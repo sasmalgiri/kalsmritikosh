@@ -1,0 +1,45 @@
+# Xcode user state
+xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Build products
+build/
+DerivedData/
+*.o
+*.dia
+*.swiftdoc
+*.swiftmodule
+*.swiftsourceinfo
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Logs and crash reports
+*.log
+crash.log
+
+# Local config / secrets
+*.env
+.env.local
+secrets.json
+
+# IDE
+.vscode/
+.idea/
+
+# Vendor build artefacts
+Vendor/**/build/
