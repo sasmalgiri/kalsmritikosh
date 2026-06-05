@@ -94,7 +94,11 @@ public struct EmailExpert: Expert {
     }
 
     private func aggregateConfidence(_ claims: [ExpertFindings.Claim]) -> Confidence {
-        guard !claims.isEmpty else { return .zero }
-        return claims.map(\.confidence).reduce(.zero) { $0.combined(with: $1) }
+        Confidence.aggregate(
+            claims.map(\.confidence),
+            agreement: 1.0,
+            diversity: 1.0,
+            contradictionPenalty: 0.0
+        )
     }
 }

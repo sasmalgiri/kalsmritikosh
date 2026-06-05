@@ -34,7 +34,12 @@ public struct FinancialExpert: Expert {
             return ExpertFindings(
                 expertID: id,
                 claims: llmClaims,
-                confidence: llmClaims.map(\.confidence).reduce(.zero) { $0.combined(with: $1) }
+                confidence: Confidence.aggregate(
+                    llmClaims.map(\.confidence),
+                    agreement: 1.0,
+                    diversity: 1.0,
+                    contradictionPenalty: 0.0
+                )
             )
         }
 

@@ -124,6 +124,50 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("body lacks delivery/delay vocabulary")
     }
 
+    // T1 — calibrated confidence aggregation (replaces noisy-OR).
+    let t1A = Confidence.aggregate(
+        Array(repeating: Confidence(0.5), count: 94),
+        agreement: 0.2,
+        diversity: 0.2,
+        contradictionPenalty: 0.0
+    )
+    if t1A.value <= 0.65 {
+        passed.append("T1(a): 94×0.5 low-signal → \(t1A.value) ≤ 0.65")
+    } else {
+        failed.append("T1(a): 94×0.5 low-signal got \(t1A.value), expected ≤ 0.65")
+    }
+
+    let t1B = Confidence.aggregate(
+        Array(repeating: Confidence(0.9), count: 3),
+        agreement: 0.9,
+        diversity: 1.0,
+        contradictionPenalty: 0.0
+    )
+    if t1B.value >= 0.85 {
+        passed.append("T1(b): 3×0.9 high-signal → \(t1B.value) ≥ 0.85")
+    } else {
+        failed.append("T1(b): 3×0.9 high-signal got \(t1B.value), expected ≥ 0.85")
+    }
+
+    // Adversarial: maximal claims should still clamp below 0.99.
+    let t1C = Confidence.aggregate(
+        Array(repeating: Confidence(1.0), count: 200),
+        agreement: 1.0,
+        diversity: 1.0,
+        contradictionPenalty: 0.0
+    )
+    if t1C.value < 0.99 {
+        passed.append("T1(c): clamp prevents ≥0.99 (got \(t1C.value))")
+    } else {
+        failed.append("T1(c): aggregate returned \(t1C.value) — clamp violated")
+    }
+
+    if answer.confidence.value < 1.0 {
+        passed.append("T1: ProjectDelta answer confidence \(answer.confidence.value) < 1.00")
+    } else {
+        failed.append("T1: ProjectDelta answer confidence is \(answer.confidence.value) (expected < 1.00)")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,

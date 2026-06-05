@@ -52,15 +52,25 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
             )
         }
 
-        let combined = claims
-            .map(\.confidence)
-            .reduce(Confidence.zero) { $0.combined(with: $1) }
-
         let sourceCount = claims.reduce(0) { $0 + $1.supportingObjectIDs.count }
         let distinctSources = Set(claims.flatMap(\.supportingObjectIDs)).count
 
         let agreement = computeAgreement(claims)
         let contradictions = detectContradictions(claims)
+        let diversity = sourceCount > 0
+            ? Double(distinctSources) / Double(sourceCount)
+            : 0.0
+        let contradictionPenalty = min(
+            1.0,
+            Double(contradictions.count) / Double(claims.count)
+        )
+
+        let combined = Confidence.aggregate(
+            claims.map(\.confidence),
+            agreement: agreement,
+            diversity: diversity,
+            contradictionPenalty: contradictionPenalty
+        )
 
         return ConfidenceReport(
             combined: combined,
