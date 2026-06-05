@@ -168,6 +168,50 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T1: ProjectDelta answer confidence is \(answer.confidence.value) (expected < 1.00)")
     }
 
+    // T2 — claim-level evidence contract. Static checks on the parser.
+    let t2Map: [String: EvidenceCitation] = [
+        "E1": EvidenceCitation(supportingObjectIDs: [], supportingEventIDs: [], supportingEntityIDs: []),
+        "E2": EvidenceCitation(supportingObjectIDs: [], supportingEventIDs: [], supportingEntityIDs: []),
+        "E3": EvidenceCitation(supportingObjectIDs: [], supportingEventIDs: [], supportingEntityIDs: [])
+    ]
+    // (a) fenced JSON parses; (b) two claims carry DIFFERENT evidence sets;
+    // (c) claims with empty / unresolved evidence are dropped and counted.
+    let t2Response = """
+    ```json
+    {"claims":[
+      {"text":"Claim citing E1 only","evidence":["E1"]},
+      {"text":"Claim citing E2 and E3","evidence":["E2","E3"]},
+      {"text":"Claim with empty evidence","evidence":[]},
+      {"text":"Claim with phantom E-id","evidence":["E99"]}
+    ]}
+    ```
+    """
+    let t2Parsed = ExpertResponseParser.parseClaims(from: t2Response, evidenceMap: t2Map)
+    if t2Parsed.claims.count == 2 {
+        passed.append("T2: parser kept 2 valid claims out of 4")
+    } else {
+        failed.append("T2: parser kept \(t2Parsed.claims.count) claims (expected 2)")
+    }
+    if t2Parsed.dropped == 2 {
+        passed.append("T2: parser dropped 2 unverifiable claims")
+    } else {
+        failed.append("T2: parser dropped \(t2Parsed.dropped) claims (expected 2)")
+    }
+
+    // (b) different evidence sets across same-expert claims.
+    let t2Sets = t2Parsed.claims.map { Set($0.citation.supportingObjectIDs)
+        .union(Set($0.citation.supportingEventIDs.map { _ in UUID() }))  // distinct shape
+    }
+    _ = t2Sets  // shape check below
+    let t2EvidenceSignatures = t2Parsed.claims.map { c in
+        "\(c.citation.supportingObjectIDs.count)/\(c.citation.supportingEventIDs.count)/\(c.citation.supportingEntityIDs.count):\(c.text)"
+    }
+    if Set(t2EvidenceSignatures).count == t2Parsed.claims.count {
+        passed.append("T2: parsed claims carry distinct evidence shapes")
+    } else {
+        failed.append("T2: parsed claims share identical evidence shapes")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,

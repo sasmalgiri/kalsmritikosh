@@ -30,7 +30,11 @@ public struct EvidenceVerifier: Verifier {
         retrieval: RetrievalResult
     ) async throws -> VerifiedAnswer {
         let claims = findings.flatMap(\.claims)
-        let report = await engine.evaluate(claims: claims)
+        let droppedUnverifiable = findings.map(\.droppedUnverifiable).reduce(0, +)
+        let report = await engine.evaluate(
+            claims: claims,
+            droppedUnverifiable: droppedUnverifiable
+        )
         _ = retrieval  // available for richer rendering below
         let citations = claims.flatMap { claim -> [VerifiedAnswer.Citation] in
             claim.supportingObjectIDs.map { objectID in

@@ -20,26 +20,20 @@ public struct LegalExpert: Expert {
         let contractEvents = result.events.filter {
             $0.kind == .contractSigned || $0.kind == .contractModified
         }
-        let supportingObjectIDs = Array(Set(contractEvents.map(\.sourceObjectID)))
-        let supportingEventIDs = contractEvents.map(\.id)
 
-        let prompt = PromptTemplates.legalAnalysis(intent: intent, retrieval: result)
-        let llmClaims = await runLLM(
-            prompt: prompt,
-            capabilities: context.capabilities,
-            supportingObjectIDs: supportingObjectIDs,
-            supportingEventIDs: supportingEventIDs
-        )
-        if !llmClaims.isEmpty {
+        let frame = PromptTemplates.legalAnalysis(intent: intent, retrieval: result)
+        let llm = await runLLM(frame: frame, capabilities: context.capabilities)
+        if !llm.claims.isEmpty {
             return ExpertFindings(
                 expertID: id,
-                claims: llmClaims,
+                claims: llm.claims,
                 confidence: Confidence.aggregate(
-                    llmClaims.map(\.confidence),
+                    llm.claims.map(\.confidence),
                     agreement: 1.0,
                     diversity: 1.0,
                     contradictionPenalty: 0.0
-                )
+                ),
+                droppedUnverifiable: llm.dropped
             )
         }
 
@@ -48,42 +42,46 @@ public struct LegalExpert: Expert {
                 statement: "\(event.title) recorded on \(event.date.formatted(date: .abbreviated, time: .omitted))",
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
-                confidence: event.confidence
+                confidence: event.confidence,
+                evidenceGranularity: .coarse
             )
         }
         return ExpertFindings(
             expertID: id,
             claims: Array(claims),
             confidence: claims.isEmpty ? .zero : .medium,
-            notes: claims.isEmpty ? "No contractual events found." : nil
+            notes: claims.isEmpty ? "No contractual events found." : nil,
+            droppedUnverifiable: llm.dropped
         )
     }
 
     private func runLLM(
-        prompt: String,
-        capabilities: CapabilityRegistry,
-        supportingObjectIDs: [KnowledgeObject.ID],
-        supportingEventIDs: [Event.ID]
-    ) async -> [ExpertFindings.Claim] {
+        frame: PromptFrame,
+        capabilities: CapabilityRegistry
+    ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.legal")
         guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else { return [] }
+              await provider.isAvailable() else { return ([], 0) }
         do {
             let response = try await provider.generate(
-                prompt: prompt,
+                prompt: frame.prompt,
                 options: GenerationOptions(maxTokens: 300, temperature: 0.2)
             )
-            return ExpertResponseParser.bullets(from: response).map { statement in
+            let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
+            let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
-                    statement: statement,
-                    supportingObjectIDs: supportingObjectIDs,
-                    supportingEventIDs: supportingEventIDs,
-                    confidence: .medium
+                    statement: p.text,
+                    supportingObjectIDs: p.citation.supportingObjectIDs,
+                    supportingEventIDs: p.citation.supportingEventIDs,
+                    supportingEntityIDs: p.citation.supportingEntityIDs,
+                    confidence: .medium,
+                    evidenceGranularity: .specific
                 )
             }
+            return (claims, parsed.dropped)
         } catch {
             AtlasLog.brain.error("LegalExpert LLM call failed: \(String(describing: error), privacy: .public)")
-            return []
+            return ([], 0)
         }
     }
 }

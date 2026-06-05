@@ -18,37 +18,64 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
     public let distinctSourceObjectIDs: Int
     public let agreementScore: Double         // 0...1, fraction of claims that agree
     public let contradictions: [VerifiedAnswer.Contradiction]
+    /// LLM claims dropped at parse time because their cited evidence
+    /// failed to resolve against the retrieval set. Surfaced for the UI.
+    public let droppedUnverifiable: Int
 
     public init(
         combined: Confidence,
         sourceCount: Int,
         distinctSourceObjectIDs: Int,
         agreementScore: Double,
-        contradictions: [VerifiedAnswer.Contradiction]
+        contradictions: [VerifiedAnswer.Contradiction],
+        droppedUnverifiable: Int = 0
     ) {
         self.combined = combined
         self.sourceCount = sourceCount
         self.distinctSourceObjectIDs = distinctSourceObjectIDs
         self.agreementScore = agreementScore
         self.contradictions = contradictions
+        self.droppedUnverifiable = droppedUnverifiable
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case combined, sourceCount, distinctSourceObjectIDs,
+             agreementScore, contradictions, droppedUnverifiable
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.combined = try c.decode(Confidence.self, forKey: .combined)
+        self.sourceCount = try c.decode(Int.self, forKey: .sourceCount)
+        self.distinctSourceObjectIDs = try c.decode(Int.self, forKey: .distinctSourceObjectIDs)
+        self.agreementScore = try c.decode(Double.self, forKey: .agreementScore)
+        self.contradictions = try c.decode([VerifiedAnswer.Contradiction].self, forKey: .contradictions)
+        self.droppedUnverifiable = try c.decodeIfPresent(Int.self, forKey: .droppedUnverifiable) ?? 0
     }
 }
 
 public protocol ConfidenceEngine: Sendable {
-    func evaluate(claims: [ExpertFindings.Claim]) async -> ConfidenceReport
+    func evaluate(
+        claims: [ExpertFindings.Claim],
+        droppedUnverifiable: Int
+    ) async -> ConfidenceReport
 }
 
 public struct DefaultConfidenceEngine: ConfidenceEngine {
     public init() {}
 
-    public func evaluate(claims: [ExpertFindings.Claim]) async -> ConfidenceReport {
+    public func evaluate(
+        claims: [ExpertFindings.Claim],
+        droppedUnverifiable: Int
+    ) async -> ConfidenceReport {
         guard !claims.isEmpty else {
             return ConfidenceReport(
                 combined: .zero,
                 sourceCount: 0,
                 distinctSourceObjectIDs: 0,
                 agreementScore: 0,
-                contradictions: []
+                contradictions: [],
+                droppedUnverifiable: droppedUnverifiable
             )
         }
 
@@ -77,7 +104,8 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
             sourceCount: sourceCount,
             distinctSourceObjectIDs: distinctSources,
             agreementScore: agreement,
-            contradictions: contradictions
+            contradictions: contradictions,
+            droppedUnverifiable: droppedUnverifiable
         )
     }
 

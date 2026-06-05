@@ -4,8 +4,9 @@
 //
 //  Asks the CapabilityRegistry for a reasoning model and uses it to
 //  produce thread/relationship analysis over the retrieved email events.
-//  Falls back to a deterministic event-listing finding when no model
-//  resolves. Never names a model.
+//  The LLM path emits strict-JSON claims with per-claim E-id evidence;
+//  the heuristic fallback enumerates events with per-event evidence.
+//  Never names a model.
 //
 
 import Foundation
@@ -25,71 +26,66 @@ public struct EmailExpert: Expert {
         let emailEvents = result.events.filter {
             $0.kind == .emailSent || $0.kind == .emailReceived
         }
-        let supportingObjectIDs = Array(Set(emailEvents.map(\.sourceObjectID)))
-        let supportingEventIDs = emailEvents.map(\.id)
-        let supportingEntityIDs = Array(Set(emailEvents.flatMap(\.entityIDs)))
 
-        let prompt = PromptTemplates.emailAnalysis(intent: intent, retrieval: result)
-        let llmClaims = await tryLLM(
-            prompt: prompt,
-            capabilities: context.capabilities,
-            supportingObjectIDs: supportingObjectIDs,
-            supportingEventIDs: supportingEventIDs,
-            supportingEntityIDs: supportingEntityIDs
-        )
-        if !llmClaims.isEmpty {
+        let frame = PromptTemplates.emailAnalysis(intent: intent, retrieval: result)
+        let llm = await tryLLM(frame: frame, capabilities: context.capabilities)
+        if !llm.claims.isEmpty {
             return ExpertFindings(
                 expertID: id,
-                claims: llmClaims,
-                confidence: aggregateConfidence(llmClaims)
+                claims: llm.claims,
+                confidence: aggregateConfidence(llm.claims),
+                droppedUnverifiable: llm.dropped
             )
         }
 
-        // Heuristic fallback: enumerate the strongest events.
+        // Heuristic fallback: enumerate the strongest events with their
+        // own per-event evidence.
         let claims = emailEvents.prefix(8).map { event in
             ExpertFindings.Claim(
                 statement: "Email: \(event.title) on \(event.date.formatted(date: .abbreviated, time: .shortened))",
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs,
-                confidence: event.confidence
+                confidence: event.confidence,
+                evidenceGranularity: .coarse
             )
         }
         return ExpertFindings(
             expertID: id,
             claims: Array(claims),
             confidence: claims.isEmpty ? .zero : .medium,
-            notes: claims.isEmpty ? "No email evidence found in retrieved scope." : nil
+            notes: claims.isEmpty ? "No email evidence found in retrieved scope." : nil,
+            droppedUnverifiable: llm.dropped
         )
     }
 
     private func tryLLM(
-        prompt: String,
-        capabilities: CapabilityRegistry,
-        supportingObjectIDs: [KnowledgeObject.ID],
-        supportingEventIDs: [Event.ID],
-        supportingEntityIDs: [Entity.ID]
-    ) async -> [ExpertFindings.Claim] {
+        frame: PromptFrame,
+        capabilities: CapabilityRegistry
+    ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.email")
         guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else { return [] }
+              await provider.isAvailable() else { return ([], 0) }
         do {
             let response = try await provider.generate(
-                prompt: prompt,
+                prompt: frame.prompt,
                 options: GenerationOptions(maxTokens: 400, temperature: 0.2)
             )
-            return ExpertResponseParser.bullets(from: response).map { statement in
+            let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
+            let claims = parsed.claims.map { parsedClaim in
                 ExpertFindings.Claim(
-                    statement: statement,
-                    supportingObjectIDs: supportingObjectIDs,
-                    supportingEventIDs: supportingEventIDs,
-                    supportingEntityIDs: supportingEntityIDs,
-                    confidence: .medium
+                    statement: parsedClaim.text,
+                    supportingObjectIDs: parsedClaim.citation.supportingObjectIDs,
+                    supportingEventIDs: parsedClaim.citation.supportingEventIDs,
+                    supportingEntityIDs: parsedClaim.citation.supportingEntityIDs,
+                    confidence: .medium,
+                    evidenceGranularity: .specific
                 )
             }
+            return (claims, parsed.dropped)
         } catch {
             AtlasLog.brain.error("EmailExpert LLM call failed: \(String(describing: error), privacy: .public)")
-            return []
+            return ([], 0)
         }
     }
 

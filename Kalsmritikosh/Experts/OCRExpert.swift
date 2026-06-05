@@ -35,7 +35,8 @@ public struct OCRExpert: Expert {
             claims.append(.init(
                 statement: "OCR expert flagged image-typed KO for follow-up: \(chunk.chunk.id.uuidString.prefix(8))",
                 supportingObjectIDs: [chunk.chunk.objectID],
-                confidence: .low
+                confidence: .low,
+                evidenceGranularity: .coarse
             ))
         }
         _ = context.capabilities

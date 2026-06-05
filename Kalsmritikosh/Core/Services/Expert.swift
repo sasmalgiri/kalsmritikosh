@@ -75,12 +75,44 @@ public struct ExpertFindings: Codable, Sendable {
     public let claims: [Claim]
     public let confidence: Confidence
     public let notes: String?
+    /// Count of LLM-generated claims dropped because their cited evidence
+    /// didn't resolve to anything in the retrieval set. Surfaced via the
+    /// ConfidenceReport so the UI can show "N unverifiable claims dropped".
+    public let droppedUnverifiable: Int
 
-    public init(expertID: String, claims: [Claim], confidence: Confidence, notes: String? = nil) {
+    public init(
+        expertID: String,
+        claims: [Claim],
+        confidence: Confidence,
+        notes: String? = nil,
+        droppedUnverifiable: Int = 0
+    ) {
         self.expertID = expertID
         self.claims = claims
         self.confidence = confidence
         self.notes = notes
+        self.droppedUnverifiable = droppedUnverifiable
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case expertID, claims, confidence, notes, droppedUnverifiable
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.expertID = try c.decode(String.self, forKey: .expertID)
+        self.claims = try c.decode([Claim].self, forKey: .claims)
+        self.confidence = try c.decode(Confidence.self, forKey: .confidence)
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        self.droppedUnverifiable = try c.decodeIfPresent(Int.self, forKey: .droppedUnverifiable) ?? 0
+    }
+
+    /// Whether a claim's supporting IDs are per-claim LLM-cited evidence
+    /// (`.specific`) or come from a deterministic per-item heuristic path
+    /// (`.coarse`). UI surfaces this so users can distinguish the two.
+    public enum EvidenceGranularity: String, Codable, Sendable, Hashable {
+        case specific
+        case coarse
     }
 
     public struct Claim: Codable, Sendable, Hashable {
@@ -89,19 +121,37 @@ public struct ExpertFindings: Codable, Sendable {
         public let supportingEventIDs: [Event.ID]
         public let supportingEntityIDs: [Entity.ID]
         public let confidence: Confidence
+        public let evidenceGranularity: EvidenceGranularity
 
         public init(
             statement: String,
             supportingObjectIDs: [KnowledgeObject.ID] = [],
             supportingEventIDs: [Event.ID] = [],
             supportingEntityIDs: [Entity.ID] = [],
-            confidence: Confidence
+            confidence: Confidence,
+            evidenceGranularity: EvidenceGranularity = .specific
         ) {
             self.statement = statement
             self.supportingObjectIDs = supportingObjectIDs
             self.supportingEventIDs = supportingEventIDs
             self.supportingEntityIDs = supportingEntityIDs
             self.confidence = confidence
+            self.evidenceGranularity = evidenceGranularity
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case statement, supportingObjectIDs, supportingEventIDs,
+                 supportingEntityIDs, confidence, evidenceGranularity
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.statement = try c.decode(String.self, forKey: .statement)
+            self.supportingObjectIDs = try c.decodeIfPresent([KnowledgeObject.ID].self, forKey: .supportingObjectIDs) ?? []
+            self.supportingEventIDs = try c.decodeIfPresent([Event.ID].self, forKey: .supportingEventIDs) ?? []
+            self.supportingEntityIDs = try c.decodeIfPresent([Entity.ID].self, forKey: .supportingEntityIDs) ?? []
+            self.confidence = try c.decode(Confidence.self, forKey: .confidence)
+            self.evidenceGranularity = try c.decodeIfPresent(EvidenceGranularity.self, forKey: .evidenceGranularity) ?? .specific
         }
     }
 }
