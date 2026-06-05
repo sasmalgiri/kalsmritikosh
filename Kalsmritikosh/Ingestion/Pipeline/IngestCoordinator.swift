@@ -201,6 +201,11 @@ public actor IngestCoordinator {
             if let entityLinker { raw = entityLinker.link(raw) }
             try? await entities.insertBatch(raw)
             extractedEntities = raw
+            // Port the render-time email-domain mining into ingest so an
+            // alias row exists for every domain we see, mapped onto its
+            // org canonical. Render still labels too — aliases also feed
+            // future lookups.
+            await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
         if let eventExtractor, let events {
@@ -239,6 +244,48 @@ public actor IngestCoordinator {
             documentClass: docClass,
             invalidations: invalidationSubjects
         )
+    }
+
+    /// For each email-address entity, derive an org label from its
+    /// domain and write a canonical org + alias row for the domain stem.
+    /// Idempotent — re-ingest of an unchanged file no-ops on the alias
+    /// table thanks to UNIQUE(entity_id, alias_normalized).
+    private func writeDomainAliases(
+        forEntities entities: [Entity],
+        in repo: EntitiesRepository,
+        sourceObjectID: KnowledgeObject.ID
+    ) async {
+        for entity in entities where entity.kind == .emailAddress {
+            let addr = entity.normalizedValue ?? entity.value
+            guard let at = addr.firstIndex(of: "@") else { continue }
+            let domain = String(addr[addr.index(after: at)...])
+            guard let head = domain.split(separator: ".").first.map(String.init),
+                  !head.isEmpty else { continue }
+            let label = head
+                .split(separator: "-")
+                .map { token -> String in
+                    let s = String(token)
+                    if s.count <= 4 && s.allSatisfy(\.isLetter) {
+                        return s.uppercased()
+                    }
+                    return s.prefix(1).uppercased() + s.dropFirst().lowercased()
+                }
+                .joined(separator: " ")
+            guard label.count > 2 else { continue }
+            do {
+                let orgID = try await repo.upsertCanonicalOrganization(
+                    label: label,
+                    sourceObjectID: sourceObjectID
+                )
+                try await repo.addAlias(
+                    entityID: orgID,
+                    aliasNormalized: domain.lowercased(),
+                    source: "email-domain"
+                )
+            } catch {
+                AtlasLog.ingestion.error("Domain alias write failed for \(domain, privacy: .public): \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     private func subjects(forEntities entities: [Entity]) -> [SubjectInvalidation.Subject] {

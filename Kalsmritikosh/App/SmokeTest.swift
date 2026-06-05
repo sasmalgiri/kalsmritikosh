@@ -212,6 +212,35 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T2: parsed claims share identical evidence shapes")
     }
 
+    // T3 — canonical entities + mentions + aliases. Re-ingest the fixture
+    // and verify idempotency at both layers.
+    let canonicalCountBefore = (try? await countAllEntities(entities)) ?? -1
+    let mentionCountBefore = (try? await entities.mentionCount()) ?? -1
+    for url in fixtureURLs {
+        _ = try? await ingest.ingest(fileAt: url)
+    }
+    let canonicalCountAfter = (try? await countAllEntities(entities)) ?? -1
+    let mentionCountAfter = (try? await entities.mentionCount()) ?? -1
+    let dupGroups = (try? await entities.duplicateCanonicalGroups()) ?? -1
+
+    if canonicalCountAfter == canonicalCountBefore {
+        passed.append("T3: canonical count stable across re-ingest (\(canonicalCountAfter))")
+    } else {
+        failed.append("T3: canonical count changed \(canonicalCountBefore) → \(canonicalCountAfter)")
+    }
+
+    if mentionCountAfter == mentionCountBefore {
+        passed.append("T3: mention count stable across re-ingest (\(mentionCountAfter))")
+    } else {
+        failed.append("T3: mention count changed \(mentionCountBefore) → \(mentionCountAfter) (hash-idempotent path broken)")
+    }
+
+    if dupGroups == 0 {
+        passed.append("T3: zero duplicate (kind, normalized) groups")
+    } else {
+        failed.append("T3: \(dupGroups) duplicate (kind, normalized) groups exist — UNIQUE violated")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,

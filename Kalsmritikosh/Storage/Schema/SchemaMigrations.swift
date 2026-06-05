@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 2
+    public static let latestVersion = 3
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -39,7 +39,8 @@ public enum SchemaMigrations {
     /// Migrations indexed by their `user_version` number. Append-only.
     private static let all: [(Int, String)] = [
         (1, v1),
-        (2, v2)
+        (2, v2),
+        (3, v3)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -264,5 +265,128 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_memory_changes_subject
         ON memory_changes(subject_kind, subject_identifier, occurred_at DESC);
+    """
+
+    // MARK: - v3 — canonical entities + per-mention rows + alias table
+
+    private static let v3: String = """
+    -- T3 — Promote `entities` to a canonical table (UNIQUE on kind+normalized),
+    -- preserve per-document occurrences as entity_mentions, and add an
+    -- aliases table so domain stems and other synonyms can map onto orgs.
+    -- Run with deferred FK checks so we can table-swap inside the savepoint.
+    PRAGMA defer_foreign_keys = ON;
+
+    -- Per-document mentions. One row per (entity, source_object) occurrence,
+    -- with the surface span for future highlighting.
+    CREATE TABLE entity_mentions (
+        id              TEXT PRIMARY KEY NOT NULL,
+        entity_id       TEXT NOT NULL,
+        kind            TEXT NOT NULL,
+        surface         TEXT NOT NULL,
+        normalized      TEXT NOT NULL,
+        source_object_id TEXT NOT NULL,
+        span_start      INTEGER,
+        span_end        INTEGER,
+        confidence      REAL NOT NULL DEFAULT 0.5,
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_mentions_entity ON entity_mentions(entity_id);
+    CREATE INDEX idx_mentions_source ON entity_mentions(source_object_id);
+    CREATE INDEX idx_mentions_normalized ON entity_mentions(normalized);
+
+    -- New canonical entities table (UNIQUE on kind+normalized).
+    CREATE TABLE entities_new (
+        id              TEXT PRIMARY KEY NOT NULL,
+        kind            TEXT NOT NULL,
+        value           TEXT NOT NULL,
+        normalized      TEXT NOT NULL,
+        source_object_id TEXT NOT NULL,
+        confidence      REAL NOT NULL DEFAULT 0.5,
+        attributes_json TEXT NOT NULL DEFAULT '{}',
+        FOREIGN KEY (source_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+        UNIQUE(kind, normalized)
+    );
+
+    -- Pick a representative row per (kind, normalized) and copy to entities_new.
+    INSERT INTO entities_new (id, kind, value, normalized, source_object_id, confidence, attributes_json)
+    SELECT id, kind, value, norm, source_object_id, confidence, attributes_json
+    FROM (
+        SELECT e.id, e.kind, e.value, e.source_object_id, e.confidence, e.attributes_json,
+               COALESCE(NULLIF(e.normalized, ''), lower(e.value)) AS norm,
+               ROW_NUMBER() OVER (
+                   PARTITION BY e.kind, COALESCE(NULLIF(e.normalized, ''), lower(e.value))
+                   ORDER BY e.confidence DESC, e.id ASC
+               ) AS rn
+        FROM entities e
+    ) ranked
+    WHERE rn = 1;
+
+    -- Backfill mentions for every OLD entity row, pointing at the canonical.
+    INSERT INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, span_start, span_end, confidence)
+    SELECT
+        lower(hex(randomblob(16))),
+        canon.id,
+        e.kind,
+        e.value,
+        COALESCE(NULLIF(e.normalized, ''), lower(e.value)),
+        e.source_object_id,
+        NULL,
+        NULL,
+        e.confidence
+    FROM entities e
+    JOIN entities_new canon
+        ON e.kind = canon.kind
+       AND COALESCE(NULLIF(e.normalized, ''), lower(e.value)) = canon.normalized;
+
+    -- Retarget event_entities and relationships to the canonical ids.
+    UPDATE event_entities
+    SET entity_id = (
+        SELECT canon.id
+        FROM entities_new canon
+        JOIN entities e ON e.kind = canon.kind
+                       AND COALESCE(NULLIF(e.normalized, ''), lower(e.value)) = canon.normalized
+        WHERE e.id = event_entities.entity_id
+        LIMIT 1
+    )
+    WHERE entity_id NOT IN (SELECT id FROM entities_new);
+
+    UPDATE relationships
+    SET from_entity_id = (
+        SELECT canon.id
+        FROM entities_new canon
+        JOIN entities e ON e.kind = canon.kind
+                       AND COALESCE(NULLIF(e.normalized, ''), lower(e.value)) = canon.normalized
+        WHERE e.id = relationships.from_entity_id
+        LIMIT 1
+    )
+    WHERE from_entity_id NOT IN (SELECT id FROM entities_new);
+
+    UPDATE relationships
+    SET to_entity_id = (
+        SELECT canon.id
+        FROM entities_new canon
+        JOIN entities e ON e.kind = canon.kind
+                       AND COALESCE(NULLIF(e.normalized, ''), lower(e.value)) = canon.normalized
+        WHERE e.id = relationships.to_entity_id
+        LIMIT 1
+    )
+    WHERE to_entity_id NOT IN (SELECT id FROM entities_new);
+
+    -- Swap old for new.
+    DROP TABLE entities;
+    ALTER TABLE entities_new RENAME TO entities;
+    CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
+    CREATE INDEX IF NOT EXISTS idx_entities_norm ON entities(normalized);
+
+    -- Aliases — normalized synonyms (e.g. an email domain stem → an org).
+    CREATE TABLE entity_aliases (
+        entity_id        TEXT NOT NULL,
+        alias_normalized TEXT NOT NULL,
+        source           TEXT NOT NULL,
+        UNIQUE(entity_id, alias_normalized),
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_aliases_norm ON entity_aliases(alias_normalized);
     """
 }

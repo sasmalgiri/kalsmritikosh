@@ -2,6 +2,11 @@
 //  EntitiesRepository.swift
 //  Kalsmritikosh
 //
+//  v3 layout: `entities` is the canonical noun-table (one row per
+//  (kind, normalized)). Each per-document occurrence lives in
+//  `entity_mentions` with span info; `entity_aliases` carries normalized
+//  synonyms (e.g. email-domain → org). Lookups resolve through aliases.
+//
 
 import Foundation
 
@@ -13,29 +18,96 @@ public actor EntitiesRepository {
         self.database = database
     }
 
+    /// Upsert each entity as a canonical row (keyed by kind+normalized)
+    /// and record one mention per input row pointing at the resolved
+    /// canonical id. The incoming `Entity.id` is used only when a new
+    /// canonical row is created; on conflict the existing canonical's id
+    /// wins and the mention is attached to it.
     public func insertBatch(_ entities: [Entity]) async throws {
         for e in entities {
-            let attrs = try encoder.encode(e.attributes)
-            try await database.exec("""
-            INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?);
-            """, [
-                .uuid(e.id),
-                .text(e.kind.rawValue),
-                .text(e.value),
-                .optionalText(e.normalizedValue),
-                .uuid(e.sourceObjectID),
-                .real(e.confidence.value),
-                .text(String(data: attrs, encoding: .utf8) ?? "{}")
-            ])
+            let normalized = normalize(e)
+            guard !normalized.isEmpty else { continue }
+            let canonID = try await upsertCanonical(e, normalized: normalized)
+            try await insertMention(e, canonicalID: canonID, normalized: normalized)
         }
     }
+
+    /// Add (or no-op) an alias for an existing canonical entity.
+    public func addAlias(
+        entityID: Entity.ID,
+        aliasNormalized: String,
+        source: String
+    ) async throws {
+        let normalized = aliasNormalized.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        try await database.exec("""
+        INSERT INTO entity_aliases (entity_id, alias_normalized, source)
+        VALUES (?, ?, ?)
+        ON CONFLICT(entity_id, alias_normalized) DO NOTHING;
+        """, [
+            .uuid(entityID),
+            .text(normalized),
+            .text(source)
+        ])
+    }
+
+    /// Upsert a canonical organization keyed by its normalized label and
+    /// return its id. Used by ingest-time domain mining.
+    public func upsertCanonicalOrganization(
+        label: String,
+        sourceObjectID: KnowledgeObject.ID
+    ) async throws -> Entity.ID {
+        let normalized = label.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { throw NSError(domain: "EntitiesRepository", code: 1) }
+        let rows = try await database.query("""
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
+        VALUES (?, ?, ?, ?, ?, ?, '{}')
+        ON CONFLICT(kind, normalized) DO UPDATE SET
+            confidence = max(entities.confidence, excluded.confidence)
+        RETURNING id;
+        """, [
+            .uuid(UUID()),
+            .text(Entity.Kind.organization.rawValue),
+            .text(label),
+            .text(normalized),
+            .uuid(sourceObjectID),
+            .real(Confidence.medium.value)
+        ])
+        guard let id = rows.first?.uuid(0) else {
+            throw NSError(domain: "EntitiesRepository", code: 2)
+        }
+        return id
+    }
+
+    // MARK: - Reads
 
     public func count(of kind: Entity.Kind) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM entities WHERE kind = ?;",
             [.text(kind.rawValue)]
         )
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Count rows in the per-document mentions table — used by acceptance
+    /// checks ("ingest twice: canonical count unchanged, mention count
+    /// doubles only if rows were actually re-ingested").
+    public func mentionCount() async throws -> Int {
+        let rows = try await database.query("SELECT COUNT(*) FROM entity_mentions;", [])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Returns the number of (kind, normalized) groups that have more
+    /// than one canonical row. Must be 0 — the UNIQUE constraint enforces
+    /// it. Surfaced for the T3 acceptance assertion.
+    public func duplicateCanonicalGroups() async throws -> Int {
+        let rows = try await database.query("""
+        SELECT COUNT(*) FROM (
+            SELECT kind, normalized FROM entities
+            GROUP BY kind, normalized
+            HAVING COUNT(*) > 1
+        );
+        """, [])
         return Int(rows.first?.int(0) ?? 0)
     }
 
@@ -70,16 +142,109 @@ public actor EntitiesRepository {
         return rows.first.flatMap(decodeFullEntity)
     }
 
+    /// Resolves a query through the canonical `value` / `normalized`
+    /// columns AND any alias rows.
     public func find(byValue value: String, limit: Int = 25) async throws -> [Entity] {
         let pattern = "%\(value)%"
+        let aliasPattern = "%\(value.lowercased())%"
         let rows = try await database.query("""
-        SELECT id, kind, value, normalized, source_object_id, confidence
-        FROM entities
-        WHERE value LIKE ? OR normalized LIKE ?
-        ORDER BY confidence DESC
+        SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence
+        FROM entities e
+        LEFT JOIN entity_aliases a ON a.entity_id = e.id
+        WHERE e.value LIKE ?
+           OR e.normalized LIKE ?
+           OR a.alias_normalized LIKE ?
+        ORDER BY e.confidence DESC
         LIMIT ?;
-        """, [.text(pattern), .text(pattern), .integer(Int64(limit))])
+        """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
         return rows.compactMap(decodeFullEntity)
+    }
+
+    public func search(value query: String, limit: Int = 50) async throws -> [EntitySummaryRow] {
+        let pattern = "%\(query)%"
+        let aliasPattern = "%\(query.lowercased())%"
+        let rows = try await database.query("""
+        SELECT DISTINCT e.id, e.value, e.normalized, e.confidence
+        FROM entities e
+        LEFT JOIN entity_aliases a ON a.entity_id = e.id
+        WHERE e.value LIKE ?
+           OR e.normalized LIKE ?
+           OR a.alias_normalized LIKE ?
+        ORDER BY e.confidence DESC
+        LIMIT ?;
+        """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
+
+        return rows.compactMap { row in
+            guard
+                let id = row.uuid(0),
+                let value = row.string(1),
+                let conf = row.double(3)
+            else { return nil }
+            return EntitySummaryRow(
+                id: id,
+                value: value,
+                normalizedValue: row.string(2),
+                confidence: Confidence(conf)
+            )
+        }
+    }
+
+    // MARK: - Internals
+
+    private func normalize(_ entity: Entity) -> String {
+        let candidate = entity.normalizedValue ?? entity.value
+        return candidate.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func upsertCanonical(_ e: Entity, normalized: String) async throws -> Entity.ID {
+        let attrs = try encoder.encode(e.attributes)
+        let attrsStr = String(data: attrs, encoding: .utf8) ?? "{}"
+        let rows = try await database.query("""
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(kind, normalized) DO UPDATE SET
+            confidence = max(entities.confidence, excluded.confidence),
+            value = CASE WHEN excluded.confidence > entities.confidence
+                         THEN excluded.value
+                         ELSE entities.value
+                    END
+        RETURNING id;
+        """, [
+            .uuid(e.id),
+            .text(e.kind.rawValue),
+            .text(e.value),
+            .text(normalized),
+            .uuid(e.sourceObjectID),
+            .real(e.confidence.value),
+            .text(attrsStr)
+        ])
+        guard let id = rows.first?.uuid(0) else {
+            throw NSError(domain: "EntitiesRepository", code: 3)
+        }
+        return id
+    }
+
+    private func insertMention(
+        _ e: Entity,
+        canonicalID: Entity.ID,
+        normalized: String
+    ) async throws {
+        let spanStart: SQLValue = e.sourceRange?.characterRange.map { .integer(Int64($0.lowerBound)) } ?? .null
+        let spanEnd: SQLValue = e.sourceRange?.characterRange.map { .integer(Int64($0.upperBound)) } ?? .null
+        try await database.exec("""
+        INSERT INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, span_start, span_end, confidence)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [
+            .uuid(UUID()),
+            .uuid(canonicalID),
+            .text(e.kind.rawValue),
+            .text(e.value),
+            .text(normalized),
+            .uuid(e.sourceObjectID),
+            spanStart,
+            spanEnd,
+            .real(e.confidence.value)
+        ])
     }
 
     private func decodeFullEntity(_ row: SQLRow) -> Entity? {
@@ -99,31 +264,6 @@ public actor EntitiesRepository {
             sourceObjectID: sourceID,
             confidence: Confidence(conf)
         )
-    }
-
-    public func search(value query: String, limit: Int = 50) async throws -> [EntitySummaryRow] {
-        let pattern = "%\(query)%"
-        let rows = try await database.query("""
-        SELECT id, value, normalized, confidence
-        FROM entities
-        WHERE value LIKE ? OR normalized LIKE ?
-        ORDER BY confidence DESC
-        LIMIT ?;
-        """, [.text(pattern), .text(pattern), .integer(Int64(limit))])
-
-        return rows.compactMap { row in
-            guard
-                let id = row.uuid(0),
-                let value = row.string(1),
-                let conf = row.double(3)
-            else { return nil }
-            return EntitySummaryRow(
-                id: id,
-                value: value,
-                normalizedValue: row.string(2),
-                confidence: Confidence(conf)
-            )
-        }
     }
 }
 
