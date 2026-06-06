@@ -58,6 +58,8 @@ public struct EmailLoader: Ingestor {
             "loader": AnyCodable(.string("emlx-apple-mail"))
         ]
         for (key, value) in headers { meta[key] = AnyCodable(.string(value)) }
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
 
         var headerLines: [String] = []
         for key in ["from", "to", "cc", "subject", "date"] {
@@ -66,8 +68,8 @@ public struct EmailLoader: Ingestor {
             }
         }
         let merged = headerLines.isEmpty
-            ? body
-            : headerLines.joined(separator: "\n") + "\n\n" + body
+            ? cleanedBody
+            : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
 
         if merged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw IngestorError.empty(url)
@@ -101,6 +103,12 @@ public struct EmailLoader: Ingestor {
         for (key, value) in headers {
             meta[key] = AnyCodable(.string(value))
         }
+
+        // T7 — Strip quoted regions before chunking. Stored bytes-removed
+        // metric flows into the completeness report.
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+
         // Prepend the human-relevant headers (From / To / Cc / Subject / Date)
         // so the entity extractor + summarizer see the participants and topic.
         var headerLines: [String] = []
@@ -110,8 +118,8 @@ public struct EmailLoader: Ingestor {
             }
         }
         let merged = headerLines.isEmpty
-            ? body
-            : headerLines.joined(separator: "\n") + "\n\n" + body
+            ? cleanedBody
+            : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
         return KnowledgeObject(
             sourceFile: url,
             sourceType: .eml,
@@ -163,6 +171,77 @@ public struct EmailLoader: Ingestor {
             ],
             confidence: .low
         )
+    }
+
+    /// Strip quoted regions from an email body and report the bytes
+    /// removed for the completeness report.
+    /// Removed:
+    ///   - lines prefixed with `>`
+    ///   - blocks following `On <when> <who> wrote:` headers
+    ///   - HTML `gmail_quote` / `<blockquote>` containers
+    ///   - `-----Original Message-----` / `_____` separator blocks
+    static func stripQuotedRegions(_ body: String) -> (stripped: String, bytesRemoved: Int) {
+        let originalBytes = body.utf8.count
+        var working = body
+
+        // 1. HTML quote containers — drop the entire region (greedy by tag).
+        let htmlPatterns = [
+            "<div[^>]*class=\"gmail_quote\"[\\s\\S]*?</div>",
+            "<blockquote[\\s\\S]*?</blockquote>"
+        ]
+        for pattern in htmlPatterns {
+            if let re = try? NSRegularExpression(
+                pattern: pattern,
+                options: [.caseInsensitive]
+            ) {
+                let ns = working as NSString
+                working = re.stringByReplacingMatches(
+                    in: working,
+                    options: [],
+                    range: NSRange(location: 0, length: ns.length),
+                    withTemplate: ""
+                )
+            }
+        }
+
+        // 2. "-----Original Message-----" and similar separators —
+        //    everything from the marker to EOF is the quoted history.
+        let separators = [
+            "-----Original Message-----",
+            "________________________________",
+            "----- Forwarded message -----"
+        ]
+        for marker in separators {
+            if let range = working.range(of: marker) {
+                working = String(working[..<range.lowerBound])
+            }
+        }
+
+        // 3. "On <when>, <who> wrote:" — header before the quote block.
+        //    Drop the header line and everything that follows.
+        if let onWroteRe = try? NSRegularExpression(
+            pattern: "^On .{5,200} wrote:$",
+            options: [.anchorsMatchLines]
+        ) {
+            let ns = working as NSString
+            let matches = onWroteRe.matches(in: working, range: NSRange(location: 0, length: ns.length))
+            if let first = matches.first {
+                let cutoff = first.range.location
+                working = ns.substring(to: cutoff)
+            }
+        }
+
+        // 4. Lines prefixed with `>` (and `> > `, etc.) — drop them outright.
+        let lines = working.split(separator: "\n", omittingEmptySubsequences: false)
+        let kept = lines.filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return !trimmed.hasPrefix(">")
+        }
+        working = kept.joined(separator: "\n")
+
+        let stripped = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        let removed = max(0, originalBytes - stripped.utf8.count)
+        return (stripped, removed)
     }
 
     private func splitEMLHeaders(_ raw: String) -> ([String: String], String) {

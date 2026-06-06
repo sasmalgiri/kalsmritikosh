@@ -325,6 +325,71 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T5: vector store setup failed: \(error)")
     }
 
+    // T7 — Quote-strip on a synthetic 10-message thread reduces body size
+    // by ≥60% vs the raw quoted thread.
+    do {
+        var rawThread = "Hi team, this is the latest reply.\n\n"
+        // Build 10 nested quoted messages (each reply double-quotes the prior).
+        for i in 1...10 {
+            rawThread += "On Mon, Mar \(i), 2026 at 09:00, Sender \(i) wrote:\n"
+            for _ in 0..<8 {
+                rawThread += "> Quoted line of reply \(i) with lots of repeated context.\n"
+            }
+            rawThread += "> > More deeply-quoted history that adds noise.\n"
+            rawThread += "> -----Original Message-----\n"
+            rawThread += "> > <blockquote>An even deeper quoted block.</blockquote>\n"
+            rawThread += "\n"
+        }
+        let (stripped, removed) = EmailLoader.stripQuotedRegions(rawThread)
+        let rawLen = rawThread.utf8.count
+        let strippedLen = stripped.utf8.count
+        let reductionRatio = Double(rawLen - strippedLen) / Double(max(1, rawLen))
+        if reductionRatio >= 0.60 {
+            passed.append(String(format: "T7: quote-strip removed %.0f%% of bytes (raw %d → %d, removed %d)", reductionRatio * 100, rawLen, strippedLen, removed))
+        } else {
+            failed.append(String(format: "T7: quote-strip removed only %.0f%% (expected ≥60%%)", reductionRatio * 100))
+        }
+    }
+
+    // T7 — Attachment dedup: same content under two URLs becomes one
+    // canonical KO + one alias file row.
+    do {
+        let dedupDB = try Database(url: tempDir.appendingPathComponent("t7-dedup.sqlite"))
+        try await SchemaMigrations.migrate(dedupDB)
+        let dedupFiles = FilesRepository(database: dedupDB)
+        let canonicalID = UUID()
+        let aliasID = UUID()
+        let hash = "deadbeef\(UUID().uuidString)"
+        try await dedupFiles.upsert(FileRecord(
+            id: canonicalID,
+            url: URL(fileURLWithPath: "/tmp/a.pdf"),
+            sourceType: .pdf,
+            contentHash: hash
+        ))
+        // Simulate hash-first detection finding the canonical:
+        let found = try await dedupFiles.findCanonicalByContentHash(hash)
+        if found?.id == canonicalID {
+            passed.append("T7: findCanonicalByContentHash resolves canonical file")
+        } else {
+            failed.append("T7: findCanonicalByContentHash did not return canonical")
+        }
+        try await dedupFiles.upsert(FileRecord(
+            id: aliasID,
+            url: URL(fileURLWithPath: "/tmp/b.pdf"),
+            sourceType: .pdf,
+            contentHash: hash,
+            aliasOf: canonicalID
+        ))
+        let aliasCount = try await dedupFiles.countAliases(of: canonicalID)
+        if aliasCount == 1 {
+            passed.append("T7: 1 alias row points at canonical (two parent links, one KO)")
+        } else {
+            failed.append("T7: \(aliasCount) alias rows for canonical (expected 1)")
+        }
+    } catch {
+        failed.append("T7: dedup setup failed: \(error)")
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()

@@ -154,6 +154,37 @@ public actor IngestCoordinator {
             try? await files.deleteByID(existing.id)
         }
 
+        // T7 — Hash-first dedup. A different URL with the same contentHash
+        // becomes an alias row pointing at the canonical file; no new KO
+        // is created and downstream extraction is skipped. "The same PDF
+        // attached to two emails yields one parsed KO with two parent links."
+        if let newHash,
+           let canonical = try? await files.findCanonicalByContentHash(newHash) {
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+            let modified = (attrs[.modificationDate] as? Date) ?? .init()
+            let size = (attrs[.size] as? Int64) ?? 0
+            let aliasRecord = FileRecord(
+                url: url,
+                sourceType: type,
+                sizeBytes: size,
+                modifiedAt: modified,
+                ingestedAt: .init(),
+                contentHash: newHash,
+                aliasOf: canonical.id
+            )
+            try? await files.upsert(aliasRecord)
+            AtlasLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .public) → canonical \(canonical.id, privacy: .public)")
+            return Result(
+                fileRecord: aliasRecord,
+                object: cleaned,
+                chunkCount: 0,
+                entityCount: 0,
+                eventCount: 0,
+                documentClass: docClass,
+                invalidations: []
+            )
+        }
+
         var meta = cleaned.metadata
         meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
         let object = KnowledgeObject(

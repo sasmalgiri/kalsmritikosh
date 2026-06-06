@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 5
+    public static let latestVersion = 6
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -42,7 +42,8 @@ public enum SchemaMigrations {
         (2, v2),
         (3, v3),
         (4, v4),
-        (5, v5)
+        (5, v5),
+        (6, v6)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -416,5 +417,17 @@ public enum SchemaMigrations {
         scale       REAL NOT NULL,
         FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
     );
+    """
+
+    // MARK: - v6 — files.alias_of for hash-based attachment dedup (T7)
+
+    private static let v6: String = """
+    -- T7 — A file whose contentHash matches an already-ingested file is
+    -- stored as an alias row. Its alias_of points at the canonical file's
+    -- id; no new knowledge_objects row is created. SET NULL on the FK so
+    -- deleting the canonical doesn't cascade through alias bookkeeping.
+    ALTER TABLE files ADD COLUMN alias_of TEXT NULL REFERENCES files(id) ON DELETE SET NULL;
+    CREATE INDEX idx_files_content_hash ON files(content_hash);
+    CREATE INDEX idx_files_alias_of ON files(alias_of);
     """
 }
