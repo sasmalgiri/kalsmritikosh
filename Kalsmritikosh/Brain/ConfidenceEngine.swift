@@ -21,6 +21,18 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
     /// LLM claims dropped at parse time because their cited evidence
     /// failed to resolve against the retrieval set. Surfaced for the UI.
     public let droppedUnverifiable: Int
+    /// T10 — Newest event date among supporting evidence (nil when no
+    /// events flowed through).
+    public let newestEvidenceDate: Date?
+    /// T10 — Freshness factor in [0,1]: exp(-ageDays/tau). nil for
+    /// historical / reconstruction intents where staleness is the point.
+    public let freshness: Double?
+    /// T10 — Fraction of intent-window buckets covered by ≥1 event.
+    public let coverage: Double
+    /// T10 — Contiguous empty windows reported as ranges.
+    public let coverageGaps: [DateInterval]
+    /// T10 — Fraction of files past Tier 1 ingest, in [0,1].
+    public let ingestCoverage: Double
 
     public init(
         combined: Confidence,
@@ -28,7 +40,12 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
         distinctSourceObjectIDs: Int,
         agreementScore: Double,
         contradictions: [VerifiedAnswer.Contradiction],
-        droppedUnverifiable: Int = 0
+        droppedUnverifiable: Int = 0,
+        newestEvidenceDate: Date? = nil,
+        freshness: Double? = nil,
+        coverage: Double = 1.0,
+        coverageGaps: [DateInterval] = [],
+        ingestCoverage: Double = 1.0
     ) {
         self.combined = combined
         self.sourceCount = sourceCount
@@ -36,11 +53,18 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
         self.agreementScore = agreementScore
         self.contradictions = contradictions
         self.droppedUnverifiable = droppedUnverifiable
+        self.newestEvidenceDate = newestEvidenceDate
+        self.freshness = freshness
+        self.coverage = coverage
+        self.coverageGaps = coverageGaps
+        self.ingestCoverage = ingestCoverage
     }
 
     private enum CodingKeys: String, CodingKey {
         case combined, sourceCount, distinctSourceObjectIDs,
-             agreementScore, contradictions, droppedUnverifiable
+             agreementScore, contradictions, droppedUnverifiable,
+             newestEvidenceDate, freshness, coverage, coverageGaps,
+             ingestCoverage
     }
 
     public init(from decoder: Decoder) throws {
@@ -51,23 +75,67 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
         self.agreementScore = try c.decode(Double.self, forKey: .agreementScore)
         self.contradictions = try c.decode([VerifiedAnswer.Contradiction].self, forKey: .contradictions)
         self.droppedUnverifiable = try c.decodeIfPresent(Int.self, forKey: .droppedUnverifiable) ?? 0
+        self.newestEvidenceDate = try c.decodeIfPresent(Date.self, forKey: .newestEvidenceDate)
+        self.freshness = try c.decodeIfPresent(Double.self, forKey: .freshness)
+        self.coverage = try c.decodeIfPresent(Double.self, forKey: .coverage) ?? 1.0
+        self.coverageGaps = try c.decodeIfPresent([DateInterval].self, forKey: .coverageGaps) ?? []
+        self.ingestCoverage = try c.decodeIfPresent(Double.self, forKey: .ingestCoverage) ?? 1.0
     }
 }
 
 public protocol ConfidenceEngine: Sendable {
     func evaluate(
         claims: [ExpertFindings.Claim],
-        droppedUnverifiable: Int
+        droppedUnverifiable: Int,
+        events: [Event],
+        intentKind: UserIntent.Kind?,
+        intentWindow: DateInterval?,
+        ingestCoverage: Double,
+        now: Date
     ) async -> ConfidenceReport
 }
 
-public struct DefaultConfidenceEngine: ConfidenceEngine {
-    public init() {}
-
+extension ConfidenceEngine {
+    /// Convenience for callers that don't yet compute T10 inputs.
     public func evaluate(
         claims: [ExpertFindings.Claim],
         droppedUnverifiable: Int
     ) async -> ConfidenceReport {
+        await evaluate(
+            claims: claims,
+            droppedUnverifiable: droppedUnverifiable,
+            events: [],
+            intentKind: nil,
+            intentWindow: nil,
+            ingestCoverage: 1.0,
+            now: .init()
+        )
+    }
+}
+
+public struct DefaultConfidenceEngine: ConfidenceEngine {
+    /// Freshness time-constant in days for status/current intents.
+    public static let statusFreshnessTau: Double = 90
+
+    public init() {}
+
+    public func evaluate(
+        claims: [ExpertFindings.Claim],
+        droppedUnverifiable: Int,
+        events: [Event],
+        intentKind: UserIntent.Kind?,
+        intentWindow: DateInterval?,
+        ingestCoverage: Double,
+        now: Date
+    ) async -> ConfidenceReport {
+        let timeliness = Self.timeliness(
+            events: events,
+            intentKind: intentKind,
+            intentWindow: intentWindow,
+            now: now
+        )
+        let ingestFactor = ingestCoverage < 1.0 ? max(ingestCoverage, 0.5) : 1.0
+
         guard !claims.isEmpty else {
             return ConfidenceReport(
                 combined: .zero,
@@ -75,7 +143,12 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
                 distinctSourceObjectIDs: 0,
                 agreementScore: 0,
                 contradictions: [],
-                droppedUnverifiable: droppedUnverifiable
+                droppedUnverifiable: droppedUnverifiable,
+                newestEvidenceDate: timeliness.newest,
+                freshness: timeliness.freshness,
+                coverage: timeliness.coverage,
+                coverageGaps: timeliness.gaps,
+                ingestCoverage: ingestCoverage
             )
         }
 
@@ -99,13 +172,22 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
             contradictionPenalty: contradictionPenalty
         )
 
+        // Apply ingest-coverage multiplier per T10: while ingest is
+        // incomplete, final confidence is multiplied by max(coverage, 0.5).
+        let combinedAdjusted = Confidence(combined.value * ingestFactor)
+
         return ConfidenceReport(
-            combined: combined,
+            combined: combinedAdjusted,
             sourceCount: sourceCount,
             distinctSourceObjectIDs: distinctSources,
             agreementScore: agreement,
             contradictions: contradictions,
-            droppedUnverifiable: droppedUnverifiable
+            droppedUnverifiable: droppedUnverifiable,
+            newestEvidenceDate: timeliness.newest,
+            freshness: timeliness.freshness,
+            coverage: timeliness.coverage,
+            coverageGaps: timeliness.gaps,
+            ingestCoverage: ingestCoverage
         )
     }
 
@@ -137,6 +219,81 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
             s.lowercased()
                 .components(separatedBy: CharacterSet.alphanumerics.inverted)
                 .filter { $0.count > 3 && !stopwords.contains($0) }
+        )
+    }
+
+    // MARK: - T10 — Timeliness signals
+
+    /// Aggregates the freshness + coverage analysis. Pure function so
+    /// the engine method stays linear.
+    public struct TimelinessSummary: Sendable {
+        public let newest: Date?
+        public let freshness: Double?
+        public let coverage: Double
+        public let gaps: [DateInterval]
+    }
+
+    public static func timeliness(
+        events: [Event],
+        intentKind: UserIntent.Kind?,
+        intentWindow: DateInterval?,
+        now: Date
+    ) -> TimelinessSummary {
+        let dates = events.map(\.date).sorted()
+        let newest = dates.last
+
+        // Freshness — only meaningful for status/current intents.
+        let freshness: Double? = {
+            guard let newest else { return nil }
+            switch intentKind {
+            case .reconstructTimeline, .reconstructProject, .reconstructRelationship:
+                return nil  // historical / reconstruction — staleness is the point
+            default:
+                let ageDays = now.timeIntervalSince(newest) / 86_400
+                return Swift.max(0, exp(-Swift.max(0, ageDays) / statusFreshnessTau))
+            }
+        }()
+
+        // Coverage — bucket events into the intent window's quarters.
+        guard let window = intentWindow, window.duration > 0 else {
+            return TimelinessSummary(
+                newest: newest,
+                freshness: freshness,
+                coverage: dates.isEmpty ? 0 : 1.0,
+                gaps: []
+            )
+        }
+        let bucketCount = 4
+        let bucketWidth = window.duration / Double(bucketCount)
+        var bucketHits = Array(repeating: false, count: bucketCount)
+        for date in dates {
+            guard window.contains(date) else { continue }
+            let offset = date.timeIntervalSince(window.start)
+            var idx = Int(offset / bucketWidth)
+            if idx >= bucketCount { idx = bucketCount - 1 }
+            if idx >= 0 { bucketHits[idx] = true }
+        }
+        let coverage = Double(bucketHits.filter { $0 }.count) / Double(bucketCount)
+
+        var gaps: [DateInterval] = []
+        var i = 0
+        while i < bucketCount {
+            if !bucketHits[i] {
+                var j = i
+                while j < bucketCount && !bucketHits[j] { j += 1 }
+                let gapStart = window.start.addingTimeInterval(Double(i) * bucketWidth)
+                let gapEnd = window.start.addingTimeInterval(Double(j) * bucketWidth)
+                gaps.append(DateInterval(start: gapStart, end: gapEnd))
+                i = j
+            } else {
+                i += 1
+            }
+        }
+        return TimelinessSummary(
+            newest: newest,
+            freshness: freshness,
+            coverage: coverage,
+            gaps: gaps
         )
     }
 

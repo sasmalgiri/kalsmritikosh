@@ -522,6 +522,51 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T9: extractor invocation failed: \(error)")
     }
 
+    // T10 — Timeliness: coverage 1.0 across full range; ≤0.5 with gap
+    // for events only in the last quarter of the window.
+    do {
+        let calendar = Calendar(identifier: .gregorian)
+        let start = calendar.date(from: DateComponents(year: 2023, month: 1, day: 1))!
+        let end = calendar.date(from: DateComponents(year: 2026, month: 12, day: 31))!
+        let window = DateInterval(start: start, end: end)
+        func mkEvent(year: Int) -> Event {
+            let d = calendar.date(from: DateComponents(year: year, month: 6, day: 15))!
+            return Event(
+                kind: .meetingHeld,
+                date: d,
+                title: "evt",
+                sourceObjectID: UUID(),
+                confidence: .medium,
+                dateConfidence: 0.9
+            )
+        }
+        let full = [mkEvent(year: 2023), mkEvent(year: 2024), mkEvent(year: 2025), mkEvent(year: 2026)]
+        let r1 = DefaultConfidenceEngine.timeliness(
+            events: full,
+            intentKind: .reconstructTimeline,
+            intentWindow: window,
+            now: Date()
+        )
+        if abs(r1.coverage - 1.0) < 0.01 && r1.gaps.isEmpty {
+            passed.append("T10: full-range evidence → coverage 1.0, 0 gaps")
+        } else {
+            failed.append("T10: full-range → coverage=\(r1.coverage) gaps=\(r1.gaps.count)")
+        }
+
+        let lateOnly = [mkEvent(year: 2026)]
+        let r2 = DefaultConfidenceEngine.timeliness(
+            events: lateOnly,
+            intentKind: .reconstructTimeline,
+            intentWindow: window,
+            now: Date()
+        )
+        if r2.coverage <= 0.5 && r2.gaps.count >= 1 {
+            passed.append(String(format: "T10: late-only → coverage %.2f ≤ 0.5 with %d gap(s)", r2.coverage, r2.gaps.count))
+        } else {
+            failed.append("T10: late-only coverage=\(r2.coverage) gaps=\(r2.gaps.count)")
+        }
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()

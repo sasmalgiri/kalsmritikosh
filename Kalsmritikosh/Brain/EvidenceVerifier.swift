@@ -31,9 +31,19 @@ public struct EvidenceVerifier: Verifier {
     ) async throws -> VerifiedAnswer {
         let claims = findings.flatMap(\.claims)
         let droppedUnverifiable = findings.map(\.droppedUnverifiable).reduce(0, +)
+        let intentWindow: DateInterval? = {
+            guard let tf = intent.timeframe,
+                  let s = tf.start, let e = tf.end, e > s else { return nil }
+            return DateInterval(start: s, end: e)
+        }()
         let report = await engine.evaluate(
             claims: claims,
-            droppedUnverifiable: droppedUnverifiable
+            droppedUnverifiable: droppedUnverifiable,
+            events: retrieval.events,
+            intentKind: intent.kind,
+            intentWindow: intentWindow,
+            ingestCoverage: 1.0,
+            now: Date()
         )
         _ = retrieval  // available for richer rendering below
         let citations = claims.flatMap { claim -> [VerifiedAnswer.Citation] in
