@@ -18,8 +18,10 @@ public actor SQLiteVectorStore: VectorStore {
     private let database: Database
 
     /// Soft cap. Beyond this row count we still scan, but log a Gate 3
-    /// reminder so latency regressions are visible.
-    public static let bruteForceWarnAt = 2_000_000
+    /// reminder so latency regressions are visible. `nonisolated` so the
+    /// actor's own `nearest` (running on the actor) can read it without
+    /// hopping back through MainActor isolation.
+    public nonisolated static let bruteForceWarnAt = 2_000_000
 
     public init(database: Database) {
         self.database = database
