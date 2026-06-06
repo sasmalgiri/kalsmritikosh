@@ -18,11 +18,22 @@ public struct RuleEventExtractor: EventExtractor {
         entities: [Entity]
     ) async throws -> [Event] {
         let content = object.content.lowercased()
-        // Best-effort temporal anchor:
-        // 1. earliest explicitly-detected date entity (high signal)
-        // 2. otherwise the source file's modification date
-        // 3. otherwise the KO's createdAt (which is now for fresh ingests)
-        let detectedDates = entities.compactMap { e -> Date? in
+
+        // T9 — temporal anchor with per-tier confidence:
+        //   0.95 — email Date: header (high signal, parsed by EmailLoader)
+        //   0.70 — content-extracted date entity (medium)
+        //   0.30 — file mtime / KO createdAt fallback (low; mtime lies)
+        var primaryDate: Date
+        var dateConfidence: Double
+
+        let headerDate: Date? = {
+            guard object.sourceType.category == .email,
+                  let headerString = object.metadata["date"].flatMap(stringValue)
+            else { return nil }
+            return parseRFC2822Date(headerString) ?? ISO8601DateFormatter().date(from: headerString)
+        }()
+
+        let contentDates = entities.compactMap { e -> Date? in
             guard e.kind == .date,
                   let iso = e.normalizedValue,
                   let date = ISO8601DateFormatter().date(from: iso)
@@ -33,7 +44,20 @@ public struct RuleEventExtractor: EventExtractor {
             let attrs = try? FileManager.default.attributesOfItem(atPath: object.sourceFile.path)
             return attrs?[.modificationDate] as? Date
         }()
-        let primaryDate = detectedDates.min() ?? fileModified ?? object.createdAt
+
+        if let header = headerDate {
+            primaryDate = header
+            dateConfidence = 0.95
+        } else if let contentDate = contentDates.min() {
+            primaryDate = contentDate
+            dateConfidence = 0.70
+        } else if let mtime = fileModified {
+            primaryDate = mtime
+            dateConfidence = 0.30
+        } else {
+            primaryDate = object.createdAt
+            dateConfidence = 0.30
+        }
 
         let entityIDs = entities.map(\.id)
         var events: [Event] = []
@@ -46,7 +70,8 @@ public struct RuleEventExtractor: EventExtractor {
                 summary: nil,
                 entityIDs: entityIDs,
                 sourceObjectID: object.id,
-                confidence: .high
+                confidence: .high,
+                dateConfidence: dateConfidence
             ))
         }
 
@@ -70,13 +95,30 @@ public struct RuleEventExtractor: EventExtractor {
                     summary: marker,
                     entityIDs: entityIDs,
                     sourceObjectID: object.id,
-                    confidence: .medium
+                    confidence: .medium,
+                    dateConfidence: dateConfidence
                 ))
                 break
             }
         }
 
         return events
+    }
+
+    /// RFC 2822 / 5322 date parser for "Date:" headers.
+    private func parseRFC2822Date(_ s: String) -> Date? {
+        let formats = [
+            "EEE, d MMM yyyy HH:mm:ss Z",
+            "d MMM yyyy HH:mm:ss Z",
+            "EEE, d MMM yyyy HH:mm:ss zzz"
+        ]
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        for f in formats {
+            formatter.dateFormat = f
+            if let date = formatter.date(from: s) { return date }
+        }
+        return nil
     }
 
     private func stringValue(_ codable: AnyCodable) -> String? {

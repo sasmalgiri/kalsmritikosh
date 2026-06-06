@@ -79,12 +79,22 @@ public struct TimelineView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    /// T9 — Prepend "~" to dates we don't fully trust (mtime-fallback,
+    /// roughly anything below the 0.6 threshold).
+    static func formatDate(_ event: Event) -> String {
+        let formatted = event.date.formatted(date: .abbreviated, time: .omitted)
+        return event.dateConfidence < 0.6 ? "~ \(formatted)" : formatted
+    }
+
     private func row(for event: Event) -> some View {
         HStack(alignment: .top) {
-            Text(event.date.formatted(date: .abbreviated, time: .omitted))
+            Text(Self.formatDate(event))
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .frame(width: 100, alignment: .leading)
+                .help(event.dateConfidence < 0.6
+                    ? "Approximate date — low date confidence (\(String(format: "%.2f", event.dateConfidence)))"
+                    : "")
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title).font(.body)
                 if let summary = event.summary {

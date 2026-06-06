@@ -22,6 +22,10 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     public let sourceObjectID: KnowledgeObject.ID
     public let sourceRange: SourceRange?
     public let confidence: Confidence
+    /// Confidence in the event's date specifically: 0.95 for email
+    /// headers, 0.7 for content-extracted, 0.3 for mtime-fallback,
+    /// 0.5 for "unknown source" backfills.
+    public let dateConfidence: Double
     public let attributes: [String: AnyCodable]
 
     public init(
@@ -35,6 +39,7 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         sourceObjectID: KnowledgeObject.ID,
         sourceRange: SourceRange? = nil,
         confidence: Confidence = .medium,
+        dateConfidence: Double = 0.5,
         attributes: [String: AnyCodable] = [:]
     ) {
         self.id = id
@@ -47,7 +52,29 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         self.sourceObjectID = sourceObjectID
         self.sourceRange = sourceRange
         self.confidence = confidence
+        self.dateConfidence = dateConfidence
         self.attributes = attributes
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, date, endDate, title, summary, entityIDs,
+             sourceObjectID, sourceRange, confidence, dateConfidence, attributes
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.kind = try c.decode(Kind.self, forKey: .kind)
+        self.date = try c.decode(Date.self, forKey: .date)
+        self.endDate = try c.decodeIfPresent(Date.self, forKey: .endDate)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        self.entityIDs = try c.decodeIfPresent([Entity.ID].self, forKey: .entityIDs) ?? []
+        self.sourceObjectID = try c.decode(KnowledgeObject.ID.self, forKey: .sourceObjectID)
+        self.sourceRange = try c.decodeIfPresent(SourceRange.self, forKey: .sourceRange)
+        self.confidence = try c.decode(Confidence.self, forKey: .confidence)
+        self.dateConfidence = try c.decodeIfPresent(Double.self, forKey: .dateConfidence) ?? 0.5
+        self.attributes = try c.decodeIfPresent([String: AnyCodable].self, forKey: .attributes) ?? [:]
     }
 
     /// The 10 event kinds from Phase 6 of the roadmap, plus an

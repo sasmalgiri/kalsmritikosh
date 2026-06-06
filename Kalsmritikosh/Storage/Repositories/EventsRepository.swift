@@ -17,8 +17,8 @@ public actor EventsRepository {
         for e in events {
             let attrs = try encoder.encode(e.attributes)
             try await database.exec("""
-            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(e.id),
                 .text(e.kind.rawValue),
@@ -28,7 +28,8 @@ public actor EventsRepository {
                 .optionalText(e.summary),
                 .uuid(e.sourceObjectID),
                 .real(e.confidence.value),
-                .text(String(data: attrs, encoding: .utf8) ?? "{}")
+                .text(String(data: attrs, encoding: .utf8) ?? "{}"),
+                .real(e.dateConfidence)
             ])
             for entityID in e.entityIDs {
                 try await database.exec("""
@@ -45,7 +46,7 @@ public actor EventsRepository {
 
     public func between(start: Date, end: Date, limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
         FROM events
         WHERE date BETWEEN ? AND ?
         ORDER BY date ASC
@@ -71,7 +72,7 @@ public actor EventsRepository {
 
     public func recent(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
         FROM events
         ORDER BY date DESC
         LIMIT ?;
@@ -89,6 +90,7 @@ public actor EventsRepository {
             let sourceID = row.uuid(6),
             let conf = row.double(7)
         else { return nil }
+        let dateConf = row.double(8) ?? 0.5
         return Event(
             id: id,
             kind: kind,
@@ -97,7 +99,8 @@ public actor EventsRepository {
             title: title,
             summary: row.string(5),
             sourceObjectID: sourceID,
-            confidence: Confidence(conf)
+            confidence: Confidence(conf),
+            dateConfidence: dateConf
         )
     }
 }

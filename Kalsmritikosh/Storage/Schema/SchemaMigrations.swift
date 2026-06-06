@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 7
+    public static let latestVersion = 8
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -44,7 +44,8 @@ public enum SchemaMigrations {
         (4, v4),
         (5, v5),
         (6, v6),
-        (7, v7)
+        (7, v7),
+        (8, v8)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -440,5 +441,14 @@ public enum SchemaMigrations {
     -- sweeps NEVER cascade-delete knowledge — they only flip this flag.
     ALTER TABLE files ADD COLUMN availability TEXT NOT NULL DEFAULT 'available';
     CREATE INDEX idx_files_availability ON files(availability);
+    """
+
+    // MARK: - v8 — event date confidence (T9)
+
+    private static let v8: String = """
+    -- T9 — Confidence in the event's date as a fact: 0.95 (parsed from
+    -- an email header), 0.7 (extracted from content), 0.3 (file mtime
+    -- fallback). 0.5 is the safe default for backfilled rows.
+    ALTER TABLE events ADD COLUMN date_confidence REAL NOT NULL DEFAULT 0.5;
     """
 }

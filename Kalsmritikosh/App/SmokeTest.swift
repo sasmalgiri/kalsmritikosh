@@ -463,6 +463,65 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T8: setup failed: \(error)")
     }
 
+    // T9 — Event date confidence: tiered assignment + badge logic.
+    do {
+        let extractor = RuleEventExtractor()
+
+        // (a) Email KO with a "date" header → 0.95.
+        let emailKO = KnowledgeObject(
+            sourceFile: URL(fileURLWithPath: "/tmp/t9-email.eml"),
+            sourceType: .eml,
+            content: "Body: invoice issued on Monday.",
+            metadata: [
+                "subject": AnyCodable(.string("Test")),
+                "date": AnyCodable(.string("Mon, 1 Apr 2025 10:00:00 +0000"))
+            ],
+            confidence: .high
+        )
+        let emailEvents = try await extractor.extractEvents(
+            from: emailKO,
+            chunks: [],
+            entities: []
+        )
+        if emailEvents.contains(where: { abs($0.dateConfidence - 0.95) < 0.01 }) {
+            passed.append("T9: email header → dateConfidence 0.95")
+        } else {
+            let confs = emailEvents.map(\.dateConfidence)
+            failed.append("T9: email header → \(confs) (expected 0.95)")
+        }
+
+        // (b) Non-email KO with no detected date → mtime fallback 0.3.
+        let mtimeKO = KnowledgeObject(
+            sourceFile: URL(fileURLWithPath: "/tmp/non-existent-\(UUID()).txt"),
+            sourceType: .txt,
+            content: "Project contract signed at the kickoff meeting.",
+            confidence: .high
+        )
+        let mtimeEvents = try await extractor.extractEvents(
+            from: mtimeKO,
+            chunks: [],
+            entities: []
+        )
+        if mtimeEvents.contains(where: { abs($0.dateConfidence - 0.30) < 0.01 }) {
+            passed.append("T9: mtime/fallback → dateConfidence 0.30")
+        } else {
+            let confs = mtimeEvents.map(\.dateConfidence)
+            failed.append("T9: mtime fallback → \(confs) (expected 0.30)")
+        }
+
+        // (c) Timeline view: low-confidence dates get the "~" badge.
+        if let mtimeEvent = mtimeEvents.first {
+            let label = TimelineView.formatDate(mtimeEvent)
+            if label.hasPrefix("~") {
+                passed.append("T9: low-confidence event renders with ~ badge")
+            } else {
+                failed.append("T9: low-confidence event label = '\(label)' (expected ~ prefix)")
+            }
+        }
+    } catch {
+        failed.append("T9: extractor invocation failed: \(error)")
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()
