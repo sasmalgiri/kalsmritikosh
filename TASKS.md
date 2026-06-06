@@ -299,6 +299,49 @@ Notarization + CODE_SIGN_ENTITLEMENTS wiring; per-file completeness report UI
 "What kalsmritikosh can see" panel; SourceViewer range highlighting; UserNotifications
 "answer matured" re-run; GB-tiered pricing copy.
 
+### G2-SWIFT6 — Swift 6 strict-concurrency migration (Gate 2)
+
+**Why:** ~279 isolation warnings are 279 places the compiler cannot prove
+data-race safety, in an app that will hold a user's life archive under real
+concurrency (WorkerPool ingest + UI + background distillation). Must be zero
+before sale. Deliberately scheduled AFTER Gate 1 so the eval harness provides a
+behavioral regression baseline for the refactor.
+
+**Precondition (hard):** T12 complete and a baseline eval-report.md committed.
+
+**Files:** cross-cutting by module, in this order, ONE MODULE PER COMMIT:
+Core → Storage → Knowledge → Retrieval → Routing → Brain → Ingestion → App/UI.
+
+**Spec:**
+- Phase the compiler: first build each module clean under
+  `-strict-concurrency=targeted`, then `complete`; flip the project to the
+  Swift 6 language mode only as the final commit.
+- Preferred fixes, in order: confine types to an existing actor; add
+  @MainActor where the type is genuinely UI-bound; add Sendable conformances
+  to value types; replace cross-actor `.shared` access with injected
+  references (IngestCoordinator already shows the DI pattern). Avoid
+  @unchecked Sendable except with a comment proving invariants; never use it
+  on mutable reference types.
+- Known specific items from the warning audit:
+  - AppState/CapabilityRegistry `.shared` cross-actor access → inject.
+  - DatabaseStack execRaw call sites → route through the Database actor API.
+  - IngestCoordinator default-param actor inits → make params explicit at
+    call sites.
+  - OllamaProvider isolation-mismatch conformance → align protocol isolation.
+  - SourceRange.swift:31 `Range: @retroactive Codable` → REMOVE the
+    retroactive conformance (future-SDK breakage risk); replace with a small
+    owned Codable wrapper struct (e.g. CodableRange) and migrate call sites.
+- After EVERY module commit: BuildProject green + SmokeTest passes.
+- After the FINAL commit: re-run the full eval harness.
+
+**Acceptance:**
+- Zero strict-concurrency warnings; project compiles in Swift 6 language mode.
+- SmokeTest passes; ingest stress check (fixture corpus at max WorkerPool
+  concurrency) completes without deadlock.
+- Eval metrics within ±2% of the pre-migration baseline report; any larger
+  delta is investigated and explained in the commit message before merge.
+- Grep guard still clean.
+
 ## Gate 3 (outline)
 sqlite-vec/ANN behind the VectorStore protocol; tiered LLM extraction at scale
 (type-routed readers: invoice/contract/thread prompts); demand-driven Tier-3 queue fed
