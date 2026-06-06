@@ -325,6 +325,21 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T5: vector store setup failed: \(error)")
     }
 
+    // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
+    do {
+        let counter = T6CallCounter()
+        let fake = T6CountingEmbedder(dimension: 8, counter: counter)
+        let texts = (0..<1000).map { "synthetic text \($0)" }
+        let out = await fake.embedAll(texts, batchSize: 64)
+        let expected = Int((1000.0 / 64.0).rounded(.up))
+        let calls = await counter.count
+        if out.count == 1000 && calls <= expected {
+            passed.append("T6: embedAll → \(calls) batch calls for 1000 texts (≤ \(expected))")
+        } else {
+            failed.append("T6: embedAll \(calls) calls / \(out.count) vectors (expected ≤\(expected) calls, 1000 vectors)")
+        }
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,
@@ -365,6 +380,27 @@ private func fixtureURLs() throws -> [URL] {
     )
     return items
         .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
+}
+
+// T6 helpers — fake counting embedder.
+private actor T6CallCounter {
+    private(set) var count = 0
+    func bump(_ n: Int = 1) { count += n }
+}
+
+private struct T6CountingEmbedder: Embedder {
+    let dimension: Int
+    let counter: T6CallCounter
+
+    func embed(_ text: String) async -> [Float] {
+        await counter.bump()
+        return Array(repeating: 0, count: dimension)
+    }
+
+    func embedBatch(_ texts: [String]) async -> [[Float]] {
+        await counter.bump()
+        return texts.map { _ in Array(repeating: 0, count: dimension) }
+    }
 }
 
 private func countAllEntities(_ repo: EntitiesRepository) async throws -> Int {

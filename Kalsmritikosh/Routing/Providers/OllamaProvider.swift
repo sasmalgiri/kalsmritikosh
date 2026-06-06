@@ -257,6 +257,42 @@ public actor OllamaProvider: ModelProvider {
         }
     }
 
+    public func embedBatch(texts: [String]) async throws -> [[Float]] {
+        guard enabled else { throw ModelProviderError.unavailable(providerID: id) }
+        guard let embedTag = embeddingModelTag, !embedTag.isEmpty else {
+            throw ModelProviderError.capabilityMissing(providerID: id, capability: .embedding)
+        }
+        guard !texts.isEmpty else { return [] }
+        AtlasLog.ingestion.info("OllamaProvider.embedBatch: \(texts.count, privacy: .public) texts")
+        // Newer Ollama exposes /api/embed accepting "input": [String].
+        let body: [String: Any] = [
+            "model": embedTag,
+            "input": texts
+        ]
+        let request = try makeRequest(path: "api/embed", body: body)
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                throw ModelProviderError.generationFailed(
+                    reason: "Ollama embed batch HTTP \(status): \(String(data: data, encoding: .utf8) ?? "(no body)")"
+                )
+            }
+            let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            if let arr = decoded?["embeddings"] as? [[Double]] {
+                return arr.map { $0.map { Float($0) } }
+            }
+            if let arr = decoded?["embeddings"] as? [[NSNumber]] {
+                return arr.map { $0.map { $0.floatValue } }
+            }
+            throw ModelProviderError.generationFailed(reason: "Ollama embed batch: missing 'embeddings' field.")
+        } catch let error as ModelProviderError {
+            throw error
+        } catch {
+            throw ModelProviderError.generationFailed(reason: "\(error)")
+        }
+    }
+
     // MARK: - Internals
 
     private func makeRequest(path: String, body: [String: Any]) throws -> URLRequest {

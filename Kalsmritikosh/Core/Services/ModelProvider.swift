@@ -47,9 +47,23 @@ public protocol ModelProvider: Sendable {
     /// Embedding vector for a piece of text. Only valid when capabilities
     /// contains `.embedding` — otherwise throws.
     func embed(text: String) async throws -> [Float]
+
+    /// Batch embedding. Providers that expose a native batch endpoint
+    /// (Ollama /api/embed, Apple's batched encoder) override; the default
+    /// loops over `embed(text:)`.
+    func embedBatch(texts: [String]) async throws -> [[Float]]
 }
 
 extension ModelProvider {
+    /// Default batch impl: loop over `embed(text:)`. Providers should
+    /// override when a real batch endpoint is available.
+    public func embedBatch(texts: [String]) async throws -> [[Float]] {
+        var out: [[Float]] = []
+        out.reserveCapacity(texts.count)
+        for t in texts { try await out.append(self.embed(text: t)) }
+        return out
+    }
+
     /// Default streaming impl: fall back to single-shot `generate`.
     public func generateStream(
         prompt: String,

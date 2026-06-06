@@ -259,9 +259,12 @@ public actor IngestCoordinator {
         }
 
         if let embedder, let vectors {
-            for chunk in chunked.prefix(20) {
-                let v = await embedder.embed(chunk.text)
-                try? await vectors.upsert(chunkID: chunk.id, embedding: v)
+            // T6 — batch embedding. embedAll chunks the list into
+            // batchSize-sized calls so we never round-trip per chunk.
+            let texts = chunked.map(\.text)
+            let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+            for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
+                try? await vectors.upsert(chunkID: chunk.id, embedding: vectorsList[i])
             }
         }
 

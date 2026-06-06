@@ -40,4 +40,21 @@ public actor CapabilityResolvedEmbedder: Embedder {
         }
         return await fallback.embed(text)
     }
+
+    public func embedBatch(_ texts: [String]) async -> [[Float]] {
+        guard !texts.isEmpty else { return [] }
+        let spec = CapabilitySpec.embedding(purpose: "embed.text.batch")
+        if let provider = try? await capabilities.resolve(spec),
+           await provider.isAvailable() {
+            do {
+                let vectors = try await provider.embedBatch(texts: texts)
+                if vectors.count == texts.count, !vectors.contains(where: \.isEmpty) {
+                    return vectors
+                }
+            } catch {
+                AtlasLog.routing.debug("Batch embedding via \(provider.id, privacy: .public) failed; falling back: \(String(describing: error), privacy: .public)")
+            }
+        }
+        return await fallback.embedBatch(texts)
+    }
 }

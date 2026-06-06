@@ -14,6 +14,36 @@ import NaturalLanguage
 public protocol Embedder: Sendable {
     var dimension: Int { get }
     func embed(_ text: String) async -> [Float]
+    /// Batch variant. Default impl loops over `embed`; providers that
+    /// support a real batch endpoint (Ollama, etc.) override.
+    func embedBatch(_ texts: [String]) async -> [[Float]]
+}
+
+extension Embedder {
+    public func embedBatch(_ texts: [String]) async -> [[Float]] {
+        var out: [[Float]] = []
+        out.reserveCapacity(texts.count)
+        for t in texts { out.append(await embed(t)) }
+        return out
+    }
+
+    /// Convenience: chunk `texts` into `batchSize` slices and call
+    /// `embedBatch` once per slice. Used by ingest to avoid per-chunk
+    /// round trips. Returns vectors in input order.
+    public func embedAll(_ texts: [String], batchSize: Int = 64) async -> [[Float]] {
+        guard !texts.isEmpty, batchSize > 0 else { return [] }
+        var out: [[Float]] = []
+        out.reserveCapacity(texts.count)
+        var i = 0
+        while i < texts.count {
+            let end = Swift.min(i + batchSize, texts.count)
+            let batch = Array(texts[i..<end])
+            let result = await embedBatch(batch)
+            out.append(contentsOf: result)
+            i = end
+        }
+        return out
+    }
 }
 
 public struct NLEmbedder: Embedder {
