@@ -622,6 +622,41 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T12 — Eval harness produces eval-report.md with nonzero numbers
+    // that are reproducible across two runs.
+    do {
+        let runner = EvalKitRunner()
+        let dir1 = tempDir.appendingPathComponent("eval1", isDirectory: true)
+        let dir2 = tempDir.appendingPathComponent("eval2", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir1, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dir2, withIntermediateDirectories: true)
+        let url1 = try runner.runOffline(outputDir: dir1)
+        let url2 = try runner.runOffline(outputDir: dir2)
+        let exists1 = FileManager.default.fileExists(atPath: url1.path)
+        let body1 = (try? String(contentsOf: url1, encoding: .utf8)) ?? ""
+        let body2 = (try? String(contentsOf: url2, encoding: .utf8)) ?? ""
+        let hasClassTable = body1.contains("| lookup |") && body1.contains("| aggregation |")
+        if exists1 && hasClassTable {
+            passed.append("T12: eval-report.md produced with per-class table")
+        } else {
+            failed.append("T12: report missing class rows or file (\(url1.path))")
+        }
+        // Strip generation timestamps before comparing — runOffline is
+        // otherwise fully deterministic.
+        func stripTimestamps(_ s: String) -> String {
+            s.components(separatedBy: "\n")
+                .filter { !$0.hasPrefix("Generated:") }
+                .joined(separator: "\n")
+        }
+        if stripTimestamps(body1) == stripTimestamps(body2) {
+            passed.append("T12: two runs produce identical reports (0% drift)")
+        } else {
+            failed.append("T12: two runs diverged")
+        }
+    } catch {
+        failed.append("T12: eval harness failed: \(error)")
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()

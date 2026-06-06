@@ -1,0 +1,149 @@
+[
+  {
+    "id": "L1",
+    "text": "Who is the project owner of Project Delta?",
+    "class": "lookup",
+    "expectedKeywords": ["delta"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L2",
+    "text": "What was the contracted delivery date for Project Delta?",
+    "class": "lookup",
+    "expectedKeywords": ["delivery"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "L3",
+    "text": "Who is the supplier listed in amendment 7?",
+    "class": "lookup",
+    "expectedKeywords": ["supplier"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "L4",
+    "text": "What is the invoice number on invoice 401?",
+    "class": "lookup",
+    "expectedKeywords": ["401"],
+    "expectedSourceFiles": ["invoice-401.eml"]
+  },
+  {
+    "id": "A1",
+    "text": "What is the total of all issued invoices?",
+    "class": "aggregation",
+    "expectedKeywords": ["invoice", "total"],
+    "expectedSourceFiles": ["invoice-401.eml", "invoice-432.eml"]
+  },
+  {
+    "id": "A2",
+    "text": "How many emails reference Supplier ABC?",
+    "class": "aggregation",
+    "expectedKeywords": ["supplier", "abc"],
+    "expectedSourceFiles": [
+      "supplier_abc_22.eml",
+      "supplier_abc_23.eml",
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "A3",
+    "text": "List all delays mentioned across the Project Delta archive.",
+    "class": "aggregation",
+    "expectedKeywords": ["delay"],
+    "expectedSourceFiles": [
+      "amendment-7.md",
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "A4",
+    "text": "How many unique suppliers appear in Project Delta?",
+    "class": "aggregation",
+    "expectedKeywords": ["supplier"],
+    "expectedSourceFiles": [
+      "supplier_abc_22.eml",
+      "supplier_abc_23.eml",
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "T1",
+    "text": "What changed between week 22 and week 25 of Project Delta?",
+    "class": "temporal",
+    "expectedKeywords": ["week", "change"],
+    "expectedSourceFiles": [
+      "supplier_abc_22.eml",
+      "supplier_abc_23.eml",
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "T2",
+    "text": "When did Supplier ABC first report a delay?",
+    "class": "temporal",
+    "expectedKeywords": ["delay"],
+    "expectedSourceFiles": ["supplier_abc_24.eml"]
+  },
+  {
+    "id": "T3",
+    "text": "How did the contract status evolve over time for Project Delta?",
+    "class": "temporal",
+    "expectedKeywords": ["contract"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "T4",
+    "text": "Which week saw the largest single change in Project Delta?",
+    "class": "temporal",
+    "expectedKeywords": ["week"],
+    "expectedSourceFiles": [
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "M1",
+    "text": "Why was Project Delta delayed?",
+    "class": "multihop",
+    "expectedKeywords": ["supplier", "delay"],
+    "expectedSourceFiles": [
+      "amendment-7.md",
+      "supplier_abc_24.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "M2",
+    "text": "Which supplier emails caused the delivery date to slip in the contract?",
+    "class": "multihop",
+    "expectedKeywords": ["supplier", "delivery"],
+    "expectedSourceFiles": [
+      "amendment-7.md",
+      "supplier_abc_24.eml"
+    ]
+  },
+  {
+    "id": "M3",
+    "text": "Connect Supplier ABC to the unpaid invoice in Project Delta.",
+    "class": "multihop",
+    "expectedKeywords": ["supplier", "invoice"],
+    "expectedSourceFiles": [
+      "invoice-432.eml",
+      "supplier_abc_25.eml"
+    ]
+  },
+  {
+    "id": "M4",
+    "text": "Trace the chain from contract signing through to amendment 7.",
+    "class": "multihop",
+    "expectedKeywords": ["contract", "amendment"],
+    "expectedSourceFiles": [
+      "contract.md",
+      "amendment-7.md"
+    ]
+  }
+]
