@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 4
+    public static let latestVersion = 5
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -41,7 +41,8 @@ public enum SchemaMigrations {
         (1, v1),
         (2, v2),
         (3, v3),
-        (4, v4)
+        (4, v4),
+        (5, v5)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -401,5 +402,19 @@ public enum SchemaMigrations {
     ALTER TABLE relationships ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE relationships ADD COLUMN evidence_object_ids_json TEXT NOT NULL DEFAULT '[]';
     CREATE UNIQUE INDEX idx_rel_canonical ON relationships(kind, from_entity_id, to_entity_id);
+    """
+
+    // MARK: - v5 — int8-quantized vectors table (T5)
+
+    private static let v5: String = """
+    -- T5 — Real vector store. One row per chunk: int8 symmetric blob +
+    -- per-vector scale. Brute force at scan time until ANN (Gate 3).
+    CREATE TABLE vectors (
+        chunk_id    TEXT PRIMARY KEY NOT NULL,
+        dim         INTEGER NOT NULL,
+        q           BLOB NOT NULL,
+        scale       REAL NOT NULL,
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+    );
     """
 }

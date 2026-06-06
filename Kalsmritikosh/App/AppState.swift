@@ -80,7 +80,7 @@ public final class AppState {
             try await SchemaMigrations.migrate(db)
             AtlasLog.storage.info("Database open at \(db.url.path, privacy: .public)")
 
-            let vectors = try await SQLiteVectorStore(database: db)
+            let vectors = SQLiteVectorStore(database: db)
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
             let chunks = ChunksRepository(database: db)

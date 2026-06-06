@@ -282,6 +282,49 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T4: relationships repository not wired into AppState")
     }
 
+    // T5 — int8 vector store round-trip. Uses a throwaway temp DB so the
+    // fixture's real vectors stay untouched.
+    do {
+        let vecDB = try Database(url: tempDir.appendingPathComponent("t5-vec.sqlite"))
+        try await SchemaMigrations.migrate(vecDB)
+        // Skip chunks FK so we can plant synthetic ids.
+        try await vecDB.exec("PRAGMA foreign_keys = OFF;")
+        let vecStore = SQLiteVectorStore(database: vecDB)
+        var ids: [UUID] = []
+        var vecs: [[Float]] = []
+        for _ in 0..<200 {
+            let id = UUID()
+            let v = (0..<128).map { _ in Float.random(in: -1...1) }
+            ids.append(id); vecs.append(v)
+            try await vecStore.upsert(chunkID: id, embedding: v)
+        }
+        var roundTrip = 0
+        for _ in 0..<20 {
+            let i = Int.random(in: 0..<200)
+            let hits = try await vecStore.nearest(to: vecs[i], limit: 1, candidateChunkIDs: nil)
+            if hits.first?.chunkID == ids[i] { roundTrip += 1 }
+        }
+        if roundTrip >= 19 {
+            passed.append("T5: int8 vector round-trip \(roundTrip)/20 correct")
+        } else {
+            failed.append("T5: int8 vector round-trip only \(roundTrip)/20 correct")
+        }
+        // Candidate prefilter sanity: scoped scan never exceeds the
+        // candidate set and respects the limit.
+        let scoped = try await vecStore.nearest(
+            to: vecs[0],
+            limit: 5,
+            candidateChunkIDs: Array(ids.prefix(10))
+        )
+        if scoped.count <= 5 && scoped.count > 0 {
+            passed.append("T5: candidate-scoped scan returned \(scoped.count) ≤ limit")
+        } else {
+            failed.append("T5: candidate-scoped scan returned \(scoped.count) (expected 1..5)")
+        }
+    } catch {
+        failed.append("T5: vector store setup failed: \(error)")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,
