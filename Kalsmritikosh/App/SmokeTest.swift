@@ -241,6 +241,47 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T3: \(dupGroups) duplicate (kind, normalized) groups exist — UNIQUE violated")
     }
 
+    // T4 — graph extraction: edges exist + supplier reachable via 2-hop.
+    if let relRepo = state.relationships {
+        let total = (try? await relRepo.count()) ?? 0
+        if total >= 8 {
+            passed.append("T4: \(total) edges in graph (≥ 8)")
+        } else {
+            failed.append("T4: only \(total) edges in graph (expected ≥ 8)")
+        }
+        let co = (try? await relRepo.count(ofKind: .coOccurs)) ?? 0
+        let ev = (try? await relRepo.count(ofKind: .eventLinked)) ?? 0
+        AtlasLog.app.info("T4 edge mix: co_occurs=\(co, privacy: .public) event_linked=\(ev, privacy: .public)")
+
+        // 2-hop traversal: find any project entity matching "Delta" and
+        // check whether traversal reaches an org whose name mentions
+        // "Supplier" or "ABC".
+        if let graph = state.graph,
+           let project = (try? await state.entities?.find(byValue: "Delta", limit: 5))?.first {
+            let edges = (try? await graph.twoHop(from: project.id, breadth: 25)) ?? []
+            let touched: Set<Entity.ID> = Set(edges.flatMap { [$0.fromEntityID, $0.toEntityID] })
+            var reachedSupplier = false
+            for id in touched {
+                if let entity = try? await state.entities?.find(byID: id),
+                   entity.kind == .organization,
+                   entity.value.localizedCaseInsensitiveContains("supplier")
+                    || entity.value.localizedCaseInsensitiveContains("abc") {
+                    reachedSupplier = true
+                    break
+                }
+            }
+            if reachedSupplier {
+                passed.append("T4: 2-hop from Project Delta reaches a Supplier org")
+            } else {
+                failed.append("T4: 2-hop from Project Delta did NOT reach a Supplier org (\(touched.count) entities touched)")
+            }
+        } else {
+            failed.append("T4: no Project Delta entity present to start 2-hop traversal")
+        }
+    } else {
+        failed.append("T4: relationships repository not wired into AppState")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,

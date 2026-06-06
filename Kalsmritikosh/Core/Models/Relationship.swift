@@ -52,5 +52,10 @@ public struct Relationship: Codable, Identifiable, Hashable, Sendable {
         case manages
         case reportsTo
         case other
+        // T4 — graph extraction edge kinds
+        case coOccurs = "co_occurs"
+        case eventLinked = "event_linked"
+        case emailed
+        case affiliated
     }
 }

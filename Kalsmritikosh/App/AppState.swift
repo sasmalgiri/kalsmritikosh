@@ -205,12 +205,14 @@ public final class AppState {
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
                 eventExtractor: RuleEventExtractor(),
+                relationshipExtractor: Tier1RelationshipExtractor(),
                 embedder: embedder,
                 files: files,
                 objects: objects,
                 chunks: chunks,
                 entities: entities,
                 events: events,
+                relationships: relationships,
                 vectors: vectors
             )
 

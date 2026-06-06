@@ -31,6 +31,7 @@ public actor IngestCoordinator {
     private let entityExtractor: EntityExtractor?
     private let entityLinker: EntityLinker?
     private let eventExtractor: EventExtractor?
+    private let relationshipExtractor: Tier1RelationshipExtractor?
     private let embedder: Embedder?
 
     private let files: FilesRepository
@@ -38,6 +39,7 @@ public actor IngestCoordinator {
     private let chunks: ChunksRepository
     private let entities: EntitiesRepository?
     private let events: EventsRepository?
+    private let relationships: RelationshipsRepository?
     private let vectors: VectorStore?
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
@@ -51,12 +53,14 @@ public actor IngestCoordinator {
         entityExtractor: EntityExtractor? = nil,
         entityLinker: EntityLinker? = nil,
         eventExtractor: EventExtractor? = nil,
+        relationshipExtractor: Tier1RelationshipExtractor? = nil,
         embedder: Embedder? = nil,
         files: FilesRepository,
         objects: KnowledgeObjectRepository,
         chunks: ChunksRepository,
         entities: EntitiesRepository? = nil,
         events: EventsRepository? = nil,
+        relationships: RelationshipsRepository? = nil,
         vectors: VectorStore? = nil
     ) {
         self.loaders = loaders
@@ -66,12 +70,14 @@ public actor IngestCoordinator {
         self.entityExtractor = entityExtractor
         self.entityLinker = entityLinker
         self.eventExtractor = eventExtractor
+        self.relationshipExtractor = relationshipExtractor
         self.embedder = embedder
         self.files = files
         self.objects = objects
         self.chunks = chunks
         self.entities = entities
         self.events = events
+        self.relationships = relationships
         self.vectors = vectors
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
@@ -195,11 +201,12 @@ public actor IngestCoordinator {
 
         var extractedEntities: [Entity] = []
         var extractedEvents: [Event] = []
+        var canonicalMapping: [Entity.ID: Entity.ID] = [:]
 
         if let entityExtractor, let entities {
             var raw = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
             if let entityLinker { raw = entityLinker.link(raw) }
-            try? await entities.insertBatch(raw)
+            canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
             extractedEntities = raw
             // Port the render-time email-domain mining into ingest so an
             // alias row exists for every domain we see, mapped onto its
@@ -209,13 +216,46 @@ public actor IngestCoordinator {
         }
 
         if let eventExtractor, let events {
-            let raw = (try? await eventExtractor.extractEvents(
+            let rawEvents = (try? await eventExtractor.extractEvents(
                 from: object,
                 chunks: chunked,
                 entities: extractedEntities
             )) ?? []
-            try? await events.insertBatch(raw)
-            extractedEvents = raw
+            // Remap event.entityIDs to canonical ids before persisting so
+            // event_entities rows reference the real canonical rows.
+            let remapped = rawEvents.map { event in
+                remapEventToCanonical(event, mapping: canonicalMapping)
+            }
+            try? await events.insertBatch(remapped)
+            extractedEvents = remapped
+        }
+
+        // T4 — Tier 1 graph extraction. Co-occurrence + event-linked
+        // edges across canonical entities, plus typed email edges when
+        // sender/recipients can be resolved.
+        if let relationshipExtractor, let relationships {
+            let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }
+            let participants = await emailParticipants(
+                for: object,
+                extractedEntities: extractedEntities,
+                mapping: canonicalMapping
+            )
+            let edges = relationshipExtractor.extract(
+                objectID: object.id,
+                canonicalEntityIDs: canonicalIDs,
+                events: extractedEvents,
+                emailParticipants: participants
+            )
+            for edge in edges {
+                let (from, to) = orderEdge(kind: edge.kind, from: edge.from, to: edge.to)
+                try? await relationships.upsertEdge(
+                    kind: edge.kind,
+                    from: from,
+                    to: to,
+                    sourceObjectID: object.id,
+                    viaEventID: edge.viaEventID
+                )
+            }
         }
 
         if let embedder, let vectors {
@@ -244,6 +284,117 @@ public actor IngestCoordinator {
             documentClass: docClass,
             invalidations: invalidationSubjects
         )
+    }
+
+    /// Replace an event's entityIDs with canonical ids. Unmapped ids
+    /// pass through unchanged (defensive — should never happen because
+    /// the event's entity references come from the same batch).
+    private func remapEventToCanonical(_ event: Event, mapping: [Entity.ID: Entity.ID]) -> Event {
+        Event(
+            id: event.id,
+            kind: event.kind,
+            date: event.date,
+            endDate: event.endDate,
+            title: event.title,
+            summary: event.summary,
+            entityIDs: event.entityIDs.map { mapping[$0] ?? $0 },
+            sourceObjectID: event.sourceObjectID,
+            sourceRange: event.sourceRange,
+            confidence: event.confidence,
+            attributes: event.attributes
+        )
+    }
+
+    /// Canonicalize edge direction for undirected edge kinds so
+    /// (a,b) and (b,a) hit the same UNIQUE row.
+    private func orderEdge(
+        kind: Relationship.Kind,
+        from: Entity.ID,
+        to: Entity.ID
+    ) -> (Entity.ID, Entity.ID) {
+        let undirected: Set<Relationship.Kind> = [.coOccurs, .eventLinked]
+        guard undirected.contains(kind) else { return (from, to) }
+        return from.uuidString <= to.uuidString ? (from, to) : (to, from)
+    }
+
+    /// For email KOs, derive sender + recipient canonical entity ids from
+    /// the EmailLoader-populated "from" / "to" / "cc" headers and resolve
+    /// the sender's domain to an org canonical via the alias table.
+    private func emailParticipants(
+        for object: KnowledgeObject,
+        extractedEntities: [Entity],
+        mapping: [Entity.ID: Entity.ID]
+    ) async -> Tier1RelationshipExtractor.EmailParticipants? {
+        guard let entities,
+              [SourceType.eml, .appleMail, .mbox].contains(object.sourceType) else {
+            return nil
+        }
+        let fromHeader = headerValue(object.metadata, "from")
+        let toHeader = headerValue(object.metadata, "to")
+        let ccHeader = headerValue(object.metadata, "cc")
+        guard let senderAddr = firstEmailAddress(in: fromHeader) else { return nil }
+        let recipientAddrs = Set(
+            emailAddresses(in: toHeader) + emailAddresses(in: ccHeader)
+        ).filter { $0 != senderAddr }
+        guard let senderID = canonicalEmailAddressID(
+            address: senderAddr,
+            extractedEntities: extractedEntities,
+            mapping: mapping
+        ) else { return nil }
+        let recipientIDs: [Entity.ID] = recipientAddrs.compactMap { addr in
+            canonicalEmailAddressID(
+                address: addr,
+                extractedEntities: extractedEntities,
+                mapping: mapping
+            )
+        }
+        var orgID: Entity.ID? = nil
+        if let at = senderAddr.firstIndex(of: "@") {
+            let domain = String(senderAddr[senderAddr.index(after: at)...]).lowercased()
+            orgID = try? await entities.find(byValue: domain, limit: 1).first?.id
+        }
+        return Tier1RelationshipExtractor.EmailParticipants(
+            senderID: senderID,
+            recipientIDs: recipientIDs,
+            senderDomainOrgID: orgID
+        )
+    }
+
+    private func headerValue(_ meta: [String: AnyCodable], _ key: String) -> String {
+        guard let v = meta[key], case .string(let s) = v.value else { return "" }
+        return s
+    }
+
+    private func firstEmailAddress(in header: String) -> String? {
+        emailAddresses(in: header).first
+    }
+
+    private func emailAddresses(in header: String) -> [String] {
+        guard !header.isEmpty else { return [] }
+        // Match e.g. "Name <addr@example.com>" or "addr@example.com" separated by , or ;.
+        let pattern = "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}"
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = header as NSString
+        let matches = re.matches(in: header, range: NSRange(location: 0, length: ns.length))
+        return matches.map { ns.substring(with: $0.range).lowercased() }
+    }
+
+    /// Resolves an email-address string to a canonical entity id by
+    /// finding the matching emailAddress entity in this batch and
+    /// looking up its canonical id in `mapping`.
+    private func canonicalEmailAddressID(
+        address: String,
+        extractedEntities: [Entity],
+        mapping: [Entity.ID: Entity.ID]
+    ) -> Entity.ID? {
+        let target = address.lowercased()
+        let match = extractedEntities.first(where: { e in
+            e.kind == .emailAddress &&
+                (e.normalizedValue?.lowercased() == target ||
+                 e.value.lowercased() == target)
+        })
+        guard let raw = match?.id else { return nil }
+        return mapping[raw]
     }
 
     /// For each email-address entity, derive an org label from its

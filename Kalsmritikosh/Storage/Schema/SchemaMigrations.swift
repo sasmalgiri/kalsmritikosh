@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 3
+    public static let latestVersion = 4
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -40,7 +40,8 @@ public enum SchemaMigrations {
     private static let all: [(Int, String)] = [
         (1, v1),
         (2, v2),
-        (3, v3)
+        (3, v3),
+        (4, v4)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -388,5 +389,17 @@ public enum SchemaMigrations {
         FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
     );
     CREATE INDEX idx_aliases_norm ON entity_aliases(alias_normalized);
+    """
+
+    // MARK: - v4 — relationships gain weight + evidence list (T4)
+
+    private static let v4: String = """
+    -- T4 — Relationship edges accumulate weight and an evidence list of
+    -- source KO ids (capped in code at 20). A UNIQUE index on
+    -- (kind, from_entity_id, to_entity_id) lets ingest upsert idempotently
+    -- via ON CONFLICT.
+    ALTER TABLE relationships ADD COLUMN weight INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE relationships ADD COLUMN evidence_object_ids_json TEXT NOT NULL DEFAULT '[]';
+    CREATE UNIQUE INDEX idx_rel_canonical ON relationships(kind, from_entity_id, to_entity_id);
     """
 }

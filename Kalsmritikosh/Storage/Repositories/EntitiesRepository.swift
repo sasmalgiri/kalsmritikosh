@@ -23,13 +23,21 @@ public actor EntitiesRepository {
     /// canonical id. The incoming `Entity.id` is used only when a new
     /// canonical row is created; on conflict the existing canonical's id
     /// wins and the mention is attached to it.
-    public func insertBatch(_ entities: [Entity]) async throws {
+    ///
+    /// Returns `[input.id : canonical.id]` so callers (the ingest
+    /// coordinator) can remap event entity references and graph edges to
+    /// the canonical ids before any downstream insert.
+    @discardableResult
+    public func insertBatch(_ entities: [Entity]) async throws -> [Entity.ID: Entity.ID] {
+        var mapping: [Entity.ID: Entity.ID] = [:]
         for e in entities {
             let normalized = normalize(e)
             guard !normalized.isEmpty else { continue }
             let canonID = try await upsertCanonical(e, normalized: normalized)
             try await insertMention(e, canonicalID: canonID, normalized: normalized)
+            mapping[e.id] = canonID
         }
+        return mapping
     }
 
     /// Add (or no-op) an alias for an existing canonical entity.
