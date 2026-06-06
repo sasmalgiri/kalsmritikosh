@@ -68,7 +68,8 @@ public struct EvidenceVerifier: Verifier {
                 refused: true,
                 refusalReason: claims.isEmpty
                     ? "No expert produced any claim."
-                    : "Evidence below confidence threshold (\(minimumConfidence.value))."
+                    : "Evidence below confidence threshold (\(minimumConfidence.value)).",
+                report: report
             )
         }
 
@@ -79,7 +80,8 @@ public struct EvidenceVerifier: Verifier {
             confidence: report.combined,
             contradictions: report.contradictions,
             refused: false,
-            refusalReason: nil
+            refusalReason: nil,
+            report: report
         )
     }
 

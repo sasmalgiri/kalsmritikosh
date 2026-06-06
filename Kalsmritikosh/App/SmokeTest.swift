@@ -567,6 +567,61 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T11 — Quality strip renders the expected fields and handles a
+    // contradictory fixture (Conflicts: 1).
+    do {
+        let report = ConfidenceReport(
+            combined: Confidence(0.82),
+            sourceCount: 5, distinctSourceObjectIDs: 4, agreementScore: 0.8,
+            contradictions: [],
+            droppedUnverifiable: 0,
+            newestEvidenceDate: Date(),
+            freshness: 0.6,
+            coverage: 0.75,
+            coverageGaps: [],
+            ingestCoverage: 1.0
+        )
+        let goodAnswer = VerifiedAnswer(
+            body: "All good.",
+            citations: [
+                VerifiedAnswer.Citation(objectID: UUID(), snippet: "a"),
+                VerifiedAnswer.Citation(objectID: UUID(), snippet: "b")
+            ],
+            confidence: Confidence(0.82),
+            contradictions: [],
+            report: report
+        )
+        let line = QualityStrip.formatLine(goodAnswer)
+        let hasAll = line.contains("Confidence: strong")
+            && line.contains("Evidence:")
+            && line.contains("Timeliness:")
+            && line.contains("Conflicts: 0")
+        if hasAll {
+            passed.append("T11: quality strip line contains all sections")
+        } else {
+            failed.append("T11: strip line missing sections — '\(line)'")
+        }
+
+        let conflict = VerifiedAnswer.Contradiction(
+            description: "Invoice paid vs unpaid",
+            claimA: "Paid on 2026-02-10",
+            claimB: "Unpaid as of 2026-03-01"
+        )
+        let conflictAnswer = VerifiedAnswer(
+            body: "Conflicting evidence.",
+            citations: goodAnswer.citations,
+            confidence: Confidence(0.55),
+            contradictions: [conflict],
+            report: report
+        )
+        let conflictLine = QualityStrip.formatLine(conflictAnswer)
+        if conflictLine.contains("Conflicts: 1") {
+            passed.append("T11: contradictory answer shows Conflicts: 1")
+        } else {
+            failed.append("T11: conflict count not surfaced — '\(conflictLine)'")
+        }
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()

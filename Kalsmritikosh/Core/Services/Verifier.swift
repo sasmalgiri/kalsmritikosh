@@ -24,6 +24,8 @@ public struct VerifiedAnswer: Codable, Sendable {
     public let contradictions: [Contradiction]
     public let refused: Bool
     public let refusalReason: String?
+    /// Full confidence report, used by the UI quality strip (T11).
+    public let report: ConfidenceReport?
 
     public init(
         body: String,
@@ -31,7 +33,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         confidence: Confidence,
         contradictions: [Contradiction] = [],
         refused: Bool = false,
-        refusalReason: String? = nil
+        refusalReason: String? = nil,
+        report: ConfidenceReport? = nil
     ) {
         self.body = body
         self.citations = citations
@@ -39,6 +42,22 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.contradictions = contradictions
         self.refused = refused
         self.refusalReason = refusalReason
+        self.report = report
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case body, citations, confidence, contradictions, refused, refusalReason, report
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.body = try c.decode(String.self, forKey: .body)
+        self.citations = try c.decode([Citation].self, forKey: .citations)
+        self.confidence = try c.decode(Confidence.self, forKey: .confidence)
+        self.contradictions = try c.decodeIfPresent([Contradiction].self, forKey: .contradictions) ?? []
+        self.refused = try c.decodeIfPresent(Bool.self, forKey: .refused) ?? false
+        self.refusalReason = try c.decodeIfPresent(String.self, forKey: .refusalReason)
+        self.report = try c.decodeIfPresent(ConfidenceReport.self, forKey: .report)
     }
 
     public struct Citation: Codable, Sendable, Hashable {

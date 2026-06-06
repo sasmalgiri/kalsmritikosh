@@ -17,6 +17,10 @@ public struct AskView: View {
     @State private var asking = false
     @State private var conversationID: UUID?
     @State private var turns: [ConversationTurn] = []
+    /// T11 — Verified answers indexed by their turn id so the bubble
+    /// can render the quality strip directly (instead of folding it
+    /// into a plain-text body line).
+    @State private var verifiedAnswers: [UUID: VerifiedAnswer] = [:]
 
     public init() {}
 
@@ -148,6 +152,11 @@ public struct AskView: View {
                         .textSelection(.enabled)
                         .padding(10)
                         .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 10))
+                    if let verified = verifiedAnswers[turn.id] {
+                        QualityStrip(answer: verified)
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 6)
+                    }
                 }
                 .frame(maxWidth: 620, alignment: .leading)
                 Spacer(minLength: 60)
@@ -246,6 +255,7 @@ public struct AskView: View {
                 if let idx = self.turns.firstIndex(where: { $0.id == placeholderID }) {
                     self.turns[idx] = finalTurn
                 }
+                self.verifiedAnswers[placeholderID] = answer
                 self.asking = false
             }
 
