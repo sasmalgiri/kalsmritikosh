@@ -16,6 +16,8 @@ public struct SourcesView: View {
     @State private var recents: [KnowledgeObjectSummaryRow] = []
     @State private var fileCount: Int = 0
     @State private var ingesting = false
+    @State private var rootPendingRemoval: BookmarkStore.Root?
+    @State private var rootPendingRemovalCount: Int = 0
 
     public init() {}
 
@@ -32,6 +34,43 @@ public struct SourcesView: View {
             }
         }
         .task { await refresh() }
+        .confirmationDialog(
+            rootRemovalTitle,
+            isPresented: Binding(
+                get: { rootPendingRemoval != nil },
+                set: { if !$0 { rootPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Stop watching (keep what was learned)") {
+                if let root = rootPendingRemoval {
+                    Task {
+                        await appState.removeRoot(root, strategy: .stopWatching)
+                        rootPendingRemoval = nil
+                        await refresh()
+                    }
+                }
+            }
+            Button("Stop and forget everything from this folder", role: .destructive) {
+                if let root = rootPendingRemoval {
+                    Task {
+                        await appState.removeRoot(root, strategy: .stopAndForget)
+                        rootPendingRemoval = nil
+                        await refresh()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { rootPendingRemoval = nil }
+        } message: {
+            Text("\(rootPendingRemovalCount) file(s) from this folder are in the knowledge base.")
+        }
+    }
+
+    private var rootRemovalTitle: String {
+        if let root = rootPendingRemoval {
+            return "Remove \(root.displayName)?"
+        }
+        return "Remove folder?"
     }
 
     private var header: some View {
@@ -83,7 +122,10 @@ public struct SourcesView: View {
                         }
                         Spacer()
                         Button(role: .destructive) {
-                            appState.bookmarks.remove(root)
+                            Task {
+                                rootPendingRemovalCount = await appState.countFiles(underRoot: root)
+                                rootPendingRemoval = root
+                            }
                         } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless)
                     }

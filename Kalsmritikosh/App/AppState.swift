@@ -247,9 +247,18 @@ public final class AppState {
                     }
                 }
             }
+            // T8 — Root reachability sweep at boot. Unreachable roots have
+            // their files flagged offline_root; reachable roots' files
+            // get restored to .available.
             for root in bookmarks.roots {
                 if let url = try? bookmarks.resolve(root) {
                     await watcher.watch(root: root, url: url)
+                    if FileManager.default.fileExists(atPath: url.path) {
+                        try? await files.markFilesUnderRoot(url, as: .available)
+                    } else {
+                        try? await files.markFilesUnderRoot(url, as: .offlineRoot)
+                    }
+                    bookmarks.stopAccessing(url)
                 }
             }
 
@@ -292,6 +301,43 @@ public final class AppState {
             AtlasLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
             self.phase = .failed("\(error)")
         }
+    }
+
+    /// T8 — Root removal with explicit knowledge-preservation choice.
+    /// .stopWatching keeps every learned KO, chunk, entity, event, etc.
+    /// .stopAndForget performs the explicit cascading delete of every
+    /// file under that root (and via FK cascade, all dependent rows).
+    public enum RootRemovalStrategy: Sendable {
+        case stopWatching
+        case stopAndForget
+    }
+
+    public func countFiles(underRoot root: BookmarkStore.Root) async -> Int {
+        guard let files,
+              let url = try? bookmarks.resolve(root) else { return 0 }
+        defer { bookmarks.stopAccessing(url) }
+        return (try? await files.countUnderRoot(url)) ?? 0
+    }
+
+    public func removeRoot(_ root: BookmarkStore.Root, strategy: RootRemovalStrategy) async {
+        let url = try? bookmarks.resolve(root)
+        defer { if let url { bookmarks.stopAccessing(url) } }
+        switch strategy {
+        case .stopWatching:
+            // Knowledge survives; files become offline_root since we no
+            // longer watch them.
+            if let url, let files {
+                try? await files.markFilesUnderRoot(url, as: .offlineRoot)
+            }
+        case .stopAndForget:
+            if let url, let files {
+                try? await files.deleteAllUnderRoot(url)
+            }
+        }
+        bookmarks.remove(root)
+        // FolderWatcher has no unwatch entry point in v1; the bookmark
+        // removal alone prevents further re-ingest because resolution
+        // fails the next time the watcher fires for that root.
     }
 
     @discardableResult

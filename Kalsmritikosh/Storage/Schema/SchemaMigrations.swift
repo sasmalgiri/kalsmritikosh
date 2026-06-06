@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 6
+    public static let latestVersion = 7
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -43,7 +43,8 @@ public enum SchemaMigrations {
         (3, v3),
         (4, v4),
         (5, v5),
-        (6, v6)
+        (6, v6),
+        (7, v7)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -429,5 +430,15 @@ public enum SchemaMigrations {
     ALTER TABLE files ADD COLUMN alias_of TEXT NULL REFERENCES files(id) ON DELETE SET NULL;
     CREATE INDEX idx_files_content_hash ON files(content_hash);
     CREATE INDEX idx_files_alias_of ON files(alias_of);
+    """
+
+    // MARK: - v7 — files.availability for move/delete/revoke reconciliation (T8)
+
+    private static let v7: String = """
+    -- T8 — Files can be available, offline (their root is unreachable),
+    -- or missing (gone from a still-reachable root). Reconciliation
+    -- sweeps NEVER cascade-delete knowledge — they only flip this flag.
+    ALTER TABLE files ADD COLUMN availability TEXT NOT NULL DEFAULT 'available';
+    CREATE INDEX idx_files_availability ON files(availability);
     """
 }

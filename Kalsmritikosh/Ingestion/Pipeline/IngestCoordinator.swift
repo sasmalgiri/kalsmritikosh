@@ -154,6 +154,44 @@ public actor IngestCoordinator {
             try? await files.deleteByID(existing.id)
         }
 
+        // T8 — Move detection. If findByURL missed but a canonical with
+        // this exact hash exists, treat it as a move: point that file row
+        // at the new url instead of re-ingesting. No new KO is created.
+        if let newHash,
+           let canonical = try? await files.findCanonicalByContentHash(newHash),
+           canonical.url != url {
+            // The canonical bytes used to be at canonical.url — if that
+            // url no longer points at the file (i.e. we got here because
+            // findByURL on the new url returned nil and findByURL on the
+            // old url would also return our row), treat it as a move:
+            // update url on the canonical and reset availability.
+            let canonicalStillAtOldURL = FileManager.default.fileExists(atPath: canonical.url.path)
+            if !canonicalStillAtOldURL {
+                try? await files.updateURL(id: canonical.id, to: url)
+                AtlasLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .public) (was at \(canonical.url.lastPathComponent, privacy: .public))")
+                let updated = FileRecord(
+                    id: canonical.id,
+                    url: url,
+                    sourceType: canonical.sourceType,
+                    sizeBytes: canonical.sizeBytes,
+                    modifiedAt: canonical.modifiedAt,
+                    ingestedAt: canonical.ingestedAt,
+                    contentHash: canonical.contentHash,
+                    aliasOf: canonical.aliasOf,
+                    availability: .available
+                )
+                return Result(
+                    fileRecord: updated,
+                    object: cleaned,
+                    chunkCount: 0,
+                    entityCount: 0,
+                    eventCount: 0,
+                    documentClass: docClass,
+                    invalidations: []
+                )
+            }
+        }
+
         // T7 — Hash-first dedup. A different URL with the same contentHash
         // becomes an alias row pointing at the canonical file; no new KO
         // is created and downstream extraction is skipped. "The same PDF

@@ -390,6 +390,79 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T7: dedup setup failed: \(error)")
     }
 
+    // T8 — Move / availability / cascading delete primitives.
+    do {
+        let t8DB = try Database(url: tempDir.appendingPathComponent("t8.sqlite"))
+        try await SchemaMigrations.migrate(t8DB)
+        let t8Files = FilesRepository(database: t8DB)
+        let rootA = URL(fileURLWithPath: "/tmp/rootA")
+        let rootB = URL(fileURLWithPath: "/tmp/rootB")
+        let recA1 = FileRecord(
+            url: rootA.appendingPathComponent("doc.txt"),
+            sourceType: .txt,
+            contentHash: "hashA1",
+            availability: .available
+        )
+        let recA2 = FileRecord(
+            url: rootA.appendingPathComponent("doc2.txt"),
+            sourceType: .txt,
+            contentHash: "hashA2"
+        )
+        let recB1 = FileRecord(
+            url: rootB.appendingPathComponent("doc.txt"),
+            sourceType: .txt,
+            contentHash: "hashB1"
+        )
+        try await t8Files.upsert(recA1)
+        try await t8Files.upsert(recA2)
+        try await t8Files.upsert(recB1)
+
+        // Move: same id, new url, no row count change.
+        let beforeMoveCount = try await t8Files.count()
+        let movedURL = rootA.appendingPathComponent("renamed-doc.txt")
+        try await t8Files.updateURL(id: recA1.id, to: movedURL)
+        let afterMoveCount = try await t8Files.count()
+        let movedRecord = try await t8Files.findByURL(movedURL)
+        if afterMoveCount == beforeMoveCount && movedRecord?.id == recA1.id {
+            passed.append("T8(move): same id, new url, KO count unchanged")
+        } else {
+            failed.append("T8(move): id=\(String(describing: movedRecord?.id)) count \(beforeMoveCount) → \(afterMoveCount)")
+        }
+
+        // Missing: flip availability, knowledge survives.
+        try await t8Files.updateAvailability(id: recA1.id, to: .missing)
+        let stillThere = try await t8Files.findByURL(movedURL)
+        let countAfterMissing = try await t8Files.count()
+        if stillThere?.availability == .missing && countAfterMissing == afterMoveCount {
+            passed.append("T8(missing): availability=missing, no cascading delete")
+        } else {
+            failed.append("T8(missing): availability=\(String(describing: stillThere?.availability)) count=\(countAfterMissing)")
+        }
+
+        // Offline root sweep: rootA files → offline_root, rootB untouched.
+        try await t8Files.markFilesUnderRoot(rootA, as: .offlineRoot)
+        let a1 = try await t8Files.findByURL(movedURL)
+        let b1 = try await t8Files.findByURL(recB1.url)
+        if a1?.availability == .offlineRoot && b1?.availability == .available {
+            passed.append("T8(offline): rootA files offline_root, rootB available")
+        } else {
+            failed.append("T8(offline): a1=\(String(describing: a1?.availability)) b1=\(String(describing: b1?.availability))")
+        }
+
+        // Cascading delete under root: only rootA's rows go.
+        let rootACountBefore = try await t8Files.countUnderRoot(rootA)
+        try await t8Files.deleteAllUnderRoot(rootA)
+        let rootAAfter = try await t8Files.countUnderRoot(rootA)
+        let rootBAfter = try await t8Files.countUnderRoot(rootB)
+        if rootAAfter == 0 && rootBAfter == 1 && rootACountBefore >= 2 {
+            passed.append("T8(forget): rootA cascaded (\(rootACountBefore) → 0), rootB intact (\(rootBAfter))")
+        } else {
+            failed.append("T8(forget): rootA \(rootACountBefore) → \(rootAAfter), rootB \(rootBAfter)")
+        }
+    } catch {
+        failed.append("T8: setup failed: \(error)")
+    }
+
     // T6 — embedAll batches 1000 inputs into ceil(1000/64) = 16 calls.
     do {
         let counter = T6CallCounter()
