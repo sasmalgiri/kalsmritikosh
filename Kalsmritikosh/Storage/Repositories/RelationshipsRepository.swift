@@ -39,6 +39,55 @@ public actor RelationshipsRepository {
         }
     }
 
+    /// Batch variant of `upsertEdge` — wraps N edge upserts in a single
+    /// BEGIN IMMEDIATE / COMMIT so disk writes amortize fsync cost. Each
+    /// edge tuple is canonical-ordered by the caller per the rules in
+    /// `upsertEdge`. ROLLBACK on partial failure so the table either gets
+    /// the full batch or none of it.
+    public struct EdgeUpsert: Sendable {
+        public let kind: Relationship.Kind
+        public let from: Entity.ID
+        public let to: Entity.ID
+        public let viaEventID: Event.ID?
+
+        public init(
+            kind: Relationship.Kind,
+            from: Entity.ID,
+            to: Entity.ID,
+            viaEventID: Event.ID? = nil
+        ) {
+            self.kind = kind
+            self.from = from
+            self.to = to
+            self.viaEventID = viaEventID
+        }
+    }
+
+    public func upsertEdges(
+        _ edges: [EdgeUpsert],
+        sourceObjectID: KnowledgeObject.ID,
+        confidence: Confidence = .medium
+    ) async throws {
+        guard !edges.isEmpty else { return }
+        try await database.exec("BEGIN IMMEDIATE;")
+        do {
+            for edge in edges {
+                try await upsertEdge(
+                    kind: edge.kind,
+                    from: edge.from,
+                    to: edge.to,
+                    sourceObjectID: sourceObjectID,
+                    viaEventID: edge.viaEventID,
+                    confidence: confidence
+                )
+            }
+            try await database.exec("COMMIT;")
+        } catch {
+            try? await database.exec("ROLLBACK;")
+            throw error
+        }
+    }
+
     /// Upsert a graph edge: increments weight by 1 and appends the
     /// source KO id to the evidence list (capped at `evidenceCap`).
     /// Edge direction is preserved as given — callers MUST canonicalize

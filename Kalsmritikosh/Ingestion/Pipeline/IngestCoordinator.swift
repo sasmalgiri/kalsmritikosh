@@ -302,8 +302,19 @@ public actor IngestCoordinator {
         // T4 — Tier 1 graph extraction. Co-occurrence + event-linked
         // edges across canonical entities, plus typed email edges when
         // sender/recipients can be resolved.
+        //
+        // Perf fix on top of T4: cap co_occurs to top-K canonicals per KO
+        // (ranked by mention frequency) so archive-shaped KOs like
+        // concatenated mboxes don't produce C(N²) edges. Also batch the
+        // per-KO upserts in a single transaction.
         if let relationshipExtractor, let relationships {
             let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }
+            var mentionFrequencies: [Entity.ID: Int] = [:]
+            for entity in extractedEntities {
+                if let canonID = canonicalMapping[entity.id] {
+                    mentionFrequencies[canonID, default: 0] += 1
+                }
+            }
             let participants = await emailParticipants(
                 for: object,
                 extractedEntities: extractedEntities,
@@ -312,19 +323,20 @@ public actor IngestCoordinator {
             let edges = relationshipExtractor.extract(
                 objectID: object.id,
                 canonicalEntityIDs: canonicalIDs,
+                entityMentionFrequencies: mentionFrequencies,
                 events: extractedEvents,
                 emailParticipants: participants
             )
-            for edge in edges {
+            let upserts: [RelationshipsRepository.EdgeUpsert] = edges.map { edge in
                 let (from, to) = orderEdge(kind: edge.kind, from: edge.from, to: edge.to)
-                try? await relationships.upsertEdge(
+                return RelationshipsRepository.EdgeUpsert(
                     kind: edge.kind,
                     from: from,
                     to: to,
-                    sourceObjectID: object.id,
                     viaEventID: edge.viaEventID
                 )
             }
+            try? await relationships.upsertEdges(upserts, sourceObjectID: object.id)
         }
 
         if let embedder, let vectors {
