@@ -16,6 +16,9 @@ public struct SettingsView: View {
     @State private var manifests: [ModelManifest] = []
     @State private var pins: [ModelCapability: String] = [:]
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
+    @State private var baselineRunning = false
+    @State private var baselineStatus: String?
+    @State private var baselineReportURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -34,11 +37,67 @@ public struct SettingsView: View {
                 providersSection
                 Divider()
                 pinningSection
+                Divider()
+                diagnosticsSection
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
         }
         .task { await reload() }
+    }
+
+    private var diagnosticsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Diagnostics").font(.title3.bold())
+            Text("Generate the Gate 1 baseline. Boots an isolated copy of Atlas into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runBaseline() }
+                } label: {
+                    if baselineRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Generate Gate 1 Baseline", systemImage: "checkmark.seal")
+                    }
+                }
+                .disabled(baselineRunning)
+                if let url = baselineReportURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                }
+            }
+            if let status = baselineStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private func runBaseline() async {
+        baselineRunning = true
+        baselineStatus = "Booting isolated AppState…"
+        defer { baselineRunning = false }
+        do {
+            let result = try await Gate1Baseline.generate()
+            baselineReportURL = result.reportURL
+            baselineStatus = """
+            ✓ Report written
+            \(result.reportURL.path)
+            ingested fixtures: \(result.ingestedFixtureFiles)
+            questions evaluated: \(result.questionCount)
+            """
+        } catch {
+            baselineReportURL = nil
+            baselineStatus = "✗ Failed: \(error)"
+        }
     }
 
     private var privacySection: some View {
