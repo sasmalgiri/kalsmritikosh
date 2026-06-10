@@ -547,10 +547,10 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             intentWindow: window,
             now: Date()
         )
-        if abs(r1.coverage - 1.0) < 0.01 && r1.gaps.isEmpty {
+        if let c1 = r1.coverage, abs(c1 - 1.0) < 0.01, r1.gaps.isEmpty {
             passed.append("T10: full-range evidence → coverage 1.0, 0 gaps")
         } else {
-            failed.append("T10: full-range → coverage=\(r1.coverage) gaps=\(r1.gaps.count)")
+            failed.append("T10: full-range → coverage=\(String(describing: r1.coverage)) gaps=\(r1.gaps.count)")
         }
 
         let lateOnly = [mkEvent(year: 2026)]
@@ -560,10 +560,10 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             intentWindow: window,
             now: Date()
         )
-        if r2.coverage <= 0.5 && r2.gaps.count >= 1 {
-            passed.append(String(format: "T10: late-only → coverage %.2f ≤ 0.5 with %d gap(s)", r2.coverage, r2.gaps.count))
+        if let c2 = r2.coverage, c2 <= 0.5, r2.gaps.count >= 1 {
+            passed.append(String(format: "T10: late-only → coverage %.2f ≤ 0.5 with %d gap(s)", c2, r2.gaps.count))
         } else {
-            failed.append("T10: late-only coverage=\(r2.coverage) gaps=\(r2.gaps.count)")
+            failed.append("T10: late-only coverage=\(String(describing: r2.coverage)) gaps=\(r2.gaps.count)")
         }
     }
 

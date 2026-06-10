@@ -28,7 +28,10 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
     /// historical / reconstruction intents where staleness is the point.
     public let freshness: Double?
     /// T10 — Fraction of intent-window buckets covered by ≥1 event.
-    public let coverage: Double
+    /// `nil` when no meaningful window exists (e.g. the question carried
+    /// no `intent.timeframe`) so the UI doesn't surface "covers 100%" as
+    /// a misleading default — UPDATE_06 Item 1.
+    public let coverage: Double?
     /// T10 — Contiguous empty windows reported as ranges.
     public let coverageGaps: [DateInterval]
     /// T10 — Fraction of files past Tier 1 ingest, in [0,1].
@@ -43,7 +46,7 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
         droppedUnverifiable: Int = 0,
         newestEvidenceDate: Date? = nil,
         freshness: Double? = nil,
-        coverage: Double = 1.0,
+        coverage: Double? = nil,
         coverageGaps: [DateInterval] = [],
         ingestCoverage: Double = 1.0
     ) {
@@ -77,7 +80,7 @@ public struct ConfidenceReport: Codable, Sendable, Hashable {
         self.droppedUnverifiable = try c.decodeIfPresent(Int.self, forKey: .droppedUnverifiable) ?? 0
         self.newestEvidenceDate = try c.decodeIfPresent(Date.self, forKey: .newestEvidenceDate)
         self.freshness = try c.decodeIfPresent(Double.self, forKey: .freshness)
-        self.coverage = try c.decodeIfPresent(Double.self, forKey: .coverage) ?? 1.0
+        self.coverage = try c.decodeIfPresent(Double.self, forKey: .coverage)
         self.coverageGaps = try c.decodeIfPresent([DateInterval].self, forKey: .coverageGaps) ?? []
         self.ingestCoverage = try c.decodeIfPresent(Double.self, forKey: .ingestCoverage) ?? 1.0
     }
@@ -229,7 +232,9 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
     public struct TimelinessSummary: Sendable {
         public let newest: Date?
         public let freshness: Double?
-        public let coverage: Double
+        /// `nil` when no meaningful intent window was provided — see
+        /// `ConfidenceReport.coverage`.
+        public let coverage: Double?
         public let gaps: [DateInterval]
     }
 
@@ -255,11 +260,14 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
         }()
 
         // Coverage — bucket events into the intent window's quarters.
+        // When the question carries no `intent.timeframe` there's no window
+        // to bucket against and we surface `nil` rather than a misleading
+        // "covers 100%". UPDATE_06 Item 1.
         guard let window = intentWindow, window.duration > 0 else {
             return TimelinessSummary(
                 newest: newest,
                 freshness: freshness,
-                coverage: dates.isEmpty ? 0 : 1.0,
+                coverage: nil,
                 gaps: []
             )
         }

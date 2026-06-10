@@ -73,8 +73,10 @@ public struct QualityStrip: View {
             if let newest = report.newestEvidenceDate {
                 timeliness.append("newest \(newest.formatted(date: .abbreviated, time: .omitted))")
             }
-            if report.coverage > 0 {
-                timeliness.append("covers \(Int(report.coverage * 100))% of window")
+            // Only surface "covers X%" when there's a real intent-window
+            // signal — otherwise `coverage` is nil and the line is misleading.
+            if let coverage = report.coverage, coverage > 0 {
+                timeliness.append("covers \(Int(coverage * 100))% of window")
             }
             for gap in report.coverageGaps.prefix(1) {
                 timeliness.append("gap \(formatInterval(gap))")
