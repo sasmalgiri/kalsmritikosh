@@ -303,18 +303,14 @@ public actor IngestCoordinator {
         // edges across canonical entities, plus typed email edges when
         // sender/recipients can be resolved.
         //
-        // Perf fix on top of T4: cap co_occurs to top-K canonicals per KO
-        // (ranked by mention frequency) so archive-shaped KOs like
-        // concatenated mboxes don't produce C(N²) edges. Also batch the
-        // per-KO upserts in a single transaction.
+        // UPDATE_04_REVISED: an oversized-KO skip threshold replaces the
+        // earlier top-K-by-frequency cap (which preserved noise and
+        // dropped signal on email archives). The batch upsert transaction
+        // stays. Once T13 splits mbox per-message, per-message KOs always
+        // sit under the threshold and full per-message co_occurrence
+        // returns automatically.
         if let relationshipExtractor, let relationships {
             let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }
-            var mentionFrequencies: [Entity.ID: Int] = [:]
-            for entity in extractedEntities {
-                if let canonID = canonicalMapping[entity.id] {
-                    mentionFrequencies[canonID, default: 0] += 1
-                }
-            }
             let participants = await emailParticipants(
                 for: object,
                 extractedEntities: extractedEntities,
@@ -323,7 +319,6 @@ public actor IngestCoordinator {
             let edges = relationshipExtractor.extract(
                 objectID: object.id,
                 canonicalEntityIDs: canonicalIDs,
-                entityMentionFrequencies: mentionFrequencies,
                 events: extractedEvents,
                 emailParticipants: participants
             )

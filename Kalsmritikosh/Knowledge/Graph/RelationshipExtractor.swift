@@ -8,14 +8,22 @@
 //
 
 import Foundation
+import OSLog
 
 public struct Tier1RelationshipExtractor: Sendable {
-    /// Max canonical entities considered for co_occurs per KO. Above this
-    /// the extractor picks the top-K by mention frequency. Caps the
-    /// quadratic explosion on archive-shaped KOs (e.g. a mbox concatenated
-    /// into one KO yielded ~6,500 distinct canonicals → 21M pairs without
-    /// this guard). 30 → at most C(30,2) = 435 pairs per KO.
-    public static let defaultCoOccurrenceCap = 30
+    /// Above this many distinct canonical entities in one KO, the
+    /// extractor skips co_occurs entirely for that KO rather than emit
+    /// pairwise edges. Co-occurrence is a document-level signal; a
+    /// concatenated multi-year mbox isn't a document, so its pairwise
+    /// edges are meaningless anyway. Once T13 splits mbox per message,
+    /// per-message KOs always have <50 entities, the guard never fires,
+    /// and full per-message co_occurrence comes back automatically.
+    /// Replaced the original top-K-by-frequency cap because the highest-
+    /// frequency tokens on an email archive are the garbage (Gmail,
+    /// SMTP, Message-ID, weekdays, server names) — ranking by frequency
+    /// kept exactly the noise and discarded the real, low-frequency
+    /// people and companies. See UPDATE_04_REVISED.
+    public static let coOccurrenceSkipThreshold = 200
 
     public struct Edge: Sendable, Hashable {
         public let kind: Relationship.Kind
@@ -41,49 +49,35 @@ public struct Tier1RelationshipExtractor: Sendable {
     /// Produce edges for one KO.
     ///
     /// - canonicalEntityIDs: canonical entity ids appearing in this KO.
-    /// - entityMentionFrequencies: mention count per canonical id in this
-    ///   KO. When provided AND the distinct-canonical set exceeds
-    ///   `coOccurrenceCap`, the extractor keeps only the top-K most-mentioned
-    ///   canonicals for co_occurs edges. If empty, the first
-    ///   `coOccurrenceCap` canonicals (in uuid order) are kept — deterministic
-    ///   but signal-agnostic.
+    /// - skipThreshold: above this many distinct canonical entities, the
+    ///   extractor skips co_occurs generation for this KO entirely
+    ///   (event_linked / emailed / affiliated still fire). See
+    ///   `coOccurrenceSkipThreshold`.
     /// - events: events extracted from this KO with their entity ids
     ///   already canonicalized.
     /// - emailParticipants: optional sender/recipients for email KOs.
     public func extract(
         objectID: KnowledgeObject.ID,
         canonicalEntityIDs: [Entity.ID],
-        entityMentionFrequencies: [Entity.ID: Int] = [:],
-        coOccurrenceCap: Int = Tier1RelationshipExtractor.defaultCoOccurrenceCap,
+        skipThreshold: Int = Tier1RelationshipExtractor.coOccurrenceSkipThreshold,
         events: [Event],
         emailParticipants: EmailParticipants? = nil
     ) -> [Edge] {
         var out: [Edge] = []
 
-        // 1. Co-occurrence: each unordered pair of distinct canonicals,
-        // capped to top-K by mention frequency to keep things sub-quadratic
-        // on archive-shaped KOs.
+        // 1. Co-occurrence: each unordered pair of distinct canonicals
+        // when the KO is document-shaped. Oversized KOs (e.g. a
+        // concatenated mbox pre-T13) skip co_occurs entirely — their
+        // pairwise edges aren't a real document-level signal anyway.
         let distinct = Array(Set(canonicalEntityIDs))
-        let capped: [Entity.ID]
-        if distinct.count <= coOccurrenceCap {
-            capped = distinct
-        } else if entityMentionFrequencies.isEmpty {
-            capped = Array(distinct.prefix(coOccurrenceCap))
+        if distinct.count > skipThreshold {
+            AtlasLog.brain.info("skipped co_occurs: \(distinct.count, privacy: .public) entities in oversized KO \(objectID.uuidString, privacy: .public)")
         } else {
-            capped = distinct
-                .sorted {
-                    let lf = entityMentionFrequencies[$0] ?? 0
-                    let rf = entityMentionFrequencies[$1] ?? 0
-                    if lf != rf { return lf > rf }
-                    return $0.uuidString < $1.uuidString
+            let sortedAll = distinct.sorted { $0.uuidString < $1.uuidString }
+            for i in 0..<sortedAll.count {
+                for j in (i + 1)..<sortedAll.count {
+                    out.append(Edge(kind: .coOccurs, from: sortedAll[i], to: sortedAll[j]))
                 }
-                .prefix(coOccurrenceCap)
-                .map { $0 }
-        }
-        let sortedAll = capped.sorted { $0.uuidString < $1.uuidString }
-        for i in 0..<sortedAll.count {
-            for j in (i + 1)..<sortedAll.count {
-                out.append(Edge(kind: .coOccurs, from: sortedAll[i], to: sortedAll[j]))
             }
         }
 
