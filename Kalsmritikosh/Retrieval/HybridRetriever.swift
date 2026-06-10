@@ -13,6 +13,11 @@
 import Foundation
 
 public actor HybridRetriever: Retriever {
+    /// How many vector hits the vector layer asks for. Held as a property
+    /// so a future Settings toggle can change it without touching the
+    /// retrieval call site. UPDATE_06 Item 2.
+    public static let defaultVectorLayerLimit = 20
+
     private let memory: MemoryRepository
     private let events: EventsRepository
     private let entities: EntitiesRepository
@@ -21,6 +26,7 @@ public actor HybridRetriever: Retriever {
     private let graph: GraphStore
     private let vectors: VectorStore
     private let embedder: Embedder
+    private let vectorLayerLimit: Int
 
     public init(
         memory: MemoryRepository,
@@ -30,7 +36,8 @@ public actor HybridRetriever: Retriever {
         summaries: SummariesRepository,
         graph: GraphStore,
         vectors: VectorStore,
-        embedder: Embedder
+        embedder: Embedder,
+        vectorLayerLimit: Int = HybridRetriever.defaultVectorLayerLimit
     ) {
         self.memory = memory
         self.events = events
@@ -40,6 +47,7 @@ public actor HybridRetriever: Retriever {
         self.graph = graph
         self.vectors = vectors
         self.embedder = embedder
+        self.vectorLayerLimit = vectorLayerLimit
     }
 
     public func retrieve(
@@ -91,7 +99,13 @@ public actor HybridRetriever: Retriever {
                     collectedRelationships.append(contentsOf: edges)
                 }
             case .vector:
-                collectedChunks.append(contentsOf: try await vectorLayer(intent))
+                // UPDATE_06 Item 2 — prefer a prefiltered scan over the
+                // pre-collected chunk set; fall back to full scan only if
+                // no earlier layer produced candidates. Keeps query latency
+                // flat as the corpus grows.
+                let candidateIDs = collectedChunks.map(\.chunk.id)
+                let prefilter: [Chunk.ID]? = candidateIDs.isEmpty ? nil : candidateIDs
+                collectedChunks.append(contentsOf: try await vectorLayer(intent, candidateChunkIDs: prefilter))
             }
         }
 
@@ -211,9 +225,16 @@ public actor HybridRetriever: Retriever {
         return out
     }
 
-    private func vectorLayer(_ intent: UserIntent) async throws -> [RetrievedChunk] {
+    private func vectorLayer(
+        _ intent: UserIntent,
+        candidateChunkIDs: [Chunk.ID]? = nil
+    ) async throws -> [RetrievedChunk] {
         let query = await embedder.embed(intent.rawQuestion)
-        let hits = try await vectors.nearest(to: query, limit: 20)
+        let hits = try await vectors.nearest(
+            to: query,
+            limit: vectorLayerLimit,
+            candidateChunkIDs: candidateChunkIDs
+        )
         let hydrated = try await chunks.findByIDs(hits.map(\.chunkID))
         let byID = Dictionary(uniqueKeysWithValues: hydrated.map { ($0.id, $0) })
         return hits.compactMap { hit in
