@@ -33,7 +33,17 @@ public struct SourcesView: View {
                     .padding(.horizontal)
             }
         }
-        .task { await refresh() }
+        .task {
+            // Initial load + cheap polling refresh while the view is
+            // visible. The task is cancelled by SwiftUI when the view
+            // disappears, so this never runs unnecessarily.
+            await refresh()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if Task.isCancelled { break }
+                await refresh()
+            }
+        }
         .confirmationDialog(
             rootRemovalTitle,
             isPresented: Binding(
