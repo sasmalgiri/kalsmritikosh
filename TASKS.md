@@ -293,6 +293,73 @@ nonzero and reproducible across two runs (±5%).
 
 ---
 
+## T13 — Email parsing quality: mbox split, structured headers, guided extraction, entity gate
+
+**Why (pre-Gate-1; blocks demo AND eval validity):** on a real archive the
+extractor emits mostly garbage entities — mail-server hostnames (Seqmbx01,
+Tyzpr01mb4530), header keywords (SMTP, MAIL, Reply, Notifications, Message ID),
+weekday/month tokens as people/orgs (tue, thu, jun), generic tokens (urls,
+category, ref), and the app's own internal identifiers (apple naturallanguage,
+worker-pod names). Garbage entities poison the graph, Knowledge tab, memory, and
+every answer, and would make the Gate 1 eval numbers meaningless. Run T13 BEFORE
+the first eval.
+
+**Files:** EmailLoader.swift, NLEntityExtractor (becomes a fallback path),
+new Knowledge/Entities/EntityQualityGate.swift + an editable Resources stoplist,
+new Knowledge/Extraction guided-extraction call site, IngestCoordinator.
+
+**Spec:**
+1. Split mbox into one KnowledgeObject per message (the documented "M5" debt):
+   EmailLoader returns [KnowledgeObject]; IngestCoordinator loops. Per-message KOs
+   carry <50 entities, so UPDATE_04's oversized guard never fires and per-message
+   co_occurrence becomes meaningful again. Remove the "single concatenated KO"
+   stub and its M5 TODO from the EmailLoader header once done.
+
+2. Parse structured headers (From, To, Cc, Date, Subject) into typed fields.
+   Populate person / organization / date entities DIRECTLY from From/To/Date as
+   high-confidence structured facts. NEVER run NER over routing headers
+   (Received, Message-ID, Return-Path, DKIM/SPF, X-*, server names). NER/guided
+   extraction runs ONLY over Subject + decoded body (after T7 quote-strip).
+
+3. PRIMARY extraction via on-device guided generation:
+   - Route entity + event extraction for the Subject+body through the EXTRACTION
+     capability (`context.capabilities.resolve(.extraction)`), which resolves to
+     Apple's on-device Foundation Models provider already registered in Routing.
+     Use guided generation / structured output with a strict schema (people,
+     organizations, dates-with-role, monetary amounts). A schema-constrained
+     model will not emit "Tuesday" as a person — this is the actual cure, not the
+     stoplist.
+   - CAPABILITY DISCIPLINE: do NOT reference any model name in Knowledge/. Resolve
+     the capability; the registry picks the model. On devices without Foundation
+     Models (older OS / non-Apple-Intelligence), the registry falls back to the
+     NLTagger path automatically.
+
+4. SECONDARY safety net — EntityQualityGate (applies to BOTH paths, before insert):
+   reject weekday and month tokens; a stoplist of mail/header keywords (smtp,
+   mail, mailer-daemon, reply, notifications, message id, localhost, async, urls,
+   category, ref, alerts, profiles, …); the app's own internal identifiers (apple
+   naturallanguage, apple ai, apple intelligence, *worker*, container/pod-name
+   patterns); single generic lowercased words; and hostname/hex/numeric-shaped
+   tokens (tyzpr01mb4530, seqmbx01, d22rediffmail). Stoplist is an editable
+   Resources data file, not hardcoded.
+
+5. Verify T3 canonicalization folds case + known aliases:
+   google / Google / Gmail / Googlemail / googlemail must resolve to ONE org.
+   If they are separate in this build, fix normalization/alias seeding and report
+   what was wrong.
+
+**Acceptance:**
+- Re-ingest the real Sent.mbox: each message is its own KO; entities-per-message
+  < 50; a 50-entity spot check of the Knowledge tab shows real people/orgs with
+  ZERO weekdays, header keywords, hostnames, or internal identifiers.
+- Total canonical-entity count is far below the pre-fix ~6,514.
+- co_occurs edges form per message and are bounded; the UPDATE_04 guard does not
+  fire on per-message KOs.
+- ProjectDelta answers unchanged or improved; grep guard clean; BuildProject
+  green; SmokeTest passes.
+
+---
+
 ## Gate 2 (outline — specs to be written after Gate 1 numbers exist)
 Notarization + CODE_SIGN_ENTITLEMENTS wiring; per-file completeness report UI
 (pages parsed/OCR'd/skipped, quotedBytesRemoved); onboarding multi-root suggestions +
