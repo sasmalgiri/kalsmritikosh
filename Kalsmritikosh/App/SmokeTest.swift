@@ -567,6 +567,36 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T13.5 — Google / Gmail / Googlemail must collapse to ONE canonical.
+    do {
+        let t135DB = try Database(url: tempDir.appendingPathComponent("t135.sqlite"))
+        try await SchemaMigrations.migrate(t135DB)
+        try await t135DB.exec("PRAGMA foreign_keys = OFF;")
+        let repo = EntitiesRepository(database: t135DB)
+        let sourceID = UUID()
+        let surfaces = ["Google", "google", "GOOGLE", "Gmail", "gmail", "Googlemail", "googlemail"]
+        let inputs = surfaces.map { value in
+            Entity(kind: .organization, value: value, sourceObjectID: sourceID, confidence: .medium)
+        }
+        let mapping = try await repo.insertBatch(inputs)
+        let canonicalIDs = Set(mapping.values)
+        if canonicalIDs.count == 1 {
+            passed.append("T13.5: 7 surface forms (Google/Gmail/Googlemail/...) → 1 canonical")
+        } else {
+            failed.append("T13.5: surface forms produced \(canonicalIDs.count) canonicals (expected 1)")
+        }
+        // Aliases must be found via the LEFT JOIN even when the value
+        // column carries the OTHER surface form.
+        let foundByGmail = try await repo.find(byValue: "Gmail", limit: 5)
+        if foundByGmail.contains(where: { canonicalIDs.contains($0.id) }) {
+            passed.append("T13.5: find(byValue: \"Gmail\") resolves to the canonical via alias")
+        } else {
+            failed.append("T13.5: find(byValue: \"Gmail\") missed the canonical (alias not seeded?)")
+        }
+    } catch {
+        failed.append("T13.5: setup failed: \(error)")
+    }
+
     // T13.4 — EntityQualityGate keeps real names, drops garbage.
     do {
         let gate = EntityQualityGate(stoplist: ["smtp", "noreply", "notifications"])

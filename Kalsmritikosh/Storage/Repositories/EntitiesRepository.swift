@@ -31,10 +31,24 @@ public actor EntitiesRepository {
     public func insertBatch(_ entities: [Entity]) async throws -> [Entity.ID: Entity.ID] {
         var mapping: [Entity.ID: Entity.ID] = [:]
         for e in entities {
-            let normalized = normalize(e)
-            guard !normalized.isEmpty else { continue }
+            let rawNormalized = rawNormalize(e)
+            guard !rawNormalized.isEmpty else { continue }
+            let normalized = applyCanonicalAlias(rawNormalized, kind: e.kind)
             let canonID = try await upsertCanonical(e, normalized: normalized)
             try await insertMention(e, canonicalID: canonID, normalized: normalized)
+            // T13.5 — when the alias map collapsed two surface forms onto
+            // one canonical (e.g. "Gmail" / "Googlemail" → google), seed
+            // an entity_aliases row for the pre-alias form so a future
+            // find(byValue: "Gmail") still resolves to the canonical via
+            // the LEFT JOIN even when the canonical's value column says
+            // "Google".
+            if normalized != rawNormalized {
+                try await addAlias(
+                    entityID: canonID,
+                    aliasNormalized: rawNormalized,
+                    source: "canonical-alias"
+                )
+            }
             mapping[e.id] = canonID
         }
         return mapping
@@ -199,9 +213,37 @@ public actor EntitiesRepository {
 
     // MARK: - Internals
 
-    private func normalize(_ entity: Entity) -> String {
+    /// Known organization aliases collapsed onto one canonical at
+    /// normalize time. T13.5 — verified Gmail / Googlemail were
+    /// previously stored as separate canonicals from Google; this map
+    /// folds them. Extend with conservative, well-known aliases only.
+    public static let canonicalOrganizationAliases: [String: String] = [
+        "gmail": "google",
+        "googlemail": "google"
+    ]
+
+    private func rawNormalize(_ entity: Entity) -> String {
         let candidate = entity.normalizedValue ?? entity.value
         return candidate.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Apply the canonical-alias map only to organization-shaped kinds
+    /// (person / org / vendor / client). Dates, money, email addresses
+    /// and phones are never aliased — they're already structured.
+    private func applyCanonicalAlias(_ normalized: String, kind: Entity.Kind) -> String {
+        switch kind {
+        case .person, .organization, .vendor, .client:
+            return Self.canonicalOrganizationAliases[normalized] ?? normalized
+        default:
+            return normalized
+        }
+    }
+
+    /// Legacy single-step normalize kept around for any non-batch caller
+    /// that might appear later. Identical semantics to the two-step
+    /// rawNormalize + applyCanonicalAlias used by `insertBatch`.
+    private func normalize(_ entity: Entity) -> String {
+        applyCanonicalAlias(rawNormalize(entity), kind: entity.kind)
     }
 
     private func upsertCanonical(_ e: Entity, normalized: String) async throws -> Entity.ID {
