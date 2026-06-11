@@ -348,11 +348,31 @@ new Knowledge/Extraction guided-extraction call site, IngestCoordinator.
    If they are separate in this build, fix normalization/alias seeding and report
    what was wrong.
 
+6. Gmail Takeout headers — use them directly:
+   - `X-GM-THRID` is Gmail's own thread id. Group messages into threads by
+     X-GM-THRID directly; it is more reliable than reconstructing threads from
+     References / In-Reply-To. Carry the thread id into KO metadata.
+   - `X-Gmail-Labels` carries labels/folders (Sent, Important, custom labels).
+     Store as KO metadata/tags; do NOT feed label text to NER/extraction.
+   - Prefer these over the generic threading path when present.
+
+7. Inline attachments — handle BEFORE extraction (a second garbage/bloat source):
+   - Gmail Takeout inlines attachments as base64 MIME parts. NEVER run NER or
+     guided extraction over base64 or raw MIME part bytes — decode first.
+   - Decode each attachment part; route real attachments (PDF, DOCX, images …)
+     through the EXISTING loaders so they become their own KnowledgeObjects
+     linked to the parent message, and dedupe by content hash per T7 (the same
+     attachment recurs across many messages).
+   - The text handed to extraction is the decoded text/plain or text/html part
+     only (after T7 quote-strip), never the attachment bytes.
+
 **Acceptance:**
 - Re-ingest the real Sent.mbox: each message is its own KO; entities-per-message
   < 50; a 50-entity spot check of the Knowledge tab shows real people/orgs with
   ZERO weekdays, header keywords, hostnames, or internal identifiers.
-- Total canonical-entity count is far below the pre-fix ~6,514.
+- Total canonical-entity count is far below the pre-fix ~6,514. If the count is
+  still in the thousands after T13, header-stripping or the gate is not working
+  — investigate before declaring T13 done.
 - co_occurs edges form per message and are bounded; the UPDATE_04 guard does not
   fire on per-message KOs.
 - ProjectDelta answers unchanged or improved; grep guard clean; BuildProject
