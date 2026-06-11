@@ -216,10 +216,42 @@ public actor EntitiesRepository {
     /// Known organization aliases collapsed onto one canonical at
     /// normalize time. T13.5 — verified Gmail / Googlemail were
     /// previously stored as separate canonicals from Google; this map
-    /// folds them. Extend with conservative, well-known aliases only.
+    /// folds them. Extend with conservative, well-known aliases only:
+    /// stock tickers, parent-company collisions, and trademark/Wikipedia
+    /// redirects. Single-word abbreviations that are also English
+    /// courtesy titles (Ms., Mr., Mrs.) are deliberately excluded.
     public static let canonicalOrganizationAliases: [String: String] = [
+        // Alphabet / Google family
         "gmail": "google",
-        "googlemail": "google"
+        "googlemail": "google",
+        "alphabet": "google",
+        "alphabet inc": "google",
+        // Microsoft
+        "msft": "microsoft",
+        "microsoft corporation": "microsoft",
+        "microsoft corp": "microsoft",
+        // Amazon
+        "amzn": "amazon",
+        "aws": "amazon",
+        "amazon web services": "amazon",
+        "amazon.com": "amazon",
+        // Apple
+        "aapl": "apple",
+        "apple inc": "apple",
+        "apple computer": "apple",
+        // Meta / Facebook
+        "facebook": "meta",
+        "fb": "meta",
+        "meta platforms": "meta",
+        // IBM
+        "international business machines": "ibm",
+        // Oracle
+        "orcl": "oracle",
+        // Salesforce
+        "crm": "salesforce",
+        "salesforce.com": "salesforce",
+        // X / Twitter (controversial but well-known)
+        "twitter": "x"
     ]
 
     private func rawNormalize(_ entity: Entity) -> String {
