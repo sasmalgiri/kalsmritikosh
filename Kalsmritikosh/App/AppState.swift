@@ -204,6 +204,7 @@ public final class AppState {
             let ingest = IngestCoordinator(
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
+                entityQualityGate: EntityQualityGate.bundled(),
                 eventExtractor: RuleEventExtractor(),
                 relationshipExtractor: Tier1RelationshipExtractor(),
                 embedder: embedder,

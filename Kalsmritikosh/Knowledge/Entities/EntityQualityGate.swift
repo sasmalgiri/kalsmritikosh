@@ -1,0 +1,131 @@
+//
+//  EntityQualityGate.swift
+//  Kalsmritikosh
+//
+//  T13 secondary safety net — reject the entity shapes NER reliably emits
+//  on email archives but never represent real people / organizations:
+//  weekday + month tokens, mail/header keywords (editable Resources
+//  stoplist), the app's own internal identifiers, single common-noun
+//  lowercased tokens, and hostname-shaped strings. Applies to BOTH the
+//  NLTagger path and the future guided-generation path, before insert.
+//
+
+import Foundation
+import OSLog
+
+public struct EntityQualityGate: Sendable {
+    public let stoplist: Set<String>
+
+    public init(stoplist: Set<String> = []) {
+        self.stoplist = stoplist
+    }
+
+    /// Loads the editable stoplist shipped at
+    /// `Resources/EntityStoplist.json` (root key "stoplist" → [String]).
+    /// Falls back to an empty stoplist when the resource is missing; the
+    /// hardcoded weekday/month/internal checks still apply.
+    public static func bundled() -> EntityQualityGate {
+        let bundle = Bundle.main
+        guard let url = bundle.url(forResource: "EntityStoplist", withExtension: "json"),
+              let data = try? Data(contentsOf: url) else {
+            return EntityQualityGate(stoplist: [])
+        }
+        struct Envelope: Decodable { let stoplist: [String] }
+        guard let env = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            return EntityQualityGate(stoplist: [])
+        }
+        return EntityQualityGate(stoplist: Set(env.stoplist.map { $0.lowercased() }))
+    }
+
+    // MARK: - Hardcoded rejects
+
+    public static let weekdays: Set<String> = [
+        "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
+    ]
+
+    public static let months: Set<String> = [
+        "jan", "feb", "mar", "apr", "may", "jun", "jul",
+        "aug", "sep", "sept", "oct", "nov", "dec",
+        "january", "february", "march", "april", "may",
+        "june", "july", "august", "september", "october", "november", "december"
+    ]
+
+    /// Identifiers the app's own pipeline emits when NLTagger reads its
+    /// internal class names off log strings the entity extractor
+    /// inadvertently sees.
+    public static let internalIdentifiers: Set<String> = [
+        "apple naturallanguage", "apple ai", "apple intelligence",
+        "natural language", "nltagger", "nlembedding"
+    ]
+
+    // MARK: - API
+
+    /// `true` iff the entity passes every gate. Per-kind rules apply
+    /// only to person / organization / vendor / client (the categories
+    /// that NER pollutes); other kinds (date, money, location, …) are
+    /// untouched.
+    public func shouldKeep(_ entity: Entity) -> Bool {
+        let surface = entity.value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = surface.lowercased()
+
+        if surface.count < 2 { return false }
+        if Self.weekdays.contains(lower) { return false }
+        if Self.months.contains(lower) { return false }
+        if stoplist.contains(lower) { return false }
+        if Self.internalIdentifiers.contains(lower) { return false }
+
+        let isNameKind = isNounKind(entity.kind)
+
+        if isNameKind, lower.contains("worker") {
+            return false
+        }
+
+        // Single all-lowercase word of person/org kind — almost always a
+        // common-noun false positive ("category", "ref", "urls").
+        if isNameKind,
+           surface.allSatisfy({ $0.isLetter || $0 == "-" }),
+           surface == lower {
+            return false
+        }
+
+        // Hostname-shaped (mixed letters + digits, no spaces, ≥6 chars):
+        // "tyzpr01mb4530", "seqmbx01", "d22rediffmail".
+        if isNameKind, isHostnameShape(surface) {
+            return false
+        }
+
+        return true
+    }
+
+    public func filter(_ entities: [Entity]) -> [Entity] {
+        let kept = entities.filter(shouldKeep)
+        let dropped = entities.count - kept.count
+        if dropped > 0 {
+            AtlasLog.brain.info("EntityQualityGate dropped \(dropped, privacy: .public) of \(entities.count, privacy: .public)")
+        }
+        return kept
+    }
+
+    // MARK: - Heuristics
+
+    private func isNounKind(_ kind: Entity.Kind) -> Bool {
+        switch kind {
+        case .person, .organization, .vendor, .client: return true
+        default: return false
+        }
+    }
+
+    private func isHostnameShape(_ s: String) -> Bool {
+        guard s.count >= 6 else { return false }
+        if s.contains(" ") { return false }
+        let hasLetter = s.contains(where: \.isLetter)
+        let hasDigit = s.contains(where: \.isNumber)
+        guard hasLetter, hasDigit else { return false }
+        // A real product name like "iPhone15" is rare for a person/org;
+        // "M4 Pro" has a space so it escapes; we err on the strict side
+        // because false-positive cost (one rejected entity) ≪ false-
+        // negative cost (graph poisoned by a hostname).
+        return true
+    }
+}

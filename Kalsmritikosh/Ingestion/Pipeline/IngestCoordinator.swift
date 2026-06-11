@@ -30,6 +30,7 @@ public actor IngestCoordinator {
     private let chunker: Chunker
     private let entityExtractor: EntityExtractor?
     private let entityLinker: EntityLinker?
+    private let entityQualityGate: EntityQualityGate?
     private let eventExtractor: EventExtractor?
     private let relationshipExtractor: Tier1RelationshipExtractor?
     private let embedder: Embedder?
@@ -52,6 +53,7 @@ public actor IngestCoordinator {
         chunker: Chunker = .init(),
         entityExtractor: EntityExtractor? = nil,
         entityLinker: EntityLinker? = nil,
+        entityQualityGate: EntityQualityGate? = nil,
         eventExtractor: EventExtractor? = nil,
         relationshipExtractor: Tier1RelationshipExtractor? = nil,
         embedder: Embedder? = nil,
@@ -69,6 +71,7 @@ public actor IngestCoordinator {
         self.chunker = chunker
         self.entityExtractor = entityExtractor
         self.entityLinker = entityLinker
+        self.entityQualityGate = entityQualityGate
         self.eventExtractor = eventExtractor
         self.relationshipExtractor = relationshipExtractor
         self.embedder = embedder
@@ -275,6 +278,13 @@ public actor IngestCoordinator {
         if let entityExtractor, let entities {
             var raw = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
             if let entityLinker { raw = entityLinker.link(raw) }
+            // T13 — secondary safety net. Drops weekday/month tokens,
+            // mail/header keywords (Resources/EntityStoplist.json),
+            // app-internal identifiers, single-lowercased-word commons,
+            // and hostname-shaped tokens before they reach storage.
+            if let entityQualityGate {
+                raw = entityQualityGate.filter(raw)
+            }
             canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
             extractedEntities = raw
             // Port the render-time email-domain mining into ingest so an

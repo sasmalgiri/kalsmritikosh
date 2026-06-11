@@ -567,6 +567,43 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T13.4 — EntityQualityGate keeps real names, drops garbage.
+    do {
+        let gate = EntityQualityGate(stoplist: ["smtp", "noreply", "notifications"])
+        func mk(_ value: String, _ kind: Entity.Kind = .person) -> Entity {
+            Entity(kind: kind, value: value, sourceObjectID: UUID())
+        }
+        let keepers = [
+            mk("Mike"),
+            mk("Supplier ABC", .organization),
+            mk("Gmail", .organization),   // T13.5: legit org
+            mk("Apple", .organization)
+        ]
+        let rejects = [
+            mk("tue"),
+            mk("jun"),
+            mk("smtp"),
+            mk("notifications"),
+            mk("tyzpr01mb4530", .organization),
+            mk("apple naturallanguage"),
+            mk("urls"),
+            mk("a"),
+            mk("worker-pod-7", .organization)
+        ]
+        let keptResult = gate.filter(keepers)
+        let droppedResult = gate.filter(rejects)
+        if keptResult.count == keepers.count {
+            passed.append("T13.4: gate kept all \(keepers.count) real names")
+        } else {
+            failed.append("T13.4: gate dropped \(keepers.count - keptResult.count) real name(s)")
+        }
+        if droppedResult.isEmpty {
+            passed.append("T13.4: gate dropped all \(rejects.count) garbage entities")
+        } else {
+            failed.append("T13.4: gate left \(droppedResult.count) garbage entities through: \(droppedResult.map(\.value))")
+        }
+    }
+
     // T11 — Quality strip renders the expected fields and handles a
     // contradictory fixture (Conflicts: 1).
     do {
