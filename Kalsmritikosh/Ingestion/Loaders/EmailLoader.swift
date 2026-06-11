@@ -599,6 +599,106 @@ public struct EmailLoader: Ingestor {
         return (stripped, removed)
     }
 
+    /// RFC 2047 encoded-word decoder. Real-world Subject / From / To
+    /// headers often arrive as
+    ///   `Subject: =?UTF-8?B?5pel5pys6Kqe?=`
+    /// or
+    ///   `From: =?ISO-8859-1?Q?Andr=E9?= <andre@example.com>`
+    /// without decoding, the strings poison NER and the UI.
+    ///
+    /// Format: `=?charset?encoding?encoded-text?=` where encoding is
+    /// `B` (base64) or `Q` (quoted-printable, with `_` standing in
+    /// for space). Multiple encoded words back-to-back are concatenated
+    /// without intervening whitespace per the spec.
+    static func decodeRFC2047(_ raw: String) -> String {
+        let pattern = "=\\?([^?]+)\\?([BbQq])\\?([^?]*)\\?="
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return raw }
+        let ns = raw as NSString
+        let matches = re.matches(in: raw, range: NSRange(location: 0, length: ns.length))
+        guard !matches.isEmpty else { return raw }
+
+        var out = ""
+        var lastEnd = 0
+        var lastWasEncoded = false
+        for match in matches {
+            let r = match.range
+            let inBetween = ns.substring(with: NSRange(location: lastEnd, length: r.location - lastEnd))
+            // Per RFC 2047 §6.2: whitespace between two encoded words is dropped.
+            let trimmedBetween = lastWasEncoded
+                ? inBetween.trimmingCharacters(in: .whitespacesAndNewlines)
+                : inBetween
+            out += trimmedBetween
+            let charset = ns.substring(with: match.range(at: 1))
+            let encoding = ns.substring(with: match.range(at: 2)).uppercased()
+            let payload = ns.substring(with: match.range(at: 3))
+            if let decoded = decodeEncodedWord(payload, encoding: encoding, charset: charset) {
+                out += decoded
+            } else {
+                out += ns.substring(with: r)
+            }
+            lastEnd = r.location + r.length
+            lastWasEncoded = true
+        }
+        if lastEnd < ns.length {
+            out += ns.substring(with: NSRange(location: lastEnd, length: ns.length - lastEnd))
+        }
+        return out
+    }
+
+    private static func decodeEncodedWord(_ payload: String, encoding: String, charset: String) -> String? {
+        let cf = stringEncoding(for: charset) ?? .utf8
+        let data: Data?
+        switch encoding {
+        case "B":
+            data = Data(base64Encoded: payload.filter { !$0.isWhitespace })
+        case "Q":
+            // Q-encoding: `_` → space, `=XX` → byte XX (hex).
+            var bytes: [UInt8] = []
+            let chars = Array(payload)
+            var i = 0
+            while i < chars.count {
+                let c = chars[i]
+                if c == "_" {
+                    bytes.append(0x20)
+                    i += 1
+                    continue
+                }
+                if c == "=", i + 2 < chars.count {
+                    let hex = String([chars[i + 1], chars[i + 2]])
+                    if let byte = UInt8(hex, radix: 16) {
+                        bytes.append(byte)
+                        i += 3
+                        continue
+                    }
+                }
+                for u in String(c).utf8 { bytes.append(u) }
+                i += 1
+            }
+            data = Data(bytes)
+        default:
+            data = nil
+        }
+        guard let data else { return nil }
+        return String(data: data, encoding: cf)
+    }
+
+    private static func stringEncoding(for charset: String) -> String.Encoding? {
+        switch charset.uppercased() {
+        case "UTF-8", "UTF8": return .utf8
+        case "US-ASCII", "ASCII": return .ascii
+        case "ISO-8859-1", "LATIN1": return .isoLatin1
+        case "ISO-8859-2", "LATIN2": return .isoLatin2
+        case "WINDOWS-1252", "CP1252": return .windowsCP1252
+        case "SHIFT_JIS", "SHIFT-JIS", "SJIS": return .shiftJIS
+        case "EUC-JP": return .japaneseEUC
+        case "ISO-2022-JP": return .iso2022JP
+        case "GB2312", "GBK", "GB18030": return .init(rawValue: 0x80000632) // GB18030 superset
+        case "BIG5": return .init(rawValue: 0x80000A03)
+        case "KOI8-R": return .init(rawValue: 0x80000A02)
+        default: return nil
+        }
+    }
+
     private func splitEMLHeaders(_ raw: String) -> ([String: String], String) {
         guard let blankLine = raw.range(of: "\n\n") else {
             return ([:], raw)
@@ -621,6 +721,13 @@ public struct EmailLoader: Ingestor {
             }
         }
         if let (k, v) = current { headers[k] = v }
-        return (headers, body)
+        // RFC 2047 — decode encoded-words in every header value so the
+        // downstream pipeline (NER, KO metadata, UI) sees real text
+        // instead of `=?UTF-8?B?...?=` strings.
+        var decoded: [String: String] = [:]
+        for (k, v) in headers {
+            decoded[k] = Self.decodeRFC2047(v)
+        }
+        return (decoded, body)
     }
 }
