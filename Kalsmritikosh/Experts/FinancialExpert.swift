@@ -42,7 +42,7 @@ public struct FinancialExpert: Expert {
                 statement: "\(event.title) \u{2014} \(event.date.formatted(date: .abbreviated, time: .omitted))",
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
-                confidence: event.confidence,
+                confidence: Confidence(event.confidence.value * event.dateConfidence),
                 evidenceGranularity: .coarse
             )
         }

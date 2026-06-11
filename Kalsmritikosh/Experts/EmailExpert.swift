@@ -46,7 +46,9 @@ public struct EmailExpert: Expert {
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs,
-                confidence: event.confidence,
+                // T9 close-out — weight by date_confidence so mtime-
+                // fallback events contribute less than header-parsed ones.
+                confidence: Confidence(event.confidence.value * event.dateConfidence),
                 evidenceGranularity: .coarse
             )
         }

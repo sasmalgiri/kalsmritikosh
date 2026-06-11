@@ -13,15 +13,24 @@ public struct EvidenceVerifier: Verifier {
     public let minimumConfidence: Confidence
     public let minimumCitations: Int
     private let engine: any ConfidenceEngine
+    /// Returns the fraction of the user's archive past Tier-1 ingest
+    /// (chunks + entities + events present). The Engine multiplies
+    /// final confidence by max(coverage, 0.5) while < 1.0, so the
+    /// Quality Strip can honestly say "Answered from X% of your
+    /// archive". `nil` → engine treats it as 1.0 (no-op multiplier).
+    /// T11 close-out.
+    private let ingestCoverageProvider: (@Sendable () async -> Double)?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
         minimumCitations: Int = 1,
-        engine: any ConfidenceEngine = DefaultConfidenceEngine()
+        engine: any ConfidenceEngine = DefaultConfidenceEngine(),
+        ingestCoverageProvider: (@Sendable () async -> Double)? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
         self.engine = engine
+        self.ingestCoverageProvider = ingestCoverageProvider
     }
 
     public func verify(
@@ -36,13 +45,14 @@ public struct EvidenceVerifier: Verifier {
                   let s = tf.start, let e = tf.end, e > s else { return nil }
             return DateInterval(start: s, end: e)
         }()
+        let ingestCoverage: Double = await ingestCoverageProvider?() ?? 1.0
         let report = await engine.evaluate(
             claims: claims,
             droppedUnverifiable: droppedUnverifiable,
             events: retrieval.events,
             intentKind: intent.kind,
             intentWindow: intentWindow,
-            ingestCoverage: 1.0,
+            ingestCoverage: ingestCoverage,
             now: Date()
         )
         _ = retrieval  // available for richer rendering below

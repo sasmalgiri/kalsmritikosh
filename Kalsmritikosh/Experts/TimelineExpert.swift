@@ -40,7 +40,7 @@ public struct TimelineExpert: Expert {
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs,
-                confidence: event.confidence,
+                confidence: Confidence(event.confidence.value * event.dateConfidence),
                 evidenceGranularity: .coarse
             )
         }

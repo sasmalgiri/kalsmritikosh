@@ -175,7 +175,20 @@ public final class AppState {
             let workerPool = WorkerPool(maxConcurrentWorkers: 4)
             let executor = ParallelExecutor(pool: workerPool, experts: expertRegistry)
             let intentDetector = RuleIntentDetector()
-            let verifier = EvidenceVerifier()
+            // T11 close-out — give the verifier a real ingest-coverage
+            // readout: fraction of registered files that have at least one
+            // KnowledgeObject in the store. While ingest is incomplete the
+            // engine multiplies final confidence by max(coverage, 0.5).
+            let verifier = EvidenceVerifier(
+                ingestCoverageProvider: { [weak files, weak objects] in
+                    guard let files, let objects else { return 1.0 }
+                    let fileCount = (try? await files.count()) ?? 0
+                    guard fileCount > 0 else { return 1.0 }
+                    let koCount = (try? await objects.count()) ?? 0
+                    let raw = Double(koCount) / Double(fileCount)
+                    return min(1.0, max(0.0, raw))
+                }
+            )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,
                 events: events,

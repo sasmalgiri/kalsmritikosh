@@ -42,7 +42,7 @@ public struct LegalExpert: Expert {
                 statement: "\(event.title) recorded on \(event.date.formatted(date: .abbreviated, time: .omitted))",
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
-                confidence: event.confidence,
+                confidence: Confidence(event.confidence.value * event.dateConfidence),
                 evidenceGranularity: .coarse
             )
         }
