@@ -567,6 +567,64 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T13.1 + T13.2 — mbox → per-message KOs with structured entities.
+    do {
+        // Synthesize a 3-message mbox in tempDir.
+        let mboxText = """
+        From a@example.com Mon Apr  1 12:00:00 2026
+        From: Alice <alice@northwind.com>
+        To: Bob <bob@northwind.com>
+        Subject: Hello bob
+        Date: Mon, 1 Apr 2026 12:00:00 +0000
+
+        First message body.
+
+        From b@example.com Tue Apr  2 09:00:00 2026
+        From: Bob <bob@northwind.com>
+        To: Alice <alice@northwind.com>
+        Subject: Re: Hello bob
+        Date: Tue, 2 Apr 2026 09:00:00 +0000
+
+        Second message body.
+
+        From a@example.com Wed Apr  3 15:30:00 2026
+        From: Alice <alice@northwind.com>
+        To: Carol <carol@external.com>
+        Subject: Different thread
+        Date: Wed, 3 Apr 2026 15:30:00 +0000
+
+        Third message body.
+        """
+        let mboxURL = tempDir.appendingPathComponent("t13_fixture.mbox")
+        try mboxText.write(to: mboxURL, atomically: true, encoding: .utf8)
+        let loader = EmailLoader()
+        let kos = try await loader.ingestMany(fileAt: mboxURL, type: .mbox)
+        if kos.count == 3 {
+            passed.append("T13.1: 3-message mbox → 3 KOs")
+        } else {
+            failed.append("T13.1: 3-message mbox produced \(kos.count) KOs (expected 3)")
+        }
+        // Each per-message KO carries its structured entities via the
+        // metadata payload key.
+        var allStructured: [Entity] = []
+        for ko in kos {
+            if let value = ko.metadata[EmailLoader.structuredEntitiesMetaKey],
+               case .string(let json) = value.value {
+                allStructured.append(contentsOf: EmailLoader.decodeStructuredEntities(from: json))
+            }
+        }
+        let hasEmailAddresses = allStructured.contains { $0.kind == .emailAddress }
+        let hasPersonName = allStructured.contains { $0.kind == .person && $0.value == "Alice" }
+        if hasEmailAddresses && hasPersonName {
+            passed.append("T13.2: structured entities (emailAddress + person) emitted from headers")
+        } else {
+            failed.append("T13.2: structured entities missing — emails=\(hasEmailAddresses) Alice=\(hasPersonName)")
+        }
+        try? FileManager.default.removeItem(at: mboxURL)
+    } catch {
+        failed.append("T13.1/2: setup failed: \(error)")
+    }
+
     // T13.5 — Google / Gmail / Googlemail must collapse to ONE canonical.
     do {
         let t135DB = try Database(url: tempDir.appendingPathComponent("t135.sqlite"))

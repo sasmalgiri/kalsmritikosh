@@ -2,12 +2,16 @@
 //  EmailLoader.swift
 //  Kalsmritikosh
 //
-//  EML (single message) is fully parsed. MBOX is split into messages
-//  by "From " separator lines and emitted as a single concatenated
-//  KnowledgeObject (each message later becomes its own KO once we
-//  split the pipeline in M5).
-//  PST / MSG / Apple Mail .emlx land in M5 — they require third-party
-//  decoders or AppKit-level Mail.app access.
+//  EML / .emlx → one KO per file. MBOX → one KO per message (T13.1
+//  paid off the M5 debt). PST / MSG land in Gate 3 via GS-MAIL —
+//  they require third-party decoders or AppKit-level Mail.app access.
+//
+//  Header parsing pulls From / To / Cc / Date out of structured fields
+//  and emits them as high-confidence Entity rows on the KO (T13.2);
+//  routing headers (Received, Message-ID, Return-Path, DKIM, SPF, X-*,
+//  server names) never reach NER because the loader only prepends the
+//  human-relevant headers (From / To / Cc / Subject / Date) to the
+//  body that gets chunked.
 //
 
 import Foundation
@@ -22,12 +26,25 @@ public struct EmailLoader: Ingestor {
         case .eml:
             return try ingestEML(at: url)
         case .mbox:
+            // For a single-KO entry point, keep the legacy concatenated
+            // KO so any caller that doesn't use `ingestMany` still gets
+            // something coherent. The modern path (IngestCoordinator)
+            // uses `ingestMany` so it gets per-message KOs.
             return try ingestMBOX(at: url)
         case .appleMail:
             return try ingestAppleEMLX(at: url)
         default:
             return try binaryStub(at: url, type: type)
         }
+    }
+
+    /// T13.1 — mbox produces one KO per message; other formats fall
+    /// through to the single-KO path.
+    public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
+        if type == .mbox {
+            return try ingestMBOXAsMessages(at: url)
+        }
+        return [try await ingest(fileAt: url, type: type)]
     }
 
     /// Apple Mail's `.emlx` is "<decimal byte length>\n<RFC822 message>\n
@@ -74,7 +91,13 @@ public struct EmailLoader: Ingestor {
         if merged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw IngestorError.empty(url)
         }
+        let koID = UUID()
+        let structured = Self.structuredEntities(from: headers, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structured) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
         return KnowledgeObject(
+            id: koID,
             sourceFile: url,
             sourceType: .appleMail,
             content: merged,
@@ -120,13 +143,203 @@ public struct EmailLoader: Ingestor {
         let merged = headerLines.isEmpty
             ? cleanedBody
             : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+        let koID = UUID()
+        let structured = Self.structuredEntities(from: headers, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structured) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
         return KnowledgeObject(
+            id: koID,
             sourceFile: url,
             sourceType: .eml,
             content: merged,
             metadata: meta,
             confidence: .high
         )
+    }
+
+    /// T13.1 — split an mbox file by `From ` separators and return one
+    /// fully-populated KnowledgeObject per message. Each per-message KO
+    /// carries its own structured From/To/Cc/Date entities (T13.2) and
+    /// goes through the standard chunker / NER / event-extraction
+    /// pipeline from IngestCoordinator independently.
+    private func ingestMBOXAsMessages(at url: URL) throws -> [KnowledgeObject] {
+        let raw: String
+        do { raw = try String(contentsOf: url, encoding: .utf8) }
+        catch {
+            do { raw = try String(contentsOf: url, encoding: .isoLatin1) }
+            catch { throw IngestorError.unreadable(url, underlying: error) }
+        }
+        var pieces: [String] = []
+        for chunk in raw.components(separatedBy: "\nFrom ") {
+            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { pieces.append(trimmed) }
+        }
+        var out: [KnowledgeObject] = []
+        for (idx, message) in pieces.enumerated() {
+            // Re-prepend the "From " line removed by splitting (except
+            // the first piece, which never carried the prefix).
+            let messageBody = idx == 0 ? message : "From " + message
+            let (headers, body) = splitEMLHeaders(messageBody)
+
+            var meta: [String: AnyCodable] = [
+                "filename": AnyCodable(.string(url.lastPathComponent)),
+                "loader": AnyCodable(.string("mbox-per-message")),
+                "messageIndex": AnyCodable(.int(Int64(idx)))
+            ]
+            for (key, value) in headers { meta[key] = AnyCodable(.string(value)) }
+
+            // T13.6 — Gmail Takeout: surface X-GM-THRID + X-Gmail-Labels
+            // as first-class metadata.
+            if let thrid = headers["x-gm-thrid"] {
+                meta["threadID"] = AnyCodable(.string(thrid))
+            }
+            if let labels = headers["x-gmail-labels"] {
+                meta["gmailLabels"] = AnyCodable(.string(labels))
+            }
+
+            // T7 — strip quoted regions from the per-message body before
+            // anything else sees it.
+            let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+            meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+
+            var headerLines: [String] = []
+            for key in ["from", "to", "cc", "subject", "date"] {
+                if let value = headers[key], !value.isEmpty {
+                    headerLines.append("\(key.capitalized): \(value)")
+                }
+            }
+            let merged = headerLines.isEmpty
+                ? cleanedBody
+                : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+            if merged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+
+            // Each per-message KO is its own row; KnowledgeObjectRepository
+            // generates a fresh id at construction.
+            let koID = UUID()
+            let structuredEntities = Self.structuredEntities(from: headers, sourceObjectID: koID)
+            if let json = Self.encodeStructuredEntities(structuredEntities) {
+                meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+            }
+            out.append(KnowledgeObject(
+                id: koID,
+                sourceFile: url,
+                sourceType: .mbox,
+                content: merged,
+                metadata: meta,
+                confidence: .high
+            ))
+        }
+        return out
+    }
+
+    /// Metadata key under which T13.2's structured From/To/Cc/Date
+    /// entities are smuggled to IngestCoordinator as a JSON-encoded
+    /// [Entity] string. KnowledgeObject.entities holds IDs only, so we
+    /// piggyback on metadata instead of changing the schema.
+    static let structuredEntitiesMetaKey = "t13_structuredEntities"
+
+    static func encodeStructuredEntities(_ entities: [Entity]) -> String? {
+        guard !entities.isEmpty else { return nil }
+        guard let data = try? JSONEncoder().encode(entities) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodeStructuredEntities(from json: String) -> [Entity] {
+        guard let data = json.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([Entity].self, from: data) else {
+            return []
+        }
+        return arr
+    }
+
+    /// T13.2 — pull structured emailAddress / person / date entities out
+    /// of the parsed RFC 5322 headers so downstream extractors don't
+    /// have to re-discover them via NER.
+    static func structuredEntities(
+        from headers: [String: String],
+        sourceObjectID: KnowledgeObject.ID
+    ) -> [Entity] {
+        var out: [Entity] = []
+        let emailRegex = try? NSRegularExpression(
+            pattern: "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}",
+            options: []
+        )
+        let nameInAngleRegex = try? NSRegularExpression(
+            pattern: "\"?([^<\"]+?)\"?\\s*<[^>]+>",
+            options: []
+        )
+
+        func addEmailsAndNames(from header: String?) {
+            guard let header, !header.isEmpty else { return }
+            let ns = header as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let emailRegex {
+                for match in emailRegex.matches(in: header, range: range) {
+                    let addr = ns.substring(with: match.range).lowercased()
+                    out.append(Entity(
+                        kind: .emailAddress,
+                        value: addr,
+                        normalizedValue: addr,
+                        sourceObjectID: sourceObjectID,
+                        confidence: .high
+                    ))
+                }
+            }
+            if let nameInAngleRegex {
+                for match in nameInAngleRegex.matches(in: header, range: range) {
+                    if match.numberOfRanges > 1 {
+                        let nameRange = match.range(at: 1)
+                        let raw = ns.substring(with: nameRange)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        // Skip empty / obviously non-name values; let
+                        // EntityQualityGate decide on edge cases.
+                        if raw.count >= 2, raw.contains(where: \.isLetter) {
+                            out.append(Entity(
+                                kind: .person,
+                                value: raw,
+                                sourceObjectID: sourceObjectID,
+                                confidence: .high
+                            ))
+                        }
+                    }
+                }
+            }
+        }
+
+        addEmailsAndNames(from: headers["from"])
+        addEmailsAndNames(from: headers["to"])
+        addEmailsAndNames(from: headers["cc"])
+
+        // Date header → date entity (best-effort RFC 2822 / 5322 parsing).
+        if let dateString = headers["date"], !dateString.isEmpty {
+            if let date = parseRFC2822DateOrNil(dateString) {
+                let iso = ISO8601DateFormatter().string(from: date)
+                out.append(Entity(
+                    kind: .date,
+                    value: dateString,
+                    normalizedValue: iso,
+                    sourceObjectID: sourceObjectID,
+                    confidence: .high
+                ))
+            }
+        }
+        return out
+    }
+
+    private static func parseRFC2822DateOrNil(_ s: String) -> Date? {
+        let formats = [
+            "EEE, d MMM yyyy HH:mm:ss Z",
+            "d MMM yyyy HH:mm:ss Z",
+            "EEE, d MMM yyyy HH:mm:ss zzz"
+        ]
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        for f in formats {
+            formatter.dateFormat = f
+            if let date = formatter.date(from: s) { return date }
+        }
+        return nil
     }
 
     private func ingestMBOX(at url: URL) throws -> KnowledgeObject {

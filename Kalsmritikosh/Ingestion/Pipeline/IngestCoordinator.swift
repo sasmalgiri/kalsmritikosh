@@ -226,28 +226,11 @@ public actor IngestCoordinator {
             )
         }
 
-        var meta = cleaned.metadata
-        meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
-        let object = KnowledgeObject(
-            id: cleaned.id,
-            sourceFile: cleaned.sourceFile,
-            sourceType: cleaned.sourceType,
-            content: cleaned.content,
-            metadata: meta,
-            entities: cleaned.entities,
-            events: cleaned.events,
-            relationships: cleaned.relationships,
-            summaries: cleaned.summaries,
-            confidence: cleaned.confidence,
-            createdAt: cleaned.createdAt,
-            updatedAt: .init()
-        )
-
         let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
         let modified = (attrs[.modificationDate] as? Date) ?? .init()
         let size = (attrs[.size] as? Int64) ?? 0
-        let contentHash: String? = {
-            if let value = meta["contentHash"],
+        let contentHashForFile: String? = {
+            if let value = cleaned.metadata["contentHash"],
                case .string(let s) = value.value { return s }
             return nil
         }()
@@ -257,14 +240,111 @@ public actor IngestCoordinator {
             sizeBytes: size,
             modifiedAt: modified,
             ingestedAt: .init(),
-            contentHash: contentHash
+            contentHash: contentHashForFile
+        )
+        do {
+            try await files.upsert(fileRecord)
+        } catch {
+            AtlasLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            throw error
+        }
+
+        // T13.1 — one OR MORE KnowledgeObjects per file. mbox produces
+        // one KO per message; other formats wrap their single ingest()
+        // result in a one-element array via the protocol default.
+        let perFileKOs: [KnowledgeObject]
+        do {
+            perFileKOs = try await loader.ingestMany(fileAt: url, type: type)
+        } catch {
+            AtlasLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            throw error
+        }
+        guard !perFileKOs.isEmpty else {
+            return Result(
+                fileRecord: fileRecord,
+                object: cleaned,
+                chunkCount: 0,
+                entityCount: 0,
+                eventCount: 0,
+                documentClass: docClass,
+                invalidations: []
+            )
+        }
+
+        var totalChunks = 0
+        var totalEntities = 0
+        var totalEvents = 0
+        var allInvalidations: [SubjectInvalidation.Subject] = []
+        var lastObject: KnowledgeObject = perFileKOs[0]
+
+        for rawKO in perFileKOs {
+            do {
+                let processed = try await processKnowledgeObject(
+                    rawKO,
+                    fileID: fileRecord.id,
+                    documentClass: docClass
+                )
+                totalChunks += processed.chunkCount
+                totalEntities += processed.entityCount
+                totalEvents += processed.eventCount
+                allInvalidations.append(contentsOf: processed.invalidations)
+                lastObject = processed.object
+            } catch {
+                AtlasLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        AtlasLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
+
+        return Result(
+            fileRecord: fileRecord,
+            object: lastObject,
+            chunkCount: totalChunks,
+            entityCount: totalEntities,
+            eventCount: totalEvents,
+            documentClass: docClass,
+            invalidations: allInvalidations
+        )
+    }
+
+    private struct ProcessedKO: Sendable {
+        let object: KnowledgeObject
+        let chunkCount: Int
+        let entityCount: Int
+        let eventCount: Int
+        let invalidations: [SubjectInvalidation.Subject]
+    }
+
+    /// Runs the per-KO half of the pipeline (chunk → entity merge → events
+    /// → relationships → embeddings → invalidations). Called once per KO
+    /// produced by `loader.ingestMany`, so an mbox file fans out through
+    /// here once per message.
+    private func processKnowledgeObject(
+        _ rawObject: KnowledgeObject,
+        fileID: UUID,
+        documentClass docClass: DocumentClass
+    ) async throws -> ProcessedKO {
+        var meta = rawObject.metadata
+        meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
+        let object = KnowledgeObject(
+            id: rawObject.id,
+            sourceFile: rawObject.sourceFile,
+            sourceType: rawObject.sourceType,
+            content: rawObject.content,
+            metadata: meta,
+            entities: rawObject.entities,
+            events: rawObject.events,
+            relationships: rawObject.relationships,
+            summaries: rawObject.summaries,
+            confidence: rawObject.confidence,
+            createdAt: rawObject.createdAt,
+            updatedAt: .init()
         )
 
         do {
-            try await files.upsert(fileRecord)
-            try await objects.insert(object, fileID: fileRecord.id)
+            try await objects.insert(object, fileID: fileID)
         } catch {
-            AtlasLog.storage.error("Failed to persist KO for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            AtlasLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
 
@@ -276,21 +356,24 @@ public actor IngestCoordinator {
         var canonicalMapping: [Entity.ID: Entity.ID] = [:]
 
         if let entityExtractor, let entities {
-            var raw = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
+            // T13.2 — seed with loader-provided structured entities
+            // (From/To/Cc/Date) BEFORE running NER over the content. NER
+            // augments; loader entities are already high-confidence.
+            var raw: [Entity] = []
+            if let value = object.metadata[EmailLoader.structuredEntitiesMetaKey],
+               case .string(let json) = value.value {
+                raw.append(contentsOf: EmailLoader.decodeStructuredEntities(from: json))
+            }
+            let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
+            raw.append(contentsOf: nerExtracted)
             if let entityLinker { raw = entityLinker.link(raw) }
-            // T13 — secondary safety net. Drops weekday/month tokens,
-            // mail/header keywords (Resources/EntityStoplist.json),
-            // app-internal identifiers, single-lowercased-word commons,
-            // and hostname-shaped tokens before they reach storage.
+            // T13.4 — drop garbage (weekdays / mail keywords / hostnames /
+            // app-internal identifiers) before storage.
             if let entityQualityGate {
                 raw = entityQualityGate.filter(raw)
             }
             canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
             extractedEntities = raw
-            // Port the render-time email-domain mining into ingest so an
-            // alias row exists for every domain we see, mapped onto its
-            // org canonical. Render still labels too — aliases also feed
-            // future lookups.
             await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
@@ -300,8 +383,6 @@ public actor IngestCoordinator {
                 chunks: chunked,
                 entities: extractedEntities
             )) ?? []
-            // Remap event.entityIDs to canonical ids before persisting so
-            // event_entities rows reference the real canonical rows.
             let remapped = rawEvents.map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             }
@@ -309,16 +390,6 @@ public actor IngestCoordinator {
             extractedEvents = remapped
         }
 
-        // T4 — Tier 1 graph extraction. Co-occurrence + event-linked
-        // edges across canonical entities, plus typed email edges when
-        // sender/recipients can be resolved.
-        //
-        // UPDATE_04_REVISED: an oversized-KO skip threshold replaces the
-        // earlier top-K-by-frequency cap (which preserved noise and
-        // dropped signal on email archives). The batch upsert transaction
-        // stays. Once T13 splits mbox per-message, per-message KOs always
-        // sit under the threshold and full per-message co_occurrence
-        // returns automatically.
         if let relationshipExtractor, let relationships {
             let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }
             let participants = await emailParticipants(
@@ -345,8 +416,6 @@ public actor IngestCoordinator {
         }
 
         if let embedder, let vectors {
-            // T6 — batch embedding. embedAll chunks the list into
-            // batchSize-sized calls so we never round-trip per chunk.
             let texts = chunked.map(\.text)
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
@@ -362,15 +431,11 @@ public actor IngestCoordinator {
             ))
         }
 
-        AtlasLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(chunked.count) chunks, \(extractedEntities.count) entities, \(extractedEvents.count) events")
-
-        return Result(
-            fileRecord: fileRecord,
+        return ProcessedKO(
             object: object,
             chunkCount: chunked.count,
             entityCount: extractedEntities.count,
             eventCount: extractedEvents.count,
-            documentClass: docClass,
             invalidations: invalidationSubjects
         )
     }
