@@ -75,8 +75,16 @@ public struct EmailLoader: Ingestor {
             "loader": AnyCodable(.string("emlx-apple-mail"))
         ]
         for (key, value) in headers { meta[key] = AnyCodable(.string(value)) }
-        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
+            headers: headers,
+            body: body,
+            for: url
+        )
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(textBody)
         meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+        if let json = Self.encodeAttachmentURLs(attachmentURLs) {
+            meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
+        }
 
         var headerLines: [String] = []
         for key in ["from", "to", "cc", "subject", "date"] {
@@ -127,10 +135,22 @@ public struct EmailLoader: Ingestor {
             meta[key] = AnyCodable(.string(value))
         }
 
+        // T13.7 — If the message is multipart, hand only the decoded
+        // text part to the chunker and stage attachments for recursive
+        // ingest. Raw base64 / MIME bytes NEVER reach NER or chunking.
+        let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
+            headers: headers,
+            body: body,
+            for: url
+        )
+
         // T7 — Strip quoted regions before chunking. Stored bytes-removed
         // metric flows into the completeness report.
-        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(textBody)
         meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+        if let json = Self.encodeAttachmentURLs(attachmentURLs) {
+            meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
+        }
 
         // Prepend the human-relevant headers (From / To / Cc / Subject / Date)
         // so the entity extractor + summarizer see the participants and topic.
@@ -198,10 +218,20 @@ public struct EmailLoader: Ingestor {
                 meta["gmailLabels"] = AnyCodable(.string(labels))
             }
 
+            // T13.7 — decode multipart so chunking sees text only.
+            let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
+                headers: headers,
+                body: body,
+                for: url
+            )
+
             // T7 — strip quoted regions from the per-message body before
             // anything else sees it.
-            let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+            let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(textBody)
             meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+            if let json = Self.encodeAttachmentURLs(attachmentURLs) {
+                meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
+            }
 
             var headerLines: [String] = []
             for key in ["from", "to", "cc", "subject", "date"] {
@@ -238,6 +268,118 @@ public struct EmailLoader: Ingestor {
     /// [Entity] string. KnowledgeObject.entities holds IDs only, so we
     /// piggyback on metadata instead of changing the schema.
     static let structuredEntitiesMetaKey = "t13_structuredEntities"
+
+    /// Metadata key under which T13.7's attachment file URLs are
+    /// surfaced — a JSON-encoded [String] of file:// paths. After the
+    /// parent email KO finishes ingestion, IngestCoordinator recursively
+    /// calls `ingest(fileAt:)` on each URL so attachments become their
+    /// own KnowledgeObjects (and T7's content-hash dedup folds recurring
+    /// attachments onto a single canonical KO with alias file rows).
+    static let attachmentURLsMetaKey = "t13_attachmentURLs"
+
+    /// Top-level helper called from each ingest path. If the message
+    /// is multipart, replaces the body with the decoded text and returns
+    /// the staged attachment URLs; otherwise passes the body through
+    /// unchanged with no attachments.
+    static func applyMultipartIfNeeded(
+        headers: [String: String],
+        body: String,
+        for sourceURL: URL
+    ) -> (textBody: String, attachmentURLs: [URL]) {
+        guard let ct = headers["content-type"],
+              ct.lowercased().hasPrefix("multipart/") else {
+            return (body, [])
+        }
+        let baseDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalsmritikosh-email-attachments", isDirectory: true)
+            .appendingPathComponent(sourceURL.lastPathComponent + "-" + UUID().uuidString.prefix(8), isDirectory: true)
+        guard let decoded = decodeMultipart(body: body, contentType: ct, attachmentDir: baseDir) else {
+            return (body, [])
+        }
+        return (decoded.text, decoded.attachmentURLs)
+    }
+
+    /// Decode a multipart body into (textBody, attachmentURLs) — the
+    /// text replaces the email body that gets handed to extraction,
+    /// and the attachment URLs go into KO metadata for recursive
+    /// ingest. Returns `nil` when the part can't be parsed; the caller
+    /// then falls back to the raw body so we never block ingestion on
+    /// a parsing edge case.
+    static func decodeMultipart(
+        body: String,
+        contentType: String,
+        attachmentDir: URL
+    ) -> (text: String, attachmentURLs: [URL])? {
+        guard contentType.lowercased().hasPrefix("multipart/"),
+              let boundary = MIMEPart.extractParam(contentType, key: "boundary") else {
+            return nil
+        }
+        let parts = MIMEParser.parseMultipart(body: body, boundary: boundary)
+        var textPieces: [String] = []
+        var attachmentURLs: [URL] = []
+        var didWriteAttachmentDir = false
+        for part in parts {
+            if part.isText {
+                // Prefer text/plain; fall back to text/html with the
+                // tags stripped (cheap). Multiple text parts get
+                // concatenated so we never lose body content.
+                let text = String(data: part.body, encoding: .utf8) ?? ""
+                if part.contentType == "text/html" {
+                    textPieces.append(stripHTML(text))
+                } else {
+                    textPieces.append(text)
+                }
+            } else {
+                // Real attachment. Write to disk and record the URL.
+                let fname = part.filename ?? "attachment-\(UUID().uuidString.prefix(8))"
+                if !didWriteAttachmentDir {
+                    try? FileManager.default.createDirectory(at: attachmentDir, withIntermediateDirectories: true)
+                    didWriteAttachmentDir = true
+                }
+                let url = attachmentDir.appendingPathComponent(sanitizeFilename(fname))
+                if (try? part.body.write(to: url, options: .atomic)) != nil {
+                    attachmentURLs.append(url)
+                }
+            }
+        }
+        return (textPieces.joined(separator: "\n\n"), attachmentURLs)
+    }
+
+    private static func stripHTML(_ s: String) -> String {
+        // Very naive — good enough to remove `<tag>` chrome without
+        // pulling in a full HTML parser. Anything richer is Gate 3.
+        guard let re = try? NSRegularExpression(pattern: "<[^>]+>") else { return s }
+        let ns = s as NSString
+        let stripped = re.stringByReplacingMatches(
+            in: s, range: NSRange(location: 0, length: ns.length), withTemplate: " "
+        )
+        return stripped
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+    }
+
+    private static func sanitizeFilename(_ name: String) -> String {
+        let bad = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        return name.components(separatedBy: bad).joined(separator: "_")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func encodeAttachmentURLs(_ urls: [URL]) -> String? {
+        guard !urls.isEmpty else { return nil }
+        let strings = urls.map(\.absoluteString)
+        guard let data = try? JSONEncoder().encode(strings) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func decodeAttachmentURLs(from json: String) -> [URL] {
+        guard let data = json.data(using: .utf8),
+              let strings = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return strings.compactMap { URL(string: $0) }
+    }
 
     static func encodeStructuredEntities(_ entities: [Entity]) -> String? {
         guard !entities.isEmpty else { return nil }

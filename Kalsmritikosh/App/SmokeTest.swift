@@ -567,6 +567,59 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // T13.7 — Multipart EML: text part feeds extraction, attachment is
+    // staged on disk and surfaced in KO metadata for recursive ingest.
+    do {
+        let emlText = """
+        From: Alice <alice@example.com>
+        To: Bob <bob@example.com>
+        Subject: With attachment
+        Date: Mon, 1 Apr 2026 12:00:00 +0000
+        Content-Type: multipart/mixed; boundary="BOUNDARY"
+
+        --BOUNDARY
+        Content-Type: text/plain; charset=utf-8
+        Content-Transfer-Encoding: 7bit
+
+        Body text — the only thing extraction should see.
+
+        --BOUNDARY
+        Content-Type: application/pdf; name="invoice.pdf"
+        Content-Transfer-Encoding: base64
+        Content-Disposition: attachment; filename="invoice.pdf"
+
+        JVBERi0xLjUKJYCBgoMKCg==
+
+        --BOUNDARY--
+        """
+        let emlURL = tempDir.appendingPathComponent("t137_fixture.eml")
+        try emlText.write(to: emlURL, atomically: true, encoding: .utf8)
+        let loader = EmailLoader()
+        let ko = try await loader.ingest(fileAt: emlURL, type: .eml)
+        let bodyHasText = ko.content.contains("Body text")
+        let bodyExcludesBase64 = !ko.content.contains("JVBERi0xLjUKJYCBgoMKCg==")
+        if bodyHasText && bodyExcludesBase64 {
+            passed.append("T13.7: multipart body → text only; base64 NOT in content")
+        } else {
+            failed.append("T13.7: hasText=\(bodyHasText) excludesB64=\(bodyExcludesBase64)")
+        }
+        if let value = ko.metadata[EmailLoader.attachmentURLsMetaKey],
+           case .string(let json) = value.value {
+            let urls = EmailLoader.decodeAttachmentURLs(from: json)
+            if urls.count == 1 && urls[0].lastPathComponent == "invoice.pdf" {
+                passed.append("T13.7: 1 attachment URL surfaced (invoice.pdf)")
+            } else {
+                failed.append("T13.7: attachment URLs = \(urls)")
+            }
+            for u in urls { try? FileManager.default.removeItem(at: u) }
+        } else {
+            failed.append("T13.7: no attachment URLs in metadata")
+        }
+        try? FileManager.default.removeItem(at: emlURL)
+    } catch {
+        failed.append("T13.7: setup failed: \(error)")
+    }
+
     // T13.1 + T13.2 — mbox → per-message KOs with structured entities.
     do {
         // Synthesize a 3-message mbox in tempDir.

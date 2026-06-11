@@ -289,6 +289,27 @@ public actor IngestCoordinator {
                 totalEvents += processed.eventCount
                 allInvalidations.append(contentsOf: processed.invalidations)
                 lastObject = processed.object
+
+                // T13.7 — if this KO staged any attachments, ingest them
+                // recursively as their own files. T7's hash-first dedup
+                // catches the same attachment recurring across many
+                // emails and folds it into a single canonical KO with
+                // alias file rows.
+                if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
+                   case .string(let json) = value.value {
+                    let attachmentURLs = EmailLoader.decodeAttachmentURLs(from: json)
+                    for attachmentURL in attachmentURLs {
+                        do {
+                            let attachmentResult = try await ingest(fileAt: attachmentURL)
+                            totalChunks += attachmentResult.chunkCount
+                            totalEntities += attachmentResult.entityCount
+                            totalEvents += attachmentResult.eventCount
+                            allInvalidations.append(contentsOf: attachmentResult.invalidations)
+                        } catch {
+                            AtlasLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                        }
+                    }
+                }
             } catch {
                 AtlasLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
             }
