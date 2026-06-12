@@ -187,7 +187,8 @@ public final class AppState {
                     let koCount = (try? await objects.count()) ?? 0
                     let raw = Double(koCount) / Double(fileCount)
                     return min(1.0, max(0.0, raw))
-                }
+                },
+                entityQualityGate: EntityQualityGate.bundled()
             )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,

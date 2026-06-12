@@ -20,17 +20,24 @@ public struct EvidenceVerifier: Verifier {
     /// archive". `nil` → engine treats it as 1.0 (no-op multiplier).
     /// T11 close-out.
     private let ingestCoverageProvider: (@Sendable () async -> Double)?
+    /// Defensive — filters hostname-shape, stoplist, and weekday
+    /// strings out of the rendered "Subjects in scope" line even if
+    /// they somehow survived ingestion. nil = no filtering, behaviour
+    /// identical to pre-fix.
+    private let entityQualityGate: EntityQualityGate?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
         minimumCitations: Int = 1,
         engine: any ConfidenceEngine = DefaultConfidenceEngine(),
-        ingestCoverageProvider: (@Sendable () async -> Double)? = nil
+        ingestCoverageProvider: (@Sendable () async -> Double)? = nil,
+        entityQualityGate: EntityQualityGate? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
         self.engine = engine
         self.ingestCoverageProvider = ingestCoverageProvider
+        self.entityQualityGate = entityQualityGate
     }
 
     public func verify(
@@ -141,8 +148,12 @@ public struct EvidenceVerifier: Verifier {
         }
         // Pull strong organization / project / person entities from
         // retrieved evidence to ground the answer body in named subjects.
+        // Defensively re-filter through EntityQualityGate so the rendered
+        // line never surfaces hostname-shape / stoplist / weekday strings
+        // even if a pre-T13.4 row survived in the canonical table.
         let strong = retrieval.entities
             .filter { $0.kind == .organization || $0.kind == .person || $0.kind == .project || $0.kind == .vendor || $0.kind == .client }
+            .filter { entityQualityGate?.shouldKeep($0) ?? true }
             .sorted { $0.confidence > $1.confidence }
             .prefix(6)
             .map(\.value)
@@ -178,6 +189,18 @@ public struct EvidenceVerifier: Verifier {
             }
         }
         for label in domains where label.count > 2 {
+            // Same gate check via a synthesized organization entity so
+            // hostname-shape domain stems (Tyzpr01mb4530, Seqmbx01) get
+            // filtered before they ever reach the rendered line.
+            if let gate = entityQualityGate {
+                let probe = Entity(
+                    kind: .organization,
+                    value: label,
+                    sourceObjectID: UUID(),
+                    confidence: .medium
+                )
+                if !gate.shouldKeep(probe) { continue }
+            }
             if !subjects.contains(where: { $0.localizedCaseInsensitiveContains(label) }) {
                 subjects.append(label)
             }

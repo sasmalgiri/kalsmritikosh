@@ -315,6 +315,14 @@ public enum ExpertResponseParser {
                 dropped += 1
                 continue
             }
+            // Drop claims whose text is degenerate: just ellipsis, a single
+            // CamelCase token (e.g. an Event.Kind rawValue parroted back by
+            // the LLM), or anything under 6 chars. These render as ugly
+            // bullets that erode trust without saying anything.
+            if looksLikeNoiseStatement(text) {
+                dropped += 1
+                continue
+            }
             var objectIDs: [KnowledgeObject.ID] = []
             var eventIDs: [Event.ID] = []
             var entityIDs: [Entity.ID] = []
@@ -333,6 +341,21 @@ public enum ExpertResponseParser {
             ))
         }
         return ParsedClaims(claims: out, dropped: dropped)
+    }
+
+    /// True when an LLM-parsed claim looks like degenerate output
+    /// rather than a real claim: literal ellipsis, a single CamelCase
+    /// or all-lowercase token (e.g. "deliveryCompleted", "invoicePaid"
+    /// parroted from the Event.Kind rawValue we showed it), or anything
+    /// shorter than 6 characters. Real claims have at least one space
+    /// or sentence-ending punctuation.
+    private static func looksLikeNoiseStatement(_ text: String) -> Bool {
+        if text == "..." || text == "…" { return true }
+        if text.count < 6 { return true }
+        let hasSpace = text.contains(" ")
+        let hasSentencePunct = text.contains(where: { ".,;:!?".contains($0) })
+        if !hasSpace && !hasSentencePunct { return true }
+        return false
     }
 
     /// Extracts the JSON object substring from an LLM response that may
