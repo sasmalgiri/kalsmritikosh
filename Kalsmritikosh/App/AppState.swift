@@ -11,6 +11,7 @@
 import Foundation
 import Observation
 import OSLog
+import NaturalLanguage
 
 @MainActor
 @Observable
@@ -23,6 +24,14 @@ public final class AppState {
 
     public private(set) var phase: Phase = .starting
     public let bookmarks: BookmarkStore
+
+    /// Live count of in-flight ingest tasks. The UI banner reads this
+    /// to show "Ingesting N file(s)…" so the user is never wondering
+    /// whether work is happening.
+    public private(set) var ingestActiveCount: Int = 0
+    /// Most recent finished file's display name (for the banner subtext
+    /// — "last: invoice-432.eml"). Cleared when the counter hits 0.
+    public private(set) var ingestLastFile: String?
 
     // Storage
     public private(set) var database: Database?
@@ -249,15 +258,17 @@ public final class AppState {
             let watcher = FolderWatcher()
             // Capture weak — when AppState is deallocated the consumer
             // task observes that ingest/watcher are gone and exits.
-            self.watcherTask = Task { [weak ingest, weak watcher] in
+            self.watcherTask = Task { [weak self, weak ingest, weak watcher] in
                 guard let watcher else { return }
                 for await event in await watcher.events {
-                    guard let ingest else { return }
+                    guard let ingest, let self else { return }
                     for url in event.urls {
-                        do {
-                            _ = try await ingest.ingest(fileAt: url)
-                        } catch {
-                            AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                        await self.withIngestActivity(file: url.lastPathComponent) {
+                            do {
+                                _ = try await ingest.ingest(fileAt: url)
+                            } catch {
+                                AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                            }
                         }
                     }
                 }
@@ -318,6 +329,158 @@ public final class AppState {
         }
     }
 
+    /// Bumps the in-flight counter for the duration of `body`. Caller
+    /// passes a display name so the banner can show "last: <file>"
+    /// after the work finishes.
+    @MainActor
+    public func withIngestActivity<T>(
+        file displayName: String,
+        body: () async throws -> T
+    ) async rethrows -> T {
+        ingestActiveCount += 1
+        defer {
+            ingestActiveCount = max(0, ingestActiveCount - 1)
+            ingestLastFile = displayName
+            if ingestActiveCount == 0 {
+                // Clear "last file" after a brief delay so the user sees
+                // it for a beat once everything finishes.
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    if self?.ingestActiveCount == 0 {
+                        self?.ingestLastFile = nil
+                    }
+                }
+            }
+        }
+        return try await body()
+    }
+
+    /// Maximum files boosted into ingestion per question. Prevents a
+    /// vague question ("what's in my archive?") from drowning the queue.
+    public static let maxBoostedFilesPerQuestion = 25
+
+    /// Query-driven priority ingest. When the user asks a question
+    /// — especially while bulk ingest is still running or hasn't
+    /// started — pull the high-signal nouns out of the question and
+    /// hand any filename-matching files in the watched roots straight
+    /// to the IngestCoordinator. The actor's serialized queue runs them
+    /// next, and T8's hash-idempotent path no-ops on files already
+    /// ingested. Fire-and-forget — the brain's own answer call runs in
+    /// parallel and gets refined on the user's next question.
+    public func boostIngestForQuestion(_ question: String) async {
+        guard let ingest else { return }
+        let nouns = Self.extractNouns(from: question)
+        guard !nouns.isEmpty else { return }
+        AtlasLog.ingestion.info("Boost ingest for nouns: \(nouns.joined(separator: ", "), privacy: .public)")
+        var collected: [URL] = []
+        for root in bookmarks.roots {
+            if collected.count >= Self.maxBoostedFilesPerQuestion { break }
+            guard let url = try? bookmarks.resolve(root) else { continue }
+            defer { bookmarks.stopAccessing(url) }
+            let matches = Self.scanFiles(at: url, matching: nouns,
+                                         remaining: Self.maxBoostedFilesPerQuestion - collected.count)
+            collected.append(contentsOf: matches)
+        }
+        guard !collected.isEmpty else {
+            AtlasLog.ingestion.info("Boost: no filename matches found")
+            return
+        }
+        AtlasLog.ingestion.info("Boost: queueing \(collected.count, privacy: .public) file(s) for priority ingest")
+        for matchURL in collected {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.withIngestActivity(file: matchURL.lastPathComponent) {
+                    _ = try? await ingest.ingest(fileAt: matchURL)
+                }
+            }
+        }
+    }
+
+    /// Pull noun-shaped tokens from the raw question via NLTagger
+    /// (on-device, English-tuned). Filters common stopwords / weekday
+    /// names so generic question vocabulary doesn't trigger boost.
+    private static func extractNouns(from question: String) -> [String] {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 3 else { return [] }
+        let tagger = NLTagger(tagSchemes: [.lexicalClass, .nameType])
+        tagger.string = trimmed
+        var nouns = Set<String>()
+        let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .joinNames]
+        tagger.enumerateTags(
+            in: trimmed.startIndex..<trimmed.endIndex,
+            unit: .word,
+            scheme: .lexicalClass,
+            options: options
+        ) { tag, range in
+            if tag == .noun || tag == .otherWord {
+                let token = String(trimmed[range])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                if token.count >= 3, !Self.questionStopwords.contains(token) {
+                    nouns.insert(token)
+                }
+            }
+            return true
+        }
+        // Also pick up proper names (people / orgs / places) as
+        // first-class boost terms even if NLTagger classified them as
+        // something other than `.noun`.
+        tagger.enumerateTags(
+            in: trimmed.startIndex..<trimmed.endIndex,
+            unit: .word,
+            scheme: .nameType,
+            options: options
+        ) { tag, range in
+            if tag == .personalName || tag == .organizationName || tag == .placeName {
+                let token = String(trimmed[range])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                if token.count >= 3 { nouns.insert(token) }
+            }
+            return true
+        }
+        return Array(nouns)
+    }
+
+    /// Common question vocabulary that NLTagger sometimes tags as
+    /// noun but should never trigger file boosting.
+    private static let questionStopwords: Set<String> = [
+        "what", "when", "where", "who", "why", "how", "which",
+        "tell", "show", "list", "give", "find", "search",
+        "thing", "things", "stuff", "item", "items",
+        "anyone", "anything", "something", "nothing",
+        "today", "yesterday", "tomorrow", "week", "month", "year",
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december",
+        "atlas", "archive", "files", "file", "document", "documents",
+        "answer", "question", "questions", "data"
+    ]
+
+    /// Walk the file tree under `root` collecting up to `remaining` URLs
+    /// whose lowercased lastPathComponent contains ANY of the nouns.
+    /// Cheap O(N) filesystem walk — no content reads.
+    private static func scanFiles(at root: URL, matching nouns: [String], remaining: Int) -> [URL] {
+        guard remaining > 0 else { return [] }
+        let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+        var out: [URL] = []
+        while let next = enumerator?.nextObject() as? URL {
+            if out.count >= remaining { break }
+            let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey])
+                .isRegularFile) ?? false
+            guard isRegular else { continue }
+            let name = next.lastPathComponent.lowercased()
+            if nouns.contains(where: { name.contains($0) }) {
+                out.append(next)
+            }
+        }
+        return out
+    }
+
     /// T8 — Root removal with explicit knowledge-preservation choice.
     /// .stopWatching keeps every learned KO, chunk, entity, event, etc.
     /// .stopAndForget performs the explicit cascading delete of every
@@ -371,11 +534,13 @@ public final class AppState {
                 let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey])
                     .isRegularFile) ?? false
                 guard isRegular else { continue }
-                do {
-                    _ = try await ingest.ingest(fileAt: next)
-                    count += 1
-                } catch {
-                    AtlasLog.ingestion.error("Bulk ingest failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                await withIngestActivity(file: next.lastPathComponent) {
+                    do {
+                        _ = try await ingest.ingest(fileAt: next)
+                        count += 1
+                    } catch {
+                        AtlasLog.ingestion.error("Bulk ingest failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    }
                 }
             }
         }

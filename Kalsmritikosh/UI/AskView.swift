@@ -232,6 +232,14 @@ public struct AskView: View {
             await MainActor.run { self.turns.append(placeholder) }
             let placeholderID = placeholder.id
 
+            // Query-driven priority ingest. The moment the user hits
+            // send, extract nouns from the question and front-load any
+            // filename-matching files in watched roots. Fire-and-forget
+            // so the brain's answer call runs in parallel — the user
+            // sees something immediately, and the next time they ask the
+            // boosted files are already in the canonical store.
+            Task { await appState.boostIngestForQuestion(q) }
+
             // 3) Streaming preview + the full brain answer run in parallel.
             //    The stream gives the user typed feedback immediately; the
             //    brain's verified answer lands when ready and replaces

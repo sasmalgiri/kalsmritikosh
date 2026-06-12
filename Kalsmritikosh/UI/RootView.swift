@@ -35,7 +35,46 @@ public struct RootView: View {
             .padding(40)
             .frame(minWidth: 800, minHeight: 500)
         case .ready:
-            tabs
+            VStack(spacing: 0) {
+                ingestBanner
+                tabs
+            }
+        }
+    }
+
+    /// Persistent thin strip across the top whenever there's any ingest
+    /// activity (bulk "Ingest All", folder-watcher pickup, query-boost).
+    /// Invisible when idle.
+    @ViewBuilder
+    private var ingestBanner: some View {
+        if appState.ingestActiveCount > 0 || appState.ingestLastFile != nil {
+            HStack(spacing: 8) {
+                if appState.ingestActiveCount > 0 {
+                    ProgressView().controlSize(.small)
+                    Text("Ingesting \(appState.ingestActiveCount) file\(appState.ingestActiveCount == 1 ? "" : "s")…")
+                        .font(.caption.weight(.medium))
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Ingestion idle")
+                        .font(.caption.weight(.medium))
+                }
+                if let last = appState.ingestLastFile {
+                    Text("· last: \(last)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(appState.ingestActiveCount > 0
+                ? Color.yellow.opacity(0.18)
+                : Color.green.opacity(0.10))
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.2), value: appState.ingestActiveCount)
         }
     }
 
