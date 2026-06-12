@@ -260,7 +260,7 @@ public final class AppState {
             // task observes that ingest/watcher are gone and exits.
             self.watcherTask = Task { [weak self, weak ingest, weak watcher] in
                 guard let watcher else { return }
-                for await event in await watcher.events {
+                for await event in watcher.events {
                     guard let ingest, let self else { return }
                     for url in event.urls {
                         await self.withIngestActivity(file: url.lastPathComponent) {
