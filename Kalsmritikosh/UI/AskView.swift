@@ -243,10 +243,15 @@ public struct AskView: View {
             // 3) Streaming preview + the full brain answer run in parallel.
             //    The stream gives the user typed feedback immediately; the
             //    brain's verified answer lands when ready and replaces
-            //    the body with cited evidence.
+            //    the body with cited evidence. The stream runs in its own
+            //    Task so the verified answer can land the moment it's
+            //    ready — and we cancel the stream then so a late delta
+            //    can't overwrite the verified body with `verified + delta`.
             async let verified = appState.brain.answer(question: q)
-            await streamPreview(question: q, into: placeholderID)
+            let streamTask = Task { await streamPreview(question: q, into: placeholderID) }
             let answer = await verified
+            streamTask.cancel()
+            _ = await streamTask.value
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)
