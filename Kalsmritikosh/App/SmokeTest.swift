@@ -678,6 +678,38 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("T13.1/2: setup failed: \(error)")
     }
 
+    // Query-driven boost — noun extraction + filename matching.
+    do {
+        // Noun extraction picks supplier / abc / delays out of a real
+        // question and filters question-vocabulary stopwords.
+        let nouns = AppState.extractNouns(from: "What did Supplier ABC say about delays?")
+        let lower = nouns.map { $0.lowercased() }
+        let hasContent = lower.contains("supplier") || lower.contains("abc") || lower.contains("delays")
+        let hasStopwords = lower.contains("what") || lower.contains("did") || lower.contains("say")
+        if hasContent && !hasStopwords {
+            passed.append("Boost: noun extraction got \(nouns.sorted()) (content kept, stopwords dropped)")
+        } else {
+            failed.append("Boost: noun extraction got \(nouns) — content=\(hasContent) stopwords=\(hasStopwords)")
+        }
+
+        // Filename matching finds the supplier_abc_*.eml fixtures in the
+        // bundled ProjectDelta corpus.
+        if let resourceRoot = Bundle.main.url(forResource: "ProjectDelta", withExtension: nil) {
+            let matches = AppState.scanFiles(
+                at: resourceRoot,
+                matching: ["supplier", "abc"],
+                remaining: 25
+            )
+            let names = matches.map(\.lastPathComponent).sorted()
+            let foundSupplierEMLs = names.contains { $0.contains("supplier_abc") }
+            if foundSupplierEMLs, matches.count >= 4 {
+                passed.append("Boost: scanFiles found \(matches.count) supplier_abc files")
+            } else {
+                failed.append("Boost: scanFiles found \(names) (expected ≥ 4 supplier_abc files)")
+            }
+        }
+    }
+
     // T13.5 — Google / Gmail / Googlemail must collapse to ONE canonical.
     do {
         let t135DB = try Database(url: tempDir.appendingPathComponent("t135.sqlite"))

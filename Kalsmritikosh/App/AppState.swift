@@ -399,7 +399,9 @@ public final class AppState {
     /// Pull noun-shaped tokens from the raw question via NLTagger
     /// (on-device, English-tuned). Filters common stopwords / weekday
     /// names so generic question vocabulary doesn't trigger boost.
-    private static func extractNouns(from question: String) -> [String] {
+    /// Exposed (internal, not private) so SmokeTest can verify the
+    /// extraction is sane on representative questions.
+    static func extractNouns(from question: String) -> [String] {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 3 else { return [] }
         let tagger = NLTagger(tagSchemes: [.lexicalClass, .nameType])
@@ -459,8 +461,9 @@ public final class AppState {
 
     /// Walk the file tree under `root` collecting up to `remaining` URLs
     /// whose lowercased lastPathComponent contains ANY of the nouns.
-    /// Cheap O(N) filesystem walk — no content reads.
-    private static func scanFiles(at root: URL, matching nouns: [String], remaining: Int) -> [URL] {
+    /// Cheap O(N) filesystem walk — no content reads. Exposed
+    /// (internal, not private) so SmokeTest can verify matching.
+    static func scanFiles(at root: URL, matching nouns: [String], remaining: Int) -> [URL] {
         guard remaining > 0 else { return [] }
         let enumerator = FileManager.default.enumerator(
             at: root,
