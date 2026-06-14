@@ -86,9 +86,18 @@ public enum Gate1Baseline {
         let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
         try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
 
-        // 5. Run the harness against the live brain.
+        // 5. Run the harness against the live brain. Pass the KO repo so
+        //    the runner can resolve citation object-IDs to filenames at
+        //    scoring time (the eval contract is filenames, not UUIDs).
+        guard let objects = state.objects else {
+            throw NSError(
+                domain: "Gate1Baseline",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "KnowledgeObjectRepository not booted."]
+            )
+        }
         let runner = EvalKitRunner()
-        let reportURL = try await runner.run(brain: state.brain, outputDir: reportDir)
+        let reportURL = try await runner.run(brain: state.brain, objects: objects, outputDir: reportDir)
 
         // Load question count for the result surface.
         let questionCount = (try? runner.loadQuestions().count) ?? 0

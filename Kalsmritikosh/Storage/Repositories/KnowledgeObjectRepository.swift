@@ -49,6 +49,35 @@ public actor KnowledgeObjectRepository {
         return rows.first?.string(0)
     }
 
+    /// Resolve a batch of object IDs to their source file's last-path
+    /// component (e.g. "contract.md", "invoice-401.eml"). The eval scorer
+    /// uses this so it compares citations against the STABLE filename
+    /// contract in questions.json — not the volatile per-ingest UUIDs.
+    /// IDs that have no row map to nothing.
+    public func sourceFilenames(
+        for ids: Set<KnowledgeObject.ID>
+    ) async throws -> [KnowledgeObject.ID: String] {
+        guard !ids.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+        let bindings: [SQLValue] = ids.map { .uuid($0) }
+        let rows = try await database.query("""
+        SELECT k.id, f.url
+        FROM knowledge_objects k
+        JOIN files f ON f.id = k.file_id
+        WHERE k.id IN (\(placeholders));
+        """, bindings)
+        var out: [KnowledgeObject.ID: String] = [:]
+        for row in rows {
+            guard let id = row.uuid(0), let urlString = row.string(1) else { continue }
+            let filename = URL(fileURLWithPath: urlString).lastPathComponent
+            let resolved = filename.isEmpty
+                ? URL(string: urlString)?.lastPathComponent ?? urlString
+                : filename
+            out[id] = resolved
+        }
+        return out
+    }
+
     public func recentContents(limit: Int = 30) async throws -> [String] {
         let rows = try await database.query("""
         SELECT content FROM knowledge_objects ORDER BY created_at DESC LIMIT ?;

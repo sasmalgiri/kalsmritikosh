@@ -61,9 +61,15 @@ public struct EvalKitRunner {
     /// Runs every bundled question through the brain, collects metrics
     /// per class, writes `eval-report.md` next to the questions file
     /// (or to `outputDir` if provided), and returns its URL.
+    ///
+    /// The `objects` repository is used to resolve each citation's
+    /// volatile per-ingest object-UUID to its STABLE source filename so
+    /// the scorer compares like-for-like against questions.json's
+    /// expectedSourceFiles (filenames, not UUIDs).
     @MainActor
     public func run(
         brain: MasterBrain,
+        objects: KnowledgeObjectRepository,
         outputDir: URL? = nil
     ) async throws -> URL {
         let questions = try loadQuestions()
@@ -82,14 +88,20 @@ public struct EvalKitRunner {
             let keywordHit = q.expectedKeywords.allSatisfy {
                 body.contains($0.lowercased())
             }
-            let citedFiles = Set(answer.citations.map(\.objectID).map(\.uuidString))
+            // Resolve cited object-IDs to filenames via the files table,
+            // then score on filenames — the STABLE contract that survives
+            // a fresh ingest's new UUIDs.
+            let citedObjectIDs = Set(answer.citations.map(\.objectID))
+            let idToFilename = (try? await objects.sourceFilenames(for: citedObjectIDs)) ?? [:]
+            let citedFilenames = Set(idToFilename.values)
             let expectedSet = Set(q.expectedSourceFiles)
-            let precision: Double = citedFiles.isEmpty
+            let totalCited = answer.citations.count
+            let precision: Double = totalCited == 0
                 ? 0
-                : Double(citedFiles.intersection(expectedSet).count) / Double(citedFiles.count)
+                : Double(citedFilenames.intersection(expectedSet).count) / Double(totalCited)
             let recall: Double = expectedSet.isEmpty
                 ? 0
-                : Double(citedFiles.intersection(expectedSet).count) / Double(expectedSet.count)
+                : Double(citedFilenames.intersection(expectedSet).count) / Double(expectedSet.count)
             byClass[q.class]?.count += 1
             byClass[q.class]?.keywordHits += keywordHit ? 1 : 0
             byClass[q.class]?.citationPrecisionSum += precision
