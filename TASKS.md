@@ -434,3 +434,36 @@ sqlite-vec/ANN behind the VectorStore protocol; tiered LLM extraction at scale
 (type-routed readers: invoice/contract/thread prompts); demand-driven Tier-3 queue fed
 by retrieval gap detection and dossier opens; legacy DOC/XLS/PPT/MSG lean scanner
 (UTF-16LE-aware) + PST via libpff; entity dossier export.
+
+### GS-MAIL — Port mailin email-format parsers (Gate 3)
+
+**Why:** PST, OST, MSG, NSF, and hardened MIME parsing already exist as
+production Swift in the sibling repo github.com/sasmalgiri/mailin (folder
+`mailin/`: PSTParser.swift, NSFParser.swift, MSGParser.swift, MIMEParser.swift,
+MBOXParser.swift, EMLXParser.swift, EmailParserProtocol.swift). Porting them
+closes every legacy email format in one task, adds Lotus Notes (NSF) support no
+competitor has, and removes the previously-planned libpff dependency. Same owner's
+proprietary code — porting is permitted; keep a one-line provenance comment atop
+each ported file.
+
+**Files:** new Ingestion/Loaders/Ported/ (PSTParser, MSGParser, NSFParser,
+MIMEParser + minimal shared helpers), EmailLoader / loader-registry updates,
+Resources/Fixtures/LegacyMail/ additions.
+
+**Spec:**
+- Copy the parser sources; strip mailin-specific UI/model types; adapt output to
+  emit KnowledgeObjects via the EXISTING Ingestor protocol (do not modify it).
+- Route OST through the PST path if mailin does so — verify in source and mirror.
+- Preserve streaming/batch behavior for large archives (mailin handles 100MB+).
+- Carry threading metadata (message-id, in-reply-to, references, thread id, and
+  Gmail X-GM-THRID when present) into KO metadata so T13 dedup/threading can use it.
+- Consider upgrading the existing EML/MBOX path to mailin's MIMEParser ONLY if a
+  side-by-side fixture run shows strictly better extraction; otherwise leave it and
+  report the comparison.
+- No new third-party dependencies.
+
+**Acceptance:**
+- Sample PST, MSG, and NSF fixtures each ingest to KnowledgeObjects with correct
+  message counts and non-empty bodies.
+- Hash-idempotent re-ingest still no-ops; grep guard clean; BuildProject green;
+  SmokeTest passes.
