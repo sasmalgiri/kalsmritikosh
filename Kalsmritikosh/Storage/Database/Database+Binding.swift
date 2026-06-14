@@ -36,17 +36,25 @@ public enum SQLValue: Sendable, Hashable {
 public struct SQLRow: Sendable {
     public let values: [SQLValue]
 
+    /// Bounds-checked accessor. Returns nil on out-of-range — a column
+    /// mismatch should yield a missing field, not a fatal crash that
+    /// takes the whole ingest task down.
+    private func value(at i: Int) -> SQLValue? {
+        guard i >= 0, i < values.count else { return nil }
+        return values[i]
+    }
+
     public func int(_ i: Int) -> Int64? {
-        if case .integer(let v) = values[i] { return v }; return nil
+        if case .integer(let v) = value(at: i) { return v }; return nil
     }
     public func double(_ i: Int) -> Double? {
-        if case .real(let v) = values[i] { return v }; return nil
+        if case .real(let v) = value(at: i) { return v }; return nil
     }
     public func string(_ i: Int) -> String? {
-        if case .text(let v) = values[i] { return v }; return nil
+        if case .text(let v) = value(at: i) { return v }; return nil
     }
     public func blob(_ i: Int) -> Data? {
-        if case .blob(let v) = values[i] { return v }; return nil
+        if case .blob(let v) = value(at: i) { return v }; return nil
     }
     public func uuid(_ i: Int) -> UUID? {
         guard let s = string(i) else { return nil }
@@ -57,7 +65,7 @@ public struct SQLRow: Sendable {
         return Date(timeIntervalSince1970: d)
     }
     public func isNull(_ i: Int) -> Bool {
-        if case .null = values[i] { return true }
+        if case .null = value(at: i) { return true }
         return false
     }
 }

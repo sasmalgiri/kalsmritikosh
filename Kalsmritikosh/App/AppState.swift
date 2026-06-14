@@ -406,6 +406,10 @@ public final class AppState {
         guard trimmed.count >= 3 else { return [] }
         let tagger = NLTagger(tagSchemes: [.lexicalClass, .nameType])
         tagger.string = trimmed
+        // English-only product — pin the language so NLTagger doesn't
+        // emit "Unsupported language X detected." when a question
+        // contains pasted non-English fragments.
+        tagger.setLanguage(.english, range: trimmed.startIndex..<trimmed.endIndex)
         var nouns = Set<String>()
         let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .joinNames]
         tagger.enumerateTags(

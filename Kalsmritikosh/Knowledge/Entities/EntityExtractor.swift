@@ -30,6 +30,14 @@ public struct NLEntityExtractor: EntityExtractor {
     private func extractNLTagger(_ object: KnowledgeObject) -> [Entity] {
         let tagger = NLTagger(tagSchemes: [.nameType])
         tagger.string = object.content
+        // Force English so NLTagger doesn't log "Unsupported language X
+        // detected." on mixed-locale email archives. We're an English-
+        // targeted product; non-English entity extraction is not in
+        // scope and the auto-detector spams Console with noise.
+        if !object.content.isEmpty {
+            tagger.setLanguage(.english,
+                               range: object.content.startIndex..<object.content.endIndex)
+        }
         let opts: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .joinNames]
 
         var out: [Entity] = []

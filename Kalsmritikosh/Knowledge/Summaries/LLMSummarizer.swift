@@ -122,7 +122,16 @@ public actor LLMSummarizer: Summarizer {
     }
 
     private func buildPrompt(corpus: String, scope: Summary.Scope, length: Summary.Length) -> String {
-        let truncated = corpus.count > 12_000 ? String(corpus.prefix(12_000)) : corpus
+        // Apple FoundationModels caps prompts at 4096 tokens and rejects
+        // anything over. Real-world prose (email, names, URLs) tokenizes
+        // denser than the lazy /4 heuristic, so use /3 plus a safety
+        // margin and shrink the corpus to whatever fits.
+        let contextBudgetTokens = 4096
+        let responseBudgetTokens = length.targetTokens
+        let overheadTokens = 250 // system prompt + scope label + format
+        let inputTokenBudget = max(512, contextBudgetTokens - responseBudgetTokens - overheadTokens)
+        let inputCharBudget = inputTokenBudget * 3
+        let truncated = corpus.count > inputCharBudget ? String(corpus.prefix(inputCharBudget)) : corpus
         let scopeLabel = scope.label
         let lengthDirective: String
         switch length {
@@ -153,7 +162,11 @@ public actor LLMSummarizer: Summarizer {
     }
 
     private func estimateTokens(_ s: String) -> Int {
-        max(64, s.count / 4)
+        // /3 is closer to real tokenization for mixed email prose than
+        // the optimistic /4 — the capability spec we resolve against
+        // should round up so the registry picks a model that actually
+        // fits.
+        max(64, s.count / 3)
     }
 }
 
