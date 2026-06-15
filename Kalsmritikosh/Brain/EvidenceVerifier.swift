@@ -10,6 +10,15 @@
 import Foundation
 
 public struct EvidenceVerifier: Verifier {
+    /// Per-claim citation cap (Item 1 of UPDATE_08). The previous
+    /// `claims.flatMap { ... supportingObjectIDs.map { ... } }` emitted
+    /// one citation per (claim × supportingObject) pair with no dedupe
+    /// and no ranking — so a 16-claim answer with 4 supporting objects
+    /// per claim shipped 64 raw citations, drowning the real source in
+    /// noise (Gate 1: lookup precision 0.02). The cap is per-claim and
+    /// NOT global so aggregation answers can still cite many sources.
+    public static let maxCitationsPerClaim = 3
+
     public let minimumConfidence: Confidence
     public let minimumCitations: Int
     private let engine: any ConfidenceEngine
@@ -62,14 +71,38 @@ public struct EvidenceVerifier: Verifier {
             ingestCoverage: ingestCoverage,
             now: Date()
         )
-        _ = retrieval  // available for richer rendering below
-        let citations = claims.flatMap { claim -> [VerifiedAnswer.Citation] in
-            claim.supportingObjectIDs.map { objectID in
-                VerifiedAnswer.Citation(
+        // Per-object ranking signal: best (max) hybrid retrieval score
+        // across the chunks in `retrieval.chunks` that belong to a given
+        // KnowledgeObject. Objects with no retrieval hit (came in via
+        // memory / entity / event layer) sort to the back via -infinity.
+        var scoreByObject: [KnowledgeObject.ID: Double] = [:]
+        for rc in retrieval.chunks {
+            let id = rc.chunk.objectID
+            if let existing = scoreByObject[id] {
+                if rc.score > existing { scoreByObject[id] = rc.score }
+            } else {
+                scoreByObject[id] = rc.score
+            }
+        }
+        // Build citations with: per-claim cap (top-N by score), dedupe
+        // across the whole answer by objectID (first claim that wins
+        // a given object owns its snippet), and NO global cap.
+        var seenObjects = Set<KnowledgeObject.ID>()
+        var citations: [VerifiedAnswer.Citation] = []
+        for claim in claims {
+            let ranked = claim.supportingObjectIDs.sorted { lhs, rhs in
+                let ls = scoreByObject[lhs] ?? -.infinity
+                let rs = scoreByObject[rhs] ?? -.infinity
+                return ls > rs
+            }
+            for objectID in ranked.prefix(Self.maxCitationsPerClaim) {
+                guard !seenObjects.contains(objectID) else { continue }
+                seenObjects.insert(objectID)
+                citations.append(VerifiedAnswer.Citation(
                     objectID: objectID,
                     eventID: claim.supportingEventIDs.first,
                     snippet: String(claim.statement.prefix(180))
-                )
+                ))
             }
         }
 
