@@ -20,6 +20,22 @@ public struct EvalKitRunner {
         public let expectedSourceFiles: [String]
     }
 
+    /// Per-question diagnostic row used to confirm precision hypotheses
+    /// (over-citation vs mis-citation vs vector noise). Each row records
+    /// what was cited, what was expected, and which filenames overlap —
+    /// the table makes the failure pattern obvious before we change code.
+    public struct PerQuestionRecord: Sendable {
+        public let id: String
+        public let className: String
+        public let citedCount: Int
+        public let expectedCount: Int
+        public let overlapCount: Int
+        public let precision: Double
+        public let recall: Double
+        public let citedFilenames: [String]
+        public let expectedFilenames: [String]
+    }
+
     public struct ClassMetrics: Sendable {
         public let className: String
         public var count: Int
@@ -74,6 +90,7 @@ public struct EvalKitRunner {
     ) async throws -> URL {
         let questions = try loadQuestions()
         var byClass: [String: ClassMetrics] = [:]
+        var perQuestion: [PerQuestionRecord] = []
         for q in questions {
             if byClass[q.class] == nil {
                 byClass[q.class] = ClassMetrics(className: q.class)
@@ -95,23 +112,35 @@ public struct EvalKitRunner {
             let idToFilename = (try? await objects.sourceFilenames(for: citedObjectIDs)) ?? [:]
             let citedFilenames = Set(idToFilename.values)
             let expectedSet = Set(q.expectedSourceFiles)
+            let overlap = citedFilenames.intersection(expectedSet)
             let totalCited = answer.citations.count
             let precision: Double = totalCited == 0
                 ? 0
-                : Double(citedFilenames.intersection(expectedSet).count) / Double(totalCited)
+                : Double(overlap.count) / Double(totalCited)
             let recall: Double = expectedSet.isEmpty
                 ? 0
-                : Double(citedFilenames.intersection(expectedSet).count) / Double(expectedSet.count)
+                : Double(overlap.count) / Double(expectedSet.count)
             byClass[q.class]?.count += 1
             byClass[q.class]?.keywordHits += keywordHit ? 1 : 0
             byClass[q.class]?.citationPrecisionSum += precision
             byClass[q.class]?.retrievalRecallSum += recall
             byClass[q.class]?.latencies.append(latency)
+            perQuestion.append(PerQuestionRecord(
+                id: q.id,
+                className: q.class,
+                citedCount: totalCited,
+                expectedCount: expectedSet.count,
+                overlapCount: overlap.count,
+                precision: precision,
+                recall: recall,
+                citedFilenames: citedFilenames.sorted(),
+                expectedFilenames: expectedSet.sorted()
+            ))
         }
 
         let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("eval-report.md", isDirectory: false)
-        try renderReport(byClass: byClass, to: reportURL)
+        try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
         AtlasLog.app.info("EvalKit wrote \(reportURL.path, privacy: .public)")
         return reportURL
     }
@@ -142,7 +171,7 @@ public struct EvalKitRunner {
         }
         let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("eval-report.md", isDirectory: false)
-        try renderReport(byClass: byClass, to: reportURL)
+        try renderReport(byClass: byClass, perQuestion: [], to: reportURL)
         return reportURL
     }
 
@@ -160,7 +189,11 @@ public struct EvalKitRunner {
         return try JSONDecoder().decode([Question].self, from: data)
     }
 
-    private func renderReport(byClass: [String: ClassMetrics], to url: URL) throws {
+    private func renderReport(
+        byClass: [String: ClassMetrics],
+        perQuestion: [PerQuestionRecord],
+        to url: URL
+    ) throws {
         var md = "# Kalsmritikosh — Eval Report\n\n"
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n\n"
         md += "## Targets (Gate 1)\n\n"
@@ -184,6 +217,39 @@ public struct EvalKitRunner {
                 m.keywordHitRate, m.avgCitationPrecision, m.avgRetrievalRecall,
                 m.p50 * 1000, m.p95 * 1000
             )
+        }
+        if !perQuestion.isEmpty {
+            md += "\n## Per-question detail\n\n"
+            md += "Diagnostic table — confirms whether failing precision is "
+            md += "over-citation (cited ≫ expected) vs mis-citation "
+            md += "(cited ≈ expected but overlap = 0) vs vector noise.\n\n"
+            md += "| Q | class | cited | expected | overlap | precision | recall |\n"
+            md += "|---|---|---:|---:|---:|---:|---:|\n"
+            let qOrder: [String: Int] = [
+                "lookup": 0, "aggregation": 1, "temporal": 2, "multihop": 3
+            ]
+            let sortedRecords = perQuestion.sorted { lhs, rhs in
+                let li = qOrder[lhs.className] ?? Int.max
+                let ri = qOrder[rhs.className] ?? Int.max
+                if li != ri { return li < ri }
+                return lhs.id < rhs.id
+            }
+            for r in sortedRecords {
+                md += String(
+                    format: "| %@ | %@ | %d | %d | %d | %.2f | %.2f |\n",
+                    r.id, r.className,
+                    r.citedCount, r.expectedCount, r.overlapCount,
+                    r.precision, r.recall
+                )
+            }
+            md += "\n### Cited vs expected filenames\n\n"
+            for r in sortedRecords {
+                let cited = r.citedFilenames.isEmpty ? "—" : r.citedFilenames.joined(separator: ", ")
+                let expected = r.expectedFilenames.isEmpty ? "—" : r.expectedFilenames.joined(separator: ", ")
+                md += "- **\(r.id)** (\(r.className))\n"
+                md += "  - cited: \(cited)\n"
+                md += "  - expected: \(expected)\n"
+            }
         }
         try md.data(using: .utf8)?.write(to: url, options: .atomic)
     }
