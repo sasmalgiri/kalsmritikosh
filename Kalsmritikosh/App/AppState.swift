@@ -81,10 +81,15 @@ public final class AppState {
         self.brain = MasterBrain()
     }
 
-    public func boot() async {
+    public func boot(databaseURL: URL? = nil) async {
         do {
             // ── Storage ──────────────────────────────────────────────
-            let db = try Database(url: DatabaseLocations.defaultDatabaseURL)
+            // `databaseURL` lets callers (Gate1Baseline) point AppState
+            // at a throwaway temp-dir DB so the eval can't read from
+            // (or write to) the user's real archive. nil = production
+            // path under Application Support.
+            let resolvedDBURL = databaseURL ?? DatabaseLocations.defaultDatabaseURL
+            let db = try Database(url: resolvedDBURL)
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
             AtlasLog.storage.info("Database open at \(db.url.path, privacy: .public)")
