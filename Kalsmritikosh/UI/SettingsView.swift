@@ -89,11 +89,13 @@ public struct SettingsView: View {
             let result = try await Gate1Baseline.generate()
             baselineReportURL = result.reportURL
             let probeLine = result.retrievalProbeURL.map { "L1 retrieval probe: \($0.path)" } ?? "L1 retrieval probe: (not written)"
+            let coverageLine = result.coverageProbeURL.map { "Ingest coverage: \($0.path)" } ?? "Ingest coverage: (not written)"
             baselineStatus = """
             ✓ Report written
             \(result.reportURL.path)
             ingested fixtures: \(result.ingestedFixtureFiles) in \(String(format: "%.1f", result.ingestSeconds))s
             questions evaluated: \(result.questionCount) in \(String(format: "%.1f", result.querySeconds))s
+            \(coverageLine)
             \(probeLine)
             """
         } catch {
