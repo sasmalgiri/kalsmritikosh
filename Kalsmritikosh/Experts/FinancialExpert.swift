@@ -65,16 +65,17 @@ public struct FinancialExpert: Expert {
             return ([], 0)
         }
         guard await provider.isAvailable() else {
-            AtlasLog.brain.info("expert.financial LLM: provider resolved but isAvailable()=false; using heuristic fallback")
+            AtlasLog.brain.info("expert.financial LLM: provider=\(provider.id, privacy: .public) available=false; using heuristic fallback")
             return ([], 0)
         }
+        AtlasLog.brain.info("expert.financial LLM: provider=\(provider.id, privacy: .public) available=true")
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
                 options: GenerationOptions(maxTokens: 350, temperature: 0.2)
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
-            AtlasLog.brain.info("expert.financial LLM: produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
+            AtlasLog.brain.info("expert.financial LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
             let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
                     statement: p.text,
@@ -87,7 +88,7 @@ public struct FinancialExpert: Expert {
             }
             return (claims, parsed.dropped)
         } catch {
-            AtlasLog.brain.error("FinancialExpert LLM call failed: \(String(describing: error), privacy: .public)")
+            AtlasLog.brain.error("expert.financial LLM: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public)")
             return ([], 0)
         }
     }
