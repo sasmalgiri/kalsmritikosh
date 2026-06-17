@@ -63,6 +63,21 @@ extension CapabilitySpec {
 
     /// Convenience for the common "I want structured reasoning over a body
     /// of evidence" call experts make.
+    ///
+    /// Privacy is `.localNetwork` (not `.onDevice`) so a localhost-only
+    /// model server (e.g. Ollama on http://localhost:11434) can resolve
+    /// when no on-device reasoning model is available — most notably on
+    /// macOS 15.6 where FoundationModelsProvider's
+    /// `#available(macOS 26.0,*)` gate fails. The privacy ladder in
+    /// CapabilityRegistry.isPrivacyEligible still accepts
+    /// `.onDevice` manifests under a `.localNetwork` spec, so
+    /// FoundationModels continues to win on macOS 26+ where it is
+    /// strictly higher-privacy and scored ahead by the resolver.
+    /// Cloud providers stay filtered via PrivacyGate independent of
+    /// this tier. UPDATE_15 Step 2 — without this relax, Ollama
+    /// could never resolve regardless of whether the server was
+    /// running, and every expert would silently fall back to
+    /// heuristic.
     public static func reasoning(
         contextTokens: Int = 4_000,
         purpose: String = ""
@@ -71,13 +86,16 @@ extension CapabilitySpec {
             requires: [.textGeneration, .reasoning],
             prefers: [.structuredOutput, .longContext],
             maxLatency: .background,
-            privacy: .onDevice,
+            privacy: .localNetwork,
             estimatedContextTokens: contextTokens,
             purpose: purpose
         )
     }
 
-    /// Convenience for the Summarizer.
+    /// Convenience for the Summarizer. Same `.localNetwork` rationale
+    /// as `reasoning` — keep on-device-or-localhost open so the
+    /// summarizer doesn't silently dead-end on macOS 15.6 when no
+    /// reasoning model is otherwise reachable.
     public static func summarization(
         contextTokens: Int = 8_000,
         purpose: String = ""
@@ -86,7 +104,7 @@ extension CapabilitySpec {
             requires: [.textGeneration, .summarization],
             prefers: [.longContext, .reasoning],
             maxLatency: .background,
-            privacy: .onDevice,
+            privacy: .localNetwork,
             estimatedContextTokens: contextTokens,
             purpose: purpose
         )
