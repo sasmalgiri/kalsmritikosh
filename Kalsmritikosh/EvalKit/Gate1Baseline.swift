@@ -27,6 +27,13 @@ public enum Gate1Baseline {
         public let questionCount: Int
         public let ingestSeconds: Double
         public let querySeconds: Double
+        /// Resolved provider ID for a reasoning capability at the start
+        /// of the run, or nil when no reasoning provider was reachable
+        /// (i.e. the baseline ran on heuristic floor). This is the
+        /// single fastest way to confirm whether the run measured the
+        /// LLM-on engine or the heuristic floor, surfaced in the
+        /// Settings UI alongside the report URL.
+        public let reasoningProviderID: String?
     }
 
     /// Run the full baseline cycle. Returns the URL of the written
@@ -61,6 +68,26 @@ public enum Gate1Baseline {
             )
         }
         AtlasLog.app.info("Gate 1 baseline DB isolated at \(isolatedDBURL.path, privacy: .public)")
+
+        // Preflight: resolve a reasoning capability against the live
+        // registry and log the outcome. Without this, the user only
+        // discovers a misconfigured Ollama provider 5 minutes into the
+        // eval when every expert silently logs available=false. The
+        // probe takes <2s and gives a single binary answer up front:
+        // "this run is measuring the LLM-on engine" or "this run is
+        // measuring the heuristic floor".
+        let reasoningProviderID: String? = await {
+            guard let caps = state.capabilities else { return nil }
+            let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "gate1.preflight")
+            do {
+                let provider = try await caps.resolve(spec)
+                AtlasLog.app.info("Gate 1 preflight: reasoning provider RESOLVED → \(provider.id, privacy: .public). LLM path will be exercised.")
+                return provider.id
+            } catch {
+                AtlasLog.app.info("Gate 1 preflight: NO reasoning provider available. Eval will run on heuristic floor.")
+                return nil
+            }
+        }()
 
         // 2. Ingest the bundled ProjectDelta fixture (and ONLY that —
         //    no mbox, no Takeout, no real archive content).
@@ -152,7 +179,8 @@ public enum Gate1Baseline {
             ingestedFixtureFiles: ingested,
             questionCount: questionCount,
             ingestSeconds: ingestSeconds,
-            querySeconds: querySeconds
+            querySeconds: querySeconds,
+            reasoningProviderID: reasoningProviderID
         )
     }
 

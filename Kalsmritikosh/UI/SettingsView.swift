@@ -90,9 +90,13 @@ public struct SettingsView: View {
             baselineReportURL = result.reportURL
             let probeLine = result.retrievalProbeURL.map { "L1 retrieval probe: \($0.path)" } ?? "L1 retrieval probe: (not written)"
             let coverageLine = result.coverageProbeURL.map { "Ingest coverage: \($0.path)" } ?? "Ingest coverage: (not written)"
+            let reasoningLine = result.reasoningProviderID.map {
+                "Reasoning provider: \($0) (LLM-on baseline)"
+            } ?? "Reasoning provider: none (HEURISTIC FLOOR baseline)"
             baselineStatus = """
             ✓ Report written
             \(result.reportURL.path)
+            \(reasoningLine)
             ingested fixtures: \(result.ingestedFixtureFiles) in \(String(format: "%.1f", result.ingestSeconds))s
             questions evaluated: \(result.questionCount) in \(String(format: "%.1f", result.querySeconds))s
             \(coverageLine)
