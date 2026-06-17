@@ -19,6 +19,44 @@ public struct EvidenceVerifier: Verifier {
     /// NOT global so aggregation answers can still cite many sources.
     public static let maxCitationsPerClaim = 3
 
+    /// UPDATE_14 — intent-aware global cap on distinct doc citations.
+    /// After the per-claim cap + cross-claim dedupe, the survivor list
+    /// still ran 6–8 docs deep because 5+ experts each contributed top
+    /// chunks. Lookup answers should cite 1–3 docs; reconstruction and
+    /// aggregation legitimately need more. These caps are intent-keyed,
+    /// with an aggregation-shape override for question text that asks
+    /// for breadth ("all", "total", "how many", "list", …).
+    public static let lookupCitationCap = 3
+    public static let reconstructCitationCap = 6
+    public static let executiveCitationCap = 8
+    public static let aggregationCitationCap = 8
+
+    /// Question-shape hints that always get the generous cap even if
+    /// the intent detector classified the question as factualLookup.
+    /// Without this guard a "How many emails reference Supplier ABC?"
+    /// question would lose recall on aggregation-class questions.
+    private static let aggregationShapeKeywords: [String] = [
+        "all ", " total", "how many", "how much", "count of",
+        "each ", "list ", "list all", "sum of", "summarize all",
+        "across the", "across all"
+    ]
+
+    /// Choose the per-answer global cap by intent kind + question shape.
+    private static func intentCitationCap(_ intent: UserIntent) -> Int {
+        let q = " " + intent.rawQuestion.lowercased() + " "
+        if aggregationShapeKeywords.contains(where: { q.contains($0) }) {
+            return aggregationCitationCap
+        }
+        switch intent.kind {
+        case .factualLookup, .semanticSearch, .unknown:
+            return lookupCitationCap
+        case .reconstructTimeline, .reconstructProject, .reconstructRelationship:
+            return reconstructCitationCap
+        case .executiveBriefing, .riskDetection, .missingInformation:
+            return executiveCitationCap
+        }
+    }
+
     public let minimumConfidence: Confidence
     public let minimumCitations: Int
     private let engine: any ConfidenceEngine
@@ -86,7 +124,8 @@ public struct EvidenceVerifier: Verifier {
         }
         // Build citations with: per-claim cap (top-N by score), dedupe
         // across the whole answer by objectID (first claim that wins
-        // a given object owns its snippet), and NO global cap.
+        // a given object owns its snippet), and an intent-aware global
+        // distinct-document cap applied last.
         var seenObjects = Set<KnowledgeObject.ID>()
         var citations: [VerifiedAnswer.Citation] = []
         for claim in claims {
@@ -105,6 +144,23 @@ public struct EvidenceVerifier: Verifier {
                 ))
             }
         }
+        // UPDATE_14 — apply the intent-aware global cap on distinct
+        // documents, ranked by retrieval score so the answer-bearing
+        // top chunk (e.g. contract.md @ 0.863) always survives. The
+        // cap is tight for factualLookup but generous for aggregation-
+        // shaped questions and reconstruction intents, so the recall
+        // won by UPDATE_13 (1.00 on lookups, 0.85 on aggregation) is
+        // preserved.
+        let globalCap = Self.intentCitationCap(intent)
+        if citations.count > globalCap {
+            citations = Array(citations.sorted { lhs, rhs in
+                let ls = scoreByObject[lhs.objectID] ?? -.infinity
+                let rs = scoreByObject[rhs.objectID] ?? -.infinity
+                return ls > rs
+            }.prefix(globalCap))
+        }
+
+        let intentKindRaw = intent.kind.rawValue
 
         guard !claims.isEmpty,
               report.combined >= minimumConfidence,
@@ -113,6 +169,7 @@ public struct EvidenceVerifier: Verifier {
             return VerifiedAnswer(
                 body: "Atlas can't ground an answer to that yet.",
                 answerText: nil,
+                intentKind: intentKindRaw,
                 citations: [],
                 confidence: report.combined,
                 contradictions: report.contradictions,
@@ -128,6 +185,7 @@ public struct EvidenceVerifier: Verifier {
         return VerifiedAnswer(
             body: rendered.body,
             answerText: rendered.answerText,
+            intentKind: intentKindRaw,
             citations: citations,
             confidence: report.combined,
             contradictions: report.contradictions,

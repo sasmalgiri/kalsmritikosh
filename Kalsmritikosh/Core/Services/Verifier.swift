@@ -26,6 +26,11 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// only in the "Subjects in scope" footer no longer satisfies the
     /// metric. UPDATE_13 Item 4.
     public let answerText: String?
+    /// Raw value of `intent.kind` that the brain resolved for the
+    /// question. Surfaced so EvalKit can show how questions actually
+    /// classify and so the citation cap can be sanity-checked against
+    /// the real intent (UPDATE_14 Item 0). nil on refusal / boot paths.
+    public let intentKind: String?
     public let citations: [Citation]
     public let confidence: Confidence
     public let contradictions: [Contradiction]
@@ -37,6 +42,7 @@ public struct VerifiedAnswer: Codable, Sendable {
     public init(
         body: String,
         answerText: String? = nil,
+        intentKind: String? = nil,
         citations: [Citation],
         confidence: Confidence,
         contradictions: [Contradiction] = [],
@@ -46,6 +52,7 @@ public struct VerifiedAnswer: Codable, Sendable {
     ) {
         self.body = body
         self.answerText = answerText
+        self.intentKind = intentKind
         self.citations = citations
         self.confidence = confidence
         self.contradictions = contradictions
@@ -55,13 +62,14 @@ public struct VerifiedAnswer: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, citations, confidence, contradictions, refused, refusalReason, report
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.body = try c.decode(String.self, forKey: .body)
         self.answerText = try c.decodeIfPresent(String.self, forKey: .answerText)
+        self.intentKind = try c.decodeIfPresent(String.self, forKey: .intentKind)
         self.citations = try c.decode([Citation].self, forKey: .citations)
         self.confidence = try c.decode(Confidence.self, forKey: .confidence)
         self.contradictions = try c.decodeIfPresent([Contradiction].self, forKey: .contradictions) ?? []

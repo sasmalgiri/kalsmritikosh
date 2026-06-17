@@ -27,6 +27,11 @@ public struct EvalKitRunner {
     public struct PerQuestionRecord: Sendable {
         public let id: String
         public let className: String
+        /// The brain's resolved UserIntent.kind for this question. Lets
+        /// the report verify that aggregation/multihop questions actually
+        /// classify the way the intent-aware citation cap expects them
+        /// to (UPDATE_14 Item 0). nil = pre-UPDATE_14 path.
+        public let intentKind: String?
         public let citedCount: Int
         public let expectedCount: Int
         public let overlapCount: Int
@@ -134,6 +139,7 @@ public struct EvalKitRunner {
             perQuestion.append(PerQuestionRecord(
                 id: q.id,
                 className: q.class,
+                intentKind: answer.intentKind,
                 citedCount: totalCited,
                 expectedCount: expectedSet.count,
                 overlapCount: overlap.count,
@@ -229,8 +235,8 @@ public struct EvalKitRunner {
             md += "Diagnostic table — confirms whether failing precision is "
             md += "over-citation (cited ≫ expected) vs mis-citation "
             md += "(cited ≈ expected but overlap = 0) vs vector noise.\n\n"
-            md += "| Q | class | cited | expected | overlap | precision | recall |\n"
-            md += "|---|---|---:|---:|---:|---:|---:|\n"
+            md += "| Q | class | intent | cited | expected | overlap | precision | recall |\n"
+            md += "|---|---|---|---:|---:|---:|---:|---:|\n"
             let qOrder: [String: Int] = [
                 "lookup": 0, "aggregation": 1, "temporal": 2, "multihop": 3
             ]
@@ -242,8 +248,8 @@ public struct EvalKitRunner {
             }
             for r in sortedRecords {
                 md += String(
-                    format: "| %@ | %@ | %d | %d | %d | %.2f | %.2f |\n",
-                    r.id, r.className,
+                    format: "| %@ | %@ | %@ | %d | %d | %d | %.2f | %.2f |\n",
+                    r.id, r.className, r.intentKind ?? "—",
                     r.citedCount, r.expectedCount, r.overlapCount,
                     r.precision, r.recall
                 )
