@@ -142,10 +142,10 @@ public final class AppState {
             // up, isAvailable() fails fast (1.5s probe) and the registry
             // skips it without affecting the user-visible latency.
             await capabilities.register(OllamaProvider(
-                modelTag: "qwen2.5:14b",
+                modelTag: "llama3.1:8b",
                 embeddingModelTag: "nomic-embed-text",
                 enabled: true,
-                displayName: "Local Ollama (qwen2.5:14b)",
+                displayName: "Local Ollama (llama3.1:8b)",
                 tier: .medium
             ))
             await capabilities.register(CloudProvider())
