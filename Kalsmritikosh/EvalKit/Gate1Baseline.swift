@@ -366,6 +366,23 @@ public enum Gate1Baseline {
         }
     }
 
+    /// Filenames that make up the Gate 1 ProjectDelta fixture. The eval
+    /// MUST have all of these — a partial corpus produces meaningless
+    /// numbers (UPDATE_11 root cause: three eval runs reported "the .md
+    /// files were outranked" when the .md files were never in the
+    /// bundle at all because the prior fallback silently loaded only
+    /// .eml files).
+    private static let expectedFixtureFilenames: Set<String> = [
+        "contract.md",
+        "amendment-7.md",
+        "invoice-401.eml",
+        "invoice-432.eml",
+        "supplier_abc_22.eml",
+        "supplier_abc_23.eml",
+        "supplier_abc_24.eml",
+        "supplier_abc_25.eml"
+    ]
+
     private static func fixtureURLs() throws -> [URL] {
         let bundle = Bundle.main
         guard let resourcePath = bundle.resourcePath else {
@@ -375,17 +392,63 @@ public enum Gate1Baseline {
                 userInfo: [NSLocalizedDescriptionKey: "Bundle has no resource path."]
             )
         }
-        let root = URL(fileURLWithPath: resourcePath)
+
+        // First preference: the ProjectDelta subdirectory exists in the
+        // bundle (proper folder reference). Reads every regular file
+        // from there, preserving any future additions to the fixture.
+        let subdir = URL(fileURLWithPath: resourcePath)
             .appendingPathComponent("ProjectDelta", isDirectory: true)
-        guard FileManager.default.fileExists(atPath: root.path) else {
-            return bundle.urls(forResourcesWithExtension: "eml", subdirectory: nil) ?? []
+        if FileManager.default.fileExists(atPath: subdir.path) {
+            let items = (try? FileManager.default.contentsOfDirectory(
+                at: subdir,
+                includingPropertiesForKeys: [.isRegularFileKey]
+            )) ?? []
+            let regular = items.filter {
+                (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+            }
+            AtlasLog.app.info("Gate 1 fixture: ProjectDelta/ subdir present, \(regular.count) regular files")
+            try Self.assertExpectedFixture(regular)
+            return regular
         }
-        let items = try FileManager.default.contentsOfDirectory(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey]
-        )
-        return items.filter {
-            (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+
+        // Fallback: Xcode 16's PBXFileSystemSynchronizedRootGroup flattens
+        // synced subdirectories into the bundle root. Gather every fixture
+        // filename across the .eml AND .md extensions and match by name.
+        // Crucially, this is no longer .eml-only — that quiet bug masked
+        // the missing .md files for three eval runs.
+        var found: [URL] = []
+        let extensions = ["eml", "md"]
+        for ext in extensions {
+            let bucket = bundle.urls(forResourcesWithExtension: ext, subdirectory: nil) ?? []
+            for url in bucket where Self.expectedFixtureFilenames.contains(url.lastPathComponent) {
+                found.append(url)
+            }
+        }
+        AtlasLog.app.info("Gate 1 fixture: flat-bundle lookup matched \(found.count) of \(Self.expectedFixtureFilenames.count) expected filenames")
+        try Self.assertExpectedFixture(found)
+        return found
+    }
+
+    /// Throws a precise, actionable error when the bundle doesn't have
+    /// the full ProjectDelta fixture. Gate 1 ALWAYS fails loud now —
+    /// a baseline run on a partial corpus is worse than no run.
+    private static func assertExpectedFixture(_ urls: [URL]) throws {
+        let foundNames = Set(urls.map { $0.lastPathComponent })
+        let missing = Self.expectedFixtureFilenames.subtracting(foundNames)
+        guard missing.isEmpty else {
+            let foundList = foundNames.sorted().joined(separator: ", ")
+            let missingList = missing.sorted().joined(separator: ", ")
+            throw NSError(
+                domain: "Gate1Baseline",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: """
+                    ProjectDelta fixture not fully bundled. Missing: \(missingList). \
+                    Found: \(foundList). Add Resources/Fixtures/ProjectDelta to the \
+                    Kalsmritikosh target as a folder reference (or ensure the missing \
+                    files are members of "Copy Bundle Resources") so they ship in the \
+                    app bundle. A Gate 1 run on a partial corpus is worse than no run.
+                    """]
+            )
         }
     }
 }
