@@ -13,9 +13,15 @@ public struct ResearchExpert: Expert {
     public init() {}
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
+        // UPDATE_13 Item 1 — include .vector. Without it, ResearchExpert
+        // starves on a corpus where chunks_fts has no entries yet (the
+        // metadata layer is the only chunk source in the previous layer
+        // list), so chunks would never reach the LLM and the expert
+        // would silently produce zero claims. .vector ensures the
+        // semantic-ranked chunks (including contract.md) reach the prompt.
         let result = try await context.retriever.retrieve(
             for: intent,
-            layers: [.memory, .metadata, .summary, .entity]
+            layers: [.memory, .metadata, .summary, .entity, .vector]
         )
 
         let frame = PromptTemplates.researchAnalysis(intent: intent, retrieval: result)
@@ -58,14 +64,26 @@ public struct ResearchExpert: Expert {
         capabilities: CapabilityRegistry
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.research")
-        guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else { return ([], 0) }
+        // UPDATE_13 Item 0 — log whether an LLM actually executes for
+        // this expert. On macOS 15.6 FoundationModels is unavailable
+        // (#available(macOS 26.0,*) fails) so without another provider
+        // every expert runs on heuristic fallback. The eval log will
+        // show that explicitly now.
+        guard let provider = try? await capabilities.resolve(spec) else {
+            AtlasLog.brain.info("expert.research LLM: no provider resolved for spec; using heuristic fallback")
+            return ([], 0)
+        }
+        guard await provider.isAvailable() else {
+            AtlasLog.brain.info("expert.research LLM: provider resolved but isAvailable()=false; using heuristic fallback")
+            return ([], 0)
+        }
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
                 options: GenerationOptions(maxTokens: 300, temperature: 0.2)
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
+            AtlasLog.brain.info("expert.research LLM: produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
             let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
                     statement: p.text,
@@ -78,7 +96,7 @@ public struct ResearchExpert: Expert {
             }
             return (claims, parsed.dropped)
         } catch {
-            AtlasLog.brain.error("ResearchExpert LLM call failed: \(String(describing: error), privacy: .public)")
+            AtlasLog.brain.error("expert.research LLM: call failed → \(String(describing: error), privacy: .public)")
             return ([], 0)
         }
     }

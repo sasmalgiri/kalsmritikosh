@@ -112,6 +112,7 @@ public struct EvidenceVerifier: Verifier {
         else {
             return VerifiedAnswer(
                 body: "Atlas can't ground an answer to that yet.",
+                answerText: nil,
                 citations: [],
                 confidence: report.combined,
                 contradictions: report.contradictions,
@@ -123,9 +124,10 @@ public struct EvidenceVerifier: Verifier {
             )
         }
 
-        let body = renderAnswer(intent: intent, findings: findings, retrieval: retrieval, report: report)
+        let rendered = renderAnswer(intent: intent, findings: findings, retrieval: retrieval, report: report)
         return VerifiedAnswer(
-            body: body,
+            body: rendered.body,
+            answerText: rendered.answerText,
             citations: citations,
             confidence: report.combined,
             contradictions: report.contradictions,
@@ -135,34 +137,68 @@ public struct EvidenceVerifier: Verifier {
         )
     }
 
+    /// Rendered answer split into the synthesized response (`answerText`)
+    /// and the full UI body (`body`, which appends a small retrieval
+    /// footer). Splitting these out is what UPDATE_13 Item 3/4 needs:
+    /// eval metrics score against `answerText` so an expected name in
+    /// the footer can no longer satisfy keyword-hit by coincidence.
+    private struct RenderedAnswer {
+        let body: String
+        let answerText: String
+    }
+
     private func renderAnswer(
         intent: UserIntent,
         findings: [ExpertFindings],
         retrieval: RetrievalResult,
         report: ConfidenceReport
-    ) -> String {
-        var sections: [String] = []
+    ) -> RenderedAnswer {
+        // 1) Prefer claims that cite document chunks (KOs) — those are
+        //    the synthesized answer for factual questions. When the LLM
+        //    ran, these are real sentences answering the question. When
+        //    the heuristic fallback ran, these are the top retrieval
+        //    snippets — still better than event-title bullets because
+        //    they contain the actual document text.
+        let docClaims = findings.flatMap(\.claims).filter { !$0.supportingObjectIDs.isEmpty }
+        let answerText: String
+        if !docClaims.isEmpty {
+            answerText = docClaims
+                .prefix(5)
+                .map(\.statement)
+                .joined(separator: " ")
+        } else {
+            // 2) No document-grounded claims. Fall back to whatever
+            //    claims any expert produced — typically event bullets.
+            //    Still better than an entity dump.
+            let anyClaims = findings.flatMap(\.claims)
+            if anyClaims.isEmpty {
+                answerText = "No expert produced findings for that question."
+            } else {
+                answerText = anyClaims
+                    .prefix(5)
+                    .map { "\u{2022} \($0.statement)" }
+                    .joined(separator: "\n")
+            }
+        }
 
-        // Lead with the subject + named entities from intent + retrieval
-        // so the body surfaces who/what the answer is about even when
-        // individual claim strings only contain event titles.
+        // 3) Optional retrieval footer: subjects + an agreement note.
+        //    This is for the user's situational awareness; it does NOT
+        //    contribute to keyword-hit scoring.
+        var footerParts: [String] = []
         let subjectLine = subjectHeading(intent: intent, retrieval: retrieval)
         if !subjectLine.isEmpty {
-            sections.append(subjectLine)
+            footerParts.append(subjectLine)
         }
-
-        for finding in findings where !finding.claims.isEmpty {
-            let body = finding.claims.map { "\u{2022} \($0.statement)" }.joined(separator: "\n")
-            let label = finding.expertID.replacingOccurrences(of: "expert.", with: "").capitalized
-            sections.append("\(label) findings:\n\(body)")
+        if report.agreementScore <= 0.6 {
+            footerParts.append("Note: experts disagreed across some of these claims.")
         }
-        if sections.isEmpty {
-            return "No expert produced findings for that question."
+        let body: String
+        if footerParts.isEmpty {
+            body = answerText
+        } else {
+            body = answerText + "\n\n---\n" + footerParts.joined(separator: "\n")
         }
-        let agreementNote = report.agreementScore > 0.6
-            ? ""
-            : "\n\nNote: experts disagreed across some of these claims."
-        return sections.joined(separator: "\n\n") + agreementNote
+        return RenderedAnswer(body: body, answerText: answerText)
     }
 
     private func subjectHeading(intent: UserIntent, retrieval: RetrievalResult) -> String {

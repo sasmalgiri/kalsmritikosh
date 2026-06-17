@@ -47,6 +47,12 @@ public struct PromptFrame: Sendable {
 
 public enum PromptTemplates {
 
+    /// How many ranked retrieval chunks each event-based template should
+    /// include as cite-able E-ids alongside the events. UPDATE_13 Item 2:
+    /// the bridge from retrieved chunk → reasoned answer. Without this,
+    /// the model only ever sees event titles and can only cite events.
+    private static let chunkEvidenceLimit = 6
+
     private static let jsonContract = """
 
     Respond with ONE JSON object and nothing else (no prose, no code fences):
@@ -56,7 +62,32 @@ public enum PromptTemplates {
     - Every claim's `evidence` MUST be a non-empty subset of the E-ids above.
     - Each E-id refers to ONLY the matching numbered line — do not invent E-ids.
     - Claims with empty or unresolved evidence will be discarded.
+    - Prefer document-text E-ids (lines beginning with "DOC") for factual
+      claims; events are for "when/who corresponded" context.
     """
+
+    /// Appends top-N ranked retrieval chunks to `lines` and `map` so the
+    /// model can cite document text by E-id and the parsed claim's
+    /// supportingObjectIDs resolve to the actual KO (e.g. contract.md),
+    /// not just an event row. Returns the next E-id index for callers.
+    private static func appendChunkEvidence(
+        _ retrieval: RetrievalResult,
+        startingIndex: Int,
+        limit: Int = PromptTemplates.chunkEvidenceLimit,
+        lines: inout [String],
+        map: inout [String: EvidenceCitation]
+    ) -> Int {
+        var index = startingIndex
+        for hit in retrieval.chunks.prefix(limit) {
+            let tag = "E\(index)"
+            let snippet = String(hit.chunk.text.prefix(240))
+                .replacingOccurrences(of: "\n", with: " ")
+            lines.append("[\(tag)] DOC (\(hit.viaLayer.rawValue)) \(snippet)")
+            map[tag] = EvidenceCitation(supportingObjectIDs: [hit.chunk.objectID])
+            index += 1
+        }
+        return index
+    }
 
     // MARK: - Email
 
@@ -66,25 +97,30 @@ public enum PromptTemplates {
         }.prefix(20)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
-        for (i, event) in events.enumerated() {
-            let tag = "E\(i + 1)"
+        var index = 1
+        for event in events {
+            let tag = "E\(index)"
             lines.append("[\(tag)] [\(event.date.formatted(date: .abbreviated, time: .shortened))] \(event.title)")
             map[tag] = EvidenceCitation(
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs
             )
+            index += 1
         }
-        let evidenceBlock = lines.isEmpty ? "(no events found)" : lines.joined(separator: "\n")
+        // UPDATE_13 Item 2 — also expose retrieved document chunks so the
+        // model can cite KOs (e.g. contract.md) not only event rows.
+        _ = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
         let prompt = """
-        Task: Analyze the email evidence below for the question:
-        "\(intent.rawQuestion)"
+        Task: Answer the question using the evidence below.
+        Question: "\(intent.rawQuestion)"
 
-        Identify:
-        - Who corresponded with whom and when
-        - Notable thread shifts (delays, escalations, decisions)
+        Lead with the direct answer to the question, then briefly note who
+        corresponded with whom and notable thread shifts (delays,
+        escalations, decisions).
 
-        Email events (cite by E-id):
+        Evidence (cite by E-id):
         \(evidenceBlock)
         \(jsonContract)
         """
@@ -99,23 +135,27 @@ public enum PromptTemplates {
         }.prefix(20)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
-        for (i, event) in events.enumerated() {
-            let tag = "E\(i + 1)"
+        var index = 1
+        for event in events {
+            let tag = "E\(index)"
             lines.append("[\(tag)] [\(event.date.formatted(date: .abbreviated, time: .omitted))] \(event.title)")
             map[tag] = EvidenceCitation(
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs
             )
+            index += 1
         }
-        let evidenceBlock = lines.isEmpty ? "(no events found)" : lines.joined(separator: "\n")
+        _ = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
         let prompt = """
-        Task: Summarize the financial signal below for the question:
-        "\(intent.rawQuestion)"
+        Task: Answer the question using the evidence below.
+        Question: "\(intent.rawQuestion)"
 
-        Note invoices issued vs paid, outstanding amounts, and overdue items.
+        Lead with the direct answer, then summarize invoices issued vs
+        paid, outstanding amounts, and overdue items where relevant.
 
-        Financial events (cite by E-id):
+        Evidence (cite by E-id):
         \(evidenceBlock)
         \(jsonContract)
         """
@@ -130,23 +170,27 @@ public enum PromptTemplates {
         }.prefix(10)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
-        for (i, event) in events.enumerated() {
-            let tag = "E\(i + 1)"
+        var index = 1
+        for event in events {
+            let tag = "E\(index)"
             lines.append("[\(tag)] [\(event.date.formatted(date: .abbreviated, time: .omitted))] \(event.title)")
             map[tag] = EvidenceCitation(
                 supportingObjectIDs: [event.sourceObjectID],
                 supportingEventIDs: [event.id],
                 supportingEntityIDs: event.entityIDs
             )
+            index += 1
         }
-        let evidenceBlock = lines.isEmpty ? "(no events found)" : lines.joined(separator: "\n")
+        _ = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
         let prompt = """
-        Task: Identify contractual signals for the question:
-        "\(intent.rawQuestion)"
+        Task: Answer the question using the evidence below.
+        Question: "\(intent.rawQuestion)"
 
-        Call out signings, amendments, obligations, and risks.
+        Lead with the direct answer, then call out signings, amendments,
+        obligations, and risks where relevant.
 
-        Contract events (cite by E-id):
+        Evidence (cite by E-id):
         \(evidenceBlock)
         \(jsonContract)
         """

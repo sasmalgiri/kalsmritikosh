@@ -60,14 +60,21 @@ public struct FinancialExpert: Expert {
         capabilities: CapabilityRegistry
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.financial")
-        guard let provider = try? await capabilities.resolve(spec),
-              await provider.isAvailable() else { return ([], 0) }
+        guard let provider = try? await capabilities.resolve(spec) else {
+            AtlasLog.brain.info("expert.financial LLM: no provider resolved for spec; using heuristic fallback")
+            return ([], 0)
+        }
+        guard await provider.isAvailable() else {
+            AtlasLog.brain.info("expert.financial LLM: provider resolved but isAvailable()=false; using heuristic fallback")
+            return ([], 0)
+        }
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
                 options: GenerationOptions(maxTokens: 350, temperature: 0.2)
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
+            AtlasLog.brain.info("expert.financial LLM: produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
             let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
                     statement: p.text,

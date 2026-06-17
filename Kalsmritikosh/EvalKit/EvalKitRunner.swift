@@ -101,9 +101,15 @@ public struct EvalKitRunner {
             let started = Date()
             let answer = await brain.answer(question: q.text)
             let latency = Date().timeIntervalSince(started)
-            let body = answer.body.lowercased()
+            // UPDATE_13 Item 4 — keyword-hit must score against the
+            // synthesized answer text only, not the full body. Otherwise
+            // an expected name surviving in the "Subjects in scope"
+            // footer satisfies the metric while the system never
+            // actually answered the question. answerText is the post-
+            // UPDATE_13 path; body is the legacy/refusal path.
+            let scoringText = (answer.answerText ?? answer.body).lowercased()
             let keywordHit = q.expectedKeywords.allSatisfy {
-                body.contains($0.lowercased())
+                scoringText.contains($0.lowercased())
             }
             // Resolve cited object-IDs to filenames via the files table,
             // then score on filenames — the STABLE contract that survives

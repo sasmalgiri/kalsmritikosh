@@ -19,6 +19,13 @@ public protocol Verifier: Sendable {
 
 public struct VerifiedAnswer: Codable, Sendable {
     public let body: String
+    /// Just the answer portion of `body`, with any subject heading or
+    /// retrieval footer stripped. nil for refusal answers and for legacy
+    /// pre-UPDATE_13 callers that produced a single combined body.
+    /// EvalKitRunner scores keyword-hit against this so a name appearing
+    /// only in the "Subjects in scope" footer no longer satisfies the
+    /// metric. UPDATE_13 Item 4.
+    public let answerText: String?
     public let citations: [Citation]
     public let confidence: Confidence
     public let contradictions: [Contradiction]
@@ -29,6 +36,7 @@ public struct VerifiedAnswer: Codable, Sendable {
 
     public init(
         body: String,
+        answerText: String? = nil,
         citations: [Citation],
         confidence: Confidence,
         contradictions: [Contradiction] = [],
@@ -37,6 +45,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         report: ConfidenceReport? = nil
     ) {
         self.body = body
+        self.answerText = answerText
         self.citations = citations
         self.confidence = confidence
         self.contradictions = contradictions
@@ -46,12 +55,13 @@ public struct VerifiedAnswer: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, citations, confidence, contradictions, refused, refusalReason, report
+        case body, answerText, citations, confidence, contradictions, refused, refusalReason, report
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.body = try c.decode(String.self, forKey: .body)
+        self.answerText = try c.decodeIfPresent(String.self, forKey: .answerText)
         self.citations = try c.decode([Citation].self, forKey: .citations)
         self.confidence = try c.decode(Confidence.self, forKey: .confidence)
         self.contradictions = try c.decodeIfPresent([Contradiction].self, forKey: .contradictions) ?? []
