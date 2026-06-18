@@ -60,10 +60,16 @@ These derive from "Set C" but are restated here as binary checks:
 | **Minimum OS** | macOS 15.6 | Locked Jun 18 (pbxproj `MACOSX_DEPLOYMENT_TARGET = 15.6`). |
 | **Minimum RAM** | 8 GB | Widest install base (every M1 MacBook Air, every base-config Mac since 2020). Pairs with the 3B default bundled model. The 16 GB+ tier auto-upgrades to 8B via optional download. |
 
+## Ask view + App Store screenshots
+
+| Decision | Pick | Implication |
+|---|---|---|
+| **Ask view first state** | Blank — no placeholder text, no suggestion grid | Calm tool, no leading the witness. `AskView.suggestionGrid` removed; `TextField` placeholder reduced to minimal "Ask…" or nothing. The user discovers their own questions. |
+| **App Store screenshot order** | Sources → Ask → Knowledge | Privacy-first lens. Screenshot 1 (hero, what people see in search results): Sources view showing folder list with "files stay where they are" framing. Screenshot 2: Ask view showing a real question answered with citations + Quality Strip. Screenshot 3: Knowledge view showing the entity graph — proves "memory, not search". Timeline can play screenshot 4 if more slots are added. |
+
 ## Open (still to decide)
 
 - v1 vs v1.1 / v2 specific feature cuts (beyond Set C metrics)
-- Killer demo question for App Store screenshots
 - Beta tester recruitment plan (10 names)
 - One-sentence positioning pitch (owner-only; planning thread held this rail)
 - Pro tier differentiators
