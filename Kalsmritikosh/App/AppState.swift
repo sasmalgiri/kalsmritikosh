@@ -186,13 +186,16 @@ public final class AppState {
             await expertRegistry.register(ProjectExpert())
 
             let router = DeterministicRouter(expertRegistry: expertRegistry)
-            // G2-0 — bump from 4 → 8 so all registered experts (7 today)
-            // can fire concurrently when `factualLookup` fans out to the
-            // full set. Swift-side concurrency caps don't help with
-            // Ollama's per-prompt serialization at the GPU, but they DO
-            // eliminate the batching overhead from the old TaskGroup
-            // splitting 7 experts into batches of 4 then 3.
-            let workerPool = WorkerPool(maxConcurrentWorkers: 8)
+            // G2-0 measurement (commit 0320a5a vs Gate 1 lock 4bcf4e5):
+            // bumping this from 4 → 8 made lookup p50 +103% (concurrent
+            // Ollama pressure with no breather between batches) and was
+            // likely a contributor to a multihop recall regression
+            // (0.67 → 0.54). Reverted to 4. Shared retrieval (the big
+            // lever) is unchanged and keeps the temporal/multihop
+            // ~15× wall-clock win. The retained 4+3 batching gives
+            // Ollama small enqueue gaps that turned out to be load-
+            // bearing for lookup latency.
+            let workerPool = WorkerPool(maxConcurrentWorkers: 4)
             let executor = ParallelExecutor(pool: workerPool, experts: expertRegistry)
             let intentDetector = RuleIntentDetector()
             // T11 close-out — give the verifier a real ingest-coverage
