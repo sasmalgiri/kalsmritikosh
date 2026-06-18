@@ -37,6 +37,47 @@ If an item's re-run drops any of those, the item rolls back.
 
 ---
 
+## G2-PROGRESSIVE — Streaming progressive answer (instant first, deepens with reasoning)
+
+**Why early:** transforms perceived latency the moment it ships. Today `MasterBrain.answer` is `async -> VerifiedAnswer` — the user waits the whole pipeline before seeing anything. The engine already has every piece needed for a Google-fast first hit (Memory layer narratives, streaming LLM preview, parallel experts, verified final pass); they're just not stitched. Progressive surfacing turns the worst-case 30-60s answer into a sub-second first read with the deep answer arriving while the user is still reading.
+
+**The four phases** (each yields as it's ready):
+
+| Phase | p50 latency | What ships to UI | Engine work |
+|---|---:|---|---|
+| 1 Instant cache | < 500 ms | Memory narrative for the resolved subject (project/org/person) if one exists, otherwise the subject-heading dump | `MemoryRepository.current(forSubject:identifier:)`, already implemented |
+| 2 First synthesis | ~ 2-5 s | Streaming sentence answer — tokens appear live in the bubble | `AskView.streamPreview` already implemented; wire its tokens into the bubble's primary body, not just preview state |
+| 3 Deep expert pass | ~ 5-30 s | Body updates with cross-doc claims; citation list grows | Existing expert fan-out; emit per-finding events instead of awaiting all |
+| 4 Final verified | ~ 30-60 s | Final answer + Quality Strip + reranker-ordered citations + contradictions | Existing verifier + G2-1 reranker |
+
+**Spec:**
+- New return type: `MasterBrain.answer(question:) -> AsyncStream<AnswerUpdate>` where:
+  ```
+  enum AnswerUpdate {
+      case instant(body: String, citations: [Citation])           // Phase 1
+      case synthesisToken(String)                                  // Phase 2 deltas
+      case expertFindingsArrived(ExpertFindings)                  // Phase 3 incremental
+      case verified(VerifiedAnswer)                                // Phase 4 final
+  }
+  ```
+- MasterBrain composes the stream from existing components: Memory probe + streamPreview + parallel experts + verifier — each phase yields to the stream as it completes, then phase N+1 starts (or runs concurrently where possible).
+- `AskView` consumes the stream: bubble shows Phase 1 immediately, swaps to streaming for Phase 2, updates citation list as expert findings arrive in Phase 3, locks in Quality Strip at Phase 4.
+- Existing `MasterBrain.answer(question:) -> VerifiedAnswer` becomes a thin wrapper that collects the stream's last `.verified` event — preserves the eval harness, no breaking API change for `EvalKitRunner`.
+
+**Eval metric:** none directly — Gate 1 metrics still measured by the final verified output, unchanged. The new metric is **time-to-first-visible-content (TTFVC)**: target p50 < 1 s, p95 < 3 s. Measure by adding a TTFVC column to the per-question table; capture the timestamp of the first `AnswerUpdate` yielded.
+
+**Files touched:** `Brain/MasterBrain.swift` (rewrite `answer`), new `Brain/AnswerUpdate.swift` (the enum), `UI/AskView.swift` (consume stream, swap bubble content as phases arrive), `EvalKit/EvalKitRunner.swift` (collect final from stream; add TTFVC column).
+
+**Acceptance:**
+- build green; grep guard clean; SmokeTest passes
+- TTFVC p50 < 1 s on questions whose subject has a Memory narrative; < 3 s otherwise
+- Final `VerifiedAnswer` byte-for-byte equal to pre-progressive output on the same input — recall and precision metrics unchanged (hard guard)
+- AskView visibly transitions through the four phases on a real question (not just instant→done)
+
+**Commit:** `feat: progressive answer stream (instant → synthesis → deep → verified)`
+
+---
+
 ## G2-SWIFT6 — Swift 6 strict-concurrency migration
 
 **Why next:** UPDATE_03 standing decision, unblocked now that Gate 1 baseline exists. Migration regressions are detected by re-running the eval against the locked baselines; that's only practical after G2-0 makes the eval finish in 30 min.
@@ -168,10 +209,12 @@ If an item's re-run drops any of those, the item rolls back.
 ## Order summary
 
 ```
-G2-0  →  G2-SWIFT6  →  G2-1  →  G2-2  →  G2-3  →  G2-4  →  G2-5
-latency   strict     reranker  temporal  contextual  model    ux
-                              window    retrieval   trial
+G2-0       →  G2-PROGRESSIVE  →  G2-SWIFT6  →  G2-1   →  G2-2  →  G2-3  →  G2-4  →  G2-5
+latency       UX feel            strict       reranker  temporal contextual model   ux
+(retrieval)   (stream phases)    concurrency           window   retrieval  trial   polish
 ```
+
+G2-PROGRESSIVE is placed before G2-SWIFT6 because it transforms the user's experience of latency *immediately* — even on the heuristic floor a real interaction feels instant, because Phase 1 hits the Memory cache and Phase 2 streams. The reranker (G2-1) plugs into Phase 4 cleanly once it lands; the progressive scaffolding doesn't need it to ship value.
 
 Re-run eval after each. Hard guard on recall throughout. Engine phase remains closed in the sense that this is *measured* improvement against a locked baseline — every item is "did the numbers move in the direction we predicted?", not "did we ship more features." If an item doesn't move the numbers, it doesn't ship.
 
