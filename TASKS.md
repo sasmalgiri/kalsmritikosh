@@ -381,6 +381,21 @@ new Knowledge/Extraction guided-extraction call site, IngestCoordinator.
 ---
 
 ## Gate 2 (outline — specs to be written after Gate 1 numbers exist)
+
+**Gate 1 is locked** (eval-report.md commit `4bcf4e5`, 18 Jun 2026). The
+prioritized, eval-driven Gate 2 work derived from the lock lives in
+[GATE2_ROADMAP.md](./GATE2_ROADMAP.md):
+
+- G2-0  parallel expert dispatch + shared evidence cache (cuts 3-4 h eval → 30 min)
+- G2-SWIFT6  Swift 6 strict-concurrency (spec below; precondition met by Gate 1 lock)
+- G2-1  per-claim reranker (lifts citation precision from 0.33 → ≥0.6)
+- G2-2  temporal intent window grammar (fixes T1/T3 = 0)
+- G2-3  contextual retrieval (Anthropic-style chunk prefix)
+- G2-4  stronger reasoning model trial procedure
+- G2-5  UI: streaming + Quality Strip expand
+
+Items below (notarization + UI items) remain Gate 2 and stay in this file.
+
 Notarization + CODE_SIGN_ENTITLEMENTS wiring; per-file completeness report UI
 (pages parsed/OCR'd/skipped, quotedBytesRemoved); onboarding multi-root suggestions +
 "What kalsmritikosh can see" panel; SourceViewer range highlighting; UserNotifications
