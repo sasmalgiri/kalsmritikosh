@@ -117,17 +117,29 @@ public actor MasterBrain {
             )
         }
 
-        let context = ExpertContext(retriever: retriever, capabilities: capabilities)
+        // G2-0 — one retrieval per question, shared across every expert
+        // AND the verifier. Was: N+1 retrieval calls per question (one
+        // per expert + one for the verifier), each repeating the same
+        // SQL + vector traffic. Wall-clock saving is N retrieval round
+        // trips per question; for `factualLookup` (which routes to all
+        // experts) that's ~7× fewer retrieval passes per question.
+        let sharedRetrieval = (try? await retriever.retrieve(
+            for: intent,
+            layers: decision.retrievalLayers
+        )) ?? RetrievalResult()
+
+        let context = ExpertContext(
+            retriever: retriever,
+            capabilities: capabilities,
+            sharedRetrieval: sharedRetrieval
+        )
         let findings = await executor.execute(
             intent: intent,
             decision: decision,
             context: context
         )
 
-        let retrievalForVerifier = (try? await retriever.retrieve(
-            for: intent,
-            layers: decision.retrievalLayers
-        )) ?? RetrievalResult()
+        let retrievalForVerifier = sharedRetrieval
 
         do {
             return try await verifier.verify(

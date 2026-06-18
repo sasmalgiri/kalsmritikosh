@@ -186,7 +186,13 @@ public final class AppState {
             await expertRegistry.register(ProjectExpert())
 
             let router = DeterministicRouter(expertRegistry: expertRegistry)
-            let workerPool = WorkerPool(maxConcurrentWorkers: 4)
+            // G2-0 — bump from 4 → 8 so all registered experts (7 today)
+            // can fire concurrently when `factualLookup` fans out to the
+            // full set. Swift-side concurrency caps don't help with
+            // Ollama's per-prompt serialization at the GPU, but they DO
+            // eliminate the batching overhead from the old TaskGroup
+            // splitting 7 experts into batches of 4 then 3.
+            let workerPool = WorkerPool(maxConcurrentWorkers: 8)
             let executor = ParallelExecutor(pool: workerPool, experts: expertRegistry)
             let intentDetector = RuleIntentDetector()
             // T11 close-out — give the verifier a real ingest-coverage

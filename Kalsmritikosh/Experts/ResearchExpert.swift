@@ -19,7 +19,7 @@ public struct ResearchExpert: Expert {
         // list), so chunks would never reach the LLM and the expert
         // would silently produce zero claims. .vector ensures the
         // semantic-ranked chunks (including contract.md) reach the prompt.
-        let result = try await context.retriever.retrieve(
+        let result = try await context.retrieve(
             for: intent,
             layers: [.memory, .metadata, .summary, .entity, .vector]
         )

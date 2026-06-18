@@ -20,7 +20,7 @@ public struct OCRExpert: Expert {
     }
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retriever.retrieve(
+        let result = try await context.retrieve(
             for: intent,
             layers: [.metadata, .entity]
         )

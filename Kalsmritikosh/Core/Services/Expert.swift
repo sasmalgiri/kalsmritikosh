@@ -62,11 +62,41 @@ public struct ExpertContext: Sendable {
     public let retriever: Retriever
     public let capabilities: CapabilityRegistry
     public let now: Date
+    /// G2-0 — when MasterBrain has already run retrieval for this
+    /// question, the result is shared across all experts (and the
+    /// verifier) so a single question never costs more than ONE
+    /// retrieval round-trip. nil = caller hasn't pre-fetched, fall
+    /// back to a direct retriever call.
+    public let sharedRetrieval: RetrievalResult?
 
-    public init(retriever: Retriever, capabilities: CapabilityRegistry, now: Date = .init()) {
+    public init(
+        retriever: Retriever,
+        capabilities: CapabilityRegistry,
+        sharedRetrieval: RetrievalResult? = nil,
+        now: Date = .init()
+    ) {
         self.retriever = retriever
         self.capabilities = capabilities
+        self.sharedRetrieval = sharedRetrieval
         self.now = now
+    }
+
+    /// Returns the shared retrieval if MasterBrain pre-fetched it
+    /// (G2-0); otherwise falls back to a fresh retriever call with the
+    /// expert's requested layers. Either way the expert sees the same
+    /// `RetrievalResult` shape — it can keep filtering chunks/events
+    /// to its domain without caring whether the result was shared. The
+    /// shared result always covers the union of layers any expert
+    /// might want (the priority order), so per-expert layer filtering
+    /// happens on the consumer side, not at retrieval time.
+    public func retrieve(
+        for intent: UserIntent,
+        layers: [RetrievalLayer]
+    ) async throws -> RetrievalResult {
+        if let cached = sharedRetrieval {
+            return cached
+        }
+        return try await retriever.retrieve(for: intent, layers: layers)
     }
 }
 

@@ -13,7 +13,7 @@ public struct FinancialExpert: Expert {
     public init() {}
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retriever.retrieve(
+        let result = try await context.retrieve(
             for: intent,
             layers: [.memory, .entity, .timeline, .metadata]
         )

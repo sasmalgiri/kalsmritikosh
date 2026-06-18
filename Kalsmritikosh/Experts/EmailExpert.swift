@@ -19,7 +19,9 @@ public struct EmailExpert: Expert {
     public init() {}
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retriever.retrieve(
+        // G2-0 — use shared retrieval when MasterBrain pre-fetched it;
+        // otherwise fall back to a fresh call with the expert's layers.
+        let result = try await context.retrieve(
             for: intent,
             layers: [.memory, .entity, .timeline, .metadata]
         )
