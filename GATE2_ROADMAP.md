@@ -64,6 +64,29 @@ If an item's re-run drops any of those, the item rolls back.
 - `AskView` consumes the stream: bubble shows Phase 1 immediately, swaps to streaming for Phase 2, updates citation list as expert findings arrive in Phase 3, locks in Quality Strip at Phase 4.
 - Existing `MasterBrain.answer(question:) -> VerifiedAnswer` becomes a thin wrapper that collects the stream's last `.verified` event — preserves the eval harness, no breaking API change for `EvalKitRunner`.
 
+**Trust contract (UI required, not optional):** every phase shows a
+visible state tag in the bubble so the user can NEVER mistake a
+preview for a verified answer. Required states:
+
+| Phase | Tag / visual | What user sees |
+|---|---|---|
+| 1 | `🕒 Quick read · verifying…` (gray, italic) | Cached narrative + citation list (clickable to source) |
+| 2 | `✎ Synthesizing…` (with blinking cursor) | Streaming tokens append in real time |
+| 3 | `🔍 Reading sources… N citations` (citation count grows) | Body updates with synthesized claims; citations animate in |
+| 4 | full Quality Strip — confidence %, citations N, freshness, contradictions if any | Locked-in verified answer; tag disappears |
+
+The Phase 1→4 transition must be a visible update in place — the user
+SEES the answer deepen. No ambiguity about which read they're acting
+on. Phase 1 must NEVER appear without the "verifying…" tag, even when
+the cached narrative happens to be correct: the trust contract is
+that the user always knows what they're reading.
+
+Cache-match gate: do NOT emit Phase 1 unless the intent's subject
+matches a distilled MemoryObject AND the cached narrative overlaps
+the question's keyword/entity terms above a confidence threshold. If
+no good match, skip Phase 1 entirely and stream directly to Phase 2.
+This prevents stale cache from polluting Phase 1.
+
 **Eval metric:** none directly — Gate 1 metrics still measured by the final verified output, unchanged. The new metric is **time-to-first-visible-content (TTFVC)**: target p50 < 1 s, p95 < 3 s. Measure by adding a TTFVC column to the per-question table; capture the timestamp of the first `AnswerUpdate` yielded.
 
 **Files touched:** `Brain/MasterBrain.swift` (rewrite `answer`), new `Brain/AnswerUpdate.swift` (the enum), `UI/AskView.swift` (consume stream, swap bubble content as phases arrive), `EvalKit/EvalKitRunner.swift` (collect final from stream; add TTFVC column).
