@@ -20,7 +20,7 @@ The point of this file is to stop scope creep and re-debating decided things. If
 
 | Decision | Pick | Implication |
 |---|---|---|
-| **Reasoning model strategy** | Must bundle on-device | `LlamaCppProvider` (currently stub) must be unstubbed. No "install Ollama" friction for end users. Model name continues to live ONLY in `App/AppState.swift` per the architecture invariant. |
+| **Reasoning model strategy** | Bundled on-device, **tiered by detected RAM** | `LlamaCppProvider` (currently stub) must be unstubbed. **Default bundled**: 3B (Llama 3.2 3B Q4_0, ~2 GB on disk, runs in 4-5 GB RAM) — ships with every install, works on the 8 GB hardware floor. **Optional in-app download**: 7-8B for users whose `HardwareProbe.totalRAMBytes` ≥ 16 GB — surfaced as "download better model" in Settings, free, no upsell. Capability registry picks the larger model automatically when present. No "install Ollama" friction for end users at any tier. Model names continue to live ONLY in `App/AppState.swift` per the architecture invariant. |
 | **Answer UX** | G2-PROGRESSIVE — instant → stream → deep → verified | Spec in `GATE2_ROADMAP.md`. Visible trust contract: every phase shows its state tag in the bubble (`🕒 Quick read · verifying…` → `✎ Synthesizing…` → `🔍 Reading sources…` → Quality Strip locked). |
 | **Engine state at Gate 1 lock** | Partial G2-0 rollback (`7b23986`) | Shared retrieval kept (~15× wall-clock win on temporal/multihop). WorkerPool reverted 8→4. Multihop recall regressed to 0.54 vs Gate 1 lock 0.67 — accepted because the wall-clock win unblocks all subsequent G2 work; recall expected to recover with G2-1 reranker. |
 | **Toggle for users** | Fast/Accurate switch in Settings (deferred) | Lets users choose retrieval mode at query time. Spec to be drafted as a small Gate 2 item if precision/recall trade remains visible after G2-1. |
@@ -53,9 +53,15 @@ These derive from "Set C" but are restated here as binary checks:
 - Microsoft Publisher (.pub) — never planned
 - PST/OST/MSG/NSF email formats (GS-MAIL block in TASKS.md, Gate 3)
 
+## Hardware floor
+
+| Decision | Pick | Implication |
+|---|---|---|
+| **Minimum OS** | macOS 15.6 | Locked Jun 18 (pbxproj `MACOSX_DEPLOYMENT_TARGET = 15.6`). |
+| **Minimum RAM** | 8 GB | Widest install base (every M1 MacBook Air, every base-config Mac since 2020). Pairs with the 3B default bundled model. The 16 GB+ tier auto-upgrades to 8B via optional download. |
+
 ## Open (still to decide)
 
-- Minimum hardware floor (RAM, OS — macOS 15.6 locked, but RAM TBD)
 - v1 vs v1.1 / v2 specific feature cuts (beyond Set C metrics)
 - Killer demo question for App Store screenshots
 - Beta tester recruitment plan (10 names)
