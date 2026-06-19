@@ -72,19 +72,29 @@ public struct EvidenceVerifier: Verifier {
     /// they somehow survived ingestion. nil = no filtering, behaviour
     /// identical to pre-fix.
     private let entityQualityGate: EntityQualityGate?
+    /// G2-1 — optional. When present, citation survivors are reordered
+    /// by claim-relevance (reranker score) before the intent-aware
+    /// global cap truncates. When nil, the cap orders by
+    /// `scoreByObject` alone (pre-G2-1 behavior). The reranker itself
+    /// degrades gracefully to identity scoring when no provider
+    /// supports `.reranking` — so plumbing this through doesn't risk
+    /// regression on a heuristic-floor run.
+    private let reranker: Reranker?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
         minimumCitations: Int = 1,
         engine: any ConfidenceEngine = DefaultConfidenceEngine(),
         ingestCoverageProvider: (@Sendable () async -> Double)? = nil,
-        entityQualityGate: EntityQualityGate? = nil
+        entityQualityGate: EntityQualityGate? = nil,
+        reranker: Reranker? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
         self.engine = engine
         self.ingestCoverageProvider = ingestCoverageProvider
         self.entityQualityGate = entityQualityGate
+        self.reranker = reranker
     }
 
     public func verify(
@@ -144,16 +154,47 @@ public struct EvidenceVerifier: Verifier {
                 ))
             }
         }
+        // G2-1 — pairwise relevance scoring of (question, candidate
+        // citation snippet) via the reranker. Lifts citation precision
+        // by reordering survivors against the actual question text
+        // instead of retrieval similarity alone. Returns identity (0.5
+        // for every candidate) when no reranker is wired OR when the
+        // resolved provider isn't available — preserving the
+        // `scoreByObject` ordering and ensuring no regression on the
+        // heuristic floor.
+        var rerankByObject: [KnowledgeObject.ID: Double] = [:]
+        if let reranker, !citations.isEmpty {
+            let snippets = citations.map { citation -> String in
+                // Prefer a chunk text snippet for the candidate. The
+                // citation's own `snippet` (a claim statement) is a
+                // weak signal because the claim is what we're scoring
+                // AGAINST. Fall back to it only when we have nothing
+                // better — typically when the citation came from an
+                // event-only claim with no chunk evidence.
+                let chunkText = retrieval.chunks
+                    .first { $0.chunk.objectID == citation.objectID }?
+                    .chunk.text
+                return String((chunkText ?? citation.snippet).prefix(400))
+            }
+            let scores = await reranker.score(question: intent.rawQuestion, candidates: snippets)
+            for (i, citation) in citations.enumerated() where i < scores.count {
+                rerankByObject[citation.objectID] = scores[i]
+            }
+        }
+
         // UPDATE_14 — apply the intent-aware global cap on distinct
-        // documents, ranked by retrieval score so the answer-bearing
-        // top chunk (e.g. contract.md @ 0.863) always survives. The
-        // cap is tight for factualLookup but generous for aggregation-
-        // shaped questions and reconstruction intents, so the recall
-        // won by UPDATE_13 (1.00 on lookups, 0.85 on aggregation) is
-        // preserved.
+        // documents. Survivor ranking is now lexicographic on
+        // (rerankScore desc, scoreByObject desc) so the reranker takes
+        // first say but never erases retrieval-score tiebreaks. The
+        // answer-bearing top chunk (e.g. contract.md @ 0.863) keeps
+        // winning when the reranker has no opinion (identity = 0.5
+        // across the board → falls back to scoreByObject).
         let globalCap = Self.intentCitationCap(intent)
         if citations.count > globalCap {
             citations = Array(citations.sorted { lhs, rhs in
+                let lr = rerankByObject[lhs.objectID] ?? 0.5
+                let rr = rerankByObject[rhs.objectID] ?? 0.5
+                if lr != rr { return lr > rr }
                 let ls = scoreByObject[lhs.objectID] ?? -.infinity
                 let rs = scoreByObject[rhs.objectID] ?? -.infinity
                 return ls > rs

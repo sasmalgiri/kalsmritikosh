@@ -198,6 +198,13 @@ public final class AppState {
             let workerPool = WorkerPool(maxConcurrentWorkers: 4)
             let executor = ParallelExecutor(pool: workerPool, experts: expertRegistry)
             let intentDetector = RuleIntentDetector()
+            // G2-1 — Reranker shares the capability registry with the
+            // experts. When a provider declares `.reranking` (today:
+            // Ollama via prompted scoring) the verifier reorders
+            // citation survivors by claim-relevance. When none is
+            // available the Reranker returns identity scores and the
+            // verifier falls back to pure scoreByObject — no regression.
+            let reranker = Reranker(capabilities: capabilities)
             // T11 close-out — give the verifier a real ingest-coverage
             // readout: fraction of registered files that have at least one
             // KnowledgeObject in the store. While ingest is incomplete the
@@ -211,7 +218,8 @@ public final class AppState {
                     let raw = Double(koCount) / Double(fileCount)
                     return min(1.0, max(0.0, raw))
                 },
-                entityQualityGate: EntityQualityGate.bundled()
+                entityQualityGate: EntityQualityGate.bundled(),
+                reranker: reranker
             )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,

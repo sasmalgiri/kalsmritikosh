@@ -104,6 +104,14 @@ public enum ModelCapability: String, Codable, Sendable, Hashable, CaseIterable {
     case routing
     case complexityAnalysis
 
+    /// G2-1 — pairwise relevance scoring of (claim, candidate evidence).
+    /// EvidenceVerifier uses this to reorder citation survivors by
+    /// claim-relevance instead of pure retrieval similarity, which is
+    /// what closes the lookup-precision gap at Gate 1 (0.33 → ≥ 0.6).
+    /// Providers that can produce a single normalized score for an
+    /// (anchor, candidate) pair declare this.
+    case reranking
+
     // Size hints used by cost-aware ranking
     case routerSmall
     case expertLarge

@@ -41,7 +41,11 @@ public actor OllamaProvider: ModelProvider {
         // capabilities; the resolver picks based on the CapabilitySpec.
         var caps: Set<ModelCapability> = [
             .textGeneration, .reasoning, .summarization,
-            .extraction, .classification, .longContext, .structuredOutput
+            .extraction, .classification, .longContext, .structuredOutput,
+            // G2-1 — Ollama can serve the Reranker via prompted scoring
+            // (no native cross-encoder endpoint; the Reranker actor's
+            // prompt asks for a JSON array of [0,1] relevance scores).
+            .reranking
         ]
         if embeddingModelTag != nil { caps.insert(.embedding) }
         self.capabilities = caps

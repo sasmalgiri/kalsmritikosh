@@ -130,4 +130,23 @@ extension CapabilitySpec {
             purpose: purpose
         )
     }
+
+    /// G2-1 — pairwise relevance scoring. The Reranker asks for this
+    /// to reorder citation candidates by claim-relevance instead of
+    /// retrieval similarity. Privacy is `.localNetwork` for the same
+    /// reason as `reasoning`: a localhost-only model (Ollama) is the
+    /// only path on macOS 15.6 where no on-device reasoning model
+    /// ships. `isPrivacyEligible(.localNetwork)` still admits
+    /// `.onDevice` manifests so FoundationModels wins on macOS 26 if
+    /// it declares `.reranking`.
+    public static func reranking(purpose: String = "") -> CapabilitySpec {
+        .init(
+            requires: [.textGeneration, .reranking],
+            prefers: [.routerSmall, .structuredOutput],
+            maxLatency: .background,
+            privacy: .localNetwork,
+            estimatedContextTokens: 2_000,
+            purpose: purpose
+        )
+    }
 }
