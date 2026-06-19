@@ -14,7 +14,7 @@ The point of this file is to stop scope creep and re-debating decided things. If
 | **Distribution path** | Mac App Store | Apple handles payment, 15-30% cut. No license server to build. App Sandbox mandatory (✓ already configured). Apple review process required. |
 | **Pricing** | $29-$49 one-time (Personal tier) | Serious-tool benchmark. Pro tier reserved for later (corpus size / export / advanced reconstruction differentiators TBD). |
 | **Launch timeline** | No deadline | Quality-driven, not calendar-driven. Risk shifts from "missing date" to "scope inflation" — this doc is the scope inflation control. |
-| **Ship bar (v1.0)** | Set C — confident v1.0 | See "Ship gates" below. The bar is not negotiable downward without revising this row. |
+| **Ship bar (v1.0)** | Set C-prime — Set C minus the 10-tester gate, plus owner self-test | Original Set C required 10 real beta users with ≥7 recommend. Owner has no warm channel and no audience to recruit from; meeting that gate would take 3-6 months of audience-building first. Path B chosen: ship to App Store as the public beta, replace the 10-tester gate with a single-operator self-test on the owner's own 100 GB+ archive plus a clean-machine install check. App Store reviews/ratings become the feedback loop after launch. |
 
 ## Engine direction
 
@@ -38,7 +38,9 @@ These derive from "Set C" but are restated here as binary checks:
 - [ ] PrivacyInfo.xcprivacy manifest present
 - [ ] Privacy Policy URL hosted, linked
 - [ ] Terms of Use / EULA hosted, linked
-- [ ] 10 real beta users tested on their own archives; ≥ 7 say "I'd recommend it"
+- [ ] Owner self-test passes: 100 GB+ personal archive ingested, ~20 representative real-world questions answered correctly with citations the owner can open and verify
+- [ ] Clean-machine install passes on a Mac that has never had Xcode or the app
+- [ ] App Store release notes call v1.0 "early access — feedback welcome via [contact URL]"
 - [ ] App Store metadata complete: name, subtitle, keywords, description, screenshots (no PII), category, age rating, privacy nutrition labels
 - [ ] Clean-machine install test passes on minimum hardware (see Open below)
 
