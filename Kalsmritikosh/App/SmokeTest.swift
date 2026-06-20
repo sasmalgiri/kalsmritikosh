@@ -777,6 +777,117 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // G2-TEMPORAL — DateGrammar.parse covers the four classes used by
+    // the question corpus: ISO range, month-year single, month range,
+    // and relative keyword. Pure & deterministic — no LLM.
+    do {
+        let utc = TimeZone(identifier: "UTC") ?? .current
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = utc
+        let base = cal.date(from: DateComponents(timeZone: utc, year: 2026, month: 6, day: 15))!
+
+        // (a) ISO range
+        if let m = DateGrammar.parse("between 2024-04-08 and 2024-06-14", baseDate: base, timeZone: utc),
+           let s = m.timeframe.start, let e = m.timeframe.end,
+           cal.component(.year, from: s) == 2024,
+           cal.component(.month, from: s) == 4,
+           cal.component(.year, from: e) == 2024,
+           cal.component(.month, from: e) == 6 {
+            passed.append("G2-TEMPORAL(iso-range): 2024-04-08..2024-06-14 parsed")
+        } else {
+            failed.append("G2-TEMPORAL(iso-range): parse failed")
+        }
+
+        // (b) Month-year single ("April 2024")
+        if let m = DateGrammar.parse("what happened in April 2024?", baseDate: base, timeZone: utc),
+           let s = m.timeframe.start, let e = m.timeframe.end,
+           cal.component(.year, from: s) == 2024,
+           cal.component(.month, from: s) == 4,
+           cal.component(.year, from: e) == 2024,
+           cal.component(.month, from: e) == 4 {
+            passed.append("G2-TEMPORAL(month-year): \"April 2024\" parsed")
+        } else {
+            failed.append("G2-TEMPORAL(month-year): parse failed")
+        }
+
+        // (c) Month range ("April through June 2024")
+        if let m = DateGrammar.parse("changes from April through June 2024", baseDate: base, timeZone: utc),
+           let s = m.timeframe.start, let e = m.timeframe.end,
+           cal.component(.month, from: s) == 4,
+           cal.component(.month, from: e) == 6 {
+            passed.append("G2-TEMPORAL(month-range): April..June 2024 parsed")
+        } else {
+            failed.append("G2-TEMPORAL(month-range): parse failed")
+        }
+
+        // (d) Relative ("last week")
+        if let m = DateGrammar.parse("what changed last week?", baseDate: base, timeZone: utc),
+           let s = m.timeframe.start, let e = m.timeframe.end,
+           s < e, e <= base {
+            passed.append("G2-TEMPORAL(relative): \"last week\" produced a window before base")
+        } else {
+            failed.append("G2-TEMPORAL(relative): \"last week\" parse failed")
+        }
+
+        // (e) Sentinel: nil for text with no temporal expression.
+        if DateGrammar.parse("Who signed the contract?", baseDate: base, timeZone: utc) == nil {
+            passed.append("G2-TEMPORAL(nil): no temporal text → nil")
+        } else {
+            failed.append("G2-TEMPORAL(nil): false positive on non-temporal question")
+        }
+    }
+
+    // G2-1.5 — SessionProfile records turns and snapshot returns
+    // recency-first entity ordering; reset clears state.
+    do {
+        let profile = SessionProfile(maxTurns: 5)
+        await profile.recordTurn(question: "Tell me about Supplier ABC",
+                                 intentKind: "lookup",
+                                 entityHints: ["Supplier ABC"])
+        await profile.recordTurn(question: "What about Project Delta?",
+                                 intentKind: "lookup",
+                                 entityHints: ["Project Delta"])
+        await profile.recordTurn(question: "And the contract?",
+                                 intentKind: "lookup",
+                                 entityHints: ["Project Delta", "contract"])
+        let snap = await profile.snapshot()
+        if snap.recentTurns.count == 3,
+           snap.mentionedEntities.first == "Project Delta",
+           snap.mentionedEntities.contains("Supplier ABC"),
+           snap.lastIntentKind == "lookup" {
+            passed.append("G2-1.5: SessionProfile snapshot recency-ordered (\(snap.mentionedEntities.prefix(3).joined(separator: ", ")))")
+        } else {
+            failed.append("G2-1.5: snapshot wrong — entities=\(snap.mentionedEntities) turns=\(snap.recentTurns.count) lastIntent=\(snap.lastIntentKind ?? "nil")")
+        }
+        await profile.reset()
+        let cleared = await profile.snapshot()
+        if cleared.isEmpty {
+            passed.append("G2-1.5: SessionProfile.reset clears state")
+        } else {
+            failed.append("G2-1.5: reset left \(cleared.recentTurns.count) turns behind")
+        }
+    }
+
+    // G2-1.5 — Reranker.questionShape is pure and covers the canonical
+    // wh-/yes-no/list shapes the prompt depends on.
+    do {
+        let cases: [(String, String)] = [
+            ("Who signed the contract?", "who"),
+            ("When did the invoice arrive?", "when"),
+            ("List all suppliers", "list"),
+            ("Is the project delayed?", "yes-no"),
+            ("Project Delta status", "statement")
+        ]
+        let mismatches = cases.compactMap { (q, expected) -> String? in
+            let got = Reranker.questionShape(q)
+            return got == expected ? nil : "\(q) → \(got) (≠ \(expected))"
+        }
+        if mismatches.isEmpty {
+            passed.append("G2-1.5: Reranker.questionShape classifies 5 canonical shapes")
+        } else {
+            failed.append("G2-1.5: questionShape mismatches: \(mismatches.joined(separator: "; "))")
+        }
+    }
+
     // T11 — Quality strip renders the expected fields and handles a
     // contradictory fixture (Conflicts: 1).
     do {
