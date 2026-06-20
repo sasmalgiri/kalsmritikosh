@@ -17,10 +17,16 @@ public struct RuleIntentDetector: IntentDetector {
         let kind = inferKind(q)
         let scope = inferScope(question)
         let hints = extractHints(question)
+        // G2-TEMPORAL-GRAMMAR — surface a real Timeframe from natural-
+        // language date expressions ("April 2024", "last week",
+        // "between April and June 2024") so downstream retrieval can
+        // filter events / chunks by date instead of treating every
+        // question as timeframe=nil.
+        let timeframe = DateGrammar.parse(question)?.timeframe
         return UserIntent(
             kind: kind,
             scope: scope,
-            timeframe: nil,
+            timeframe: timeframe,
             entityHints: hints,
             rawQuestion: question
         )
