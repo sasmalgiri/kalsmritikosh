@@ -87,9 +87,13 @@ public enum DateGrammar {
 
     // MARK: - 1. ISO range
 
-    /// `2024-04-08 to 2024-06-14`, `2024-04-08..2024-06-14`, `2024-04-08-2024-06-14`
+    /// `2024-04-08 to 2024-06-14`, `between 2024-04-08 and 2024-06-14`,
+    /// `2024-04-08..2024-06-14`, `2024-04-08-2024-06-14`.
+    /// `and` is included so natural-language "between X and Y" parses as
+    /// a range — without it, the parser fell through to the single-date
+    /// matcher and lost the end date.
     private static let isoRangeRx: NSRegularExpression? = try? NSRegularExpression(
-        pattern: #"\b(\d{4}-\d{2}-\d{2})\s*(?:to|through|-|\.\.)\s*(\d{4}-\d{2}-\d{2})\b"#,
+        pattern: #"\b(\d{4}-\d{2}-\d{2})\s*(?:to|through|and|-|\.\.)\s*(\d{4}-\d{2}-\d{2})\b"#,
         options: [.caseInsensitive]
     )
 
