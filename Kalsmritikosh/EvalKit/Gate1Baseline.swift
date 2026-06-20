@@ -53,14 +53,25 @@ public enum Gate1Baseline {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Gate1Baseline-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: tempDir) }
+        // The temp dir is removed in `cleanup()` after we've awaited
+        // state.shutdown() — see the do/catch around the body below.
+        // Defer can't `await`, so we can't put the SQLite close there;
+        // it must run BEFORE the file is unlinked.
         let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
 
         let isolatedBookmarks = BookmarkStore()
         let state = AppState(bookmarks: isolatedBookmarks)
         await state.boot(databaseURL: isolatedDBURL)
 
+        // Tear the AppState (and its SQLite handle) down BEFORE the
+        // temp-dir file is unlinked. Called on every exit path.
+        @Sendable func cleanup(_ state: AppState) async {
+            await state.shutdown()
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
         guard case .ready = state.phase, let ingest = state.ingest else {
+            await cleanup(state)
             throw NSError(
                 domain: "Gate1Baseline",
                 code: 1,
@@ -69,6 +80,7 @@ public enum Gate1Baseline {
         }
         AtlasLog.app.info("Gate 1 baseline DB isolated at \(isolatedDBURL.path, privacy: .public)")
 
+        do {
         // Preflight: resolve a reasoning capability against the live
         // registry and log the outcome. Without this, the user only
         // discovers a misconfigured Ollama provider 5 minutes into the
@@ -172,7 +184,7 @@ public enum Gate1Baseline {
         let questionCount = (try? runner.loadQuestions().count) ?? 0
 
         AtlasLog.app.info("Gate 1 baseline complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
-        return Result(
+        let result = Result(
             reportURL: reportURL,
             retrievalProbeURL: retrievalProbeURL,
             coverageProbeURL: coverageProbeURL,
@@ -182,6 +194,12 @@ public enum Gate1Baseline {
             querySeconds: querySeconds,
             reasoningProviderID: reasoningProviderID
         )
+        await cleanup(state)
+        return result
+        } catch {
+            await cleanup(state)
+            throw error
+        }
     }
 
     /// Writes a per-file table covering every ingested fixture file:

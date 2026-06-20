@@ -60,6 +60,18 @@ public actor Database {
         }
     }
 
+    /// Deterministically close the SQLite handle. The eval harness
+    /// (Gate1Baseline) must call this *before* its `defer` removes the
+    /// temp-dir DB file — otherwise the file unlinks while the handle
+    /// is still open and macOS raises a `vnode unlinked while in use`
+    /// warning per open fd, and ongoing queries get `invalidated open
+    /// fd: N` errors. Idempotent: subsequent calls become no-ops.
+    public func close() {
+        guard let handle = rawHandle else { return }
+        sqlite3_close_v2(handle)
+        rawHandle = nil
+    }
+
     // MARK: - Exec / Query
 
     public func exec(_ sql: String) throws {

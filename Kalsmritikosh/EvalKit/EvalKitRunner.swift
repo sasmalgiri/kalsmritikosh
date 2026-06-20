@@ -103,6 +103,16 @@ public struct EvalKitRunner {
         }
 
         for q in questions {
+            // G2-1.5 — eval questions are independent. Without this
+            // reset the in-memory SessionProfile accumulates entities
+            // across all 16 turns, and by question N the reranker
+            // prompt's MENTIONED THIS SESSION line is polluted with
+            // entities from prior unrelated questions — driving
+            // multihop recall down because the model anchors on the
+            // wrong context. Real users keep the session for legitimate
+            // follow-ups; the eval harness is the only caller that
+            // resets per-question.
+            await brain.resetSession()
             let started = Date()
             let answer = await brain.answer(question: q.text)
             let latency = Date().timeIntervalSince(started)

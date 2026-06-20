@@ -41,10 +41,19 @@ public struct EvidenceVerifier: Verifier {
         "across the", "across all"
     ]
 
+    /// Question text matches an aggregation shape ("all X", "how many",
+    /// "list all", "across the…"). Drives both the generous global
+    /// citation cap AND the G2-1.5 reranker bypass — aggregation needs
+    /// breadth of coverage, but the reranker scores relevance, so it
+    /// systematically drops the long tail of legitimate evidence.
+    private static func isAggregationShape(_ intent: UserIntent) -> Bool {
+        let q = " " + intent.rawQuestion.lowercased() + " "
+        return aggregationShapeKeywords.contains(where: { q.contains($0) })
+    }
+
     /// Choose the per-answer global cap by intent kind + question shape.
     private static func intentCitationCap(_ intent: UserIntent) -> Int {
-        let q = " " + intent.rawQuestion.lowercased() + " "
-        if aggregationShapeKeywords.contains(where: { q.contains($0) }) {
+        if isAggregationShape(intent) {
             return aggregationCitationCap
         }
         switch intent.kind {
@@ -59,6 +68,16 @@ public struct EvidenceVerifier: Verifier {
 
     public let minimumConfidence: Confidence
     public let minimumCitations: Int
+    /// Answerability gate (inspired by chatmind-pipeline's ANSWERABILITY_MIN_SCORE).
+    /// When the BEST retrieval score across all chunks is below this floor,
+    /// the verifier refuses before running the LLM reranker — saves wasted
+    /// latency AND prevents weak evidence from producing a confidently-
+    /// worded answer the user shouldn't trust.
+    ///
+    /// The fixture's typical max score is ~0.86. A real-archive query that
+    /// finds nothing relevant typically tops out under 0.20. Default sits
+    /// well below the fixture floor so eval behavior is unchanged.
+    public let answerabilityMinRetrievalScore: Double
     private let engine: any ConfidenceEngine
     /// Returns the fraction of the user's archive past Tier-1 ingest
     /// (chunks + entities + events present). The Engine multiplies
@@ -80,6 +99,11 @@ public struct EvidenceVerifier: Verifier {
     /// supports `.reranking` — so plumbing this through doesn't risk
     /// regression on a heuristic-floor run.
     private let reranker: Reranker?
+    /// G2-1.5 — optional. When present, the verifier reads the session
+    /// snapshot at verify() time and hands it to the reranker so the
+    /// model can resolve pronouns / topic returns against recent turns.
+    /// Nil → reranker prompt falls back to the G2-1 question-only form.
+    private let sessionProfile: SessionProfile?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -87,7 +111,9 @@ public struct EvidenceVerifier: Verifier {
         engine: any ConfidenceEngine = DefaultConfidenceEngine(),
         ingestCoverageProvider: (@Sendable () async -> Double)? = nil,
         entityQualityGate: EntityQualityGate? = nil,
-        reranker: Reranker? = nil
+        reranker: Reranker? = nil,
+        sessionProfile: SessionProfile? = nil,
+        answerabilityMinRetrievalScore: Double = 0.20
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -95,6 +121,8 @@ public struct EvidenceVerifier: Verifier {
         self.ingestCoverageProvider = ingestCoverageProvider
         self.entityQualityGate = entityQualityGate
         self.reranker = reranker
+        self.sessionProfile = sessionProfile
+        self.answerabilityMinRetrievalScore = answerabilityMinRetrievalScore
     }
 
     public func verify(
@@ -132,6 +160,27 @@ public struct EvidenceVerifier: Verifier {
                 scoreByObject[id] = rc.score
             }
         }
+        // Answerability gate (chatmind-inspired). When retrieval clearly
+        // didn't find anything similar to the question, refuse early
+        // BEFORE running the LLM reranker. This both saves an Ollama
+        // round-trip on hopeless queries AND prevents the model from
+        // ranking noise into a confident-sounding answer.
+        let maxRetrievalScore: Double = scoreByObject.values.max() ?? 0
+        if maxRetrievalScore < answerabilityMinRetrievalScore {
+            let intentKindRaw = intent.kind.rawValue
+            return VerifiedAnswer(
+                body: "Atlas can't ground an answer to that yet.",
+                answerText: nil,
+                intentKind: intentKindRaw,
+                citations: [],
+                confidence: report.combined,
+                contradictions: report.contradictions,
+                refused: true,
+                refusalReason: "Retrieval scores too low (max=\(String(format: "%.3f", maxRetrievalScore)) < \(String(format: "%.2f", answerabilityMinRetrievalScore))) — no confident match in archive.",
+                report: report
+            )
+        }
+
         // Build citations with: per-claim cap (top-N by score), dedupe
         // across the whole answer by objectID (first claim that wins
         // a given object owns its snippet), and an intent-aware global
@@ -163,7 +212,26 @@ public struct EvidenceVerifier: Verifier {
         // `scoreByObject` ordering and ensuring no regression on the
         // heuristic floor.
         var rerankByObject: [KnowledgeObject.ID: Double] = [:]
-        if let reranker, !citations.isEmpty {
+        // Runtime A/B/C toggle (KALSMRITIKOSH_RERANKER):
+        //   off    → skip reranker entirely (sort by scoreByObject only)
+        //   embed  → Apple NLEmbedding bi-encoder (deterministic, sandbox-safe)
+        //   <else> → default Ollama prompted scoring (current path)
+        // The Ollama path is non-deterministic and not App-Store-shippable;
+        // `embed` and `off` are the diagnostic baselines while UPDATE_17B's
+        // Core ML cross-encoder is being built.
+        let rerankerMode = ProcessInfo.processInfo
+            .environment["KALSMRITIKOSH_RERANKER"]?
+            .lowercased() ?? ""
+        let rerankerDisabled = (rerankerMode == "off")
+        let useEmbeddingReranker = (rerankerMode == "embed")
+        // G2-1.5 — bypass the reranker for aggregation-shape questions
+        // ("list all", "how many", "across the…"). The reranker scores
+        // relevance and would drop the long tail of legitimate evidence
+        // that aggregation answers need for coverage. Leaving
+        // rerankByObject empty makes the survivor sort fall back to
+        // `scoreByObject`, which is what aggregation wants.
+        let bypassRerank = Self.isAggregationShape(intent) || rerankerDisabled
+        if !citations.isEmpty, !bypassRerank {
             let snippets = citations.map { citation -> String in
                 // Prefer a chunk text snippet for the candidate. The
                 // citation's own `snippet` (a claim statement) is a
@@ -176,7 +244,41 @@ public struct EvidenceVerifier: Verifier {
                     .chunk.text
                 return String((chunkText ?? citation.snippet).prefix(400))
             }
-            let scores = await reranker.score(question: intent.rawQuestion, candidates: snippets)
+            let scores: [Double]
+            if useEmbeddingReranker {
+                // Apple-native bi-encoder. Deterministic. No external
+                // dep, no Ollama, no LLM noise. Lower ceiling than a
+                // cross-encoder but a strict improvement over the
+                // current Ollama prompted-scoring path for evals.
+                let embedRanker = EmbeddingReranker()
+                scores = await embedRanker.score(
+                    question: intent.rawQuestion,
+                    candidates: snippets
+                )
+            } else if let reranker {
+                // Default: Ollama LLM prompted scoring with intent context.
+                let snapshot = await sessionProfile?.snapshot()
+                let recentTurns: [String] = snapshot
+                    .map { $0.recentTurns.reversed().map(\.rawQuestion) }
+                    ?? []
+                let mentioned: [String] = snapshot?.mentionedEntities ?? []
+                let context = Reranker.Context(
+                    intentKind: intent.kind.rawValue,
+                    questionShape: Reranker.questionShape(intent.rawQuestion),
+                    keyEntities: intent.entityHints,
+                    recentTurns: recentTurns,
+                    mentionedEntities: mentioned
+                )
+                scores = await reranker.score(
+                    question: intent.rawQuestion,
+                    context: context,
+                    candidates: snippets
+                )
+            } else {
+                // No reranker available; leave rerankByObject empty
+                // so the sort falls back to scoreByObject.
+                scores = []
+            }
             for (i, citation) in citations.enumerated() where i < scores.count {
                 rerankByObject[citation.objectID] = scores[i]
             }

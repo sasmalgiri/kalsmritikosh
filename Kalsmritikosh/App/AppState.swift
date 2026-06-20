@@ -205,6 +205,14 @@ public final class AppState {
             // available the Reranker returns identity scores and the
             // verifier falls back to pure scoreByObject — no regression.
             let reranker = Reranker(capabilities: capabilities)
+            // G2-1.5 — per-session, in-memory question-meaning context.
+            // MasterBrain records each turn; EvidenceVerifier reads the
+            // snapshot at verify() time and hands it to the reranker so
+            // follow-ups ("the same supplier", "by when?") resolve
+            // against the prior turn instead of being re-interpreted
+            // from scratch. Nothing here is persisted — privacy stays
+            // on the ledger.
+            let sessionProfile = SessionProfile()
             // T11 close-out — give the verifier a real ingest-coverage
             // readout: fraction of registered files that have at least one
             // KnowledgeObject in the store. While ingest is incomplete the
@@ -219,7 +227,8 @@ public final class AppState {
                     return min(1.0, max(0.0, raw))
                 },
                 entityQualityGate: EntityQualityGate.bundled(),
-                reranker: reranker
+                reranker: reranker,
+                sessionProfile: sessionProfile
             )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,
@@ -242,7 +251,8 @@ public final class AppState {
                 executor: executor,
                 capabilities: capabilities,
                 verifier: verifier,
-                weeklyBriefing: weeklyBriefing
+                weeklyBriefing: weeklyBriefing,
+                sessionProfile: sessionProfile
             )
 
             // ── Ingestion ────────────────────────────────────────────
@@ -574,5 +584,18 @@ public final class AppState {
             }
         }
         return count
+    }
+
+    /// Deterministically release every resource the boot() flow opened.
+    /// The eval harness (Gate1Baseline) MUST call this before its
+    /// `defer` removes the temp directory; otherwise the SQLite handle
+    /// stays open against an unlinked file and macOS raises
+    /// `vnode unlinked while in use` / `invalidated open fd: N` per
+    /// open descriptor. Idempotent: safe to call more than once.
+    public func shutdown() async {
+        watcherTask?.cancel()
+        watcherTask = nil
+        await database?.close()
+        phase = .starting
     }
 }

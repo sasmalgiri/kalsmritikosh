@@ -23,6 +23,11 @@ public actor MasterBrain {
     private let capabilities: CapabilityRegistry?
     private let verifier: Verifier?
     private let weeklyBriefing: WeeklyBriefingGenerator?
+    /// G2-1.5 — shared with the EvidenceVerifier. MasterBrain records
+    /// each turn here right after intent detection; the verifier reads
+    /// the snapshot when scoring citations so follow-ups inherit the
+    /// prior turn's entities + topic frame.
+    private let sessionProfile: SessionProfile?
 
     public init(
         intentDetector: IntentDetector? = nil,
@@ -31,7 +36,8 @@ public actor MasterBrain {
         executor: ParallelExecutor? = nil,
         capabilities: CapabilityRegistry? = nil,
         verifier: Verifier? = nil,
-        weeklyBriefing: WeeklyBriefingGenerator? = nil
+        weeklyBriefing: WeeklyBriefingGenerator? = nil,
+        sessionProfile: SessionProfile? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -40,6 +46,16 @@ public actor MasterBrain {
         self.capabilities = capabilities
         self.verifier = verifier
         self.weeklyBriefing = weeklyBriefing
+        self.sessionProfile = sessionProfile
+    }
+
+    /// Clear the in-memory SessionProfile. The eval harness calls this
+    /// between independent questions so question N+1 isn't scored
+    /// against entities from questions 1..N. In real usage the session
+    /// IS persistent across follow-ups, so callers MUST NOT invoke
+    /// this in the user-facing flow.
+    public func resetSession() async {
+        await sessionProfile?.reset()
     }
 
     public func answer(question: String) async -> VerifiedAnswer {
@@ -72,6 +88,18 @@ public actor MasterBrain {
                 refusalReason: "Intent detection failed: \(error)"
             )
         }
+
+        // G2-1.5 — record this turn before anything else runs. The
+        // verifier reads the snapshot during citation reranking, so
+        // even on this very turn the prompt sees the current entities
+        // (helpful when the same name appears in retrieval candidates).
+        // Failed intent detection above skips the record on purpose —
+        // we only want well-formed turns in the session log.
+        await sessionProfile?.recordTurn(
+            question: question,
+            intentKind: intent.kind.rawValue,
+            entityHints: intent.entityHints
+        )
 
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
