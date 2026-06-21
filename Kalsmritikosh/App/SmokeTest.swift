@@ -35,14 +35,20 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     AtlasLog.app.info("ProjectDelta smoke test starting")
 
     // 1. Use a fresh isolated bookmark store + fresh in-tmp AppState.
+    // CRITICAL: boot must receive an isolated databaseURL — without it,
+    // AppState falls back to the user's PRODUCTION sqlite in the app
+    // container, and the T13 / brain / distiller passes run against
+    // their real archive (observed: 549 memory rows = ~hours of work
+    // before the smoke ever finishes). Mirror Gate1Baseline's pattern.
     let tempDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("AtlasSmoke-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
+    let isolatedDBURL = tempDir.appendingPathComponent("smoke.sqlite", isDirectory: false)
     let isolatedBookmarks = BookmarkStore()
     let state = AppState(bookmarks: isolatedBookmarks)
-    await state.boot()
+    await state.boot(databaseURL: isolatedDBURL)
 
     guard case .ready = state.phase,
           let ingest = state.ingest,
