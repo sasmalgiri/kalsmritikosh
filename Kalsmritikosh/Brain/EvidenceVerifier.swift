@@ -51,6 +51,84 @@ public struct EvidenceVerifier: Verifier {
         return aggregationShapeKeywords.contains(where: { q.contains($0) })
     }
 
+    /// G2-MMR — Maximal Marginal Relevance lambda. 0.7 = 70% weight on
+    /// relevance, 30% on diversity. chatmind-pipeline's validated value.
+    /// Lower → more diversity / less relevance pull; higher → vice-versa.
+    private static let mmrLambda = 0.7
+
+    /// MMR pass over reranked citation survivors.
+    ///
+    /// Greedy selection: at each step, pick the candidate that
+    /// maximizes  λ * relevance − (1 − λ) * maxSimilarityToAlreadyPicked.
+    /// Relevance combines reranker + retrieval scores. Similarity is
+    /// token-Jaccard on snippets — cheap, deterministic, no embedder
+    /// needed. Stops when `limit` citations are picked.
+    ///
+    /// Fixes the aggregation pile-up pattern (UPDATE_18 §2): without
+    /// MMR, a thread of 4 near-identical supplier emails monopolizes
+    /// the citation cap and crowds out the contract/amendment that
+    /// completes the answer.
+    private static func applyMMR(
+        citations: [VerifiedAnswer.Citation],
+        rerankByObject: [KnowledgeObject.ID: Double],
+        scoreByObject: [KnowledgeObject.ID: Double],
+        lambda: Double,
+        limit: Int
+    ) -> [VerifiedAnswer.Citation] {
+        guard citations.count > limit else { return citations }
+
+        // Pre-tokenize each snippet once. Short tokens (<3 chars) are
+        // dropped to suppress stop-word noise; lowercasing makes the
+        // Jaccard case-insensitive.
+        let tokensByID: [KnowledgeObject.ID: Set<String>] = Dictionary(
+            uniqueKeysWithValues: citations.map { c in
+                let toks = c.snippet
+                    .lowercased()
+                    .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                    .filter { $0.count >= 3 }
+                return (c.objectID, Set(toks))
+            }
+        )
+
+        func relevance(_ c: VerifiedAnswer.Citation) -> Double {
+            let r = rerankByObject[c.objectID] ?? 0.5
+            let s = scoreByObject[c.objectID] ?? 0.5
+            return (r + s) / 2
+        }
+
+        func jaccard(_ a: Set<String>, _ b: Set<String>) -> Double {
+            if a.isEmpty && b.isEmpty { return 0 }
+            let inter = a.intersection(b).count
+            let union = a.union(b).count
+            return union == 0 ? 0 : Double(inter) / Double(union)
+        }
+
+        var pool = citations
+        var picked: [VerifiedAnswer.Citation] = []
+        picked.reserveCapacity(limit)
+
+        while !pool.isEmpty && picked.count < limit {
+            var bestIdx = 0
+            var bestScore = -Double.infinity
+            for (i, c) in pool.enumerated() {
+                let rel = relevance(c)
+                let cToks = tokensByID[c.objectID] ?? []
+                var maxSim = 0.0
+                for p in picked {
+                    let sim = jaccard(cToks, tokensByID[p.objectID] ?? [])
+                    if sim > maxSim { maxSim = sim }
+                }
+                let score = lambda * rel - (1 - lambda) * maxSim
+                if score > bestScore {
+                    bestScore = score
+                    bestIdx = i
+                }
+            }
+            picked.append(pool.remove(at: bestIdx))
+        }
+        return picked
+    }
+
     /// Choose the per-answer global cap by intent kind + question shape.
     private static func intentCitationCap(_ intent: UserIntent) -> Int {
         if isAggregationShape(intent) {
@@ -284,23 +362,21 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
-        // UPDATE_14 — apply the intent-aware global cap on distinct
-        // documents. Survivor ranking is now lexicographic on
-        // (rerankScore desc, scoreByObject desc) so the reranker takes
-        // first say but never erases retrieval-score tiebreaks. The
-        // answer-bearing top chunk (e.g. contract.md @ 0.863) keeps
-        // winning when the reranker has no opinion (identity = 0.5
-        // across the board → falls back to scoreByObject).
+        // UPDATE_14 + G2-MMR — apply the intent-aware global cap on
+        // distinct documents. The pre-MMR rule was a pure lexicographic
+        // sort on (rerankScore desc, scoreByObject desc). MMR adds a
+        // diversity term so aggregation/multihop answers stop piling
+        // up many duplicates of the same email thread — the
+        // pile-up pattern noted in UPDATE_18 §2 (Revision D).
         let globalCap = Self.intentCitationCap(intent)
         if citations.count > globalCap {
-            citations = Array(citations.sorted { lhs, rhs in
-                let lr = rerankByObject[lhs.objectID] ?? 0.5
-                let rr = rerankByObject[rhs.objectID] ?? 0.5
-                if lr != rr { return lr > rr }
-                let ls = scoreByObject[lhs.objectID] ?? -.infinity
-                let rs = scoreByObject[rhs.objectID] ?? -.infinity
-                return ls > rs
-            }.prefix(globalCap))
+            citations = Self.applyMMR(
+                citations: citations,
+                rerankByObject: rerankByObject,
+                scoreByObject: scoreByObject,
+                lambda: Self.mmrLambda,
+                limit: globalCap
+            )
         }
 
         let intentKindRaw = intent.kind.rawValue
