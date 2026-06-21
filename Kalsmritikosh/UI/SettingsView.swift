@@ -19,6 +19,9 @@ public struct SettingsView: View {
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
     @State private var baselineReportURL: URL?
+    @State private var smokeRunning = false
+    @State private var smokeStatus: String?
+    @State private var smokeFailures: [String] = []
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -78,6 +81,58 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Run the in-process smoke test. Boots an isolated AppState into a temp directory, ingests the bundled ProjectDelta fixture, runs every T1–T13 + G2-TEMPORAL + G2-1.5 assertion, and reports pass/fail counts. Your real database is untouched.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runSmokeTest() }
+                } label: {
+                    if smokeRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Run Smoke Test", systemImage: "checkmark.circle")
+                    }
+                }
+                .disabled(smokeRunning)
+            }
+            if let status = smokeStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            if !smokeFailures.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(smokeFailures.enumerated()), id: \.offset) { _, line in
+                        Text("• \(line)")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(.leading, 8)
+            }
+        }
+    }
+
+    private func runSmokeTest() async {
+        smokeRunning = true
+        smokeStatus = "Booting isolated AppState + ingesting fixture…"
+        smokeFailures = []
+        defer { smokeRunning = false }
+        do {
+            let result = try await runProjectDeltaSmokeTest()
+            smokeFailures = result.assertionsFailed
+            smokeStatus = """
+            \(result.ok ? "✓ PASSED" : "✗ FAILED") — \(result.assertionsPassed.count) checks, \(result.assertionsFailed.count) failures
+            ingested: \(result.ingested) files · entities: \(result.entityCount) · events: \(result.eventCount) · memory: \(result.memoryObjectCount)
+            answer refused: \(result.answer.refused) · citations: \(result.answer.citations.count) · confidence: \(String(format: "%.2f", result.answer.confidence.value))
+            """
+        } catch {
+            smokeStatus = "✗ Threw: \(error)"
         }
     }
 
