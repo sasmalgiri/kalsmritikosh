@@ -325,13 +325,17 @@ public struct EvidenceVerifier: Verifier {
             }
             let scores: [Double]
             if useLadder {
-                // G2-RERANK-LADDER — composable cascade. Today the only
-                // built-in tier is HeuristicKeywordTier; future tiers
-                // (BM25 / Core ML cross-encoder / LLM) plug in via the
-                // RerankerTier protocol with no change here. The cascade
-                // applies fast-path skip when high-confidence survivors
-                // are already few enough to short-circuit expensive tiers.
-                let ladder = RerankerLadder(tiers: [HeuristicKeywordTier()])
+                // G2-RERANK-LADDER — composable cascade. Cheap tiers
+                // run first; the Core ML cross-encoder tier (Tier 3,
+                // costClass 50) returns nil when the .mlpackage isn't
+                // bundled yet, so the cascade gracefully falls back to
+                // the heuristic tier alone. When BGEReranker.mlpackage
+                // lands in Resources/ (UPDATE_17B), Tier 3 activates
+                // automatically — no code change here.
+                let ladder = RerankerLadder(tiers: [
+                    HeuristicKeywordTier(),
+                    CoreMLCrossEncoderTier()
+                ])
                 scores = await ladder.score(
                     question: intent.rawQuestion,
                     candidates: snippets

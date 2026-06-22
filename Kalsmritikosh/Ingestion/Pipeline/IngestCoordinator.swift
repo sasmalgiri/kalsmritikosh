@@ -729,7 +729,10 @@ public actor IngestCoordinator {
     /// at this point — no chunker overrides or extraction-hint usage
     /// is wired here yet (those land per-format in follow-on commits).
     private static let documentEnvironments: [any DocumentEnvironment] = [
-        EmailDocumentEnvironment()
+        EmailDocumentEnvironment(),
+        PDFDocumentEnvironment(),
+        SpreadsheetDocumentEnvironment(),
+        VideoDocumentEnvironment()
     ]
 
     /// G2-3 — Build a short doc-level context blurb prepended to each

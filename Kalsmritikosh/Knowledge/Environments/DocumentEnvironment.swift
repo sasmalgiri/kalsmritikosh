@@ -144,3 +144,111 @@ public struct EmailDocumentEnvironment: DocumentEnvironment {
         ["sender", "recipient", "thread_topic", "subject"]
     }
 }
+
+/// PDF environment — recognizes PDF/PPT/DOCX/MD KOs and lifts a
+/// detected document-class hint into metadata. Doesn't override the
+/// chunker today (the generic Chunker still applies). Future commits
+/// can add table-region detection and signature-block tagging.
+public struct PDFDocumentEnvironment: DocumentEnvironment {
+    public nonisolated let id = "env.pdf.pdfkit"
+    public nonisolated init() {}
+
+    public nonisolated func recognizes(_ object: KnowledgeObject) -> Bool {
+        let category = object.sourceType.category
+        return category == .document || category == .presentation
+    }
+
+    public nonisolated func extractStructuralMetadata(
+        from object: KnowledgeObject
+    ) async -> [String: AnyCodable] {
+        // Light heuristic: classify the doc-shape from content first
+        // 1KB. Future: PDFKit tables / images / signatures, mlmodel
+        // template classifier. Today's hints feed downstream prompts.
+        let preview = String(object.content.prefix(1500)).lowercased()
+        var docClass = "unknown"
+        if preview.contains("invoice") && (preview.contains("amount") || preview.contains("total")) {
+            docClass = "invoice"
+        } else if preview.contains("agreement") || preview.contains("party a") || preview.contains("party b") {
+            docClass = "contract"
+        } else if preview.contains("amendment") {
+            docClass = "amendment"
+        } else if preview.contains("receipt") {
+            docClass = "receipt"
+        } else if preview.contains("minutes") || preview.contains("attendees") {
+            docClass = "meeting_minutes"
+        }
+        return [
+            "env.pdf.detected_doc_class": AnyCodable(.string(docClass))
+        ]
+    }
+
+    public var extractionHints: [String] {
+        ["title", "date", "parties", "total", "line_items"]
+    }
+}
+
+/// Spreadsheet environment — recognizes CSV / XLSX / TSV. Provides
+/// header-row + column-type hints downstream extraction can use to
+/// avoid treating every cell as free text. Chunker override is the
+/// future addition; today the generic chunker still applies.
+public struct SpreadsheetDocumentEnvironment: DocumentEnvironment {
+    public nonisolated let id = "env.spreadsheet.tabular"
+    public nonisolated init() {}
+
+    public nonisolated func recognizes(_ object: KnowledgeObject) -> Bool {
+        object.sourceType.category == .spreadsheet
+    }
+
+    public nonisolated func extractStructuralMetadata(
+        from object: KnowledgeObject
+    ) async -> [String: AnyCodable] {
+        // First non-empty line is the canonical header row in most
+        // CSVs and XLSX-rendered-to-tab-separated layouts (which is
+        // what SpreadsheetLoader emits today).
+        let firstLine = object.content
+            .split(separator: "\n", maxSplits: 5, omittingEmptySubsequences: true)
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        guard !firstLine.isEmpty else { return [:] }
+        let columns = firstLine
+            .components(separatedBy: CharacterSet(charactersIn: ",\t|"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !columns.isEmpty else { return [:] }
+        return [
+            "env.spreadsheet.header_row": AnyCodable(.string(columns.joined(separator: " | "))),
+            "env.spreadsheet.column_count": AnyCodable(.int(Int64(columns.count)))
+        ]
+    }
+
+    public var extractionHints: [String] {
+        ["column_header", "row_label", "date", "amount", "category"]
+    }
+}
+
+/// Video environment — recognizes audio/video KOs. The actual
+/// transcription has already happened in the loader (SpeechTranscriber);
+/// this env tags the KO so downstream prompts know the body is a
+/// transcript and not native prose.
+public struct VideoDocumentEnvironment: DocumentEnvironment {
+    public nonisolated let id = "env.video.transcript"
+    public nonisolated init() {}
+
+    public nonisolated func recognizes(_ object: KnowledgeObject) -> Bool {
+        let cat = object.sourceType.category
+        return cat == .audio || cat == .video
+    }
+
+    public nonisolated func extractStructuralMetadata(
+        from object: KnowledgeObject
+    ) async -> [String: AnyCodable] {
+        [
+            "env.transcript.source_kind": AnyCodable(.string(object.sourceType.category.rawValue)),
+            "env.transcript.is_transcription": AnyCodable(.bool(true))
+        ]
+    }
+
+    public var extractionHints: [String] {
+        ["speaker", "topic", "duration", "decision", "action_item"]
+    }
+}
