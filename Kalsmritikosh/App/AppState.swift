@@ -76,9 +76,20 @@ public final class AppState {
 
     private var watcherTask: Task<Void, Never>?
 
-    public init(bookmarks: BookmarkStore = .shared) {
+    // G2-SWIFT6 — the previous signature had `bookmarks: BookmarkStore
+    // = .shared`. That default expression evaluates at the call site,
+    // where Swift 6 strict concurrency saw "main-actor-isolated static
+    // property cannot be referenced from a nonisolated context" even
+    // though every real call site is @MainActor. Splitting into two
+    // initialisers keeps the ergonomic default for the in-app case
+    // while letting tests/eval explicitly pass an isolated store.
+    public init(bookmarks: BookmarkStore) {
         self.bookmarks = bookmarks
         self.brain = MasterBrain()
+    }
+
+    public convenience init() {
+        self.init(bookmarks: BookmarkStore.shared)
     }
 
     public func boot(databaseURL: URL? = nil) async {
