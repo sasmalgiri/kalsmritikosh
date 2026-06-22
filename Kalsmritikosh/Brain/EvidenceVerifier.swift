@@ -297,9 +297,21 @@ public struct EvidenceVerifier: Verifier {
         // The Ollama path is non-deterministic and not App-Store-shippable;
         // `embed` and `off` are the diagnostic baselines while UPDATE_17B's
         // Core ML cross-encoder is being built.
-        let rerankerMode = ProcessInfo.processInfo
+        // Mode source priority (highest to lowest):
+        //   1. KALSMRITIKOSH_RERANKER process env (Xcode scheme arg)
+        //   2. UserDefaults key "KALSMRITIKOSH_RERANKER" (set via
+        //      `defaults write <bundle-id> KALSMRITIKOSH_RERANKER ladder`)
+        //   3. Default empty → Ollama path.
+        // The UserDefaults fallback lets us flip rerank modes without
+        // touching the Xcode scheme — useful when the scheme is
+        // auto-generated and has no on-disk XML to edit.
+        let envMode = ProcessInfo.processInfo
             .environment["KALSMRITIKOSH_RERANKER"]?
-            .lowercased() ?? ""
+            .lowercased()
+        let defaultsMode = UserDefaults.standard
+            .string(forKey: "KALSMRITIKOSH_RERANKER")?
+            .lowercased()
+        let rerankerMode = envMode ?? defaultsMode ?? ""
         let rerankerDisabled = (rerankerMode == "off")
         let useEmbeddingReranker = (rerankerMode == "embed")
         let useLadder = (rerankerMode == "ladder")
