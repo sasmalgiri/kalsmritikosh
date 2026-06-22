@@ -347,6 +347,17 @@ public actor IngestCoordinator {
     ) async throws -> ProcessedKO {
         var meta = rawObject.metadata
         meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
+        // G2-ENVIRONMENTS — let the format-specific environment lift
+        // structural facts BEFORE generic entity / event extraction
+        // runs. EmailDocumentEnvironment is the only one wired today;
+        // future PDFDocumentEnvironment / SpreadsheetDocumentEnvironment
+        // plug in the same way. Additive only — no fields are removed.
+        for env in Self.documentEnvironments where env.recognizes(rawObject) {
+            let extra = await env.extractStructuralMetadata(from: rawObject)
+            for (k, v) in extra {
+                meta[k] = v
+            }
+        }
         let object = KnowledgeObject(
             id: rawObject.id,
             sourceFile: rawObject.sourceFile,
@@ -629,6 +640,15 @@ public actor IngestCoordinator {
             }
         }
     }
+
+    /// G2-ENVIRONMENTS — registered DocumentEnvironment adapters,
+    /// applied in order. The first one(s) that `recognizes(_:)` the
+    /// raw object run; outputs merge into KO metadata. Pure additive
+    /// at this point — no chunker overrides or extraction-hint usage
+    /// is wired here yet (those land per-format in follow-on commits).
+    private static let documentEnvironments: [any DocumentEnvironment] = [
+        EmailDocumentEnvironment()
+    ]
 
     /// G2-3 — Build a short doc-level context blurb prepended to each
     /// chunk at embedding time. Pure: derives from KO metadata + first

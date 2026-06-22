@@ -302,6 +302,7 @@ public struct EvidenceVerifier: Verifier {
             .lowercased() ?? ""
         let rerankerDisabled = (rerankerMode == "off")
         let useEmbeddingReranker = (rerankerMode == "embed")
+        let useLadder = (rerankerMode == "ladder")
         // G2-1.5 — bypass the reranker for aggregation-shape questions
         // ("list all", "how many", "across the…"). The reranker scores
         // relevance and would drop the long tail of legitimate evidence
@@ -323,7 +324,19 @@ public struct EvidenceVerifier: Verifier {
                 return String((chunkText ?? citation.snippet).prefix(400))
             }
             let scores: [Double]
-            if useEmbeddingReranker {
+            if useLadder {
+                // G2-RERANK-LADDER — composable cascade. Today the only
+                // built-in tier is HeuristicKeywordTier; future tiers
+                // (BM25 / Core ML cross-encoder / LLM) plug in via the
+                // RerankerTier protocol with no change here. The cascade
+                // applies fast-path skip when high-confidence survivors
+                // are already few enough to short-circuit expensive tiers.
+                let ladder = RerankerLadder(tiers: [HeuristicKeywordTier()])
+                scores = await ladder.score(
+                    question: intent.rawQuestion,
+                    candidates: snippets
+                )
+            } else if useEmbeddingReranker {
                 // Apple-native bi-encoder. Deterministic. No external
                 // dep, no Ollama, no LLM noise. Lower ceiling than a
                 // cross-encoder but a strict improvement over the
