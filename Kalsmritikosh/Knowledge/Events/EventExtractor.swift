@@ -102,7 +102,94 @@ public struct RuleEventExtractor: EventExtractor {
             }
         }
 
+        // G2-COMMITMENTS-REFRESH — chatmind-style commitment detection.
+        // Adds taskAssigned events for explicit intentions ("I will…",
+        // "we plan to…", "action item:…") and lifts the date OUT of the
+        // commitment phrase when "by <date>" is present, rather than
+        // pinning everything to the KO's primaryDate. Cap at 5 per KO
+        // so a chatty thread can't flood the timeline.
+        let nsContent = object.content as NSString
+        let fullRange = NSRange(location: 0, length: nsContent.length)
+        var commitmentEvents = 0
+        for (rx, label) in Self.commitmentPatterns {
+            guard let rx else { continue }
+            for m in rx.matches(in: object.content, range: fullRange) {
+                if commitmentEvents >= 5 { break }
+                if m.numberOfRanges < 2 { continue }
+                let phrase = nsContent.substring(with: m.range(at: 1))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard phrase.count >= 5 else { continue }
+
+                let (phraseDate, dueConfidence) = Self.extractDueDate(
+                    from: phrase,
+                    base: primaryDate
+                )
+                events.append(.init(
+                    kind: .taskAssigned,
+                    date: phraseDate ?? primaryDate,
+                    title: "Commitment: \(label)",
+                    summary: phrase,
+                    entityIDs: entityIDs,
+                    sourceObjectID: object.id,
+                    confidence: .medium,
+                    dateConfidence: dueConfidence ?? (dateConfidence * 0.8)
+                ))
+                commitmentEvents += 1
+            }
+            if commitmentEvents >= 5 { break }
+        }
+
         return events
+    }
+
+    // MARK: - G2-COMMITMENTS-REFRESH helpers
+
+    /// Intention / action patterns ported from chatmind-pipeline's
+    /// `commitment_extract.py`. Capturing group 1 is the commitment
+    /// content; the label classifies the speaker-stance.
+    private static let commitmentPatterns: [(NSRegularExpression?, String)] = [
+        (try? NSRegularExpression(
+            pattern: #"\b(?:i\s+will|we\s+will|i'll|we'll)\s+([^.!?\n]{5,160})"#,
+            options: [.caseInsensitive]
+        ), "stated intent"),
+        (try? NSRegularExpression(
+            pattern: #"\b(?:i'm|i\s+am|we're|we\s+are)\s+(?:going|planning)\s+to\s+([^.!?\n]{5,160})"#,
+            options: [.caseInsensitive]
+        ), "near-term plan"),
+        (try? NSRegularExpression(
+            pattern: #"\b(?:i\s+plan\s+to|we\s+plan\s+to|i\s+intend\s+to|we\s+need\s+to|i\s+propose|we\s+propose)\s+([^.!?\n]{5,160})"#,
+            options: [.caseInsensitive]
+        ), "plan"),
+        (try? NSRegularExpression(
+            pattern: #"(?:^|\n)\s*(?:action\s*item|owner|todo|action|next\s*step)s?\s*[:\-]\s*([^.!?\n]{5,160})"#,
+            options: [.caseInsensitive]
+        ), "action item")
+    ]
+
+    /// Pull a "by <date>" or "by <weekday> at <time>" sub-phrase out of
+    /// a commitment string. Returns (extractedDate, confidence) — the
+    /// confidence is 0.75 for explicit due-date matches, falling back to
+    /// nil when no due-by phrase fires.
+    private static let dueByRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\bby\s+([A-Za-z]+\s+\d{1,2}(?:,?\s+\d{4})?|next\s+\w+|tomorrow|today|end\s+of\s+(?:week|month|quarter))\b"#,
+        options: [.caseInsensitive]
+    )
+
+    private static func extractDueDate(
+        from phrase: String,
+        base: Date
+    ) -> (Date?, Double?) {
+        guard let rx = dueByRegex else { return (nil, nil) }
+        let ns = phrase as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        guard let m = rx.firstMatch(in: phrase, range: range),
+              m.numberOfRanges >= 2
+        else { return (nil, nil) }
+        let dueText = ns.substring(with: m.range(at: 1))
+        if let match = DateGrammar.parse(dueText, baseDate: base) {
+            return (match.timeframe.start, 0.75)
+        }
+        return (nil, nil)
     }
 
     /// RFC 2822 / 5322 date parser for "Date:" headers.

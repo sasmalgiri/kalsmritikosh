@@ -922,6 +922,39 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // G2-COMMITMENTS-REFRESH — chatmind intention patterns produce
+    // taskAssigned events with date lifted from "by <date>" phrasing.
+    do {
+        let extractor = RuleEventExtractor()
+        let ko = KnowledgeObject(
+            sourceFile: URL(fileURLWithPath: "/tmp/g2-commit.txt"),
+            sourceType: .txt,
+            content: """
+            Hi team — quick recap from today's call:
+            I will send the revised contract by Friday March 6, 2026.
+            We plan to finalize the supplier list next week.
+            Action item: Maria to share the invoice by tomorrow.
+            """,
+            confidence: .high
+        )
+        let events = try await extractor.extractEvents(from: ko, chunks: [], entities: [])
+        let commitments = events.filter { $0.kind == .taskAssigned }
+        if commitments.count >= 3 {
+            passed.append("G2-COMMIT: \(commitments.count) taskAssigned events from 3 intention phrases")
+        } else {
+            failed.append("G2-COMMIT: expected ≥3 taskAssigned events, got \(commitments.count)")
+        }
+        // At least one commitment should carry a due-by date (0.75 conf)
+        // — the "by Friday March 6, 2026" phrase.
+        let dueDated = commitments.first { abs($0.dateConfidence - 0.75) < 0.01 }
+        if dueDated != nil {
+            passed.append("G2-COMMIT: dueDate lifted from 'by <date>' phrase (confidence 0.75)")
+        } else {
+            let confs = commitments.map(\.dateConfidence)
+            failed.append("G2-COMMIT: no commitment carried due-date confidence 0.75 (confs=\(confs))")
+        }
+    }
+
     // T11 — Quality strip renders the expected fields and handles a
     // contradictory fixture (Conflicts: 1).
     do {
