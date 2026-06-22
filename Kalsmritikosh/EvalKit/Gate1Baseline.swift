@@ -262,17 +262,16 @@ public enum Gate1Baseline {
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
-            if let distiller = state.memoryDistiller, let entities = state.entities {
-                let projects = (try? await entities.list(kind: .project, limit: 25))?.map(\.value) ?? []
-                let orgs = (try? await entities.list(kind: .organization, limit: 25))?.map(\.value) ?? []
-                let people = (try? await entities.list(kind: .person, limit: 25))?.map(\.value) ?? []
-                let candidates = Set(projects + orgs + people)
-                for value in candidates {
-                    for kind in MemoryObject.SubjectKind.allCases {
-                        _ = try? await distiller.distill(.init(kind: kind, identifier: value))
-                    }
-                }
-            }
+            // Fast Eval deliberately SKIPS the memory distill loop.
+            // The full Gate 1 baseline calls distill across up to 75
+            // entities × 5 subject kinds = ~375 LLM round-trips before
+            // the first question runs — that's the dominant cost on
+            // top of the per-question latency. The distilled memory
+            // layer is the SAME across A/B/C reranker modes, so
+            // skipping it doesn't bias the diff signal Fast Eval is
+            // designed to produce. The Memory retrieval layer simply
+            // returns empty for these runs — Timeline/Entity/FTS/
+            // Vector layers still answer.
 
             let documentsDir = try FileManager.default.url(
                 for: .documentDirectory,
