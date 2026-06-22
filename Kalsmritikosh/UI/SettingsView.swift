@@ -22,6 +22,9 @@ public struct SettingsView: View {
     @State private var smokeRunning = false
     @State private var smokeStatus: String?
     @State private var smokeFailures: [String] = []
+    @State private var fastEvalRunning = false
+    @State private var fastEvalStatus: String?
+    @State private var fastEvalReportURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -84,6 +87,38 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
+            Text("Fast Eval — runs only 4 representative questions (1 per class). ~5 minutes vs ~20. Directional signal only; not a Gate 1 verdict.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runFastEval() }
+                } label: {
+                    if fastEvalRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Run Fast Eval (4 questions)", systemImage: "bolt.fill")
+                    }
+                }
+                .disabled(fastEvalRunning)
+                if let url = fastEvalReportURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                }
+            }
+            if let status = fastEvalStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
             Text("Run the in-process smoke test. Boots an isolated AppState into a temp directory, ingests the bundled ProjectDelta fixture, runs every T1–T13 + G2-TEMPORAL + G2-1.5 assertion, and reports pass/fail counts. Your real database is untouched.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -115,6 +150,29 @@ public struct SettingsView: View {
                 }
                 .padding(.leading, 8)
             }
+        }
+    }
+
+    private func runFastEval() async {
+        fastEvalRunning = true
+        fastEvalStatus = "Booting isolated AppState + running 4 questions…"
+        defer { fastEvalRunning = false }
+        do {
+            let result = try await Gate1Baseline.generateFast()
+            fastEvalReportURL = result.reportURL
+            let providerLine = result.reasoningProviderID.map {
+                "Reasoning provider: \($0)"
+            } ?? "Reasoning provider: none (heuristic floor)"
+            fastEvalStatus = """
+            ✓ Report written
+            \(result.reportURL.path)
+            \(providerLine)
+            ingested fixtures: \(result.ingestedFixtureFiles) in \(String(format: "%.1f", result.ingestSeconds))s
+            questions evaluated: \(result.questionCount) in \(String(format: "%.1f", result.querySeconds))s
+            """
+        } catch {
+            fastEvalReportURL = nil
+            fastEvalStatus = "✗ Failed: \(error)"
         }
     }
 

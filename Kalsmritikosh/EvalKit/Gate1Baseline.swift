@@ -202,6 +202,125 @@ public enum Gate1Baseline {
         }
     }
 
+    /// Fast Eval — same isolated-boot + ingest + distill sequence as
+    /// `generate()`, but the harness runs only 4 representative questions
+    /// (1 per class) instead of all 16. Skips the coverage + retrieval
+    /// probes since those don't change between runs.
+    ///
+    /// Use for tight iteration during code changes ("did MMR help?").
+    /// NOT a substitute for the full `generate()` — sample is too small
+    /// to be a verdict on Gate 1 targets; this is a directional diff tool.
+    ///
+    /// Chosen IDs (one per class):
+    /// - L1 lookup (the canonical owner question)
+    /// - A3 aggregation (exercises MMR + aggregation-bypass)
+    /// - T3 temporal (has shown variance across reranker modes)
+    /// - M1 multihop (the smoke test's canonical question)
+    @MainActor
+    public static func generateFast() async throws -> Result {
+        AtlasLog.app.info("Gate 1 FAST baseline starting")
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Gate1Fast-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
+        let isolatedBookmarks = BookmarkStore()
+        let state = AppState(bookmarks: isolatedBookmarks)
+        await state.boot(databaseURL: isolatedDBURL)
+
+        @Sendable func cleanup(_ state: AppState) async {
+            await state.shutdown()
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        guard case .ready = state.phase, let ingest = state.ingest else {
+            await cleanup(state)
+            throw NSError(
+                domain: "Gate1Baseline",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "AppState failed to boot."]
+            )
+        }
+
+        do {
+            let reasoningProviderID: String? = await {
+                guard let caps = state.capabilities else { return nil }
+                let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "gate1.fast.preflight")
+                do { return try await caps.resolve(spec).id } catch { return nil }
+            }()
+
+            let ingestStarted = Date()
+            let fixtureURLs = try Self.fixtureURLs()
+            var ingested = 0
+            for url in fixtureURLs {
+                do {
+                    _ = try await ingest.ingest(fileAt: url)
+                    ingested += 1
+                } catch {
+                    AtlasLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
+            }
+            let ingestSeconds = Date().timeIntervalSince(ingestStarted)
+
+            if let distiller = state.memoryDistiller, let entities = state.entities {
+                let projects = (try? await entities.list(kind: .project, limit: 25))?.map(\.value) ?? []
+                let orgs = (try? await entities.list(kind: .organization, limit: 25))?.map(\.value) ?? []
+                let people = (try? await entities.list(kind: .person, limit: 25))?.map(\.value) ?? []
+                let candidates = Set(projects + orgs + people)
+                for value in candidates {
+                    for kind in MemoryObject.SubjectKind.allCases {
+                        _ = try? await distiller.distill(.init(kind: kind, identifier: value))
+                    }
+                }
+            }
+
+            let documentsDir = try FileManager.default.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
+            try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+
+            guard let objects = state.objects else {
+                throw NSError(
+                    domain: "Gate1Baseline",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "KnowledgeObjectRepository not booted."]
+                )
+            }
+
+            let queryStarted = Date()
+            let runner = EvalKitRunner()
+            let reportURL = try await runner.runSubset(
+                brain: state.brain,
+                objects: objects,
+                ids: ["L1", "A3", "T3", "M1"],
+                outputDir: reportDir,
+                reportName: "eval-report-fast.md"
+            )
+            let querySeconds = Date().timeIntervalSince(queryStarted)
+
+            AtlasLog.app.info("Gate 1 FAST complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
+            let result = Result(
+                reportURL: reportURL,
+                retrievalProbeURL: nil,
+                coverageProbeURL: nil,
+                ingestedFixtureFiles: ingested,
+                questionCount: 4,
+                ingestSeconds: ingestSeconds,
+                querySeconds: querySeconds,
+                reasoningProviderID: reasoningProviderID
+            )
+            await cleanup(state)
+            return result
+        } catch {
+            await cleanup(state)
+            throw error
+        }
+    }
+
     /// Writes a per-file table covering every ingested fixture file:
     /// #KOs, #chunks, #vector embeddings, #entities, #FTS rows. This
     /// rules out "the file produced nothing" before assuming the

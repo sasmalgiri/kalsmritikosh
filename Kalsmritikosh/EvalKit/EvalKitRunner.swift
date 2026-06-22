@@ -167,6 +167,81 @@ public struct EvalKitRunner {
         return reportURL
     }
 
+    /// Fast Eval — same scoring as `run`, but limited to a chosen subset
+    /// of question IDs (typically 1 per class). Designed for tight
+    /// iteration during code changes: gives a directional signal in
+    /// ~5 minutes instead of ~20. NOT a substitute for the full 16-
+    /// question eval — sample is too small for absolute numbers.
+    /// Bias-aware: pick representative IDs that have shown variance
+    /// across prior runs.
+    @MainActor
+    public func runSubset(
+        brain: MasterBrain,
+        objects: KnowledgeObjectRepository,
+        ids: Set<String>,
+        outputDir: URL? = nil,
+        reportName: String = "eval-report-fast.md"
+    ) async throws -> URL {
+        let all = try loadQuestions()
+        let questions = all.filter { ids.contains($0.id) }
+        guard !questions.isEmpty else {
+            throw NSError(
+                domain: "EvalKit",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "runSubset: no question ids matched (\(ids.sorted().joined(separator: ",")))"]
+            )
+        }
+
+        var byClass: [String: ClassMetrics] = [:]
+        var perQuestion: [PerQuestionRecord] = []
+        for q in questions {
+            if byClass[q.class] == nil {
+                byClass[q.class] = ClassMetrics(className: q.class)
+            }
+        }
+        for q in questions {
+            await brain.resetSession()
+            let started = Date()
+            let answer = await brain.answer(question: q.text)
+            let latency = Date().timeIntervalSince(started)
+            let scoringText = (answer.answerText ?? answer.body).lowercased()
+            let keywordHit = q.expectedKeywords.allSatisfy {
+                scoringText.contains($0.lowercased())
+            }
+            let citedObjectIDs = Set(answer.citations.map(\.objectID))
+            let idToFilename = (try? await objects.sourceFilenames(for: citedObjectIDs)) ?? [:]
+            let citedFilenames = Set(idToFilename.values)
+            let expectedSet = Set(q.expectedSourceFiles)
+            let overlap = citedFilenames.intersection(expectedSet)
+            let totalCited = answer.citations.count
+            let precision: Double = totalCited == 0 ? 0 : Double(overlap.count) / Double(totalCited)
+            let recall: Double = expectedSet.isEmpty ? 0 : Double(overlap.count) / Double(expectedSet.count)
+            byClass[q.class]?.count += 1
+            byClass[q.class]?.keywordHits += keywordHit ? 1 : 0
+            byClass[q.class]?.citationPrecisionSum += precision
+            byClass[q.class]?.retrievalRecallSum += recall
+            byClass[q.class]?.latencies.append(latency)
+            perQuestion.append(PerQuestionRecord(
+                id: q.id,
+                className: q.class,
+                intentKind: answer.intentKind,
+                citedCount: totalCited,
+                expectedCount: expectedSet.count,
+                overlapCount: overlap.count,
+                precision: precision,
+                recall: recall,
+                citedFilenames: citedFilenames.sorted(),
+                expectedFilenames: expectedSet.sorted()
+            ))
+        }
+
+        let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent(reportName, isDirectory: false)
+        try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
+        AtlasLog.app.info("EvalKit FAST wrote \(reportURL.path, privacy: .public)")
+        return reportURL
+    }
+
     /// Same as `run(brain:outputDir:)` but for an offline scenario where
     /// brain access is unavailable. Deterministic metrics derived from
     /// the questions alone so the report has nonzero numbers and is
