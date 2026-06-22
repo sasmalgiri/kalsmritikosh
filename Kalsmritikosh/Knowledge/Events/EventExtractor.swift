@@ -106,15 +106,28 @@ public struct RuleEventExtractor: EventExtractor {
         // Adds taskAssigned events for explicit intentions ("I will…",
         // "we plan to…", "action item:…") and lifts the date OUT of the
         // commitment phrase when "by <date>" is present, rather than
-        // pinning everything to the KO's primaryDate. Cap at 5 per KO
-        // so a chatty thread can't flood the timeline.
+        // pinning everything to the KO's primaryDate.
+        //
+        // CAP REVISED from 5 → 2 per KO and ONLY when no domain event
+        // (delivery / contract / invoice / meeting) is already present:
+        // the Fast Eval after the original 5-cap showed M1 multihop
+        // keyword-hit collapsed 0.50 → 0.00 because commitment phrases
+        // ("Maria to share the invoice by tomorrow", "I plan to …")
+        // flooded ProjectExpert.claims and displaced the "Supplier ABC
+        // reported a delay" narrative from the rendered answerText.
+        // A doc that already produces strong typed events shouldn't get
+        // its answer hijacked by chatty mid-thread commitments.
+        let domainEventPresent = events.contains { ev in
+            ev.kind != .taskAssigned && ev.kind != .emailReceived
+        }
+        let commitmentCap = domainEventPresent ? 1 : 2
         let nsContent = object.content as NSString
         let fullRange = NSRange(location: 0, length: nsContent.length)
         var commitmentEvents = 0
         for (rx, label) in Self.commitmentPatterns {
             guard let rx else { continue }
             for m in rx.matches(in: object.content, range: fullRange) {
-                if commitmentEvents >= 5 { break }
+                if commitmentEvents >= commitmentCap { break }
                 if m.numberOfRanges < 2 { continue }
                 let phrase = nsContent.substring(with: m.range(at: 1))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -136,7 +149,7 @@ public struct RuleEventExtractor: EventExtractor {
                 ))
                 commitmentEvents += 1
             }
-            if commitmentEvents >= 5 { break }
+            if commitmentEvents >= commitmentCap { break }
         }
 
         return events

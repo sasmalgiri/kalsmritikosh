@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 8
+    public static let latestVersion = 9
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -45,7 +45,8 @@ public enum SchemaMigrations {
         (5, v5),
         (6, v6),
         (7, v7),
-        (8, v8)
+        (8, v8),
+        (9, v9)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -450,5 +451,56 @@ public enum SchemaMigrations {
     -- an email header), 0.7 (extracted from content), 0.3 (file mtime
     -- fallback). 0.5 is the safe default for backfilled rows.
     ALTER TABLE events ADD COLUMN date_confidence REAL NOT NULL DEFAULT 0.5;
+    """
+
+    // MARK: - v9 — G2-SYNTHETIC-QUESTIONS + G2-QA-PAIRS storage
+
+    private static let v9: String = """
+    -- G2-SYNTHETIC-QUESTIONS — hypothetical questions per chunk.
+    -- Each chunk can carry many generated questions; FTS5 indexes the
+    -- text so question-shaped queries match by surface form, and the
+    -- separate `vectors` table can host their embeddings under the
+    -- `kind='synthetic_question'` discriminator (added below) so
+    -- HybridRetriever's vector layer can fuse them at query time
+    -- without changing the chunk text path.
+    CREATE TABLE IF NOT EXISTS synthetic_questions (
+        id              TEXT PRIMARY KEY NOT NULL,
+        chunk_id        TEXT NOT NULL,
+        object_id       TEXT NOT NULL,
+        text            TEXT NOT NULL,
+        confidence      REAL NOT NULL DEFAULT 0.5,
+        produced_by     TEXT NOT NULL DEFAULT 'synthq.heuristic',
+        created_at      REAL NOT NULL,
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE,
+        FOREIGN KEY (object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_synthq_chunk ON synthetic_questions(chunk_id);
+    CREATE INDEX IF NOT EXISTS idx_synthq_object ON synthetic_questions(object_id);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS synthetic_questions_fts USING fts5(
+        text,
+        content='synthetic_questions',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
+
+    -- G2-QA-PAIRS — mined Q-A turns from threads / conversations.
+    -- Sidecar table so the chunk path stays clean; retrieval can
+    -- vector-search the answer summaries (held in `answer_text`) and
+    -- RRF-fuse the hits with chunk + synthetic-question signals.
+    CREATE TABLE IF NOT EXISTS qa_pairs (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        question_text           TEXT NOT NULL,
+        answer_text             TEXT NOT NULL,
+        question_object_id      TEXT NOT NULL,
+        answer_object_id        TEXT NOT NULL,
+        confidence              REAL NOT NULL DEFAULT 0.5,
+        produced_by             TEXT NOT NULL DEFAULT 'qa.email.thread',
+        created_at              REAL NOT NULL,
+        FOREIGN KEY (question_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+        FOREIGN KEY (answer_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_qa_q_object ON qa_pairs(question_object_id);
+    CREATE INDEX IF NOT EXISTS idx_qa_a_object ON qa_pairs(answer_object_id);
     """
 }

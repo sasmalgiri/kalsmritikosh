@@ -27,6 +27,10 @@ public actor HybridRetriever: Retriever {
     private let vectors: VectorStore
     private let embedder: Embedder
     private let vectorLayerLimit: Int
+    /// G2-SYNTHETIC-QUESTIONS — optional. When present, the metadata
+    /// (FTS) layer also queries the synthetic-questions FTS view and
+    /// unions chunk hits derived from synthetic-question matches.
+    private let syntheticQuestions: SyntheticQuestionsRepository?
 
     public init(
         memory: MemoryRepository,
@@ -37,7 +41,8 @@ public actor HybridRetriever: Retriever {
         graph: GraphStore,
         vectors: VectorStore,
         embedder: Embedder,
-        vectorLayerLimit: Int = HybridRetriever.defaultVectorLayerLimit
+        vectorLayerLimit: Int = HybridRetriever.defaultVectorLayerLimit,
+        syntheticQuestions: SyntheticQuestionsRepository? = nil
     ) {
         self.memory = memory
         self.events = events
@@ -48,6 +53,7 @@ public actor HybridRetriever: Retriever {
         self.vectors = vectors
         self.embedder = embedder
         self.vectorLayerLimit = vectorLayerLimit
+        self.syntheticQuestions = syntheticQuestions
     }
 
     public func retrieve(
@@ -204,13 +210,46 @@ public actor HybridRetriever: Retriever {
         let q = intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
         let hits = try await chunks.searchFTS(q, limit: 25)
-        return hits.enumerated().map { idx, chunk in
+        var collected: [RetrievedChunk] = hits.enumerated().map { idx, chunk in
             RetrievedChunk(
                 chunk: chunk,
                 score: 1.0 / Double(idx + 1),
                 viaLayer: .metadata
             )
         }
+
+        // G2-SYNTHETIC-QUESTIONS — also search the synthetic-questions
+        // FTS view; for each match, hydrate the underlying chunk and
+        // merge into the result set. De-dupe by chunkID — if the same
+        // chunk was hit by chunk-text FTS AND by a synthetic question,
+        // we keep the higher score (synthetic-question matches signal
+        // question-shaped relevance, which chatmind validated as the
+        // strongest single retrieval lift).
+        if let synthRepo = syntheticQuestions {
+            let synthHits = (try? await synthRepo.search(q, limit: 25)) ?? []
+            if !synthHits.isEmpty {
+                let existingChunkIDs = Set(collected.map(\.chunk.id))
+                // Hydrate chunks for synthetic-question hits not already
+                // present in the chunk-text path.
+                let missingChunkIDs = synthHits
+                    .map(\.chunkID)
+                    .filter { !existingChunkIDs.contains($0) }
+                let hydrated = (try? await chunks.findByIDs(missingChunkIDs)) ?? []
+                let hydratedByID: [Chunk.ID: Chunk] = Dictionary(
+                    uniqueKeysWithValues: hydrated.map { ($0.id, $0) }
+                )
+                for hit in synthHits {
+                    if let chunk = hydratedByID[hit.chunkID] {
+                        collected.append(RetrievedChunk(
+                            chunk: chunk,
+                            score: hit.score,
+                            viaLayer: .metadata
+                        ))
+                    }
+                }
+            }
+        }
+        return collected
     }
 
     private func summaryLayer(_ intent: UserIntent) async throws -> [Summary] {

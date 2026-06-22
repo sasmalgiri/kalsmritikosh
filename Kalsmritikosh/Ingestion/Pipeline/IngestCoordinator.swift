@@ -42,6 +42,12 @@ public actor IngestCoordinator {
     private let events: EventsRepository?
     private let relationships: RelationshipsRepository?
     private let vectors: VectorStore?
+    /// G2-SYNTHETIC-QUESTIONS — optional repository; when wired, the
+    /// ingest pipeline generates and writes hypothetical questions for
+    /// each chunk so the retriever can match question-shaped queries
+    /// against question-shaped projections of the corpus.
+    private let syntheticQuestions: SyntheticQuestionsRepository?
+    private let syntheticQuestionGenerator: any SyntheticQuestionGenerator
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -63,7 +69,9 @@ public actor IngestCoordinator {
         entities: EntitiesRepository? = nil,
         events: EventsRepository? = nil,
         relationships: RelationshipsRepository? = nil,
-        vectors: VectorStore? = nil
+        vectors: VectorStore? = nil,
+        syntheticQuestions: SyntheticQuestionsRepository? = nil,
+        syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil
     ) {
         self.loaders = loaders
         self.cleaner = cleaner
@@ -82,6 +90,9 @@ public actor IngestCoordinator {
         self.events = events
         self.relationships = relationships
         self.vectors = vectors
+        self.syntheticQuestions = syntheticQuestions
+        self.syntheticQuestionGenerator = syntheticQuestionGenerator
+            ?? HeuristicSyntheticQuestionGenerator()
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
         let stream = AsyncStream<SubjectInvalidation> { c in continuation = c }
@@ -382,6 +393,41 @@ public actor IngestCoordinator {
 
         let chunked = chunker.chunk(objectID: object.id, content: object.content)
         try? await chunks.insertBatch(chunked)
+
+        // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per
+        // chunk and persist them. The default generator is the free
+        // NLTagger-based heuristic; the CapabilitySyntheticQuestionGenerator
+        // (LLM-backed, summarization spec) can be injected at AppState
+        // wire-time for higher quality at higher ingest cost. Failure
+        // here is non-fatal — synthetic questions are an ADDITIONAL
+        // retrieval signal, never a required one.
+        if let synthRepo = syntheticQuestions {
+            let docContext = Self.documentContext(for: object)
+            var rows: [SyntheticQuestionsRepository.Row] = []
+            for chunk in chunked {
+                let questions = await syntheticQuestionGenerator.generate(
+                    for: chunk,
+                    documentContext: docContext,
+                    topK: 4
+                )
+                for q in questions {
+                    rows.append(SyntheticQuestionsRepository.Row(
+                        chunkID: chunk.id,
+                        objectID: object.id,
+                        text: q.text,
+                        confidence: q.confidence,
+                        producedBy: syntheticQuestionGenerator.id
+                    ))
+                }
+            }
+            if !rows.isEmpty {
+                do {
+                    try await synthRepo.insertBatch(rows)
+                } catch {
+                    AtlasLog.ingestion.error("Synthetic-questions write failed for \(object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
 
         var extractedEntities: [Entity] = []
         var extractedEvents: [Event] = []

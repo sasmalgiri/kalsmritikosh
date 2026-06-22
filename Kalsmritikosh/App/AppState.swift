@@ -165,6 +165,11 @@ public final class AppState {
                 capabilities: capabilities
             )
             let graph = GraphStore(relationships: relationships)
+            // G2-SYNTHETIC-QUESTIONS — repo shared between ingest
+            // (writes question rows) and retrieval (searches the
+            // synthetic-questions FTS view to add question-shaped
+            // hits to the metadata layer).
+            let syntheticQuestionsRepo = SyntheticQuestionsRepository(database: db)
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -173,7 +178,8 @@ public final class AppState {
                 summaries: summariesRepo,
                 graph: graph,
                 vectors: vectors,
-                embedder: embedder
+                embedder: embedder,
+                syntheticQuestions: syntheticQuestionsRepo
             )
 
             let expertRegistry = ExpertRegistry()
@@ -256,6 +262,13 @@ public final class AppState {
             )
 
             // ── Ingestion ────────────────────────────────────────────
+            // G2-SYNTHETIC-QUESTIONS — same repo as the retriever's
+            // (see above), so the ingest write path and the retrieval
+            // read path share one Database actor. The heuristic
+            // generator runs by default (free, deterministic, NLTagger
+            // entity-name driven). To switch to LLM-backed generation,
+            // pass CapabilitySyntheticQuestionGenerator(capabilities:)
+            // as the generator argument below.
             let ingest = IngestCoordinator(
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
@@ -269,7 +282,9 @@ public final class AppState {
                 entities: entities,
                 events: events,
                 relationships: relationships,
-                vectors: vectors
+                vectors: vectors,
+                syntheticQuestions: syntheticQuestionsRepo,
+                syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator()
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
