@@ -12,7 +12,13 @@ import Foundation
 public struct AnyCodable: Codable, Sendable, Hashable {
     public let value: AnySendable
 
-    public init(_ value: AnySendable) { self.value = value }
+    // G2-SWIFT6 — `nonisolated` so the encode(to:) closure-passed map
+    // expression `a.map(AnyCodable.init)` doesn't trigger
+    // "Call to main actor-isolated initializer in a synchronous
+    // nonisolated context" under strict concurrency. AnyCodable is a
+    // value type holding a Sendable enum; main-actor isolation isn't
+    // needed for construction.
+    public nonisolated init(_ value: AnySendable) { self.value = value }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
