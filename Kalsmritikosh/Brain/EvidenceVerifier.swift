@@ -468,7 +468,30 @@ public struct EvidenceVerifier: Verifier {
         let docClaims = findings.flatMap(\.claims).filter { !$0.supportingObjectIDs.isEmpty }
         let answerText: String
         if !docClaims.isEmpty {
-            answerText = docClaims
+            // G2-RENDER-FIX (Fast Eval #2 follow-up) — rank doc-claims
+            // by the maximum retrieval score across the KOs they cite,
+            // not by expert-iteration order. With synthetic-questions
+            // + QA-pairs + Tier 3 in the cascade, many experts now
+            // produce many doc-grounded claims; the original `.prefix(5)`
+            // truncation was dropping the claim that cited the #1-ranked
+            // chunk (e.g. contract.md on T3 question 3) in favour of
+            // whichever expert finished first. Surfacing the
+            // best-evidenced claims first keeps the rendered answer
+            // text aligned with the citation list.
+            var scoreByObject: [KnowledgeObject.ID: Double] = [:]
+            for rc in retrieval.chunks {
+                let id = rc.chunk.objectID
+                if let prior = scoreByObject[id], prior >= rc.score { continue }
+                scoreByObject[id] = rc.score
+            }
+            let rankedDocClaims = docClaims.sorted { a, b in
+                let aScore = a.supportingObjectIDs
+                    .compactMap { scoreByObject[$0] }.max() ?? 0
+                let bScore = b.supportingObjectIDs
+                    .compactMap { scoreByObject[$0] }.max() ?? 0
+                return aScore > bScore
+            }
+            answerText = rankedDocClaims
                 .prefix(5)
                 .map(\.statement)
                 .joined(separator: " ")
