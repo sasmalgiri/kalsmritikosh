@@ -13,11 +13,11 @@ public struct LoaderRegistry: Sendable {
     private var loaders: [SourceType: any Ingestor] = [:]
     private let unknownFallback: any Ingestor
 
-    public init(unknownFallback: any Ingestor = TextLoader()) {
+    public nonisolated init(unknownFallback: any Ingestor = TextLoader()) {
         self.unknownFallback = unknownFallback
     }
 
-    public static func standard() -> LoaderRegistry {
+    public nonisolated static func standard() -> LoaderRegistry {
         var r = LoaderRegistry()
         r.register(TextLoader())
         r.register(PDFLoader())
@@ -36,7 +36,7 @@ public struct LoaderRegistry: Sendable {
         for t in loader.supportedTypes { loaders[t] = loader }
     }
 
-    public func loader(for type: SourceType) -> any Ingestor {
+    public nonisolated func loader(for type: SourceType) -> any Ingestor {
         loaders[type] ?? unknownFallback
     }
 }

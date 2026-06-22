@@ -14,7 +14,7 @@ public struct SubjectInvalidation: Sendable, Hashable {
     public let triggeringObjectID: KnowledgeObject.ID
     public let occurredAt: Date
 
-    public init(
+    public nonisolated init(
         subjects: [Subject],
         triggeringObjectID: KnowledgeObject.ID,
         occurredAt: Date = .init()
@@ -27,7 +27,7 @@ public struct SubjectInvalidation: Sendable, Hashable {
     public struct Subject: Sendable, Hashable {
         public let kind: MemoryObject.SubjectKind
         public let identifier: String
-        public init(kind: MemoryObject.SubjectKind, identifier: String) {
+        public nonisolated init(kind: MemoryObject.SubjectKind, identifier: String) {
             self.kind = kind
             self.identifier = identifier
         }

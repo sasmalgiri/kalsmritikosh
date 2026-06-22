@@ -27,9 +27,9 @@ public enum DocumentClass: String, Codable, CaseIterable, Sendable {
 }
 
 public struct DocumentClassifier: Sendable {
-    public init() {}
+    public nonisolated init() {}
 
-    public func classify(_ object: KnowledgeObject) -> DocumentClass {
+    public nonisolated func classify(_ object: KnowledgeObject) -> DocumentClass {
         switch object.sourceType.category {
         case .email: return .email
         case .image: return .image

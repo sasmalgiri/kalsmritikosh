@@ -19,7 +19,7 @@ public actor IncrementalUpdater: BackgroundService {
     private var pending: [String: (subject: SubjectInvalidation.Subject, trigger: KnowledgeObject.ID)] = [:]
     private var debounceTask: Task<Void, Never>?
 
-    public init(
+    public nonisolated init(
         stream: AsyncStream<SubjectInvalidation>,
         distiller: MemoryDistiller,
         debounceMilliseconds: UInt64 = 1_500

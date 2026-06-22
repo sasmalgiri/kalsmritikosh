@@ -11,9 +11,9 @@
 import Foundation
 
 public struct EntityLinker: Sendable {
-    public init() {}
+    public nonisolated init() {}
 
-    public func link(_ entities: [Entity]) -> [Entity] {
+    public nonisolated func link(_ entities: [Entity]) -> [Entity] {
         // Group by (kind, normalized), keep the highest-confidence
         // representative. Source IDs of merged duplicates AND their
         // attributes get folded into the representative — no data lost.

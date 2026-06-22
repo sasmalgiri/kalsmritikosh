@@ -19,7 +19,7 @@ import Foundation
 public struct EmailLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         switch type {
@@ -267,7 +267,7 @@ public struct EmailLoader: Ingestor {
     /// entities are smuggled to IngestCoordinator as a JSON-encoded
     /// [Entity] string. KnowledgeObject.entities holds IDs only, so we
     /// piggyback on metadata instead of changing the schema.
-    static let structuredEntitiesMetaKey = "t13_structuredEntities"
+    nonisolated static let structuredEntitiesMetaKey = "t13_structuredEntities"
 
     /// Metadata key under which T13.7's attachment file URLs are
     /// surfaced — a JSON-encoded [String] of file:// paths. After the
@@ -275,7 +275,7 @@ public struct EmailLoader: Ingestor {
     /// calls `ingest(fileAt:)` on each URL so attachments become their
     /// own KnowledgeObjects (and T7's content-hash dedup folds recurring
     /// attachments onto a single canonical KO with alias file rows).
-    static let attachmentURLsMetaKey = "t13_attachmentURLs"
+    nonisolated static let attachmentURLsMetaKey = "t13_attachmentURLs"
 
     /// Top-level helper called from each ingest path. If the message
     /// is multipart, replaces the body with the decoded text and returns
@@ -373,7 +373,7 @@ public struct EmailLoader: Ingestor {
         return String(data: data, encoding: .utf8)
     }
 
-    static func decodeAttachmentURLs(from json: String) -> [URL] {
+    nonisolated static func decodeAttachmentURLs(from json: String) -> [URL] {
         guard let data = json.data(using: .utf8),
               let strings = try? JSONDecoder().decode([String].self, from: data) else {
             return []
@@ -387,7 +387,7 @@ public struct EmailLoader: Ingestor {
         return String(data: data, encoding: .utf8)
     }
 
-    static func decodeStructuredEntities(from json: String) -> [Entity] {
+    nonisolated static func decodeStructuredEntities(from json: String) -> [Entity] {
         guard let data = json.data(using: .utf8),
               let arr = try? JSONDecoder().decode([Entity].self, from: data) else {
             return []

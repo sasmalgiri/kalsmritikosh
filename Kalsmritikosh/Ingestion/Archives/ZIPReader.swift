@@ -34,11 +34,11 @@ public struct ZIPEntry: Sendable {
 public struct ZIPReader {
     private let data: Data
 
-    public init(data: Data) {
+    public nonisolated init(data: Data) {
         self.data = data
     }
 
-    public init(url: URL) throws {
+    public nonisolated init(url: URL) throws {
         self.data = try Data(contentsOf: url, options: [.mappedIfSafe])
     }
 

@@ -12,9 +12,9 @@ import NaturalLanguage
 import CryptoKit
 
 public struct Cleaner: Sendable {
-    public init() {}
+    public nonisolated init() {}
 
-    public func clean(_ object: KnowledgeObject) -> KnowledgeObject {
+    public nonisolated func clean(_ object: KnowledgeObject) -> KnowledgeObject {
         let normalized = collapseWhitespace(repairEncoding(object.content))
         let language = detectLanguage(normalized)
         let spamScore = spamProbability(normalized)

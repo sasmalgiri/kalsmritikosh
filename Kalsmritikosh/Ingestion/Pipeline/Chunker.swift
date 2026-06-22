@@ -13,11 +13,11 @@ import NaturalLanguage
 public struct Chunker: Sendable {
     public let targetCharacterCount: Int
 
-    public init(targetCharacterCount: Int = 1200) {
+    public nonisolated init(targetCharacterCount: Int = 1200) {
         self.targetCharacterCount = targetCharacterCount
     }
 
-    public func chunk(
+    public nonisolated func chunk(
         objectID: KnowledgeObject.ID,
         content: String,
         pageBreaks: [Int] = []

@@ -13,7 +13,7 @@ import Foundation
 public struct DocxLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.docx, .doc, .odt]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]

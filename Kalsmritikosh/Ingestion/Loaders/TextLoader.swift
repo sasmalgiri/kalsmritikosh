@@ -14,7 +14,7 @@ import AppKit
 public struct TextLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.txt, .markdown, .rtf]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         let data: Data

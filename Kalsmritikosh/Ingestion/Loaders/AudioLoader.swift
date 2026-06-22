@@ -15,7 +15,7 @@ public struct AudioLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp3, .wav, .m4a, .aac]
     private let transcriber: SpeechTranscriber
 
-    public init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
+    public nonisolated init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
         self.transcriber = transcriber
     }
 

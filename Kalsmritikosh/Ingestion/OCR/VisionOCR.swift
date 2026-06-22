@@ -17,7 +17,7 @@ import AppKit
 #endif
 
 public actor VisionOCR {
-    public init() {}
+    public nonisolated init() {}
 
     public func recognizePrinted(at url: URL) async -> [String] {
         #if canImport(Vision) && canImport(AppKit)

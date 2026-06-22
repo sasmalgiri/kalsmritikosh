@@ -36,13 +36,15 @@ public protocol DocumentEnvironment: Sendable {
 
     /// Stable id for capability resolution + debugging. e.g.
     /// "env.email.rfc5322", "env.pdf.pdfkit", "env.spreadsheet.xlsx".
-    var id: String { get }
+    // G2-SWIFT6 — nonisolated so the IngestCoordinator actor can read
+    // these declaratively (id for logs, recognizes for dispatch).
+    nonisolated var id: String { get }
 
     /// Does this environment recognize the KnowledgeObject?
     /// Implementations are expected to inspect `object.sourceType`
     /// first and optionally peek at metadata for sub-type detection
     /// (e.g. PDFEnvironment may further split into invoice vs contract).
-    func recognizes(_ object: KnowledgeObject) -> Bool
+    nonisolated func recognizes(_ object: KnowledgeObject) -> Bool
 
     /// Optional structural facts the environment lifts BEFORE generic
     /// entity / event extraction runs. These survive into KO metadata
@@ -96,9 +98,9 @@ public extension DocumentEnvironment {
 /// environment claims the KO. Ensures every code path through the
 /// future wiring still works even when no per-format adapter is wired.
 public struct BaseDocumentEnvironment: DocumentEnvironment {
-    public let id = "env.base"
-    public init() {}
-    public func recognizes(_ object: KnowledgeObject) -> Bool { true }
+    public nonisolated let id = "env.base"
+    public nonisolated init() {}
+    public nonisolated func recognizes(_ object: KnowledgeObject) -> Bool { true }
 }
 
 /// First real environment — Email (RFC 5322 / .eml / .mbox).
@@ -109,14 +111,14 @@ public struct BaseDocumentEnvironment: DocumentEnvironment {
 /// re-parsing the raw text. No chunker or extraction-prompt changes
 /// yet — those can be added in a follow-on commit.
 public struct EmailDocumentEnvironment: DocumentEnvironment {
-    public let id = "env.email.rfc5322"
-    public init() {}
+    public nonisolated let id = "env.email.rfc5322"
+    public nonisolated init() {}
 
-    public func recognizes(_ object: KnowledgeObject) -> Bool {
+    public nonisolated func recognizes(_ object: KnowledgeObject) -> Bool {
         object.sourceType.category == .email
     }
 
-    public func extractStructuralMetadata(
+    public nonisolated func extractStructuralMetadata(
         from object: KnowledgeObject
     ) async -> [String: AnyCodable] {
         // EmailLoader already populates subject/date/X-GM-THRID. Promote

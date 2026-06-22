@@ -13,7 +13,7 @@ import Foundation
 public struct ArchiveLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.zip, .rar, .sevenZip]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         switch type {
@@ -79,7 +79,7 @@ public struct ArchiveLoader: Ingestor {
     /// returns the URLs of each regular-file entry, ready for the
     /// IngestCoordinator to re-ingest. Skips directories and entries
     /// with absolute / traversal-style paths.
-    public static func expandZIP(at url: URL) throws -> (root: URL, files: [URL]) {
+    public nonisolated static func expandZIP(at url: URL) throws -> (root: URL, files: [URL]) {
         let reader = try ZIPReader(url: url)
         let entries = try reader.entries()
         let root = FileManager.default.temporaryDirectory

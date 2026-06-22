@@ -12,7 +12,7 @@ import Foundation
 public struct PresentationLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.pptx, .ppt, .keynote]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         switch type {

@@ -22,7 +22,7 @@ public struct MIMEPart: Sendable {
     public let headers: [String: String]
     public let body: Data
 
-    public init(headers: [String: String], body: Data) {
+    public nonisolated init(headers: [String: String], body: Data) {
         self.headers = headers
         self.body = body
     }
@@ -53,7 +53,7 @@ public struct MIMEPart: Sendable {
     /// Extracts a parameter from a header value (e.g. `boundary` from
     /// `Content-Type: multipart/mixed; boundary="abc"`). Handles quoted
     /// values and unquoted runs separated by semicolons.
-    public static func extractParam(_ header: String, key: String) -> String? {
+    public nonisolated static func extractParam(_ header: String, key: String) -> String? {
         let lower = header.lowercased()
         let needle = "\(key)="
         guard let range = lower.range(of: needle) else { return nil }
@@ -82,7 +82,7 @@ public struct MIMEPart: Sendable {
 public enum MIMEParser {
     /// Returns a flat list of LEAF parts; multipart/* containers are
     /// recursively unrolled.
-    public static func parseMultipart(body: String, boundary: String) -> [MIMEPart] {
+    public nonisolated static func parseMultipart(body: String, boundary: String) -> [MIMEPart] {
         let openMarker = "--\(boundary)"
         var pieces: [String] = []
         var current = ""

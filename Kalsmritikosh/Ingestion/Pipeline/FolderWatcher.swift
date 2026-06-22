@@ -24,7 +24,7 @@ public actor FolderWatcher {
     private(set) var continuation: AsyncStream<Event>.Continuation?
     public let events: AsyncStream<Event>
 
-    public init() {
+    public nonisolated init() {
         var cont: AsyncStream<Event>.Continuation!
         self.events = AsyncStream { c in cont = c }
         self.continuation = cont

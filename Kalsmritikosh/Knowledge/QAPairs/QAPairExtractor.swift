@@ -48,7 +48,9 @@ public struct QAPair: Sendable, Codable, Hashable {
 /// caller is responsible for grouping by thread/conversation before
 /// invoking — the extractor doesn't try to discover threading itself.
 public protocol QAPairExtractor: Sendable {
-    var id: String { get }
+    // G2-SWIFT6 — nonisolated so the IngestCoordinator actor can read
+    // `extractor.id` in log statements from any context.
+    nonisolated var id: String { get }
     func extract(from thread: [KnowledgeObject]) async -> [QAPair]
 }
 
@@ -59,7 +61,7 @@ public protocol QAPairExtractor: Sendable {
 /// id-shared = 0.75, adjacency-only = 0.4.
 public struct EmailThreadQAPairExtractor: QAPairExtractor {
     public let id = "qa.email.thread"
-    public init() {}
+    public nonisolated init() {}
 
     public func extract(from thread: [KnowledgeObject]) async -> [QAPair] {
         // Email-only — bail early for mixed-format inputs.

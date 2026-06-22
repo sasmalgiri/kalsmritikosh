@@ -41,7 +41,9 @@ public struct SyntheticQuestion: Sendable, Codable, Hashable {
 /// chatmind's numbers; we should match or beat that).
 public protocol SyntheticQuestionGenerator: Sendable {
     /// Stable id surfaced in logs.
-    var id: String { get }
+    // G2-SWIFT6 — nonisolated so IngestCoordinator can format
+    // `generator.id` in log statements from any actor context.
+    nonisolated var id: String { get }
 
     /// Generate up to `topK` questions for the chunk. May return fewer
     /// if the chunk is too small or doesn't contain question-worthy
@@ -60,7 +62,7 @@ public protocol SyntheticQuestionGenerator: Sendable {
 /// stronger generator's output can be checked against.
 public struct HeuristicSyntheticQuestionGenerator: SyntheticQuestionGenerator {
     public let id = "synthq.heuristic"
-    public init() {}
+    public nonisolated init() {}
 
     public func generate(
         for chunk: Chunk,

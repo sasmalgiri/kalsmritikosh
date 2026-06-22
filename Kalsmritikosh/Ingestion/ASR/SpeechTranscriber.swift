@@ -14,7 +14,7 @@ import Speech
 #endif
 
 public actor SpeechTranscriber {
-    public init() {}
+    public nonisolated init() {}
 
     public func transcribe(audioAt url: URL) async throws -> String {
         #if canImport(Speech)

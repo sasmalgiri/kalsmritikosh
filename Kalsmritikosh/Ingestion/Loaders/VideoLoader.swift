@@ -16,7 +16,7 @@ public struct VideoLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp4, .mov]
     private let transcriber: SpeechTranscriber
 
-    public init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
+    public nonisolated init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
         self.transcriber = transcriber
     }
 

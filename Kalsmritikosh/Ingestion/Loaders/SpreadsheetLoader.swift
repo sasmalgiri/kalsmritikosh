@@ -14,7 +14,7 @@ import Foundation
 public struct SpreadsheetLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.csv, .xlsx, .xls, .ods]
 
-    public init() {}
+    public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         switch type {

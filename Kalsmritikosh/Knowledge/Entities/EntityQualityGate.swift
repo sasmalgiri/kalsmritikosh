@@ -16,7 +16,7 @@ import OSLog
 public struct EntityQualityGate: Sendable {
     public let stoplist: Set<String>
 
-    public init(stoplist: Set<String> = []) {
+    public nonisolated init(stoplist: Set<String> = []) {
         self.stoplist = stoplist
     }
 
@@ -24,7 +24,7 @@ public struct EntityQualityGate: Sendable {
     /// `Resources/EntityStoplist.json` (root key "stoplist" → [String]).
     /// Falls back to an empty stoplist when the resource is missing; the
     /// hardcoded weekday/month/internal checks still apply.
-    public static func bundled() -> EntityQualityGate {
+    public nonisolated static func bundled() -> EntityQualityGate {
         let bundle = Bundle.main
         guard let url = bundle.url(forResource: "EntityStoplist", withExtension: "json"),
               let data = try? Data(contentsOf: url) else {
@@ -39,12 +39,12 @@ public struct EntityQualityGate: Sendable {
 
     // MARK: - Hardcoded rejects
 
-    public static let weekdays: Set<String> = [
+    public nonisolated static let weekdays: Set<String> = [
         "mon", "tue", "wed", "thu", "fri", "sat", "sun",
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
     ]
 
-    public static let months: Set<String> = [
+    public nonisolated static let months: Set<String> = [
         "jan", "feb", "mar", "apr", "may", "jun", "jul",
         "aug", "sep", "sept", "oct", "nov", "dec",
         "january", "february", "march", "april", "may",
@@ -54,7 +54,7 @@ public struct EntityQualityGate: Sendable {
     /// Identifiers the app's own pipeline emits when NLTagger reads its
     /// internal class names off log strings the entity extractor
     /// inadvertently sees.
-    public static let internalIdentifiers: Set<String> = [
+    public nonisolated static let internalIdentifiers: Set<String> = [
         "apple naturallanguage", "apple ai", "apple intelligence",
         "natural language", "nltagger", "nlembedding"
     ]
@@ -98,7 +98,7 @@ public struct EntityQualityGate: Sendable {
         return true
     }
 
-    public func filter(_ entities: [Entity]) -> [Entity] {
+    public nonisolated func filter(_ entities: [Entity]) -> [Entity] {
         let kept = entities.filter(shouldKeep)
         let dropped = entities.count - kept.count
         if dropped > 0 {

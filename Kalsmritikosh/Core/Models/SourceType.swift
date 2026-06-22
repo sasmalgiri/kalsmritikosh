@@ -38,7 +38,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     case unknown
 
     /// Best-effort detection from a file URL.
-    public static func detect(from url: URL) -> SourceType {
+    public nonisolated static func detect(from url: URL) -> SourceType {
         switch url.pathExtension.lowercased() {
         case "pdf": return .pdf
         case "docx": return .docx

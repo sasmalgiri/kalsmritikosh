@@ -23,7 +23,7 @@ public struct Tier1RelationshipExtractor: Sendable {
     /// SMTP, Message-ID, weekdays, server names) — ranking by frequency
     /// kept exactly the noise and discarded the real, low-frequency
     /// people and companies. See UPDATE_04_REVISED.
-    public static let coOccurrenceSkipThreshold = 200
+    public nonisolated static let coOccurrenceSkipThreshold = 200
 
     public struct Edge: Sendable, Hashable {
         public let kind: Relationship.Kind
@@ -31,7 +31,7 @@ public struct Tier1RelationshipExtractor: Sendable {
         public let to: Entity.ID
         public let viaEventID: Event.ID?
 
-        public init(
+        public nonisolated init(
             kind: Relationship.Kind,
             from: Entity.ID,
             to: Entity.ID,
@@ -44,7 +44,7 @@ public struct Tier1RelationshipExtractor: Sendable {
         }
     }
 
-    public init() {}
+    public nonisolated init() {}
 
     /// Produce edges for one KO.
     ///
@@ -56,7 +56,7 @@ public struct Tier1RelationshipExtractor: Sendable {
     /// - events: events extracted from this KO with their entity ids
     ///   already canonicalized.
     /// - emailParticipants: optional sender/recipients for email KOs.
-    public func extract(
+    public nonisolated func extract(
         objectID: KnowledgeObject.ID,
         canonicalEntityIDs: [Entity.ID],
         skipThreshold: Int = Tier1RelationshipExtractor.coOccurrenceSkipThreshold,
@@ -121,7 +121,7 @@ public struct Tier1RelationshipExtractor: Sendable {
         public let recipientIDs: [Entity.ID]
         public let senderDomainOrgID: Entity.ID?
 
-        public init(
+        public nonisolated init(
             senderID: Entity.ID,
             recipientIDs: [Entity.ID],
             senderDomainOrgID: Entity.ID? = nil

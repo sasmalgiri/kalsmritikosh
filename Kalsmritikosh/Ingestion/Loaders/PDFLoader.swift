@@ -18,7 +18,7 @@ public struct PDFLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.pdf]
     private let ocr: VisionOCR
 
-    public init(ocr: VisionOCR = VisionOCR()) {
+    public nonisolated init(ocr: VisionOCR = VisionOCR()) {
         self.ocr = ocr
     }
 

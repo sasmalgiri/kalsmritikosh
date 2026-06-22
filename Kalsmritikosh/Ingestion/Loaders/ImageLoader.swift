@@ -16,7 +16,7 @@ public struct ImageLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.png, .jpg, .heic, .tiff, .webp]
     private let ocr: VisionOCR
 
-    public init(ocr: VisionOCR = VisionOCR()) {
+    public nonisolated init(ocr: VisionOCR = VisionOCR()) {
         self.ocr = ocr
     }
 

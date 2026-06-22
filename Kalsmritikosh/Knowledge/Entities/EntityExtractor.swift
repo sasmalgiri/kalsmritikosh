@@ -12,7 +12,7 @@ import Foundation
 import NaturalLanguage
 
 public struct NLEntityExtractor: EntityExtractor {
-    public init() {}
+    public nonisolated init() {}
 
     public func extractEntities(
         from object: KnowledgeObject,
