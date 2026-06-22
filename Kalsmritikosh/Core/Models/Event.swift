@@ -28,7 +28,7 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     public let dateConfidence: Double
     public let attributes: [String: AnyCodable]
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         kind: Kind,
         date: Date,
@@ -61,7 +61,7 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
              sourceObjectID, sourceRange, confidence, dateConfidence, attributes
     }
 
-    public init(from decoder: Decoder) throws {
+    public nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(UUID.self, forKey: .id)
         self.kind = try c.decode(Kind.self, forKey: .kind)

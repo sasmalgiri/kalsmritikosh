@@ -36,7 +36,7 @@ public struct FileRecord: Sendable, Hashable {
     public let aliasOf: UUID?
     public let availability: FileAvailability
 
-    public init(
+    public nonisolated init(
         id: UUID = UUID(),
         url: URL,
         sourceType: SourceType,

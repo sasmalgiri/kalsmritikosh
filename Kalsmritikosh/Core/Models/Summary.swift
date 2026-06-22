@@ -21,7 +21,7 @@ public struct Summary: Codable, Identifiable, Hashable, Sendable {
     public let modelID: String?
     public let confidence: Confidence
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         level: Level,
         length: Length,
@@ -59,7 +59,11 @@ public struct Summary: Codable, Identifiable, Hashable, Sendable {
 
     /// What this summary is about. Decoded into specific identifiers
     /// per level when the summary is read back.
-    public enum Scope: Codable, Hashable, Sendable {
+    // G2-SWIFT6 — Codable conformance moved to a nonisolated extension
+    // (see bottom of file) so SummariesRepository's actor-isolated SQL
+    // path can encode/decode without picking up main-actor isolation
+    // from the synthesized conformance.
+    public enum Scope: Hashable, Sendable {
         case document(KnowledgeObject.ID)
         case folder(String)             // folder path (relative to a root bookmark)
         case project(String)            // project name / id
@@ -67,13 +71,18 @@ public struct Summary: Codable, Identifiable, Hashable, Sendable {
         case timeline(Range)            // a closed date range
         case knowledgeBase
 
-        public struct Range: Codable, Hashable, Sendable {
+        public struct Range: Hashable, Sendable {
             public let start: Date
             public let end: Date
-            public init(start: Date, end: Date) {
+            public nonisolated init(start: Date, end: Date) {
                 self.start = start
                 self.end = end
             }
         }
     }
 }
+
+// G2-SWIFT6 — nonisolated extensions add Codable so repository actors
+// can call encode/decode without picking up main-actor isolation.
+nonisolated extension Summary.Scope: Codable {}
+nonisolated extension Summary.Scope.Range: Codable {}

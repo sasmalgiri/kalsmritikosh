@@ -11,15 +11,18 @@ import Foundation
 public struct Confidence: Codable, Hashable, Sendable, Comparable {
     public let value: Double  // 0.0 ... 1.0
 
-    public init(_ value: Double) {
+    // G2-SWIFT6 — nonisolated so any actor / nonisolated repository can
+    // construct Confidence in synchronous context. Value type.
+    public nonisolated init(_ value: Double) {
         self.value = max(0.0, min(1.0, value))
     }
 
-    public static let zero = Confidence(0.0)
-    public static let low = Confidence(0.33)
-    public static let medium = Confidence(0.66)
-    public static let high = Confidence(0.9)
-    public static let certain = Confidence(1.0)
+    // G2-SWIFT6 — nonisolated so any actor context can reference these.
+    public nonisolated static let zero = Confidence(0.0)
+    public nonisolated static let low = Confidence(0.33)
+    public nonisolated static let medium = Confidence(0.66)
+    public nonisolated static let high = Confidence(0.9)
+    public nonisolated static let certain = Confidence(1.0)
 
     public static func < (lhs: Confidence, rhs: Confidence) -> Bool {
         lhs.value < rhs.value

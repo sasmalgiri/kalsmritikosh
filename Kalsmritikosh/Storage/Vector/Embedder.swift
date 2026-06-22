@@ -50,7 +50,7 @@ public struct NLEmbedder: Embedder {
     public let dimension: Int
     private let language: NLLanguage
 
-    public init(language: NLLanguage = .english) {
+    public nonisolated init(language: NLLanguage = .english) {
         self.language = language
         let model = NLEmbedding.wordEmbedding(for: language)
         self.dimension = model?.dimension ?? 300

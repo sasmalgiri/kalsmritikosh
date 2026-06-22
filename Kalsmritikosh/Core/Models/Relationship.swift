@@ -20,7 +20,7 @@ public struct Relationship: Codable, Identifiable, Hashable, Sendable {
     public let confidence: Confidence
     public let attributes: [String: AnyCodable]
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         kind: Kind,
         fromEntityID: Entity.ID,

@@ -78,7 +78,7 @@ extension CapabilitySpec {
     /// could never resolve regardless of whether the server was
     /// running, and every expert would silently fall back to
     /// heuristic.
-    public static func reasoning(
+    public nonisolated static func reasoning(
         contextTokens: Int = 4_000,
         purpose: String = ""
     ) -> CapabilitySpec {
@@ -96,7 +96,7 @@ extension CapabilitySpec {
     /// as `reasoning` — keep on-device-or-localhost open so the
     /// summarizer doesn't silently dead-end on macOS 15.6 when no
     /// reasoning model is otherwise reachable.
-    public static func summarization(
+    public nonisolated static func summarization(
         contextTokens: Int = 8_000,
         purpose: String = ""
     ) -> CapabilitySpec {
@@ -111,7 +111,7 @@ extension CapabilitySpec {
     }
 
     /// Convenience for embedding calls.
-    public static func embedding(purpose: String = "") -> CapabilitySpec {
+    public nonisolated static func embedding(purpose: String = "") -> CapabilitySpec {
         .init(
             requires: [.embedding],
             maxLatency: .interactive,
@@ -139,7 +139,7 @@ extension CapabilitySpec {
     /// ships. `isPrivacyEligible(.localNetwork)` still admits
     /// `.onDevice` manifests so FoundationModels wins on macOS 26 if
     /// it declares `.reranking`.
-    public static func reranking(purpose: String = "") -> CapabilitySpec {
+    public nonisolated static func reranking(purpose: String = "") -> CapabilitySpec {
         .init(
             requires: [.textGeneration, .reranking],
             prefers: [.routerSmall, .structuredOutput],

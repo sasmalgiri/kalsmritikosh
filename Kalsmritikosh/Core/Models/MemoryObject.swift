@@ -31,7 +31,7 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
     public let createdAt: Date
     public let updatedAt: Date
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         subjectKind: SubjectKind,
         subjectIdentifier: String,
@@ -77,7 +77,7 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
         public let sourceObjectID: KnowledgeObject.ID?
         public let confidence: Confidence
 
-        public init(
+        public nonisolated init(
             summary: String,
             madeOn: Date? = nil,
             sourceObjectID: KnowledgeObject.ID? = nil,
@@ -96,7 +96,7 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
         public let sourceObjectIDs: [KnowledgeObject.ID]
         public let confidence: Confidence
 
-        public init(
+        public nonisolated init(
             description: String,
             severity: Severity,
             sourceObjectIDs: [KnowledgeObject.ID] = [],

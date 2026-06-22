@@ -13,15 +13,18 @@ import Foundation
 public protocol ModelProvider: Sendable {
     /// Opaque identifier used only inside the registry. Callers must NOT
     /// reference this string anywhere; it's purely for registry bookkeeping.
-    var id: String { get }
+    // G2-SWIFT6 — nonisolated so log statements can reference these
+    // from any actor / nonisolated context without "main-actor-isolated
+    // property cannot be referenced from a nonisolated autoclosure".
+    nonisolated var id: String { get }
 
     /// Capabilities this provider exposes — used by CapabilityRegistry to
     /// match providers to CapabilitySpecs.
-    var capabilities: Set<ModelCapability> { get }
+    nonisolated var capabilities: Set<ModelCapability> { get }
 
     /// Describes what this provider can do, where it runs, and how heavy
     /// it is. Surfaced to the CapabilityRegistry for cost-aware ranking.
-    var manifest: ModelManifest { get }
+    nonisolated var manifest: ModelManifest { get }
 
     /// Whether this provider is currently usable (model loaded, OS feature
     /// enabled, network reachable for cloud, etc.).

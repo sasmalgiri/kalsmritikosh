@@ -33,7 +33,7 @@ public struct VectorHit: Sendable, Hashable {
     public let chunkID: Chunk.ID
     public let score: Double  // cosine similarity, -1...1 (typical use ≥ 0)
 
-    public init(chunkID: Chunk.ID, score: Double) {
+    public nonisolated init(chunkID: Chunk.ID, score: Double) {
         self.chunkID = chunkID
         self.score = score
     }

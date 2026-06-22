@@ -47,9 +47,15 @@ public actor Database {
         }
         self.rawHandle = db
 
-        try execRaw("PRAGMA journal_mode=WAL;")
-        try execRaw("PRAGMA foreign_keys=ON;")
-        try execRaw("PRAGMA synchronous=NORMAL;")
+        // G2-SWIFT6 — the actor `init` is nonisolated (it must be, to
+        // bootstrap the actor's state). Calling the actor-isolated
+        // `execRaw` from here trips the strict-concurrency warning.
+        // Route the pragma setup through the static helper instead —
+        // it takes the raw handle directly so no actor isolation is
+        // needed. Both paths converge on `Self.execRaw(handle:sql:)`.
+        try Self.execRaw(handle: db, sql: "PRAGMA journal_mode=WAL;")
+        try Self.execRaw(handle: db, sql: "PRAGMA foreign_keys=ON;")
+        try Self.execRaw(handle: db, sql: "PRAGMA synchronous=NORMAL;")
     }
 
     deinit {
@@ -118,8 +124,16 @@ public actor Database {
     // MARK: - Internals
 
     internal func execRaw(_ sql: String) throws {
+        try Self.execRaw(handle: rawHandle, sql: sql)
+    }
+
+    /// Nonisolated raw-exec helper. Used from the actor `init` (where
+    /// the actor isn't shared yet so accessing rawHandle is safe) AND
+    /// from the actor-isolated `execRaw` instance method above. Single
+    /// shared body avoids drift.
+    private static func execRaw(handle: OpaquePointer?, sql: String) throws {
         var err: UnsafeMutablePointer<CChar>?
-        let rc = sqlite3_exec(rawHandle, sql, nil, nil, &err)
+        let rc = sqlite3_exec(handle, sql, nil, nil, &err)
         if rc != SQLITE_OK {
             let message = err.map { String(cString: $0) } ?? "unknown"
             sqlite3_free(err)

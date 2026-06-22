@@ -25,7 +25,10 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     public let pageNumber: Int?
     public let createdAt: Date
 
-    public init(
+    // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
+    // rows in synchronous context. Value type holding only Sendable
+    // fields; main-actor isolation isn't needed.
+    public nonisolated init(
         id: ID = UUID(),
         objectID: KnowledgeObject.ID,
         ordinal: Int,

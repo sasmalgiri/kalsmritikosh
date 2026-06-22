@@ -29,7 +29,7 @@ public struct KnowledgeObject: Codable, Identifiable, Hashable, Sendable {
     public let createdAt: Date
     public let updatedAt: Date
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         sourceFile: URL,
         sourceType: SourceType,

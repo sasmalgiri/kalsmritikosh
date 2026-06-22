@@ -10,7 +10,11 @@
 import Foundation
 import SQLite3
 
-private let SQLITE_TRANSIENT = unsafeBitCast(
+// G2-SWIFT6 — `nonisolated(unsafe)` so this top-level constant isn't
+// inferred main-actor-isolated under strict concurrency. The value is
+// a SQLite3 sentinel pointer that's immutable for the process
+// lifetime; race conditions are not possible.
+nonisolated(unsafe) private let SQLITE_TRANSIENT = unsafeBitCast(
     OpaquePointer(bitPattern: -1),
     to: sqlite3_destructor_type.self
 )
@@ -22,49 +26,61 @@ public enum SQLValue: Sendable, Hashable {
     case text(String)
     case blob(Data)
 
-    public static func uuid(_ value: UUID) -> SQLValue { .text(value.uuidString) }
-    public static func date(_ value: Date) -> SQLValue { .real(value.timeIntervalSince1970) }
-    public static func bool(_ value: Bool) -> SQLValue { .integer(value ? 1 : 0) }
-    public static func optionalText(_ value: String?) -> SQLValue {
+    // G2-SWIFT6 — every SQLValue static helper is nonisolated so it
+    // can be called from any actor context. Pure value-producing funcs;
+    // no mutable state, no isolation needed.
+    nonisolated public static func uuid(_ value: UUID) -> SQLValue { .text(value.uuidString) }
+    nonisolated public static func date(_ value: Date) -> SQLValue { .real(value.timeIntervalSince1970) }
+    nonisolated public static func bool(_ value: Bool) -> SQLValue { .integer(value ? 1 : 0) }
+    nonisolated public static func optionalText(_ value: String?) -> SQLValue {
         value.map { .text($0) } ?? .null
     }
-    public static func optionalDate(_ value: Date?) -> SQLValue {
+    nonisolated public static func optionalDate(_ value: Date?) -> SQLValue {
         value.map { .real($0.timeIntervalSince1970) } ?? .null
     }
 }
 
+// G2-SWIFT6 — every SQLRow accessor needs `nonisolated` so repository
+// actors can call them in synchronous context without tripping the
+// strict-concurrency warning ("can not be called from outside of the
+// actor"). SQLRow is a Sendable value type of immutable storage; no
+// isolation is needed.
 public struct SQLRow: Sendable {
     public let values: [SQLValue]
+
+    public init(values: [SQLValue]) {
+        self.values = values
+    }
 
     /// Bounds-checked accessor. Returns nil on out-of-range — a column
     /// mismatch should yield a missing field, not a fatal crash that
     /// takes the whole ingest task down.
-    private func value(at i: Int) -> SQLValue? {
+    nonisolated private func value(at i: Int) -> SQLValue? {
         guard i >= 0, i < values.count else { return nil }
         return values[i]
     }
 
-    public func int(_ i: Int) -> Int64? {
+    nonisolated public func int(_ i: Int) -> Int64? {
         if case .integer(let v) = value(at: i) { return v }; return nil
     }
-    public func double(_ i: Int) -> Double? {
+    nonisolated public func double(_ i: Int) -> Double? {
         if case .real(let v) = value(at: i) { return v }; return nil
     }
-    public func string(_ i: Int) -> String? {
+    nonisolated public func string(_ i: Int) -> String? {
         if case .text(let v) = value(at: i) { return v }; return nil
     }
-    public func blob(_ i: Int) -> Data? {
+    nonisolated public func blob(_ i: Int) -> Data? {
         if case .blob(let v) = value(at: i) { return v }; return nil
     }
-    public func uuid(_ i: Int) -> UUID? {
+    nonisolated public func uuid(_ i: Int) -> UUID? {
         guard let s = string(i) else { return nil }
         return UUID(uuidString: s)
     }
-    public func date(_ i: Int) -> Date? {
+    nonisolated public func date(_ i: Int) -> Date? {
         guard let d = double(i) else { return nil }
         return Date(timeIntervalSince1970: d)
     }
-    public func isNull(_ i: Int) -> Bool {
+    nonisolated public func isNull(_ i: Int) -> Bool {
         if case .null = value(at: i) { return true }
         return false
     }

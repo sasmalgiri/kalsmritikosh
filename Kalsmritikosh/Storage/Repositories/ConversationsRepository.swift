@@ -15,7 +15,7 @@ public struct Conversation: Identifiable, Sendable, Hashable {
     public let startedAt: Date
     public let title: String?
 
-    public init(id: UUID = UUID(), startedAt: Date = .init(), title: String? = nil) {
+    public nonisolated init(id: UUID = UUID(), startedAt: Date = .init(), title: String? = nil) {
         self.id = id
         self.startedAt = startedAt
         self.title = title
@@ -34,7 +34,7 @@ public struct ConversationTurn: Identifiable, Sendable, Hashable {
     public let body: String
     public let createdAt: Date
 
-    public init(
+    public nonisolated init(
         id: UUID = UUID(),
         conversationID: UUID,
         ordinal: Int,

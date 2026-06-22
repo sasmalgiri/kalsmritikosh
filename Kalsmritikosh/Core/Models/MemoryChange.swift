@@ -24,7 +24,7 @@ public struct MemoryChange: Codable, Identifiable, Hashable, Sendable {
     public let triggeringObjectID: KnowledgeObject.ID?
     public let occurredAt: Date
 
-    public init(
+    public nonisolated init(
         id: ID = UUID(),
         memoryObjectID: MemoryObject.ID,
         subjectKind: MemoryObject.SubjectKind,
@@ -46,7 +46,11 @@ public struct MemoryChange: Codable, Identifiable, Hashable, Sendable {
         self.occurredAt = occurredAt
     }
 
-    public struct Delta: Codable, Sendable, Hashable {
+    // G2-SWIFT6 — Codable conformance moved to a nonisolated extension
+    // below so MemoryRepository (an actor) can call its encode/decode
+    // without "main-actor-isolated conformance cannot be used in actor-
+    // isolated context" warning. Delta is a Sendable value type.
+    public struct Delta: Sendable, Hashable {
         public let addedDecisions: [String]
         public let removedDecisions: [String]
         public let addedRisks: [String]
@@ -55,7 +59,7 @@ public struct MemoryChange: Codable, Identifiable, Hashable, Sendable {
         public let statusChanged: StatusChange?
         public let narrativeRewrite: Bool
 
-        public init(
+        public nonisolated init(
             addedDecisions: [String] = [],
             removedDecisions: [String] = [],
             addedRisks: [String] = [],
@@ -73,13 +77,20 @@ public struct MemoryChange: Codable, Identifiable, Hashable, Sendable {
             self.narrativeRewrite = narrativeRewrite
         }
 
-        public struct StatusChange: Codable, Sendable, Hashable {
+        public struct StatusChange: Sendable, Hashable {
             public let from: String
             public let to: String
-            public init(from: String, to: String) {
+            public nonisolated init(from: String, to: String) {
                 self.from = from
                 self.to = to
             }
         }
     }
 }
+
+// G2-SWIFT6 — Codable conformance declared outside the type with
+// `nonisolated` scope, so MemoryRepository's actor-isolated SQL paths
+// can encode/decode without picking up main-actor isolation from the
+// synthesized conformance.
+nonisolated extension MemoryChange.Delta: Codable {}
+nonisolated extension MemoryChange.Delta.StatusChange: Codable {}
