@@ -42,7 +42,7 @@ public struct HardwareProfile: Codable, Sendable, Hashable {
 
     /// Tier used by AutoRecommendation to pick default models without
     /// reading any specific model identifier.
-    public var tier: ModelManifest.Tier {
+    public nonisolated var tier: ModelManifest.Tier {
         switch totalRAMBytes {
         case ..<(10 * 1_073_741_824): return .small      // < 10 GB
         case ..<(20 * 1_073_741_824): return .medium     // < 20 GB

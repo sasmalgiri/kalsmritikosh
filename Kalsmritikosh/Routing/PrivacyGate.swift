@@ -15,7 +15,7 @@ public final class PrivacyGate: @unchecked Sendable {
     private let defaultsKey = "atlas.privacy.allowCloud"
     private let queue = DispatchQueue(label: "atlas.privacy")
 
-    public var allowCloudRouting: Bool {
+    public nonisolated var allowCloudRouting: Bool {
         get { queue.sync { UserDefaults.standard.bool(forKey: defaultsKey) } }
         set { queue.sync { UserDefaults.standard.set(newValue, forKey: defaultsKey) } }
     }

@@ -10,7 +10,7 @@
 import Foundation
 
 public struct RuleIntentDetector: IntentDetector {
-    public init() {}
+    public nonisolated init() {}
 
     public func detect(question: String) async throws -> UserIntent {
         let q = question.lowercased()

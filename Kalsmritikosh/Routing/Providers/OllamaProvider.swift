@@ -11,6 +11,17 @@
 import Foundation
 import OSLog
 
+// G2-SWIFT6 — known remaining warning on this conformance: the
+// protocol's async methods (isAvailable / generate / embed / ...)
+// come in nonisolated, while the actor's implementations are
+// actor-isolated. The actor IS the synchronization boundary, so
+// data races aren't actually possible — but Swift 6 strict
+// concurrency can't prove that and `@preconcurrency` doesn't help
+// on this specific shape. Deferred to a future commit that either
+// migrates OllamaProvider to a value-type façade over a NIO/URLSession
+// task, or splits the protocol into a nonisolated `Sendable`-prop
+// half and an explicitly-isolated async half. Behavior is correct
+// today.
 public actor OllamaProvider: ModelProvider {
     // G2-SWIFT6 — explicit nonisolated to match the protocol's
     // nonisolated requirements (the registry reads these declaratively
@@ -110,7 +121,6 @@ public actor OllamaProvider: ModelProvider {
             ]
         ]
         if !options.stopSequences.isEmpty {
-            body["options", default: [:]]
             if var opts = body["options"] as? [String: Any] {
                 opts["stop"] = options.stopSequences
                 body["options"] = opts

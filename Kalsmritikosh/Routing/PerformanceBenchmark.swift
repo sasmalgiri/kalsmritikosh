@@ -10,7 +10,11 @@
 
 import Foundation
 
-public struct BenchmarkResult: Codable, Sendable, Hashable {
+// G2-SWIFT6 — Codable/Hashable/Equatable conformances declared via
+// nonisolated extension at the bottom of the file so PerformanceBenchmark
+// (an actor) can use them without the "main-actor-isolated conformance"
+// warning.
+public struct BenchmarkResult: Sendable {
     public let providerID: String
     public let tokensPerSecond: Double
     public let latencyP50Ms: Double
@@ -33,7 +37,10 @@ public struct BenchmarkResult: Codable, Sendable, Hashable {
 
     /// Maps measured P50 to the matching LatencyHint, used by the resolver
     /// when ranking providers against `CapabilitySpec.maxLatency`.
-    public var observedLatency: LatencyHint {
+    // G2-SWIFT6 — nonisolated so actor-isolated rankers can read it
+    // without "main-actor-isolated property can not be referenced on
+    // a nonisolated actor instance".
+    public nonisolated var observedLatency: LatencyHint {
         switch latencyP50Ms {
         case ..<500: return .interactive
         case ..<3_000: return .background
@@ -47,7 +54,7 @@ public actor PerformanceBenchmark {
     private let storeURL: URL
     private let hardwareFingerprint: String
 
-    public nonisolated init(hardwareProfile: HardwareProfile) {
+    public init(hardwareProfile: HardwareProfile) {
         let dir = (try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
@@ -57,9 +64,15 @@ public actor PerformanceBenchmark {
             .appendingPathComponent("AtlasChronicaMemora", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.storeURL = dir.appendingPathComponent("benchmarks.json")
-        self.hardwareFingerprint = "\(hardwareProfile.chipName)|\(hardwareProfile.totalRAMBytes)"
-        self.cached = loadCache()
+        // G2-SWIFT6 — actor init is implicitly nonisolated and can't
+        // reach into instance-isolated state until the actor exists.
+        // Compute the URL + fingerprint locally, hydrate the cache via
+        // a STATIC helper, then assign the result.
+        let url = dir.appendingPathComponent("benchmarks.json")
+        let fingerprint = "\(hardwareProfile.chipName)|\(hardwareProfile.totalRAMBytes)"
+        self.storeURL = url
+        self.hardwareFingerprint = fingerprint
+        self.cached = Self.loadCacheStatic(at: url, fingerprint: fingerprint)
     }
 
     public func result(for providerID: String) -> BenchmarkResult? {
@@ -100,9 +113,17 @@ public actor PerformanceBenchmark {
     }
 
     private func loadCache() -> [String: BenchmarkResult] {
-        guard let data = try? Data(contentsOf: storeURL) else { return [:] }
+        Self.loadCacheStatic(at: storeURL, fingerprint: hardwareFingerprint)
+    }
+
+    /// G2-SWIFT6 — static helper used from the nonisolated init.
+    private static func loadCacheStatic(
+        at url: URL,
+        fingerprint: String
+    ) -> [String: BenchmarkResult] {
+        guard let data = try? Data(contentsOf: url) else { return [:] }
         guard let file = try? JSONDecoder().decode(CacheFile.self, from: data) else { return [:] }
-        guard file.fingerprint == hardwareFingerprint else { return [:] }
+        guard file.fingerprint == fingerprint else { return [:] }
         return file.results
     }
 
@@ -124,3 +145,9 @@ public actor PerformanceBenchmark {
         return rc == KERN_SUCCESS ? info.resident_size : 0
     }
 }
+
+
+// G2-SWIFT6 — nonisolated conformances so actor-isolated code can use
+// Codable/Hashable/Equatable without picking up main-actor isolation.
+nonisolated extension BenchmarkResult: Codable {}
+nonisolated extension BenchmarkResult: Hashable {}

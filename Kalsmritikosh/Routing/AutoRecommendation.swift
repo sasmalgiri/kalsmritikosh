@@ -29,7 +29,7 @@ public struct AutoRecommendation: Sendable {
     /// Returns one recommendation per capability the resolver wants a default
     /// for. Manifests whose `minRAMBytes` exceeds the hardware budget are
     /// dropped from candidacy.
-    public func recommend(
+    public nonisolated func recommend(
         manifests: [ModelManifest],
         benchmarks: [String: BenchmarkResult]
     ) -> [Recommendation] {

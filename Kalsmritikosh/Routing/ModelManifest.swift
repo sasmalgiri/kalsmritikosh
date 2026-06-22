@@ -57,7 +57,7 @@ public struct ModelManifest: Codable, Sendable, Hashable {
         case large
     }
 
-    public init(
+    public nonisolated init(
         id: String,
         displayName: String,
         capabilities: Set<ModelCapability>,

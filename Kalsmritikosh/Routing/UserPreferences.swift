@@ -28,7 +28,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
     }
 
     /// Returns the pinned provider ID for a given capability, if any.
-    public func pinnedProvider(for capability: ModelCapability) -> String? {
+    public nonisolated func pinnedProvider(for capability: ModelCapability) -> String? {
         queue.sync { self.pinsByCapability()[capability] }
     }
 

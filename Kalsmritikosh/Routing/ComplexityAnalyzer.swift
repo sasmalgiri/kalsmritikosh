@@ -29,7 +29,7 @@ public protocol ComplexityAnalyzer: Sendable {
 }
 
 public struct HeuristicComplexityAnalyzer: ComplexityAnalyzer {
-    public init() {}
+    public nonisolated init() {}
 
     public func score(_ intent: UserIntent) async -> ComplexityScore {
         var score = 1
