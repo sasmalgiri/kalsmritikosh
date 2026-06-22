@@ -28,6 +28,11 @@ public actor MasterBrain {
     /// the snapshot when scoring citations so follow-ups inherit the
     /// prior turn's entities + topic frame.
     private let sessionProfile: SessionProfile?
+    /// G2-PROGRESSIVE Phase 1 — optional. When present, answerStream
+    /// emits an `.instant` event before kicking off the full pipeline,
+    /// IF the resolved subject has a distilled MemoryObject whose
+    /// narrative is non-empty. The UI tags this read as "verifying…".
+    private let memoryRepo: MemoryRepository?
 
     public init(
         intentDetector: IntentDetector? = nil,
@@ -37,7 +42,8 @@ public actor MasterBrain {
         capabilities: CapabilityRegistry? = nil,
         verifier: Verifier? = nil,
         weeklyBriefing: WeeklyBriefingGenerator? = nil,
-        sessionProfile: SessionProfile? = nil
+        sessionProfile: SessionProfile? = nil,
+        memoryRepo: MemoryRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -47,6 +53,7 @@ public actor MasterBrain {
         self.verifier = verifier
         self.weeklyBriefing = weeklyBriefing
         self.sessionProfile = sessionProfile
+        self.memoryRepo = memoryRepo
     }
 
     /// Clear the in-memory SessionProfile. The eval harness calls this
@@ -73,11 +80,57 @@ public actor MasterBrain {
         AsyncStream { continuation in
             Task { [weak self] in
                 guard let self else { continuation.finish(); return }
+
+                // G2-PROGRESSIVE Phase 1 — emit an instant cached read
+                // if a confident MemoryObject for the resolved subject
+                // exists. The UI MUST tag this as "Quick read · verifying…"
+                // and NEVER treat it as a verified answer (trust contract,
+                // GATE2_ROADMAP §G2-PROGRESSIVE). The pipeline continues
+                // regardless; Phase 4 is the locked answer.
+                if let instant = await self.phase1Instant(question: question) {
+                    continuation.yield(instant)
+                }
+
                 let final = await self.computeVerified(question: question)
                 continuation.yield(.verified(final))
                 continuation.finish()
             }
         }
+    }
+
+    /// Phase 1 cache probe. Returns an `.instant` update only when:
+    ///   1. A MemoryRepository is wired (caller opted in)
+    ///   2. Intent detection produced a non-global scope
+    ///   3. A MemoryObject for that subject exists AND its narrative
+    ///      shares at least one entity hint with the question (a weak
+    ///      relevance gate so stale memory doesn't pollute Phase 1)
+    private func phase1Instant(question: String) async -> AnswerUpdate? {
+        guard let memoryRepo, let intentDetector else { return nil }
+        guard let intent = try? await intentDetector.detect(question: question) else {
+            return nil
+        }
+        let resolved: (MemoryObject.SubjectKind, String)?
+        switch intent.scope {
+        case .project(let n): resolved = (.project, n)
+        case .organization(let n): resolved = (.organization, n)
+        case .person(let n): resolved = (.person, n)
+        case .global, .folder: resolved = nil
+        }
+        guard let (kind, identifier) = resolved,
+              let memory = try? await memoryRepo.current(forSubject: kind, identifier: identifier),
+              !memory.narrative.isEmpty
+        else { return nil }
+
+        // Cache-match gate: require at least one entity-hint overlap
+        // (case-insensitive) so a stale narrative doesn't pollute Phase 1.
+        let narrativeLower = memory.narrative.lowercased()
+        let hits = intent.entityHints.contains { hint in
+            narrativeLower.contains(hint.lowercased())
+        }
+        guard hits || !intent.entityHints.isEmpty == false else { return nil }
+        guard hits else { return nil }
+
+        return .instant(body: memory.narrative, citations: [])
     }
 
     /// Legacy synchronous-ish entry point. Reads the terminal

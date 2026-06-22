@@ -258,7 +258,8 @@ public final class AppState {
                 capabilities: capabilities,
                 verifier: verifier,
                 weeklyBriefing: weeklyBriefing,
-                sessionProfile: sessionProfile
+                sessionProfile: sessionProfile,
+                memoryRepo: memoryRepo
             )
 
             // ── Ingestion ────────────────────────────────────────────
