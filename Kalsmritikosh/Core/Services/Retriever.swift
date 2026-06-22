@@ -26,7 +26,7 @@ public struct RetrievalResult: Codable, Sendable {
     public let layersUsed: [RetrievalLayer]
     public let shortCircuitedAt: RetrievalLayer?
 
-    public init(
+    public nonisolated init(
         chunks: [RetrievedChunk] = [],
         events: [Event] = [],
         entities: [Entity] = [],
@@ -50,7 +50,7 @@ public struct RetrievedChunk: Codable, Sendable, Hashable {
     public let score: Double
     public let viaLayer: RetrievalLayer
 
-    public init(chunk: Chunk, score: Double, viaLayer: RetrievalLayer) {
+    public nonisolated init(chunk: Chunk, score: Double, viaLayer: RetrievalLayer) {
         self.chunk = chunk
         self.score = score
         self.viaLayer = viaLayer

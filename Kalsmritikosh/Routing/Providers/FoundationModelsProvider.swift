@@ -12,13 +12,13 @@ import FoundationModels
 #endif
 
 public struct FoundationModelsProvider: ModelProvider {
-    public let id = "provider.system.languageModel"
-    public let capabilities: Set<ModelCapability> = [
+    public nonisolated let id = "provider.system.languageModel"
+    public nonisolated let capabilities: Set<ModelCapability> = [
         .textGeneration, .structuredOutput, .toolCalling,
         .longContext, .reasoning, .summarization,
         .extraction, .classification
     ]
-    public let manifest: ModelManifest
+    public nonisolated let manifest: ModelManifest
 
     public init() {
         self.manifest = ModelManifest(

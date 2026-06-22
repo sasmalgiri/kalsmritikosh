@@ -22,7 +22,7 @@ public struct AutoRecommendation: Sendable {
 
     public let hardware: HardwareProfile
 
-    public init(hardware: HardwareProfile) {
+    public nonisolated init(hardware: HardwareProfile) {
         self.hardware = hardware
     }
 

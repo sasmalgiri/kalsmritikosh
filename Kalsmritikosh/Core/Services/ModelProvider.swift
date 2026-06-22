@@ -127,7 +127,7 @@ public struct GenerationOptions: Sendable, Hashable {
     public var stopSequences: [String]
     public var systemPrompt: String?
 
-    public init(
+    public nonisolated init(
         maxTokens: Int = 1024,
         temperature: Double = 0.4,
         topP: Double = 0.95,
@@ -163,19 +163,25 @@ public enum PrivacyLevel: String, Codable, Sendable, Hashable, CaseIterable {
 
 /// Lets callers say "I'm OK waiting" vs "this must be interactive". The
 /// registry uses this to rank providers when several fulfil the spec.
-public enum LatencyHint: String, Codable, Sendable, Hashable, Comparable {
+// G2-SWIFT6 — Comparable conformance moved to a nonisolated extension
+// at the bottom of this file so CapabilityRegistry's actor-isolated
+// comparisons don't pick up main-actor isolation from synthesis.
+public enum LatencyHint: String, Codable, Sendable, Hashable {
     case interactive   // < 500ms tokens-to-first
     case background    // okay if it takes seconds
     case bulk          // batch jobs, no UI waiting
 
-    private var order: Int {
+    nonisolated fileprivate var order: Int {
         switch self {
         case .interactive: return 0
         case .background: return 1
         case .bulk: return 2
         }
     }
-    public static func < (lhs: LatencyHint, rhs: LatencyHint) -> Bool {
+    public nonisolated static func < (lhs: LatencyHint, rhs: LatencyHint) -> Bool {
         lhs.order < rhs.order
     }
 }
+
+// G2-SWIFT6 — explicit nonisolated Comparable conformance.
+nonisolated extension LatencyHint: Comparable {}

@@ -39,7 +39,7 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// Full confidence report, used by the UI quality strip (T11).
     public let report: ConfidenceReport?
 
-    public init(
+    public nonisolated init(
         body: String,
         answerText: String? = nil,
         intentKind: String? = nil,
@@ -65,7 +65,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report
     }
 
-    public init(from decoder: Decoder) throws {
+    public nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.body = try c.decode(String.self, forKey: .body)
         self.answerText = try c.decodeIfPresent(String.self, forKey: .answerText)
@@ -84,7 +84,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         public let eventID: Event.ID?
         public let snippet: String
 
-        public init(
+        public nonisolated init(
             objectID: KnowledgeObject.ID,
             chunkID: Chunk.ID? = nil,
             eventID: Event.ID? = nil,
@@ -101,7 +101,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         public let description: String
         public let claimA: String
         public let claimB: String
-        public init(description: String, claimA: String, claimB: String) {
+        public nonisolated init(description: String, claimA: String, claimB: String) {
             self.description = description
             self.claimA = claimA
             self.claimB = claimB

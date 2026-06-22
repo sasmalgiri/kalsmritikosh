@@ -8,12 +8,12 @@
 import Foundation
 
 public actor CloudProvider: ModelProvider {
-    public let id = "provider.cloud"
-    public let capabilities: Set<ModelCapability> = [
+    public nonisolated let id = "provider.cloud"
+    public nonisolated let capabilities: Set<ModelCapability> = [
         .textGeneration, .structuredOutput, .longContext,
         .reasoning, .summarization, .extraction
     ]
-    public let manifest: ModelManifest
+    public nonisolated let manifest: ModelManifest
 
     private let enabled: Bool
 

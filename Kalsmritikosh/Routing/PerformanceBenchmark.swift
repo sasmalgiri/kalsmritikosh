@@ -17,7 +17,7 @@ public struct BenchmarkResult: Codable, Sendable, Hashable {
     public let peakMemoryBytes: Int64
     public let measuredAt: Date
 
-    public init(
+    public nonisolated init(
         providerID: String,
         tokensPerSecond: Double,
         latencyP50Ms: Double,
@@ -47,7 +47,7 @@ public actor PerformanceBenchmark {
     private let storeURL: URL
     private let hardwareFingerprint: String
 
-    public init(hardwareProfile: HardwareProfile) {
+    public nonisolated init(hardwareProfile: HardwareProfile) {
         let dir = (try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,

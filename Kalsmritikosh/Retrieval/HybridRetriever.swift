@@ -16,7 +16,7 @@ public actor HybridRetriever: Retriever {
     /// How many vector hits the vector layer asks for. Held as a property
     /// so a future Settings toggle can change it without touching the
     /// retrieval call site. UPDATE_06 Item 2.
-    public static let defaultVectorLayerLimit = 20
+    public nonisolated static let defaultVectorLayerLimit = 20
 
     private let memory: MemoryRepository
     private let events: EventsRepository
@@ -279,7 +279,7 @@ public actor HybridRetriever: Retriever {
 
 extension RetrievalLayer {
     /// The locked priority order. Memory leads; vector is intentionally last.
-    public static let priorityOrder: [RetrievalLayer] = [
+    public nonisolated static let priorityOrder: [RetrievalLayer] = [
         .memory, .timeline, .entity, .metadata, .summary, .graph, .vector
     ]
 }

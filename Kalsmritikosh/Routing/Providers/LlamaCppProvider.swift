@@ -6,9 +6,9 @@
 import Foundation
 
 public struct LlamaCppProvider: ModelProvider {
-    public let id = "provider.local.gguf"
-    public let capabilities: Set<ModelCapability> = [.textGeneration, .reasoning]
-    public let manifest: ModelManifest
+    public nonisolated let id = "provider.local.gguf"
+    public nonisolated let capabilities: Set<ModelCapability> = [.textGeneration, .reasoning]
+    public nonisolated let manifest: ModelManifest
 
     public init() {
         self.manifest = ModelManifest(

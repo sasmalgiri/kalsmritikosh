@@ -20,7 +20,7 @@ public struct UserIntent: Codable, Sendable, Hashable {
     public let entityHints: [String]
     public let rawQuestion: String
 
-    public init(
+    public nonisolated init(
         kind: Kind,
         scope: Scope,
         timeframe: Timeframe? = nil,
@@ -57,7 +57,7 @@ public struct UserIntent: Codable, Sendable, Hashable {
     public struct Timeframe: Codable, Sendable, Hashable {
         public let start: Date?
         public let end: Date?
-        public init(start: Date?, end: Date?) {
+        public nonisolated init(start: Date?, end: Date?) {
             self.start = start
             self.end = end
         }
@@ -76,7 +76,7 @@ public struct RoutingDecision: Codable, Sendable {
     public let complexity: Int        // 1...5, produced by ComplexityAnalyzer
     public let rationale: String
 
-    public init(
+    public nonisolated init(
         answerSpec: CapabilitySpec,
         expertIDs: [String],
         retrievalLayers: [RetrievalLayer],

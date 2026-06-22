@@ -14,8 +14,8 @@ import Foundation
 
 public actor MLXProvider: ModelProvider {
     public let id: String
-    public let capabilities: Set<ModelCapability>
-    public let manifest: ModelManifest
+    public nonisolated let capabilities: Set<ModelCapability>
+    public nonisolated let manifest: ModelManifest
 
     private let downloader: ModelDownloader
 

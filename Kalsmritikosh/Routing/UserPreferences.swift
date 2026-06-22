@@ -13,7 +13,7 @@
 import Foundation
 
 public final class ModelUserPreferences: @unchecked Sendable {
-    public static let shared = ModelUserPreferences()
+    public nonisolated static let shared = ModelUserPreferences()
 
     private let defaultsKey = "atlas.model.preferences"
     private let queue = DispatchQueue(label: "atlas.preferences", attributes: .concurrent)

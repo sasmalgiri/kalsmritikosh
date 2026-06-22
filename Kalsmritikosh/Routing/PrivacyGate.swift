@@ -10,7 +10,7 @@
 import Foundation
 
 public final class PrivacyGate: @unchecked Sendable {
-    public static let shared = PrivacyGate()
+    public nonisolated static let shared = PrivacyGate()
 
     private let defaultsKey = "atlas.privacy.allowCloud"
     private let queue = DispatchQueue(label: "atlas.privacy")

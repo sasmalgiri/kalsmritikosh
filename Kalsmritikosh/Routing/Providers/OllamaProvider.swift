@@ -12,9 +12,13 @@ import Foundation
 import OSLog
 
 public actor OllamaProvider: ModelProvider {
-    public let id = "provider.local.network"
-    public let capabilities: Set<ModelCapability>
-    public let manifest: ModelManifest
+    // G2-SWIFT6 — explicit nonisolated to match the protocol's
+    // nonisolated requirements (the registry reads these declaratively
+    // before the actor is "live"). All three are immutable `let` set
+    // once in init; nonisolated access is safe.
+    public nonisolated let id = "provider.local.network"
+    public nonisolated let capabilities: Set<ModelCapability>
+    public nonisolated let manifest: ModelManifest
 
     private let baseURL: URL
     private let modelTag: String

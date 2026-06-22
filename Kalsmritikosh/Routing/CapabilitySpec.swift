@@ -38,7 +38,7 @@ public struct CapabilitySpec: Codable, Sendable, Hashable {
     /// parsed by the resolver.
     public let purpose: String
 
-    public init(
+    public nonisolated init(
         requires: Set<ModelCapability>,
         prefers: Set<ModelCapability> = [],
         maxLatency: LatencyHint = .background,

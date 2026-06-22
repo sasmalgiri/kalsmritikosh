@@ -16,12 +16,15 @@ import Foundation
 
 public protocol Expert: Sendable {
     /// Stable identifier the Router uses to address this expert.
-    var id: String { get }
+    // G2-SWIFT6 — nonisolated so the registry / router can read these
+    // declaratively without "main-actor-isolated property cannot be
+    // referenced on a nonisolated actor instance" warnings.
+    nonisolated var id: String { get }
 
     /// Capabilities + domains declared up front so the Router can match
     /// experts to intents deterministically.
-    var capabilities: Set<ExpertCapability> { get }
-    var domains: Set<ExpertDomain> { get }
+    nonisolated var capabilities: Set<ExpertCapability> { get }
+    nonisolated var domains: Set<ExpertDomain> { get }
 
     func analyze(
         intent: UserIntent,
@@ -69,7 +72,7 @@ public struct ExpertContext: Sendable {
     /// back to a direct retriever call.
     public let sharedRetrieval: RetrievalResult?
 
-    public init(
+    public nonisolated init(
         retriever: Retriever,
         capabilities: CapabilityRegistry,
         sharedRetrieval: RetrievalResult? = nil,
@@ -110,7 +113,7 @@ public struct ExpertFindings: Codable, Sendable {
     /// ConfidenceReport so the UI can show "N unverifiable claims dropped".
     public let droppedUnverifiable: Int
 
-    public init(
+    public nonisolated init(
         expertID: String,
         claims: [Claim],
         confidence: Confidence,
@@ -128,7 +131,7 @@ public struct ExpertFindings: Codable, Sendable {
         case expertID, claims, confidence, notes, droppedUnverifiable
     }
 
-    public init(from decoder: Decoder) throws {
+    public nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.expertID = try c.decode(String.self, forKey: .expertID)
         self.claims = try c.decode([Claim].self, forKey: .claims)
@@ -153,7 +156,7 @@ public struct ExpertFindings: Codable, Sendable {
         public let confidence: Confidence
         public let evidenceGranularity: EvidenceGranularity
 
-        public init(
+        public nonisolated init(
             statement: String,
             supportingObjectIDs: [KnowledgeObject.ID] = [],
             supportingEventIDs: [Event.ID] = [],
@@ -174,7 +177,7 @@ public struct ExpertFindings: Codable, Sendable {
                  supportingEntityIDs, confidence, evidenceGranularity
         }
 
-        public init(from decoder: Decoder) throws {
+        public nonisolated init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             self.statement = try c.decode(String.self, forKey: .statement)
             self.supportingObjectIDs = try c.decodeIfPresent([KnowledgeObject.ID].self, forKey: .supportingObjectIDs) ?? []
