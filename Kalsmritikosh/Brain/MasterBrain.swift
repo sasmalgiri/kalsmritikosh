@@ -58,7 +58,52 @@ public actor MasterBrain {
         await sessionProfile?.reset()
     }
 
+    /// G2-PROGRESSIVE — streaming answer stream. Emits phase events as
+    /// the pipeline produces them; terminal event for a non-refused
+    /// answer is `.verified(VerifiedAnswer)`. For refusals, only the
+    /// terminal `.verified` is emitted (no Phase 1-3 events).
+    ///
+    /// **Current implementation scope:** Phase 4 (verified) is wired.
+    /// Phases 1-3 are reserved in the enum for the follow-on commit
+    /// that wires Memory cache + streaming tokens + per-expert events.
+    /// Today's stream therefore yields exactly one `.verified` event;
+    /// shipping the API surface now keeps future phase additions from
+    /// breaking callers.
+    public func answerStream(question: String) -> AsyncStream<AnswerUpdate> {
+        AsyncStream { continuation in
+            Task { [weak self] in
+                guard let self else { continuation.finish(); return }
+                let final = await self.computeVerified(question: question)
+                continuation.yield(.verified(final))
+                continuation.finish()
+            }
+        }
+    }
+
+    /// Legacy synchronous-ish entry point. Reads the terminal
+    /// `.verified` from `answerStream` so both code paths share one
+    /// pipeline. EvalKit and existing UI buttons keep working
+    /// unchanged.
     public func answer(question: String) async -> VerifiedAnswer {
+        for await update in answerStream(question: question) {
+            if case .verified(let answer) = update {
+                return answer
+            }
+        }
+        // Stream finished without emitting .verified — defensive.
+        return VerifiedAnswer(
+            body: "Atlas produced no terminal answer.",
+            citations: [],
+            confidence: .zero,
+            refused: true,
+            refusalReason: "answerStream closed without .verified event."
+        )
+    }
+
+    /// G2-PROGRESSIVE — the previous body of `answer(question:)`, now
+    /// shared between the stream wrapper and any future per-phase
+    /// emitter. Returns the terminal `VerifiedAnswer`.
+    private func computeVerified(question: String) async -> VerifiedAnswer {
         guard
             let intentDetector,
             let router,
