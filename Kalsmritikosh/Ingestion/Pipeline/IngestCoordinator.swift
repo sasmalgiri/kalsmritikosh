@@ -437,7 +437,23 @@ public actor IngestCoordinator {
         }
 
         if let embedder, let vectors {
-            let texts = chunked.map(\.text)
+            // G2-3 contextual retrieval — Anthropic-style chunk-context
+            // prefix. We prepend a short doc-level blurb (filename +
+            // first line + email subject when present) to each chunk
+            // BEFORE embedding. The stored `chunk.text` is unchanged —
+            // FTS rows, citation snippets, range maps, and the chunker
+            // contract all keep their existing shape. Only the vector
+            // changes, and that re-anchors small chunks against the
+            // larger semantically-similar neighbors they previously
+            // lost to (e.g. contract.md vs invoice-432.eml on
+            // "delivery date" similarity, per UPDATE_09 Item 1).
+            let docContext = Self.documentContext(for: object)
+            let texts: [String]
+            if docContext.isEmpty {
+                texts = chunked.map(\.text)
+            } else {
+                texts = chunked.map { "\(docContext)\n---\n\($0.text)" }
+            }
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
                 try? await vectors.upsert(chunkID: chunk.id, embedding: vectorsList[i])
@@ -612,6 +628,45 @@ public actor IngestCoordinator {
                 AtlasLog.ingestion.error("Domain alias write failed for \(domain, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
+    }
+
+    /// G2-3 — Build a short doc-level context blurb prepended to each
+    /// chunk at embedding time. Pure: derives from KO metadata + first
+    /// content line + filename. Capped to keep the prefix from
+    /// drowning the chunk text itself in the embedding pool.
+    ///
+    /// Inputs (in order of value):
+    /// 1. Email Subject (loader writes it as metadata["subject"]).
+    /// 2. Source filename (often carries the answer, e.g. invoice-432.eml).
+    /// 3. First non-empty content line (typical title / H1 / opener).
+    ///
+    /// Result is "" when no context can be derived — caller falls back
+    /// to the chunk text alone, preserving pre-G2-3 behavior.
+    private static func documentContext(for object: KnowledgeObject) -> String {
+        var parts: [String] = []
+
+        if let value = object.metadata["subject"],
+           case .string(let subject) = value.value {
+            let trimmed = subject.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                parts.append("Subject: \(String(trimmed.prefix(160)))")
+            }
+        }
+
+        let filename = object.sourceFile.lastPathComponent
+        if !filename.isEmpty {
+            parts.append("File: \(filename)")
+        }
+
+        let firstLine = object.content
+            .split(separator: "\n", maxSplits: 5, omittingEmptySubsequences: true)
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+        if !firstLine.isEmpty, firstLine.count <= 240, !parts.contains(where: { $0.hasSuffix(firstLine) }) {
+            parts.append("Opening: \(String(firstLine.prefix(200)))")
+        }
+
+        return parts.joined(separator: " | ")
     }
 
     private func subjects(forEntities entities: [Entity]) -> [SubjectInvalidation.Subject] {
