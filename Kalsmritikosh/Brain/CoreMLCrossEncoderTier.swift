@@ -4,24 +4,24 @@
 //
 //  G2-RERANK-LADDER Tier 3 — Core ML cross-encoder reranker.
 //
-//  Loads a bundled Core ML cross-encoder (default: BAAI/bge-reranker-base
-//  converted via coremltools) and scores each (question, passage) pair
-//  with a single forward pass. The model's logits are mapped to [0, 1]
-//  via sigmoid so the score composes with HeuristicKeywordTier and the
-//  existing scoreByObject path.
+//  Loads the bundled bge-reranker-base Core ML model + a pure-Swift
+//  greedy Unigram tokenizer (BGETokenizer), tokenizes each
+//  (question, passage) pair, runs a single forward pass, and maps
+//  the logit through sigmoid to [0, 1].
 //
-//  Conformance to RerankerTier — slots into RerankerLadder above the
-//  heuristic tier and below the LLM tier:
+//  Conformance to RerankerTier — slots between the heuristic tier
+//  (costClass 0) and the LLM tier (costClass 90):
 //
 //      RerankerLadder(tiers: [
 //          HeuristicKeywordTier(),                  // costClass 0
 //          CoreMLCrossEncoderTier(),                // costClass 50
 //      ])
 //
-//  Graceful unavailability: when the .mlpackage isn't bundled (the
-//  default until UPDATE_17B's conversion lands), `score(...)` returns
-//  nil so the cascade falls back to whatever earlier tier produced
-//  scores. No throws; no fatal crashes.
+//  Graceful unavailability cascade:
+//    • model not bundled  → return nil (pass-through)
+//    • tokenizer json not bundled → return nil (pass-through)
+//    • Core ML init throws → return nil + log
+//    • prediction throws on any candidate → that candidate scores 0.5
 //
 
 import Foundation
@@ -33,13 +33,8 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
     public let costClass = 50
 
     /// Name of the bundled Core ML model (without extension). The file
-    /// must live at `Kalsmritikosh/Resources/<modelName>.mlpackage` and
+    /// must live at `Resources/BGEReranker/<modelName>.mlpackage` and
     /// be added to the target's Copy Bundle Resources phase.
-    ///
-    /// To bundle bge-reranker-base:
-    ///   pip install -U huggingface_hub coremltools transformers torch
-    ///   python -c "<see CoreMLCrossEncoderTier.conversionScript>"
-    ///   → produces BGEReranker.mlpackage; drop in Resources/.
     public let modelName: String
     public let maxSequenceLength: Int
 
@@ -53,24 +48,19 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
         candidates: [String]
     ) async -> [Double]? {
         guard !candidates.isEmpty else { return [] }
-
-        // The model loads from the bundle; if the .mlpackage isn't
-        // present yet, return nil so the cascade falls through to
-        // earlier tiers. This is the expected steady state until the
-        // converted model is bundled.
-        guard let url = Bundle.main.url(forResource: modelName, withExtension: "mlpackage")
-                ?? Bundle.main.url(forResource: modelName, withExtension: "mlmodelc")
-                ?? Bundle.main.url(forResource: modelName, withExtension: "mlmodel")
-        else {
-            AtlasLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) not bundled; tier passes through")
+        guard let modelURL = locateModelURL() else {
+            AtlasLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) not bundled; pass-through")
             return nil
         }
-
+        guard let tokenizer = BGETokenizer(maxLength: maxSequenceLength) else {
+            AtlasLog.brain.info("\(id, privacy: .public): tokenizer.json not bundled; pass-through")
+            return nil
+        }
         let model: MLModel
         do {
             let compiledURL: URL = try {
-                if url.pathExtension == "mlmodelc" { return url }
-                return try MLModel.compileModel(at: url)
+                if modelURL.pathExtension == "mlmodelc" { return modelURL }
+                return try MLModel.compileModel(at: modelURL)
             }()
             model = try MLModel(contentsOf: compiledURL)
         } catch {
@@ -78,45 +68,106 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
             return nil
         }
 
-        // The model is expected to take two tokenized inputs (`input_ids`
-        // and `attention_mask`, both [1, maxSequenceLength] int32) and
-        // emit a single logit. Real tokenization needs a bundled
-        // tokenizer (XLM-RoBERTa SentencePiece for bge-reranker-base);
-        // until that's wired, this tier returns nil rather than feed
-        // garbage byte-tokenized input to the model.
-        //
-        // The wiring lands as a follow-on once the .mlpackage and the
-        // matching tokenizer (sentencepiece.model) are both in
-        // Resources/. The protocol API stays unchanged.
-        _ = model
-        AtlasLog.brain.info("\(id, privacy: .public): model loaded but tokenizer not yet wired; tier passes through")
+        var scores: [Double] = []
+        scores.reserveCapacity(candidates.count)
+        for passage in candidates {
+            let out = tokenizer.encode(question: question, passage: passage)
+            do {
+                let logit = try Self.runForward(
+                    model: model,
+                    inputIDs: out.inputIDs,
+                    attentionMask: out.attentionMask,
+                    length: maxSequenceLength
+                )
+                scores.append(Self.sigmoid(logit))
+            } catch {
+                AtlasLog.brain.error("\(id, privacy: .public): forward pass failed: \(String(describing: error), privacy: .public); 0.5 score")
+                scores.append(0.5)
+            }
+        }
+        AtlasLog.brain.info("\(id, privacy: .public): scored \(scores.count, privacy: .public) candidates")
+        return scores
+    }
+
+    private func locateModelURL() -> URL? {
+        // The bundled location is `Resources/BGEReranker/BGEReranker.mlpackage`.
+        // Try variants Xcode might pick up depending on whether it
+        // compiled the .mlpackage to .mlmodelc.
+        if let url = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc", subdirectory: "BGEReranker") {
+            return url
+        }
+        if let url = Bundle.main.url(forResource: modelName, withExtension: "mlpackage", subdirectory: "BGEReranker") {
+            return url
+        }
+        if let url = Bundle.main.url(forResource: modelName, withExtension: "mlmodelc") {
+            return url
+        }
+        if let url = Bundle.main.url(forResource: modelName, withExtension: "mlpackage") {
+            return url
+        }
         return nil
     }
 
-    /// Python conversion script (run once on a Mac with `coremltools`).
-    /// Produces `BGEReranker.mlpackage` which is then dropped into the
-    /// project's Resources/ folder and added to Copy Bundle Resources.
+    private static func runForward(
+        model: MLModel,
+        inputIDs: [Int32],
+        attentionMask: [Int32],
+        length: Int
+    ) throws -> Float {
+        let shape: [NSNumber] = [1, NSNumber(value: length)]
+        let inputIDsArray = try MLMultiArray(shape: shape, dataType: .int32)
+        let maskArray = try MLMultiArray(shape: shape, dataType: .int32)
+        for i in 0..<length {
+            inputIDsArray[i] = NSNumber(value: i < inputIDs.count ? inputIDs[i] : Int32(BGETokenizer.padID))
+            maskArray[i] = NSNumber(value: i < attentionMask.count ? attentionMask[i] : 0)
+        }
+        let inputs: [String: MLFeatureValue] = [
+            "input_ids": MLFeatureValue(multiArray: inputIDsArray),
+            "attention_mask": MLFeatureValue(multiArray: maskArray)
+        ]
+        let provider = try MLDictionaryFeatureProvider(dictionary: inputs)
+        let result = try model.prediction(from: provider)
+
+        // bge-reranker emits a single logit. The Core ML conversion
+        // may name it 'logits' / 'output' / something else — probe
+        // the available feature names.
+        for name in result.featureNames {
+            if let val = result.featureValue(for: name)?.multiArrayValue,
+               val.count >= 1 {
+                return Float(truncating: val[0])
+            }
+        }
+        throw NSError(
+            domain: "CoreMLCrossEncoderTier",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Model produced no numeric output"]
+        )
+    }
+
+    private static func sigmoid(_ x: Float) -> Double {
+        Double(1.0 / (1.0 + exp(-x)))
+    }
+
+    /// Reference Python conversion script (run once with the bundled
+    /// venv at ~/coreml-bge/.venv). Kept inline as documentation; the
+    /// actual file used was ~/coreml-bge/convert.py.
     public static let conversionScript: String = """
     from huggingface_hub import snapshot_download
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
     import torch, coremltools as ct
-
     src = snapshot_download("BAAI/bge-reranker-base")
     tok = AutoTokenizer.from_pretrained(src)
     mdl = AutoModelForSequenceClassification.from_pretrained(src, torchscript=True).eval()
-
     example = tok(["query"], ["passage"], return_tensors="pt",
                   padding="max_length", truncation=True, max_length=512)
     traced = torch.jit.trace(mdl, (example["input_ids"], example["attention_mask"]))
-
-    mlmodel = ct.convert(
+    ct.convert(
         traced,
         inputs=[
             ct.TensorType(name="input_ids",      shape=(1, 512), dtype=int),
             ct.TensorType(name="attention_mask", shape=(1, 512), dtype=int),
         ],
         minimum_deployment_target=ct.target.macOS14,
-    )
-    mlmodel.save("BGEReranker.mlpackage")
+    ).save("BGEReranker.mlpackage")
     """
 }

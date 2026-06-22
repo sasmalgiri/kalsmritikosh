@@ -43,3 +43,12 @@ secrets.json
 
 # Vendor build artefacts
 Vendor/**/build/
+
+# G2-RERANK-LADDER Tier 3 — bundled Core ML model + tokenizer.
+# 531 MB weight blob exceeds GitHub's per-file limit. Each developer
+# generates this locally via `scripts/build-bge-reranker.sh`; the
+# resulting files land in Kalsmritikosh/Resources/BGEReranker/ and
+# Xcode picks them up via PBXFileSystemSynchronizedRootGroup at the
+# next build. Keep the directory itself ignored so accidental commits
+# of the binaries don't poison history.
+Kalsmritikosh/Resources/BGEReranker/
