@@ -170,7 +170,11 @@ public actor LLMSummarizer: Summarizer {
     }
 }
 
-private extension Summary.Length {
+// G2-SWIFT6 — nonisolated extensions so LLMSummarizer (an actor) can
+// read these computed properties without "main-actor-isolated property
+// cannot be referenced on a nonisolated actor instance" warnings.
+// Both are pure (no mutable state).
+nonisolated private extension Summary.Length {
     var targetTokens: Int {
         switch self {
         case .short: return 120
@@ -187,7 +191,7 @@ private extension Summary.Length {
     }
 }
 
-private extension Summary.Scope {
+nonisolated private extension Summary.Scope {
     var label: String {
         switch self {
         case .document(let id): return "document \(id.uuidString.prefix(8))"

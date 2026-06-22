@@ -32,7 +32,9 @@ public struct Confidence: Codable, Hashable, Sendable, Comparable {
     /// (1 - product of complements). Used when multiple sources
     /// reinforce the same fact.
     // noisy-OR: P(at least one). Never use across claims.
-    public func combined(with other: Confidence) -> Confidence {
+    // G2-SWIFT6 — nonisolated so callers in actor / nonisolated contexts
+    // can combine confidences directly.
+    public nonisolated func combined(with other: Confidence) -> Confidence {
         Confidence(1.0 - (1.0 - value) * (1.0 - other.value))
     }
 
