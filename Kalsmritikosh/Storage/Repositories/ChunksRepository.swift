@@ -38,6 +38,17 @@ public actor ChunksRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// G2-QA-PAIRS retrieval helper. Returns the ordinal-0 chunk for
+    /// an objectID — used by HybridRetriever when a qa_pair match
+    /// hydrates the answer-side KO into a `RetrievedChunk`.
+    public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
+        let rows = try await database.query("""
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at
+        FROM chunks WHERE object_id = ? ORDER BY ordinal ASC LIMIT 1;
+        """, [.uuid(id)])
+        return rows.first.flatMap(decode)
+    }
+
     public func findByIDs(_ ids: [Chunk.ID]) async throws -> [Chunk] {
         guard !ids.isEmpty else { return [] }
         var chunks: [Chunk] = []

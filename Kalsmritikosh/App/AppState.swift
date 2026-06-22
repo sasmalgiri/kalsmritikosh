@@ -165,11 +165,11 @@ public final class AppState {
                 capabilities: capabilities
             )
             let graph = GraphStore(relationships: relationships)
-            // G2-SYNTHETIC-QUESTIONS — repo shared between ingest
-            // (writes question rows) and retrieval (searches the
-            // synthetic-questions FTS view to add question-shaped
-            // hits to the metadata layer).
+            // G2-SYNTHETIC-QUESTIONS + G2-QA-PAIRS — repos shared between
+            // ingest (writes) and retrieval (reads). One Database actor
+            // → one source of truth for both surfaces.
             let syntheticQuestionsRepo = SyntheticQuestionsRepository(database: db)
+            let qaPairsRepo = QAPairsRepository(database: db)
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -179,7 +179,8 @@ public final class AppState {
                 graph: graph,
                 vectors: vectors,
                 embedder: embedder,
-                syntheticQuestions: syntheticQuestionsRepo
+                syntheticQuestions: syntheticQuestionsRepo,
+                qaPairs: qaPairsRepo
             )
 
             let expertRegistry = ExpertRegistry()
@@ -285,7 +286,9 @@ public final class AppState {
                 relationships: relationships,
                 vectors: vectors,
                 syntheticQuestions: syntheticQuestionsRepo,
-                syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator()
+                syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator(),
+                qaPairs: qaPairsRepo,
+                qaPairExtractor: EmailThreadQAPairExtractor()
             )
 
             // ── Concurrency + Live wiring ────────────────────────────

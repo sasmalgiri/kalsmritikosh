@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 9
+    public static let latestVersion = 10
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -46,7 +46,8 @@ public enum SchemaMigrations {
         (6, v6),
         (7, v7),
         (8, v8),
-        (9, v9)
+        (9, v9),
+        (10, v10)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -502,5 +503,22 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_qa_q_object ON qa_pairs(question_object_id);
     CREATE INDEX IF NOT EXISTS idx_qa_a_object ON qa_pairs(answer_object_id);
+    """
+
+    // MARK: - v10 — G2-QA-PAIRS FTS view + thread_id on KO metadata index
+
+    private static let v10: String = """
+    -- G2-QA-PAIRS — FTS5 over the answer_text. The question shape comes
+    -- from the user; the corpus side stores the answer's summary, so
+    -- matching question-to-answer-summary on bm25 gives the retrieval
+    -- layer a question-shaped second surface alongside chunk text and
+    -- synthetic_questions_fts.
+    CREATE VIRTUAL TABLE IF NOT EXISTS qa_pairs_fts USING fts5(
+        question_text,
+        answer_text,
+        content='qa_pairs',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
     """
 }

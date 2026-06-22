@@ -31,6 +31,10 @@ public actor HybridRetriever: Retriever {
     /// (FTS) layer also queries the synthetic-questions FTS view and
     /// unions chunk hits derived from synthetic-question matches.
     private let syntheticQuestions: SyntheticQuestionsRepository?
+    /// G2-QA-PAIRS — optional. When present, the metadata (FTS) layer
+    /// also searches the qa_pairs FTS view; matches hydrate the
+    /// answer-side KO's top chunk and append it to the retrieved set.
+    private let qaPairs: QAPairsRepository?
 
     public init(
         memory: MemoryRepository,
@@ -42,7 +46,8 @@ public actor HybridRetriever: Retriever {
         vectors: VectorStore,
         embedder: Embedder,
         vectorLayerLimit: Int = HybridRetriever.defaultVectorLayerLimit,
-        syntheticQuestions: SyntheticQuestionsRepository? = nil
+        syntheticQuestions: SyntheticQuestionsRepository? = nil,
+        qaPairs: QAPairsRepository? = nil
     ) {
         self.memory = memory
         self.events = events
@@ -54,6 +59,7 @@ public actor HybridRetriever: Retriever {
         self.embedder = embedder
         self.vectorLayerLimit = vectorLayerLimit
         self.syntheticQuestions = syntheticQuestions
+        self.qaPairs = qaPairs
     }
 
     public func retrieve(
@@ -249,6 +255,32 @@ public actor HybridRetriever: Retriever {
                 }
             }
         }
+
+        // G2-QA-PAIRS — search the qa_pairs FTS view. For each pair the
+        // user question matches, hydrate the FIRST chunk of the answer
+        // KO (small enough that taking the head of its chunk set is a
+        // decent stand-in for "the answer text"). Append as metadata-
+        // layer hits so the verifier can merge with chunk-text + synthq
+        // hits.
+        if let qaRepo = qaPairs {
+            let qaHits = (try? await qaRepo.search(q, limit: 15)) ?? []
+            if !qaHits.isEmpty {
+                let existingObjectIDs = Set(collected.map(\.chunk.objectID))
+                let novelHits = qaHits.filter {
+                    !existingObjectIDs.contains($0.answerObjectID)
+                }
+                for hit in novelHits {
+                    if let chunk = try? await chunks.firstChunk(forObjectID: hit.answerObjectID) {
+                        collected.append(RetrievedChunk(
+                            chunk: chunk,
+                            score: hit.score,
+                            viaLayer: .metadata
+                        ))
+                    }
+                }
+            }
+        }
+
         return collected
     }
 

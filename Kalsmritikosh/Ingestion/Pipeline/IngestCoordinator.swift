@@ -48,6 +48,11 @@ public actor IngestCoordinator {
     /// against question-shaped projections of the corpus.
     private let syntheticQuestions: SyntheticQuestionsRepository?
     private let syntheticQuestionGenerator: any SyntheticQuestionGenerator
+    /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
+    /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
+    /// the per-KO loop and persists summarised pairs for retrieval.
+    private let qaPairs: QAPairsRepository?
+    private let qaPairExtractor: any QAPairExtractor
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -71,7 +76,9 @@ public actor IngestCoordinator {
         relationships: RelationshipsRepository? = nil,
         vectors: VectorStore? = nil,
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
-        syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil
+        syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil,
+        qaPairs: QAPairsRepository? = nil,
+        qaPairExtractor: (any QAPairExtractor)? = nil
     ) {
         self.loaders = loaders
         self.cleaner = cleaner
@@ -93,6 +100,8 @@ public actor IngestCoordinator {
         self.syntheticQuestions = syntheticQuestions
         self.syntheticQuestionGenerator = syntheticQuestionGenerator
             ?? HeuristicSyntheticQuestionGenerator()
+        self.qaPairs = qaPairs
+        self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
         let stream = AsyncStream<SubjectInvalidation> { c in continuation = c }
@@ -323,6 +332,33 @@ public actor IngestCoordinator {
                 }
             } catch {
                 AtlasLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        // G2-QA-PAIRS — once every KO from this file is processed, run
+        // the thread-pair extractor over the batch. mbox files produce
+        // one KO per message; the extractor finds adjacent question →
+        // answer turns and persists summaries via QAPairsRepository.
+        // Single-KO files (.eml singleton, .pdf, .md, ...) emit nothing.
+        if let qaRepo = qaPairs, perFileKOs.count >= 2 {
+            let pairs = await qaPairExtractor.extract(from: perFileKOs)
+            if !pairs.isEmpty {
+                let rows = pairs.map { p in
+                    QAPairsRepository.Row(
+                        questionText: p.questionText,
+                        answerText: p.answerText,
+                        questionObjectID: p.questionObjectID,
+                        answerObjectID: p.answerObjectID,
+                        confidence: p.confidence,
+                        producedBy: qaPairExtractor.id
+                    )
+                }
+                do {
+                    try await qaRepo.insertBatch(rows)
+                    AtlasLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .public)")
+                } catch {
+                    AtlasLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
         }
 
