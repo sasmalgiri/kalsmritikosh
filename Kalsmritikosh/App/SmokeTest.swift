@@ -1060,6 +1060,54 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // G3.22 — typed-bond engine end-to-end. Ingest writes bonds via
+    // BondConstructor; BondWalker should reach KOs from a Project
+    // Delta seed; WalkExplainer should turn the steps into typed
+    // WalkStep rows with valid FactType endpoints.
+    if let factBonds = state.factBonds {
+        let bondCount = (try? await factBonds.count()) ?? 0
+        if bondCount > 0 {
+            passed.append("G3: fact_bonds populated (count=\(bondCount))")
+        } else {
+            failed.append("G3: fact_bonds is empty after ingest")
+        }
+
+        // Walk from the Project Delta entity. The corpus contains
+        // multiple ProjectDelta-related KOs (contract, amendment,
+        // invoices, emails) so the walker should reach ≥1 source KO.
+        let projects = (try? await entities.list(kind: .project, limit: 25)) ?? []
+        let delta = projects.first(where: { $0.value.lowercased().contains("delta") })
+            ?? projects.first
+        if let seed = delta {
+            let walker = BondWalker(repository: factBonds)
+            let result = await walker.expand(from: seed.id, maxHops: 2)
+            if !result.sourceObjectIDs.isEmpty {
+                passed.append("G3: BondWalker reached \(result.sourceObjectIDs.count) KO(s) from seed '\(seed.value)'")
+            } else {
+                failed.append("G3: BondWalker found no source KOs from seed '\(seed.value)'")
+            }
+
+            // WalkExplainer should classify ≥1 step's endpoints. The
+            // backfill labels fact_type on every entity/event, so we
+            // expect at least one typed step out the other side.
+            let explainer = WalkExplainer(entities: entities, events: events)
+            let typed = await explainer.explain(result.steps)
+            if !typed.isEmpty {
+                let bondNames = Set(typed.map(\.bond)).sorted().joined(separator: ",")
+                passed.append("G3: WalkExplainer produced \(typed.count) typed step(s); bonds=[\(bondNames)]")
+            } else if !result.steps.isEmpty {
+                // Steps exist but none classified — backfill hasn't
+                // run yet OR none of the touched rows are typed.
+                failed.append("G3: WalkExplainer produced 0 typed steps from \(result.steps.count) raw step(s)")
+            }
+            // (No raw steps = nothing to explain. Not a failure.)
+        } else {
+            failed.append("G3: no project entity available to seed BondWalker")
+        }
+    } else {
+        failed.append("G3: AppState.factBonds is nil (boot path didn't wire FactBondsRepository)")
+    }
+
     let result = ProjectDeltaSmokeResult(
         ingested: ingested,
         entityCount: entityCount,

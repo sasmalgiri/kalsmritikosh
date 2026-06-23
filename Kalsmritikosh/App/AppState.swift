@@ -45,6 +45,9 @@ public final class AppState {
     public private(set) var relationships: RelationshipsRepository?
     public private(set) var memoryRepo: MemoryRepository?
     public private(set) var conversations: ConversationsRepository?
+    /// G3.22 — exposed so smoke / eval rigs can assert against the
+    /// typed-bond engine end-to-end.
+    public private(set) var factBonds: FactBondsRepository?
 
     // Knowledge
     public private(set) var timelineEngine: TimelineEngine?
@@ -379,6 +382,7 @@ public final class AppState {
             self.relationships = relationships
             self.memoryRepo = memoryRepo
             self.conversations = conversationsRepo
+            self.factBonds = factBondsRepo
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
             self.compression = compression

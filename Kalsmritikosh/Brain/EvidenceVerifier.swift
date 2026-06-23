@@ -459,7 +459,8 @@ public struct EvidenceVerifier: Verifier {
             contradictions: report.contradictions,
             refused: false,
             refusalReason: nil,
-            report: report
+            report: report,
+            walkSteps: retrieval.walkSteps
         )
     }
 

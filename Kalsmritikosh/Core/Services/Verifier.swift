@@ -38,6 +38,12 @@ public struct VerifiedAnswer: Codable, Sendable {
     public let refusalReason: String?
     /// Full confidence report, used by the UI quality strip (T11).
     public let report: ConfidenceReport?
+    /// G3.20/G3.22 — typed walk-path steps inherited from the
+    /// RetrievalResult. EvalKit aggregates this into a "walk coverage"
+    /// metric; the UI "Why this answer?" panel renders the chain.
+    /// Empty when the answer wasn't bond-walked (no entity seed, no
+    /// walker wired, or non-multihop intent).
+    public let walkSteps: [WalkStep]
 
     public nonisolated init(
         body: String,
@@ -48,7 +54,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         contradictions: [Contradiction] = [],
         refused: Bool = false,
         refusalReason: String? = nil,
-        report: ConfidenceReport? = nil
+        report: ConfidenceReport? = nil,
+        walkSteps: [WalkStep] = []
     ) {
         self.body = body
         self.answerText = answerText
@@ -59,10 +66,11 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.refused = refused
         self.refusalReason = refusalReason
         self.report = report
+        self.walkSteps = walkSteps
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -76,6 +84,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.refused = try c.decodeIfPresent(Bool.self, forKey: .refused) ?? false
         self.refusalReason = try c.decodeIfPresent(String.self, forKey: .refusalReason)
         self.report = try c.decodeIfPresent(ConfidenceReport.self, forKey: .report)
+        self.walkSteps = try c.decodeIfPresent([WalkStep].self, forKey: .walkSteps) ?? []
     }
 
     public struct Citation: Codable, Sendable, Hashable {
