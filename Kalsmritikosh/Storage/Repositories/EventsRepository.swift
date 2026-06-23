@@ -109,6 +109,17 @@ public actor EventsRepository {
         )
     }
 
+    /// G3.20 — read the persisted fact_type for a single row. Returns
+    /// nil when the row isn't classified or doesn't exist. Used by the
+    /// WalkExplainer to type each end of a bond step.
+    public func lookupFactType(forEventID id: Event.ID) async throws -> String? {
+        let rows = try await database.query(
+            "SELECT fact_type FROM events WHERE id = ? LIMIT 1;",
+            [.uuid(id)]
+        )
+        return rows.first?.string(0)
+    }
+
     private func decode(_ row: SQLRow) -> Event? {
         guard
             let id = row.uuid(0),

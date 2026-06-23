@@ -25,6 +25,10 @@ public struct RetrievalResult: Codable, Sendable {
     public let summaries: [Summary]
     public let layersUsed: [RetrievalLayer]
     public let shortCircuitedAt: RetrievalLayer?
+    /// G3.20 — typed walk-path steps from the bond engine, ready for
+    /// the "Why this answer?" UI. Empty when no bond walks ran (no
+    /// entity seeds, no walker wired, or intent budget = 0).
+    public let walkSteps: [WalkStep]
 
     public nonisolated init(
         chunks: [RetrievedChunk] = [],
@@ -33,7 +37,8 @@ public struct RetrievalResult: Codable, Sendable {
         relationships: [Relationship] = [],
         summaries: [Summary] = [],
         layersUsed: [RetrievalLayer] = [],
-        shortCircuitedAt: RetrievalLayer? = nil
+        shortCircuitedAt: RetrievalLayer? = nil,
+        walkSteps: [WalkStep] = []
     ) {
         self.chunks = chunks
         self.events = events
@@ -42,6 +47,7 @@ public struct RetrievalResult: Codable, Sendable {
         self.summaries = summaries
         self.layersUsed = layersUsed
         self.shortCircuitedAt = shortCircuitedAt
+        self.walkSteps = walkSteps
     }
 }
 

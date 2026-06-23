@@ -40,6 +40,10 @@ public actor HybridRetriever: Retriever {
     /// reached via fact_bonds (up to 2 hops). Schema-aware multi-hop
     /// without changing the layer ordering or public API.
     private let bondWalker: BondWalker?
+    /// G3.20 — optional explainer that translates raw bond steps
+    /// into typed [WalkStep] for the "Why this answer?" UI. Wired
+    /// alongside the walker; both nil = bond-walk features disabled.
+    private let walkExplainer: WalkExplainer?
     /// G3.17 — how many bond walks per retrieve() call. Capped so a
     /// dense graph doesn't blow up the query budget. 0 = walks
     /// disabled even if a walker is wired.
@@ -60,6 +64,7 @@ public actor HybridRetriever: Retriever {
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
         qaPairs: QAPairsRepository? = nil,
         bondWalker: BondWalker? = nil,
+        walkExplainer: WalkExplainer? = nil,
         bondWalkSeedLimit: Int = 3,
         bondWalkChunkLimit: Int = 10
     ) {
@@ -75,6 +80,7 @@ public actor HybridRetriever: Retriever {
         self.syntheticQuestions = syntheticQuestions
         self.qaPairs = qaPairs
         self.bondWalker = bondWalker
+        self.walkExplainer = walkExplainer
         self.bondWalkSeedLimit = bondWalkSeedLimit
         self.bondWalkChunkLimit = bondWalkChunkLimit
     }
@@ -92,6 +98,10 @@ public actor HybridRetriever: Retriever {
         var collectedSummaries: [Summary] = []
         var collectedRelationships: [Relationship] = []
         var collectedMemoryNarratives: [String] = []
+        // G3.20 — raw bond steps collected from each seed walk; the
+        // WalkExplainer translates them to typed WalkSteps once the
+        // graph layer finishes.
+        var collectedBondSteps: [BondWalker.WalkResult.Step] = []
 
         for layer in ordering {
             usedLayers.append(layer)
@@ -131,12 +141,13 @@ public actor HybridRetriever: Retriever {
                     // hops; flat factual lookups get a tight budget so
                     // the schema-aware layer doesn't tax simple queries.
                     let existingObjectIDs = Set(collectedChunks.map(\.chunk.objectID))
-                    let bondedChunks = try await bondLayer(
+                    let bondOutcome = try await bondLayer(
                         intent: intent,
                         seeds: collectedEntities,
                         excludeObjectIDs: existingObjectIDs
                     )
-                    collectedChunks.append(contentsOf: bondedChunks)
+                    collectedChunks.append(contentsOf: bondOutcome.chunks)
+                    collectedBondSteps.append(contentsOf: bondOutcome.steps)
                 }
             case .vector:
                 // UPDATE_06 Item 2 — prefer a prefiltered scan over the
@@ -149,6 +160,16 @@ public actor HybridRetriever: Retriever {
             }
         }
 
+        // G3.20 — translate raw bond steps into typed [WalkStep] for
+        // the "Why this answer?" UI. Skipped when no explainer is
+        // wired or no steps were produced.
+        let walkSteps: [WalkStep]
+        if let explainer = walkExplainer, !collectedBondSteps.isEmpty {
+            walkSteps = await explainer.explain(collectedBondSteps)
+        } else {
+            walkSteps = []
+        }
+
         return assemble(
             chunks: collectedChunks,
             events: collectedEvents,
@@ -156,7 +177,8 @@ public actor HybridRetriever: Retriever {
             relationships: collectedRelationships,
             summaries: collectedSummaries,
             layers: usedLayers,
-            shortCircuit: nil
+            shortCircuit: nil,
+            walkSteps: walkSteps
         )
     }
 
@@ -324,24 +346,37 @@ public actor HybridRetriever: Retriever {
         return out
     }
 
-    /// G3.17/G3.18 — typed bond walk, intent-biased. For each seed
-    /// entity, BFS over fact_bonds up to a per-intent hop budget,
+    /// G3.17/G3.18/G3.20 — typed bond walk, intent-biased. For each
+    /// seed entity, BFS over fact_bonds up to a per-intent hop budget,
     /// collect the source KO ids of the traversed bonds, and hydrate
     /// the first chunk per KO as retrieval evidence (`viaLayer:
-    /// .graph`). KOs that already appeared in earlier layers are
-    /// skipped so we don't duplicate citations.
+    /// .graph`). Returns both chunks (for the retrieval set) and raw
+    /// bond steps (for the WalkExplainer / "Why this answer?" UI).
+    /// KOs that already appeared in earlier layers are skipped so we
+    /// don't duplicate citations.
+    private struct BondLayerOutcome {
+        let chunks: [RetrievedChunk]
+        let steps: [BondWalker.WalkResult.Step]
+    }
+
     private func bondLayer(
         intent: UserIntent,
         seeds: [Entity],
         excludeObjectIDs: Set<KnowledgeObject.ID>
-    ) async throws -> [RetrievedChunk] {
-        guard let walker = bondWalker, bondWalkSeedLimit > 0 else { return [] }
+    ) async throws -> BondLayerOutcome {
+        guard let walker = bondWalker, bondWalkSeedLimit > 0 else {
+            return BondLayerOutcome(chunks: [], steps: [])
+        }
         let budget = bondWalkBudget(for: intent)
-        guard budget.seeds > 0, budget.chunks > 0 else { return [] }
+        guard budget.seeds > 0, budget.chunks > 0 else {
+            return BondLayerOutcome(chunks: [], steps: [])
+        }
         var aggregatedKOIDs: [KnowledgeObject.ID] = []
         var seenKOIDs: Set<KnowledgeObject.ID> = excludeObjectIDs
+        var allSteps: [BondWalker.WalkResult.Step] = []
         for seed in seeds.prefix(budget.seeds) {
             let result = await walker.expand(from: seed.id, maxHops: budget.hops)
+            allSteps.append(contentsOf: result.steps)
             for koID in result.sourceObjectIDs {
                 guard !seenKOIDs.contains(koID) else { continue }
                 seenKOIDs.insert(koID)
@@ -350,7 +385,9 @@ public actor HybridRetriever: Retriever {
             }
             if aggregatedKOIDs.count >= budget.chunks { break }
         }
-        guard !aggregatedKOIDs.isEmpty else { return [] }
+        guard !aggregatedKOIDs.isEmpty else {
+            return BondLayerOutcome(chunks: [], steps: allSteps)
+        }
         var out: [RetrievedChunk] = []
         for koID in aggregatedKOIDs {
             if let chunk = try? await chunks.firstChunk(forObjectID: koID) {
@@ -366,7 +403,7 @@ public actor HybridRetriever: Retriever {
                 ))
             }
         }
-        return out
+        return BondLayerOutcome(chunks: out, steps: allSteps)
     }
 
     /// G3.18 — pick (seeds × hops × chunkLimit) for bond walks based
@@ -443,7 +480,8 @@ public actor HybridRetriever: Retriever {
         relationships: [Relationship] = [],
         summaries: [Summary],
         layers: [RetrievalLayer],
-        shortCircuit: RetrievalLayer?
+        shortCircuit: RetrievalLayer?,
+        walkSteps: [WalkStep] = []
     ) -> RetrievalResult {
         RetrievalResult(
             chunks: chunks,
@@ -452,7 +490,8 @@ public actor HybridRetriever: Retriever {
             relationships: relationships,
             summaries: summaries,
             layersUsed: layers,
-            shortCircuitedAt: shortCircuit
+            shortCircuitedAt: shortCircuit,
+            walkSteps: walkSteps
         )
     }
 }

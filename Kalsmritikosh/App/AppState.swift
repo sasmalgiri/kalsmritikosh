@@ -196,7 +196,8 @@ public final class AppState {
                 embedder: embedder,
                 syntheticQuestions: syntheticQuestionsRepo,
                 qaPairs: qaPairsRepo,
-                bondWalker: BondWalker(repository: factBondsRepo)
+                bondWalker: BondWalker(repository: factBondsRepo),
+                walkExplainer: WalkExplainer(entities: entities, events: events)
             )
 
             let expertRegistry = ExpertRegistry()
