@@ -320,6 +320,105 @@ public enum Gate1Baseline {
         }
     }
 
+    /// G3.23 — Gate 3 typed-multihop subset. Runs only M1..M4 (the
+    /// four multi-hop questions the bond engine is designed to answer)
+    /// and writes `eval-report-gate3-multihop.md` next to the other
+    /// baselines. Mirrors `generateFast` except for the question id
+    /// set, the report name, and the skipped distill loop (same
+    /// rationale — multi-hop retrieval doesn't depend on memory).
+    @MainActor
+    public static func generateGate3Multihop() async throws -> Result {
+        AtlasLog.app.info("Gate 3 multihop baseline starting")
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Gate3Multihop-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
+        let isolatedBookmarks = BookmarkStore()
+        let state = AppState(bookmarks: isolatedBookmarks)
+        await state.boot(databaseURL: isolatedDBURL)
+
+        @Sendable func cleanup(_ state: AppState) async {
+            await state.shutdown()
+            try? FileManager.default.removeItem(at: tempDir)
+        }
+
+        guard case .ready = state.phase, let ingest = state.ingest else {
+            await cleanup(state)
+            throw NSError(
+                domain: "Gate1Baseline",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "AppState failed to boot."]
+            )
+        }
+
+        do {
+            let reasoningProviderID: String? = await {
+                guard let caps = state.capabilities else { return nil }
+                let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "gate3.multihop.preflight")
+                do { return try await caps.resolve(spec).id } catch { return nil }
+            }()
+
+            let ingestStarted = Date()
+            let fixtureURLs = try Self.fixtureURLs()
+            var ingested = 0
+            for url in fixtureURLs {
+                do {
+                    _ = try await ingest.ingest(fileAt: url)
+                    ingested += 1
+                } catch {
+                    AtlasLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
+            }
+            let ingestSeconds = Date().timeIntervalSince(ingestStarted)
+
+            let documentsDir = try FileManager.default.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            )
+            let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
+            try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+
+            guard let objects = state.objects else {
+                throw NSError(
+                    domain: "Gate1Baseline",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "KnowledgeObjectRepository not booted."]
+                )
+            }
+
+            let queryStarted = Date()
+            let runner = EvalKitRunner()
+            let reportURL = try await runner.runSubset(
+                brain: state.brain,
+                objects: objects,
+                ids: EvalKitRunner.gate3MultihopIDs,
+                outputDir: reportDir,
+                reportName: "eval-report-gate3-multihop.md"
+            )
+            let querySeconds = Date().timeIntervalSince(queryStarted)
+
+            AtlasLog.app.info("Gate 3 multihop complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
+            let result = Result(
+                reportURL: reportURL,
+                retrievalProbeURL: nil,
+                coverageProbeURL: nil,
+                ingestedFixtureFiles: ingested,
+                questionCount: EvalKitRunner.gate3MultihopIDs.count,
+                ingestSeconds: ingestSeconds,
+                querySeconds: querySeconds,
+                reasoningProviderID: reasoningProviderID
+            )
+            await cleanup(state)
+            return result
+        } catch {
+            await cleanup(state)
+            throw error
+        }
+    }
+
     /// Writes a per-file table covering every ingested fixture file:
     /// #KOs, #chunks, #vector embeddings, #entities, #FTS rows. This
     /// rules out "the file produced nothing" before assuming the

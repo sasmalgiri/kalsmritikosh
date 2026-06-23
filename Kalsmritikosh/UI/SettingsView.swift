@@ -25,6 +25,9 @@ public struct SettingsView: View {
     @State private var fastEvalRunning = false
     @State private var fastEvalStatus: String?
     @State private var fastEvalReportURL: URL?
+    @State private var gate3Running = false
+    @State private var gate3Status: String?
+    @State private var gate3ReportURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -119,6 +122,38 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
+            Text("Gate 3 Multi-hop — runs only M1..M4, the typed-multihop subset the bond engine is designed to answer. Watch the Walk cov. / Walk steps/Q columns in the report to verify the schema-aware retrieval layer is firing.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runGate3Multihop() }
+                } label: {
+                    if gate3Running {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Run Gate 3 Multi-hop (M1–M4)", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                }
+                .disabled(gate3Running)
+                if let url = gate3ReportURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                }
+            }
+            if let status = gate3Status {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
             Text("Run the in-process smoke test. Boots an isolated AppState into a temp directory, ingests the bundled ProjectDelta fixture, runs every T1–T13 + G2-TEMPORAL + G2-1.5 assertion, and reports pass/fail counts. Your real database is untouched.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -173,6 +208,29 @@ public struct SettingsView: View {
         } catch {
             fastEvalReportURL = nil
             fastEvalStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    private func runGate3Multihop() async {
+        gate3Running = true
+        gate3Status = "Booting isolated AppState + running M1..M4…"
+        defer { gate3Running = false }
+        do {
+            let result = try await Gate1Baseline.generateGate3Multihop()
+            gate3ReportURL = result.reportURL
+            let providerLine = result.reasoningProviderID.map {
+                "Reasoning provider: \($0)"
+            } ?? "Reasoning provider: none (heuristic floor)"
+            gate3Status = """
+            ✓ Report written
+            \(result.reportURL.path)
+            \(providerLine)
+            ingested fixtures: \(result.ingestedFixtureFiles) in \(String(format: "%.1f", result.ingestSeconds))s
+            questions evaluated: \(result.questionCount) in \(String(format: "%.1f", result.querySeconds))s
+            """
+        } catch {
+            gate3ReportURL = nil
+            gate3Status = "✗ Failed: \(error)"
         }
     }
 
