@@ -13,6 +13,9 @@ import SwiftUI
 public struct QualityStrip: View {
     public let answer: VerifiedAnswer
     @State private var conflictsExpanded = false
+    /// G3 Phase 5 — "Why this answer?" disclosure. Renders the typed
+    /// walk-path chain that the bond engine produced for this answer.
+    @State private var walkExpanded = false
 
     public init(answer: VerifiedAnswer) {
         self.answer = answer
@@ -55,6 +58,59 @@ public struct QualityStrip: View {
                     }
                 }
             }
+            if !answer.walkSteps.isEmpty {
+                whyThisAnswer(steps: answer.walkSteps)
+            }
+        }
+    }
+
+    // MARK: - G3 Phase 5: Why this answer?
+
+    @ViewBuilder
+    private func whyThisAnswer(steps: [WalkStep]) -> some View {
+        Button {
+            walkExpanded.toggle()
+        } label: {
+            Label(
+                walkExpanded
+                    ? "Hide reasoning path"
+                    : "Why this answer? (\(steps.count) step\(steps.count == 1 ? "" : "s"))",
+                systemImage: walkExpanded ? "chevron.up" : "chevron.down"
+            )
+            .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        if walkExpanded {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { (idx, step) in
+                    HStack(alignment: .center, spacing: 4) {
+                        Text("\(idx + 1).")
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.secondary)
+                        Text(step.fromFact.displayName)
+                            .font(.caption.bold())
+                        Image(systemName: "arrow.right")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                        Text(step.bond)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.tint)
+                        Image(systemName: "arrow.right")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                        Text(step.toFact.displayName)
+                            .font(.caption.bold())
+                        if !step.evidenceObjectIDs.isEmpty {
+                            Text("(\(step.evidenceObjectIDs.count) src)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.tint.opacity(0.06), in: .rect(cornerRadius: 6))
         }
     }
 
