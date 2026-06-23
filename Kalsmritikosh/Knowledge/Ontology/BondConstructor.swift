@@ -21,12 +21,15 @@
 //    - attended_by(Meeting-event→Person)   via person entity in event.entityIDs
 //    - signed_by(Contract-event→Person)    via person entity in event.entityIDs
 //    - made_by(Decision-event→Person)      via person entity in event.entityIDs
+//    - issued_by(Invoice-event→Org)        via sender domain org (email path)
+//    - issued_to(Invoice-event→Org)        via org entity in event.entityIDs
+//    - invoice_for(Invoice-event→Project)  via project entity in event.entityIDs
+//    - delivers_for(Delivery-event→Project) via project entity in event.entityIDs
 //
-//  Slot-aware bonds (party_a, party_b, amends, issued_by/_to,
-//  invoice_for, delivers_for, owns, delivered_by) need the slot
-//  extractors landing in G3.13/14 before they can be derived
-//  reliably. The constructor skips them for now — they'll be added
-//  in a follow-on commit once slot values are populated.
+//  Still slot-driven (need G3.14 LLM-assisted slot extractor for the
+//  reference values): amends, party_a, party_b, owns, delivered_by.
+//  Those wait until OntologyBackfill writes the reference slot values
+//  on Amendment/Contract/Project rows.
 //
 //  Idempotency is provided by the FactBondsRepository UNIQUE INDEX on
 //  (bond_name, from_fact_id, to_fact_id); re-ingesting the same KO
@@ -193,10 +196,63 @@ public actor BondConstructor {
                     ))
                 }
 
-            case .invoice, .delivery, .amendment, .person, .organization, .project:
-                // Slot-driven bonds (issued_by, issued_to, invoice_for,
-                // delivers_for, amends, owns, delivered_by) need the
-                // slot extractor — wired in a follow-on G3.13/14 commit.
+            case .invoice:
+                // issued_by / issued_to come from the email participants
+                // when the invoice was carried by an email — the sender's
+                // org issued it, the recipients' org received it. The KO
+                // pipeline writes a domain-org alias at ingest time
+                // (writeDomainAliases) so the org entity is available.
+                if let participants = context.emailParticipants,
+                   let orgID = participants.senderDomainOrgID {
+                    bonds.append(.init(
+                        bondName: "issued_by",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: orgID
+                    ))
+                }
+                for orgID in organizationEntityIDs(in: event, factTypes: entityFactTypes) {
+                    // The sender's org also lands in event.entityIDs via
+                    // the EmailLoader; skip it to avoid double-counting
+                    // it as the recipient.
+                    if let participants = context.emailParticipants,
+                       participants.senderDomainOrgID == orgID {
+                        continue
+                    }
+                    bonds.append(.init(
+                        bondName: "issued_to",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: orgID
+                    ))
+                }
+                for projectID in projectEntityIDs(in: event, factTypes: entityFactTypes) {
+                    bonds.append(.init(
+                        bondName: "invoice_for",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: projectID
+                    ))
+                }
+
+            case .delivery:
+                for projectID in projectEntityIDs(in: event, factTypes: entityFactTypes) {
+                    bonds.append(.init(
+                        bondName: "delivers_for",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: projectID
+                    ))
+                }
+
+            case .amendment, .person, .organization, .project:
+                // amends needs Contract↔Amendment linkage (slot
+                // extractor or LLM-assisted G3.14). party_a/b, owns,
+                // and delivered_by likewise wait on slot values.
                 continue
             }
         }
@@ -245,6 +301,15 @@ public actor BondConstructor {
         // explicit emailParticipants path; other event kinds without a
         // Person participant emit nothing.
         return []
+    }
+
+    /// Organization entities participating in this event (canonical
+    /// ids). Used by Invoice → issued_by / issued_to.
+    private func organizationEntityIDs(
+        in event: Event,
+        factTypes: [Entity.ID: FactType]
+    ) -> [Entity.ID] {
+        event.entityIDs.filter { factTypes[$0] == .organization }
     }
 
     /// Bonds can repeat within a single KO context (a Person mentioned

@@ -152,6 +152,23 @@ public actor EntitiesRepository {
         return rows.first?.string(0)
     }
 
+    /// G3.22 — counts of canonical entities grouped by their classified
+    /// fact_type. NULL-typed rows aren't returned. Smoke + eval diag
+    /// uses this to confirm the classifier actually labeled something.
+    public func countsByFactType() async throws -> [String: Int] {
+        let rows = try await database.query("""
+        SELECT fact_type, COUNT(*) FROM entities
+        WHERE fact_type IS NOT NULL
+        GROUP BY fact_type;
+        """)
+        var out: [String: Int] = [:]
+        for row in rows {
+            guard let t = row.string(0) else { continue }
+            out[t] = Int(row.int(1) ?? 0)
+        }
+        return out
+    }
+
     /// Count rows in the per-document mentions table — used by acceptance
     /// checks ("ingest twice: canonical count unchanged, mention count
     /// doubles only if rows were actually re-ingested").

@@ -120,6 +120,23 @@ public actor EventsRepository {
         return rows.first?.string(0)
     }
 
+    /// G3.22 — counts of events grouped by their classified fact_type.
+    /// NULL-typed rows aren't returned. Smoke + eval diag uses this to
+    /// confirm the classifier actually labeled something.
+    public func countsByFactType() async throws -> [String: Int] {
+        let rows = try await database.query("""
+        SELECT fact_type, COUNT(*) FROM events
+        WHERE fact_type IS NOT NULL
+        GROUP BY fact_type;
+        """)
+        var out: [String: Int] = [:]
+        for row in rows {
+            guard let t = row.string(0) else { continue }
+            out[t] = Int(row.int(1) ?? 0)
+        }
+        return out
+    }
+
     private func decode(_ row: SQLRow) -> Event? {
         guard
             let id = row.uuid(0),

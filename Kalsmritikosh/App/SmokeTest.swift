@@ -1060,6 +1060,29 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // G3.22 — per-FactType row counts. The OntologyBackfill runs at
+    // boot and labels every entity / event row with a fact_type. If
+    // the classifier or backfill regress, these counts go to 0.
+    do {
+        let entityCounts = (try? await entities.countsByFactType()) ?? [:]
+        let eventCounts = (try? await events.countsByFactType()) ?? [:]
+        let totalLabeled = entityCounts.values.reduce(0, +) + eventCounts.values.reduce(0, +)
+        if totalLabeled > 0 {
+            // Render a compact summary so the failure case is debuggable.
+            let entityStr = entityCounts.isEmpty
+                ? "—"
+                : entityCounts.sorted(by: { $0.key < $1.key })
+                    .map { "\($0.key):\($0.value)" }.joined(separator: ",")
+            let eventStr = eventCounts.isEmpty
+                ? "—"
+                : eventCounts.sorted(by: { $0.key < $1.key })
+                    .map { "\($0.key):\($0.value)" }.joined(separator: ",")
+            passed.append("G3: fact_type counts entities[\(entityStr)] events[\(eventStr)]")
+        } else {
+            failed.append("G3: OntologyBackfill produced 0 typed rows (classifier or backfill regression)")
+        }
+    }
+
     // G3.22 — typed-bond engine end-to-end. Ingest writes bonds via
     // BondConstructor; BondWalker should reach KOs from a Project
     // Delta seed; WalkExplainer should turn the steps into typed

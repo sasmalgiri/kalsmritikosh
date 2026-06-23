@@ -16,9 +16,18 @@ public struct QualityStrip: View {
     /// G3 Phase 5 — "Why this answer?" disclosure. Renders the typed
     /// walk-path chain that the bond engine produced for this answer.
     @State private var walkExpanded = false
+    /// G3 Phase 5 UI — optional callback for walk-step row taps. When
+    /// non-nil, tapping a step row hands the first evidence KO id back
+    /// so the parent can reveal the source (typically in Finder). nil =
+    /// rows are read-only.
+    public var onEvidenceTap: (@MainActor (UUID) -> Void)?
 
-    public init(answer: VerifiedAnswer) {
+    public init(
+        answer: VerifiedAnswer,
+        onEvidenceTap: (@MainActor (UUID) -> Void)? = nil
+    ) {
         self.answer = answer
+        self.onEvidenceTap = onEvidenceTap
     }
 
     public var body: some View {
@@ -83,34 +92,54 @@ public struct QualityStrip: View {
         if walkExpanded {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(steps.enumerated()), id: \.offset) { (idx, step) in
-                    HStack(alignment: .center, spacing: 4) {
-                        Text("\(idx + 1).")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
-                        Text(step.fromFact.displayName)
-                            .font(.caption.bold())
-                        Image(systemName: "arrow.right")
-                            .imageScale(.small)
-                            .foregroundStyle(.secondary)
-                        Text(QualityStrip.label(forBond: step.bond))
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.tint)
-                        Image(systemName: "arrow.right")
-                            .imageScale(.small)
-                            .foregroundStyle(.secondary)
-                        Text(step.toFact.displayName)
-                            .font(.caption.bold())
-                        if !step.evidenceObjectIDs.isEmpty {
-                            Text("(\(step.evidenceObjectIDs.count) src)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+                    walkRow(index: idx, step: step)
                 }
             }
             .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.tint.opacity(0.06), in: .rect(cornerRadius: 6))
+        }
+    }
+
+    /// One row in the walk-path disclosure. Tappable when an
+    /// `onEvidenceTap` closure is wired AND the step has at least one
+    /// evidence KO id — the closure reveals the first source.
+    @ViewBuilder
+    private func walkRow(index: Int, step: WalkStep) -> some View {
+        let tappable = onEvidenceTap != nil && !step.evidenceObjectIDs.isEmpty
+        HStack(alignment: .center, spacing: 4) {
+            Text("\(index + 1).")
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+            Text(step.fromFact.displayName)
+                .font(.caption.bold())
+            Image(systemName: "arrow.right")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+            Text(QualityStrip.label(forBond: step.bond))
+                .font(.caption.monospaced())
+                .foregroundStyle(.tint)
+            Image(systemName: "arrow.right")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+            Text(step.toFact.displayName)
+                .font(.caption.bold())
+            if !step.evidenceObjectIDs.isEmpty {
+                Text("(\(step.evidenceObjectIDs.count) src)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if tappable {
+                    Image(systemName: "arrow.up.right.square")
+                        .imageScale(.small)
+                        .foregroundStyle(.tint)
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard let cb = onEvidenceTap,
+                  let firstID = step.evidenceObjectIDs.first else { return }
+            cb(firstID)
         }
     }
 

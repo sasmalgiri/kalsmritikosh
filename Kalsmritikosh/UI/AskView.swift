@@ -11,6 +11,10 @@
 import SwiftUI
 import OSLog
 
+#if canImport(AppKit)
+import AppKit
+#endif
+
 public struct AskView: View {
     @Environment(AppState.self) private var appState
     @State private var question: String = ""
@@ -153,7 +157,12 @@ public struct AskView: View {
                         .padding(10)
                         .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 10))
                     if let verified = verifiedAnswers[turn.id] {
-                        QualityStrip(answer: verified)
+                        QualityStrip(
+                            answer: verified,
+                            onEvidenceTap: { objectID in
+                                revealSource(objectID: objectID)
+                            }
+                        )
                             .padding(.horizontal, 10)
                             .padding(.bottom, 6)
                     }
@@ -161,6 +170,23 @@ public struct AskView: View {
                 .frame(maxWidth: 620, alignment: .leading)
                 Spacer(minLength: 60)
             }
+        }
+    }
+
+    // MARK: - Walk-step clickthrough
+
+    /// G3 Phase 5 UI — resolve a walk-step evidence KO id to its source
+    /// file URL and reveal it in Finder. Non-fatal when the KO has no
+    /// underlying file row (rare; should only happen mid-ingest).
+    private func revealSource(objectID: UUID) {
+        Task { @MainActor in
+            guard let repo = appState.objects,
+                  let url = try? await repo.fetchSourceURL(id: objectID) else {
+                return
+            }
+            #if canImport(AppKit)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            #endif
         }
     }
 

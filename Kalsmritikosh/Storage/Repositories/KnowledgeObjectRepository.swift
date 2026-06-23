@@ -78,6 +78,20 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// G3 Phase 5 UI — resolve a KO id to the underlying file's URL.
+    /// Used by the walk-step clickthrough so tapping a row in the
+    /// "Why this answer?" panel reveals the source in Finder.
+    /// Returns nil when the KO has no file row or the URL doesn't parse.
+    public func fetchSourceURL(id: KnowledgeObject.ID) async throws -> URL? {
+        let rows = try await database.query("""
+        SELECT f.url FROM knowledge_objects k
+        JOIN files f ON f.id = k.file_id
+        WHERE k.id = ? LIMIT 1;
+        """, [.uuid(id)])
+        guard let urlString = rows.first?.string(0) else { return nil }
+        return URL(string: urlString) ?? URL(fileURLWithPath: urlString)
+    }
+
     public func recentContents(limit: Int = 30) async throws -> [String] {
         let rows = try await database.query("""
         SELECT content FROM knowledge_objects ORDER BY created_at DESC LIMIT ?;
