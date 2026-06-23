@@ -100,6 +100,15 @@ public actor EventsRepository {
         )
     }
 
+    /// G3.13 — write a JSON-encoded slot-values map back to a single row.
+    /// Caller is responsible for shape (OntologyValidator-gated).
+    public func setSlotValues(_ json: String, forEventID id: Event.ID) async throws {
+        try await database.exec(
+            "UPDATE events SET slot_values_json = ? WHERE id = ?;",
+            [.text(json), .uuid(id)]
+        )
+    }
+
     private func decode(_ row: SQLRow) -> Event? {
         guard
             let id = row.uuid(0),

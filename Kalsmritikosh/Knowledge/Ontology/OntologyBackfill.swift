@@ -27,22 +27,32 @@ public actor OntologyBackfill {
         public var eventsClassified = 0
         public var entitiesSkipped = 0
         public var eventsSkipped = 0
+        public var entitySlotsWritten = 0
+        public var eventSlotsWritten = 0
+        public var slotWritesRejected = 0
     }
 
     private let entities: EntitiesRepository
     private let events: EventsRepository
     private let classifier: FactTypeClassifier
+    private let slotExtractor: SlotExtractor
+    private let validator: OntologyValidator
+    private let encoder = JSONEncoder()
     private let minConfidence: Double
 
     public init(
         entities: EntitiesRepository,
         events: EventsRepository,
         classifier: FactTypeClassifier = FactTypeClassifier(),
+        slotExtractor: SlotExtractor = SlotExtractor(),
+        validator: OntologyValidator = OntologyValidator(),
         minConfidence: Double = 0.5
     ) {
         self.entities = entities
         self.events = events
         self.classifier = classifier
+        self.slotExtractor = slotExtractor
+        self.validator = validator
         self.minConfidence = minConfidence
     }
 
@@ -63,6 +73,11 @@ public actor OntologyBackfill {
                         forEntityID: entity.id
                     )
                     stats.entitiesClassified += 1
+                    if await writeEntitySlots(entity: entity, factType: result.type) {
+                        stats.entitySlotsWritten += 1
+                    } else {
+                        stats.slotWritesRejected += 1
+                    }
                 } catch {
                     AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                     stats.entitiesSkipped += 1
@@ -82,6 +97,11 @@ public actor OntologyBackfill {
                         forEventID: event.id
                     )
                     stats.eventsClassified += 1
+                    if await writeEventSlots(event: event, factType: result.type) {
+                        stats.eventSlotsWritten += 1
+                    } else {
+                        stats.slotWritesRejected += 1
+                    }
                 } catch {
                     AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                     stats.eventsSkipped += 1
@@ -91,7 +111,59 @@ public actor OntologyBackfill {
             }
         }
 
-        AtlasLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) skipped=\(stats.entitiesSkipped, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) skipped=\(stats.eventsSkipped, privacy: .public)")
+        AtlasLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
         return stats
+    }
+
+    // MARK: - Slot-write helpers (G3.13 + G3.15)
+
+    /// Derive slots, validate via OntologyValidator, and persist if not
+    /// `.reject`. Returns true when a row was written, false otherwise.
+    /// `.lowQuality` writes proceed — the data still goes in; the UI
+    /// can render a warning per the validator contract.
+    private func writeEntitySlots(entity: Entity, factType: FactType) async -> Bool {
+        let slots = slotExtractor.extract(entity: entity, factType: factType)
+        guard !slots.isEmpty else { return false }
+        let verdict = validator.validate(type: factType, slots: slots)
+        if case .reject(let reasons) = verdict {
+            AtlasLog.knowledge.debug("OntologyBackfill: rejected entity \(entity.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
+            return false
+        }
+        guard let json = encodeSlots(slots) else { return false }
+        do {
+            try await entities.setSlotValues(json, forEntityID: entity.id)
+            return true
+        } catch {
+            AtlasLog.knowledge.error("OntologyBackfill: setSlotValues failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
+    private func writeEventSlots(event: Event, factType: FactType) async -> Bool {
+        let slots = slotExtractor.extract(event: event, factType: factType)
+        guard !slots.isEmpty else { return false }
+        let verdict = validator.validate(type: factType, slots: slots)
+        if case .reject(let reasons) = verdict {
+            AtlasLog.knowledge.debug("OntologyBackfill: rejected event \(event.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
+            return false
+        }
+        guard let json = encodeSlots(slots) else { return false }
+        do {
+            try await events.setSlotValues(json, forEventID: event.id)
+            return true
+        } catch {
+            AtlasLog.knowledge.error("OntologyBackfill: setSlotValues failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
+    /// Encode `[String: AnySendable]` as JSON via AnyCodable wrappers.
+    private func encodeSlots(_ slots: [String: AnyCodable.AnySendable]) -> String? {
+        let wrapped = slots.mapValues { AnyCodable($0) }
+        guard let data = try? encoder.encode(wrapped),
+              let s = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        return s
     }
 }

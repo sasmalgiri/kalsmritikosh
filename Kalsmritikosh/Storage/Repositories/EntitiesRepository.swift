@@ -132,6 +132,15 @@ public actor EntitiesRepository {
         )
     }
 
+    /// G3.13 — write a JSON-encoded slot-values map back to a single row.
+    /// Caller is responsible for shape (OntologyValidator-gated).
+    public func setSlotValues(_ json: String, forEntityID id: Entity.ID) async throws {
+        try await database.exec(
+            "UPDATE entities SET slot_values_json = ? WHERE id = ?;",
+            [.text(json), .uuid(id)]
+        )
+    }
+
     /// Count rows in the per-document mentions table — used by acceptance
     /// checks ("ingest twice: canonical count unchanged, mention count
     /// doubles only if rows were actually re-ingested").
