@@ -28,6 +28,9 @@ public struct SettingsView: View {
     @State private var gate3Running = false
     @State private var gate3Status: String?
     @State private var gate3ReportURL: URL?
+    @State private var allDiagnosticsRunning = false
+    @State private var allDiagnosticsStatus: String?
+    @State private var allDiagnosticsURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -58,6 +61,39 @@ public struct SettingsView: View {
     private var diagnosticsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Diagnostics").font(.title3.bold())
+
+            Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runAllDiagnostics() }
+                } label: {
+                    if allDiagnosticsRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Run Full Diagnostics", systemImage: "play.circle.fill")
+                    }
+                }
+                .disabled(allDiagnosticsRunning)
+                if let url = allDiagnosticsURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Reveal summary", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = allDiagnosticsStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
             Text("Generate the Gate 1 baseline. Boots an isolated copy of Atlas into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -208,6 +244,34 @@ public struct SettingsView: View {
         } catch {
             fastEvalReportURL = nil
             fastEvalStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    private func runAllDiagnostics() async {
+        allDiagnosticsRunning = true
+        allDiagnosticsStatus = "Running smoke + Fast Eval + Gate 3 Multi-hop… (~10–12 min)"
+        defer { allDiagnosticsRunning = false }
+        do {
+            let result = try await Gate1Baseline.generateAllDiagnostics()
+            allDiagnosticsURL = result.summaryURL
+            let smokeLine: String
+            if let smoke = result.smoke {
+                smokeLine = "Smoke: \(smoke.ok ? "✓" : "✗") \(smoke.assertionsPassed.count) passed, \(smoke.assertionsFailed.count) failed"
+            } else {
+                smokeLine = "Smoke: ⚠️ \(result.smokeError ?? "no result")"
+            }
+            let fastLine = result.fastEval != nil ? "Fast Eval: ✓ \(result.fastEval!.questionCount)Q" : "Fast Eval: ⚠️ \(result.fastEvalError ?? "no result")"
+            let gate3Line = result.gate3 != nil ? "Gate 3: ✓ \(result.gate3!.questionCount)Q" : "Gate 3: ⚠️ \(result.gate3Error ?? "no result")"
+            allDiagnosticsStatus = """
+            \(result.allPassed ? "✓ ALL PASSED" : "⚠️ PARTIAL/FAILED") · \(String(format: "%.1f", result.totalSeconds))s total
+            \(smokeLine)
+            \(fastLine)
+            \(gate3Line)
+            Unified summary: \(result.summaryURL.path)
+            """
+        } catch {
+            allDiagnosticsURL = nil
+            allDiagnosticsStatus = "✗ Orchestrator failed: \(error)"
         }
     }
 

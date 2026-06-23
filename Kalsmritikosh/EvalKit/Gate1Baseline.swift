@@ -714,4 +714,194 @@ public enum Gate1Baseline {
             )
         }
     }
+
+    // MARK: - All-diagnostics — single-button run
+
+    /// G3.24 — combined result of running the smoke test + Fast Eval +
+    /// Gate 3 Multi-hop in one press. The unified `summaryURL` is the
+    /// thing you hand over for a verdict; each substep's standalone
+    /// report still lives at the per-step URL.
+    public struct AllDiagnosticsResult: Sendable {
+        public let smoke: ProjectDeltaSmokeResult?
+        public let smokeError: String?
+        public let fastEval: Gate1Baseline.Result?
+        public let fastEvalError: String?
+        public let gate3: Gate1Baseline.Result?
+        public let gate3Error: String?
+        public let summaryURL: URL
+        public let totalSeconds: TimeInterval
+
+        public var allPassed: Bool {
+            (smoke?.ok ?? false)
+                && fastEval != nil
+                && gate3 != nil
+                && smokeError == nil
+                && fastEvalError == nil
+                && gate3Error == nil
+        }
+    }
+
+    /// One-press orchestrator. Runs the smoke + Fast Eval + Gate 3
+    /// Multi-hop in sequence, collects partial results when any step
+    /// throws, and writes a unified markdown summary embedding each
+    /// substep's report. Use this when you only want to hand one file
+    /// over for review.
+    @MainActor
+    public static func generateAllDiagnostics() async throws -> AllDiagnosticsResult {
+        let started = Date()
+        AtlasLog.app.info("All-diagnostics run starting")
+
+        var smokeResult: ProjectDeltaSmokeResult?
+        var smokeErr: String?
+        do {
+            smokeResult = try await runProjectDeltaSmokeTest()
+        } catch {
+            smokeErr = "\(error)"
+            AtlasLog.app.error("All-diagnostics: smoke threw \(String(describing: error), privacy: .public)")
+        }
+
+        var fastResult: Gate1Baseline.Result?
+        var fastErr: String?
+        do {
+            fastResult = try await generateFast()
+        } catch {
+            fastErr = "\(error)"
+            AtlasLog.app.error("All-diagnostics: fast eval threw \(String(describing: error), privacy: .public)")
+        }
+
+        var gate3Result: Gate1Baseline.Result?
+        var gate3Err: String?
+        do {
+            gate3Result = try await generateGate3Multihop()
+        } catch {
+            gate3Err = "\(error)"
+            AtlasLog.app.error("All-diagnostics: gate3 multihop threw \(String(describing: error), privacy: .public)")
+        }
+
+        let total = Date().timeIntervalSince(started)
+        let summaryURL = try writeUnifiedSummary(
+            smoke: smokeResult,
+            smokeError: smokeErr,
+            fastEval: fastResult,
+            fastEvalError: fastErr,
+            gate3: gate3Result,
+            gate3Error: gate3Err,
+            totalSeconds: total
+        )
+
+        AtlasLog.app.info("All-diagnostics complete → \(summaryURL.path, privacy: .public) (\(String(format: "%.1f", total))s)")
+        return AllDiagnosticsResult(
+            smoke: smokeResult,
+            smokeError: smokeErr,
+            fastEval: fastResult,
+            fastEvalError: fastErr,
+            gate3: gate3Result,
+            gate3Error: gate3Err,
+            summaryURL: summaryURL,
+            totalSeconds: total
+        )
+    }
+
+    /// Embed each substep's standalone report into one markdown so the
+    /// user has a single file to share. Missing/failed substeps render
+    /// as a placeholder section so the structure stays predictable.
+    private static func writeUnifiedSummary(
+        smoke: ProjectDeltaSmokeResult?,
+        smokeError: String?,
+        fastEval: Gate1Baseline.Result?,
+        fastEvalError: String?,
+        gate3: Gate1Baseline.Result?,
+        gate3Error: String?,
+        totalSeconds: TimeInterval
+    ) throws -> URL {
+        let documentsDir = try FileManager.default.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let reportDir = documentsDir.appendingPathComponent("EvalBaselines", isDirectory: true)
+        try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let url = reportDir.appendingPathComponent("diagnostics-summary.md", isDirectory: false)
+
+        var md = "# Kalsmritikosh — Full Diagnostics Run\n\n"
+        md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
+        md += "Total runtime: \(String(format: "%.1f", totalSeconds))s\n\n"
+
+        // ── 1. Smoke ────────────────────────────────────────────────
+        md += "## 1. Smoke test\n\n"
+        if let smoke {
+            md += smoke.ok ? "**Status:** ✓ PASSED\n\n" : "**Status:** ✗ FAILED\n\n"
+            md += "- Checks passed: \(smoke.assertionsPassed.count)\n"
+            md += "- Checks failed: \(smoke.assertionsFailed.count)\n"
+            md += "- Ingested files: \(smoke.ingested)\n"
+            md += "- Entities: \(smoke.entityCount), Events: \(smoke.eventCount), Memory: \(smoke.memoryObjectCount)\n"
+            md += "- Answer refused: \(smoke.answer.refused), citations: \(smoke.answer.citations.count), confidence: \(String(format: "%.2f", smoke.answer.confidence.value))\n\n"
+
+            let g3Lines = smoke.assertionsPassed.filter { $0.hasPrefix("G3") }
+            if !g3Lines.isEmpty {
+                md += "### G3 passed checks\n\n"
+                for line in g3Lines { md += "- ✓ \(line)\n" }
+                md += "\n"
+            }
+            if !smoke.assertionsFailed.isEmpty {
+                md += "### Failures\n\n"
+                for line in smoke.assertionsFailed { md += "- ✗ \(line)\n" }
+                md += "\n"
+            }
+        } else {
+            md += "**Status:** ⚠️ Did not run — \(smokeError ?? "unknown error")\n\n"
+        }
+
+        // ── 2. Fast Eval ────────────────────────────────────────────
+        md += "## 2. Fast Eval (L1, A3, T3, M1)\n\n"
+        if let fastEval {
+            md += "Report: `\(fastEval.reportURL.path)`\n"
+            if let provider = fastEval.reasoningProviderID {
+                md += "Reasoning provider: \(provider)\n"
+            } else {
+                md += "Reasoning provider: none (heuristic floor)\n"
+            }
+            md += "Ingest: \(String(format: "%.1f", fastEval.ingestSeconds))s, query: \(String(format: "%.1f", fastEval.querySeconds))s\n\n"
+            md += embeddedReport(at: fastEval.reportURL)
+        } else {
+            md += "**Status:** ⚠️ Did not run — \(fastEvalError ?? "unknown error")\n\n"
+        }
+
+        // ── 3. Gate 3 Multi-hop ─────────────────────────────────────
+        md += "## 3. Gate 3 Multi-hop (M1..M4)\n\n"
+        if let gate3 {
+            md += "Report: `\(gate3.reportURL.path)`\n"
+            if let provider = gate3.reasoningProviderID {
+                md += "Reasoning provider: \(provider)\n"
+            } else {
+                md += "Reasoning provider: none (heuristic floor)\n"
+            }
+            md += "Ingest: \(String(format: "%.1f", gate3.ingestSeconds))s, query: \(String(format: "%.1f", gate3.querySeconds))s\n\n"
+            md += embeddedReport(at: gate3.reportURL)
+        } else {
+            md += "**Status:** ⚠️ Did not run — \(gate3Error ?? "unknown error")\n\n"
+        }
+
+        try md.data(using: .utf8)?.write(to: url, options: .atomic)
+        return url
+    }
+
+    /// Read a substep's standalone report and indent it so it nests
+    /// cleanly under the section heading. Falls back to a placeholder
+    /// when the file can't be read.
+    private static func embeddedReport(at url: URL) -> String {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+            return "_(report file unreadable at \(url.path))_\n\n"
+        }
+        // Demote the embedded report's H1/H2 by two levels so it nests
+        // cleanly inside the summary's H2 sections.
+        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let s = String(line)
+            if s.hasPrefix("## ") { return "#### " + s.dropFirst(3) }
+            if s.hasPrefix("# ") { return "### " + s.dropFirst(2) }
+            return s
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
 }
