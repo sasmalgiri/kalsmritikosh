@@ -388,22 +388,45 @@ public actor HybridRetriever: Retriever {
         guard !aggregatedKOIDs.isEmpty else {
             return BondLayerOutcome(chunks: [], steps: allSteps)
         }
+        let scoreFloor = bondChunkScore(for: intent)
         var out: [RetrievedChunk] = []
         for koID in aggregatedKOIDs {
             if let chunk = try? await chunks.firstChunk(forObjectID: koID) {
                 out.append(RetrievedChunk(
                     chunk: chunk,
-                    // Score floor — bond-walked chunks are valuable
-                    // structural evidence but shouldn't outrank a
-                    // direct semantic match. 0.55 keeps them above
-                    // most vector-only fallbacks while letting
-                    // higher-scored layers ride above.
-                    score: 0.55,
+                    // G3.19 — score floor is intent-biased. Multi-hop
+                    // questions promote bond chunks above most vector
+                    // hits since the bond graph IS the answer path;
+                    // lookups demote them so a direct semantic match
+                    // still wins.
+                    score: scoreFloor,
                     viaLayer: .graph
                 ))
             }
         }
         return BondLayerOutcome(chunks: out, steps: allSteps)
+    }
+
+    /// G3.19 — pick the bond-chunk score floor based on intent. The
+    /// values are kept inside a narrow band so MMR diversity (G2-MMR)
+    /// can still reshuffle them; this is the BASELINE score, not the
+    /// final ranking.
+    private func bondChunkScore(for intent: UserIntent) -> Double {
+        switch intent.kind {
+        case .reconstructProject,
+             .reconstructRelationship,
+             .reconstructTimeline,
+             .executiveBriefing:
+            // Multi-hop / reconstruction — the bond graph is what the
+            // question hinges on. Above most vector fallbacks.
+            return 0.65
+        case .riskDetection, .missingInformation:
+            return 0.55
+        case .factualLookup, .semanticSearch, .unknown:
+            // Direct factual matches usually outrank a graph walk for
+            // simple lookups; keep bond chunks visible but below.
+            return 0.45
+        }
     }
 
     /// G3.18 — pick (seeds × hops × chunkLimit) for bond walks based

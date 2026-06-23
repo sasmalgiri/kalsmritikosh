@@ -25,11 +25,15 @@
 //    - issued_to(Invoice-event→Org)        via org entity in event.entityIDs
 //    - invoice_for(Invoice-event→Project)  via project entity in event.entityIDs
 //    - delivers_for(Delivery-event→Project) via project entity in event.entityIDs
+//    - delivered_by(Project→Org)           via org entity in delivery event
+//    - amends(Amendment-event→Contract)    via same-KO contract event
+//    - party_a(Contract-event→Org)         via first org in canonical id order
+//    - party_b(Contract-event→Org)         via second org in canonical id order
 //
-//  Still slot-driven (need G3.14 LLM-assisted slot extractor for the
-//  reference values): amends, party_a, party_b, owns, delivered_by.
-//  Those wait until OntologyBackfill writes the reference slot values
-//  on Amendment/Contract/Project rows.
+//  Only `owns` (Person → Project) is still deferred — it genuinely
+//  needs Project.owner_person populated by the G3.14 LLM slot extractor.
+//  16 of 17 v1 bonds are wired here at ingest; cross-KO amends
+//  (the typical multi-document case) is left for a future backfill pass.
 //
 //  Idempotency is provided by the FactBondsRepository UNIQUE INDEX on
 //  (bond_name, from_fact_id, to_fact_id); re-ingesting the same KO
@@ -184,6 +188,31 @@ public actor BondConstructor {
                         toID: personID
                     ))
                 }
+                // party_a / party_b — the first two distinct
+                // Organization entities (by canonical id order) become
+                // the contract's two counterparties. Cardinality
+                // .zeroOrOne per bond ensures we never emit more than
+                // one of each.
+                let orgs = organizationEntityIDs(in: event, factTypes: entityFactTypes)
+                    .sorted(by: { $0.uuidString < $1.uuidString })
+                if let a = orgs.first {
+                    bonds.append(.init(
+                        bondName: "party_a",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: a
+                    ))
+                }
+                if orgs.count >= 2 {
+                    bonds.append(.init(
+                        bondName: "party_b",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .entity,
+                        toID: orgs[1]
+                    ))
+                }
 
             case .decision:
                 for personID in personEntityIDs(in: event, factTypes: entityFactTypes) {
@@ -247,12 +276,50 @@ public actor BondConstructor {
                         toKind: .entity,
                         toID: projectID
                     ))
+                    // delivered_by — Project → Organization. Pulls org
+                    // from the delivery event's participants OR from
+                    // the sender's domain when an email carries the
+                    // delivery notification.
+                    var orgs = organizationEntityIDs(in: event, factTypes: entityFactTypes)
+                    if let domainOrg = context.emailParticipants?.senderDomainOrgID,
+                       !orgs.contains(domainOrg) {
+                        orgs.append(domainOrg)
+                    }
+                    for orgID in orgs {
+                        bonds.append(.init(
+                            bondName: "delivered_by",
+                            fromKind: .entity,
+                            fromID: projectID,
+                            toKind: .entity,
+                            toID: orgID
+                        ))
+                    }
                 }
 
-            case .amendment, .person, .organization, .project:
-                // amends needs Contract↔Amendment linkage (slot
-                // extractor or LLM-assisted G3.14). party_a/b, owns,
-                // and delivered_by likewise wait on slot values.
+            case .amendment:
+                // Same-KO amends — when a single document produces BOTH
+                // a contract event and an amendment event, the
+                // amendment likely amends that contract. Cross-KO
+                // amends (the typical case, e.g. amendment-7.md
+                // amending contract.md) requires a backfill traversal
+                // and is left for a future Ontology pass.
+                let sameKOContracts = context.events.filter { other in
+                    other.id != event.id
+                        && classifier.classify(event: other)?.type == .contract
+                }
+                for contract in sameKOContracts {
+                    bonds.append(.init(
+                        bondName: "amends",
+                        fromKind: .event,
+                        fromID: event.id,
+                        toKind: .event,
+                        toID: contract.id
+                    ))
+                }
+
+            case .person, .organization, .project:
+                // `owns` (Person → Project) needs Project.owner_person
+                // populated by the G3.14 LLM extractor. Deferred.
                 continue
             }
         }
