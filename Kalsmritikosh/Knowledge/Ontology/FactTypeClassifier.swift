@@ -51,6 +51,18 @@ public struct FactTypeClassifier: Sendable {
         switch entity.kind {
         case .person:
             return Result(type: .person, confidence: 0.95, reason: "entity.kind=person")
+        case .emailAddress:
+            // v1 Person stand-in: every email address represents some
+            // Person. Confidence is 0.55 — just above the default
+            // minConfidence floor (0.5) so the backfill labels these,
+            // but well below the 0.95 of a real Person mention. This
+            // is what makes WalkExplainer render the "Email →
+            // sent_by → Person" path when the bond's `to` side is
+            // an emailAddress entity (which it always is on the
+            // EmailLoader path). v2 may promote emailAddress to a
+            // separate EmailAddress FactType and lift sender_person
+            // resolution into G3.14 slot extraction.
+            return Result(type: .person, confidence: 0.55, reason: "entity.kind=emailAddress (Person stand-in)")
         case .organization, .vendor, .client:
             return Result(type: .organization, confidence: 0.95, reason: "entity.kind=\(entity.kind.rawValue)")
         case .project:
@@ -59,9 +71,9 @@ public struct FactTypeClassifier: Sendable {
             // Best v1 fit: deliverable maps to Delivery.
             return Result(type: .delivery, confidence: 0.80, reason: "entity.kind=deliverable")
         default:
-            // emailAddress / date / monetaryAmount / location / other —
-            // not promoted to typed FactType in v1. v2 may add
-            // EmailAddress / Money / Location as first-class types.
+            // date / monetaryAmount / location / other — not promoted to
+            // typed FactType in v1. v2 may add Money / Location as
+            // first-class types.
             return nil
         }
     }

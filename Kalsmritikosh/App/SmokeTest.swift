@@ -1060,6 +1060,19 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // G3.22 — make the backfill deterministic for the smoke. AppState's
+    // boot-time backfill is dispatched on a detached utility task, so
+    // it may not have completed before the assertions below read
+    // fact_type. Running it synchronously here re-applies cleanly
+    // (idempotent: only touches NULL rows) and removes the race.
+    if let entities = state.entities, let events = state.events {
+        let backfill = OntologyBackfill(
+            entities: entities,
+            events: events
+        )
+        _ = await backfill.run()
+    }
+
     // G3.22 — per-FactType row counts. The OntologyBackfill runs at
     // boot and labels every entity / event row with a fact_type. If
     // the classifier or backfill regress, these counts go to 0.
