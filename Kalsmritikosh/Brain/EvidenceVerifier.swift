@@ -299,19 +299,23 @@ public struct EvidenceVerifier: Verifier {
         // Core ML cross-encoder is being built.
         // Mode source priority (highest to lowest):
         //   1. KALSMRITIKOSH_RERANKER process env (Xcode scheme arg)
-        //   2. UserDefaults key "KALSMRITIKOSH_RERANKER" (set via
-        //      `defaults write <bundle-id> KALSMRITIKOSH_RERANKER ladder`)
-        //   3. Default empty → Ollama path.
-        // The UserDefaults fallback lets us flip rerank modes without
-        // touching the Xcode scheme — useful when the scheme is
-        // auto-generated and has no on-disk XML to edit.
+        //   2. UserDefaults key "KALSMRITIKOSH_RERANKER"
+        //   3. Default: "ladder" (post-Fast-Eval-#3 decision).
+        //
+        // FAST-EVAL-FIX (run #3): the Ollama prompted-scoring path
+        // produced ±33% multihop recall swings across identical runs
+        // (UPDATE_18 §1 documented this; Fast Eval #2 → #3 confirmed
+        // it on M1: 1.00 → 0.67 with no code change). The Core ML
+        // cross-encoder cascade ("ladder") is deterministic; ship it
+        // as the new default. Explicit env / defaults can still flip
+        // back to off / embed / ollama for diagnostic runs.
         let envMode = ProcessInfo.processInfo
             .environment["KALSMRITIKOSH_RERANKER"]?
             .lowercased()
         let defaultsMode = UserDefaults.standard
             .string(forKey: "KALSMRITIKOSH_RERANKER")?
             .lowercased()
-        let rerankerMode = envMode ?? defaultsMode ?? ""
+        let rerankerMode = envMode ?? defaultsMode ?? "ladder"
         let rerankerDisabled = (rerankerMode == "off")
         let useEmbeddingReranker = (rerankerMode == "embed")
         let useLadder = (rerankerMode == "ladder")
@@ -397,7 +401,23 @@ public struct EvidenceVerifier: Verifier {
         // diversity term so aggregation/multihop answers stop piling
         // up many duplicates of the same email thread — the
         // pile-up pattern noted in UPDATE_18 §2 (Revision D).
-        let globalCap = Self.intentCitationCap(intent)
+        //
+        // FAST-EVAL-FIX (run #3): factualLookup questions stuck at
+        // precision 0.33 for 3 runs because L1 was citing 3 documents
+        // when only 1 was expected. When the top retrieval hit is
+        // BOTH confident (>=0.85 score) AND clearly ahead of the runner-up
+        // (margin >=0.04), the answer almost certainly comes from that
+        // single chunk. Tighten the cap to 1 in that case. The same
+        // rule benefits semanticSearch and unknown-kind questions.
+        let lookupKinds: Set<UserIntent.Kind> = [.factualLookup, .semanticSearch, .unknown]
+        var globalCap = Self.intentCitationCap(intent)
+        if lookupKinds.contains(intent.kind), !Self.isAggregationShape(intent) {
+            let sortedScores = scoreByObject.values.sorted(by: >)
+            if let top = sortedScores.first, top >= 0.85,
+               (sortedScores.dropFirst().first ?? 0) <= top - 0.04 {
+                globalCap = 1
+            }
+        }
         if citations.count > globalCap {
             citations = Self.applyMMR(
                 citations: citations,
