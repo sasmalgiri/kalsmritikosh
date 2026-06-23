@@ -181,6 +181,10 @@ public final class AppState {
             // → one source of truth for both surfaces.
             let syntheticQuestionsRepo = SyntheticQuestionsRepository(database: db)
             let qaPairsRepo = QAPairsRepository(database: db)
+            // G3.10 — typed-bonds repo. Ingest writes per-KO bonds;
+            // future schema-aware retrieval (Phase 4) and the
+            // "Why this answer?" walk explainer (Phase 5) read them.
+            let factBondsRepo = FactBondsRepository(database: db)
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -299,7 +303,8 @@ public final class AppState {
                 syntheticQuestions: syntheticQuestionsRepo,
                 syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator(),
                 qaPairs: qaPairsRepo,
-                qaPairExtractor: EmailThreadQAPairExtractor()
+                qaPairExtractor: EmailThreadQAPairExtractor(),
+                bondConstructor: BondConstructor(repository: factBondsRepo)
             )
 
             // ── Concurrency + Live wiring ────────────────────────────

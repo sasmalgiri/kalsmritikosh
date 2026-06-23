@@ -53,6 +53,12 @@ public actor IngestCoordinator {
     /// the per-KO loop and persists summarised pairs for retrieval.
     private let qaPairs: QAPairsRepository?
     private let qaPairExtractor: any QAPairExtractor
+    /// G3.12 — typed-bond construction. When wired, every KO's
+    /// per-context bonds (sent_by, discusses, affiliated_with, …)
+    /// are upserted into `fact_bonds` after the entity/event/
+    /// relationship write block. Nil = phase-3 bonds disabled
+    /// (older boot paths, smoke tests).
+    private let bondConstructor: BondConstructor?
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -78,7 +84,8 @@ public actor IngestCoordinator {
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
         syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil,
         qaPairs: QAPairsRepository? = nil,
-        qaPairExtractor: (any QAPairExtractor)? = nil
+        qaPairExtractor: (any QAPairExtractor)? = nil,
+        bondConstructor: BondConstructor? = nil
     ) {
         self.loaders = loaders
         self.cleaner = cleaner
@@ -102,6 +109,7 @@ public actor IngestCoordinator {
             ?? HeuristicSyntheticQuestionGenerator()
         self.qaPairs = qaPairs
         self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
+        self.bondConstructor = bondConstructor
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
         let stream = AsyncStream<SubjectInvalidation> { c in continuation = c }
@@ -504,18 +512,24 @@ public actor IngestCoordinator {
             extractedEvents = remapped
         }
 
+        // Computed once and reused by both the entity-entity relationship
+        // extractor (legacy untyped edges) and the typed BondConstructor
+        // (G3.10/12). For email KOs both rely on the same canonical
+        // sender/recipient ids; computing the participants twice would
+        // do redundant alias lookups.
+        let resolvedParticipants = await emailParticipants(
+            for: object,
+            extractedEntities: extractedEntities,
+            mapping: canonicalMapping
+        )
+
         if let relationshipExtractor, let relationships {
             let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }
-            let participants = await emailParticipants(
-                for: object,
-                extractedEntities: extractedEntities,
-                mapping: canonicalMapping
-            )
             let edges = relationshipExtractor.extract(
                 objectID: object.id,
                 canonicalEntityIDs: canonicalIDs,
                 events: extractedEvents,
-                emailParticipants: participants
+                emailParticipants: resolvedParticipants
             )
             let upserts: [RelationshipsRepository.EdgeUpsert] = edges.map { edge in
                 let (from, to) = orderEdge(kind: edge.kind, from: edge.from, to: edge.to)
@@ -527,6 +541,22 @@ public actor IngestCoordinator {
                 )
             }
             try? await relationships.upsertEdges(upserts, sourceObjectID: object.id)
+        }
+
+        // G3.12 — typed bonds. Runs after the entity-entity edge write
+        // so the canonical mapping is settled and the events table has
+        // any newly inserted ids. Failure is non-fatal: bonds are an
+        // ADDITIONAL graph signal; the legacy `relationships` table is
+        // what existing retrieval still reads.
+        if let bondConstructor {
+            let context = BondConstructor.Context(
+                object: object,
+                entities: extractedEntities,
+                events: extractedEvents,
+                canonicalMapping: canonicalMapping,
+                emailParticipants: resolvedParticipants
+            )
+            _ = await bondConstructor.construct(context)
         }
 
         if let embedder, let vectors {

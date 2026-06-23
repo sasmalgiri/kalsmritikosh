@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 12
+    public static let latestVersion = 13
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -49,7 +49,8 @@ public enum SchemaMigrations {
         (9, v9),
         (10, v10),
         (11, v11),
-        (12, v12)
+        (12, v12),
+        (13, v13)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -550,5 +551,36 @@ public enum SchemaMigrations {
     ALTER TABLE entities       ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
     ALTER TABLE events         ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
     ALTER TABLE memory_objects ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
+    """
+
+    // MARK: - v13 — G3 Phase 3: fact_bonds (polymorphic typed graph edges)
+
+    private static let v13: String = """
+    -- G3.10 — Typed bonds between facts. Unlike `relationships`
+    -- (entity↔entity only), bonds are polymorphic over fact kind:
+    -- an Email-event can be bonded to a Person-entity via `sent_by`,
+    -- a Decision-memory to a Project-entity via `concerns`, etc.
+    -- Bond names come from Ontology.rules; this table has no FK to
+    -- the fact rows themselves (different tables per kind) but the
+    -- source_object_id FK gives us KO-cascade delete for free.
+    CREATE TABLE fact_bonds (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        bond_name               TEXT NOT NULL,
+        from_fact_kind          TEXT NOT NULL,
+        from_fact_id            TEXT NOT NULL,
+        to_fact_kind            TEXT NOT NULL,
+        to_fact_id              TEXT NOT NULL,
+        source_object_id        TEXT NOT NULL,
+        confidence              REAL NOT NULL DEFAULT 0.5,
+        weight                  INTEGER NOT NULL DEFAULT 1,
+        evidence_object_ids_json TEXT NOT NULL DEFAULT '[]',
+        created_at              REAL NOT NULL,
+        FOREIGN KEY (source_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX idx_fact_bonds_unique
+        ON fact_bonds(bond_name, from_fact_id, to_fact_id);
+    CREATE INDEX idx_fact_bonds_from ON fact_bonds(from_fact_id, bond_name);
+    CREATE INDEX idx_fact_bonds_to   ON fact_bonds(to_fact_id, bond_name);
+    CREATE INDEX idx_fact_bonds_name ON fact_bonds(bond_name);
     """
 }
