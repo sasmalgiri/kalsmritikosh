@@ -111,6 +111,27 @@ public actor EntitiesRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    // MARK: - G3 Phase 2
+
+    /// G3.8 — return entities whose `fact_type` column is NULL so the
+    /// OntologyBackfill classifier can label them in one pass. Bounded
+    /// by `limit` so a large archive can backfill in batches.
+    public func listUnlabeledFactTypes(limit: Int = 500) async throws -> [Entity] {
+        let rows = try await database.query("""
+        SELECT id, kind, value, normalized, source_object_id, confidence, attributes_json
+        FROM entities WHERE fact_type IS NULL ORDER BY id LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decodeFullEntity)
+    }
+
+    /// G3.8 — write the classifier's label back to a single row.
+    public func setFactType(_ factType: String, forEntityID id: Entity.ID) async throws {
+        try await database.exec(
+            "UPDATE entities SET fact_type = ? WHERE id = ?;",
+            [.text(factType), .uuid(id)]
+        )
+    }
+
     /// Count rows in the per-document mentions table — used by acceptance
     /// checks ("ingest twice: canonical count unchanged, mention count
     /// doubles only if rows were actually re-ingested").

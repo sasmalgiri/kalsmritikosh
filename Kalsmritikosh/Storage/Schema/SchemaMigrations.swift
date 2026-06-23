@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 10
+    public static let latestVersion = 12
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -47,7 +47,9 @@ public enum SchemaMigrations {
         (7, v7),
         (8, v8),
         (9, v9),
-        (10, v10)
+        (10, v10),
+        (11, v11),
+        (12, v12)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -520,5 +522,33 @@ public enum SchemaMigrations {
         content_rowid='rowid',
         tokenize='porter unicode61'
     );
+    """
+
+    // MARK: - v11 — G3 Phase 2: fact_type column on canonical rows (G3.5)
+
+    private static let v11: String = """
+    -- G3.5 — Promote every entity / event / memory_object row to a
+    -- typed fact. The column is nullable; NULL = "not yet classified"
+    -- (the FactTypeClassifier backfill in G3.8 fills it in).
+    -- Schema version stays small: just one TEXT column per table.
+    ALTER TABLE entities         ADD COLUMN fact_type TEXT NULL;
+    ALTER TABLE events           ADD COLUMN fact_type TEXT NULL;
+    ALTER TABLE memory_objects   ADD COLUMN fact_type TEXT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_entities_fact_type      ON entities(fact_type);
+    CREATE INDEX IF NOT EXISTS idx_events_fact_type        ON events(fact_type);
+    CREATE INDEX IF NOT EXISTS idx_memory_objects_fact_type ON memory_objects(fact_type);
+    """
+
+    // MARK: - v12 — G3 Phase 2: slot_values_json column (G3.6)
+
+    private static let v12: String = """
+    -- G3.6 — JSON-encoded typed slot values per row. The schema for
+    -- each FactType lives in Ontology.swift; OntologyValidator (G3.9)
+    -- checks the JSON against the type's expected slots before write.
+    -- Defaults to "{}" so existing rows decode cleanly.
+    ALTER TABLE entities       ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE events         ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
+    ALTER TABLE memory_objects ADD COLUMN slot_values_json TEXT NOT NULL DEFAULT '{}';
     """
 }

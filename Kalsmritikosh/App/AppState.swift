@@ -317,6 +317,16 @@ public final class AppState {
             )
             await updater.start()
 
+            // G3.8 — one-shot ontology backfill. Walks every entity /
+            // event row whose `fact_type` is NULL (post-v11 migration)
+            // and labels it via the rule-based classifier. Idempotent:
+            // safe to re-run; only touches NULL rows. Runs in a detached
+            // Task so it doesn't block boot; logs counts when done.
+            Task.detached(priority: .utility) { [entities, events] in
+                let backfill = OntologyBackfill(entities: entities, events: events)
+                _ = await backfill.run()
+            }
+
             let watcher = FolderWatcher()
             // Capture weak — when AppState is deallocated the consumer
             // task observes that ingest/watcher are gone and exits.

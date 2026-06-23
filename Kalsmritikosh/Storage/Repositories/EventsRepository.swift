@@ -80,6 +80,26 @@ public actor EventsRepository {
         return rows.compactMap(decode)
     }
 
+    // MARK: - G3 Phase 2
+
+    /// G3.8 — return events whose `fact_type` is NULL so the
+    /// OntologyBackfill can label them.
+    public func listUnlabeledFactTypes(limit: Int = 500) async throws -> [Event] {
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        FROM events WHERE fact_type IS NULL ORDER BY date DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
+    /// G3.8 — write the classifier's label back to a single row.
+    public func setFactType(_ factType: String, forEventID id: Event.ID) async throws {
+        try await database.exec(
+            "UPDATE events SET fact_type = ? WHERE id = ?;",
+            [.text(factType), .uuid(id)]
+        )
+    }
+
     private func decode(_ row: SQLRow) -> Event? {
         guard
             let id = row.uuid(0),
