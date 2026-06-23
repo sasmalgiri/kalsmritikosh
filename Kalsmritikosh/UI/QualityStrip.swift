@@ -92,7 +92,7 @@ public struct QualityStrip: View {
                         Image(systemName: "arrow.right")
                             .imageScale(.small)
                             .foregroundStyle(.secondary)
-                        Text(step.bond)
+                        Text(QualityStrip.label(forBond: step.bond))
                             .font(.caption.monospaced())
                             .foregroundStyle(.tint)
                         Image(systemName: "arrow.right")
@@ -155,6 +155,33 @@ public struct QualityStrip: View {
     }
 
     private static func plural(_ n: Int) -> String { n == 1 ? "" : "s" }
+
+    /// G3 Phase 5 polish — map raw bond names (snake_case ontology
+    /// keys) to short English phrases for the walk-path UI. Unknown
+    /// bonds fall back to a space-separated form so a new bond rule
+    /// added to Ontology.rules still renders without crashing.
+    private static func label(forBond raw: String) -> String {
+        switch raw {
+        case "affiliated_with": return "is affiliated with"
+        case "signed_by": return "signed by"
+        case "party_a": return "is party A of"
+        case "party_b": return "is party B of"
+        case "amends": return "amends"
+        case "owns": return "owns"
+        case "delivered_by": return "delivered by"
+        case "issued_by": return "issued by"
+        case "issued_to": return "issued to"
+        case "invoice_for": return "invoice for"
+        case "delivers_for": return "delivers for"
+        case "sent_by": return "sent by"
+        case "received_by": return "received by"
+        case "discusses": return "discusses"
+        case "about": return "about"
+        case "attended_by": return "attended by"
+        case "made_by": return "made by"
+        default: return raw.replacingOccurrences(of: "_", with: " ")
+        }
+    }
 
     private static func formatInterval(_ i: DateInterval) -> String {
         "\(i.start.formatted(date: .abbreviated, time: .omitted))–\(i.end.formatted(date: .abbreviated, time: .omitted))"
