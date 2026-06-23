@@ -195,7 +195,8 @@ public final class AppState {
                 vectors: vectors,
                 embedder: embedder,
                 syntheticQuestions: syntheticQuestionsRepo,
-                qaPairs: qaPairsRepo
+                qaPairs: qaPairsRepo,
+                bondWalker: BondWalker(repository: factBondsRepo)
             )
 
             let expertRegistry = ExpertRegistry()

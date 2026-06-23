@@ -35,6 +35,17 @@ public actor HybridRetriever: Retriever {
     /// also searches the qa_pairs FTS view; matches hydrate the
     /// answer-side KO's top chunk and append it to the retrieved set.
     private let qaPairs: QAPairsRepository?
+    /// G3.17 — optional typed-graph walker. When wired, the graph
+    /// layer enriches entity seeds with chunks pulled from KOs
+    /// reached via fact_bonds (up to 2 hops). Schema-aware multi-hop
+    /// without changing the layer ordering or public API.
+    private let bondWalker: BondWalker?
+    /// G3.17 — how many bond walks per retrieve() call. Capped so a
+    /// dense graph doesn't blow up the query budget. 0 = walks
+    /// disabled even if a walker is wired.
+    private let bondWalkSeedLimit: Int
+    /// G3.17 — how many chunks the bond walks contribute.
+    private let bondWalkChunkLimit: Int
 
     public init(
         memory: MemoryRepository,
@@ -47,7 +58,10 @@ public actor HybridRetriever: Retriever {
         embedder: Embedder,
         vectorLayerLimit: Int = HybridRetriever.defaultVectorLayerLimit,
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
-        qaPairs: QAPairsRepository? = nil
+        qaPairs: QAPairsRepository? = nil,
+        bondWalker: BondWalker? = nil,
+        bondWalkSeedLimit: Int = 3,
+        bondWalkChunkLimit: Int = 10
     ) {
         self.memory = memory
         self.events = events
@@ -60,6 +74,9 @@ public actor HybridRetriever: Retriever {
         self.vectorLayerLimit = vectorLayerLimit
         self.syntheticQuestions = syntheticQuestions
         self.qaPairs = qaPairs
+        self.bondWalker = bondWalker
+        self.bondWalkSeedLimit = bondWalkSeedLimit
+        self.bondWalkChunkLimit = bondWalkChunkLimit
     }
 
     public func retrieve(
@@ -109,6 +126,16 @@ public actor HybridRetriever: Retriever {
                 if !collectedEntities.isEmpty {
                     let edges = try await graphLayer(seeds: collectedEntities)
                     collectedRelationships.append(contentsOf: edges)
+                    // G3.17 — typed bond walks. Pulls chunks from KOs
+                    // reached via fact_bonds (sent_by, discusses,
+                    // affiliated_with, …). Skipped when no walker is
+                    // wired (test rigs, older boot paths).
+                    let existingObjectIDs = Set(collectedChunks.map(\.chunk.objectID))
+                    let bondedChunks = try await bondLayer(
+                        seeds: collectedEntities,
+                        excludeObjectIDs: existingObjectIDs
+                    )
+                    collectedChunks.append(contentsOf: bondedChunks)
                 }
             case .vector:
                 // UPDATE_06 Item 2 — prefer a prefiltered scan over the
@@ -292,6 +319,48 @@ public actor HybridRetriever: Retriever {
         var out: [Relationship] = []
         for seed in seeds.prefix(3) {
             out.append(contentsOf: try await graph.neighbors(of: seed.id, limit: 25))
+        }
+        return out
+    }
+
+    /// G3.17 — typed bond walk. For each seed entity, BFS over
+    /// fact_bonds up to 2 hops, collect the source KO ids of the
+    /// traversed bonds, and hydrate the first chunk per KO as
+    /// retrieval evidence (`viaLayer: .graph`). KOs that already
+    /// appeared in earlier layers are skipped so we don't duplicate
+    /// citations.
+    private func bondLayer(
+        seeds: [Entity],
+        excludeObjectIDs: Set<KnowledgeObject.ID>
+    ) async throws -> [RetrievedChunk] {
+        guard let walker = bondWalker, bondWalkSeedLimit > 0 else { return [] }
+        var aggregatedKOIDs: [KnowledgeObject.ID] = []
+        var seenKOIDs: Set<KnowledgeObject.ID> = excludeObjectIDs
+        for seed in seeds.prefix(bondWalkSeedLimit) {
+            let result = await walker.expand(from: seed.id, maxHops: 2)
+            for koID in result.sourceObjectIDs {
+                guard !seenKOIDs.contains(koID) else { continue }
+                seenKOIDs.insert(koID)
+                aggregatedKOIDs.append(koID)
+                if aggregatedKOIDs.count >= bondWalkChunkLimit { break }
+            }
+            if aggregatedKOIDs.count >= bondWalkChunkLimit { break }
+        }
+        guard !aggregatedKOIDs.isEmpty else { return [] }
+        var out: [RetrievedChunk] = []
+        for koID in aggregatedKOIDs {
+            if let chunk = try? await chunks.firstChunk(forObjectID: koID) {
+                out.append(RetrievedChunk(
+                    chunk: chunk,
+                    // Score floor — bond-walked chunks are valuable
+                    // structural evidence but shouldn't outrank a
+                    // direct semantic match. 0.55 keeps them above
+                    // most vector-only fallbacks while letting
+                    // higher-scored layers ride above.
+                    score: 0.55,
+                    viaLayer: .graph
+                ))
+            }
         }
         return out
     }
