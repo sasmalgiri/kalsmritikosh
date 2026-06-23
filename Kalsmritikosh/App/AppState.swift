@@ -332,8 +332,14 @@ public final class AppState {
             // and labels it via the rule-based classifier. Idempotent:
             // safe to re-run; only touches NULL rows. Runs in a detached
             // Task so it doesn't block boot; logs counts when done.
-            Task.detached(priority: .utility) { [entities, events] in
-                let backfill = OntologyBackfill(entities: entities, events: events)
+            Task.detached(priority: .utility) { [entities, events, objects, capabilities] in
+                let llm = LLMSlotExtractor(capabilities: capabilities)
+                let backfill = OntologyBackfill(
+                    entities: entities,
+                    events: events,
+                    llmSlotExtractor: llm,
+                    knowledgeObjects: objects
+                )
                 _ = await backfill.run()
             }
 

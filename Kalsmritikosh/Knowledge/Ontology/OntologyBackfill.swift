@@ -39,6 +39,12 @@ public actor OntologyBackfill {
     private let validator: OntologyValidator
     private let encoder = JSONEncoder()
     private let minConfidence: Double
+    /// G3.14 — optional LLM-assisted slot filler. When wired, the
+    /// backfill runs it for rows where the rule-based SlotExtractor
+    /// didn't produce a `.ok` verdict, fetching the source KO content
+    /// to give the model a context window. nil = LLM step disabled.
+    private let llmSlotExtractor: LLMSlotExtractor?
+    private let knowledgeObjects: KnowledgeObjectRepository?
 
     public init(
         entities: EntitiesRepository,
@@ -46,6 +52,8 @@ public actor OntologyBackfill {
         classifier: FactTypeClassifier = FactTypeClassifier(),
         slotExtractor: SlotExtractor = SlotExtractor(),
         validator: OntologyValidator = OntologyValidator(),
+        llmSlotExtractor: LLMSlotExtractor? = nil,
+        knowledgeObjects: KnowledgeObjectRepository? = nil,
         minConfidence: Double = 0.5
     ) {
         self.entities = entities
@@ -53,6 +61,8 @@ public actor OntologyBackfill {
         self.classifier = classifier
         self.slotExtractor = slotExtractor
         self.validator = validator
+        self.llmSlotExtractor = llmSlotExtractor
+        self.knowledgeObjects = knowledgeObjects
         self.minConfidence = minConfidence
     }
 
@@ -121,10 +131,24 @@ public actor OntologyBackfill {
     /// `.reject`. Returns true when a row was written, false otherwise.
     /// `.lowQuality` writes proceed — the data still goes in; the UI
     /// can render a warning per the validator contract.
+    ///
+    /// G3.14 — when an LLM extractor is wired AND the rule-based
+    /// verdict is `.reject`, fetch the source KO content and ask the
+    /// model to fill the missing slots. If the second verdict is
+    /// `.ok`/`.lowQuality`, persist; otherwise drop the row.
     private func writeEntitySlots(entity: Entity, factType: FactType) async -> Bool {
-        let slots = slotExtractor.extract(entity: entity, factType: factType)
+        var slots = slotExtractor.extract(entity: entity, factType: factType)
         guard !slots.isEmpty else { return false }
-        let verdict = validator.validate(type: factType, slots: slots)
+        var verdict = validator.validate(type: factType, slots: slots)
+        if case .reject = verdict {
+            slots = await llmFill(
+                entity: entity,
+                factType: factType,
+                existing: slots,
+                sourceObjectID: entity.sourceObjectID
+            )
+            verdict = validator.validate(type: factType, slots: slots)
+        }
         if case .reject(let reasons) = verdict {
             AtlasLog.knowledge.debug("OntologyBackfill: rejected entity \(entity.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
             return false
@@ -140,9 +164,18 @@ public actor OntologyBackfill {
     }
 
     private func writeEventSlots(event: Event, factType: FactType) async -> Bool {
-        let slots = slotExtractor.extract(event: event, factType: factType)
+        var slots = slotExtractor.extract(event: event, factType: factType)
         guard !slots.isEmpty else { return false }
-        let verdict = validator.validate(type: factType, slots: slots)
+        var verdict = validator.validate(type: factType, slots: slots)
+        if case .reject = verdict {
+            slots = await llmFill(
+                event: event,
+                factType: factType,
+                existing: slots,
+                sourceObjectID: event.sourceObjectID
+            )
+            verdict = validator.validate(type: factType, slots: slots)
+        }
         if case .reject(let reasons) = verdict {
             AtlasLog.knowledge.debug("OntologyBackfill: rejected event \(event.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
             return false
@@ -155,6 +188,49 @@ public actor OntologyBackfill {
             AtlasLog.knowledge.error("OntologyBackfill: setSlotValues failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             return false
         }
+    }
+
+    /// G3.14 — call the LLM slot extractor with the source KO content.
+    /// No-op when no extractor/KO repo is wired or the content fetch
+    /// fails. Returns the (possibly merged) slot map.
+    private func llmFill(
+        entity: Entity,
+        factType: FactType,
+        existing: [String: AnyCodable.AnySendable],
+        sourceObjectID: KnowledgeObject.ID
+    ) async -> [String: AnyCodable.AnySendable] {
+        // try? on a throwing String? returns String?? — flatten in one shot.
+        guard let llm = llmSlotExtractor,
+              let kos = knowledgeObjects,
+              let text = (try? await kos.fetchContent(id: sourceObjectID)) ?? nil else {
+            return existing
+        }
+        return await llm.fillMissing(
+            entity: entity,
+            factType: factType,
+            existing: existing,
+            sourceText: text
+        )
+    }
+
+    private func llmFill(
+        event: Event,
+        factType: FactType,
+        existing: [String: AnyCodable.AnySendable],
+        sourceObjectID: KnowledgeObject.ID
+    ) async -> [String: AnyCodable.AnySendable] {
+        // try? on a throwing String? returns String?? — flatten in one shot.
+        guard let llm = llmSlotExtractor,
+              let kos = knowledgeObjects,
+              let text = (try? await kos.fetchContent(id: sourceObjectID)) ?? nil else {
+            return existing
+        }
+        return await llm.fillMissing(
+            event: event,
+            factType: factType,
+            existing: existing,
+            sourceText: text
+        )
     }
 
     /// Encode `[String: AnySendable]` as JSON via AnyCodable wrappers.
