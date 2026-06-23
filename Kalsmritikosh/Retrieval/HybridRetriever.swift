@@ -126,12 +126,13 @@ public actor HybridRetriever: Retriever {
                 if !collectedEntities.isEmpty {
                     let edges = try await graphLayer(seeds: collectedEntities)
                     collectedRelationships.append(contentsOf: edges)
-                    // G3.17 — typed bond walks. Pulls chunks from KOs
-                    // reached via fact_bonds (sent_by, discusses,
-                    // affiliated_with, …). Skipped when no walker is
-                    // wired (test rigs, older boot paths).
+                    // G3.17/G3.18 — typed bond walks, biased by intent.
+                    // Reconstruction-shaped questions get more seeds and
+                    // hops; flat factual lookups get a tight budget so
+                    // the schema-aware layer doesn't tax simple queries.
                     let existingObjectIDs = Set(collectedChunks.map(\.chunk.objectID))
                     let bondedChunks = try await bondLayer(
+                        intent: intent,
                         seeds: collectedEntities,
                         excludeObjectIDs: existingObjectIDs
                     )
@@ -323,28 +324,31 @@ public actor HybridRetriever: Retriever {
         return out
     }
 
-    /// G3.17 — typed bond walk. For each seed entity, BFS over
-    /// fact_bonds up to 2 hops, collect the source KO ids of the
-    /// traversed bonds, and hydrate the first chunk per KO as
-    /// retrieval evidence (`viaLayer: .graph`). KOs that already
-    /// appeared in earlier layers are skipped so we don't duplicate
-    /// citations.
+    /// G3.17/G3.18 — typed bond walk, intent-biased. For each seed
+    /// entity, BFS over fact_bonds up to a per-intent hop budget,
+    /// collect the source KO ids of the traversed bonds, and hydrate
+    /// the first chunk per KO as retrieval evidence (`viaLayer:
+    /// .graph`). KOs that already appeared in earlier layers are
+    /// skipped so we don't duplicate citations.
     private func bondLayer(
+        intent: UserIntent,
         seeds: [Entity],
         excludeObjectIDs: Set<KnowledgeObject.ID>
     ) async throws -> [RetrievedChunk] {
         guard let walker = bondWalker, bondWalkSeedLimit > 0 else { return [] }
+        let budget = bondWalkBudget(for: intent)
+        guard budget.seeds > 0, budget.chunks > 0 else { return [] }
         var aggregatedKOIDs: [KnowledgeObject.ID] = []
         var seenKOIDs: Set<KnowledgeObject.ID> = excludeObjectIDs
-        for seed in seeds.prefix(bondWalkSeedLimit) {
-            let result = await walker.expand(from: seed.id, maxHops: 2)
+        for seed in seeds.prefix(budget.seeds) {
+            let result = await walker.expand(from: seed.id, maxHops: budget.hops)
             for koID in result.sourceObjectIDs {
                 guard !seenKOIDs.contains(koID) else { continue }
                 seenKOIDs.insert(koID)
                 aggregatedKOIDs.append(koID)
-                if aggregatedKOIDs.count >= bondWalkChunkLimit { break }
+                if aggregatedKOIDs.count >= budget.chunks { break }
             }
-            if aggregatedKOIDs.count >= bondWalkChunkLimit { break }
+            if aggregatedKOIDs.count >= budget.chunks { break }
         }
         guard !aggregatedKOIDs.isEmpty else { return [] }
         var out: [RetrievedChunk] = []
@@ -363,6 +367,42 @@ public actor HybridRetriever: Retriever {
             }
         }
         return out
+    }
+
+    /// G3.18 — pick (seeds × hops × chunkLimit) for bond walks based
+    /// on the question's intent kind. Reconstruction-shaped questions
+    /// (project / relationship / timeline) explore wider; flat factual
+    /// lookups stay narrow so we don't pay the bond-walk cost on a
+    /// "what is X" query that the entity layer already answers.
+    private func bondWalkBudget(for intent: UserIntent) -> (seeds: Int, hops: Int, chunks: Int) {
+        switch intent.kind {
+        case .reconstructProject,
+             .reconstructRelationship,
+             .reconstructTimeline,
+             .executiveBriefing:
+            // Multi-hop questions — the bond graph is the whole point.
+            return (
+                seeds: max(bondWalkSeedLimit, 5),
+                hops: 2,
+                chunks: max(bondWalkChunkLimit, 15)
+            )
+        case .riskDetection, .missingInformation:
+            // Want broad context but not exhaustive — sit between the
+            // reconstruction tier and the cheap lookup tier.
+            return (
+                seeds: bondWalkSeedLimit,
+                hops: 2,
+                chunks: bondWalkChunkLimit
+            )
+        case .factualLookup, .semanticSearch, .unknown:
+            // Cheap path: a single short hop off the top seed. Saves
+            // ~ N×perHopLimit SQL queries on every direct-lookup query.
+            return (
+                seeds: min(bondWalkSeedLimit, 2),
+                hops: 1,
+                chunks: min(bondWalkChunkLimit, 5)
+            )
+        }
     }
 
     private func vectorLayer(
