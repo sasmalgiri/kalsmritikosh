@@ -514,6 +514,16 @@ public final class AppState {
             self.ingest = ingest
             self.phase = .ready
             AtlasLog.app.info("AppState booted successfully")
+
+            // Post-boot auto-reingest: if a bookmark exists but the DB
+            // has zero file rows under that root (recovered from a wiped
+            // DB, fresh install on a backed-up machine, or schema migration
+            // that dropped rows), kick off a one-shot ingest for that root
+            // so the user doesn't have to re-pick the same folder. Runs
+            // detached so boot completes immediately.
+            Task { [weak self] in
+                await self?.autoReingestEmptyRoots()
+            }
         } catch {
             AtlasLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
             self.phase = .failed("\(error)")
@@ -714,6 +724,41 @@ public final class AppState {
         // FolderWatcher has no unwatch entry point in v1; the bookmark
         // removal alone prevents further re-ingest because resolution
         // fails the next time the watcher fires for that root.
+    }
+
+    /// Re-ingest any bookmarked root whose file rows are absent from the
+    /// DB. Called once at the end of boot(). Each root with > 0 existing
+    /// file rows is left alone — FolderWatcher handles the incremental
+    /// case. Idempotent at the ingestor level (content-hash dedup).
+    public func autoReingestEmptyRoots() async {
+        guard let ingest, let files else { return }
+        for root in bookmarks.roots {
+            guard let url = try? bookmarks.resolve(root) else { continue }
+            let existing = (try? await files.countUnderRoot(url)) ?? 0
+            if existing > 0 {
+                bookmarks.stopAccessing(url)
+                continue
+            }
+            AtlasLog.app.info("Auto-reingest: root \(root.displayName, privacy: .public) has 0 files in DB — kicking off bulk ingest")
+            let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            )
+            while let next = enumerator?.nextObject() as? URL {
+                let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+                guard isRegular else { continue }
+                await withIngestActivity(file: next.lastPathComponent) {
+                    do {
+                        _ = try await ingest.ingest(fileAt: next)
+                    } catch {
+                        AtlasLog.ingestion.error("Auto-reingest failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    }
+                }
+            }
+            bookmarks.stopAccessing(url)
+        }
+        AtlasLog.app.info("Auto-reingest pass complete")
     }
 
     @discardableResult
