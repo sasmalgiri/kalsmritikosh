@@ -33,6 +33,9 @@ public struct SettingsView: View {
     @State private var allDiagnosticsURL: URL?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
+    @State private var healthCheckRunning = false
+    @State private var healthCheckStatus: String?
+    @State private var healthCheckURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -152,6 +155,38 @@ public struct SettingsView: View {
                 }
             }
             if let status = fastEvalStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Check Data Health — read-only audit of your LIVE database. Counts every layer (files, KOs, chunks, entities, events, vectors, bonds, memory) and flags incomplete ingestion (KOs without chunks, entities without fact_type, etc.). Writes data-health-report.md to ~/Documents/EvalBaselines/. Safe to run anytime.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runHealthCheck() }
+                } label: {
+                    if healthCheckRunning {
+                        Label("Auditing…", systemImage: "hourglass")
+                    } else {
+                        Label("Check Data Health", systemImage: "stethoscope")
+                    }
+                }
+                .disabled(healthCheckRunning)
+                if let url = healthCheckURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open report", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = healthCheckStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -297,6 +332,27 @@ public struct SettingsView: View {
         } catch {
             allDiagnosticsURL = nil
             allDiagnosticsStatus = "✗ Orchestrator failed: \(error)"
+        }
+    }
+
+    private func runHealthCheck() async {
+        healthCheckRunning = true
+        healthCheckStatus = "Auditing live database…"
+        defer { healthCheckRunning = false }
+        do {
+            let result = try await DataHealthCheck.run(appState)
+            healthCheckURL = result.reportURL
+            let verdict = result.issuesFound == 0
+                ? "✓ Clean — no issues detected"
+                : "⚠️ \(result.issuesFound) issue(s) flagged — see report"
+            healthCheckStatus = """
+            \(verdict)
+            \(result.summary)
+            Report: \(result.reportURL.path)
+            """
+        } catch {
+            healthCheckURL = nil
+            healthCheckStatus = "✗ Failed: \(error)"
         }
     }
 
