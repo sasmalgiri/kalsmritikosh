@@ -113,6 +113,7 @@ public struct QualityStrip: View {
                 .foregroundStyle(.secondary)
             Text(step.fromFact.displayName)
                 .font(.caption.bold())
+                .foregroundStyle(QualityStrip.color(for: step.fromFact))
             Image(systemName: "arrow.right")
                 .imageScale(.small)
                 .foregroundStyle(.secondary)
@@ -124,6 +125,7 @@ public struct QualityStrip: View {
                 .foregroundStyle(.secondary)
             Text(step.toFact.displayName)
                 .font(.caption.bold())
+                .foregroundStyle(QualityStrip.color(for: step.toFact))
             if !step.evidenceObjectIDs.isEmpty {
                 Text("(\(step.evidenceObjectIDs.count) src)")
                     .font(.caption2)
@@ -214,5 +216,23 @@ public struct QualityStrip: View {
 
     private static func formatInterval(_ i: DateInterval) -> String {
         "\(i.start.formatted(date: .abbreviated, time: .omitted))–\(i.end.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    /// G4.8 — color-code FactType so the eye can pick out subjects vs
+    /// objects in the walk path at a glance. Same swatches the future
+    /// timeline / dossier UI should reuse.
+    fileprivate static func color(for type: FactType) -> Color {
+        switch type {
+        case .person:        return .blue
+        case .organization:  return .orange
+        case .project:       return .green
+        case .contract:      return .purple
+        case .amendment:     return .indigo
+        case .invoice:       return .pink
+        case .delivery:      return .teal
+        case .email:         return .cyan
+        case .meeting:       return .mint
+        case .decision:      return .yellow
+        }
     }
 }
