@@ -129,6 +129,35 @@ public enum DataHealthCheck {
             }
         }
 
+        // ── In-memory cache stats ────────────────────────────────────
+        // Each cache exposes isWarm() so we can tell whether the boot
+        // task finished warming it. count()/stats() give the loaded
+        // payload sizes — if these are 0 while the underlying table
+        // is non-empty, the warm-up regressed.
+        let bondCacheWarm = (await state.bondGraphCache?.isWarm()) ?? false
+        let bondCacheCount = (await state.bondGraphCache?.count()) ?? 0
+        let memoryCacheWarm = (await state.memoryCache?.isWarm()) ?? false
+        let memoryCacheCount = (await state.memoryCache?.count()) ?? 0
+        let timelineWarm = (await state.entityTimeline?.isWarm()) ?? false
+        let timelineEvents = (await state.entityTimeline?.count()) ?? 0
+        let timelineBuckets = (await state.entityTimeline?.entityCount()) ?? 0
+        let trieWarm = (await state.entityTrie?.isWarm()) ?? false
+        let trieStats = await state.entityTrie?.stats()
+
+        // Structured-output provider audit — which providers declare
+        // the .structuredOutput capability so we know the typed
+        // @Generable expert path will fire when the registry picks
+        // them.
+        let structuredOutputProviders: [String] = await {
+            guard let registry = state.capabilities else { return [] }
+            let all = await registry.allProviders()
+            var ids: [String] = []
+            for provider in all where provider.capabilities.contains(.structuredOutput) {
+                ids.append(provider.id)
+            }
+            return ids.sorted()
+        }()
+
         // ── Identify issues ──────────────────────────────────────────
         var issues: [String] = []
         if fileCount > 0, filesNoKO > 0 {
@@ -168,6 +197,23 @@ public enum DataHealthCheck {
         }
         if koCount > 0 && bondCount == 0 {
             issues.append("fact_bonds is EMPTY despite \(koCount) KOs ingested — click 'Rebuild Typed Bonds' to populate the typed graph for the existing corpus")
+        }
+        // Cache health: if SQLite has rows but the in-memory cache
+        // is empty AND warmed, the warm path regressed.
+        if bondCount > 0 && bondCacheWarm && bondCacheCount == 0 {
+            issues.append("InMemoryBondGraph is warmed but EMPTY despite \(bondCount) fact_bonds rows — warm-up regression")
+        }
+        if memoryCount > 0 && memoryCacheWarm && memoryCacheCount == 0 {
+            issues.append("MemoryHashCache is warmed but EMPTY despite \(memoryCount) memory_objects rows — warm-up regression")
+        }
+        if eventCount > 0 && timelineWarm && timelineEvents == 0 {
+            issues.append("EntityTimeline is warmed but EMPTY despite \(eventCount) events rows — warm-up regression")
+        }
+        if entityCount > 0 && trieWarm && (trieStats?.entitiesLoaded ?? 0) == 0 {
+            issues.append("EntityTrie is warmed but EMPTY despite \(entityCount) entities — warm-up regression")
+        }
+        if structuredOutputProviders.isEmpty {
+            issues.append("No provider declares .structuredOutput capability — the @Generable typed-output path (item #7) will never fire; experts will prompt-parse instead")
         }
 
         // ── Render report ────────────────────────────────────────────
@@ -257,6 +303,29 @@ public enum DataHealthCheck {
             md += "| bond_name | count |\n|---|---:|\n"
             for (name, count) in bondNameDist {
                 md += "| \(name) | \(count) |\n"
+            }
+            md += "\n"
+        }
+
+        md += "## In-memory caches\n\n"
+        md += "| Cache | Warm? | Loaded |\n|---|---|---:|\n"
+        md += "| InMemoryBondGraph | \(bondCacheWarm ? "✓" : "—") | \(bondCacheCount) bonds |\n"
+        md += "| MemoryHashCache | \(memoryCacheWarm ? "✓" : "—") | \(memoryCacheCount) memories |\n"
+        md += "| EntityTimeline | \(timelineWarm ? "✓" : "—") | \(timelineEvents) events across \(timelineBuckets) entities |\n"
+        if let trieStats {
+            md += "| EntityTrie | \(trieWarm ? "✓" : "—") | \(trieStats.entitiesLoaded) entities, \(trieStats.trieNodes) trie nodes |\n"
+        } else {
+            md += "| EntityTrie | \(trieWarm ? "✓" : "—") | (no stats) |\n"
+        }
+        md += "\nA cache that hasn't warmed yet is normal during the first few seconds after boot — the OntologyBackfill detached task warms all four in parallel. Re-run this audit after ~5s if any row shows `—`.\n\n"
+
+        md += "## Structured-output providers (item #7)\n\n"
+        if structuredOutputProviders.isEmpty {
+            md += "_(none declared)_\n\n"
+        } else {
+            md += "These providers can return typed `@Generable` claims directly — experts call respondClaims(...) and skip the prompt-parser:\n\n"
+            for id in structuredOutputProviders {
+                md += "- `\(id)`\n"
             }
             md += "\n"
         }
