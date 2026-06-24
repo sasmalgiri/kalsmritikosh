@@ -49,12 +49,36 @@ public struct RuleIntentDetector: IntentDetector {
         // Why / when / how questions about projects and people are
         // reconstruction-shaped — they need the timeline and the
         // multi-expert pipeline, not a one-shot factual lookup.
-        let reconstructionVerbs = ["why", "how", "when", "explain", "delayed", "slipped", "blocked", "happened"]
+        //
+        // Verbs were expanded after the 2026-06-24 Gate 3 run
+        // surfaced 3 of 4 multi-hop questions classifying as
+        // factualLookup ("Which supplier emails caused…", "Connect
+        // Supplier ABC to…", "Trace the chain from contract signing
+        // through to amendment 7"). factualLookup shrinks the bond-
+        // walk budget to seeds=2 / hops=1 / chunks=5 — far too narrow
+        // for these inherently multi-hop framings. Added: trace,
+        // connect, caused, chain, through, from, slip(s|ped), causes.
+        let reconstructionVerbs = [
+            "why", "how", "when", "explain",
+            "delayed", "slipped", "slip", "blocked", "happened",
+            "trace", "connect", "chain", "through",
+            "caused", "causes",
+        ]
         let isReconstructionShaped = reconstructionVerbs.contains { q.contains($0) }
         if isReconstructionShaped {
-            if q.contains("project") { return .reconstructProject }
+            // Disambiguate between project / relationship / timeline
+            // by which subject the question anchors on. "Trace the
+            // chain from contract signing through to amendment 7"
+            // mentions a project context indirectly via contract +
+            // amendment vocabulary, so we look at "amendment" / "contract"
+            // as project-shaped too.
+            if q.contains("project") || q.contains("amendment") || q.contains("contract") {
+                return .reconstructProject
+            }
             if q.contains("supplier") || q.contains("vendor") || q.contains("client")
-               || q.contains("company") || q.contains("relationship") { return .reconstructRelationship }
+               || q.contains("company") || q.contains("relationship") {
+                return .reconstructRelationship
+            }
             return .reconstructTimeline
         }
         if q.contains("brief") || q.contains("summarize everything") {

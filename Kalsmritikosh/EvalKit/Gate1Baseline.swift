@@ -116,6 +116,12 @@ public enum Gate1Baseline {
         }
         let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
+        // Run rule-only OntologyBackfill synchronously so fact_type is
+        // populated on every entity / event before the eval starts.
+        // Without this, WalkExplainer drops every step (race with the
+        // boot-time detached backfill task).
+        await runRuleOnlyBackfill(state)
+
         // 3. Force a synchronous distillation pass so the brain sees the
         //    memory layer the same way it would after a normal session.
         if let distiller = state.memoryDistiller, let entities = state.entities {
@@ -262,6 +268,11 @@ public enum Gate1Baseline {
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
 
+            // Run rule-only OntologyBackfill synchronously so fact_type
+            // is populated before the EvalKit harness starts. Without
+            // this, WalkExplainer drops every step (Walk cov. = 0).
+            await runRuleOnlyBackfill(state)
+
             // Fast Eval deliberately SKIPS the memory distill loop.
             // The full Gate 1 baseline calls distill across up to 75
             // entities × 5 subject kinds = ~375 LLM round-trips before
@@ -371,6 +382,11 @@ public enum Gate1Baseline {
                 }
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
+
+            // Run rule-only OntologyBackfill synchronously so fact_type
+            // is populated before the EvalKit harness starts. Without
+            // this, WalkExplainer drops every step (Walk cov. = 0).
+            await runRuleOnlyBackfill(state)
 
             let documentsDir = try FileManager.default.url(
                 for: .documentDirectory,
@@ -713,6 +729,24 @@ public enum Gate1Baseline {
                     """]
             )
         }
+    }
+
+    /// Run OntologyBackfill synchronously WITHOUT the LLM slot
+    /// extractor so the entity / event rows have fact_type populated
+    /// before any eval question runs. The boot-time backfill in
+    /// AppState dispatches a heavier LLM-wired backfill on a detached
+    /// utility task, but that task often doesn't finish before the
+    /// EvalKit harness starts asking questions — which leaves
+    /// WalkExplainer with unclassified endpoints and Walk cov. = 0
+    /// across every multi-hop row (root cause of the 2026-06-24
+    /// 06:45 Gate 3 run's "Walk cov. 0.00" on all 4 questions). The
+    /// rule-only variant is fast (no LLM round-trips) so blocking
+    /// on it adds < 1s per eval boot.
+    @MainActor
+    private static func runRuleOnlyBackfill(_ state: AppState) async {
+        guard let entities = state.entities, let events = state.events else { return }
+        let backfill = OntologyBackfill(entities: entities, events: events)
+        _ = await backfill.run()
     }
 
     // MARK: - All-diagnostics — single-button run
