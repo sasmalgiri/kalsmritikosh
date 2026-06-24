@@ -70,6 +70,14 @@ public enum DateGrammar {
         // 3. Month-name range ("April through June 2024", "Apr-Jun 2024")
         if let m = matchMonthRange(in: lower, calendar: calendar, baseDate: baseDate) { return m }
 
+        // 3.5. Specific fully-qualified date ("March 6, 2026", "8 April 2024").
+        // Runs BEFORE monthSingle so a day-precise phrase resolves to a 1-day
+        // span instead of being collapsed to the whole month — without it,
+        // "Friday March 6, 2026" returns the whole of March, costing G2-COMMIT
+        // its per-day due-by precision. Requires BOTH day and year so phrases
+        // like "April 2024" still fall through to monthSingle.
+        if let m = matchSpecificDate(in: lower, calendar: calendar) { return m }
+
         // 4. Month-name single ("April 2024" / "in April" / "Apr")
         if let m = matchMonthSingle(in: lower, calendar: calendar, baseDate: baseDate) { return m }
 
@@ -145,10 +153,15 @@ public enum DateGrammar {
         guard hits.count >= 2 else { return nil }
         hits.sort { $0.start < $1.start }
 
-        // Two adjacent hits separated by "to" / "through" / "and" / "-"
+        // Two adjacent hits separated by "to" / "through" / "and" / "-".
+        // Skip overlapping pairs — dayMonYearRx and monDayYearRx can both
+        // hit the same text region (e.g. "8 April 2024" yields a "8 April
+        // 2024" hit AND a "April 20" hit), and `text[a.end..<b.start]`
+        // would crash with an invalid range otherwise.
         for i in 0..<(hits.count - 1) {
             let a = hits[i]
             let b = hits[i + 1]
+            guard a.end <= b.start else { continue }
             let between = text[a.end..<b.start].lowercased()
             let isConnector = between.contains(" to ")
                 || between.contains(" through ")
@@ -199,6 +212,59 @@ public enum DateGrammar {
             timeframe: .init(start: start, end: end),
             evidence: String(lower[evidenceR])
         )
+    }
+
+    // MARK: - 3.5. Specific calendar date
+
+    /// "March 6, 2026", "Apr 8, 2024", "8 April 2024".
+    /// Both day AND year are required so vaguer phrases like "April 2024" or
+    /// "April 8" still defer to monthSingle / singleAbsolute (which already
+    /// fall back to baseDate's year). Returns a 1-day span ending at end-of-day.
+    private static let monDayYearStrictRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{4})\b"#,
+        options: [.caseInsensitive]
+    )
+    private static let dayMonYearStrictRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[,\s]+(\d{4})\b"#,
+        options: [.caseInsensitive]
+    )
+
+    private static func matchSpecificDate(in lower: String, calendar: Calendar) -> Match? {
+        // Mon D YYYY
+        if let rx = monDayYearStrictRx,
+           let m = rx.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+           let monthR = Range(m.range(at: 1), in: lower),
+           let dayR = Range(m.range(at: 2), in: lower),
+           let yearR = Range(m.range(at: 3), in: lower),
+           let evidenceR = Range(m.range, in: lower),
+           let month = monthIndex(String(lower[monthR])),
+           let day = Int(lower[dayR]),
+           let year = Int(lower[yearR]) {
+            return makeDayMatch(year: year, month: month, day: day, evidence: String(lower[evidenceR]), calendar: calendar)
+        }
+        // D Mon YYYY
+        if let rx = dayMonYearStrictRx,
+           let m = rx.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+           let dayR = Range(m.range(at: 1), in: lower),
+           let monthR = Range(m.range(at: 2), in: lower),
+           let yearR = Range(m.range(at: 3), in: lower),
+           let evidenceR = Range(m.range, in: lower),
+           let day = Int(lower[dayR]),
+           let month = monthIndex(String(lower[monthR])),
+           let year = Int(lower[yearR]) {
+            return makeDayMatch(year: year, month: month, day: day, evidence: String(lower[evidenceR]), calendar: calendar)
+        }
+        return nil
+    }
+
+    private static func makeDayMatch(year: Int, month: Int, day: Int, evidence: String, calendar: Calendar) -> Match? {
+        var comps = DateComponents()
+        comps.year = year; comps.month = month; comps.day = day
+        comps.hour = 0; comps.minute = 0; comps.second = 0
+        guard let start = calendar.date(from: comps),
+              let end = endOfDay(start, calendar: calendar)
+        else { return nil }
+        return Match(timeframe: .init(start: start, end: end), evidence: evidence)
     }
 
     // MARK: - 4. Month-name single
