@@ -48,6 +48,21 @@ public struct FactTypeClassifier: Sendable {
     // MARK: - Entity
 
     public nonisolated func classify(entity: Entity) -> Result? {
+        // Name-based override — NLTagger frequently tags "Project Delta"
+        // (and other "Project XYZ" names) as ORGANIZATION because the
+        // capitalization pattern matches a company. The "Project Foo"
+        // convention is strong enough to override the NER tag. Without
+        // this override, fact_bonds never reference the project entity
+        // (BondConstructor.projectEntityIDs filters on .project) and
+        // BondWalker seeded from "Project Delta" finds zero outgoing
+        // typed bonds — Walk cov. collapses to 0 in every multi-hop
+        // eval row. (Confirmed via Run Full Diagnostics 2026-06-24:
+        // entities[organization:5, person:10] — zero projects.)
+        let value = entity.value.trimmingCharacters(in: .whitespaces)
+        if value.range(of: #"^Project\s+\p{Lu}"#, options: .regularExpression) != nil {
+            return Result(type: .project, confidence: 0.85, reason: "name matches 'Project <Capital>' override")
+        }
+
         switch entity.kind {
         case .person:
             return Result(type: .person, confidence: 0.95, reason: "entity.kind=person")

@@ -1111,9 +1111,17 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         // Walk from the Project Delta entity. The corpus contains
         // multiple ProjectDelta-related KOs (contract, amendment,
         // invoices, emails) so the walker should reach ≥1 source KO.
+        // NLTagger sometimes tags "Project Delta" as organization
+        // (the FactTypeClassifier has a name-based override for this,
+        // but the underlying entity.kind stays organization). Fall
+        // back to scanning orgs for "delta" so the seed is found even
+        // when entity.kind is misleading.
         let projects = (try? await entities.list(kind: .project, limit: 25)) ?? []
-        let delta = projects.first(where: { $0.value.lowercased().contains("delta") })
+        let orgs = (try? await entities.list(kind: .organization, limit: 25)) ?? []
+        let projectDelta = projects.first(where: { $0.value.lowercased().contains("delta") })
             ?? projects.first
+        let orgDelta = orgs.first(where: { $0.value.lowercased().contains("delta") })
+        let delta = projectDelta ?? orgDelta
         if let seed = delta {
             let walker = BondWalker(repository: factBonds)
             let result = await walker.expand(from: seed.id, maxHops: 2)
