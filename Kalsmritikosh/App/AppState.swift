@@ -420,15 +420,36 @@ public final class AppState {
             // task observes that ingest/watcher are gone and exits.
             self.watcherTask = Task { [weak self, weak ingest, weak watcher] in
                 guard let watcher else { return }
+                // G4.4 — bounded ingest concurrency. Sequential per-url
+                // ingestion was the only path before; on a big drop
+                // (Gmail Takeout ZIP expansion = thousands of files)
+                // ingest was wall-clocked by file order. A TaskGroup
+                // with maxInFlight=4 (matching the expert WorkerPool
+                // cap) ingests up to 4 files in parallel with
+                // backpressure — drops shrink from N×t to N×t/4 while
+                // keeping the per-file pipeline (loader → chunker →
+                // embedder) serial inside each task.
+                let maxInFlight = 4
                 for await event in watcher.events {
                     guard let ingest, let self else { return }
-                    for url in event.urls {
-                        await self.withIngestActivity(file: url.lastPathComponent) {
-                            do {
-                                _ = try await ingest.ingest(fileAt: url)
-                            } catch {
-                                AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    await withTaskGroup(of: Void.self) { group in
+                        var inFlight = 0
+                        for url in event.urls {
+                            if inFlight >= maxInFlight {
+                                _ = await group.next()
+                                inFlight -= 1
                             }
+                            group.addTask { [weak self, weak ingest] in
+                                guard let self, let ingest else { return }
+                                await self.withIngestActivity(file: url.lastPathComponent) {
+                                    do {
+                                        _ = try await ingest.ingest(fileAt: url)
+                                    } catch {
+                                        AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                                    }
+                                }
+                            }
+                            inFlight += 1
                         }
                     }
                 }
