@@ -68,34 +68,47 @@ public actor FactBondsRepository {
 
     /// Batched upserts wrapped in BEGIN IMMEDIATE / COMMIT so an N-bond
     /// write amortises fsync cost. ROLLBACK on partial failure leaves
-    /// the table at its pre-batch state.
+    /// the table at its pre-batch state. Returns the Bond values for
+    /// NEWLY-INSERTED rows only (UPDATE-path rows already exist in any
+    /// downstream cache, so they don't need re-insertion). Existing
+    /// caches use this return value to keep their adjacency fresh.
+    @discardableResult
     public func upsertBonds(
         _ bonds: [BondUpsert],
         sourceObjectID: KnowledgeObject.ID,
         confidence: Confidence = .medium
-    ) async throws {
-        guard !bonds.isEmpty else { return }
+    ) async throws -> [Bond] {
+        guard !bonds.isEmpty else { return [] }
         try await database.exec("BEGIN IMMEDIATE;")
+        var written: [Bond] = []
         do {
             for bond in bonds {
-                try await upsertBond(
+                if let newBond = try await upsertBond(
                     bond,
                     sourceObjectID: sourceObjectID,
                     confidence: confidence
-                )
+                ) {
+                    written.append(newBond)
+                }
             }
             try await database.exec("COMMIT;")
+            return written
         } catch {
             try? await database.exec("ROLLBACK;")
             throw error
         }
     }
 
+    /// Returns nil when the bond already existed (weight bumped +
+    /// evidence appended); returns a populated Bond when the row was
+    /// newly inserted. Caches use the non-nil return to patch their
+    /// adjacency without re-warming.
+    @discardableResult
     public func upsertBond(
         _ bond: BondUpsert,
         sourceObjectID: KnowledgeObject.ID,
         confidence: Confidence = .medium
-    ) async throws {
+    ) async throws -> Bond? {
         let existing = try await database.query("""
         SELECT id, weight, evidence_object_ids_json
         FROM fact_bonds
@@ -126,7 +139,9 @@ public actor FactBondsRepository {
                 .text(serializeEvidence(evidence)),
                 .uuid(id)
             ])
+            return nil
         } else {
+            let newID = UUID()
             try await database.exec("""
             INSERT INTO fact_bonds (
                 id, bond_name, from_fact_kind, from_fact_id,
@@ -135,7 +150,7 @@ public actor FactBondsRepository {
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);
             """, [
-                .uuid(UUID()),
+                .uuid(newID),
                 .text(bond.bondName),
                 .text(bond.fromKind.rawValue),
                 .uuid(bond.fromID),
@@ -146,6 +161,17 @@ public actor FactBondsRepository {
                 .text("[\"\(sourceObjectID.uuidString)\"]"),
                 .date(.init())
             ])
+            return Bond(
+                id: newID,
+                bondName: bond.bondName,
+                fromKind: bond.fromKind,
+                fromID: bond.fromID,
+                toKind: bond.toKind,
+                toID: bond.toID,
+                sourceObjectID: sourceObjectID,
+                confidence: confidence.value,
+                weight: 1
+            )
         }
     }
 

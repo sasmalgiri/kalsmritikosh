@@ -45,6 +45,10 @@ public actor OntologyBackfill {
     /// to give the model a context window. nil = LLM step disabled.
     private let llmSlotExtractor: LLMSlotExtractor?
     private let knowledgeObjects: KnowledgeObjectRepository?
+    /// Optional cache patch — every successful setFactType also lands
+    /// in the in-memory map so WalkExplainer's resolveFactType hits
+    /// the hashmap immediately (no wait for next cold-boot warm).
+    private let cache: InMemoryBondGraph?
 
     public init(
         entities: EntitiesRepository,
@@ -54,6 +58,7 @@ public actor OntologyBackfill {
         validator: OntologyValidator = OntologyValidator(),
         llmSlotExtractor: LLMSlotExtractor? = nil,
         knowledgeObjects: KnowledgeObjectRepository? = nil,
+        cache: InMemoryBondGraph? = nil,
         minConfidence: Double = 0.5
     ) {
         self.entities = entities
@@ -63,6 +68,7 @@ public actor OntologyBackfill {
         self.validator = validator
         self.llmSlotExtractor = llmSlotExtractor
         self.knowledgeObjects = knowledgeObjects
+        self.cache = cache
         self.minConfidence = minConfidence
     }
 
@@ -94,6 +100,7 @@ public actor OntologyBackfill {
                             result.type.rawValue,
                             forEntityID: entity.id
                         )
+                        await cache?.noteFactType(entity.id, type: result.type)
                         stats.entitiesClassified += 1
                         progressedThisCycle += 1
                         if await writeEntitySlots(entity: entity, factType: result.type) {
@@ -141,6 +148,7 @@ public actor OntologyBackfill {
                             result.type.rawValue,
                             forEventID: event.id
                         )
+                        await cache?.noteFactType(event.id, type: result.type)
                         stats.eventsClassified += 1
                         progressedThisCycle += 1
                         if await writeEventSlots(event: event, factType: result.type) {

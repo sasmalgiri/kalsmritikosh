@@ -79,15 +79,21 @@ public actor BondConstructor {
     private let repository: FactBondsRepository
     private let classifier: FactTypeClassifier
     private let minConfidence: Double
+    /// Optional cache patch — when wired, every successfully written
+    /// bond also lands in the in-memory adjacency so newly-ingested
+    /// KOs are walkable immediately (no wait for next cold boot).
+    private let cache: InMemoryBondGraph?
 
     public init(
         repository: FactBondsRepository,
         classifier: FactTypeClassifier = FactTypeClassifier(),
-        minConfidence: Double = 0.5
+        minConfidence: Double = 0.5,
+        cache: InMemoryBondGraph? = nil
     ) {
         self.repository = repository
         self.classifier = classifier
         self.minConfidence = minConfidence
+        self.cache = cache
     }
 
     /// Build the bond set for this KO and upsert in a single batched
@@ -334,12 +340,20 @@ public actor BondConstructor {
         let deduped = dedupe(bonds)
 
         do {
-            try await repository.upsertBonds(
+            let newlyWritten = try await repository.upsertBonds(
                 deduped,
                 sourceObjectID: context.objectID,
                 confidence: .medium
             )
-            AtlasLog.knowledge.debug("BondConstructor: KO \(context.objectID.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s)")
+            // Patch the in-memory adjacency for every NEWLY-inserted
+            // bond so retrieval queries on the just-ingested KO walk
+            // the live graph instead of waiting for next cold boot.
+            if let cache, !newlyWritten.isEmpty {
+                for bond in newlyWritten {
+                    await cache.noteBond(bond)
+                }
+            }
+            AtlasLog.knowledge.debug("BondConstructor: KO \(context.objectID.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s), \(newlyWritten.count, privacy: .public) new")
             return deduped.count
         } catch {
             AtlasLog.knowledge.error("BondConstructor: upsert failed for KO \(context.objectID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")

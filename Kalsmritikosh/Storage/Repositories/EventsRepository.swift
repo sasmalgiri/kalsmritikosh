@@ -120,6 +120,29 @@ public actor EventsRepository {
         return rows.first?.string(0)
     }
 
+    /// EntityTimeline warm-up — paged enumeration of every event paired
+    /// with its participating entity ids. Returns (event, participants)
+    /// tuples; the cache shards them by entity into sorted per-entity
+    /// timelines.
+    public func allWithParticipants(offset: Int = 0, pageSize: Int = 2_000) async throws -> [(Event, [Entity.ID])] {
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        FROM events
+        ORDER BY date ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        var out: [(Event, [Entity.ID])] = []
+        for row in rows {
+            guard let event = decode(row) else { continue }
+            let participants = try await database.query("""
+            SELECT entity_id FROM event_entities WHERE event_id = ?;
+            """, [.uuid(event.id)])
+            let entityIDs = participants.compactMap { $0.uuid(0) }
+            out.append((event, entityIDs))
+        }
+        return out
+    }
+
     /// InMemoryBondGraph warm-up — paged enumeration of every event's
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (event_id, fact_type_raw) tuples.

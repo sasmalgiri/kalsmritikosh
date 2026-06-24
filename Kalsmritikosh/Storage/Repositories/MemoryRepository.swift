@@ -97,6 +97,24 @@ public actor MemoryRepository {
         return rows.first.flatMap(decode)
     }
 
+    /// MemoryHashCache warm-up — paged enumeration of every memory
+    /// object in the ledger. The cache calls this in a loop until the
+    /// returned page is shorter than `pageSize`. Ordered by updated_at
+    /// so re-warms after a session pick up the latest snapshots.
+    public func listAll(offset: Int = 0, pageSize: Int = 2_000) async throws -> [MemoryObject] {
+        let rows = try await database.query("""
+        SELECT id, subject_kind, subject_identifier,
+               key_decisions_json, key_event_ids_json,
+               important_relationship_ids_json, risks_json,
+               status, narrative, source_object_ids_json,
+               confidence, version, created_at, updated_at
+        FROM memory_objects
+        ORDER BY updated_at DESC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap(decode)
+    }
+
     public func search(_ query: String, limit: Int = 20) async throws -> [MemoryObject] {
         let pattern = "%\(query)%"
         let rows = try await database.query("""

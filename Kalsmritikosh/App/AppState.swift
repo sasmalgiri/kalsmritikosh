@@ -57,6 +57,14 @@ public final class AppState {
     /// hashmap instead of N SQL queries per hop. Optional — when nil
     /// (older boot paths, isolated test rigs), the SQL fallback runs.
     public private(set) var bondGraphCache: InMemoryBondGraph?
+    /// In-memory cache for the Memory retrieval layer (first hop on
+    /// every question).
+    public private(set) var memoryCache: MemoryHashCache?
+    /// In-memory per-entity sorted-by-date event index for Timeline
+    /// range queries.
+    public private(set) var entityTimeline: EntityTimeline?
+    /// In-memory Trie + fuzzy index for entity hint resolution.
+    public private(set) var entityTrie: EntityTrie?
 
     // Knowledge
     public private(set) var timelineEngine: TimelineEngine?
@@ -197,12 +205,15 @@ public final class AppState {
             // future schema-aware retrieval (Phase 4) and the
             // "Why this answer?" walk explainer (Phase 5) read them.
             let factBondsRepo = FactBondsRepository(database: db)
-            // In-memory bond-graph cache. Created empty; warmed
-            // asynchronously after OntologyBackfill finishes (see
-            // Task.detached lower in this method). BondWalker +
-            // WalkExplainer check isWarm() before preferring the
-            // cache over SQL, so the boot warm-up window stays safe.
+            // In-memory caches for the four hot paths. Created empty;
+            // warmed asynchronously after OntologyBackfill finishes
+            // (see Task.detached lower in this method). Each cache
+            // exposes isWarm() so the consuming layer falls back to
+            // SQL during the warm-up window.
             let bondCache = InMemoryBondGraph()
+            let memoryHashCache = MemoryHashCache()
+            let entityTimelineCache = EntityTimeline()
+            let entityTrieCache = EntityTrie()
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -324,7 +335,7 @@ public final class AppState {
                 syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator(),
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
-                bondConstructor: BondConstructor(repository: factBondsRepo)
+                bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache)
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -347,23 +358,31 @@ public final class AppState {
             // and labels it via the rule-based classifier. Idempotent:
             // safe to re-run; only touches NULL rows. Runs in a detached
             // Task so it doesn't block boot; logs counts when done.
-            Task.detached(priority: .utility) { [entities, events, objects, capabilities, factBondsRepo, bondCache] in
+            Task.detached(priority: .utility) { [entities, events, objects, capabilities, factBondsRepo, bondCache, memoryHashCache, entityTimelineCache, entityTrieCache, memoryRepo] in
                 let llm = LLMSlotExtractor(capabilities: capabilities)
                 let backfill = OntologyBackfill(
                     entities: entities,
                     events: events,
                     llmSlotExtractor: llm,
-                    knowledgeObjects: objects
+                    knowledgeObjects: objects,
+                    cache: bondCache
                 )
                 _ = await backfill.run()
-                // Warm the InMemoryBondGraph after backfill so the
-                // fact_type index is fresh. BondWalker + WalkExplainer
-                // start preferring the cache the moment isWarm() flips.
-                await bondCache.warm(
+                // Warm the four in-memory caches in parallel after
+                // backfill so the fact_type / memory / timeline / trie
+                // indexes are fresh together. Each cache flips isWarm()
+                // at completion so its consumer stops falling back to
+                // SQL.
+                async let bondWarm: Void = bondCache.warm(
                     bonds: factBondsRepo,
                     entities: entities,
                     events: events
                 )
+                async let memoryWarm: Void = memoryHashCache.warm(memory: memoryRepo)
+                async let timelineWarm: Void = entityTimelineCache.warm(events: events)
+                async let trieWarm: Void = entityTrieCache.warm(entities: entities)
+                _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm)
+                AtlasLog.app.info("All four in-memory caches warmed (bond + memory + timeline + trie)")
             }
 
             let watcher = FolderWatcher()
@@ -417,6 +436,9 @@ public final class AppState {
             // completion is async (chained off the OntologyBackfill
             // detached task below).
             self.bondGraphCache = bondCache
+            self.memoryCache = memoryHashCache
+            self.entityTimeline = entityTimelineCache
+            self.entityTrie = entityTrieCache
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
             self.compression = compression

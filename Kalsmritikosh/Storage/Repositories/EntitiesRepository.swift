@@ -152,6 +152,23 @@ public actor EntitiesRepository {
         return rows.first?.string(0)
     }
 
+    /// EntityTrie warm-up — paged enumeration of every canonical
+    /// entity's id + value + normalized. The Trie builds prefix
+    /// buckets from both `value` and `normalized` so "Project Delta"
+    /// is reachable as "project delta", "project", and "delta" prefix
+    /// queries.
+    public func allValues(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String, String?)] {
+        let rows = try await database.query("""
+        SELECT id, value, normalized FROM entities
+        ORDER BY id ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let value = row.string(1) else { return nil }
+            return (id, value, row.string(2))
+        }
+    }
+
     /// InMemoryBondGraph warm-up — paged enumeration of every entity's
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (canonical_id, fact_type_raw) tuples; caller
