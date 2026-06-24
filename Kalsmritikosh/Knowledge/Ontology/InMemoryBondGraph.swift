@@ -46,6 +46,7 @@ public actor InMemoryBondGraph {
         public let outgoingBuckets: Int
         public let incomingBuckets: Int
         public let warmSeconds: Double
+        public let evictions: Int
     }
 
     // MARK: - State
@@ -60,6 +61,13 @@ public actor InMemoryBondGraph {
     private var factTypeMap: [UUID: FactType] = [:]
     /// Set so a duplicate `noteBond` (same id) doesn't double-append.
     private var seenBondIDs: Set<UUID> = []
+    /// Per-bucket last-access epoch (LRU policy). When the bucket
+    /// count exceeds `maxBuckets`, the coldest 10% are evicted. Cold
+    /// buckets fall through to SQL via `hasBucket(_:)` — the cache
+    /// stops claiming to know about them.
+    private var bucketAccess: [UUID: UInt64] = [:]
+    private var accessEpoch: UInt64 = 0
+    private var evictionCount: Int = 0
 
     private var lastStats: Stats?
     /// false until warm() finishes. Callers check this before
@@ -68,9 +76,26 @@ public actor InMemoryBondGraph {
     /// set — incremental `noteBond` patches don't flip it back.
     private var warmed = false
 
-    public init() {}
+    /// Hard cap on (outgoing + incoming) bucket count. Above this
+    /// the coldest 10% get evicted. Default 50_000 covers a corpus
+    /// of ~50k entities with bonds (well above current production
+    /// scale) while staying well under 1 GB RAM. At 4 TB target
+    /// scale (~10M facts with bonds) you'd raise this to ~500_000
+    /// and accept the 5-10 GB RAM cost OR add disk-backed pages.
+    private let maxBuckets: Int
+
+    public init(maxBuckets: Int = 50_000) {
+        self.maxBuckets = maxBuckets
+    }
 
     public func isWarm() -> Bool { warmed }
+
+    /// LRU contract: a bucket is "in cache" only when the cache has
+    /// not evicted it. BondWalker checks this before consuming the
+    /// hot path — false means fall through to SQL.
+    public func hasBucket(_ id: UUID) -> Bool {
+        outgoingMap[id] != nil || incomingMap[id] != nil
+    }
 
     // MARK: - Warm-up
 
@@ -136,7 +161,8 @@ public actor InMemoryBondGraph {
             factsTyped: totalTyped,
             outgoingBuckets: outgoingMap.count,
             incomingBuckets: incomingMap.count,
-            warmSeconds: elapsed
+            warmSeconds: elapsed,
+            evictions: evictionCount
         )
         warmed = true
         AtlasLog.knowledge.info("InMemoryBondGraph: warmed bonds=\(totalBonds, privacy: .public) typed=\(totalTyped, privacy: .public) outBuckets=\(self.outgoingMap.count, privacy: .public) inBuckets=\(self.incomingMap.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
@@ -185,12 +211,14 @@ public actor InMemoryBondGraph {
     /// per hop.
     public func outgoing(from factID: UUID, bondNames: Set<String> = []) -> [FactBondsRepository.Bond] {
         guard let raw = outgoingMap[factID] else { return [] }
+        touch(factID)
         if bondNames.isEmpty { return raw }
         return raw.filter { bondNames.contains($0.bondName) }
     }
 
     public func incoming(to factID: UUID, bondNames: Set<String> = []) -> [FactBondsRepository.Bond] {
         guard let raw = incomingMap[factID] else { return [] }
+        touch(factID)
         if bondNames.isEmpty { return raw }
         return raw.filter { bondNames.contains($0.bondName) }
     }
@@ -225,5 +253,38 @@ public actor InMemoryBondGraph {
         guard seenBondIDs.insert(bond.id).inserted else { return }
         outgoingMap[bond.fromID, default: []].append(bond)
         incomingMap[bond.toID, default: []].append(bond)
+        touch(bond.fromID)
+        touch(bond.toID)
+        evictIfNeeded()
+    }
+
+    /// Bump the last-access epoch for an id. Called on every read and
+    /// write so LRU eviction targets genuinely cold buckets.
+    private func touch(_ id: UUID) {
+        accessEpoch &+= 1
+        bucketAccess[id] = accessEpoch
+    }
+
+    /// When the cache exceeds its bucket cap, evict the coldest 10%.
+    /// Both adjacency directions for an evicted id drop together so
+    /// hasBucket() stays consistent.
+    private func evictIfNeeded() {
+        let total = outgoingMap.count + incomingMap.count
+        guard total > maxBuckets * 2 else { return }
+        // Build an array of (id, lastAccess) for every live bucket.
+        var ages: [(UUID, UInt64)] = []
+        ages.reserveCapacity(bucketAccess.count)
+        for (id, epoch) in bucketAccess where outgoingMap[id] != nil || incomingMap[id] != nil {
+            ages.append((id, epoch))
+        }
+        ages.sort { $0.1 < $1.1 }
+        let evictCount = max(1, ages.count / 10)
+        for (id, _) in ages.prefix(evictCount) {
+            outgoingMap.removeValue(forKey: id)
+            incomingMap.removeValue(forKey: id)
+            bucketAccess.removeValue(forKey: id)
+            evictionCount += 1
+        }
+        AtlasLog.knowledge.debug("InMemoryBondGraph: LRU evicted \(evictCount, privacy: .public) cold buckets (total now \(self.outgoingMap.count + self.incomingMap.count, privacy: .public))")
     }
 }

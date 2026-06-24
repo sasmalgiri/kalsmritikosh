@@ -159,9 +159,11 @@ public actor BondWalker {
         bondNames: Set<String>
     ) async throws -> [FactBondsRepository.Bond] {
         // Hot path: cache lookup is O(1) + in-memory filter. Only
-        // when warm — during the boot warm-up window the SQL fallback
-        // runs so we don't silently return empty walks.
-        if let cache, await cache.isWarm() {
+        // when warm AND the bucket is still resident (LRU may have
+        // evicted cold buckets at 4 TB scale) — during the warm-up
+        // window OR after eviction we fall through to SQL so walks
+        // never silently return empty.
+        if let cache, await cache.isWarm(), await cache.hasBucket(id) {
             let hits = await cache.outgoing(from: id, bondNames: bondNames)
             return Array(hits.prefix(perHopLimit))
         }
@@ -182,7 +184,7 @@ public actor BondWalker {
         to id: UUID,
         bondNames: Set<String>
     ) async throws -> [FactBondsRepository.Bond] {
-        if let cache, await cache.isWarm() {
+        if let cache, await cache.isWarm(), await cache.hasBucket(id) {
             let hits = await cache.incoming(to: id, bondNames: bondNames)
             return Array(hits.prefix(perHopLimit))
         }

@@ -143,6 +143,8 @@ public enum DataHealthCheck {
         let timelineBuckets = (await state.entityTimeline?.entityCount()) ?? 0
         let trieWarm = (await state.entityTrie?.isWarm()) ?? false
         let trieStats = await state.entityTrie?.stats()
+        let hnswBuilt = (await state.hnswIndex?.isBuilt()) ?? false
+        let hnswSize = (await state.hnswIndex?.size()) ?? 0
 
         // Structured-output provider audit — which providers declare
         // the .structuredOutput capability so we know the typed
@@ -211,6 +213,12 @@ public enum DataHealthCheck {
         }
         if entityCount > 0 && trieWarm && (trieStats?.entitiesLoaded ?? 0) == 0 {
             issues.append("EntityTrie is warmed but EMPTY despite \(entityCount) entities — warm-up regression")
+        }
+        if vectorCount > 0 && hnswBuilt && hnswSize == 0 {
+            issues.append("HNSWVectorIndex is built but EMPTY despite \(vectorCount) vectors rows — build regression")
+        }
+        if vectorCount > 5_000 && !hnswBuilt {
+            issues.append("HNSWVectorIndex is NOT built despite \(vectorCount) vectors — every vector query is brute-forcing the whole table. Restart the app or wait for the boot warm task to complete.")
         }
         if structuredOutputProviders.isEmpty {
             issues.append("No provider declares .structuredOutput capability — the @Generable typed-output path (item #7) will never fire; experts will prompt-parse instead")
@@ -317,7 +325,8 @@ public enum DataHealthCheck {
         } else {
             md += "| EntityTrie | \(trieWarm ? "✓" : "—") | (no stats) |\n"
         }
-        md += "\nA cache that hasn't warmed yet is normal during the first few seconds after boot — the OntologyBackfill detached task warms all four in parallel. Re-run this audit after ~5s if any row shows `—`.\n\n"
+        md += "| HNSWVectorIndex | \(hnswBuilt ? "✓" : "—") | \(hnswSize) vectors |\n"
+        md += "\nA cache that hasn't warmed yet is normal during the first few seconds after boot — the OntologyBackfill detached task warms all five in parallel. Re-run this audit after ~5s if any row shows `—`.\n\n"
 
         md += "## Structured-output providers (item #7)\n\n"
         if structuredOutputProviders.isEmpty {
