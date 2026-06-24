@@ -65,6 +65,10 @@ public final class AppState {
     public private(set) var entityTimeline: EntityTimeline?
     /// In-memory Trie + fuzzy index for entity hint resolution.
     public private(set) var entityTrie: EntityTrie?
+    /// HNSW ANN index over the `vectors` table. Built at boot in
+    /// parallel with the other caches. When built, SQLiteVectorStore
+    /// .nearest takes the index path; brute-force is the fallback.
+    public private(set) var hnswIndex: HNSWVectorIndex?
 
     // Knowledge
     public private(set) var timelineEngine: TimelineEngine?
@@ -125,7 +129,11 @@ public final class AppState {
             try await SchemaMigrations.migrate(db)
             AtlasLog.storage.info("Database open at \(db.url.path, privacy: .public)")
 
-            let vectors = SQLiteVectorStore(database: db)
+            // HNSW ANN index — built lazily after boot. Pass it to
+            // SQLiteVectorStore so `nearest()` takes the index path
+            // once it's built (brute force remains the fallback).
+            let hnsw = HNSWVectorIndex()
+            let vectors = SQLiteVectorStore(database: db, annIndex: hnsw)
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
             let chunks = ChunksRepository(database: db)
@@ -361,7 +369,7 @@ public final class AppState {
             // and labels it via the rule-based classifier. Idempotent:
             // safe to re-run; only touches NULL rows. Runs in a detached
             // Task so it doesn't block boot; logs counts when done.
-            Task.detached(priority: .utility) { [entities, events, objects, capabilities, factBondsRepo, bondCache, memoryHashCache, entityTimelineCache, entityTrieCache, memoryRepo] in
+            Task.detached(priority: .utility) { [entities, events, objects, capabilities, factBondsRepo, bondCache, memoryHashCache, entityTimelineCache, entityTrieCache, memoryRepo, vectors, hnsw] in
                 let llm = LLMSlotExtractor(capabilities: capabilities)
                 let backfill = OntologyBackfill(
                     entities: entities,
@@ -371,11 +379,11 @@ public final class AppState {
                     cache: bondCache
                 )
                 _ = await backfill.run()
-                // Warm the four in-memory caches in parallel after
-                // backfill so the fact_type / memory / timeline / trie
-                // indexes are fresh together. Each cache flips isWarm()
-                // at completion so its consumer stops falling back to
-                // SQL.
+                // Warm the five in-memory caches in parallel after
+                // backfill: fact_type / memory / timeline / trie /
+                // HNSW vector index. Each flips isWarm()/isBuilt()
+                // at completion so its consumer stops falling back
+                // to SQL.
                 async let bondWarm: Void = bondCache.warm(
                     bonds: factBondsRepo,
                     entities: entities,
@@ -384,8 +392,9 @@ public final class AppState {
                 async let memoryWarm: Void = memoryHashCache.warm(memory: memoryRepo)
                 async let timelineWarm: Void = entityTimelineCache.warm(events: events)
                 async let trieWarm: Void = entityTrieCache.warm(entities: entities)
-                _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm)
-                AtlasLog.app.info("All four in-memory caches warmed (bond + memory + timeline + trie)")
+                async let hnswWarm: HNSWVectorIndex.BuildStats = hnsw.build(from: vectors)
+                _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm, hnswWarm)
+                AtlasLog.app.info("All five in-memory caches warmed (bond + memory + timeline + trie + HNSW)")
             }
 
             let watcher = FolderWatcher()
@@ -442,6 +451,7 @@ public final class AppState {
             self.memoryCache = memoryHashCache
             self.entityTimeline = entityTimelineCache
             self.entityTrie = entityTrieCache
+            self.hnswIndex = hnsw
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
             self.compression = compression

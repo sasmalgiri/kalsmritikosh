@@ -16,6 +16,11 @@ import OSLog
 
 public actor SQLiteVectorStore: VectorStore {
     private let database: Database
+    /// Optional ANN accelerator. When wired AND built, `nearest()` hits
+    /// the HNSW index instead of brute-forcing every row. SQL stays
+    /// the durable source-of-truth; the index is rebuilt from SQL on
+    /// every cold boot.
+    private let annIndex: HNSWVectorIndex?
 
     /// Soft cap. Beyond this row count we still scan, but log a Gate 3
     /// reminder so latency regressions are visible. `nonisolated` so the
@@ -23,8 +28,36 @@ public actor SQLiteVectorStore: VectorStore {
     /// hopping back through MainActor isolation.
     public nonisolated static let bruteForceWarnAt = 2_000_000
 
-    public init(database: Database) {
+    public init(database: Database, annIndex: HNSWVectorIndex? = nil) {
         self.database = database
+        self.annIndex = annIndex
+    }
+
+    /// Public so HNSWVectorIndex.build can page through. Each row carries
+    /// the chunk id + int8 quantized bytes + per-vector scale.
+    public struct RawVector: Sendable {
+        public let chunkID: Chunk.ID
+        public let bytes: [UInt8]
+        public let scale: Double
+    }
+
+    /// Paged enumeration of every vector row. Used by HNSW build.
+    public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [RawVector] {
+        let rows = try await database.query("""
+        SELECT chunk_id, q, scale FROM vectors
+        ORDER BY chunk_id ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        var out: [RawVector] = []
+        for row in rows {
+            guard let cid = row.uuid(0),
+                  let blob = row.blob(1),
+                  let scale = row.double(2) else { continue }
+            var bytes = [UInt8](repeating: 0, count: blob.count)
+            blob.copyBytes(to: &bytes, count: blob.count)
+            out.append(RawVector(chunkID: cid, bytes: bytes, scale: scale))
+        }
+        return out
     }
 
     public func upsert(chunkID: Chunk.ID, embedding: [Float]) async throws {
@@ -51,6 +84,16 @@ public actor SQLiteVectorStore: VectorStore {
         candidateChunkIDs: [Chunk.ID]?
     ) async throws -> [VectorHit] {
         guard !embedding.isEmpty, limit > 0 else { return [] }
+        // ANN hot path: when the HNSW index is built AND no
+        // pre-filter is requested (candidateChunkIDs == nil), the
+        // index answers in O(log N) instead of O(N) brute-force.
+        // Pre-filtered queries still take the SQL path so the
+        // vector layer can honour upstream layer prefilters.
+        if let ann = annIndex, candidateChunkIDs == nil {
+            if await ann.isBuilt() {
+                return await ann.nearest(to: embedding, limit: limit)
+            }
+        }
         let (qBytes, queryScale) = quantizeToBytes(embedding)
         var queryNormSquared: Double = 0
         for b in qBytes {
