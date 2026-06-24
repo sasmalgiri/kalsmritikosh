@@ -46,7 +46,12 @@ import OSLog
 public actor BondConstructor {
 
     public struct Context: Sendable {
-        public let object: KnowledgeObject
+        /// The source KO id all bonds in this batch attribute back to.
+        /// Was `object: KnowledgeObject` in earlier revisions; BondBackfill
+        /// only has the id (not the full object), so the contract is
+        /// narrowed to the id since that's the only field the
+        /// constructor actually reads.
+        public let objectID: KnowledgeObject.ID
         public let entities: [Entity]
         public let events: [Event]
         /// Pre-canonicalised entity ids — bond writes always use the
@@ -57,13 +62,13 @@ public actor BondConstructor {
         public let emailParticipants: Tier1RelationshipExtractor.EmailParticipants?
 
         public nonisolated init(
-            object: KnowledgeObject,
+            objectID: KnowledgeObject.ID,
             entities: [Entity],
             events: [Event],
             canonicalMapping: [Entity.ID: Entity.ID],
             emailParticipants: Tier1RelationshipExtractor.EmailParticipants?
         ) {
-            self.object = object
+            self.objectID = objectID
             self.entities = entities
             self.events = events
             self.canonicalMapping = canonicalMapping
@@ -331,13 +336,13 @@ public actor BondConstructor {
         do {
             try await repository.upsertBonds(
                 deduped,
-                sourceObjectID: context.object.id,
+                sourceObjectID: context.objectID,
                 confidence: .medium
             )
-            AtlasLog.knowledge.debug("BondConstructor: KO \(context.object.id.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s)")
+            AtlasLog.knowledge.debug("BondConstructor: KO \(context.objectID.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s)")
             return deduped.count
         } catch {
-            AtlasLog.knowledge.error("BondConstructor: upsert failed for KO \(context.object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            AtlasLog.knowledge.error("BondConstructor: upsert failed for KO \(context.objectID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             return 0
         }
     }

@@ -152,6 +152,23 @@ public actor EntitiesRepository {
         return rows.first?.string(0)
     }
 
+    /// G3 BondBackfill — fetch all canonical entities whose mentions
+    /// touch this KO. Used by the BondBackfill engine to rebuild
+    /// fact_bonds against an already-ingested corpus (without
+    /// re-ingesting every file). Joins through entity_mentions so
+    /// entities shared across documents are returned for each KO
+    /// they appear in, not just the one they were first seen in.
+    public func findByMentionSource(_ id: KnowledgeObject.ID) async throws -> [Entity] {
+        let rows = try await database.query("""
+        SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence, e.attributes_json
+        FROM entities e
+        JOIN entity_mentions m ON m.entity_id = e.id
+        WHERE m.source_object_id = ?
+        LIMIT 500;
+        """, [.uuid(id)])
+        return rows.compactMap(decodeFullEntity)
+    }
+
     /// G3.22 — counts of canonical entities grouped by their classified
     /// fact_type. NULL-typed rows aren't returned. Smoke + eval diag
     /// uses this to confirm the classifier actually labeled something.

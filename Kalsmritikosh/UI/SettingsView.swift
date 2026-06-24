@@ -31,6 +31,8 @@ public struct SettingsView: View {
     @State private var allDiagnosticsRunning = false
     @State private var allDiagnosticsStatus: String?
     @State private var allDiagnosticsURL: URL?
+    @State private var rebuildBondsRunning = false
+    @State private var rebuildBondsStatus: String?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -158,6 +160,29 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
+            Text("Rebuild typed bonds — walks your existing knowledge_objects and re-runs BondConstructor against the already-extracted entities + events. Use this once after upgrading to a build that ships the fact_bonds table (v13) so your production archive picks up bonds without forcing a full re-ingest. Idempotent — safe to re-run.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await rebuildBonds() }
+                } label: {
+                    if rebuildBondsRunning {
+                        Label("Rebuilding…", systemImage: "hourglass")
+                    } else {
+                        Label("Rebuild Typed Bonds", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(rebuildBondsRunning)
+            }
+            if let status = rebuildBondsStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
             Text("Gate 3 Multi-hop — runs only M1..M4, the typed-multihop subset the bond engine is designed to answer. Watch the Walk cov. / Walk steps/Q columns in the report to verify the schema-aware retrieval layer is firing.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -273,6 +298,38 @@ public struct SettingsView: View {
             allDiagnosticsURL = nil
             allDiagnosticsStatus = "✗ Orchestrator failed: \(error)"
         }
+    }
+
+    private func rebuildBonds() async {
+        rebuildBondsRunning = true
+        rebuildBondsStatus = "Walking knowledge_objects + writing bonds…"
+        defer { rebuildBondsRunning = false }
+        guard let objects = appState.objects,
+              let entities = appState.entities,
+              let events = appState.events,
+              let factBonds = appState.factBonds else {
+            rebuildBondsStatus = "✗ AppState not booted — cannot reach repositories."
+            return
+        }
+        let started = Date()
+        let constructor = BondConstructor(repository: factBonds)
+        let backfill = BondBackfill(
+            knowledgeObjects: objects,
+            entities: entities,
+            events: events,
+            constructor: constructor
+        )
+        let stats = await backfill.run()
+        let elapsed = Date().timeIntervalSince(started)
+        let total = (try? await factBonds.count()) ?? 0
+        rebuildBondsStatus = """
+        ✓ Rebuild complete in \(String(format: "%.1f", elapsed))s
+        KOs scanned: \(stats.knowledgeObjects)
+        Bonds written / upserted: \(stats.bondsWritten)
+        Skipped (no entities or events): \(stats.skipped)
+        Failed: \(stats.failed)
+        Total bonds in ledger now: \(total)
+        """
     }
 
     private func runGate3Multihop() async {

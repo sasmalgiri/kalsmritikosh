@@ -78,6 +78,20 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// G3 BondBackfill — enumerate all KO ids in the ledger, paged so
+    /// a million-KO archive doesn't blow up memory. Caller iterates
+    /// (offset += pageSize) until the returned array is shorter than
+    /// `pageSize`. Used to rebuild fact_bonds against an already-
+    /// ingested corpus.
+    public func allIDs(offset: Int = 0, pageSize: Int = 500) async throws -> [KnowledgeObject.ID] {
+        let rows = try await database.query("""
+        SELECT id FROM knowledge_objects
+        ORDER BY created_at ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
     /// G3 Phase 5 UI — resolve a KO id to the underlying file's URL.
     /// Used by the walk-step clickthrough so tapping a row in the
     /// "Why this answer?" panel reveals the source in Finder.

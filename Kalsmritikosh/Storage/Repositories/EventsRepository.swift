@@ -120,6 +120,42 @@ public actor EventsRepository {
         return rows.first?.string(0)
     }
 
+    /// G3 BondBackfill — fetch all events whose source KO is `id`,
+    /// hydrating their entityIDs from event_entities. Returns the
+    /// fact-grade Event objects BondConstructor expects (kind, title,
+    /// summary, date, entityIDs, …). Used to rebuild fact_bonds for
+    /// an already-ingested corpus without re-running ingest.
+    public func findBySourceObject(_ id: KnowledgeObject.ID) async throws -> [Event] {
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        FROM events WHERE source_object_id = ? ORDER BY date ASC LIMIT 200;
+        """, [.uuid(id)])
+        var out: [Event] = []
+        for row in rows {
+            guard var event = decode(row) else { continue }
+            let participants = try await database.query("""
+            SELECT entity_id FROM event_entities WHERE event_id = ?;
+            """, [.uuid(event.id)])
+            let entityIDs = participants.compactMap { $0.uuid(0) }
+            event = Event(
+                id: event.id,
+                kind: event.kind,
+                date: event.date,
+                endDate: event.endDate,
+                title: event.title,
+                summary: event.summary,
+                entityIDs: entityIDs,
+                sourceObjectID: event.sourceObjectID,
+                sourceRange: event.sourceRange,
+                confidence: event.confidence,
+                dateConfidence: event.dateConfidence,
+                attributes: event.attributes
+            )
+            out.append(event)
+        }
+        return out
+    }
+
     /// G3.22 — counts of events grouped by their classified fact_type.
     /// NULL-typed rows aren't returned. Smoke + eval diag uses this to
     /// confirm the classifier actually labeled something.

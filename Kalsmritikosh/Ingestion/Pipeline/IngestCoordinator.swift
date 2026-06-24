@@ -550,7 +550,7 @@ public actor IngestCoordinator {
         // what existing retrieval still reads.
         if let bondConstructor {
             let context = BondConstructor.Context(
-                object: object,
+                objectID: object.id,
                 entities: extractedEntities,
                 events: extractedEvents,
                 canonicalMapping: canonicalMapping,
