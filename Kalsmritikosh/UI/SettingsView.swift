@@ -38,6 +38,9 @@ public struct SettingsView: View {
     @State private var healthCheckRunning = false
     @State private var healthCheckStatus: String?
     @State private var healthCheckURL: URL?
+    @State private var inventoryRunning = false
+    @State private var inventoryStatus: String?
+    @State private var inventoryURL: URL?
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -157,6 +160,38 @@ public struct SettingsView: View {
                 }
             }
             if let status = fastEvalStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Atlas extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runInventory() }
+                } label: {
+                    if inventoryRunning {
+                        Label("Generating…", systemImage: "hourglass")
+                    } else {
+                        Label("Generate Knowledge Inventory", systemImage: "list.bullet.rectangle")
+                    }
+                }
+                .disabled(inventoryRunning)
+                if let url = inventoryURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open inventory", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = inventoryStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -357,6 +392,27 @@ public struct SettingsView: View {
         } catch {
             allDiagnosticsURL = nil
             allDiagnosticsStatus = "✗ Orchestrator failed: \(error)"
+        }
+    }
+
+    private func runInventory() async {
+        inventoryRunning = true
+        inventoryStatus = "Reading every KO and dumping extracted facts…"
+        defer { inventoryRunning = false }
+        do {
+            let result = try await KnowledgeInventory.generate(appState)
+            inventoryURL = result.reportURL
+            inventoryStatus = """
+            ✓ Inventory written
+            \(result.reportURL.path)
+            Files audited: \(result.filesAudited)
+            Entities listed: \(result.totalEntities)
+            Events listed: \(result.totalEvents)
+            Bonds emitted from these KOs: \(result.totalBonds)
+            """
+        } catch {
+            inventoryURL = nil
+            inventoryStatus = "✗ Failed: \(error)"
         }
     }
 
