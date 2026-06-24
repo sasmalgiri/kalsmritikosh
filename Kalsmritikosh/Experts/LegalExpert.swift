@@ -69,6 +69,19 @@ public struct LegalExpert: Expert {
             return ([], 0)
         }
         AtlasLog.brain.info("expert.legal LLM: provider=\(provider.id, privacy: .public) available=true")
+        // STRUCTURED-OUTPUT PATH (#7) — typed @Generable claims.
+        if let fmProvider = provider as? FoundationModelsProvider {
+            do {
+                let typed = try await fmProvider.respondClaims(
+                    prompt: frame.prompt,
+                    systemPrompt: "You are Atlas. Use ONLY the evidence ids the prompt provides; never invent ids."
+                )
+                AtlasLog.brain.info("expert.legal LLM: produced \(typed.count) typed claims via @Generable")
+                return (typed, 0)
+            } catch {
+                AtlasLog.brain.error("expert.legal LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
+            }
+        }
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,

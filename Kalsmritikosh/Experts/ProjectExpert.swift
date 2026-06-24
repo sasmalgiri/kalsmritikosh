@@ -78,6 +78,25 @@ public struct ProjectExpert: Expert {
             return ([], 0)
         }
         AtlasLog.brain.info("expert.project LLM: provider=\(provider.id, privacy: .public) available=true")
+
+        // STRUCTURED-OUTPUT PATH (item #7) — when the resolved
+        // provider is Apple's FoundationModels, ask for a typed
+        // `StructuredClaimBatch` directly. No prompt parsing, no
+        // regex, no JSON brittleness. Falls through to the
+        // prompt-parsing path on older OS or non-Apple providers.
+        if let fmProvider = provider as? FoundationModelsProvider {
+            do {
+                let typed = try await fmProvider.respondClaims(
+                    prompt: frame.prompt,
+                    systemPrompt: "You are Atlas. Use ONLY the evidence ids the prompt provides; never invent ids."
+                )
+                AtlasLog.brain.info("expert.project LLM: provider=\(provider.id, privacy: .public) produced \(typed.count) typed claims via @Generable")
+                return (typed, 0)
+            } catch {
+                AtlasLog.brain.error("expert.project LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
+            }
+        }
+
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
