@@ -239,6 +239,43 @@ public enum PromptTemplates {
         return PromptFrame(prompt: prompt, evidenceMap: map)
     }
 
+    // MARK: - OCR (image-derived KOs)
+
+    /// Builds a prompt that asks the LLM to extract claim-shaped facts
+    /// from OCR'd image text. The caller (OCRExpert) pre-filters the
+    /// retrieval result to chunks whose source KO is image-typed.
+    public static func ocrAnalysis(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        imageChunks: [RetrievedChunk]
+    ) -> PromptFrame {
+        var lines: [String] = []
+        var map: [String: EvidenceCitation] = [:]
+        var index = 1
+        for hit in imageChunks {
+            let tag = "E\(index)"
+            let snippet = String(hit.chunk.text.prefix(300))
+                .replacingOccurrences(of: "\n", with: " ")
+            lines.append("[\(tag)] IMAGE-OCR \(snippet)")
+            map[tag] = EvidenceCitation(supportingObjectIDs: [hit.chunk.objectID])
+            index += 1
+        }
+        let evidenceBlock = lines.isEmpty ? "(no OCR text in scope)" : lines.joined(separator: "\n")
+        let prompt = """
+        Task: Read the OCR'd text from images and extract factual claims that
+        answer the question. Treat OCR output as potentially noisy — only emit
+        claims you can grounded in the evidence below; do not paraphrase
+        garbled text into fluent prose.
+
+        Question: "\(intent.rawQuestion)"
+
+        Evidence (cite by E-id):
+        \(evidenceBlock)
+        \(jsonContract)
+        """
+        return PromptFrame(prompt: prompt, evidenceMap: map)
+    }
+
     // MARK: - Timeline
 
     public static func timelineAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
