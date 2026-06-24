@@ -110,14 +110,30 @@ public struct RuleEventExtractor: EventExtractor {
         // entities, emit one emailReceived event per recognized date so
         // the archive is represented on the timeline. Capped at 50 per
         // KO to keep one giant report from flooding the events table.
+        //
+        // Quality gate (real-data validation): only emit if the source
+        // VALUE of the date entity contains a year — time-only fragments
+        // like "11:44:20 +0530" get normalized to TODAY by the date
+        // entity extractor and otherwise flood the timeline with fake
+        // "Archived email — today" rows that drown out real signal.
         if object.sourceType.category != .email {
             let dateEntities = entities.filter { $0.kind == .date }
             let emailEntities = entities.filter { $0.kind == .emailAddress }
             if dateEntities.count >= 3 && emailEntities.count >= 2 {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions = [.withInternetDateTime]
+                let yearRegex = try? NSRegularExpression(pattern: #"\b(19|20)\d{2}\b"#)
                 var emitted = 0
                 for dateEntity in dateEntities {
+                    let rawValue = dateEntity.value
+                    // Require an explicit YYYY in the raw VALUE — guards
+                    // against time-only fragments that normalize to today.
+                    guard let yr = yearRegex,
+                          yr.firstMatch(
+                            in: rawValue,
+                            range: NSRange(location: 0, length: (rawValue as NSString).length)
+                          ) != nil
+                    else { continue }
                     guard emitted < 50,
                           let iso = dateEntity.normalizedValue,
                           let parsed = formatter.date(from: iso.uppercased())
@@ -127,7 +143,7 @@ public struct RuleEventExtractor: EventExtractor {
                         kind: .emailReceived,
                         date: parsed,
                         title: "Archived email",
-                        summary: dateEntity.value,
+                        summary: rawValue,
                         entityIDs: entityIDs,
                         sourceObjectID: object.id,
                         confidence: .medium,
