@@ -1,0 +1,88 @@
+name: Build + Guards
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - name: Select Xcode (latest stable on macos-15 runner)
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+          swift --version
+
+      - name: Build (Debug)
+        env:
+          # Reduce build noise; pretty-print errors only.
+          NSUnbufferedIO: YES
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Kalsmritikosh/Kalsmritikosh.xcodeproj \
+            -scheme Kalsmritikosh \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/derived \
+            -skipMacroValidation \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tee build.log | grep -E "(error|warning):" || true
+          # Fail loudly if xcodebuild emitted any error.
+          if grep -qE "^.+: error:" build.log; then
+            echo "::error::xcodebuild reported errors"
+            exit 1
+          fi
+
+      - name: Capability-discipline grep guard
+        run: |
+          # No model names may appear in Experts / Brain / Knowledge /
+          # Retrieval / Ingestion. Routing/Providers + ModelManifest +
+          # AppState + SettingsView are the ONLY allowed namers.
+          set +e
+          MATCHES=$(grep -rniE "qwen|gemma|deepseek|llama|mistral|nomic|gpt" \
+            Kalsmritikosh/Experts/ \
+            Kalsmritikosh/Brain/ \
+            Kalsmritikosh/Knowledge/ \
+            Kalsmritikosh/Retrieval/ \
+            Kalsmritikosh/Ingestion/ \
+            2>/dev/null | grep -vE "//.*(Ollama|llama3|model name|reference)" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Grep guard failed — model names leaked into capability-discipline layers"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "Grep guard clean."
+
+      - name: No try! / fatalError outside UI
+        run: |
+          set +e
+          MATCHES=$(grep -rnE "try!|fatalError\(" Kalsmritikosh/ \
+            --include="*.swift" \
+            2>/dev/null | grep -vE "^Kalsmritikosh/UI/" || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::try! or fatalError() found in non-UI code"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "No try! / fatalError() in non-UI code."
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
