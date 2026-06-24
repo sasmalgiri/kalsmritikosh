@@ -152,6 +152,21 @@ public actor EntitiesRepository {
         return rows.first?.string(0)
     }
 
+    /// Hydrate a batch of canonical entities by id. Used by the
+    /// HybridRetriever.entityLayer when the EntityTrie produced
+    /// candidate ids and the layer needs the full Entity objects.
+    public func findByIDs(_ ids: [Entity.ID], limit: Int = 200) async throws -> [Entity] {
+        guard !ids.isEmpty else { return [] }
+        let capped = Array(ids.prefix(limit))
+        let placeholders = Array(repeating: "?", count: capped.count).joined(separator: ", ")
+        let bindings: [SQLValue] = capped.map { .uuid($0) }
+        let rows = try await database.query("""
+        SELECT id, kind, value, normalized, source_object_id, confidence, attributes_json
+        FROM entities WHERE id IN (\(placeholders));
+        """, bindings)
+        return rows.compactMap(decodeFullEntity)
+    }
+
     /// EntityTrie warm-up — paged enumeration of every canonical
     /// entity's id + value + normalized. The Trie builds prefix
     /// buckets from both `value` and `normalized` so "Project Delta"

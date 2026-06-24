@@ -35,6 +35,13 @@ public actor HybridRetriever: Retriever {
     /// also searches the qa_pairs FTS view; matches hydrate the
     /// answer-side KO's top chunk and append it to the retrieved set.
     private let qaPairs: QAPairsRepository?
+    /// In-memory caches for the three SQL-heavy retrieval layers.
+    /// When wired AND warm, the layer prefers the cache lookup over
+    /// SQL. Each cache exposes isWarm() so the warm-up window stays
+    /// safe (SQL fallback).
+    private let memoryCache: MemoryHashCache?
+    private let entityTrie: EntityTrie?
+    private let entityTimeline: EntityTimeline?
     /// G3.17 — optional typed-graph walker. When wired, the graph
     /// layer enriches entity seeds with chunks pulled from KOs
     /// reached via fact_bonds (up to 2 hops). Schema-aware multi-hop
@@ -65,6 +72,9 @@ public actor HybridRetriever: Retriever {
         qaPairs: QAPairsRepository? = nil,
         bondWalker: BondWalker? = nil,
         walkExplainer: WalkExplainer? = nil,
+        memoryCache: MemoryHashCache? = nil,
+        entityTrie: EntityTrie? = nil,
+        entityTimeline: EntityTimeline? = nil,
         bondWalkSeedLimit: Int = 3,
         bondWalkChunkLimit: Int = 10
     ) {
@@ -81,6 +91,9 @@ public actor HybridRetriever: Retriever {
         self.qaPairs = qaPairs
         self.bondWalker = bondWalker
         self.walkExplainer = walkExplainer
+        self.memoryCache = memoryCache
+        self.entityTrie = entityTrie
+        self.entityTimeline = entityTimeline
         self.bondWalkSeedLimit = bondWalkSeedLimit
         self.bondWalkChunkLimit = bondWalkChunkLimit
     }
@@ -197,11 +210,24 @@ public actor HybridRetriever: Retriever {
             break
         }
 
-        for candidate in Set(candidates) where !candidate.isEmpty {
-            for kind in MemoryObject.SubjectKind.allCases {
-                if let current = try? await memory.current(forSubject: kind, identifier: candidate),
-                   seen.insert(current.id).inserted {
-                    hits.append(current)
+        // Hot path: hashmap lookups via MemoryHashCache.
+        let cacheReady = await memoryCache?.isWarm() ?? false
+        if let cache = memoryCache, cacheReady {
+            for candidate in Set(candidates) where !candidate.isEmpty {
+                for kind in MemoryObject.SubjectKind.allCases {
+                    if let current = await cache.lookup(kind: kind, identifier: candidate),
+                       seen.insert(current.id).inserted {
+                        hits.append(current)
+                    }
+                }
+            }
+        } else {
+            for candidate in Set(candidates) where !candidate.isEmpty {
+                for kind in MemoryObject.SubjectKind.allCases {
+                    if let current = try? await memory.current(forSubject: kind, identifier: candidate),
+                       seen.insert(current.id).inserted {
+                        hits.append(current)
+                    }
                 }
             }
         }
@@ -222,6 +248,40 @@ public actor HybridRetriever: Retriever {
     }
 
     private func timelineLayer(_ intent: UserIntent) async throws -> [Event] {
+        // Hot path: when entity hints + a timeframe both narrow the
+        // result, fan out per-entity via the EntityTimeline cache —
+        // binary search + memcpy instead of SQL intersection of
+        // (entity_id, date BETWEEN). Falls back to the global SQL
+        // path when no hint anchors the query.
+        let timelineReady = await entityTimeline?.isWarm() ?? false
+        let trieReady = await entityTrie?.isWarm() ?? false
+        if let timeline = entityTimeline, timelineReady,
+           let trie = entityTrie, trieReady,
+           !intent.entityHints.isEmpty {
+            var seenEventIDs = Set<Event.ID>()
+            var collectedIDs: [Event.ID] = []
+            for hint in intent.entityHints.prefix(4) {
+                let entityIDs = await trie.resolve(hint)
+                for entityID in entityIDs {
+                    let slots = await timeline.slots(
+                        forEntity: entityID,
+                        from: intent.timeframe?.start,
+                        to: intent.timeframe?.end
+                    )
+                    for slot in slots where seenEventIDs.insert(slot.eventID).inserted {
+                        collectedIDs.append(slot.eventID)
+                        if collectedIDs.count >= 200 { break }
+                    }
+                    if collectedIDs.count >= 200 { break }
+                }
+                if collectedIDs.count >= 200 { break }
+            }
+            if !collectedIDs.isEmpty {
+                return try await events.findByIDs(collectedIDs)
+            }
+            // No entity matches — fall through to the SQL timeline path
+            // so the brain still gets globally-recent context.
+        }
         if let timeframe = intent.timeframe,
            let start = timeframe.start,
            let end = timeframe.end {
@@ -240,7 +300,22 @@ public actor HybridRetriever: Retriever {
     private func entityLayer(_ intent: UserIntent) async throws -> [Entity] {
         var results: [Entity] = []
         var seen = Set<Entity.ID>()
+        let trieReady = await entityTrie?.isWarm() ?? false
         for hint in intent.entityHints.prefix(6) {
+            // Hot path: Trie resolves the hint in O(|hint|) to a set
+            // of candidate ids, then a single `WHERE id IN (...)` SQL
+            // hydrates them. Replaces `LIKE '%hint%'` full scan.
+            if let trie = entityTrie, trieReady {
+                let candidateIDs = Array(await trie.resolve(hint))
+                if !candidateIDs.isEmpty {
+                    let hydrated = (try? await entities.findByIDs(candidateIDs, limit: 15)) ?? []
+                    for entity in hydrated where seen.insert(entity.id).inserted {
+                        results.append(entity)
+                    }
+                    continue
+                }
+            }
+            // Fallback: SQL LIKE scan.
             let rows = try await entities.find(byValue: hint, limit: 15)
             for entity in rows where seen.insert(entity.id).inserted {
                 results.append(entity)

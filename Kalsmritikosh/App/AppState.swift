@@ -226,7 +226,10 @@ public final class AppState {
                 syntheticQuestions: syntheticQuestionsRepo,
                 qaPairs: qaPairsRepo,
                 bondWalker: BondWalker(repository: factBondsRepo, cache: bondCache),
-                walkExplainer: WalkExplainer(entities: entities, events: events, cache: bondCache)
+                walkExplainer: WalkExplainer(entities: entities, events: events, cache: bondCache),
+                memoryCache: memoryHashCache,
+                entityTrie: entityTrieCache,
+                entityTimeline: entityTimelineCache
             )
 
             let expertRegistry = ExpertRegistry()
