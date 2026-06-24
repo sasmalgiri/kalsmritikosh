@@ -102,6 +102,42 @@ public struct RuleEventExtractor: EventExtractor {
             }
         }
 
+        // Forensic email-archive PDFs (GDPR exports, mailin investigation
+        // reports, takeout summaries) carry explicit dated email entries
+        // but never hit the rule markers above, so the Timeline went
+        // blind to them — observed: 4 GDPR PDFs / 90+ entities each / 0
+        // events. When a non-email KO carries many date + emailAddress
+        // entities, emit one emailReceived event per recognized date so
+        // the archive is represented on the timeline. Capped at 50 per
+        // KO to keep one giant report from flooding the events table.
+        if object.sourceType.category != .email {
+            let dateEntities = entities.filter { $0.kind == .date }
+            let emailEntities = entities.filter { $0.kind == .emailAddress }
+            if dateEntities.count >= 3 && emailEntities.count >= 2 {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime]
+                var emitted = 0
+                for dateEntity in dateEntities {
+                    guard emitted < 50,
+                          let iso = dateEntity.normalizedValue,
+                          let parsed = formatter.date(from: iso.uppercased())
+                            ?? ISO8601DateFormatter().date(from: iso.uppercased())
+                    else { continue }
+                    events.append(.init(
+                        kind: .emailReceived,
+                        date: parsed,
+                        title: "Archived email",
+                        summary: dateEntity.value,
+                        entityIDs: entityIDs,
+                        sourceObjectID: object.id,
+                        confidence: .medium,
+                        dateConfidence: 0.85
+                    ))
+                    emitted += 1
+                }
+            }
+        }
+
         // G2-COMMITMENTS-REFRESH — chatmind-style commitment detection.
         // Adds taskAssigned events for explicit intentions ("I will…",
         // "we plan to…", "action item:…") and lifts the date OUT of the
