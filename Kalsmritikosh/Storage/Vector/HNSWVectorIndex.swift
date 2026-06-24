@@ -80,8 +80,18 @@ public actor HNSWVectorIndex {
     private var entryPoint: Chunk.ID? = nil
     private var maxLayer: Int = -1
     private var warmed = false
+    /// Last build's stats — surfaced to DataHealthCheck + AppState.
+    private var lastStats: BuildStats?
     /// Deterministic PRNG state so build is reproducible. xorshift64*.
     private var rngState: UInt64 = 0x9E37_79B9_7F4A_7C15
+
+    /// File magic + version. Bumped if the on-disk layout changes so
+    /// stale caches get rejected instead of loaded incorrectly.
+    private static let fileMagic: UInt32 = 0x484E_5357 // "HNSW"
+    private static let fileVersion: UInt16 = 1
+    /// Stored to disk so a corpus that grew or shrank since the last
+    /// persist triggers a rebuild instead of loading a stale graph.
+    private var persistedVectorCount: Int = 0
 
     public init(M: Int = 16, efConstruction: Int = 200) {
         self.M = M
@@ -92,6 +102,7 @@ public actor HNSWVectorIndex {
 
     public func isBuilt() -> Bool { warmed }
     public func size() -> Int { nodes.count }
+    public func stats() -> BuildStats? { lastStats }
 
     // MARK: - Build
 
@@ -133,8 +144,248 @@ public actor HNSWVectorIndex {
         let elapsed = Date().timeIntervalSince(started)
         warmed = true
         let stats = BuildStats(vectorsLoaded: total, maxLayer: maxLayer, buildSeconds: elapsed)
+        lastStats = stats
         AtlasLog.storage.info("HNSW: built vectors=\(total, privacy: .public) maxLayer=\(self.maxLayer, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
         return stats
+    }
+
+    // MARK: - Disk persistence (G4.2)
+    //
+    // Cold-start rebuild is O(N log N) — at 10M vectors that's
+    // 30-60s. Persisting the built graph to disk lets the next boot
+    // load it in ~100ms. Format is a custom binary blob (NOT JSON)
+    // since the node-adjacency lists are dense + repeated.
+    //
+    // File layout (little-endian):
+    //   header: magic (u32) | version (u16) | M (u16) | dim (u32)
+    //           vector_count (u64) | entry_point (16 bytes UUID, or all-zero if nil)
+    //           max_layer (i32)
+    //   node[i]: chunk_id (16 bytes) | scale (f64) | layer (u8)
+    //            blob_len (u32) | blob (blob_len bytes)
+    //            for each layer ℓ in 0..<=node.layer:
+    //              neighbour_count (u16) | neighbour_ids (count × 16 bytes)
+    //
+    // Validation: load() returns false if magic/version mismatch OR
+    // vector_count != expectedCount (caller's `vectors.count()`).
+
+    /// Persist the current built graph to a binary file. Returns
+    /// `false` on any error (file write fail, encoding fail). Safe to
+    /// call from any time after `build` completes.
+    @discardableResult
+    public func persist(to url: URL) -> Bool {
+        guard warmed else { return false }
+        var data = Data()
+        data.reserveCapacity(nodes.count * 512)
+
+        // Header
+        appendU32(&data, Self.fileMagic)
+        appendU16(&data, Self.fileVersion)
+        appendU16(&data, UInt16(M))
+        // dim — read from the first node we encounter
+        let dim = UInt32(nodes.values.first?.bytes.count ?? 0)
+        appendU32(&data, dim)
+        appendU64(&data, UInt64(nodes.count))
+        appendUUID(&data, entryPoint ?? UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)))
+        appendI32(&data, Int32(maxLayer))
+
+        // Nodes — order doesn't matter since adjacency uses UUIDs.
+        for node in nodes.values {
+            appendUUID(&data, node.chunkID)
+            appendF64(&data, node.scale)
+            data.append(UInt8(node.layer))
+            appendU32(&data, UInt32(node.bytes.count))
+            data.append(contentsOf: node.bytes)
+            // Per-layer adjacency
+            for layer in 0...node.layer {
+                let nbrs = layer < node.neighbours.count ? node.neighbours[layer] : []
+                appendU16(&data, UInt16(nbrs.count))
+                for nid in nbrs { appendUUID(&data, nid) }
+            }
+        }
+
+        do {
+            try data.write(to: url, options: .atomic)
+            persistedVectorCount = nodes.count
+            AtlasLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .public) (\(data.count, privacy: .public) bytes)")
+            return true
+        } catch {
+            AtlasLog.storage.error("HNSW: persist failed → \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
+    /// Load a previously-persisted graph from disk. Returns `false`
+    /// when the file doesn't exist, magic/version mismatches, or
+    /// `expectedCount` (the live row count in the `vectors` table)
+    /// disagrees with the file — caller should fall back to a fresh
+    /// build in those cases.
+    @discardableResult
+    public func load(from url: URL, expectedCount: Int) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch {
+            AtlasLog.storage.error("HNSW: load read failed → \(String(describing: error), privacy: .public)")
+            return false
+        }
+        let started = Date()
+        var cursor = 0
+
+        // Header
+        guard let magic = readU32(data, &cursor), magic == Self.fileMagic,
+              let version = readU16(data, &cursor), version == Self.fileVersion,
+              let mLoaded = readU16(data, &cursor),
+              let dim = readU32(data, &cursor),
+              let vectorCount = readU64(data, &cursor),
+              let entryID = readUUID(data, &cursor),
+              let maxL = readI32(data, &cursor)
+        else {
+            AtlasLog.storage.warning("HNSW: load rejected — header malformed")
+            return false
+        }
+        if Int(vectorCount) != expectedCount {
+            AtlasLog.storage.info("HNSW: load rejected — file has \(vectorCount, privacy: .public) vectors, ledger has \(expectedCount, privacy: .public). Rebuilding.")
+            return false
+        }
+        guard Int(mLoaded) == M else {
+            AtlasLog.storage.info("HNSW: load rejected — file M=\(mLoaded, privacy: .public), runtime M=\(self.M, privacy: .public)")
+            return false
+        }
+        _ = dim // only used during build; consistency check would compare against the embedder dim if exposed
+
+        // Reset state
+        nodes.removeAll(keepingCapacity: true)
+        nodes.reserveCapacity(Int(vectorCount))
+        let zeroUUID = UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        entryPoint = (entryID == zeroUUID) ? nil : entryID
+        maxLayer = Int(maxL)
+
+        // Nodes
+        for _ in 0..<Int(vectorCount) {
+            guard let chunkID = readUUID(data, &cursor),
+                  let scale = readF64(data, &cursor),
+                  let layer = readU8(data, &cursor),
+                  let blobLen = readU32(data, &cursor)
+            else {
+                AtlasLog.storage.warning("HNSW: load truncated at node payload")
+                nodes.removeAll(keepingCapacity: false)
+                return false
+            }
+            guard cursor + Int(blobLen) <= data.count else { return false }
+            let bytes = Array(data[cursor..<(cursor + Int(blobLen))])
+            cursor += Int(blobLen)
+            var neighbours: [[Chunk.ID]] = Array(repeating: [], count: Int(layer) + 1)
+            for ℓ in 0...Int(layer) {
+                guard let nCount = readU16(data, &cursor) else { return false }
+                var bucket: [Chunk.ID] = []
+                bucket.reserveCapacity(Int(nCount))
+                for _ in 0..<Int(nCount) {
+                    guard let nid = readUUID(data, &cursor) else { return false }
+                    bucket.append(nid)
+                }
+                neighbours[ℓ] = bucket
+            }
+            nodes[chunkID] = Node(
+                chunkID: chunkID,
+                bytes: bytes,
+                scale: scale,
+                neighbours: neighbours,
+                layer: Int(layer)
+            )
+        }
+
+        warmed = true
+        persistedVectorCount = nodes.count
+        let elapsed = Date().timeIntervalSince(started)
+        lastStats = BuildStats(
+            vectorsLoaded: nodes.count,
+            maxLayer: maxLayer,
+            buildSeconds: elapsed
+        )
+        AtlasLog.storage.info("HNSW: loaded \(self.nodes.count, privacy: .public) vectors from disk in \(String(format: "%.2f", elapsed), privacy: .public)s")
+        return true
+    }
+
+    // MARK: - Binary helpers
+
+    private func appendU16(_ d: inout Data, _ v: UInt16) {
+        var v = v.littleEndian
+        d.append(Data(bytes: &v, count: 2))
+    }
+    private func appendU32(_ d: inout Data, _ v: UInt32) {
+        var v = v.littleEndian
+        d.append(Data(bytes: &v, count: 4))
+    }
+    private func appendU64(_ d: inout Data, _ v: UInt64) {
+        var v = v.littleEndian
+        d.append(Data(bytes: &v, count: 8))
+    }
+    private func appendI32(_ d: inout Data, _ v: Int32) {
+        var v = v.littleEndian
+        d.append(Data(bytes: &v, count: 4))
+    }
+    private func appendF64(_ d: inout Data, _ v: Double) {
+        var bits = v.bitPattern.littleEndian
+        d.append(Data(bytes: &bits, count: 8))
+    }
+    private func appendUUID(_ d: inout Data, _ id: UUID) {
+        let t = id.uuid
+        let bytes: [UInt8] = [
+            t.0, t.1, t.2, t.3, t.4, t.5, t.6, t.7,
+            t.8, t.9, t.10, t.11, t.12, t.13, t.14, t.15
+        ]
+        d.append(contentsOf: bytes)
+    }
+    private func readU8(_ d: Data, _ c: inout Int) -> UInt8? {
+        guard c + 1 <= d.count else { return nil }
+        defer { c += 1 }
+        return d[c]
+    }
+    private func readU16(_ d: Data, _ c: inout Int) -> UInt16? {
+        guard c + 2 <= d.count else { return nil }
+        let v: UInt16 = d.withUnsafeBytes { buf in
+            buf.loadUnaligned(fromByteOffset: c, as: UInt16.self).littleEndian
+        }
+        c += 2
+        return v
+    }
+    private func readU32(_ d: Data, _ c: inout Int) -> UInt32? {
+        guard c + 4 <= d.count else { return nil }
+        let v: UInt32 = d.withUnsafeBytes { buf in
+            buf.loadUnaligned(fromByteOffset: c, as: UInt32.self).littleEndian
+        }
+        c += 4
+        return v
+    }
+    private func readU64(_ d: Data, _ c: inout Int) -> UInt64? {
+        guard c + 8 <= d.count else { return nil }
+        let v: UInt64 = d.withUnsafeBytes { buf in
+            buf.loadUnaligned(fromByteOffset: c, as: UInt64.self).littleEndian
+        }
+        c += 8
+        return v
+    }
+    private func readI32(_ d: Data, _ c: inout Int) -> Int32? {
+        guard c + 4 <= d.count else { return nil }
+        let v: Int32 = d.withUnsafeBytes { buf in
+            buf.loadUnaligned(fromByteOffset: c, as: Int32.self).littleEndian
+        }
+        c += 4
+        return v
+    }
+    private func readF64(_ d: Data, _ c: inout Int) -> Double? {
+        guard c + 8 <= d.count else { return nil }
+        let bits: UInt64 = d.withUnsafeBytes { buf in
+            buf.loadUnaligned(fromByteOffset: c, as: UInt64.self).littleEndian
+        }
+        c += 8
+        return Double(bitPattern: bits)
+    }
+    private func readUUID(_ d: Data, _ c: inout Int) -> UUID? {
+        guard c + 16 <= d.count else { return nil }
+        let b = Array(d[c..<(c + 16)])
+        c += 16
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                          b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
     }
 
     // MARK: - Query

@@ -392,7 +392,25 @@ public final class AppState {
                 async let memoryWarm: Void = memoryHashCache.warm(memory: memoryRepo)
                 async let timelineWarm: Void = entityTimelineCache.warm(events: events)
                 async let trieWarm: Void = entityTrieCache.warm(entities: entities)
-                async let hnswWarm: HNSWVectorIndex.BuildStats = hnsw.build(from: vectors)
+                // G4.2 — load from disk when the persisted graph matches
+                // the ledger; otherwise build fresh from SQL and re-persist.
+                // Cold-start at 10M vectors: ~30-60s build → ~100ms load.
+                // Cache file lives next to knowledge.sqlite so a DB wipe
+                // also wipes the index.
+                async let hnswWarm: HNSWVectorIndex.BuildStats = {
+                    let cacheURL = resolvedDBURL
+                        .deletingLastPathComponent()
+                        .appendingPathComponent("hnsw-index.bin")
+                    let liveCount = (try? await vectors.count()) ?? 0
+                    if liveCount > 0,
+                       await hnsw.load(from: cacheURL, expectedCount: liveCount) {
+                        return await hnsw.stats()
+                            ?? HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
+                    }
+                    let stats = await hnsw.build(from: vectors)
+                    _ = await hnsw.persist(to: cacheURL)
+                    return stats
+                }()
                 _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm, hnswWarm)
                 AtlasLog.app.info("All five in-memory caches warmed (bond + memory + timeline + trie + HNSW)")
             }

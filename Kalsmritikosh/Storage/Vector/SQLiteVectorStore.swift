@@ -41,6 +41,14 @@ public actor SQLiteVectorStore: VectorStore {
         public let scale: Double
     }
 
+    /// Row count for the `vectors` table. Cheap; used by HNSW's
+    /// load-from-disk validation to decide whether a persisted index
+    /// is still in sync with the ledger.
+    public func count() async throws -> Int {
+        let rows = try await database.query("SELECT COUNT(*) FROM vectors;")
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     /// Paged enumeration of every vector row. Used by HNSW build.
     public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [RawVector] {
         let rows = try await database.query("""
