@@ -183,8 +183,15 @@ public struct RuleEventExtractor: EventExtractor {
     /// a commitment string. Returns (extractedDate, confidence) — the
     /// confidence is 0.75 for explicit due-date matches, falling back to
     /// nil when no due-by phrase fires.
+    ///
+    /// Group 1 deliberately drops a leading weekday ("Friday") via a
+    /// non-capturing prefix so the slot we feed to DateGrammar is the
+    /// resolvable date portion ("March 6, 2026"). DateGrammar doesn't
+    /// know how to anchor a bare weekday to a calendar date, so passing
+    /// it through would return nil and cost us the 0.75 confidence on a
+    /// fully-specified due-by phrase.
     private static let dueByRegex: NSRegularExpression? = try? NSRegularExpression(
-        pattern: #"\bby\s+([A-Za-z]+\s+\d{1,2}(?:,?\s+\d{4})?|next\s+\w+|tomorrow|today|end\s+of\s+(?:week|month|quarter))\b"#,
+        pattern: #"\bby\s+(?:(?:Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day\s+)?([A-Za-z]+\s+\d{1,2}(?:[,\s]+\d{4})?|\d{4}-\d{2}-\d{2}|next\s+\w+|tomorrow|today|end\s+of\s+(?:week|month|quarter))\b"#,
         options: [.caseInsensitive]
     )
 
