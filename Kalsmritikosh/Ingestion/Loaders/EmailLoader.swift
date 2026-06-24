@@ -184,22 +184,69 @@ public struct EmailLoader: Ingestor {
     /// goes through the standard chunker / NER / event-extraction
     /// pipeline from IngestCoordinator independently.
     private func ingestMBOXAsMessages(at url: URL) throws -> [KnowledgeObject] {
-        let raw: String
-        do { raw = try String(contentsOf: url, encoding: .utf8) }
-        catch {
-            do { raw = try String(contentsOf: url, encoding: .isoLatin1) }
-            catch { throw IngestorError.unreadable(url, underlying: error) }
+        // Byte-level scan for "\nFrom " message boundaries. Avoids the
+        // String.components(separatedBy:) path that silently flattens
+        // very large mbox files (~94MB observed: 525 boundaries seen by
+        // /bin/grep, but `components` returned a 1-element array,
+        // melting the whole archive into one giant KO). Reading as Data
+        // keeps the file out of Swift String's bridging-heavy
+        // representation while we look for the 6-byte separator
+        // 0x0A 'F' 'r' 'o' 'm' ' '.
+        let data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw IngestorError.unreadable(url, underlying: error) }
+        let separator: [UInt8] = [0x0A, 0x46, 0x72, 0x6F, 0x6D, 0x20]
+        var boundaries: [Int] = [0]
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            guard let base = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+            let count = raw.count
+            var i = 0
+            // Treat the leading "From " (no preceding \n) as a synthetic boundary.
+            if count >= 5 && base[0] == 0x46 && base[1] == 0x72 && base[2] == 0x6F && base[3] == 0x6D && base[4] == 0x20 {
+                // boundaries already includes 0.
+                i = 5
+            }
+            while i + separator.count <= count {
+                if base[i] == 0x0A &&
+                   base[i+1] == 0x46 && base[i+2] == 0x72 && base[i+3] == 0x6F &&
+                   base[i+4] == 0x6D && base[i+5] == 0x20 {
+                    // Message body for the NEXT piece starts at i+1 (skip the \n).
+                    boundaries.append(i + 1)
+                    i += separator.count
+                } else {
+                    i += 1
+                }
+            }
         }
+        boundaries.append(data.count)
         var pieces: [String] = []
-        for chunk in raw.components(separatedBy: "\nFrom ") {
-            let trimmed = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+        for k in 0..<(boundaries.count - 1) {
+            let slice = data[boundaries[k]..<boundaries[k + 1]]
+            let messageString = String(data: slice, encoding: .utf8)
+                ?? String(data: slice, encoding: .isoLatin1)
+                ?? ""
+            let trimmed = messageString.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { pieces.append(trimmed) }
         }
         var out: [KnowledgeObject] = []
         for (idx, message) in pieces.enumerated() {
-            // Re-prepend the "From " line removed by splitting (except
-            // the first piece, which never carried the prefix).
-            let messageBody = idx == 0 ? message : "From " + message
+            // Byte-scan splitter keeps the leading "From " envelope on
+            // every piece — no manual re-prepend needed. Drop the first
+            // line ("From <sender> <date>") so splitEMLHeaders sees a
+            // clean header block; the envelope line is not a real header
+            // and has no value to downstream extraction.
+            //
+            // `.isNewline` (not `$0 == "\n"`) is intentional: Swift treats
+            // "\r\n" as ONE grapheme-cluster Character distinct from "\n",
+            // so a CRLF-terminated mbox (Gmail Takeout) makes the bare
+            // "\n" match return nil and the envelope line leaks back into
+            // the header parser.
+            let messageBody: String
+            if let firstLineEnd = message.firstIndex(where: { $0.isNewline }) {
+                messageBody = String(message[message.index(after: firstLineEnd)...])
+            } else {
+                messageBody = message
+            }
             let (headers, body) = splitEMLHeaders(messageBody)
 
             var meta: [String: AnyCodable] = [
@@ -700,15 +747,39 @@ public struct EmailLoader: Ingestor {
     }
 
     private func splitEMLHeaders(_ raw: String) -> ([String: String], String) {
-        guard let blankLine = raw.range(of: "\n\n") else {
+        // Accept both LF (Unix) and CRLF (Windows / Gmail Takeout) blank-line
+        // boundaries. The original \n\n-only path silently dropped every
+        // header on CRLF-terminated mbox files (Gmail Takeout), turning
+        // From/To/Subject/Date into wall-of-text body content the rest of
+        // the pipeline could only NER-recover, not structure-recover.
+        let crlfBoundary = raw.range(of: "\r\n\r\n")
+        let lfBoundary = raw.range(of: "\n\n")
+        let blankLine: Range<String.Index>?
+        switch (crlfBoundary, lfBoundary) {
+        case (let crlf?, let lf?):
+            blankLine = crlf.lowerBound <= lf.lowerBound ? crlf : lf
+        case (let crlf?, nil):
+            blankLine = crlf
+        case (nil, let lf?):
+            blankLine = lf
+        default:
+            blankLine = nil
+        }
+        guard let boundary = blankLine else {
             return ([:], raw)
         }
-        let headerBlock = String(raw[..<blankLine.lowerBound])
-        let body = String(raw[blankLine.upperBound...])
+        let headerBlock = String(raw[..<boundary.lowerBound])
+        let body = String(raw[boundary.upperBound...])
 
         var headers: [String: String] = [:]
         var current: (String, String)?
-        for line in headerBlock.split(separator: "\n", omittingEmptySubsequences: false) {
+        // Normalize CRLF→LF before splitting. `headerBlock.split(separator: "\n")`
+        // operates on Character (grapheme cluster), and Swift treats "\r\n" as
+        // a SINGLE cluster distinct from "\n", so the bare Character split
+        // collapses the whole CRLF header block to one "line" — every header
+        // value would inherit every subsequent header as a continuation.
+        let normalized = headerBlock.replacingOccurrences(of: "\r\n", with: "\n")
+        for line in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
             if line.first == " " || line.first == "\t" {
                 if let (k, v) = current {
                     current = (k, v + " " + line.trimmingCharacters(in: .whitespaces))
