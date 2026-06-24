@@ -152,6 +152,23 @@ public actor EntitiesRepository {
         return rows.first?.string(0)
     }
 
+    /// InMemoryBondGraph warm-up — paged enumeration of every entity's
+    /// classified fact_type. Skips NULL and the `_unclassified`
+    /// sentinel. Returns (canonical_id, fact_type_raw) tuples; caller
+    /// maps the raw string to the FactType enum.
+    public func allFactTypes(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
+        let rows = try await database.query("""
+        SELECT id, fact_type FROM entities
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
+        ORDER BY id ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let raw = row.string(1) else { return nil }
+            return (id, raw)
+        }
+    }
+
     /// G3 BondBackfill — fetch all canonical entities whose mentions
     /// touch this KO. Used by the BondBackfill engine to rebuild
     /// fact_bonds against an already-ingested corpus (without

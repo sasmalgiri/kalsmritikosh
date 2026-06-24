@@ -120,6 +120,22 @@ public actor EventsRepository {
         return rows.first?.string(0)
     }
 
+    /// InMemoryBondGraph warm-up — paged enumeration of every event's
+    /// classified fact_type. Skips NULL and the `_unclassified`
+    /// sentinel. Returns (event_id, fact_type_raw) tuples.
+    public func allFactTypes(offset: Int = 0, pageSize: Int = 5_000) async throws -> [(UUID, String)] {
+        let rows = try await database.query("""
+        SELECT id, fact_type FROM events
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
+        ORDER BY id ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let raw = row.string(1) else { return nil }
+            return (id, raw)
+        }
+    }
+
     /// G3 BondBackfill — fetch all events whose source KO is `id`,
     /// hydrating their entityIDs from event_entities. Returns the
     /// fact-grade Event objects BondConstructor expects (kind, title,

@@ -154,6 +154,22 @@ public actor FactBondsRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// InMemoryBondGraph warm-up: paged enumeration of every bond in
+    /// the ledger. The cache calls this in a loop until the returned
+    /// page is shorter than `pageSize`. Ordered by created_at so the
+    /// pages are stable across calls.
+    public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [Bond] {
+        let rows = try await database.query("""
+        SELECT id, bond_name, from_fact_kind, from_fact_id,
+               to_fact_kind, to_fact_id, source_object_id,
+               confidence, weight
+        FROM fact_bonds
+        ORDER BY created_at ASC
+        LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap(decode)
+    }
+
     public func count(bondName: String) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM fact_bonds WHERE bond_name = ?;",

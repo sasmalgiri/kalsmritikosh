@@ -52,6 +52,11 @@ public final class AppState {
     /// "Rebuild synthetic questions" button can re-run the generator
     /// over chunks that existed before this layer was wired.
     public private(set) var syntheticQuestions: SyntheticQuestionsRepository?
+    /// In-memory adjacency cache for the typed-bond graph. Warmed
+    /// after the boot-time OntologyBackfill so BondWalker hits a
+    /// hashmap instead of N SQL queries per hop. Optional — when nil
+    /// (older boot paths, isolated test rigs), the SQL fallback runs.
+    public private(set) var bondGraphCache: InMemoryBondGraph?
 
     // Knowledge
     public private(set) var timelineEngine: TimelineEngine?
@@ -192,6 +197,12 @@ public final class AppState {
             // future schema-aware retrieval (Phase 4) and the
             // "Why this answer?" walk explainer (Phase 5) read them.
             let factBondsRepo = FactBondsRepository(database: db)
+            // In-memory bond-graph cache. Created empty; warmed
+            // asynchronously after OntologyBackfill finishes (see
+            // Task.detached lower in this method). BondWalker +
+            // WalkExplainer check isWarm() before preferring the
+            // cache over SQL, so the boot warm-up window stays safe.
+            let bondCache = InMemoryBondGraph()
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -203,8 +214,8 @@ public final class AppState {
                 embedder: embedder,
                 syntheticQuestions: syntheticQuestionsRepo,
                 qaPairs: qaPairsRepo,
-                bondWalker: BondWalker(repository: factBondsRepo),
-                walkExplainer: WalkExplainer(entities: entities, events: events)
+                bondWalker: BondWalker(repository: factBondsRepo, cache: bondCache),
+                walkExplainer: WalkExplainer(entities: entities, events: events, cache: bondCache)
             )
 
             let expertRegistry = ExpertRegistry()
@@ -336,7 +347,7 @@ public final class AppState {
             // and labels it via the rule-based classifier. Idempotent:
             // safe to re-run; only touches NULL rows. Runs in a detached
             // Task so it doesn't block boot; logs counts when done.
-            Task.detached(priority: .utility) { [entities, events, objects, capabilities] in
+            Task.detached(priority: .utility) { [entities, events, objects, capabilities, factBondsRepo, bondCache] in
                 let llm = LLMSlotExtractor(capabilities: capabilities)
                 let backfill = OntologyBackfill(
                     entities: entities,
@@ -345,6 +356,14 @@ public final class AppState {
                     knowledgeObjects: objects
                 )
                 _ = await backfill.run()
+                // Warm the InMemoryBondGraph after backfill so the
+                // fact_type index is fresh. BondWalker + WalkExplainer
+                // start preferring the cache the moment isWarm() flips.
+                await bondCache.warm(
+                    bonds: factBondsRepo,
+                    entities: entities,
+                    events: events
+                )
             }
 
             let watcher = FolderWatcher()
@@ -394,6 +413,10 @@ public final class AppState {
             self.conversations = conversationsRepo
             self.factBonds = factBondsRepo
             self.syntheticQuestions = syntheticQuestionsRepo
+            // Exposed so smoke / DataHealthCheck can poke stats; warm
+            // completion is async (chained off the OntologyBackfill
+            // detached task below).
+            self.bondGraphCache = bondCache
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
             self.compression = compression

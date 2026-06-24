@@ -28,10 +28,20 @@ import Foundation
 public actor WalkExplainer {
     private let entities: EntitiesRepository
     private let events: EventsRepository
+    /// Optional in-memory fact_type index. When wired, every step's
+    /// endpoint resolution is a O(1) dictionary lookup instead of two
+    /// SQL queries (entity then event). For a 50-step walk that's
+    /// 100 SQL round-trips collapsed to zero.
+    private let cache: InMemoryBondGraph?
 
-    public init(entities: EntitiesRepository, events: EventsRepository) {
+    public init(
+        entities: EntitiesRepository,
+        events: EventsRepository,
+        cache: InMemoryBondGraph? = nil
+    ) {
         self.entities = entities
         self.events = events
+        self.cache = cache
     }
 
     /// Translate raw bond steps into typed walk steps. Order is
@@ -95,8 +105,13 @@ public actor WalkExplainer {
 
     /// Resolve a UUID to its FactType by consulting the entity table
     /// first, then the event table. Returns nil when neither row is
-    /// classified — the caller drops the step.
+    /// classified — the caller drops the step. Hot path is the cache
+    /// when wired (O(1) hashmap); SQL is the fallback.
     private func resolveFactType(_ id: UUID) async -> FactType? {
+        if let cache, await cache.isWarm(),
+           let type = await cache.factType(for: id) {
+            return type
+        }
         // `try? await ...` returns `String??` (throws + nullable col),
         // so flatten both layers in one shot.
         if let typeRaw = (try? await entities.lookupFactType(forEntityID: id)) ?? nil,

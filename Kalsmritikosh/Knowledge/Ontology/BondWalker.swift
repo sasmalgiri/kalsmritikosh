@@ -55,12 +55,22 @@ public actor BondWalker {
     }
 
     private let repository: FactBondsRepository
+    /// Optional in-memory adjacency cache. When wired, all hop fetches
+    /// hit the hashmap instead of SQL — multi-hop walks drop from
+    /// ~50-200 SQL queries to O(reached) dictionary lookups. SQLite
+    /// stays the source of truth; the cache is rebuilt on cold start.
+    private let cache: InMemoryBondGraph?
     /// Hard ceiling — prevents a runaway walk on a dense graph from
     /// hammering SQLite with thousands of queries.
     private let perHopLimit: Int
 
-    public init(repository: FactBondsRepository, perHopLimit: Int = 50) {
+    public init(
+        repository: FactBondsRepository,
+        cache: InMemoryBondGraph? = nil,
+        perHopLimit: Int = 50
+    ) {
         self.repository = repository
+        self.cache = cache
         self.perHopLimit = perHopLimit
     }
 
@@ -148,6 +158,14 @@ public actor BondWalker {
         from id: UUID,
         bondNames: Set<String>
     ) async throws -> [FactBondsRepository.Bond] {
+        // Hot path: cache lookup is O(1) + in-memory filter. Only
+        // when warm — during the boot warm-up window the SQL fallback
+        // runs so we don't silently return empty walks.
+        if let cache, await cache.isWarm() {
+            let hits = await cache.outgoing(from: id, bondNames: bondNames)
+            return Array(hits.prefix(perHopLimit))
+        }
+        // Fallback: SQL per hop.
         if bondNames.isEmpty {
             return try await repository.outgoing(from: id, limit: perHopLimit)
         }
@@ -164,6 +182,10 @@ public actor BondWalker {
         to id: UUID,
         bondNames: Set<String>
     ) async throws -> [FactBondsRepository.Bond] {
+        if let cache, await cache.isWarm() {
+            let hits = await cache.incoming(to: id, bondNames: bondNames)
+            return Array(hits.prefix(perHopLimit))
+        }
         if bondNames.isEmpty {
             return try await repository.incoming(to: id, limit: perHopLimit)
         }
