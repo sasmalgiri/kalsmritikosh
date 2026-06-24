@@ -58,7 +58,7 @@ jobs:
             Kalsmritikosh/Knowledge/ \
             Kalsmritikosh/Retrieval/ \
             Kalsmritikosh/Ingestion/ \
-            2>/dev/null | grep -vE "//.*(Ollama|llama3|model name|reference)" || true)
+            2>/dev/null | grep -vEi "//.*(ollama|llama3|model name|reference)" || true)
           if [ -n "$MATCHES" ]; then
             echo "::error::Grep guard failed — model names leaked into capability-discipline layers"
             echo "$MATCHES"
