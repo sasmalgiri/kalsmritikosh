@@ -123,4 +123,15 @@ public actor SyntheticQuestionsRepository {
         let rows = try await database.query("SELECT COUNT(*) FROM synthetic_questions;")
         return Int(rows.first?.int(0) ?? 0)
     }
+
+    /// Backfill idempotency check — returns N synthetic_questions rows
+    /// for a given KO. SyntheticQuestionsBackfill skips KOs whose
+    /// count is > 0 so re-runs don't double-write.
+    public func countForObject(_ id: KnowledgeObject.ID) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM synthetic_questions WHERE object_id = ?;",
+            [.uuid(id)]
+        )
+        return Int(rows.first?.int(0) ?? 0)
+    }
 }

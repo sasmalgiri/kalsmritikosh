@@ -33,6 +33,8 @@ public struct SettingsView: View {
     @State private var allDiagnosticsURL: URL?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
+    @State private var rebuildSynthQRunning = false
+    @State private var rebuildSynthQStatus: String?
     @State private var healthCheckRunning = false
     @State private var healthCheckStatus: String?
     @State private var healthCheckURL: URL?
@@ -187,6 +189,29 @@ public struct SettingsView: View {
                 }
             }
             if let status = healthCheckStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Rebuild synthetic questions — runs the heuristic generator over chunks of KOs ingested BEFORE the G2 wiring landed. Populates synthetic_questions + its FTS index so the question-shaped retrieval layer can match. No LLM calls; runs in seconds. Idempotent — KOs that already have questions are skipped.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await rebuildSyntheticQuestions() }
+                } label: {
+                    if rebuildSynthQRunning {
+                        Label("Rebuilding…", systemImage: "hourglass")
+                    } else {
+                        Label("Rebuild Synthetic Questions", systemImage: "questionmark.bubble")
+                    }
+                }
+                .disabled(rebuildSynthQRunning)
+            }
+            if let status = rebuildSynthQStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -354,6 +379,35 @@ public struct SettingsView: View {
             healthCheckURL = nil
             healthCheckStatus = "✗ Failed: \(error)"
         }
+    }
+
+    private func rebuildSyntheticQuestions() async {
+        rebuildSynthQRunning = true
+        rebuildSynthQStatus = "Generating synthetic questions for existing chunks…"
+        defer { rebuildSynthQRunning = false }
+        guard let objects = appState.objects,
+              let chunks = appState.chunks,
+              let synthRepo = appState.syntheticQuestions else {
+            rebuildSynthQStatus = "✗ AppState not booted — cannot reach repositories."
+            return
+        }
+        let started = Date()
+        let backfill = SyntheticQuestionsBackfill(
+            knowledgeObjects: objects,
+            chunks: chunks,
+            syntheticQuestions: synthRepo
+        )
+        let stats = await backfill.run()
+        let elapsed = Date().timeIntervalSince(started)
+        let total = (try? await synthRepo.count()) ?? 0
+        rebuildSynthQStatus = """
+        ✓ Rebuild complete in \(String(format: "%.1f", elapsed))s
+        KOs scanned: \(stats.knowledgeObjects)
+        Questions written: \(stats.questionsWritten)
+        Skipped (already had questions or no chunks): \(stats.skipped)
+        Failed: \(stats.failed)
+        Total synthetic questions in ledger now: \(total)
+        """
     }
 
     private func rebuildBonds() async {

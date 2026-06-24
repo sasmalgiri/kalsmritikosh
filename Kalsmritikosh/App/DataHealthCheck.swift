@@ -105,8 +105,12 @@ public enum DataHealthCheck {
         }
 
         // ── G3 ontology coverage ─────────────────────────────────────
-        let entityTyped = await scalarCount(database, "SELECT COUNT(*) FROM entities WHERE fact_type IS NOT NULL;")
-        let eventTyped = await scalarCount(database, "SELECT COUNT(*) FROM events WHERE fact_type IS NOT NULL;")
+        // Exclude the `_unclassified` sentinel that OntologyBackfill
+        // writes for rows whose entity.kind / event.kind isn't a
+        // recognised FactType (date, monetaryAmount, location, …).
+        // Those rows ARE processed; they just have no FactType in v1.
+        let entityTyped = await scalarCount(database, "SELECT COUNT(*) FROM entities WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
+        let eventTyped = await scalarCount(database, "SELECT COUNT(*) FROM events WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
         let entityCountsByType = (try? await state.entities?.countsByFactType()) ?? [:]
         let eventCountsByType = (try? await state.events?.countsByFactType()) ?? [:]
         let entitySlotPop = await scalarCount(database, """

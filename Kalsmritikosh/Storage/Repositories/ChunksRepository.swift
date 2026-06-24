@@ -38,6 +38,18 @@ public actor ChunksRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// All chunks for a KO, in ordinal order. Used by the
+    /// SyntheticQuestionsBackfill to re-run the heuristic generator
+    /// over chunks ingested before G2 wired the synthetic-question
+    /// writer.
+    public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
+        let rows = try await database.query("""
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at
+        FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
+        """, [.uuid(id)])
+        return rows.compactMap(decode)
+    }
+
     /// G2-QA-PAIRS retrieval helper. Returns the ordinal-0 chunk for
     /// an objectID — used by HybridRetriever when a qa_pair match
     /// hydrates the answer-side KO into a `RetrievedChunk`.

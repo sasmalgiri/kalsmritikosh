@@ -175,7 +175,7 @@ public actor EntitiesRepository {
     public func countsByFactType() async throws -> [String: Int] {
         let rows = try await database.query("""
         SELECT fact_type, COUNT(*) FROM entities
-        WHERE fact_type IS NOT NULL
+        WHERE fact_type IS NOT NULL AND fact_type != '_unclassified'
         GROUP BY fact_type;
         """)
         var out: [String: Int] = [:]

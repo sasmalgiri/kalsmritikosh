@@ -48,6 +48,10 @@ public final class AppState {
     /// G3.22 — exposed so smoke / eval rigs can assert against the
     /// typed-bond engine end-to-end.
     public private(set) var factBonds: FactBondsRepository?
+    /// G2-SYNTHETIC-QUESTIONS — exposed so the Settings
+    /// "Rebuild synthetic questions" button can re-run the generator
+    /// over chunks that existed before this layer was wired.
+    public private(set) var syntheticQuestions: SyntheticQuestionsRepository?
 
     // Knowledge
     public private(set) var timelineEngine: TimelineEngine?
@@ -389,6 +393,7 @@ public final class AppState {
             self.memoryRepo = memoryRepo
             self.conversations = conversationsRepo
             self.factBonds = factBondsRepo
+            self.syntheticQuestions = syntheticQuestionsRepo
             self.timelineEngine = timelineEngine
             self.summarizer = summarizer
             self.compression = compression

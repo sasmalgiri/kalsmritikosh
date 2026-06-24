@@ -67,61 +67,105 @@ public actor OntologyBackfill {
     }
 
     /// Run the backfill. Returns counts so callers can log/report.
+    /// Loops in `batchSize` chunks until no NULL rows remain — earlier
+    /// revisions processed exactly one batch which left larger archives
+    /// at ~30-40% classified (caught by DataHealthCheck 2026-06-24:
+    /// 674 of 1699 entities typed). Cycle ceiling prevents an infinite
+    /// loop if a row's classifier returns nil but the listUnlabeled
+    /// query still surfaces it next round.
     public func run(batchSize: Int = 500) async -> Stats {
         var stats = Stats()
+        let maxCycles = 200
 
         // Entities first — many bond rules join through canonical
         // entity ids, so labeling those early lets event classifiers
         // skip work later.
-        let unlabeledEntities = (try? await entities.listUnlabeledFactTypes(limit: batchSize)) ?? []
-        for entity in unlabeledEntities {
-            if let result = classifier.classify(entity: entity),
-               result.confidence >= minConfidence {
-                do {
-                    try await entities.setFactType(
-                        result.type.rawValue,
+        var entityCycles = 0
+        while entityCycles < maxCycles {
+            entityCycles += 1
+            let unlabeled = (try? await entities.listUnlabeledFactTypes(limit: batchSize)) ?? []
+            if unlabeled.isEmpty { break }
+            var progressedThisCycle = 0
+            for entity in unlabeled {
+                if let result = classifier.classify(entity: entity),
+                   result.confidence >= minConfidence {
+                    do {
+                        try await entities.setFactType(
+                            result.type.rawValue,
+                            forEntityID: entity.id
+                        )
+                        stats.entitiesClassified += 1
+                        progressedThisCycle += 1
+                        if await writeEntitySlots(entity: entity, factType: result.type) {
+                            stats.entitySlotsWritten += 1
+                        } else {
+                            stats.slotWritesRejected += 1
+                        }
+                    } catch {
+                        AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                        stats.entitiesSkipped += 1
+                    }
+                } else {
+                    // The classifier doesn't recognise this entity (e.g.
+                    // .date / .monetaryAmount / .location). Write a
+                    // sentinel `_unclassified` so the next page query
+                    // doesn't keep surfacing it — otherwise the loop
+                    // would never terminate on corpora with many
+                    // unrecognised kinds.
+                    try? await entities.setFactType(
+                        "_unclassified",
                         forEntityID: entity.id
                     )
-                    stats.entitiesClassified += 1
-                    if await writeEntitySlots(entity: entity, factType: result.type) {
-                        stats.entitySlotsWritten += 1
-                    } else {
-                        stats.slotWritesRejected += 1
-                    }
-                } catch {
-                    AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                     stats.entitiesSkipped += 1
                 }
-            } else {
-                stats.entitiesSkipped += 1
+            }
+            if progressedThisCycle == 0 && stats.entitiesSkipped == unlabeled.count {
+                // All-skips cycle but rows were marked _unclassified —
+                // next page query won't return the same set, but
+                // defensively bail if it does.
+                if unlabeled.count < batchSize { break }
             }
         }
 
-        let unlabeledEvents = (try? await events.listUnlabeledFactTypes(limit: batchSize)) ?? []
-        for event in unlabeledEvents {
-            if let result = classifier.classify(event: event),
-               result.confidence >= minConfidence {
-                do {
-                    try await events.setFactType(
-                        result.type.rawValue,
+        var eventCycles = 0
+        while eventCycles < maxCycles {
+            eventCycles += 1
+            let unlabeled = (try? await events.listUnlabeledFactTypes(limit: batchSize)) ?? []
+            if unlabeled.isEmpty { break }
+            var progressedThisCycle = 0
+            for event in unlabeled {
+                if let result = classifier.classify(event: event),
+                   result.confidence >= minConfidence {
+                    do {
+                        try await events.setFactType(
+                            result.type.rawValue,
+                            forEventID: event.id
+                        )
+                        stats.eventsClassified += 1
+                        progressedThisCycle += 1
+                        if await writeEventSlots(event: event, factType: result.type) {
+                            stats.eventSlotsWritten += 1
+                        } else {
+                            stats.slotWritesRejected += 1
+                        }
+                    } catch {
+                        AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                        stats.eventsSkipped += 1
+                    }
+                } else {
+                    try? await events.setFactType(
+                        "_unclassified",
                         forEventID: event.id
                     )
-                    stats.eventsClassified += 1
-                    if await writeEventSlots(event: event, factType: result.type) {
-                        stats.eventSlotsWritten += 1
-                    } else {
-                        stats.slotWritesRejected += 1
-                    }
-                } catch {
-                    AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                     stats.eventsSkipped += 1
                 }
-            } else {
-                stats.eventsSkipped += 1
+            }
+            if progressedThisCycle == 0 && stats.eventsSkipped == unlabeled.count {
+                if unlabeled.count < batchSize { break }
             }
         }
 
-        AtlasLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
+        AtlasLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public) cycles=\(entityCycles, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public) cycles=\(eventCycles, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
         return stats
     }
 
