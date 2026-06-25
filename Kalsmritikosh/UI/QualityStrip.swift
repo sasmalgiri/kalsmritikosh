@@ -146,27 +146,51 @@ public struct QualityStrip: View {
     }
 
     /// Builds the one-line strip text:
-    /// `Confidence: strong · Evidence: N claims, M files, K formats · Timeliness: newest <date>, covers <range>[, gap <range>] · Conflicts: 0`
+    /// `Confidence: strong · Evidence: N claims, M files [, K dropped] · Agreement: X% · Timeliness: newest <date>, fresh X%, covers Y%, gap <range> · Conflicts: 0`
     public static func formatLine(_ answer: VerifiedAnswer) -> String {
         var parts: [String] = []
         parts.append("Confidence: \(confidenceWord(answer.confidence))")
 
         let claimCount = answer.citations.count
         let fileCount = Set(answer.citations.map(\.objectID)).count
-        parts.append("Evidence: \(claimCount) claim\(plural(claimCount)), \(fileCount) file\(plural(fileCount))")
+        var evidence = "Evidence: \(claimCount) claim\(plural(claimCount)), \(fileCount) file\(plural(fileCount))"
+        if let dropped = answer.report?.droppedUnverifiable, dropped > 0 {
+            evidence += ", \(dropped) dropped"
+        }
+        parts.append(evidence)
 
         if let report = answer.report {
+            // G2-5 — surface agreement when it's actually informative.
+            // Agreement is the share of claims that don't contradict each
+            // other. A perfect 1.0 is the boring default; below ~0.9
+            // means at least one pairwise conflict slipped through.
+            if report.agreementScore < 0.99, claimCount > 1 {
+                parts.append("Agreement: \(Int(report.agreementScore * 100))%")
+            }
+
             var timeliness: [String] = []
             if let newest = report.newestEvidenceDate {
                 timeliness.append("newest \(newest.formatted(date: .abbreviated, time: .omitted))")
+            }
+            // G2-5 — freshness is the exponential-decay factor on age.
+            // nil for historical intents where staleness is expected.
+            if let fresh = report.freshness {
+                timeliness.append("fresh \(Int(fresh * 100))%")
             }
             // Only surface "covers X%" when there's a real intent-window
             // signal — otherwise `coverage` is nil and the line is misleading.
             if let coverage = report.coverage, coverage > 0 {
                 timeliness.append("covers \(Int(coverage * 100))% of window")
             }
-            for gap in report.coverageGaps.prefix(1) {
+            // G2-5 — surface up to three coverage gaps; older code only
+            // showed one even when several existed. Beyond three the line
+            // becomes noise.
+            let gaps = report.coverageGaps.prefix(3)
+            for gap in gaps {
                 timeliness.append("gap \(formatInterval(gap))")
+            }
+            if report.coverageGaps.count > gaps.count {
+                timeliness.append("+\(report.coverageGaps.count - gaps.count) more gap\(plural(report.coverageGaps.count - gaps.count))")
             }
             if !timeliness.isEmpty {
                 parts.append("Timeliness: \(timeliness.joined(separator: ", "))")
