@@ -111,6 +111,14 @@ public actor EntitiesRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// Total count of canonical (de-duped) entity rows across all
+    /// kinds. Used by the Onboarding scope panel and any other UI
+    /// that needs a single "X entities indexed" figure.
+    public func canonicalCount() async throws -> Int {
+        let rows = try await database.query("SELECT COUNT(*) FROM entities;", [])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     // MARK: - G3 Phase 2
 
     /// G3.8 — return entities whose `fact_type` column is NULL so the

@@ -22,7 +22,22 @@ public struct OnboardingView: View {
     @State private var providerCount: Int = 0
     @State private var ramGB: Int = 0
 
-    enum Step: Int { case welcome, hardware, folder, done }
+    enum Step: Int { case welcome, hardware, folder, scope, done }
+
+    /// Counts pulled from the live ledger after the user picks a
+    /// folder, so the scope step can say "here's exactly what
+    /// kalsmritikosh has indexed so far" rather than abstract claims.
+    @State private var scopeCounts: ScopeCounts = .empty
+
+    public struct ScopeCounts: Sendable {
+        public var files: Int
+        public var objects: Int
+        public var entities: Int
+        public var events: Int
+        public var memoryObjects: Int
+
+        public static let empty = ScopeCounts(files: 0, objects: 0, entities: 0, events: 0, memoryObjects: 0)
+    }
 
     public init() {}
 
@@ -38,6 +53,11 @@ public struct OnboardingView: View {
         }
         .frame(minWidth: 640, minHeight: 480)
         .task { await loadProfile() }
+        .onChange(of: step) { _, newStep in
+            if newStep == .scope {
+                Task { await loadScopeCounts() }
+            }
+        }
     }
 
     private var header: some View {
@@ -63,9 +83,69 @@ public struct OnboardingView: View {
             hardwareStep
         case .folder:
             folderStep
+        case .scope:
+            scopeStep
         case .done:
             doneStep
         }
+    }
+
+    /// Trust-and-transparency panel: shows exactly which file
+    /// categories kalsmritikosh processes, what the enrichment
+    /// ladder produces, and (once any data exists) the live ledger
+    /// counts so the user can verify what's actually been indexed.
+    private var scopeStep: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("What kalsmritikosh can see")
+                .font(.headline)
+            Text("From every folder you add, kalsmritikosh reads:")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                seeRow("Documents", "PDF, DOCX/DOC, TXT, MD, RTF, ODT, EPUB", "doc.text")
+                seeRow("Spreadsheets", "XLSX/XLS, CSV, ODS", "tablecells")
+                seeRow("Presentations", "PPTX/PPT", "rectangle.on.rectangle")
+                seeRow("Email", "MBOX, EML, EMLX (Apple Mail), MSG, PST/OST, NSF (Lotus)", "envelope")
+                seeRow("Images", "PNG, JPG, HEIC, TIFF, WebP (with OCR)", "photo")
+                seeRow("Audio & Video", "MP3, WAV, M4A, MP4, MOV (transcribed)", "waveform")
+                seeRow("Archives", "ZIP — expanded then ingested", "archivebox")
+            }
+            Divider().padding(.vertical, 6)
+            Text("What it extracts (privacy-first, on-device):")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 18) {
+                scopeCount("Files", scopeCounts.files)
+                scopeCount("Objects", scopeCounts.objects)
+                scopeCount("Entities", scopeCounts.entities)
+                scopeCount("Events", scopeCounts.events)
+                scopeCount("Memory", scopeCounts.memoryObjects)
+            }
+            Text("Open the Completeness tab anytime to see per-file ingest health, or the Knowledge tab to browse what's been extracted.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 560)
+    }
+
+    private func seeRow(_ title: String, _ formats: String, _ icon: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(.tint).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.callout.weight(.medium))
+                Text(formats).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func scopeCount(_ label: String, _ n: Int) -> some View {
+        VStack(spacing: 2) {
+            Text("\(n)")
+                .font(.title3.monospaced())
+                .foregroundStyle(n > 0 ? .primary : .secondary)
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 60)
     }
 
     private var welcomeStep: some View {
@@ -193,5 +273,28 @@ public struct OnboardingView: View {
         if let caps = appState.capabilities {
             providerCount = await caps.allProviders().count
         }
+    }
+
+    /// Pull live counts from each repo. Each lookup is independent
+    /// so a single failing repo doesn't blank the panel — the field
+    /// stays at its last value (zero on first load).
+    private func loadScopeCounts() async {
+        var next = ScopeCounts.empty
+        if let files = appState.files {
+            next.files = (try? await files.count()) ?? 0
+        }
+        if let objects = appState.objects {
+            next.objects = (try? await objects.count()) ?? 0
+        }
+        if let entities = appState.entities {
+            next.entities = (try? await entities.canonicalCount()) ?? 0
+        }
+        if let events = appState.events {
+            next.events = (try? await events.count()) ?? 0
+        }
+        if let memories = appState.memoryRepo {
+            next.memoryObjects = (try? await memories.count()) ?? 0
+        }
+        await MainActor.run { self.scopeCounts = next }
     }
 }
