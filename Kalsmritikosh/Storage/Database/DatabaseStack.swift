@@ -30,6 +30,16 @@ public actor Database {
     internal var rawHandle: OpaquePointer?
     public let url: URL
 
+    /// Transaction serialization gate. Without this, two concurrent
+    /// callers can both call `exec("BEGIN IMMEDIATE;")` between each
+    /// other's `await`s — SQLite sees the second BEGIN as nested and
+    /// raises "cannot start a transaction within a transaction".
+    /// Repository writes that wrap a multi-await BEGIN/COMMIT block
+    /// MUST acquire the gate via `beginTransaction()` first, releasing
+    /// it via `commitTransaction()` or `rollbackTransaction()`.
+    private var transactionInProgress = false
+    private var transactionWaiters: [CheckedContinuation<Void, Never>] = []
+
     public init(url: URL) throws {
         self.url = url
         try FileManager.default.createDirectory(
@@ -106,6 +116,58 @@ public actor Database {
         } catch {
             try? execRaw("ROLLBACK;")
             throw error
+        }
+    }
+
+    /// Acquire the transaction gate and start a SQLite transaction.
+    /// Waits (suspending the caller, not blocking the actor) until any
+    /// prior transaction has called `commitTransaction()` or
+    /// `rollbackTransaction()`. Required for any repository pattern that
+    /// awaits between BEGIN and COMMIT — without this gate, concurrent
+    /// callers race and SQLite raises "cannot start a transaction
+    /// within a transaction".
+    ///
+    /// Hand-off semantics: when a transaction releases the gate, it
+    /// resumes the next waiter directly (keeping `transactionInProgress`
+    /// = true). The woken waiter inherits the gate without re-racing
+    /// against any newly-arriving caller, avoiding starvation.
+    public func beginTransaction() async throws {
+        if transactionInProgress {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                transactionWaiters.append(cont)
+            }
+            // On resume the gate has been handed to us — transactionInProgress
+            // is still true (set by the previous owner's release).
+        } else {
+            transactionInProgress = true
+        }
+        do {
+            try execRaw("BEGIN IMMEDIATE;")
+        } catch {
+            releaseGate()
+            throw error
+        }
+    }
+
+    public func commitTransaction() throws {
+        defer { releaseGate() }
+        try execRaw("COMMIT;")
+    }
+
+    public func rollbackTransaction() {
+        defer { releaseGate() }
+        try? execRaw("ROLLBACK;")
+    }
+
+    /// Hand the gate to the next waiter (if any), or clear the flag.
+    private func releaseGate() {
+        if !transactionWaiters.isEmpty {
+            let next = transactionWaiters.removeFirst()
+            // Keep transactionInProgress = true so a newly-arriving caller
+            // queues behind the woken waiter rather than racing past it.
+            next.resume()
+        } else {
+            transactionInProgress = false
         }
     }
 

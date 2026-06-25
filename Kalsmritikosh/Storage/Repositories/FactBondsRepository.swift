@@ -79,7 +79,11 @@ public actor FactBondsRepository {
         confidence: Confidence = .medium
     ) async throws -> [Bond] {
         guard !bonds.isEmpty else { return [] }
-        try await database.exec("BEGIN IMMEDIATE;")
+        // Serialize concurrent batch-upserts at the gate so two callers
+        // don't both BEGIN at the same time (SQLite raises "transaction
+        // within a transaction" otherwise — observed during real-archive
+        // ingest with parallel IngestCoordinator fan-out).
+        try await database.beginTransaction()
         var written: [Bond] = []
         do {
             for bond in bonds {
@@ -91,10 +95,10 @@ public actor FactBondsRepository {
                     written.append(newBond)
                 }
             }
-            try await database.exec("COMMIT;")
+            try await database.commitTransaction()
             return written
         } catch {
-            try? await database.exec("ROLLBACK;")
+            await database.rollbackTransaction()
             throw error
         }
     }

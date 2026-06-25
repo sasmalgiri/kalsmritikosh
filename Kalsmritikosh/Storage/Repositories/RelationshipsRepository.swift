@@ -69,7 +69,9 @@ public actor RelationshipsRepository {
         confidence: Confidence = .medium
     ) async throws {
         guard !edges.isEmpty else { return }
-        try await database.exec("BEGIN IMMEDIATE;")
+        // Same gate as FactBondsRepository — concurrent IngestCoordinator
+        // fan-out caused nested BEGINs to fail.
+        try await database.beginTransaction()
         do {
             for edge in edges {
                 try await upsertEdge(
@@ -81,9 +83,9 @@ public actor RelationshipsRepository {
                     confidence: confidence
                 )
             }
-            try await database.exec("COMMIT;")
+            try await database.commitTransaction()
         } catch {
-            try? await database.exec("ROLLBACK;")
+            await database.rollbackTransaction()
             throw error
         }
     }
