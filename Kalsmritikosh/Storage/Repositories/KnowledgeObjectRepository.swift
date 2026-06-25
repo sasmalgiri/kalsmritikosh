@@ -168,3 +168,91 @@ public struct KnowledgeObjectSummaryRow: Identifiable, Sendable, Hashable {
     public let confidence: Confidence
     public let createdAt: Date
 }
+
+/// Per-file ingest health row used by the Completeness panel. All
+/// fields come from KO metadata stamped by the loaders.
+public struct CompletenessRow: Identifiable, Sendable, Hashable {
+    public let id: KnowledgeObject.ID
+    public let sourceFile: URL
+    public let sourceType: SourceType
+    public let loader: String?
+    public let confidence: Confidence
+    public let createdAt: Date
+    public let contentBytes: Int
+    public let pageCount: Int?
+    public let ocrPagesUsed: Int?
+    public let quotedBytesRemoved: Int?
+    public let streamsScanned: Int?
+    public let messageCount: Int?
+    public let isStub: Bool
+}
+
+extension KnowledgeObjectRepository {
+    /// Walk every KO and pull the ingest-health fields out of its
+    /// JSON metadata blob. Heavy-ish (full-table scan + per-row JSON
+    /// parse) so the caller paginates or restricts.
+    public func completenessRows(limit: Int = 1000) async throws -> [CompletenessRow] {
+        let rows = try await database.query("""
+        SELECT k.id, k.source_type, k.content, k.metadata_json, k.confidence, k.created_at, f.url
+        FROM knowledge_objects k
+        JOIN files f ON f.id = k.file_id
+        ORDER BY k.created_at DESC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+
+        var out: [CompletenessRow] = []
+        out.reserveCapacity(rows.count)
+        for row in rows {
+            guard
+                let id = row.uuid(0),
+                let typeRaw = row.string(1),
+                let type = SourceType(rawValue: typeRaw),
+                let content = row.string(2),
+                let metaJSON = row.string(3),
+                let conf = row.double(4),
+                let created = row.date(5),
+                let urlString = row.string(6),
+                let url = URL(string: urlString)
+            else { continue }
+
+            let meta = parseMetadataBag(metaJSON)
+            out.append(CompletenessRow(
+                id: id,
+                sourceFile: url,
+                sourceType: type,
+                loader: meta["loader"] ?? meta["loaderStub"],
+                confidence: Confidence(conf),
+                createdAt: created,
+                contentBytes: content.utf8.count,
+                pageCount: meta["pageCount"].flatMap(Int.init),
+                ocrPagesUsed: meta["ocrPagesUsed"].flatMap(Int.init),
+                quotedBytesRemoved: meta["quotedBytesRemoved"].flatMap(Int.init),
+                streamsScanned: meta["streamsScanned"].flatMap(Int.init),
+                messageCount: meta["messageCount"].flatMap(Int.init),
+                isStub: meta["loaderStub"] != nil
+            ))
+        }
+        return out
+    }
+
+    /// Flatten the JSON metadata blob to a plain [String: String] —
+    /// every value lands as its string form, integer/double/bool are
+    /// coerced. We can re-parse on the consumer side when needed.
+    private nonisolated func parseMetadataBag(_ json: String) -> [String: String] {
+        guard let data = json.data(using: .utf8) else { return [:] }
+        guard let parsed = try? JSONDecoder().decode([String: AnyCodable].self, from: data) else {
+            return [:]
+        }
+        var out: [String: String] = [:]
+        for (k, v) in parsed {
+            switch v.value {
+            case .string(let s): out[k] = s
+            case .int(let i): out[k] = String(i)
+            case .double(let d): out[k] = String(d)
+            case .bool(let b): out[k] = String(b)
+            default: continue
+            }
+        }
+        return out
+    }
+}
