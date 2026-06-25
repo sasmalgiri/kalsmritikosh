@@ -129,9 +129,14 @@ public actor LLMSlotExtractor {
             let hint = s.extractorHint.map { " — \($0)" } ?? ""
             return "- \(s.name): \(describe(s.type))\(hint)"
         }.joined(separator: "\n")
+        // G3 — type-routed extraction. Invoice / contract / email
+        // threads each carry their own conventions (amounts, parties,
+        // action items); the generic prompt under-fills slots that
+        // a typed prompt could anchor more confidently.
+        let typedHints = Self.typedReaderHints(for: factType)
         let prompt = """
         Extract values for the following slots of a \(factType.displayName).
-
+        \(typedHints)
         Slots to fill:
         \(schemaLines)
 
@@ -167,6 +172,89 @@ public actor LLMSlotExtractor {
         case .date: return "date (ISO8601)"
         case .bool: return "bool"
         case .reference(let ft): return "reference to a \(ft.displayName) (its name)"
+        }
+    }
+
+    /// G3 — domain-specific reading guidance prepended to the slot
+    /// extraction prompt. Generic extraction ("read every slot
+    /// equally") under-fills typed fields that a domain-anchored
+    /// prompt could nail. The hints are short on purpose — most of
+    /// the prompt budget should still go to the source text.
+    private static func typedReaderHints(for factType: FactType) -> String {
+        switch factType {
+        case .invoice:
+            return """
+
+            This is an INVOICE. Look for: invoice number / reference,
+            issued and due dates, total amount with currency, line-item
+            subtotal vs tax vs grand total, the payee (who's billing)
+            and payer (who pays). When you see a currency symbol or ISO
+            code, capture both the number and the currency.
+
+            """
+        case .contract:
+            return """
+
+            This is a CONTRACT. Look for: the two (or more) named
+            parties and which is buyer / seller, the effective date and
+            termination date, governing-law jurisdiction, contract
+            value, signatures and signature dates. Distinguish
+            preamble dates ("dated as of") from execution dates.
+
+            """
+        case .amendment:
+            return """
+
+            This is a CONTRACT AMENDMENT. Look for: the parent
+            contract this amends (by name or reference), the effective
+            date of the amendment, which clauses are modified vs added
+            vs deleted, and any change in contract value or term.
+
+            """
+        case .email:
+            return """
+
+            This is an EMAIL or message thread. Look for: the From
+            address, primary To recipients, Cc recipients, message
+            send date (header trumps body), subject line, and any
+            explicit action items or decisions. A "thread" may carry
+            multiple sub-messages — extract slots from the outermost
+            (most recent) unless the slot context says otherwise.
+
+            """
+        case .meeting:
+            return """
+
+            This is a MEETING record. Look for: meeting date and
+            duration, attendees (with role when stated), agenda items,
+            decisions made, action items with owners, follow-up dates.
+            Calendar-export shapes vary; verbatim minutes carry more
+            signal than calendar metadata.
+
+            """
+        case .delivery:
+            return """
+
+            This is a DELIVERY / SHIPMENT record. Look for: tracking
+            or shipment number, ship / pickup date, delivery date
+            (promised vs actual), carrier, origin and destination
+            addresses, contents reference (PO or invoice number).
+
+            """
+        case .decision:
+            return """
+
+            This is a DECISION record. Look for: the decision itself
+            (one short imperative sentence), who decided (role and
+            name), when, what alternatives were considered, and what
+            triggers a reversal.
+
+            """
+        case .person, .organization, .project:
+            // These are simpler subject types — the schema lines
+            // alone are enough guidance; injecting a paragraph of
+            // hints would actually crowd out source text.
+            return ""
         }
     }
 
