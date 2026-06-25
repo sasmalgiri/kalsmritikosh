@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 13
+    public static let latestVersion = 14
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -50,7 +50,8 @@ public enum SchemaMigrations {
         (10, v10),
         (11, v11),
         (12, v12),
-        (13, v13)
+        (13, v13),
+        (14, v14)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -582,5 +583,52 @@ public enum SchemaMigrations {
     CREATE INDEX idx_fact_bonds_from ON fact_bonds(from_fact_id, bond_name);
     CREATE INDEX idx_fact_bonds_to   ON fact_bonds(to_fact_id, bond_name);
     CREATE INDEX idx_fact_bonds_name ON fact_bonds(bond_name);
+    """
+
+    // MARK: - v14 — FTS5 population triggers + index rebuild
+    //
+    // CRITICAL FIX: chunks_fts / knowledge_objects_fts were created in
+    // v1 as external-content FTS5 tables (content='chunks' / 'knowledge_objects')
+    // but no triggers were ever added to populate the FTS index. Result:
+    // 42K+ chunks in chunks but `chunks_fts MATCH 'patent'` returns 0
+    // rows — the entire FTS retrieval tier in HybridRetriever has been
+    // silently dead since launch. Every topic question silently fell
+    // through to vector + entity-frequency, which is why "patents"
+    // returned Google instead of IIPRD/Khurana.
+    //
+    // This migration:
+    //   1. Adds INSERT/UPDATE/DELETE triggers so future writes stay in sync.
+    //   2. Rebuilds the existing index for the rows already in chunks
+    //      and knowledge_objects.
+
+    private static let v14: String = """
+    -- Triggers: keep chunks_fts in sync with chunks.
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_ai AFTER INSERT ON chunks BEGIN
+        INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_ad AFTER DELETE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS chunks_fts_au AFTER UPDATE ON chunks BEGIN
+        INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+        INSERT INTO chunks_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+
+    -- Triggers: keep knowledge_objects_fts in sync with knowledge_objects.
+    CREATE TRIGGER IF NOT EXISTS ko_fts_ai AFTER INSERT ON knowledge_objects BEGIN
+        INSERT INTO knowledge_objects_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS ko_fts_ad AFTER DELETE ON knowledge_objects BEGIN
+        INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+    END;
+    CREATE TRIGGER IF NOT EXISTS ko_fts_au AFTER UPDATE ON knowledge_objects BEGIN
+        INSERT INTO knowledge_objects_fts(knowledge_objects_fts, rowid, content) VALUES('delete', old.rowid, old.content);
+        INSERT INTO knowledge_objects_fts(rowid, content) VALUES (new.rowid, new.content);
+    END;
+
+    -- Rebuild the indexes from existing rows. Idempotent — running
+    -- this twice produces the same final index.
+    INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild');
+    INSERT INTO knowledge_objects_fts(knowledge_objects_fts) VALUES('rebuild');
     """
 }

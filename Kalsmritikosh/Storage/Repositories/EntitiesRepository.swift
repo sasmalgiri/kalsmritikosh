@@ -218,6 +218,46 @@ public actor EntitiesRepository {
         return rows.compactMap(decodeFullEntity)
     }
 
+    /// Topic-to-entity retrieval: given a set of KO ids (typically
+    /// the FTS-matched documents for a query topic like "patents"),
+    /// returns the entities co-occurring in those KOs ranked by
+    /// within-set mention count. This surfaces topic-relevant entities
+    /// that frequency-only retrieval misses ("via patents" pulls IIPRD,
+    /// Khurana — not Google, which is high-frequency globally but
+    /// noise-frequency within patent-KOs).
+    ///
+    /// Returns up to `limit` rows of (entity, count). Entities are
+    /// only person/organization/vendor/client kinds — name-like
+    /// candidates the user would ask about by name.
+    public func findInObjects(
+        _ koIDs: [KnowledgeObject.ID],
+        limit: Int = 30
+    ) async throws -> [(Entity, Int)] {
+        guard !koIDs.isEmpty else { return [] }
+        let placeholders = Array(repeating: "?", count: koIDs.count).joined(separator: ",")
+        var bindings: [SQLValue] = koIDs.map { .uuid($0) }
+        bindings.append(.integer(Int64(limit)))
+        let sql = """
+        SELECT e.id, e.kind, e.value, e.normalized, e.source_object_id,
+               e.confidence, e.attributes_json, COUNT(m.id) AS hits
+        FROM entities e
+        JOIN entity_mentions m ON m.entity_id = e.id
+        WHERE m.source_object_id IN (\(placeholders))
+          AND e.kind IN ('person','organization','vendor','client')
+        GROUP BY e.id
+        ORDER BY hits DESC
+        LIMIT ?;
+        """
+        let rows = try await database.query(sql, bindings)
+        var out: [(Entity, Int)] = []
+        for row in rows {
+            guard let entity = decodeFullEntity(row) else { continue }
+            let count = Int(row.int(7) ?? 0)
+            out.append((entity, count))
+        }
+        return out
+    }
+
     /// G3.22 — counts of canonical entities grouped by their classified
     /// fact_type. NULL-typed rows aren't returned. Smoke + eval diag
     /// uses this to confirm the classifier actually labeled something.

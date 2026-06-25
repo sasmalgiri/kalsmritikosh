@@ -321,6 +321,32 @@ public actor HybridRetriever: Retriever {
                 results.append(entity)
             }
         }
+        // Topic-to-entity retrieval: when the question is about a TOPIC
+        // (e.g. "patents") and entity hints didn't surface anything via
+        // the trie/SQL paths above, find the KOs that mention the topic
+        // via FTS and rank the entities CO-OCCURRING in those KOs. This
+        // demotes frequency-dominant noise (Google appears in every
+        // gmail header) and surfaces entities actually clustered around
+        // the topic (IIPRD, Khurana, BiswajitSarkar for patents).
+        // Only runs when hint resolution produced few/no results, so it
+        // doesn't dilute targeted-entity queries.
+        if results.count < 3 {
+            let q = intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !q.isEmpty,
+               let ftsHits = try? await chunks.searchFTS(q, limit: 25) {
+                let koIDs = Array(Set(ftsHits.map(\.objectID))).prefix(20)
+                if !koIDs.isEmpty {
+                    let topicEntities = (try? await entities.findInObjects(
+                        Array(koIDs),
+                        limit: 15
+                    )) ?? []
+                    for (entity, _) in topicEntities where seen.insert(entity.id).inserted {
+                        results.append(entity)
+                    }
+                }
+            }
+        }
+
         // Pull a handful of high-signal entities — emails, orgs, people —
         // so the brain has named subjects to surface even when intent
         // hints don't directly match. Hydrate each through find(byID:)
