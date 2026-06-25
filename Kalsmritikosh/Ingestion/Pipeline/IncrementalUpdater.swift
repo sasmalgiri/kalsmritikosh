@@ -15,6 +15,7 @@ public actor IncrementalUpdater: BackgroundService {
     private let stream: AsyncStream<SubjectInvalidation>
     private let distiller: MemoryDistiller
     private let debounceMs: UInt64
+    private let notifier: MaturationNotifier?
     private var consumerTask: Task<Void, Never>?
     private var pending: [String: (subject: SubjectInvalidation.Subject, trigger: KnowledgeObject.ID)] = [:]
     private var debounceTask: Task<Void, Never>?
@@ -22,11 +23,13 @@ public actor IncrementalUpdater: BackgroundService {
     public init(
         stream: AsyncStream<SubjectInvalidation>,
         distiller: MemoryDistiller,
-        debounceMilliseconds: UInt64 = 1_500
+        debounceMilliseconds: UInt64 = 1_500,
+        notifier: MaturationNotifier? = nil
     ) {
         self.stream = stream
         self.distiller = distiller
         self.debounceMs = debounceMilliseconds
+        self.notifier = notifier
     }
 
     public func start() async {
@@ -74,6 +77,14 @@ public actor IncrementalUpdater: BackgroundService {
                     triggeredBy: entry.trigger
                 )
                 AtlasLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .public)")
+                // G2-misc — answer-matured notification: tell the
+                // user iff they asked about this subject recently.
+                // The notifier handles the gate + UNUserNotification
+                // permission flow.
+                await notifier?.notifyIfRelevant(
+                    subjectKind: entry.subject.kind.rawValue,
+                    subjectIdentifier: entry.subject.identifier
+                )
             } catch {
                 AtlasLog.knowledge.error("Memory distillation failed for \(entry.subject.identifier, privacy: .public): \(String(describing: error), privacy: .public)")
             }
