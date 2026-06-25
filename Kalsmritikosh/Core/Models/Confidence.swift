@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct Confidence: Codable, Hashable, Sendable, Comparable {
+public nonisolated struct Confidence: Codable, Hashable, Sendable, Comparable {
     public let value: Double  // 0.0 ... 1.0
 
     // G2-SWIFT6 — nonisolated so any actor / nonisolated repository can

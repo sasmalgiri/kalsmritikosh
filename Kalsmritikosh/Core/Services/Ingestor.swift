@@ -11,7 +11,7 @@ import Foundation
 
 public protocol Ingestor: Sendable {
     /// The source types this ingestor knows how to handle.
-    var supportedTypes: Set<SourceType> { get }
+    nonisolated var supportedTypes: Set<SourceType> { get }
 
     /// Read the file at `url` (already resolved through a security-scoped
     /// bookmark) and return a fully-populated KnowledgeObject. Throws if

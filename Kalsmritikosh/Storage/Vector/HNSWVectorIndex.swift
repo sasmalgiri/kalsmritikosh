@@ -650,7 +650,7 @@ public actor HNSWVectorIndex {
 
 // MARK: - Heaps (min/max) — small, hot, hand-written for performance
 
-private struct MinHeap<Element: Comparable> {
+private nonisolated struct MinHeap<Element: Comparable> {
     private(set) var storage: [Element] = []
     var count: Int { storage.count }
     func peek() -> Element? { storage.first }
@@ -692,7 +692,7 @@ private struct MinHeap<Element: Comparable> {
     }
 }
 
-private struct MaxHeap<Element: Comparable> {
+private nonisolated struct MaxHeap<Element: Comparable> {
     private(set) var storage: [Element] = []
     let maxCount: Int
     var count: Int { storage.count }

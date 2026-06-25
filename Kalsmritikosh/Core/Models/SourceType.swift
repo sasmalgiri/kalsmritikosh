@@ -78,7 +78,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         }
     }
 
-    public var category: Category {
+    public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet

@@ -33,7 +33,7 @@ public struct LoaderRegistry: Sendable {
         return r
     }
 
-    public mutating func register(_ loader: any Ingestor) {
+    public nonisolated mutating func register(_ loader: any Ingestor) {
         for t in loader.supportedTypes { loaders[t] = loader }
     }
 

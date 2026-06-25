@@ -31,7 +31,7 @@ public struct ZIPEntry: Sendable {
     public let localHeaderOffset: Int
 }
 
-public struct ZIPReader {
+public nonisolated struct ZIPReader {
     private let data: Data
 
     public nonisolated init(data: Data) {

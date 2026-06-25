@@ -12,7 +12,7 @@ import Foundation
 public actor GraphStore {
     private let relationships: RelationshipsRepository
 
-    public nonisolated init(relationships: RelationshipsRepository) {
+    public init(relationships: RelationshipsRepository) {
         self.relationships = relationships
     }
 

@@ -128,7 +128,7 @@ public struct Chunker: Sendable {
 
     // MARK: - Block detection
 
-    private struct Block {
+    private nonisolated struct Block {
         let start: Int
         let end: Int
         let text: String
@@ -138,7 +138,7 @@ public struct Chunker: Sendable {
 
     private nonisolated func splitIntoBlocks(_ content: String) -> [Block] {
         var blocks: [Block] = []
-        var index = content.startIndex
+        let index = content.startIndex
         let utf16Start = content.utf16.startIndex
         var paragraphStartUTF16: Int? = nil
         var paragraphLines: [String] = []

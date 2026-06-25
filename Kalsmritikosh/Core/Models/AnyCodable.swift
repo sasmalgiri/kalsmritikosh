@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct AnyCodable: Codable, Sendable, Hashable {
+public nonisolated struct AnyCodable: Codable, Sendable, Hashable {
     public let value: AnySendable
 
     // G2-SWIFT6 — `nonisolated` so the encode(to:) closure-passed map

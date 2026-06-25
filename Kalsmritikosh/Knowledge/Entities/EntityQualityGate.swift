@@ -65,7 +65,7 @@ public struct EntityQualityGate: Sendable {
     /// only to person / organization / vendor / client (the categories
     /// that NER pollutes); other kinds (date, money, location, …) are
     /// untouched.
-    public func shouldKeep(_ entity: Entity) -> Bool {
+    public nonisolated func shouldKeep(_ entity: Entity) -> Bool {
         let surface = entity.value.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = surface.lowercased()
 
@@ -196,14 +196,14 @@ public struct EntityQualityGate: Sendable {
 
     // MARK: - Heuristics
 
-    private func isNounKind(_ kind: Entity.Kind) -> Bool {
+    private nonisolated func isNounKind(_ kind: Entity.Kind) -> Bool {
         switch kind {
         case .person, .organization, .vendor, .client: return true
         default: return false
         }
     }
 
-    private func isHostnameShape(_ s: String) -> Bool {
+    private nonisolated func isHostnameShape(_ s: String) -> Bool {
         guard s.count >= 6 else { return false }
         if s.contains(" ") { return false }
         let hasLetter = s.contains(where: \.isLetter)

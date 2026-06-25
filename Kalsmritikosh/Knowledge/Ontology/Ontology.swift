@@ -20,7 +20,7 @@
 
 import Foundation
 
-public enum Ontology {
+public nonisolated enum Ontology {
 
     /// Schema-version stamp. Each fact row in v2+ carries the version
     /// it was classified under so that re-classification (G3.8) can
@@ -228,7 +228,7 @@ public enum Ontology {
 
     // MARK: - Lookup helpers (no actor state — pure)
 
-    public static func schema(for type: FactType) -> FactTypeSchema? {
+    public nonisolated static func schema(for type: FactType) -> FactTypeSchema? {
         types.first { $0.type == type }
     }
 

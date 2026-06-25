@@ -41,13 +41,13 @@ public struct Cleaner: Sendable {
         )
     }
 
-    private func repairEncoding(_ s: String) -> String {
+    private nonisolated func repairEncoding(_ s: String) -> String {
         s.replacingOccurrences(of: "\u{FEFF}", with: "")
          .replacingOccurrences(of: "\r\n", with: "\n")
          .replacingOccurrences(of: "\u{00A0}", with: " ")
     }
 
-    private func collapseWhitespace(_ s: String) -> String {
+    private nonisolated func collapseWhitespace(_ s: String) -> String {
         var result = ""
         var lastWasSpace = false
         var lastWasNewline = false
@@ -75,7 +75,7 @@ public struct Cleaner: Sendable {
         return result
     }
 
-    private func detectLanguage(_ s: String) -> String? {
+    private nonisolated func detectLanguage(_ s: String) -> String? {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(String(s.prefix(2000)))
         return recognizer.dominantLanguage?.rawValue
@@ -83,7 +83,7 @@ public struct Cleaner: Sendable {
 
     /// 0...1 — entirely heuristic, used only to lightly downweight messages
     /// that look like marketing or boilerplate. Never auto-removes content.
-    private func spamProbability(_ s: String) -> Double {
+    private nonisolated func spamProbability(_ s: String) -> Double {
         let lower = s.lowercased()
         let signals: [String] = [
             "unsubscribe", "click here", "limited time", "act now",
@@ -94,7 +94,7 @@ public struct Cleaner: Sendable {
         return min(1.0, Double(hits) / Double(signals.count) * 1.5)
     }
 
-    private func contentHash(_ s: String) -> String {
+    private nonisolated func contentHash(_ s: String) -> String {
         let data = Data(s.utf8)
         let digest = SHA256.hash(data: data)
         return digest.map { String(format: "%02x", $0) }.joined()

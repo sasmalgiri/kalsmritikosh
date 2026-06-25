@@ -18,7 +18,7 @@
 
 import Foundation
 
-public struct MIMEPart: Sendable {
+public nonisolated struct MIMEPart: Sendable {
     public let headers: [String: String]
     public let body: Data
 
@@ -119,7 +119,7 @@ public enum MIMEParser {
         return out
     }
 
-    private static func parseSinglePart(_ text: String) -> MIMEPart {
+    private nonisolated static func parseSinglePart(_ text: String) -> MIMEPart {
         guard let blank = text.range(of: "\n\n") else {
             return MIMEPart(headers: [:], body: text.data(using: .utf8) ?? Data())
         }
@@ -132,7 +132,7 @@ public enum MIMEParser {
         return MIMEPart(headers: headers, body: decoded)
     }
 
-    private static func parseHeaders(_ block: String) -> [String: String] {
+    private nonisolated static func parseHeaders(_ block: String) -> [String: String] {
         var headers: [String: String] = [:]
         var current: (String, String)?
         for line in block.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -151,7 +151,7 @@ public enum MIMEParser {
         return headers
     }
 
-    private static func decodeBody(_ text: String, encoding: String, charset: String?) -> Data {
+    private nonisolated static func decodeBody(_ text: String, encoding: String, charset: String?) -> Data {
         switch encoding {
         case "base64":
             let cleaned = text.filter { !$0.isWhitespace }
@@ -167,7 +167,7 @@ public enum MIMEParser {
         }
     }
 
-    private static func decodeQuotedPrintable(_ text: String) -> Data {
+    private nonisolated static func decodeQuotedPrintable(_ text: String) -> Data {
         var bytes: [UInt8] = []
         let chars = Array(text)
         var i = 0

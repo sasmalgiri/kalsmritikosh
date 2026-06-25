@@ -72,7 +72,7 @@ public struct DocumentClassifier: Sendable {
         return .other
     }
 
-    private func matchesAny(_ body: String, _ markers: [String]) -> Bool {
+    private nonisolated func matchesAny(_ body: String, _ markers: [String]) -> Bool {
         for m in markers where body.contains(m) { return true }
         return false
     }

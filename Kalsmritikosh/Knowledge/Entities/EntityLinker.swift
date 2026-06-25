@@ -66,7 +66,7 @@ public struct EntityLinker: Sendable {
         }
     }
 
-    private func normalize(_ entity: Entity) -> String {
+    private nonisolated func normalize(_ entity: Entity) -> String {
         switch entity.kind {
         case .emailAddress:
             return entity.value.lowercased()
@@ -81,7 +81,7 @@ public struct EntityLinker: Sendable {
         }
     }
 
-    private struct Key: Hashable {
+    private nonisolated struct Key: Hashable {
         let kind: Entity.Kind
         let normalized: String
     }

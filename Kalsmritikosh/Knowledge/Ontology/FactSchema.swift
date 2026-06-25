@@ -41,7 +41,7 @@ public enum FactType: String, Codable, Sendable, Hashable, CaseIterable {
     case decision
 
     /// Display string used in UI surfaces ("Why this answer?" panel).
-    public var displayName: String {
+    public nonisolated var displayName: String {
         switch self {
         case .person: return "Person"
         case .organization: return "Organization"

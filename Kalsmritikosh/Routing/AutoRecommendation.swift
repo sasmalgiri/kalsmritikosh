@@ -51,7 +51,7 @@ public struct AutoRecommendation: Sendable {
         return recommendations
     }
 
-    private func pickProvider(
+    private nonisolated func pickProvider(
         for capability: ModelCapability,
         manifests: [ModelManifest],
         benchmarks: [String: BenchmarkResult]
@@ -96,7 +96,7 @@ public struct AutoRecommendation: Sendable {
     }
 }
 
-private extension ModelManifest.Tier {
+nonisolated private extension ModelManifest.Tier {
     var weight: Int {
         switch self {
         case .small: return 0

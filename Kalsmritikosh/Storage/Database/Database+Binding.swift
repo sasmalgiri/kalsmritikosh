@@ -48,7 +48,7 @@ public enum SQLValue: Sendable, Hashable {
 public struct SQLRow: Sendable {
     public let values: [SQLValue]
 
-    public init(values: [SQLValue]) {
+    public nonisolated init(values: [SQLValue]) {
         self.values = values
     }
 

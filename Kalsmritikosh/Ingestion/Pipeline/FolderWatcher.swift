@@ -24,7 +24,7 @@ public actor FolderWatcher {
     private(set) var continuation: AsyncStream<Event>.Continuation?
     public let events: AsyncStream<Event>
 
-    public nonisolated init() {
+    public init() {
         var cont: AsyncStream<Event>.Continuation!
         self.events = AsyncStream { c in cont = c }
         self.continuation = cont
@@ -67,7 +67,7 @@ public actor FolderWatcher {
 }
 
 #if canImport(CoreServices) && os(macOS)
-private final class WatchHandle {
+private nonisolated final class WatchHandle {
     let url: URL
     let onEvents: @Sendable ([URL]) -> Void
     var stream: FSEventStreamRef?
