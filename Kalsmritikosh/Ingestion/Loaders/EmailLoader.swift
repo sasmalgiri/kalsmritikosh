@@ -17,7 +17,7 @@
 import Foundation
 
 public struct EmailLoader: Ingestor {
-    public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail]
+    public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail, .nsf]
 
     public nonisolated init() {}
 
@@ -43,19 +43,27 @@ public struct EmailLoader: Ingestor {
             // via ingestMany; collapse all messages into one KO so
             // they still get something coherent.
             return try ingestPSTConcatenated(at: url)
+        case .nsf:
+            // G4.9 — Lotus Notes NSF: same many-per-file shape as PST,
+            // same legacy single-KO fallback strategy.
+            return try ingestNSFConcatenated(at: url)
         default:
             return try binaryStub(at: url, type: type)
         }
     }
 
     /// T13.1 — mbox produces one KO per message; other formats fall
-    /// through to the single-KO path. G4.9 — PST is also per-message.
+    /// through to the single-KO path. G4.9 — PST and NSF are also
+    /// per-message.
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         if type == .mbox {
             return try ingestMBOXAsMessages(at: url)
         }
         if type == .pst {
             return try ingestPSTAsMessages(at: url)
+        }
+        if type == .nsf {
+            return try ingestNSFAsMessages(at: url)
         }
         return [try await ingest(fileAt: url, type: type)]
     }
@@ -891,6 +899,194 @@ public struct EmailLoader: Ingestor {
             lines.append(body)
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// G4.9 — Lotus Notes NSF database → one KO per mail-shaped note.
+    private func ingestNSFAsMessages(at url: URL) throws -> [KnowledgeObject] {
+        let notes = try loadNSFNotes(at: url)
+        var out: [KnowledgeObject] = []
+        out.reserveCapacity(notes.count)
+        for note in notes where note.isMailNote {
+            guard let ko = buildKO(fromNSFNote: note, source: url) else { continue }
+            out.append(ko)
+        }
+        return out
+    }
+
+    /// G4.9 — concatenated NSF KO: every mail note as a markdown block.
+    private func ingestNSFConcatenated(at url: URL) throws -> KnowledgeObject {
+        let notes = try loadNSFNotes(at: url)
+        let mailNotes = notes.filter(\.isMailNote)
+        guard !mailNotes.isEmpty else { throw IngestorError.empty(url) }
+        let content = mailNotes
+            .map { nsfNoteMarkdown($0) }
+            .joined(separator: "\n\n---\n\n")
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+        let size = (attrs[.size] as? Int64) ?? 0
+        return KnowledgeObject(
+            sourceFile: url,
+            sourceType: .nsf,
+            content: content,
+            metadata: [
+                "filename": AnyCodable(.string(url.lastPathComponent)),
+                "loader": AnyCodable(.string("nsf-domino")),
+                "messageCount": AnyCodable(.int(Int64(mailNotes.count))),
+                "binarySize": AnyCodable(.int(size))
+            ],
+            confidence: .medium
+        )
+    }
+
+    private func loadNSFNotes(at url: URL) throws -> [NSFReader.NSFNote] {
+        let raw: Data
+        do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw IngestorError.unreadable(url, underlying: error) }
+        // NSF can run very large; cap at 4 GB like the original mailin
+        // parser to keep mapping cost predictable.
+        if raw.count > 4_000_000_000 {
+            throw IngestorError.parseFailure(
+                url,
+                reason: "nsf: file too large (\(raw.count / 1_000_000) MB; limit 4 GB)"
+            )
+        }
+        let reader = NSFReader(data: raw)
+        do { return try reader.readNotes() }
+        catch { throw IngestorError.parseFailure(url, reason: "nsf: \(error)") }
+    }
+
+    private func buildKO(fromNSFNote note: NSFReader.NSFNote, source url: URL) -> KnowledgeObject? {
+        // NSF stores SMTP-shaped addresses under multiple field names
+        // depending on the form variant.
+        let from = note.items["From"]
+            ?? note.items["$From"]
+            ?? note.items["SMTPOriginator"]
+            ?? ""
+        let to = note.items["SendTo"] ?? note.items["EnterSendTo"] ?? ""
+        let cc = note.items["CopyTo"] ?? note.items["EnterCopyTo"] ?? ""
+        let bcc = note.items["BlindCopyTo"] ?? ""
+        let subject = note.items["Subject"] ?? ""
+        let dateRaw = note.items["DeliveredDate"] ?? note.items["PostedDate"] ?? ""
+        let messageID = note.items["$MessageID"] ?? note.items["UNID"]
+
+        // Body precedence: plain Body → $HtmlBody/Body_HTML (stripped).
+        let plainBody = note.items["Body"] ?? ""
+        let htmlBody = note.items["$HtmlBody"] ?? note.items["Body_HTML"] ?? ""
+        let body: String
+        if !plainBody.isEmpty {
+            body = plainBody
+        } else if !htmlBody.isEmpty {
+            body = DocxLoader.stripTags(htmlBody)
+        } else {
+            body = ""
+        }
+
+        // Normalize the delivered-date string into ISO8601 when we can
+        // recognize the format. Notes ships in several locale-specific
+        // shapes — keep the raw string as a fallback when none parse.
+        let dateString = Self.normalizeNotesDate(dateRaw)
+
+        var headers: [String: String] = [:]
+        if !from.isEmpty { headers["from"] = from }
+        if !to.isEmpty { headers["to"] = to }
+        if !cc.isEmpty { headers["cc"] = cc }
+        if !bcc.isEmpty { headers["bcc"] = bcc }
+        if !subject.isEmpty { headers["subject"] = subject }
+        if !dateString.isEmpty { headers["date"] = dateString }
+        if let mid = messageID, !mid.isEmpty { headers["message-id"] = mid }
+        if let irt = note.items["$Ref"], !irt.isEmpty { headers["in-reply-to"] = irt }
+        if let form = note.items["Form"], !form.isEmpty { headers["x-notes-form"] = form }
+        headers["x-source-format"] = "NSF"
+
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && headers.count <= 2 {
+            return nil
+        }
+
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        var headerLines: [String] = []
+        for key in ["from", "to", "cc", "subject", "date"] {
+            if let value = headers[key], !value.isEmpty {
+                headerLines.append("\(key.capitalized): \(value)")
+            }
+        }
+        let merged = headerLines.isEmpty
+            ? cleanedBody
+            : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+
+        var meta: [String: AnyCodable] = [
+            "filename": AnyCodable(.string(url.lastPathComponent)),
+            "loader": AnyCodable(.string("nsf-note")),
+            "quotedBytesRemoved": AnyCodable(.int(Int64(quotedBytesRemoved)))
+        ]
+        for (k, v) in headers { meta[k] = AnyCodable(.string(v)) }
+        if !note.categories.isEmpty {
+            meta["nsfCategories"] = AnyCodable(.string(note.categories.joined(separator: ",")))
+        }
+
+        let koID = UUID()
+        let structured = Self.structuredEntities(from: headers, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structured) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
+        return KnowledgeObject(
+            id: koID,
+            sourceFile: url,
+            sourceType: .nsf,
+            content: merged,
+            metadata: meta,
+            confidence: .high
+        )
+    }
+
+    private func nsfNoteMarkdown(_ note: NSFReader.NSFNote) -> String {
+        var lines: [String] = []
+        let from = note.items["From"]
+            ?? note.items["$From"]
+            ?? note.items["SMTPOriginator"]
+            ?? ""
+        if !from.isEmpty { lines.append("From: \(from)") }
+        if let to = note.items["SendTo"] ?? note.items["EnterSendTo"], !to.isEmpty {
+            lines.append("To: \(to)")
+        }
+        if let cc = note.items["CopyTo"], !cc.isEmpty { lines.append("Cc: \(cc)") }
+        if let subject = note.items["Subject"], !subject.isEmpty {
+            lines.append("Subject: \(subject)")
+        }
+        if let d = note.items["DeliveredDate"] ?? note.items["PostedDate"], !d.isEmpty {
+            lines.append("Date: \(d)")
+        }
+        let body = note.items["Body"]
+            ?? (note.items["$HtmlBody"].map(DocxLoader.stripTags))
+            ?? ""
+        if !body.isEmpty {
+            lines.append("")
+            lines.append(body)
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// Lotus Notes ships dates in a small handful of locale-specific
+    /// shapes. Walk the candidates in order and return the first
+    /// that parses; otherwise pass the raw string through so callers
+    /// can still see something in the `date` header.
+    private static func normalizeNotesDate(_ raw: String) -> String {
+        if raw.isEmpty { return "" }
+        let candidates = [
+            "MM/dd/yyyy hh:mm:ss a",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "MM/dd/yyyy HH:mm:ss",
+            "dd/MM/yyyy HH:mm:ss",
+            "yyyy/MM/dd HH:mm:ss",
+            "EEE, dd MMM yyyy HH:mm:ss Z"
+        ]
+        for format in candidates {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: raw) {
+                return ISO8601DateFormatter().string(from: date)
+            }
+        }
+        return raw
     }
 
     private func binaryStub(at url: URL, type: SourceType) throws -> KnowledgeObject {

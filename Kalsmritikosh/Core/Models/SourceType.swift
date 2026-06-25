@@ -20,7 +20,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     case pptx, ppt, keynote
 
     // Email
-    case mbox, pst, eml, msg, appleMail
+    case mbox, pst, eml, msg, appleMail, nsf
 
     // Images
     case png, jpg, heic, tiff, webp
@@ -60,6 +60,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "eml": return .eml
         case "msg": return .msg
         case "emlx": return .appleMail
+        case "nsf": return .nsf
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -83,7 +84,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
-        case .mbox, .pst, .eml, .msg, .appleMail: return .email
+        case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
         case .png, .jpg, .heic, .tiff, .webp: return .image
         case .mp3, .wav, .m4a, .aac: return .audio
         case .mp4, .mov: return .video

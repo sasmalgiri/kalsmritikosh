@@ -143,7 +143,7 @@ public struct DocxLoader: Ingestor {
     /// Strips XML tags and entity-decodes the result. We intentionally
     /// keep block-level tags as paragraph breaks so sentence tokenization
     /// downstream stays sane.
-    static func stripTags(_ xml: String) -> String {
+    nonisolated static func stripTags(_ xml: String) -> String {
         var out = ""
         var insideTag = false
         var lastWasSpace = false
@@ -173,7 +173,7 @@ public struct DocxLoader: Ingestor {
         return entityDecode(out).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func entityDecode(_ s: String) -> String {
+    private nonisolated static func entityDecode(_ s: String) -> String {
         var t = s
         let replacements: [(String, String)] = [
             ("&amp;", "&"),
