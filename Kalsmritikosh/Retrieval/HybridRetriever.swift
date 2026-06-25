@@ -18,6 +18,22 @@ public actor HybridRetriever: Retriever {
     /// retrieval call site. UPDATE_06 Item 2.
     public nonisolated static let defaultVectorLayerLimit = 20
 
+    /// Words IntentDetector sometimes emits as "entity hints" but which
+    /// are actually question words / list-shape words. Filtering them
+    /// out at `entityLayer` time prevents `entities.find(byValue:)`
+    /// from matching arbitrary substrings and polluting the candidate
+    /// set with low-signal entities — observed on
+    /// "What organizations am I in touch with via patents?" where
+    /// `["What"]` swamped the result list with random WhatsApp /
+    /// LinkedIn entities and the topic-to-entity fallback couldn't fire.
+    private nonisolated static let questionWords: Set<String> = [
+        "what", "who", "when", "where", "why", "how", "which",
+        "list", "show", "tell", "find", "give",
+        "the", "a", "an", "of", "is", "are", "was", "were",
+        "do", "did", "does", "have", "had", "has",
+        "i", "me", "my", "you", "your", "us", "we", "our", "their"
+    ]
+
     private let memory: MemoryRepository
     private let events: EventsRepository
     private let entities: EntitiesRepository
@@ -301,7 +317,19 @@ public actor HybridRetriever: Retriever {
         var results: [Entity] = []
         var seen = Set<Entity.ID>()
         let trieReady = await entityTrie?.isWarm() ?? false
-        for hint in intent.entityHints.prefix(6) {
+        // Real-data debug (2026-06-25): IntentDetector was emitting
+        // question-words ("What", "Who", "When") as entity hints, and
+        // `entities.find(byValue: "What")` LIKE-matched 15+ unrelated
+        // entities containing the substring "what" — polluting the
+        // candidate set and bypassing the downstream topic-to-entity
+        // logic. Drop the question-words at this layer so the topic
+        // step can actually fire when no real entity name appears
+        // in the question.
+        let cleanHints = intent.entityHints.filter { hint in
+            let h = hint.lowercased()
+            return !Self.questionWords.contains(h) && h.count >= 2
+        }
+        for hint in cleanHints.prefix(6) {
             // Hot path: Trie resolves the hint in O(|hint|) to a set
             // of candidate ids, then a single `WHERE id IN (...)` SQL
             // hydrates them. Replaces `LIKE '%hint%'` full scan.
@@ -321,29 +349,42 @@ public actor HybridRetriever: Retriever {
                 results.append(entity)
             }
         }
-        // Topic-to-entity retrieval: when the question is about a TOPIC
-        // (e.g. "patents") and entity hints didn't surface anything via
-        // the trie/SQL paths above, find the KOs that mention the topic
-        // via FTS and rank the entities CO-OCCURRING in those KOs. This
-        // demotes frequency-dominant noise (Google appears in every
-        // gmail header) and surfaces entities actually clustered around
-        // the topic (IIPRD, Khurana, BiswajitSarkar for patents).
-        // Only runs when hint resolution produced few/no results, so it
-        // doesn't dilute targeted-entity queries.
-        if results.count < 3 {
-            let q = intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !q.isEmpty,
-               let ftsHits = try? await chunks.searchFTS(q, limit: 25) {
-                let koIDs = Array(Set(ftsHits.map(\.objectID))).prefix(20)
-                if !koIDs.isEmpty {
-                    let topicEntities = (try? await entities.findInObjects(
-                        Array(koIDs),
-                        limit: 15
-                    )) ?? []
-                    for (entity, _) in topicEntities where seen.insert(entity.id).inserted {
-                        results.append(entity)
-                    }
+        // Topic-to-entity retrieval: regardless of hint count, when the
+        // question text has searchable nouns, also pull entities
+        // co-occurring with those nouns in the corpus. We PREPEND
+        // these so they outrank the generic top-up entities the next
+        // block adds.
+        //
+        // Why unconditional (was `results.count < 3`): for questions
+        // like "What organizations am I in touch with via patents?",
+        // even after we filter out question-words from hints, the
+        // hint loop produces nothing (no entity named "patents"), so
+        // the old < 3 guard relied on luck. Always running this step
+        // ensures topic-relevant entities (Khurana / IIPRD / BiswajitSarkar)
+        // appear at the front of the candidate list. Capped at 15 so
+        // it doesn't drown out a targeted-entity query that DID match.
+        // FTS5's MATCH rejects raw question text with punctuation /
+        // question marks. Extract content words (≥3 chars, filter
+        // question-words/stopwords) and OR-join them so FTS5 treats it
+        // as a multi-keyword query.
+        let topicTokens = intent.rawQuestion
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 3 && !Self.questionWords.contains($0.lowercased()) }
+        let ftsQuery = topicTokens.joined(separator: " OR ")
+        if !ftsQuery.isEmpty,
+           let ftsHits = try? await chunks.searchFTS(ftsQuery, limit: 25) {
+            let koIDs = Array(Set(ftsHits.map(\.objectID))).prefix(20)
+            if !koIDs.isEmpty {
+                let topicEntities = (try? await entities.findInObjects(
+                    Array(koIDs),
+                    limit: 15
+                )) ?? []
+                // Prepend so they outrank the alphabetical top-up below.
+                var topicResults: [Entity] = []
+                for (entity, _) in topicEntities where seen.insert(entity.id).inserted {
+                    topicResults.append(entity)
                 }
+                results = topicResults + results
             }
         }
 
