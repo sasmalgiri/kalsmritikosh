@@ -12,5 +12,25 @@
     <true/>
     <key>com.apple.security.device.audio-input</key>
     <false/>
+    <!--
+      Hardened runtime entitlements. Required for notarization on
+      App Store distribution and Developer ID outside-the-store
+      distribution. Each true value below documents WHY the
+      exception is needed; flip any to false if the linked
+      framework / behavior is removed.
+    -->
+    <!-- AppleScript / NSAppleEventDescriptor: not used, so disabled. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <false/>
+    <!-- We don't load unsigned plugins or Mach-O at runtime. -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <false/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+    <!-- Foundation Models / on-device LLM may JIT — enable when
+         we adopt MLX or any framework that requires it. Default
+         off because we ship Apple frameworks + Ollama HTTP only. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
 </dict>
 </plist>
