@@ -25,6 +25,22 @@ public struct Tier1RelationshipExtractor: Sendable {
     /// people and companies. See UPDATE_04_REVISED.
     public nonisolated static let coOccurrenceSkipThreshold = 200
 
+    /// Per-event participant cap for `event_linked` pairwise edge
+    /// generation. Above this, the extractor falls back to a
+    /// star-shaped pattern: it picks the lowest-uuid id as the
+    /// anchor and emits ONLY (anchor → others) edges, never
+    /// (others ↔ others). Reasoning: a sent-folder mass-mail with
+    /// 1,500 recipients would otherwise produce N(N-1) ≈ 2.4M
+    /// pairwise rows for ONE event (observed on a real archive:
+    /// two such events accounted for 4.8M of 5.5M total
+    /// relationships, ~93% of the 3 GB knowledge.sqlite for a
+    /// 150 MB source). Most "recipients" in such an event don't
+    /// have a real social tie to each other — they're on the same
+    /// list. Capping at 50 keeps real meeting/thread events
+    /// faithful while killing the explosion. See
+    /// `eventLinkedFallbackPattern` below for the exact behavior.
+    public nonisolated static let eventLinkedParticipantCap = 50
+
     public struct Edge: Sendable, Hashable {
         public let kind: Relationship.Kind
         public let from: Entity.ID
@@ -81,17 +97,43 @@ public struct Tier1RelationshipExtractor: Sendable {
             }
         }
 
-        // 2. Event-linked: pairs of entities that share an Event.
-        // Already bounded by per-event entity count — no cap needed.
+        // 2. Event-linked: entities that share an Event. Up to
+        // `eventLinkedParticipantCap` participants we emit the full
+        // pairwise mesh — that's what meeting/thread events are.
+        // Above the cap (mass distribution emails, ad-hoc mailers)
+        // we switch to a star pattern from a deterministic anchor
+        // to avoid O(N²) blow-up. The old "no cap needed" comment
+        // was wrong: a single 1,500-recipient sent email produced
+        // 2.4M edges on the real corpus.
         for event in events {
             let evDistinct = Array(Set(event.entityIDs))
                 .sorted { $0.uuidString < $1.uuidString }
-            for i in 0..<evDistinct.count {
-                for j in (i + 1)..<evDistinct.count {
+            guard evDistinct.count > 1 else { continue }
+            if evDistinct.count <= Self.eventLinkedParticipantCap {
+                for i in 0..<evDistinct.count {
+                    for j in (i + 1)..<evDistinct.count {
+                        out.append(Edge(
+                            kind: .eventLinked,
+                            from: evDistinct[i],
+                            to: evDistinct[j],
+                            viaEventID: event.id
+                        ))
+                    }
+                }
+            } else {
+                // Star: anchor is the lowest-uuid id by the same
+                // sort, so the pattern is deterministic and
+                // re-ingest-stable. Every other participant gets a
+                // single (anchor → other) edge.
+                AtlasLog.brain.info(
+                    "event_linked cap (\(evDistinct.count, privacy: .public) participants > \(Self.eventLinkedParticipantCap, privacy: .public)) → star pattern for event \(event.id.uuidString, privacy: .public)"
+                )
+                let anchor = evDistinct[0]
+                for other in evDistinct.dropFirst() {
                     out.append(Edge(
                         kind: .eventLinked,
-                        from: evDistinct[i],
-                        to: evDistinct[j],
+                        from: anchor,
+                        to: other,
                         viaEventID: event.id
                     ))
                 }
