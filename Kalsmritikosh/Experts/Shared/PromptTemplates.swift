@@ -89,6 +89,35 @@ public enum PromptTemplates {
         return index
     }
 
+    /// Append retrieved entities (people, orgs, projects) as ENT lines.
+    /// Without this, prompts for "list-style" questions (what orgs?,
+    /// who are the people?) get only document SNIPPETS, and the LLM
+    /// composes a vague answer instead of enumerating the retrieved
+    /// candidates by name. Each entity carries its own E-id so claims
+    /// can cite it.
+    @discardableResult
+    private static func appendEntityEvidence(
+        _ retrieval: RetrievalResult,
+        startingIndex: Int,
+        limit: Int = 12,
+        kinds: Set<Entity.Kind> = [.person, .organization, .vendor, .client, .project, .emailAddress],
+        lines: inout [String],
+        map: inout [String: EvidenceCitation]
+    ) -> Int {
+        var index = startingIndex
+        for entity in retrieval.entities.filter({ kinds.contains($0.kind) }).prefix(limit) {
+            let tag = "E\(index)"
+            lines.append("[\(tag)] ENT (\(entity.kind.rawValue)) \(entity.value)")
+            map[tag] = EvidenceCitation(
+                supportingObjectIDs: [],
+                supportingEventIDs: [],
+                supportingEntityIDs: [entity.id]
+            )
+            index += 1
+        }
+        return index
+    }
+
     // MARK: - Email
 
     public static func emailAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
@@ -306,23 +335,47 @@ public enum PromptTemplates {
     // MARK: - Research
 
     public static func researchAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
-        let hits = retrieval.chunks.prefix(6)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
-        for (i, hit) in hits.enumerated() {
-            let tag = "E\(i + 1)"
-            let snippet = String(hit.chunk.text.prefix(240))
-                .replacingOccurrences(of: "\n", with: " ")
-            lines.append("[\(tag)] (\(hit.viaLayer.rawValue)) \(snippet)")
-            map[tag] = EvidenceCitation(supportingObjectIDs: [hit.chunk.objectID])
-        }
+        var index = 1
+        // Show retrieved DOCUMENT SNIPPETS first.
+        index = appendChunkEvidence(
+            retrieval,
+            startingIndex: index,
+            limit: 6,
+            lines: &lines,
+            map: &map
+        )
+        // Then attach retrieved ENTITIES so the LLM has concrete names to
+        // enumerate when the question asks "what / which / who" — without
+        // this, "What organizations am I in touch with via patents?"
+        // returned vague prose because the prompt only carried document
+        // snippets and the model never saw the actual entity names like
+        // IIPRD / Khurana & Khurana / BiswajitSarkar.
+        index = appendEntityEvidence(
+            retrieval,
+            startingIndex: index,
+            limit: 12,
+            lines: &lines,
+            map: &map
+        )
         let evidenceBlock = lines.isEmpty ? "(no snippets)" : lines.joined(separator: "\n")
+        // List-style nudge: detect questions that ask for an enumeration
+        // and tell the LLM explicitly to enumerate ENT lines by name.
+        let q = intent.rawQuestion.lowercased()
+        let isListShape = q.hasPrefix("what ") || q.hasPrefix("which ")
+            || q.hasPrefix("who ") || q.contains("list ") || q.contains("name ")
+            || q.contains("organizations") || q.contains("people")
+        let enumerationDirective: String = isListShape
+            ? "\n        IMPORTANT: the user is asking for a LIST. Enumerate the\n        relevant ENT lines BY NAME. Do NOT invent names. Each claim\n        names a specific entity from the ENT lines above and cites\n        its E-id."
+            : ""
         let prompt = """
-        Task: From the literature snippets below, extract the key citations
-        and findings relevant to:
-        "\(intent.rawQuestion)"
+        Task: From the evidence below (document snippets + retrieved
+        entities), extract the key claims relevant to:
+        "\(intent.rawQuestion)"\(enumerationDirective)
 
-        Snippets (cite by E-id):
+        Evidence (cite by E-id; DOC = document snippet, ENT = retrieved
+        entity name):
         \(evidenceBlock)
         \(jsonContract)
         """
