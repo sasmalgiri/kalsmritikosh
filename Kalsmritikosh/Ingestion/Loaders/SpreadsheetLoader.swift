@@ -25,7 +25,30 @@ public struct SpreadsheetLoader: Ingestor {
         case .ods:
             return try ingestODS(at: url)
         case .xls:
-            return binaryStub(at: url, type: .xls, note: "Legacy .xls BIFF binary; OLE2 parsing pending.", stubTag: "xls-legacy")
+            // Legacy .xls (BIFF8 / OLE2). Full BIFF-record parsing
+            // would be ideal, but the lean scanner over Workbook +
+            // SST streams recovers cell text + sheet names well
+            // enough for FTS and entity extraction.
+            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .xls)
+            if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw IngestorError.empty(url)
+            }
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+            let size = (attrs[.size] as? Int64) ?? 0
+            return KnowledgeObject(
+                sourceFile: url,
+                sourceType: .xls,
+                content: extraction.text,
+                metadata: [
+                    "filename": AnyCodable(.string(url.lastPathComponent)),
+                    "binarySize": AnyCodable(.int(size)),
+                    "loader": AnyCodable(.string("xls-lean-ole2")),
+                    "streamsScanned": AnyCodable(.int(Int64(extraction.streamsScanned))),
+                    "bytesScanned": AnyCodable(.int(Int64(extraction.bytesScanned))),
+                    "runCount": AnyCodable(.int(Int64(extraction.runCount)))
+                ],
+                confidence: .medium
+            )
         default:
             throw IngestorError.unsupportedType(type)
         }

@@ -18,19 +18,45 @@ public struct PresentationLoader: Ingestor {
         switch type {
         case .pptx:
             return try ingestPPTX(at: url)
-        case .ppt, .keynote:
+        case .ppt:
+            // Legacy PowerPoint .ppt (OLE2). Atom-record parsing is
+            // complex; the lean scanner over PowerPoint Document /
+            // Pictures (skipped) / outline streams recovers slide
+            // text and speaker notes.
+            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .ppt)
+            if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw IngestorError.empty(url)
+            }
             let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
             let size = (attrs[.size] as? Int64) ?? 0
             return KnowledgeObject(
                 sourceFile: url,
-                sourceType: type,
-                content: type == .ppt
-                    ? "Legacy PowerPoint .ppt binary; OLE2 parsing pending."
-                    : "Apple Keynote package; native parsing pending.",
+                sourceType: .ppt,
+                content: extraction.text,
                 metadata: [
                     "filename": AnyCodable(.string(url.lastPathComponent)),
                     "binarySize": AnyCodable(.int(size)),
-                    "loaderStub": AnyCodable(.string(type == .ppt ? "ppt-legacy" : "keynote-package"))
+                    "loader": AnyCodable(.string("ppt-lean-ole2")),
+                    "streamsScanned": AnyCodable(.int(Int64(extraction.streamsScanned))),
+                    "bytesScanned": AnyCodable(.int(Int64(extraction.bytesScanned))),
+                    "runCount": AnyCodable(.int(Int64(extraction.runCount)))
+                ],
+                confidence: .medium
+            )
+        case .keynote:
+            // Apple Keynote ships as a bundle (.key directory or
+            // tar.gz) — different format entirely. Leave the stub
+            // until we wire a real Keynote parser.
+            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+            let size = (attrs[.size] as? Int64) ?? 0
+            return KnowledgeObject(
+                sourceFile: url,
+                sourceType: .keynote,
+                content: "Apple Keynote package; native parsing pending.",
+                metadata: [
+                    "filename": AnyCodable(.string(url.lastPathComponent)),
+                    "binarySize": AnyCodable(.int(size)),
+                    "loaderStub": AnyCodable(.string("keynote-package"))
                 ],
                 confidence: .low
             )

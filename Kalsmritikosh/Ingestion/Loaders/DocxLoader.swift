@@ -25,19 +25,28 @@ public struct DocxLoader: Ingestor {
         case .odt:
             return try ingestODT(url: url, size: size)
         case .doc:
-            // Legacy binary .doc (Compound File Binary Format) isn't ZIP.
-            // Genuine support needs an OLE2 parser; until then it remains
-            // a metadata-only KO so the rest of the pipeline still sees it.
+            // Legacy binary .doc (OLE2 Compound File). Full FIB / piece-
+            // table parsing is a multi-month effort; until then the lean
+            // scanner pulls printable strings out of WordDocument /
+            // 0Table / 1Table streams. Imperfect formatting but real
+            // searchable content.
+            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .doc)
+            if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw IngestorError.empty(url)
+            }
             return KnowledgeObject(
                 sourceFile: url,
                 sourceType: .doc,
-                content: "Legacy Word .doc binary; OLE2 parsing pending.",
+                content: extraction.text,
                 metadata: [
                     "filename": AnyCodable(.string(url.lastPathComponent)),
                     "binarySize": AnyCodable(.int(size)),
-                    "loaderStub": AnyCodable(.string("doc-legacy"))
+                    "loader": AnyCodable(.string("doc-lean-ole2")),
+                    "streamsScanned": AnyCodable(.int(Int64(extraction.streamsScanned))),
+                    "bytesScanned": AnyCodable(.int(Int64(extraction.bytesScanned))),
+                    "runCount": AnyCodable(.int(Int64(extraction.runCount)))
                 ],
-                confidence: .low
+                confidence: .medium
             )
         default:
             throw IngestorError.unsupportedType(type)
