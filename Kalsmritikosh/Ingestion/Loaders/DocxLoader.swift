@@ -105,11 +105,39 @@ public struct DocxLoader: Ingestor {
         return 5
     }
 
-    // MARK: - XML-to-text (tag stripper)
+    // MARK: - XML-to-text (structured)
 
+    /// Element-aware extraction. Inspired by mammoth/python-docx: walks
+    /// the OOXML tree instead of stripping all tags into a blob. Emits
+    /// markdown so the downstream chunker / entity-extractor sees real
+    /// paragraph and heading boundaries.
+    ///
+    /// Recognises:
+    ///   - `<w:p>` paragraphs (separated by blank lines)
+    ///   - `<w:pStyle w:val="Heading1"/>` ... `Heading6` (rendered with
+    ///     leading `# `, `## `, ...)
+    ///   - `<w:r>` runs inside paragraphs (inline text)
+    ///   - `<w:t>` text leaves (the actual characters)
+    ///   - `<w:br>` and `<w:tab>` (inline whitespace)
+    ///   - `<w:tbl>`/`<w:tr>`/`<w:tc>` tables (rendered as markdown rows)
+    ///   - `<w:numPr>` (list item — rendered as `- ` prefix)
+    ///
+    /// Falls back to the original tag-stripper on parse failure so we
+    /// never regress.
     private func extractText(from data: Data) -> String {
         let xml = String(decoding: data, as: UTF8.self)
+        if let structured = Self.structuredExtract(data: data), !structured.isEmpty {
+            return structured
+        }
         return Self.stripTags(xml)
+    }
+
+    static func structuredExtract(data: Data) -> String? {
+        let parser = XMLParser(data: data)
+        let delegate = OOXMLStructuredDelegate()
+        parser.delegate = delegate
+        guard parser.parse() else { return nil }
+        return delegate.render()
     }
 
     /// Strips XML tags and entity-decodes the result. We intentionally
@@ -163,7 +191,7 @@ public struct DocxLoader: Ingestor {
 
     /// Replaces `&#65;` and `&#x41;` style references with their unicode
     /// scalars. Office docs occasionally emit these for accented chars.
-    private static func decodeNumericEntities(_ input: String) -> String {
+    nonisolated static func decodeNumericEntities(_ input: String) -> String {
         var output = ""
         output.reserveCapacity(input.count)
         var i = input.startIndex
@@ -188,5 +216,140 @@ public struct DocxLoader: Ingestor {
             i = input.index(after: i)
         }
         return output
+    }
+}
+
+// MARK: - OOXMLStructuredDelegate
+
+/// XMLParser delegate that walks `word/document.xml` (and headers /
+/// footers, same vocabulary) and emits markdown with paragraph + heading
+/// + list + table boundaries preserved. Inspired by mammoth's mapping
+/// philosophy: convert Word's structure to markdown so the chunker sees
+/// real boundaries instead of one space-flattened blob.
+private final class OOXMLStructuredDelegate: NSObject, XMLParserDelegate {
+    private var output: [String] = []
+    private var currentParagraph = ""
+    private var currentHeadingLevel: Int = 0
+    private var isListItem = false
+    private var currentTableRows: [[String]] = []
+    private var currentTableRow: [String] = []
+    private var currentCell = ""
+    private var depth = ElementStack()
+
+    // Accumulates the text of <w:t> leaves. Multiple runs in one paragraph
+    // all flow into `currentParagraph`.
+    private var capturingText = false
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String,
+                namespaceURI: String?, qualifiedName qName: String?,
+                attributes attributeDict: [String: String]) {
+        let local = ElementStack.local(elementName)
+        depth.push(local)
+        switch local {
+        case "p":
+            currentParagraph = ""
+            currentHeadingLevel = 0
+            isListItem = false
+        case "pStyle":
+            // <w:pStyle w:val="Heading1"/> — pick up the val attr.
+            if let val = attributeDict["w:val"] ?? attributeDict["val"] {
+                if val.hasPrefix("Heading") {
+                    let n = Int(val.dropFirst("Heading".count)) ?? 1
+                    currentHeadingLevel = max(1, min(6, n))
+                }
+            }
+        case "numPr":
+            isListItem = true
+        case "t":
+            capturingText = true
+        case "br":
+            currentParagraph.append("\n")
+        case "tab":
+            currentParagraph.append("\t")
+        case "tbl":
+            currentTableRows = []
+        case "tr":
+            currentTableRow = []
+        case "tc":
+            currentCell = ""
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard capturingText else { return }
+        // Cell content goes to the cell buffer; otherwise to the paragraph.
+        if depth.contains("tc") {
+            currentCell.append(string)
+        } else {
+            currentParagraph.append(string)
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String,
+                namespaceURI: String?, qualifiedName qName: String?) {
+        let local = ElementStack.local(elementName)
+        switch local {
+        case "t":
+            capturingText = false
+        case "p":
+            let trimmed = currentParagraph.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                if currentHeadingLevel > 0 {
+                    output.append(String(repeating: "#", count: currentHeadingLevel) + " " + trimmed)
+                } else if isListItem {
+                    output.append("- " + trimmed)
+                } else {
+                    output.append(trimmed)
+                }
+            }
+            currentParagraph = ""
+            currentHeadingLevel = 0
+            isListItem = false
+        case "tc":
+            currentTableRow.append(currentCell.trimmingCharacters(in: .whitespacesAndNewlines))
+            currentCell = ""
+        case "tr":
+            currentTableRows.append(currentTableRow)
+            currentTableRow = []
+        case "tbl":
+            if !currentTableRows.isEmpty {
+                // Markdown table — header row, alignment row, then data.
+                let widest = currentTableRows.map(\.count).max() ?? 0
+                let normalized = currentTableRows.map { row in
+                    row + Array(repeating: "", count: max(0, widest - row.count))
+                }
+                let header = normalized[0]
+                output.append("| " + header.joined(separator: " | ") + " |")
+                output.append("|" + String(repeating: " --- |", count: widest))
+                for row in normalized.dropFirst() {
+                    output.append("| " + row.joined(separator: " | ") + " |")
+                }
+            }
+            currentTableRows = []
+        default:
+            break
+        }
+        depth.pop()
+    }
+
+    func render() -> String {
+        output.joined(separator: "\n\n")
+    }
+
+    /// Tiny stack of local element names (namespace prefix stripped) so
+    /// we can ask "are we currently inside a <tc>?" cheaply.
+    private struct ElementStack {
+        private var names: [String] = []
+        mutating func push(_ s: String) { names.append(s) }
+        mutating func pop() { _ = names.popLast() }
+        func contains(_ s: String) -> Bool { names.contains(s) }
+        static func local(_ qualified: String) -> String {
+            if let i = qualified.firstIndex(of: ":") {
+                return String(qualified[qualified.index(after: i)...])
+            }
+            return qualified
+        }
     }
 }
