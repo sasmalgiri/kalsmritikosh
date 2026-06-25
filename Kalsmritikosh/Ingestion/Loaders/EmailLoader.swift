@@ -37,16 +37,25 @@ public struct EmailLoader: Ingestor {
             // G4.9 — native Outlook .msg parsing via OLE2 + MAPI.
             // Previously fell through to the binary stub.
             return try ingestMSG(at: url)
+        case .pst:
+            // G4.9 — PST is many-messages-per-file. The single-KO
+            // entry point only used by callers that don't iterate
+            // via ingestMany; collapse all messages into one KO so
+            // they still get something coherent.
+            return try ingestPSTConcatenated(at: url)
         default:
             return try binaryStub(at: url, type: type)
         }
     }
 
     /// T13.1 — mbox produces one KO per message; other formats fall
-    /// through to the single-KO path.
+    /// through to the single-KO path. G4.9 — PST is also per-message.
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         if type == .mbox {
             return try ingestMBOXAsMessages(at: url)
+        }
+        if type == .pst {
+            return try ingestPSTAsMessages(at: url)
         }
         return [try await ingest(fileAt: url, type: type)]
     }
@@ -704,6 +713,184 @@ public struct EmailLoader: Ingestor {
             metadata: meta,
             confidence: .high
         )
+    }
+
+    /// G4.9 — read a PST/OST and emit one KO per message. The KO
+    /// shape mirrors the EML path: human headers prepended to body,
+    /// structured From/To/Cc/Date entities, full header dictionary
+    /// stored in metadata. Errors on individual messages are skipped
+    /// inside PSTReader; here we just adapt each surviving PSTMessage
+    /// into a KnowledgeObject.
+    private func ingestPSTAsMessages(at url: URL) throws -> [KnowledgeObject] {
+        let messages = try loadPSTMessages(at: url)
+        var out: [KnowledgeObject] = []
+        out.reserveCapacity(messages.count)
+        for msg in messages {
+            guard let ko = buildKO(fromPSTMessage: msg, source: url) else { continue }
+            out.append(ko)
+        }
+        return out
+    }
+
+    /// G4.9 — single-KO legacy path: every PST message concatenated
+    /// in chronological-ish order (whatever ordering the NDB walk
+    /// produces, which is approximately insertion order). Used only
+    /// by callers that don't iterate via ingestMany.
+    private func ingestPSTConcatenated(at url: URL) throws -> KnowledgeObject {
+        let messages = try loadPSTMessages(at: url)
+        guard !messages.isEmpty else { throw IngestorError.empty(url) }
+
+        var blocks: [String] = []
+        for msg in messages {
+            blocks.append(pstMessageMarkdown(msg))
+        }
+        let content = blocks.joined(separator: "\n\n---\n\n")
+        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
+        let size = (attrs[.size] as? Int64) ?? 0
+        return KnowledgeObject(
+            sourceFile: url,
+            sourceType: .pst,
+            content: content,
+            metadata: [
+                "filename": AnyCodable(.string(url.lastPathComponent)),
+                "loader": AnyCodable(.string("pst-ole-ndb")),
+                "messageCount": AnyCodable(.int(Int64(messages.count))),
+                "binarySize": AnyCodable(.int(size))
+            ],
+            confidence: .medium
+        )
+    }
+
+    private func loadPSTMessages(at url: URL) throws -> [PSTReader.PSTMessage] {
+        let raw: Data
+        do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw IngestorError.unreadable(url, underlying: error) }
+        // Same sanity cap as MSG — PSTs in the wild routinely run into
+        // multi-GB territory but mapping them at ingest time is
+        // expensive. Bigger archives should be split externally.
+        if raw.count > 2_000_000_000 {
+            throw IngestorError.parseFailure(
+                url,
+                reason: "pst: file too large (\(raw.count / 1_000_000) MB; limit 2 GB)"
+            )
+        }
+        let reader: PSTReader
+        do { reader = try PSTReader(data: raw) }
+        catch { throw IngestorError.parseFailure(url, reason: "pst: \(error)") }
+        return try reader.readAllMessages()
+    }
+
+    /// Adapt one PSTMessage into a KnowledgeObject. Returns nil when
+    /// the message has no displayable body and no headers worth
+    /// keeping (which happens for placeholder NDB rows).
+    private func buildKO(fromPSTMessage msg: PSTReader.PSTMessage, source url: URL) -> KnowledgeObject? {
+        let from: String
+        if !msg.senderEmail.isEmpty && !msg.senderName.isEmpty {
+            from = "\(msg.senderName) <\(msg.senderEmail)>"
+        } else if !msg.senderEmail.isEmpty {
+            from = msg.senderEmail
+        } else {
+            from = msg.senderName
+        }
+        let date = msg.deliveryTime ?? msg.creationTime
+        let dateString = date.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+
+        var headers: [String: String] = [:]
+        if !from.isEmpty { headers["from"] = from }
+        if !msg.displayTo.isEmpty { headers["to"] = msg.displayTo }
+        if !msg.displayCc.isEmpty { headers["cc"] = msg.displayCc }
+        if !msg.displayBcc.isEmpty { headers["bcc"] = msg.displayBcc }
+        if !msg.subject.isEmpty { headers["subject"] = msg.subject }
+        if !dateString.isEmpty { headers["date"] = dateString }
+        if let mid = msg.internetMessageId { headers["message-id"] = mid }
+        if let irt = msg.inReplyToId { headers["in-reply-to"] = irt }
+        if let refs = msg.references { headers["references"] = refs }
+        if let rt = msg.replyToAddress, !rt.isEmpty { headers["reply-to"] = rt }
+        if let topic = msg.conversationTopic { headers["thread-topic"] = topic }
+        if let ct = msg.contentType { headers["content-type"] = ct }
+
+        // Body precedence: plain text → tag-stripped HTML.
+        let body: String
+        if !msg.bodyText.isEmpty {
+            body = msg.bodyText
+        } else if !msg.bodyHTML.isEmpty {
+            body = DocxLoader.stripTags(msg.bodyHTML)
+        } else {
+            body = ""
+        }
+
+        // If there's no usable signal at all, drop it — these are
+        // empty NDB rows that would only waste downstream cycles.
+        if body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && headers.count <= 1 {
+            return nil
+        }
+
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+
+        var headerLines: [String] = []
+        for key in ["from", "to", "cc", "subject", "date"] {
+            if let value = headers[key], !value.isEmpty {
+                headerLines.append("\(key.capitalized): \(value)")
+            }
+        }
+        let merged = headerLines.isEmpty
+            ? cleanedBody
+            : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+
+        var meta: [String: AnyCodable] = [
+            "filename": AnyCodable(.string(url.lastPathComponent)),
+            "loader": AnyCodable(.string("pst-message")),
+            "quotedBytesRemoved": AnyCodable(.int(Int64(quotedBytesRemoved)))
+        ]
+        for (k, v) in headers {
+            meta[k] = AnyCodable(.string(v))
+        }
+
+        let koID = UUID()
+        let structured = Self.structuredEntities(from: headers, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structured) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
+        return KnowledgeObject(
+            id: koID,
+            sourceFile: url,
+            sourceType: .pst,
+            content: merged,
+            metadata: meta,
+            confidence: .high
+        )
+    }
+
+    /// Stringify a PSTMessage as a markdown block for the concatenated
+    /// fallback path. Used only when a caller can't iterate the
+    /// per-message KO stream.
+    private func pstMessageMarkdown(_ msg: PSTReader.PSTMessage) -> String {
+        var lines: [String] = []
+        if !msg.senderName.isEmpty || !msg.senderEmail.isEmpty {
+            let from = msg.senderEmail.isEmpty
+                ? msg.senderName
+                : (msg.senderName.isEmpty ? msg.senderEmail : "\(msg.senderName) <\(msg.senderEmail)>")
+            lines.append("From: \(from)")
+        }
+        if !msg.displayTo.isEmpty { lines.append("To: \(msg.displayTo)") }
+        if !msg.displayCc.isEmpty { lines.append("Cc: \(msg.displayCc)") }
+        if !msg.subject.isEmpty { lines.append("Subject: \(msg.subject)") }
+        if let d = msg.deliveryTime ?? msg.creationTime {
+            lines.append("Date: \(ISO8601DateFormatter().string(from: d))")
+        }
+        let body: String
+        if !msg.bodyText.isEmpty {
+            body = msg.bodyText
+        } else if !msg.bodyHTML.isEmpty {
+            body = DocxLoader.stripTags(msg.bodyHTML)
+        } else {
+            body = ""
+        }
+        if !body.isEmpty {
+            lines.append("")
+            lines.append(body)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func binaryStub(at url: URL, type: SourceType) throws -> KnowledgeObject {
