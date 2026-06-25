@@ -24,6 +24,7 @@ public struct LoaderRegistry: Sendable {
         r.register(DocxLoader())
         r.register(SpreadsheetLoader())
         r.register(PresentationLoader())
+        r.register(EpubLoader())
         r.register(EmailLoader())
         r.register(ImageLoader())
         r.register(AudioLoader())

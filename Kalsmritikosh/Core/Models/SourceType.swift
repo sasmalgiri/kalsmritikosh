@@ -11,7 +11,7 @@ import Foundation
 
 public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Documents
-    case pdf, docx, doc, txt, markdown, rtf, odt
+    case pdf, docx, doc, txt, markdown, rtf, odt, epub
 
     // Spreadsheets
     case xlsx, xls, csv, ods
@@ -47,6 +47,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "md", "markdown": return .markdown
         case "rtf": return .rtf
         case "odt": return .odt
+        case "epub": return .epub
         case "xlsx": return .xlsx
         case "xls": return .xls
         case "csv": return .csv
@@ -79,7 +80,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
 
     public var category: Category {
         switch self {
-        case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt: return .document
+        case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail: return .email
