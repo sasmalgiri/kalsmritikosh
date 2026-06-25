@@ -33,6 +33,10 @@ public struct EmailLoader: Ingestor {
             return try ingestMBOX(at: url)
         case .appleMail:
             return try ingestAppleEMLX(at: url)
+        case .msg:
+            // G4.9 — native Outlook .msg parsing via OLE2 + MAPI.
+            // Previously fell through to the binary stub.
+            return try ingestMSG(at: url)
         default:
             return try binaryStub(at: url, type: type)
         }
@@ -556,6 +560,149 @@ public struct EmailLoader: Ingestor {
                 "loader": AnyCodable(.string("mbox"))
             ],
             confidence: .medium
+        )
+    }
+
+    /// G4.9 — parse an Outlook `.msg` (OLE2 compound file w/ MAPI
+    /// properties) and emit a KO shaped exactly like the EML path:
+    /// human-relevant headers prepended to the plain-text body, the
+    /// full header map in `metadata`, and structured From/To/Cc/Date
+    /// entities pre-built. Ported from the sibling mailin/MSGParser.
+    private func ingestMSG(at url: URL) throws -> KnowledgeObject {
+        let raw: Data
+        do { raw = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw IngestorError.unreadable(url, underlying: error) }
+        // Sanity cap — the OLE2 reader is robust but mapping a 4 GB blob
+        // and walking its FAT chains is not a workload we want at ingest
+        // time. The historical .msg corpora cap out well under 100 MB.
+        if raw.count > 500_000_000 {
+            throw IngestorError.parseFailure(
+                url,
+                reason: "msg: file too large (\(raw.count / 1_000_000) MB; limit 500 MB)"
+            )
+        }
+        let ole2: OLE2Reader
+        do { ole2 = try OLE2Reader(data: raw) }
+        catch { throw IngestorError.parseFailure(url, reason: "msg: \(error)") }
+
+        let props = ole2.readMAPIProperties()
+
+        // MAPI property → RFC822-ish header. Sender SMTP wins over the
+        // legacy `senderEmailAddress` because the latter often carries
+        // Exchange-internal LDAP DNs (e.g. /O=ORG/OU=.../CN=user) that
+        // the entity layer can't ground to a real address.
+        let senderAddr = props.stringProperty(.senderSmtpAddress)
+            ?? props.stringProperty(.senderEmailAddress)
+            ?? ""
+        let senderName = props.stringProperty(.senderName) ?? ""
+        let from: String
+        if !senderAddr.isEmpty && !senderName.isEmpty {
+            from = "\(senderName) <\(senderAddr)>"
+        } else if !senderAddr.isEmpty {
+            from = senderAddr
+        } else {
+            from = senderName
+        }
+        let to = props.stringProperty(.displayTo) ?? ""
+        let cc = props.stringProperty(.displayCc) ?? ""
+        let bcc = props.stringProperty(.displayBcc) ?? ""
+        let subject = props.stringProperty(.subject) ?? ""
+
+        // Date precedence: delivery time > client-submit > creation. All
+        // are FILETIME → Date in the OLE2 reader.
+        let date = props.dateProperty(.messageDeliveryTime)
+            ?? props.dateProperty(.clientSubmitTime)
+            ?? props.dateProperty(.creationTime)
+        let dateString = date.map { ISO8601DateFormatter().string(from: $0) } ?? ""
+
+        // Body precedence: plain → HTML stripped → decompressed RTF.
+        // Some Outlook senders ship only the RTF stream.
+        let plainBody = props.stringProperty(.body) ?? ""
+        let htmlBody: String
+        if let bytes = props.binaryProperty(.htmlBody) {
+            htmlBody = String(data: bytes, encoding: .utf8) ?? ""
+        } else {
+            htmlBody = ""
+        }
+        let rtfBody: String
+        if let rtfBytes = props.binaryProperty(.rtfCompressed) {
+            rtfBody = decompressRTFLZFu(rtfBytes) ?? ""
+        } else {
+            rtfBody = ""
+        }
+        let body: String
+        if !plainBody.isEmpty {
+            body = plainBody
+        } else if !htmlBody.isEmpty {
+            // Reuse the existing tag stripper from the EML path.
+            body = DocxLoader.stripTags(htmlBody)
+        } else {
+            body = rtfBody
+        }
+
+        // Build a lower-cased header dict that mirrors what
+        // `splitEMLHeaders` produces, so structuredEntities() and
+        // downstream metadata callers see the same shape as EML.
+        var headers: [String: String] = [:]
+        if !from.isEmpty { headers["from"] = from }
+        if !to.isEmpty { headers["to"] = to }
+        if !cc.isEmpty { headers["cc"] = cc }
+        if !bcc.isEmpty { headers["bcc"] = bcc }
+        if !subject.isEmpty { headers["subject"] = subject }
+        if !dateString.isEmpty { headers["date"] = dateString }
+        if let msgID = props.stringProperty(.internetMessageId) {
+            headers["message-id"] = msgID
+        }
+        if let inReplyTo = props.stringProperty(.inReplyToId) {
+            headers["in-reply-to"] = inReplyTo
+        }
+        if let references = props.stringProperty(.references) {
+            headers["references"] = references
+        }
+        if let replyTo = props.stringProperty(.replyToAddress) {
+            headers["reply-to"] = replyTo
+        }
+        if let topic = props.stringProperty(.conversationTopic) {
+            headers["thread-topic"] = topic
+        }
+
+        var meta: [String: AnyCodable] = [
+            "filename": AnyCodable(.string(url.lastPathComponent)),
+            "loader": AnyCodable(.string("msg-ole2-mapi"))
+        ]
+        for (key, value) in headers {
+            meta[key] = AnyCodable(.string(value))
+        }
+
+        let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(body)
+        meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+
+        // Prepend human-relevant headers to the body so NER + summarizer
+        // see participants and topic, matching the EML path exactly.
+        var headerLines: [String] = []
+        for key in ["from", "to", "cc", "subject", "date"] {
+            if let value = headers[key], !value.isEmpty {
+                headerLines.append("\(key.capitalized): \(value)")
+            }
+        }
+        let merged = headerLines.isEmpty
+            ? cleanedBody
+            : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+        if merged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw IngestorError.empty(url)
+        }
+        let koID = UUID()
+        let structured = Self.structuredEntities(from: headers, sourceObjectID: koID)
+        if let json = Self.encodeStructuredEntities(structured) {
+            meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+        }
+        return KnowledgeObject(
+            id: koID,
+            sourceFile: url,
+            sourceType: .msg,
+            content: merged,
+            metadata: meta,
+            confidence: .high
         )
     }
 
