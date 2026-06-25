@@ -46,19 +46,39 @@ public struct PresentationLoader: Ingestor {
             .map(\.name)
             .filter { $0.hasPrefix("ppt/slides/slide") && $0.hasSuffix(".xml") }
             .sorted { lhs, rhs in
-                slideOrdinal(lhs) < slideOrdinal(rhs)
+                slideOrdinal(lhs, prefix: "ppt/slides/slide") <
+                slideOrdinal(rhs, prefix: "ppt/slides/slide")
             }
+        // Inspired by python-pptx: speaker notes live in a parallel
+        // tree under ppt/notesSlides/. Pull them into a per-slide
+        // dictionary so they can be emitted right under their slide
+        // body — much of the real content of a deck lives in notes.
+        var notesBySlide: [Int: String] = [:]
+        for entry in entries where entry.name.hasPrefix("ppt/notesSlides/notesSlide") && entry.name.hasSuffix(".xml") {
+            let ord = slideOrdinal(entry.name, prefix: "ppt/notesSlides/notesSlide")
+            if let data = try? zip.read(entry.name) {
+                let text = Self.extractDrawingMLText(data)
+                if !text.isEmpty { notesBySlide[ord] = text }
+            }
+        }
         guard !slideNames.isEmpty else {
             throw IngestorError.parseFailure(url, reason: "no slides in PPTX")
         }
         var pieces: [String] = []
+        var slidesWithNotes = 0
         for (i, name) in slideNames.enumerated() {
+            let slideNum = i + 1
             let data = try zip.read(name)
-            let text = DocxLoader.stripTags(String(decoding: data, as: UTF8.self))
-            pieces.append("# Slide \(i + 1)")
+            let text = Self.extractDrawingMLText(data)
+            pieces.append("# Slide \(slideNum)")
             if !text.isEmpty { pieces.append(text) }
+            if let notes = notesBySlide[slideNum], !notes.isEmpty {
+                pieces.append("**Speaker notes:**")
+                pieces.append(notes)
+                slidesWithNotes += 1
+            }
         }
-        let content = pieces.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let content = pieces.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
         if content.isEmpty { throw IngestorError.empty(url) }
         let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
         let size = (attrs[.size] as? Int64) ?? 0
@@ -68,18 +88,57 @@ public struct PresentationLoader: Ingestor {
             content: content,
             metadata: [
                 "filename": AnyCodable(.string(url.lastPathComponent)),
-                "loader": AnyCodable(.string("pptx-ooxml")),
+                "loader": AnyCodable(.string("pptx-ooxml-v2")),
                 "slideCount": AnyCodable(.int(Int64(slideNames.count))),
+                "slidesWithNotes": AnyCodable(.int(Int64(slidesWithNotes))),
                 "binarySize": AnyCodable(.int(size))
             ]
         )
     }
 
-    private func slideOrdinal(_ name: String) -> Int {
-        // ppt/slides/slide12.xml → 12
+    private func slideOrdinal(_ name: String, prefix: String) -> Int {
         let stripped = name
-            .replacingOccurrences(of: "ppt/slides/slide", with: "")
+            .replacingOccurrences(of: prefix, with: "")
             .replacingOccurrences(of: ".xml", with: "")
         return Int(stripped) ?? 0
+    }
+
+    /// PPTX uses DrawingML for text: `<a:p>` paragraphs containing
+    /// `<a:r>` runs, each holding `<a:t>` text leaves. We walk the
+    /// XML extracting one paragraph per `<a:p>` (separated by blank
+    /// lines) so slide bullet points stay as separate text blocks
+    /// instead of collapsing into one space-flattened blob — same
+    /// boundary preservation the DocxLoader v2 does for `<w:p>`.
+    static func extractDrawingMLText(_ data: Data) -> String {
+        let xml = String(decoding: data, as: UTF8.self)
+        var paragraphs: [String] = []
+        var cursor = xml.startIndex
+        while cursor < xml.endIndex {
+            guard let pOpen = xml.range(of: "<a:p", range: cursor..<xml.endIndex) else { break }
+            // Skip self-closing <a:p/> (an empty paragraph).
+            let scanFrom = pOpen.upperBound
+            guard let pHeadClose = xml.range(of: ">", range: scanFrom..<xml.endIndex) else { break }
+            let pClose = xml.range(of: "</a:p>", range: pHeadClose.upperBound..<xml.endIndex)
+            let bodyStart = pHeadClose.upperBound
+            let bodyEnd = pClose?.lowerBound ?? xml.endIndex
+            let body = String(xml[bodyStart..<bodyEnd])
+            // Pull <a:t>...</a:t> leaves from this paragraph and
+            // concatenate them as one logical paragraph string.
+            var runs: [String] = []
+            var bcursor = body.startIndex
+            while bcursor < body.endIndex {
+                guard let tOpen = body.range(of: "<a:t", range: bcursor..<body.endIndex),
+                      let tHead = body.range(of: ">", range: tOpen.upperBound..<body.endIndex),
+                      let tClose = body.range(of: "</a:t>", range: tHead.upperBound..<body.endIndex)
+                else { break }
+                let runText = String(body[tHead.upperBound..<tClose.lowerBound])
+                runs.append(DocxLoader.stripTags(runText))
+                bcursor = tClose.upperBound
+            }
+            let para = runs.joined(separator: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !para.isEmpty { paragraphs.append(para) }
+            cursor = pClose?.upperBound ?? bodyEnd
+        }
+        return paragraphs.joined(separator: "\n\n")
     }
 }
