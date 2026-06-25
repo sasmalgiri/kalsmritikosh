@@ -139,17 +139,28 @@ public enum PromptTemplates {
         }
         // UPDATE_13 Item 2 — also expose retrieved document chunks so the
         // model can cite KOs (e.g. contract.md) not only event rows.
-        _ = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        index = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        // Patent-question fix (researchAnalysis pattern) extended here:
+        // surface retrieved entities (people / orgs / email addresses)
+        // as ENT lines so questions like "who did I email about X" can
+        // name the actual correspondents the retriever found.
+        index = appendEntityEvidence(
+            retrieval,
+            startingIndex: index,
+            limit: 12,
+            lines: &lines,
+            map: &map
+        )
         let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
         let prompt = """
         Task: Answer the question using the evidence below.
         Question: "\(intent.rawQuestion)"
 
-        Lead with the direct answer to the question, then briefly note who
-        corresponded with whom and notable thread shifts (delays,
-        escalations, decisions).
+        Lead with the direct answer. When the question asks WHO / WHICH,
+        enumerate the relevant ENT lines BY NAME. Do NOT invent names.
 
-        Evidence (cite by E-id):
+        Evidence (cite by E-id; DOC = document snippet, ENT = retrieved
+        entity):
         \(evidenceBlock)
         \(jsonContract)
         """
@@ -210,16 +221,30 @@ public enum PromptTemplates {
             )
             index += 1
         }
-        _ = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        index = appendChunkEvidence(retrieval, startingIndex: index, lines: &lines, map: &map)
+        // Surface the retrieved counterparties / firms as ENT lines so
+        // legal questions ("which firms am I in touch with via patents",
+        // "who signed the X agreement") can enumerate names from the
+        // candidate set — same pattern as researchAnalysis / emailAnalysis.
+        index = appendEntityEvidence(
+            retrieval,
+            startingIndex: index,
+            limit: 12,
+            lines: &lines,
+            map: &map
+        )
         let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
         let prompt = """
         Task: Answer the question using the evidence below.
         Question: "\(intent.rawQuestion)"
 
         Lead with the direct answer, then call out signings, amendments,
-        obligations, and risks where relevant.
+        obligations, and risks where relevant. When the question asks
+        WHO / WHICH / LIST, enumerate the relevant ENT lines BY NAME.
+        Do NOT invent names.
 
-        Evidence (cite by E-id):
+        Evidence (cite by E-id; DOC = document snippet, ENT = retrieved
+        entity):
         \(evidenceBlock)
         \(jsonContract)
         """
