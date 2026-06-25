@@ -6,6 +6,10 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 public struct KnowledgeView: View {
     @State private var selection: KnowledgeTab = .people
@@ -63,6 +67,7 @@ private struct KnowledgeListView: View {
     @Environment(AppState.self) private var appState
     let kind: Entity.Kind
     @State private var rows: [EntitySummaryRow] = []
+    @State private var exportingForID: Entity.ID?
 
     var body: some View {
         VStack {
@@ -77,6 +82,14 @@ private struct KnowledgeListView: View {
                         Spacer()
                         ConfidenceBadge(row.confidence)
                     }
+                    .contextMenu {
+                        Button {
+                            Task { await exportDossier(for: row) }
+                        } label: {
+                            Label("Export dossier…", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(exportingForID != nil)
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -89,5 +102,52 @@ private struct KnowledgeListView: View {
         guard let entities = appState.entities else { return }
         let results = (try? await entities.list(kind: kind, limit: 500)) ?? []
         await MainActor.run { self.rows = results }
+    }
+
+    /// Build the markdown dossier and run a save panel so the user
+    /// can drop it wherever. We don't auto-save — the user owns
+    /// where private knowledge gets written.
+    private func exportDossier(for row: EntitySummaryRow) async {
+        guard let entities = appState.entities,
+              let events = appState.events,
+              let objects = appState.objects else { return }
+        exportingForID = row.id
+        defer { exportingForID = nil }
+        let markdown: String?
+        do {
+            markdown = try await EntityDossier.build(
+                forEntityID: row.id,
+                entities: entities,
+                events: events,
+                objects: objects
+            )
+        } catch {
+            markdown = nil
+        }
+        guard let body = markdown, !body.isEmpty else { return }
+        await MainActor.run { saveDossier(body, suggestedName: row.value) }
+    }
+
+    @MainActor
+    private func saveDossier(_ body: String, suggestedName: String) {
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        if let mdType = UTType(filenameExtension: "md") {
+            panel.allowedContentTypes = [mdType]
+        }
+        let safe = suggestedName
+            .replacingOccurrences(of: "/", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        panel.nameFieldStringValue = "\(safe.isEmpty ? "dossier" : safe).md"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try body.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            // Failure to write is rare (user-picked URL is sandboxed) —
+            // surface in the log; we don't have a toast surface yet.
+            print("Dossier export failed: \(error)")
+        }
+        #endif
     }
 }

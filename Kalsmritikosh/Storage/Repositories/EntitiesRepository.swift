@@ -297,6 +297,38 @@ public actor EntitiesRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// Every (KO id, source filename, surface form, mention confidence)
+    /// for a canonical entity. Joins entity_mentions → knowledge_objects
+    /// → files. Used by the dossier export.
+    public func mentions(forEntityID id: Entity.ID, limit: Int = 500) async throws -> [EntityMentionRow] {
+        let rows = try await database.query("""
+        SELECT m.source_object_id, m.surface, m.confidence, f.url, k.source_type, k.created_at
+        FROM entity_mentions m
+        JOIN knowledge_objects k ON k.id = m.source_object_id
+        JOIN files f ON f.id = k.file_id
+        WHERE m.entity_id = ?
+        ORDER BY k.created_at DESC
+        LIMIT ?;
+        """, [.uuid(id), .integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard
+                let koID = row.uuid(0),
+                let urlString = row.string(3),
+                let url = URL(string: urlString),
+                let typeRaw = row.string(4),
+                let type = SourceType(rawValue: typeRaw)
+            else { return nil }
+            return EntityMentionRow(
+                objectID: koID,
+                sourceFile: url,
+                sourceType: type,
+                surface: row.string(1) ?? "",
+                confidence: Confidence(row.double(2) ?? 0.5),
+                createdAt: row.date(5) ?? Date()
+            )
+        }
+    }
+
     public func list(kind: Entity.Kind, limit: Int = 200) async throws -> [EntitySummaryRow] {
         let rows = try await database.query("""
         SELECT id, value, normalized, confidence
@@ -518,4 +550,13 @@ public struct EntitySummaryRow: Identifiable, Sendable, Hashable {
     public let value: String
     public let normalizedValue: String?
     public let confidence: Confidence
+}
+
+public struct EntityMentionRow: Sendable, Hashable {
+    public let objectID: KnowledgeObject.ID
+    public let sourceFile: URL
+    public let sourceType: SourceType
+    public let surface: String
+    public let confidence: Confidence
+    public let createdAt: Date
 }
