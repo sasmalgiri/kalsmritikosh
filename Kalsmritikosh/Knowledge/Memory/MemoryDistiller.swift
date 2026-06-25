@@ -47,8 +47,19 @@ public actor MemoryDistiller {
 
     /// Distill (or refresh) the MemoryObject for the given subject.
     /// Returns the resulting MemoryObject, or `nil` if no evidence exists.
+    ///
+    /// IMPORTANT: this fast-skips obvious-noise subject identifiers
+    /// (length<3, header-fragment shapes) so a 9000+ subject backlog
+    /// doesn't burn an hour distilling base64 fragments that nobody
+    /// will query. The underlying entity row + its mentions REMAIN —
+    /// only the memory_object summary is skipped. User-directed
+    /// distillation (e.g. a future "promote this subject" action)
+    /// bypasses this guard.
     @discardableResult
     public func distill(_ subject: Subject, triggeredBy: KnowledgeObject.ID? = nil) async throws -> MemoryObject? {
+        if Self.isLowSignalSubject(subject.identifier) {
+            return nil
+        }
         let allRecent = try await events.recent(limit: 200)
         var sourceMatches: Set<KnowledgeObject.ID> = []
         if let kos = knowledgeObjects {
@@ -215,5 +226,49 @@ public actor MemoryDistiller {
             ),
             triggeringObjectID: triggeredBy
         )
+    }
+
+    /// Conservative cheap check — returns true for subject identifiers
+    /// that are almost certainly header artifacts (DKIM / ARC IDs,
+    /// base64 fragments, 2-char initials). Distillation is skipped for
+    /// these but the entity rows themselves are not touched, honoring
+    /// the "preserve all data" directive — the user can search them via
+    /// FTS or surface them via a future "promote" action.
+    nonisolated static func isLowSignalSubject(_ identifier: String) -> Bool {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else { return true }
+        let isSingleWord = !trimmed.contains(" ")
+        // Single-word, NOT all-caps, no vowels — clear noise. The
+        // all-caps exemption preserves real acronyms (BMW, NHL, NFL).
+        // No upper-bound on length: a long string of consonants is
+        // even more clearly noise ("aetnfnkzqotrtcqbk"). Real words
+        // and short titles always include a vowel within 6 chars.
+        if isSingleWord,
+           trimmed.allSatisfy({ $0.isLetter }),
+           trimmed != trimmed.uppercased(),
+           !trimmed.lowercased().contains(where: { "aeiouy".contains($0) }) {
+            return true
+        }
+        // Mid-cap base64 noise: ≥3 uppercase letters AFTER position 0
+        // in a single token — "AeTnFNkZQOTRtCqBk", "rMsPWt". Real
+        // camelCase names (iPhone, MacBook, JavaScript) have at most
+        // 1 mid-cap.
+        if isSingleWord, trimmed.count >= 5,
+           trimmed != trimmed.uppercased() {
+            let midUpper = trimmed.dropFirst().filter(\.isUppercase).count
+            if midUpper >= 3 { return true }
+        }
+        // Long-string low-vowel-ratio noise. "aetnfnkzqotrtcqbk" has
+        // vowels but at 18% (real words run 30-45%). Only fires on
+        // pure-alpha lowercase tokens length ≥ 10 so we don't catch
+        // common short words.
+        if isSingleWord, trimmed.count >= 10,
+           trimmed == trimmed.lowercased(),
+           trimmed.allSatisfy({ $0.isLetter }) {
+            let vowels = trimmed.filter { "aeiouy".contains($0) }.count
+            let ratio = Double(vowels) / Double(trimmed.count)
+            if ratio < 0.25 { return true }
+        }
+        return false
     }
 }
