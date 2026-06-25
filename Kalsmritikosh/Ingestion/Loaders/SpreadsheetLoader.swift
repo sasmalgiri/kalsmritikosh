@@ -66,20 +66,38 @@ public struct SpreadsheetLoader: Ingestor {
             sharedStrings = parseSharedStrings(data)
         }
 
-        // Walk every sheet under xl/worksheets/
-        let sheetNames = entries
+        // Inspired by openpyxl: workbook.xml maps internal sheet ids to
+        // user-visible names ("Sheet1" / "Q1 2024 numbers"). Without
+        // this, headers in the KO content are useless paths like
+        // "xl/worksheets/sheet1.xml". With it, downstream entity
+        // extraction sees real section names.
+        var sheetNameByPath: [String: String] = [:]
+        if entries.contains(where: { $0.name == "xl/workbook.xml" }) {
+            let wbData = try zip.read("xl/workbook.xml")
+            sheetNameByPath = parseWorkbookSheetNames(wbData)
+        }
+
+        let sheetPaths = entries
             .map(\.name)
             .filter { $0.hasPrefix("xl/worksheets/sheet") && $0.hasSuffix(".xml") }
             .sorted()
-        guard !sheetNames.isEmpty else {
+        guard !sheetPaths.isEmpty else {
             throw IngestorError.parseFailure(url, reason: "no worksheets in XLSX")
         }
 
         var lines: [String] = []
-        for sheet in sheetNames {
-            let data = try zip.read(sheet)
-            lines.append("# \(sheet)")
-            lines.append(contentsOf: parseSheet(data, sharedStrings: sharedStrings))
+        for (index, sheetPath) in sheetPaths.enumerated() {
+            let data = try zip.read(sheetPath)
+            // Prefer the friendly name; fall back to "Sheet N" for
+            // workbooks without the mapping.
+            let title = sheetNameByPath[sheetPath]
+                ?? sheetNameByPath["sheet\(index + 1)"]
+                ?? "Sheet \(index + 1)"
+            lines.append("# \(title)")
+            lines.append("")
+            let tableLines = parseSheetAsMarkdownTable(data, sharedStrings: sharedStrings)
+            lines.append(contentsOf: tableLines)
+            lines.append("")
         }
         let content = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         if content.isEmpty { throw IngestorError.empty(url) }
@@ -89,10 +107,40 @@ public struct SpreadsheetLoader: Ingestor {
             content: content,
             metadata: [
                 "filename": AnyCodable(.string(url.lastPathComponent)),
-                "loader": AnyCodable(.string("xlsx-ooxml")),
-                "sheetCount": AnyCodable(.int(Int64(sheetNames.count)))
+                "loader": AnyCodable(.string("xlsx-ooxml-v2")),
+                "sheetCount": AnyCodable(.int(Int64(sheetPaths.count)))
             ]
         )
+    }
+
+    /// Maps the worksheet ZIP path (e.g. "xl/worksheets/sheet3.xml")
+    /// to its user-visible sheet name. Workbook order matters because
+    /// the OOXML spec assigns sheet1, sheet2, … in declaration order.
+    private func parseWorkbookSheetNames(_ data: Data) -> [String: String] {
+        let xml = String(decoding: data, as: UTF8.self)
+        var map: [String: String] = [:]
+        var cursor = xml.startIndex
+        var index = 1
+        while cursor < xml.endIndex {
+            guard let open = xml.range(of: "<sheet ", range: cursor..<xml.endIndex),
+                  let close = xml.range(of: "/>", range: open.upperBound..<xml.endIndex)
+            else { break }
+            let attrs = String(xml[open.upperBound..<close.lowerBound])
+            // Pull the name="..." attribute via a small scan.
+            if let nameRange = attrs.range(of: "name=\"") {
+                let valueStart = nameRange.upperBound
+                if let valueEnd = attrs.range(of: "\"", range: valueStart..<attrs.endIndex) {
+                    let name = String(attrs[valueStart..<valueEnd.lowerBound])
+                    let path = "xl/worksheets/sheet\(index).xml"
+                    map[path] = name
+                    // Secondary key without the path prefix for fallback.
+                    map["sheet\(index)"] = name
+                }
+            }
+            index += 1
+            cursor = close.upperBound
+        }
+        return map
     }
 
     private func ingestODS(at url: URL) throws -> KnowledgeObject {
@@ -146,6 +194,31 @@ public struct SpreadsheetLoader: Ingestor {
             cursor = siClose.upperBound
         }
         return strings
+    }
+
+    /// Reads sheet rows and emits a markdown table. The first row is
+    /// treated as the header. Inspired by openpyxl + markitdown: real
+    /// spreadsheet ingestion preserves the table boundary so downstream
+    /// NER + Chunker can treat each row as a structured record (and the
+    /// brain can answer "what's in the X column?" questions). Falls
+    /// back to no table when the sheet has no rows.
+    private func parseSheetAsMarkdownTable(_ data: Data, sharedStrings: [String]) -> [String] {
+        let rows = parseSheet(data, sharedStrings: sharedStrings)
+        guard !rows.isEmpty else { return [] }
+        // Split each tab-joined row back into cells.
+        let cells: [[String]] = rows.map { $0.components(separatedBy: "\t") }
+        let widest = cells.map(\.count).max() ?? 0
+        guard widest > 0 else { return [] }
+        let normalized = cells.map { row in
+            row + Array(repeating: "", count: max(0, widest - row.count))
+        }
+        var out: [String] = []
+        out.append("| " + normalized[0].joined(separator: " | ") + " |")
+        out.append("|" + String(repeating: " --- |", count: widest))
+        for row in normalized.dropFirst() {
+            out.append("| " + row.joined(separator: " | ") + " |")
+        }
+        return out
     }
 
     /// Reads <c t="..."><v>idx</v></c> + inline strings, emits one line
