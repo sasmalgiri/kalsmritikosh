@@ -104,18 +104,16 @@ public struct RuleEventExtractor: EventExtractor {
 
         // Forensic email-archive PDFs (GDPR exports, mailin investigation
         // reports, takeout summaries) carry explicit dated email entries
-        // but never hit the rule markers above, so the Timeline went
-        // blind to them — observed: 4 GDPR PDFs / 90+ entities each / 0
-        // events. When a non-email KO carries many date + emailAddress
-        // entities, emit one emailReceived event per recognized date so
-        // the archive is represented on the timeline. Capped at 50 per
-        // KO to keep one giant report from flooding the events table.
+        // but never hit the rule markers above. Per the "keep all data"
+        // directive, we infer one emailReceived event per recognized
+        // date + email-address co-occurrence so the Timeline isn't blind
+        // to them. Confidence is 0.85 (below the 0.95 for real
+        // header-derived events) so the brain can demote them when real
+        // events are available.
         //
-        // Quality gate (real-data validation): only emit if the source
-        // VALUE of the date entity contains a year — time-only fragments
-        // like "11:44:20 +0530" get normalized to TODAY by the date
-        // entity extractor and otherwise flood the timeline with fake
-        // "Archived email — today" rows that drown out real signal.
+        // Guard: only emit if the raw VALUE of the date entity contains
+        // an explicit YYYY — time-only fragments would normalize to
+        // today and pollute the timeline with fake "today" events.
         if object.sourceType.category != .email {
             let dateEntities = entities.filter { $0.kind == .date }
             let emailEntities = entities.filter { $0.kind == .emailAddress }
@@ -124,10 +122,9 @@ public struct RuleEventExtractor: EventExtractor {
                 formatter.formatOptions = [.withInternetDateTime]
                 let yearRegex = try? NSRegularExpression(pattern: #"\b(19|20)\d{2}\b"#)
                 var emitted = 0
+                let fileName = object.sourceFile.lastPathComponent
                 for dateEntity in dateEntities {
                     let rawValue = dateEntity.value
-                    // Require an explicit YYYY in the raw VALUE — guards
-                    // against time-only fragments that normalize to today.
                     guard let yr = yearRegex,
                           yr.firstMatch(
                             in: rawValue,
@@ -139,10 +136,13 @@ public struct RuleEventExtractor: EventExtractor {
                           let parsed = formatter.date(from: iso.uppercased())
                             ?? ISO8601DateFormatter().date(from: iso.uppercased())
                     else { continue }
+                    // Use the source filename as the title so the brain can
+                    // tell these apart from real header-derived events
+                    // (which use the actual email subject).
                     events.append(.init(
                         kind: .emailReceived,
                         date: parsed,
-                        title: "Archived email",
+                        title: "Archived entry — \(fileName)",
                         summary: rawValue,
                         entityIDs: entityIDs,
                         sourceObjectID: object.id,

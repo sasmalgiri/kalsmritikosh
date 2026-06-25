@@ -98,6 +98,15 @@ public struct EntityQualityGate: Sendable {
         return true
     }
 
+    // (NOTE: per real-archive validation + user directive "keep all data,
+    // arrange don't filter", the previous mid-cap / vowel-less / 2-char
+    // rejection rules have been REMOVED. Tokens like "AeTnFNkZQOTRtCqBk"
+    // or "rMsPWt" are real bytes from DKIM/ARC headers and have query
+    // value for "what email systems delivered my mail?" / "show the
+    // routing chain". Filtering them at storage was lossy. The redesign
+    // tiers them by confidence at extraction time — tracked as a follow-
+    // on commit.)
+
     public nonisolated func filter(_ entities: [Entity]) -> [Entity] {
         let kept = entities.filter(shouldKeep)
         let dropped = entities.count - kept.count
@@ -105,6 +114,84 @@ public struct EntityQualityGate: Sendable {
             AtlasLog.brain.info("EntityQualityGate dropped \(dropped, privacy: .public) of \(entities.count, privacy: .public)")
         }
         return kept
+    }
+
+    // MARK: - Retroactive purge
+
+    public struct PurgeReport: Sendable {
+        public let entitiesDeleted: Int
+        public let memoryObjectsDeleted: Int
+        public let totalEntitiesScanned: Int
+    }
+
+    /// Sweep existing canonical noun entities, drop those that fail
+    /// `shouldKeep`, and cascade-delete any memory_objects whose
+    /// subject_identifier matches a dropped entity's value or
+    /// normalized form. Idempotent — running it twice on the same DB
+    /// is a no-op the second time. Pass `dryRun: true` to count without
+    /// modifying.
+    public func purgeGarbage(in database: Database, dryRun: Bool = false) async throws -> PurgeReport {
+        let rows = try await database.query("""
+        SELECT id, kind, value, normalized FROM entities
+        WHERE kind IN ('person','organization','vendor','client');
+        """)
+        var toDelete: [(id: UUID, value: String, normalized: String)] = []
+        for row in rows {
+            guard let id = row.uuid(0),
+                  let kindStr = row.string(1),
+                  let value = row.string(2),
+                  let normalized = row.string(3),
+                  let kind = Entity.Kind(rawValue: kindStr)
+            else { continue }
+            let entity = Entity(kind: kind, value: value, sourceObjectID: UUID())
+            if !shouldKeep(entity) {
+                toDelete.append((id, value, normalized))
+            }
+        }
+        guard !toDelete.isEmpty else {
+            return PurgeReport(entitiesDeleted: 0, memoryObjectsDeleted: 0, totalEntitiesScanned: rows.count)
+        }
+        if dryRun {
+            return PurgeReport(
+                entitiesDeleted: toDelete.count,
+                memoryObjectsDeleted: 0,
+                totalEntitiesScanned: rows.count
+            )
+        }
+        try await database.beginTransaction()
+        var memoryDeleted = 0
+        do {
+            for entry in toDelete {
+                // Delete memory_objects matching value OR normalized (case-insensitive).
+                let res = try await database.query("""
+                SELECT id FROM memory_objects
+                WHERE lower(subject_identifier) IN (?, ?);
+                """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
+                memoryDeleted += res.count
+                if !res.isEmpty {
+                    try await database.exec("""
+                    DELETE FROM memory_objects
+                    WHERE lower(subject_identifier) IN (?, ?);
+                    """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
+                }
+                // Delete the canonical entity (FK cascade removes
+                // entity_mentions + entity_aliases automatically).
+                try await database.exec(
+                    "DELETE FROM entities WHERE id = ?;",
+                    [.uuid(entry.id)]
+                )
+            }
+            try await database.commitTransaction()
+        } catch {
+            await database.rollbackTransaction()
+            throw error
+        }
+        AtlasLog.brain.info("EntityQualityGate purge: removed \(toDelete.count, privacy: .public) entities + \(memoryDeleted, privacy: .public) memory rows")
+        return PurgeReport(
+            entitiesDeleted: toDelete.count,
+            memoryObjectsDeleted: memoryDeleted,
+            totalEntitiesScanned: rows.count
+        )
     }
 
     // MARK: - Heuristics
