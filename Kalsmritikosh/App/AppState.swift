@@ -52,6 +52,10 @@ public final class AppState {
     /// "Rebuild synthetic questions" button can re-run the generator
     /// over chunks that existed before this layer was wired.
     public private(set) var syntheticQuestions: SyntheticQuestionsRepository?
+    /// Background queue that decouples synthetic-question generation
+    /// from ingest. Owned by AppState so `shutdown()` can cancel its
+    /// detached worker before the SQLite handle closes.
+    public private(set) var syntheticQuestionQueue: SyntheticQuestionQueue?
     /// In-memory adjacency cache for the typed-bond graph. Warmed
     /// after the boot-time OntologyBackfill so BondWalker hits a
     /// hashmap instead of N SQL queries per hop. Optional — when nil
@@ -328,6 +332,16 @@ public final class AppState {
             // entity-name driven). To switch to LLM-backed generation,
             // pass CapabilitySyntheticQuestionGenerator(capabilities:)
             // as the generator argument below.
+            // Background queue for synthetic-question generation — keeps
+            // the ingest activity banner short and lets a 42K-chunk
+            // archive complete in minutes instead of hours. The queue
+            // drains in its own detached Task; the ingest path enqueues
+            // and moves on.
+            let synthQueue = SyntheticQuestionQueue(
+                generator: HeuristicSyntheticQuestionGenerator(),
+                repository: syntheticQuestionsRepo
+            )
+
             let ingest = IngestCoordinator(
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
@@ -344,6 +358,7 @@ public final class AppState {
                 vectors: vectors,
                 syntheticQuestions: syntheticQuestionsRepo,
                 syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator(),
+                synthQueue: synthQueue,
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
                 bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache)
@@ -483,6 +498,7 @@ public final class AppState {
             self.conversations = conversationsRepo
             self.factBonds = factBondsRepo
             self.syntheticQuestions = syntheticQuestionsRepo
+            self.syntheticQuestionQueue = synthQueue
             // Exposed so smoke / DataHealthCheck can poke stats; warm
             // completion is async (chained off the OntologyBackfill
             // detached task below).
@@ -799,6 +815,9 @@ public final class AppState {
     public func shutdown() async {
         watcherTask?.cancel()
         watcherTask = nil
+        // Cancel synth-q queue worker before closing the DB so it
+        // doesn't try to insert into a closed handle.
+        await syntheticQuestionQueue?.shutdown()
         await database?.close()
         phase = .starting
     }

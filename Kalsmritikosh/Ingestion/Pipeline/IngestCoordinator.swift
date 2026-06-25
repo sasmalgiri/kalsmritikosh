@@ -46,8 +46,16 @@ public actor IngestCoordinator {
     /// ingest pipeline generates and writes hypothetical questions for
     /// each chunk so the retriever can match question-shaped queries
     /// against question-shaped projections of the corpus.
+    ///
+    /// Generation runs OUT-OF-BAND via `synthQueue` so re-ingest of a
+    /// 42K-chunk archive completes in minutes instead of hours. The
+    /// queue is allowed to drain on its own schedule; the ingest path
+    /// returns once KO + chunks + entities + events + bonds are
+    /// persisted. Falls back to inline generation when the queue
+    /// isn't wired (smoke tests, the eval harness).
     private let syntheticQuestions: SyntheticQuestionsRepository?
     private let syntheticQuestionGenerator: any SyntheticQuestionGenerator
+    private let synthQueue: SyntheticQuestionQueue?
     /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
     /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
     /// the per-KO loop and persists summarised pairs for retrieval.
@@ -83,6 +91,7 @@ public actor IngestCoordinator {
         vectors: VectorStore? = nil,
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
         syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil,
+        synthQueue: SyntheticQuestionQueue? = nil,
         qaPairs: QAPairsRepository? = nil,
         qaPairExtractor: (any QAPairExtractor)? = nil,
         bondConstructor: BondConstructor? = nil
@@ -107,6 +116,7 @@ public actor IngestCoordinator {
         self.syntheticQuestions = syntheticQuestions
         self.syntheticQuestionGenerator = syntheticQuestionGenerator
             ?? HeuristicSyntheticQuestionGenerator()
+        self.synthQueue = synthQueue
         self.qaPairs = qaPairs
         self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
         self.bondConstructor = bondConstructor
@@ -439,13 +449,24 @@ public actor IngestCoordinator {
         try? await chunks.insertBatch(chunked)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per
-        // chunk and persist them. The default generator is the free
-        // NLTagger-based heuristic; the CapabilitySyntheticQuestionGenerator
-        // (LLM-backed, summarization spec) can be injected at AppState
-        // wire-time for higher quality at higher ingest cost. Failure
-        // here is non-fatal — synthetic questions are an ADDITIONAL
-        // retrieval signal, never a required one.
-        if let synthRepo = syntheticQuestions {
+        // chunk and persist them so the retriever can match question-
+        // shaped queries against question-shaped projections.
+        //
+        // Off the ingest path: when `synthQueue` is wired, enqueue the
+        // work as a deferred job and return immediately. The queue
+        // drains in a long-running background Task. This is the path
+        // the app uses — without it a 42K-chunk re-ingest blocked at
+        // 99% CPU for hours generating questions inline.
+        //
+        // Inline path retained as a fallback for the smoke + eval
+        // harnesses that boot AppState without the queue.
+        if let synthQueue {
+            await synthQueue.enqueue(.init(
+                objectID: object.id,
+                chunks: chunked,
+                documentContext: Self.documentContext(for: object)
+            ))
+        } else if let synthRepo = syntheticQuestions {
             let docContext = Self.documentContext(for: object)
             var rows: [SyntheticQuestionsRepository.Row] = []
             for chunk in chunked {
