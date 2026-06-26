@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 14
+    public static let latestVersion = 15
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -51,7 +51,8 @@ public enum SchemaMigrations {
         (11, v11),
         (12, v12),
         (13, v13),
-        (14, v14)
+        (14, v14),
+        (15, v15)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -630,5 +631,42 @@ public enum SchemaMigrations {
     -- this twice produces the same final index.
     INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild');
     INSERT INTO knowledge_objects_fts(knowledge_objects_fts) VALUES('rebuild');
+    """
+
+    // MARK: - v15 — Boilerplate registry (Move B)
+    //
+    // Long repeated substrings (email signatures, legal disclaimers,
+    // unsubscribe footers) are extracted ONCE into boilerplate_templates
+    // and replaced in KO content with a `[[BOILERPLATE:<id>]]` token.
+    // The boilerplate_uses join records every KO that referenced each
+    // template so display / search can re-inject the text on demand.
+    //
+    // No data is destroyed: raw mbox/eml/pdf files on disk stay
+    // untouched, and the templates table preserves the literal bytes
+    // verbatim. Re-assembling the original KO body is one JOIN.
+
+    private static let v15: String = """
+    CREATE TABLE IF NOT EXISTS boilerplate_templates (
+        id TEXT PRIMARY KEY,
+        body TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'unknown',
+        first_seen_at REAL NOT NULL,
+        byte_size INTEGER NOT NULL,
+        match_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_boilerplate_kind
+        ON boilerplate_templates(kind);
+
+    CREATE TABLE IF NOT EXISTS boilerplate_uses (
+        template_id TEXT NOT NULL,
+        ko_id TEXT NOT NULL,
+        PRIMARY KEY (template_id, ko_id),
+        FOREIGN KEY (template_id) REFERENCES boilerplate_templates(id) ON DELETE CASCADE,
+        FOREIGN KEY (ko_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_boilerplate_uses_ko
+        ON boilerplate_uses(ko_id);
     """
 }
