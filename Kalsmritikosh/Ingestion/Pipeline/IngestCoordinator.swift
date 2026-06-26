@@ -350,6 +350,10 @@ public actor IngestCoordinator {
                 }
             } catch {
                 AtlasLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
+                // Console echo so dev / smoke runs can see the cause
+                // without subscribing to OSLog; quiet enough not to
+                // spam a healthy ingest.
+                print("PerKO drop \(rawKO.id.uuidString.prefix(8)): \(String(describing: error).prefix(200))")
             }
         }
 
