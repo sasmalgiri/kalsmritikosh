@@ -840,6 +840,27 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         } else {
             failed.append("G2-TEMPORAL(nil): false positive on non-temporal question")
         }
+
+        // (f) G2-2 — week-number range. The engine-firing audit flagged
+        // "between week N and week M of <project>" returning timeframe=nil
+        // even though intent kind resolved to executiveBriefing. The
+        // baseDate's ISO year is 2026; weeks 22-25 of 2026 = May 25..Jun 21.
+        if let m = DateGrammar.parse("between week 22 and week 25 of Project Delta",
+                                     baseDate: base, timeZone: utc),
+           let s = m.timeframe.start, let e = m.timeframe.end,
+           s < e {
+            passed.append("G2-2(week-range): weeks 22-25 produced a window")
+        } else {
+            failed.append("G2-2(week-range): weeks 22-25 returned nil")
+        }
+        if let m = DateGrammar.parse("what happened during week 22 of 2024",
+                                     baseDate: base, timeZone: utc),
+           let s = m.timeframe.start,
+           cal.component(.year, from: s) == 2024 {
+            passed.append("G2-2(week-single): \"week 22 of 2024\" anchored to 2024")
+        } else {
+            failed.append("G2-2(week-single): explicit year not honored")
+        }
     }
 
     // G2-1.5 — SessionProfile records turns and snapshot returns

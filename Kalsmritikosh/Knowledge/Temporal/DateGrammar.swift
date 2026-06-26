@@ -70,6 +70,15 @@ public enum DateGrammar {
         // 3. Month-name range ("April through June 2024", "Apr-Jun 2024")
         if let m = matchMonthRange(in: lower, calendar: calendar, baseDate: baseDate) { return m }
 
+        // 3.25. Week-number range ("between week 22 and week 25",
+        // "weeks 22 to 25", "week 22 of 2024"). The G2-2 spec calls
+        // for "of <project>" anchoring against the project's earliest
+        // event, which requires DB access this grammar doesn't have;
+        // we fall back to baseDate's ISO-8601 year, which is correct
+        // when no project is named and a useful default when one is.
+        if let m = matchWeekRange(in: lower, baseDate: baseDate) { return m }
+        if let m = matchWeekSingle(in: lower, baseDate: baseDate) { return m }
+
         // 3.5. Specific fully-qualified date ("March 6, 2026", "8 April 2024").
         // Runs BEFORE monthSingle so a day-precise phrase resolves to a 1-day
         // span instead of being collapsed to the whole month — without it,
@@ -212,6 +221,88 @@ public enum DateGrammar {
             timeframe: .init(start: start, end: end),
             evidence: String(lower[evidenceR])
         )
+    }
+
+    // MARK: - 3.25. Week-number range
+
+    /// "between week 22 and week 25", "week 22 through week 25",
+    /// "weeks 22 to 25". Optional trailing "of 2024" / "in 2024" sets
+    /// the ISO year; absent that, baseDate's ISO year wins.
+    private static let weekRangeRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\b(?:between\s+)?weeks?\s+(\d{1,2})\s+(?:to|through|and|-|–|—)\s+(?:week\s+)?(\d{1,2})\b(?:[^\d]{0,32}?(?:of|in)\s+(\d{4}))?"#,
+        options: [.caseInsensitive]
+    )
+
+    /// "week 22 of 2024", "in week 22", "during week 22". Standalone.
+    private static let weekSingleRx: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\bweek\s+(\d{1,2})\b(?:[^\d]{0,32}?(?:of|in)\s+(\d{4}))?"#,
+        options: [.caseInsensitive]
+    )
+
+    private static func matchWeekRange(in lower: String, baseDate: Date) -> Match? {
+        guard let rx = weekRangeRx,
+              let m = rx.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+              let r1 = Range(m.range(at: 1), in: lower),
+              let r2 = Range(m.range(at: 2), in: lower),
+              let evidenceR = Range(m.range, in: lower),
+              let w1 = Int(lower[r1]), (1...53).contains(w1),
+              let w2 = Int(lower[r2]), (1...53).contains(w2),
+              w1 <= w2
+        else { return nil }
+        let isoCal = isoWeekCalendar()
+        let year: Int = {
+            if let yR = Range(m.range(at: 3), in: lower), let y = Int(lower[yR]) { return y }
+            return isoCal.component(.yearForWeekOfYear, from: baseDate)
+        }()
+        guard let start = startOfIsoWeek(year: year, week: w1, calendar: isoCal),
+              let end = endOfIsoWeek(year: year, week: w2, calendar: isoCal)
+        else { return nil }
+        return Match(
+            timeframe: .init(start: start, end: end),
+            evidence: String(lower[evidenceR])
+        )
+    }
+
+    private static func matchWeekSingle(in lower: String, baseDate: Date) -> Match? {
+        guard let rx = weekSingleRx,
+              let m = rx.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
+              let r1 = Range(m.range(at: 1), in: lower),
+              let evidenceR = Range(m.range, in: lower),
+              let w = Int(lower[r1]), (1...53).contains(w)
+        else { return nil }
+        let isoCal = isoWeekCalendar()
+        let year: Int = {
+            if let yR = Range(m.range(at: 2), in: lower), let y = Int(lower[yR]) { return y }
+            return isoCal.component(.yearForWeekOfYear, from: baseDate)
+        }()
+        guard let start = startOfIsoWeek(year: year, week: w, calendar: isoCal),
+              let end = endOfIsoWeek(year: year, week: w, calendar: isoCal)
+        else { return nil }
+        return Match(
+            timeframe: .init(start: start, end: end),
+            evidence: String(lower[evidenceR])
+        )
+    }
+
+    private static func isoWeekCalendar() -> Calendar {
+        var cal = Calendar(identifier: .iso8601)
+        cal.firstWeekday = 2 // Monday
+        cal.minimumDaysInFirstWeek = 4 // ISO 8601 definition
+        return cal
+    }
+
+    private static func startOfIsoWeek(year: Int, week: Int, calendar: Calendar) -> Date? {
+        var comps = DateComponents()
+        comps.yearForWeekOfYear = year
+        comps.weekOfYear = week
+        comps.weekday = 2 // Monday
+        comps.hour = 0; comps.minute = 0; comps.second = 0
+        return calendar.date(from: comps)
+    }
+
+    private static func endOfIsoWeek(year: Int, week: Int, calendar: Calendar) -> Date? {
+        guard let monday = startOfIsoWeek(year: year, week: week, calendar: calendar) else { return nil }
+        return calendar.date(byAdding: DateComponents(day: 7, second: -1), to: monday)
     }
 
     // MARK: - 3.5. Specific calendar date
