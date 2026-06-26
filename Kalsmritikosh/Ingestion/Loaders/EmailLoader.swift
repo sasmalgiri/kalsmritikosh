@@ -19,6 +19,19 @@ import Foundation
 public struct EmailLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail, .nsf]
 
+    /// Move-A feature flag. When `true`, mbox ingest emits one KO per
+    /// reply-chain thread via ThreadCoalescer. When `false` (default),
+    /// mbox ingest emits one KO per message — the pre-Move-A path that
+    /// the 435 MB production DB was built with.
+    ///
+    /// Held at `false` until the per-message extraction fanout lands
+    /// in `IngestCoordinator.processKnowledgeObject` so events,
+    /// mentions, and memory subjects don't degrade on thread KOs.
+    /// Flip to `true` only when the fanout is in place AND a fresh
+    /// re-ingest is acceptable. ThreadCoalescer.swift stays in the
+    /// tree either way — the helper is ready when we are.
+    public nonisolated static let threadCoalescingEnabled: Bool = false
+
     public nonisolated init() {}
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
@@ -249,6 +262,13 @@ public struct EmailLoader: Ingestor {
             let trimmed = messageString.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { pieces.append(trimmed) }
         }
+        // Move-A switch — when the flag is OFF (default), emit one KO
+        // per message (the pre-Move-A path that the 435 MB production
+        // DB was built with). When ON, fall through to the thread
+        // coalescer below.
+        if !Self.threadCoalescingEnabled {
+            return emitPerMessageKOs(from: pieces, url: url)
+        }
         // First pass — parse each mbox piece into a structured record
         // (cleaned body + headers + date). We don't emit a KO yet
         // because Move A coalesces these into threads first.
@@ -421,6 +441,84 @@ public struct EmailLoader: Ingestor {
     /// SourceViewer / Evidence gate read this to extract per-message
     /// citation offsets.
     nonisolated static let threadMessagesMetaKey = "t_threadMessages"
+
+    /// Pre-Move-A path. One KO per mbox message. Active when
+    /// `threadCoalescingEnabled == false`. Preserved verbatim from
+    /// commit dd93c9e so the production DB shape (526 per-message
+    /// KOs from Sent.mbox) is reproducible on a fresh re-ingest.
+    private func emitPerMessageKOs(from pieces: [String], url: URL) -> [KnowledgeObject] {
+        var out: [KnowledgeObject] = []
+        for (idx, message) in pieces.enumerated() {
+            // Drop the "From <sender> <date>" envelope line — not a
+            // real header, leaks into the parser. `.isNewline` (not
+            // `$0 == "\n"`) catches CRLF-terminated mbox from Gmail
+            // Takeout where Swift treats "\r\n" as ONE grapheme.
+            let messageBody: String
+            if let firstLineEnd = message.firstIndex(where: { $0.isNewline }) {
+                messageBody = String(message[message.index(after: firstLineEnd)...])
+            } else {
+                messageBody = message
+            }
+            let (headers, body) = splitEMLHeaders(messageBody)
+
+            var meta: [String: AnyCodable] = [
+                "filename": AnyCodable(.string(url.lastPathComponent)),
+                "loader": AnyCodable(.string("mbox-per-message")),
+                "messageIndex": AnyCodable(.int(Int64(idx)))
+            ]
+            for (key, value) in headers { meta[key] = AnyCodable(.string(value)) }
+
+            // T13.6 — Gmail Takeout: surface X-GM-THRID + X-Gmail-Labels
+            // as first-class metadata.
+            if let thrid = headers["x-gm-thrid"] {
+                meta["threadID"] = AnyCodable(.string(thrid))
+            }
+            if let labels = headers["x-gmail-labels"] {
+                meta["gmailLabels"] = AnyCodable(.string(labels))
+            }
+
+            // T13.7 — decode multipart so chunking sees text only.
+            let (textBody, attachmentURLs) = Self.applyMultipartIfNeeded(
+                headers: headers,
+                body: body,
+                for: url
+            )
+
+            // T7 — strip quoted regions from the per-message body before
+            // anything else sees it.
+            let (cleanedBody, quotedBytesRemoved) = Self.stripQuotedRegions(textBody)
+            meta["quotedBytesRemoved"] = AnyCodable(.int(Int64(quotedBytesRemoved)))
+            if let json = Self.encodeAttachmentURLs(attachmentURLs) {
+                meta[Self.attachmentURLsMetaKey] = AnyCodable(.string(json))
+            }
+
+            var headerLines: [String] = []
+            for key in ["from", "to", "cc", "subject", "date"] {
+                if let value = headers[key], !value.isEmpty {
+                    headerLines.append("\(key.capitalized): \(value)")
+                }
+            }
+            let merged = headerLines.isEmpty
+                ? cleanedBody
+                : headerLines.joined(separator: "\n") + "\n\n" + cleanedBody
+            if merged.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+
+            let koID = UUID()
+            let structuredEntities = Self.structuredEntities(from: headers, sourceObjectID: koID)
+            if let json = Self.encodeStructuredEntities(structuredEntities) {
+                meta[Self.structuredEntitiesMetaKey] = AnyCodable(.string(json))
+            }
+            out.append(KnowledgeObject(
+                id: koID,
+                sourceFile: url,
+                sourceType: .mbox,
+                content: merged,
+                metadata: meta,
+                confidence: .high
+            ))
+        }
+        return out
+    }
 
     private static func encodeMessagesBag(_ bag: [[String: AnyCodable]]) -> String? {
         let encoded = bag.map { AnyCodable(.array($0.mapValues { $0.value }.map { _ in
