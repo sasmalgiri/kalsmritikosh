@@ -11,6 +11,7 @@
 
 import Foundation
 import OSLog
+import CryptoKit
 
 
 public actor IngestCoordinator {
@@ -335,8 +336,21 @@ public actor IngestCoordinator {
                 // alias file rows.
                 if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
                    case .string(let json) = value.value {
+                    // DETERMINISM FIX (reproducibility):
+                    // Sort attachments by content hash before recursing
+                    // so the T7 "first-wins" canonical selection is
+                    // stable across runs. Without this, when two emails
+                    // carry the same PDF, which one becomes the canonical
+                    // depended on actor scheduling — varying KO + chunk
+                    // counts by 5-25% across fresh re-ingests.
                     let attachmentURLs = EmailLoader.decodeAttachmentURLs(from: json)
-                    for attachmentURL in attachmentURLs {
+                    let ordered: [URL] = attachmentURLs.sorted { lhs, rhs in
+                        let lh = (try? Data(contentsOf: lhs, options: [.mappedIfSafe])).map { Self.sha256Hex($0) } ?? lhs.path
+                        let rh = (try? Data(contentsOf: rhs, options: [.mappedIfSafe])).map { Self.sha256Hex($0) } ?? rhs.path
+                        if lh == rh { return lhs.path < rhs.path }
+                        return lh < rh
+                    }
+                    for attachmentURL in ordered {
                         do {
                             let attachmentResult = try await ingest(fileAt: attachmentURL)
                             totalChunks += attachmentResult.chunkCount
@@ -822,6 +836,14 @@ public actor IngestCoordinator {
     ///
     /// Result is "" when no context can be derived — caller falls back
     /// to the chunk text alone, preserving pre-G2-3 behavior.
+    /// Lower-case hex SHA-256 over `data`. Used to compute a stable
+    /// canonical-sort key for attachment-recursion ordering so the
+    /// T7 "first-wins" dedup decision is reproducible across runs.
+    static func sha256Hex(_ data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     private static func documentContext(for object: KnowledgeObject) -> String {
         var parts: [String] = []
 

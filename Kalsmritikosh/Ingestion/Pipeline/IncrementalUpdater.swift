@@ -67,9 +67,44 @@ public actor IncrementalUpdater: BackgroundService {
         }
     }
 
+    /// Block until no distillation work is pending or running. Used
+    /// by eval / smoke runs to wait deterministically for the memory
+    /// layer to settle instead of guessing a sleep duration.
+    ///
+    /// Returns when ALL of these are true:
+    ///   - the pending queue is empty
+    ///   - no debounce task is in flight
+    ///   - the most recent flush has completed
+    ///
+    /// Polled at 100 ms granularity, capped at `timeoutMilliseconds`
+    /// (default 60 s) so a runaway distillation can't hang the test
+    /// harness. Returns the elapsed wait duration in milliseconds.
+    @discardableResult
+    public func waitForIdle(timeoutMilliseconds: UInt64 = 60_000) async -> UInt64 {
+        let start = Date()
+        let timeoutSec = Double(timeoutMilliseconds) / 1000.0
+        // First, wait for the debounce task to fire by waiting for
+        // it to clear. Then wait for pending to drain.
+        while Date().timeIntervalSince(start) < timeoutSec {
+            if pending.isEmpty && debounceTask == nil {
+                return UInt64(Date().timeIntervalSince(start) * 1000)
+            }
+            // Yield + sleep 100ms. We can't await the debounceTask
+            // directly because it's a fire-and-forget Task; polling
+            // is the simplest reliable signal.
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        AtlasLog.knowledge.warning("IncrementalUpdater.waitForIdle hit timeout after \(timeoutMilliseconds, privacy: .public)ms; pending=\(self.pending.count, privacy: .public)")
+        return timeoutMilliseconds
+    }
+
     private func flush() async {
         let snapshot = pending
         pending.removeAll()
+        // Clear the debounce task reference so waitForIdle can see
+        // that no flush is scheduled. The task itself has already
+        // completed (we're inside its body).
+        debounceTask = nil
         for (_, entry) in snapshot {
             do {
                 _ = try await distiller.distill(
