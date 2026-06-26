@@ -145,38 +145,53 @@ public nonisolated enum ThreadCoalescer {
             }
         }
 
-        // Third pass: subject-based fallback. Only merge when the
-        // normalized subject is non-empty (avoid "Re:" → "" lumping
-        // every blank-subject reply together) AND messages are
-        // within 180 days of each other. Without the date window we
-        // would coalesce e.g. multiple unrelated "Invoice" emails
-        // sent years apart into one mega-thread.
-        let dayWindow: TimeInterval = 180 * 86_400
+        // Third pass: subject-based fallback. STRICT version — the
+        // earlier 180-day window over-merged real archives (Sent.mbox
+        // of 526 messages collapsed to 2 threads because every "Re:"
+        // chain over years got lumped). Tighter rules:
+        //
+        // - Skip when normalized subject is short (<10 chars after
+        //   "Re:"/"Fwd:" stripping) — generic subjects like "thanks"
+        //   are not thread signal.
+        // - Skip when subject reduces to a single common word
+        //   (single-token + ≤5 chars).
+        // - Require BOTH dates to be present AND within 14 days for
+        //   the merge. Anchor-day jumps (subject reused for a new
+        //   topic a year later) should NOT thread.
+        // - Cap the size of subject-fallback threads at 30 messages
+        //   so a recurring weekly subject doesn't form a 200-message
+        //   monster.
+        let dayWindow: TimeInterval = 14 * 86_400
         var bySubject: [String: [(Int, Date?)]] = [:]
         for (i, m) in messages.enumerated() {
             let subj = m.normalizedSubject
             guard !subj.isEmpty else { continue }
+            // Reject too-short / single-tokenish subjects.
+            let tokens = subj.split(separator: " ", omittingEmptySubsequences: true)
+            if subj.count < 10 { continue }
+            if tokens.count < 2 && subj.count < 12 { continue }
             bySubject[subj, default: []].append((i, m.date))
         }
         for (_, group) in bySubject {
             guard group.count > 1 else { continue }
-            // Sort by date so we can do a sliding-window merge.
             let sorted = group.sorted { (lhs, rhs) in
                 (lhs.1 ?? .distantPast) < (rhs.1 ?? .distantPast)
             }
+            // Sliding window: merge consecutive pairs only when both
+            // sides have a date AND the gap fits the window. Stop a
+            // chain when a gap is too large or when the resulting
+            // component already exceeds the size cap.
+            let maxSubjectThreadSize = 30
             for k in 1..<sorted.count {
                 let (i, dateI) = sorted[k]
                 let (j, dateJ) = sorted[k - 1]
-                // Within the date window OR either side missing a
-                // date (still safer to merge than to fragment when
-                // we already have a subject match).
-                if let dI = dateI, let dJ = dateJ {
-                    if abs(dI.timeIntervalSince(dJ)) <= dayWindow {
-                        union(i, j)
-                    }
-                } else {
-                    union(i, j)
-                }
+                guard let dI = dateI, let dJ = dateJ,
+                      abs(dI.timeIntervalSince(dJ)) <= dayWindow else { continue }
+                // Cap on component size — count current root's reach.
+                let rootI = find(i)
+                let componentSize = (0..<messages.count).filter { find($0) == rootI }.count
+                if componentSize >= maxSubjectThreadSize { break }
+                union(i, j)
             }
         }
 
