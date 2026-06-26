@@ -66,6 +66,15 @@ public actor Database {
         try Self.execRaw(handle: db, sql: "PRAGMA journal_mode=WAL;")
         try Self.execRaw(handle: db, sql: "PRAGMA foreign_keys=ON;")
         try Self.execRaw(handle: db, sql: "PRAGMA synchronous=NORMAL;")
+        // CRITICAL: without busy_timeout SQLite returns SQLITE_BUSY
+        // immediately on any lock contention. During concurrent
+        // ingestion (mbox per-message inserts overlapping with PDF
+        // chunk writes, distillation writes, FTS trigger updates) we
+        // observed ~75% of mbox KO inserts silently failing — the
+        // per-KO catch in IngestCoordinator was swallowing the
+        // "database is locked" errors. 30 s gives SQLite room to wait
+        // out any in-flight transaction without raising.
+        try Self.execRaw(handle: db, sql: "PRAGMA busy_timeout=30000;")
     }
 
     deinit {
