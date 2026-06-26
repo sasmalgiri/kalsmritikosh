@@ -471,9 +471,29 @@ public actor IngestCoordinator {
                 documentContext: Self.documentContext(for: object)
             ))
         } else if let synthRepo = syntheticQuestions {
+            // Inline path — Smoke / eval harnesses that boot AppState
+            // without the queue land here. Large-content KOs (a
+            // 67-message thread, a 50-page PDF) routinely produce
+            // 100+ chunks each; running the generator over every
+            // chunk inline stalls the per-KO pipeline for minutes
+            // per KO, which then silently swallows ~80% of a 236-KO
+            // batch via the per-KO catch at line 351.
+            //
+            // Cap inline generation at `maxInlineSynthChunksPerKO`
+            // chunks. The remaining chunks just don't get synth-Q
+            // rows for this run — they'll be filled by the queue
+            // when the production app re-ingests with synthQueue
+            // wired. Eval still gets representative coverage.
+            let maxInlineSynthChunksPerKO = 24
+            let chunksToProcess = chunked.prefix(maxInlineSynthChunksPerKO)
+            if chunked.count > maxInlineSynthChunksPerKO {
+                AtlasLog.ingestion.info(
+                    "inline synth-Q capped: \(chunked.count, privacy: .public) chunks → \(maxInlineSynthChunksPerKO, privacy: .public) for KO \(object.id.uuidString.prefix(8), privacy: .public)"
+                )
+            }
             let docContext = Self.documentContext(for: object)
             var rows: [SyntheticQuestionsRepository.Row] = []
-            for chunk in chunked {
+            for chunk in chunksToProcess {
                 let questions = await syntheticQuestionGenerator.generate(
                     for: chunk,
                     documentContext: docContext,
