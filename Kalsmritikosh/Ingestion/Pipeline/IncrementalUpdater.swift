@@ -83,15 +83,26 @@ public actor IncrementalUpdater: BackgroundService {
     public func waitForIdle(timeoutMilliseconds: UInt64 = 60_000) async -> UInt64 {
         let start = Date()
         let timeoutSec = Double(timeoutMilliseconds) / 1000.0
-        // First, wait for the debounce task to fire by waiting for
-        // it to clear. Then wait for pending to drain.
+        // Stability window: idle must persist across N consecutive
+        // polls to be considered real. The SubjectInvalidation stream
+        // is buffered between IngestCoordinator's continuation.yield
+        // and the consumerTask actually processing the event into
+        // `pending`. A naive "empty right now" check fires too soon
+        // — the events are still in flight. Requiring 5 consecutive
+        // empty polls (500 ms of stable idle) covers the buffer
+        // drain + debounce-fire window with margin.
+        let stabilityRequired = 5
+        var stable = 0
         while Date().timeIntervalSince(start) < timeoutSec {
-            if pending.isEmpty && debounceTask == nil {
-                return UInt64(Date().timeIntervalSince(start) * 1000)
+            let isIdle = pending.isEmpty && debounceTask == nil
+            if isIdle {
+                stable += 1
+                if stable >= stabilityRequired {
+                    return UInt64(Date().timeIntervalSince(start) * 1000)
+                }
+            } else {
+                stable = 0
             }
-            // Yield + sleep 100ms. We can't await the debounceTask
-            // directly because it's a fire-and-forget Task; polling
-            // is the simplest reliable signal.
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         AtlasLog.knowledge.warning("IncrementalUpdater.waitForIdle hit timeout after \(timeoutMilliseconds, privacy: .public)ms; pending=\(self.pending.count, privacy: .public)")

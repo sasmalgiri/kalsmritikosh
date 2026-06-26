@@ -547,6 +547,22 @@ public actor IngestCoordinator {
             }
             let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
             raw.append(contentsOf: nerExtracted)
+            // Deterministic input order so EntityLinker's
+            // first-wins canonical resolution is reproducible.
+            // Without this, the merge winner for a (kind,
+            // normalized) collision depends on actor scheduling
+            // around when each chunk's NER pass returned its
+            // entities — varying canonical entity counts by
+            // ~10-15% across fresh re-ingests despite identical
+            // mention counts.
+            raw.sort { lhs, rhs in
+                if lhs.kind != rhs.kind { return lhs.kind.rawValue < rhs.kind.rawValue }
+                let lhn = lhs.normalizedValue ?? lhs.value
+                let rhn = rhs.normalizedValue ?? rhs.value
+                if lhn != rhn { return lhn < rhn }
+                if lhs.value != rhs.value { return lhs.value < rhs.value }
+                return lhs.id.uuidString < rhs.id.uuidString
+            }
             if let entityLinker { raw = entityLinker.link(raw) }
             // T13.4 — drop garbage (weekdays / mail keywords / hostnames /
             // app-internal identifiers) before storage.
