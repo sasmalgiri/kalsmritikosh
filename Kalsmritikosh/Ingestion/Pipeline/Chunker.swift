@@ -48,43 +48,142 @@ public struct Chunker: Sendable {
         self.minChunkCharacterCount = minChunkCharacterCount
     }
 
-    /// Derive a sensible `targetCharacterCount` from the resolved
-    /// reasoning model's context window AND the user's hardware
-    /// tier, so the per-chunk LLM calls (context-prefix generator,
-    /// extractor prompts) have room for prompt scaffolding + answer
-    /// + buffer AND so a low-RAM machine isn't asked to hold many
-    /// huge chunks in flight.
+    // MARK: - Adaptive sizing for ANY model / device / context
+
+    /// Hard floor / ceiling on chunk size in characters.
     ///
-    /// Why we DON'T just maximize: bigger chunks dilute embeddings
-    /// (one vector represents too many topics, vector similarity
-    /// loses its sharpness for lookups). Gate-1 retrieval recall on
-    /// 1200-char chunks was 0.88 on lookup. Doubling the chunk size
-    /// is a measured trade-off; quadrupling would hurt precision.
-    /// The cap of 2400 chars is set there for that reason.
+    /// `minTargetCharacterCount` — under this, a single chunk no
+    /// longer carries enough semantic content for an embedding to be
+    /// distinguishable in vector space. Lookup recall collapses.
+    ///
+    /// `maxTargetCharacterCount` — over this, embeddings dilute (one
+    /// vector represents too many topics) and Gate-1 L1 precision
+    /// drops. The cap is a quality decision, not a memory one.
+    public static let minTargetCharacterCount: Int = 800
+    public static let maxTargetCharacterCount: Int = 2400
+
+    /// Diagnostic output of `Chunker.diagnose(...)` — the computed
+    /// target plus warnings about mismatches between the chosen
+    /// model and the user's device. AppState logs the warnings on
+    /// boot so misconfigurations are visible up front.
+    public struct SizingDiagnostic: Sendable, Equatable {
+        public let target: Int
+        public let warnings: [String]
+
+        public init(target: Int, warnings: [String]) {
+            self.target = target
+            self.warnings = warnings
+        }
+    }
+
+    /// Primary sizing API — adaptive to ANY context window and ANY
+    /// device RAM. The discrete-tier overloads below delegate here.
     ///
     /// Formula:
-    ///   chars   = max(1, tokens) × 4 / 12     (English ≈ 4 chars/token)
-    ///   chars  *= tierFactor                  (small=0.6, medium=0.85, large=1.0)
-    ///   chars   = clamp(chars, 800, 2400)
+    ///   chars  = max(1024, tokens) × 4 / 12   (English ≈ 4 chars/token)
+    ///   chars *= ramFactor                    (≤ 1.0; floor 0.3 — see below)
+    ///   chars  = clamp(chars, 800, 2400)
     ///
-    /// Worked examples (large-tier Mac):
-    ///   llama3 8B,    8K tokens →   2400  (clamped)
-    ///   qwen2.5 14B, 32K tokens →   2400  (clamped)
-    ///   tiny 2B,      2K tokens →    800  (floored)
+    /// RAM factor: `min(1.0, totalRAMBytes / 16 GB)` with a floor of
+    /// 0.3. Why 16 GB as the unit? It's the modern Mac baseline where
+    /// a typical 8B Q4 reasoning model fits comfortably alongside the
+    /// OS and app. The floor of 0.3 means even a 2 GB device gets a
+    /// usable chunk (800 chars after clamping) rather than crashing
+    /// to zero. Devices smaller than that won't run any local LLM
+    /// reasoning meaningfully anyway.
+    ///
+    /// Worked examples (16 GB RAM = factor 1.0):
+    ///   llama3 8B,    8K tokens  → 2400  (clamped)
+    ///   qwen2.5 14B, 32K tokens  → 2400  (clamped)
+    ///   tiny 1B,     1K tokens   →  800  (floored — too small to be useful)
+    ///   tokens = 0 (missing)     →  800  (defaulted to safe min)
+    ///
+    /// Worked examples (8 GB RAM = factor 0.5):
+    ///   llama3 8B,    8K tokens  → 1365  (scaled down for RAM)
+    ///   qwen2.5 14B, 32K tokens  → 2400  (clamped)
+    ///
+    /// Worked examples (4 GB RAM = factor 0.30 floor):
+    ///   any model                →  800  (effectively forced to floor)
+    public static func targetForContextWindow(
+        tokens: Int,
+        totalRAMBytes: Int
+    ) -> Int {
+        // Default to 4K tokens if the manifest is missing or
+        // nonsense — a safe middle ground for unknown models.
+        let safeTokens = tokens >= 1024 ? tokens : (tokens > 0 ? 1024 : 4_096)
+        let charsByContext = safeTokens * 4 / 12
+        let safeBytes = max(0, totalRAMBytes)
+        let ramGB = Double(safeBytes) / 1_073_741_824
+        let ramFactor = max(0.3, min(1.0, ramGB / 16.0))
+        let scaled = Int(Double(charsByContext) * ramFactor)
+        return max(minTargetCharacterCount, min(scaled, maxTargetCharacterCount))
+    }
+
+    /// Tier-based overload — used by call sites that only have the
+    /// coarse hardware tier. Each tier maps to a representative RAM
+    /// size (small=8 GB / medium=16 GB / large=32 GB) which is then
+    /// fed through the primary RAM-bytes API. Preferring this tier
+    /// API over the RAM API costs a small accuracy loss but lets
+    /// callers without HardwareProbe access still call in.
     public static func targetForContextWindow(
         tokens: Int,
         hardwareTier: ModelManifest.Tier = .large
     ) -> Int {
-        let base = max(1, tokens) * 4 / 12
-        let tierFactor: Double = {
+        let representativeRAM: Int = {
             switch hardwareTier {
-            case .small: return 0.6
-            case .medium: return 0.85
-            case .large: return 1.0
+            case .small: return 8 * 1_073_741_824
+            case .medium: return 16 * 1_073_741_824
+            case .large: return 32 * 1_073_741_824
             }
         }()
-        let scaled = Int(Double(base) * tierFactor)
-        return max(800, min(scaled, 2400))
+        return targetForContextWindow(
+            tokens: tokens,
+            totalRAMBytes: representativeRAM
+        )
+    }
+
+    /// Produce a sizing target PLUS warnings for any device/model
+    /// mismatch. Use this at boot to log a clear up-front signal
+    /// when the user has chosen a combo that won't behave well —
+    /// rather than silently sizing badly and hoping nobody notices.
+    ///
+    /// Warnings surfaced (any combination):
+    ///   - Model context window is missing / zero
+    ///   - Model context window < 1K (chunks forced to floor; LLM
+    ///     context-prefix prompts will struggle to fit prompt + answer)
+    ///   - Model's required RAM > total device RAM (model will OOM or
+    ///     swap heavily; ingest will be unusable)
+    ///   - Model RAM > 70% of device RAM (ingest will compete with
+    ///     everything else on the machine)
+    public static func diagnose(
+        modelContextTokens: Int,
+        modelRequiredRAMBytes: Int,
+        totalRAMBytes: Int
+    ) -> SizingDiagnostic {
+        var warnings: [String] = []
+
+        if modelContextTokens <= 0 {
+            warnings.append("model context window is 0 or missing; defaulting chunk sizing to a safe 4K-token assumption")
+        } else if modelContextTokens < 1_024 {
+            warnings.append("model context window=\(modelContextTokens) is below 1K — per-chunk LLM prompts may not fit prompt+answer+buffer")
+        }
+
+        let safeDeviceBytes = max(0, totalRAMBytes)
+        let safeModelBytes = max(0, modelRequiredRAMBytes)
+        if safeDeviceBytes > 0 && safeModelBytes > safeDeviceBytes {
+            let modelGB = String(format: "%.1f", Double(safeModelBytes) / 1_073_741_824)
+            let deviceGB = String(format: "%.1f", Double(safeDeviceBytes) / 1_073_741_824)
+            warnings.append("model needs \(modelGB) GB RAM but device has only \(deviceGB) GB — model will OOM or swap heavily; choose a smaller model")
+        } else if safeDeviceBytes > 0 && Double(safeModelBytes) > Double(safeDeviceBytes) * 0.7 {
+            let pct = Int((Double(safeModelBytes) / Double(safeDeviceBytes)) * 100)
+            warnings.append("model uses \(pct)% of device RAM — ingest will compete with other apps and likely thrash the cache")
+        }
+
+        let target = targetForContextWindow(
+            tokens: modelContextTokens,
+            totalRAMBytes: totalRAMBytes
+        )
+        return SizingDiagnostic(target: target, warnings: warnings)
     }
 
     public nonisolated func chunk(

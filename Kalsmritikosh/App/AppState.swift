@@ -370,26 +370,30 @@ public final class AppState {
             )
 
             // G2-3 — derive chunk size from the resolved reasoning
-            // provider's context window so chunks always fit the
-            // user's chosen model (and the user's machine). The
-            // resolved manifest carries `contextWindow` in tokens;
-            // hardware tier shrinks the target on small-RAM Macs.
-            // Defaults if no provider resolves: 8K tokens (llama3
-            // 8B) on the hardware-detected tier.
-            let resolvedReasoningTokens: Int = await {
+            // provider's manifest (contextWindow + minRAMBytes) AND
+            // the user's actual device RAM. Adaptive to ANY model
+            // and ANY device. Defaults if no provider resolves:
+            // 8K tokens, 8 GB required (llama3 8B baseline).
+            let resolvedManifest: (tokens: Int, requiredRAM: Int) = await {
                 let spec = CapabilitySpec.reasoning(
                     contextTokens: 1_500,
                     purpose: "appstate.chunker.sizing"
                 )
-                guard let p = try? await capabilities.resolve(spec) else { return 8_192 }
-                return p.manifest.contextWindow
+                guard let p = try? await capabilities.resolve(spec) else {
+                    return (8_192, 8 * 1_073_741_824)
+                }
+                return (p.manifest.contextWindow, Int(p.manifest.minRAMBytes))
             }()
-            let chunkerTarget = Chunker.targetForContextWindow(
-                tokens: resolvedReasoningTokens,
-                hardwareTier: hardware.tier
+            let sizing = Chunker.diagnose(
+                modelContextTokens: resolvedManifest.tokens,
+                modelRequiredRAMBytes: resolvedManifest.requiredRAM,
+                totalRAMBytes: Int(hardware.totalRAMBytes)
             )
-            AtlasLog.app.info("Chunker target=\(chunkerTarget, privacy: .public) chars (modelTokens=\(resolvedReasoningTokens, privacy: .public), tier=\(hardware.tier.rawValue, privacy: .public))")
-            let dynamicChunker = Chunker(targetCharacterCount: chunkerTarget)
+            AtlasLog.app.info("Chunker target=\(sizing.target, privacy: .public) chars (modelTokens=\(resolvedManifest.tokens, privacy: .public), modelRAM=\(resolvedManifest.requiredRAM, privacy: .public) bytes, deviceRAM=\(hardware.totalRAMBytes, privacy: .public) bytes)")
+            for w in sizing.warnings {
+                AtlasLog.app.warning("Sizing warning: \(w, privacy: .public)")
+            }
+            let dynamicChunker = Chunker(targetCharacterCount: sizing.target)
 
             let ingest = IngestCoordinator(
                 chunker: dynamicChunker,
