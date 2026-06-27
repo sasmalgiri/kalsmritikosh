@@ -54,7 +54,8 @@ public enum SchemaMigrations {
         (14, v14),
         (15, v15),
         (16, v16),
-        (17, v17)
+        (17, v17),
+        (18, v18)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -704,5 +705,37 @@ public enum SchemaMigrations {
 
     private static let v17: String = """
     ALTER TABLE chunks ADD COLUMN context_prefix_source TEXT;
+    """
+
+    // MARK: - v18 — HISTORY Phase A: quality_tier on extracted facts
+    //
+    // Every extracted entity / event / memory_object / fact_bond
+    // carries a `quality_tier` ('T1' / 'T2' / 'T3') so the brain can
+    // demote noise at query time without ever deleting it. Direct
+    // response to the "preserve all data, arrange don't filter"
+    // directive.
+    //
+    // T1 — structured header-derived (EmailLoader's From / To / Cc /
+    //      Date fields; calendar event ICS attendees; vCard rows).
+    //      Highest trust.
+    // T2 — body-text extraction via NER / NLTagger (the historical
+    //      default). Mid trust.
+    // T3 — shape-flagged noise (hostname-looking, vowel-less, mid-cap
+    //      run, base64-ish). Preserved on disk; demoted at retrieval.
+    //
+    // Existing rows default to 'T2' since that's the historical
+    // extraction path. A future backfill pass can re-classify
+    // pre-v18 rows; not required for forward correctness.
+
+    private static let v18: String = """
+    ALTER TABLE entities       ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'T2';
+    ALTER TABLE events         ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'T2';
+    ALTER TABLE memory_objects ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'T2';
+    ALTER TABLE fact_bonds     ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'T2';
+
+    CREATE INDEX IF NOT EXISTS idx_entities_quality_tier       ON entities(quality_tier);
+    CREATE INDEX IF NOT EXISTS idx_events_quality_tier         ON events(quality_tier);
+    CREATE INDEX IF NOT EXISTS idx_memory_objects_quality_tier ON memory_objects(quality_tier);
+    CREATE INDEX IF NOT EXISTS idx_fact_bonds_quality_tier     ON fact_bonds(quality_tier);
     """
 }
