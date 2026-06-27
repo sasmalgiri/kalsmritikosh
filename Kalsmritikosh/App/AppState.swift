@@ -649,6 +649,14 @@ public final class AppState {
             )
             await contextPrefixBackfiller.start()
 
+            // HISTORY Phase A.8 — periodic re-tier of pre-Phase-A
+            // entity rows. Hourly cadence with 500-row batches;
+            // demote-only (T2 → T3 when shape rules now flag the
+            // value as noise). Never deletes; only updates the
+            // quality_tier column.
+            let qualityTierBackfiller = QualityTierBackfiller(database: db)
+            await qualityTierBackfiller.start()
+
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
             // and labels it via the rule-based classifier. Idempotent:
