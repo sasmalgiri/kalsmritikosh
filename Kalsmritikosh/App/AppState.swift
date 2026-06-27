@@ -188,13 +188,49 @@ public final class AppState {
             // will rank it alongside Apple's model. When the server isn't
             // up, isAvailable() fails fast (1.5s probe) and the registry
             // skips it without affecting the user-visible latency.
-            await capabilities.register(OllamaProvider(
-                modelTag: "llama3:latest",
-                embeddingModelTag: "nomic-embed-text",
-                enabled: true,
-                displayName: "Local Ollama (llama3:latest)",
-                tier: .medium
-            ))
+            // G2-3 "any model the device can run" — discover every
+            // model the user has pulled in their local Ollama daemon
+            // and register one provider per model. The advisor then
+            // ranks them by device-fit, surfaces the best, and warns
+            // when the user has picked something that won't run well.
+            // Falls back to a single hardcoded llama3:latest entry
+            // when Ollama isn't reachable (so existing flows still
+            // work when the user hasn't installed Ollama yet).
+            let ollamaBase = URL(string: "http://localhost:11434")!
+            let detectedOllama = await OllamaDiscovery.list(baseURL: ollamaBase)
+            if detectedOllama.isEmpty {
+                await capabilities.register(OllamaProvider(
+                    id: "provider.local.network",
+                    baseURL: ollamaBase,
+                    modelTag: "llama3:latest",
+                    embeddingModelTag: "nomic-embed-text",
+                    enabled: true,
+                    displayName: "Local Ollama (llama3:latest)",
+                    tier: .medium
+                ))
+            } else {
+                AtlasLog.app.info("Ollama discovery: \(detectedOllama.count, privacy: .public) model(s) installed")
+                for m in detectedOllama {
+                    // Pull the actual context window from /api/show
+                    // when available; fall back to a family default.
+                    let ctx = await OllamaDiscovery.contextWindow(for: m.name, baseURL: ollamaBase)
+                        ?? OllamaDiscovery.defaultContextWindow(forFamily: m.family)
+                    let providerID = "provider.local.network.\(m.name)"
+                    let displayName = "Ollama \(m.name)"
+                    AtlasLog.app.info("Registering \(displayName, privacy: .public) — ram=\(m.estimatedRAMBytes, privacy: .public) tier=\(m.tier.rawValue, privacy: .public) ctx=\(ctx, privacy: .public)")
+                    await capabilities.register(OllamaProvider(
+                        id: providerID,
+                        baseURL: ollamaBase,
+                        modelTag: m.name,
+                        embeddingModelTag: m.name.contains("embed") ? m.name : "nomic-embed-text",
+                        enabled: true,
+                        displayName: displayName,
+                        tier: m.tier,
+                        contextWindow: ctx,
+                        minRAMBytes: m.estimatedRAMBytes
+                    ))
+                }
+            }
             await capabilities.register(CloudProvider())
 
             // G2-3 pre-warm — kick a tiny detached prompt at the

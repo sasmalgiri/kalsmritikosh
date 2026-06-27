@@ -27,7 +27,7 @@ public actor OllamaProvider: ModelProvider {
     // nonisolated requirements (the registry reads these declaratively
     // before the actor is "live"). All three are immutable `let` set
     // once in init; nonisolated access is safe.
-    public nonisolated let id = "provider.local.network"
+    public nonisolated let id: String
     public nonisolated let capabilities: Set<ModelCapability>
     public nonisolated let manifest: ModelManifest
 
@@ -38,14 +38,17 @@ public actor OllamaProvider: ModelProvider {
     private let session: URLSession
 
     public init(
+        id: String = "provider.local.network",
         baseURL: URL = URL(string: "http://localhost:11434")!,
         modelTag: String = "qwen2.5:14b",
         embeddingModelTag: String? = "nomic-embed-text",
         enabled: Bool = false,
         displayName: String = "Local network model server",
         tier: ModelManifest.Tier = .medium,
-        contextWindow: Int = 32_768
+        contextWindow: Int = 32_768,
+        minRAMBytes: Int64 = 0
     ) {
+        self.id = id
         self.baseURL = baseURL
         self.modelTag = modelTag
         self.embeddingModelTag = embeddingModelTag
@@ -66,10 +69,10 @@ public actor OllamaProvider: ModelProvider {
         self.capabilities = caps
 
         self.manifest = ModelManifest(
-            id: "provider.local.network",
+            id: id,
             displayName: displayName,
             capabilities: caps,
-            minRAMBytes: 0,        // server handles its own memory budget
+            minRAMBytes: minRAMBytes, // 0 when caller doesn't know; G2-3 discovery sets real bytes
             diskBytes: 0,
             contextWindow: contextWindow,
             privacyLevel: .localNetwork,
