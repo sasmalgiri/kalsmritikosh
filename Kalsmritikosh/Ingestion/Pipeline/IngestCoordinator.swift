@@ -482,7 +482,7 @@ public actor IngestCoordinator {
             let opening = String(object.content.prefix(1_500))
             let filename = object.sourceFile.lastPathComponent
             let total = chunked.count
-            chunked = await withTaskGroup(of: (Int, String?).self) { group in
+            chunked = await withTaskGroup(of: (Int, ContextPrefixResult?).self) { group in
                 for (i, c) in chunked.enumerated() {
                     let req = ContextPrefixRequest(
                         chunkText: c.text,
@@ -493,10 +493,11 @@ public actor IngestCoordinator {
                     )
                     group.addTask { (i, await gen.prefix(for: req)) }
                 }
-                var prefixes: [Int: String?] = [:]
-                for await (i, p) in group { prefixes[i] = p }
+                var results: [Int: ContextPrefixResult?] = [:]
+                for await (i, r) in group { results[i] = r }
                 return chunked.enumerated().map { idx, c in
-                    c.withContextPrefix(prefixes[idx] ?? nil)
+                    let result = results[idx] ?? nil
+                    return c.withContextPrefix(result?.text, source: result?.source)
                 }
             }
         }

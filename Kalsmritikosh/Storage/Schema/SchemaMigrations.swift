@@ -53,7 +53,8 @@ public enum SchemaMigrations {
         (13, v13),
         (14, v14),
         (15, v15),
-        (16, v16)
+        (16, v16),
+        (17, v17)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -683,5 +684,25 @@ public enum SchemaMigrations {
 
     private static let v16: String = """
     ALTER TABLE chunks ADD COLUMN context_prefix TEXT;
+    """
+
+    // MARK: - v17 — G2-3 provenance: which generator produced the prefix
+    //
+    // Tracks whether each chunk's context_prefix came from the LLM
+    // path or a fallback. Values written by IngestCoordinator:
+    //   - "llm"                 — LLM provider produced the prefix
+    //   - "heuristic"           — heuristic generator wired directly
+    //   - "heuristic-fallback"  — LLM tried, timed out / failed / empty;
+    //                             heuristic supplied the bytes instead
+    //   - NULL                  — no prefix on this row (single-chunk
+    //                             KOs, pre-v16 rows, generator disabled)
+    //
+    // Lets the user query "SELECT context_prefix_source, COUNT(*) FROM
+    // chunks GROUP BY context_prefix_source" to see how often the
+    // fallback path fired during ingest — useful for diagnosing a
+    // misconfigured / unreachable LLM provider.
+
+    private static let v17: String = """
+    ALTER TABLE chunks ADD COLUMN context_prefix_source TEXT;
     """
 }

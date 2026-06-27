@@ -30,6 +30,12 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// whole content IS the document and for chunks ingested before
     /// schema v16.
     public let contextPrefix: String?
+    /// G2-3 provenance — which generator produced `contextPrefix`.
+    /// One of `ContextPrefixResult.sourceLLM` /
+    /// `ContextPrefixResult.sourceHeuristic` /
+    /// `ContextPrefixResult.sourceHeuristicFallback`, or nil when no
+    /// prefix was generated.
+    public let contextPrefixSource: String?
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -42,7 +48,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         characterRange: Range<Int>,
         pageNumber: Int? = nil,
         createdAt: Date = .init(),
-        contextPrefix: String? = nil
+        contextPrefix: String? = nil,
+        contextPrefixSource: String? = nil
     ) {
         self.id = id
         self.objectID = objectID
@@ -52,12 +59,13 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.pageNumber = pageNumber
         self.createdAt = createdAt
         self.contextPrefix = contextPrefix
+        self.contextPrefixSource = contextPrefixSource
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
-    /// is replaced. Used by IngestCoordinator after the per-chunk
-    /// context generator runs.
-    public func withContextPrefix(_ prefix: String?) -> Chunk {
+    /// + `contextPrefixSource` are replaced. Used by IngestCoordinator
+    /// after the per-chunk context generator runs.
+    public func withContextPrefix(_ prefix: String?, source: String?) -> Chunk {
         Chunk(
             id: id,
             objectID: objectID,
@@ -66,14 +74,15 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             characterRange: characterRange,
             pageNumber: pageNumber,
             createdAt: createdAt,
-            contextPrefix: prefix
+            contextPrefix: prefix,
+            contextPrefixSource: source
         )
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
-        case pageNumber, createdAt, contextPrefix
+        case pageNumber, createdAt, contextPrefix, contextPrefixSource
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,6 +97,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.pageNumber = try c.decodeIfPresent(Int.self, forKey: .pageNumber)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.contextPrefix = try c.decodeIfPresent(String.self, forKey: .contextPrefix)
+        self.contextPrefixSource = try c.decodeIfPresent(String.self, forKey: .contextPrefixSource)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -101,5 +111,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encodeIfPresent(pageNumber, forKey: .pageNumber)
         try c.encode(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(contextPrefix, forKey: .contextPrefix)
+        try c.encodeIfPresent(contextPrefixSource, forKey: .contextPrefixSource)
     }
 }

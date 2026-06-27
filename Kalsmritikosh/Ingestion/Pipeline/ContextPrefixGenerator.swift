@@ -50,11 +50,30 @@ public struct ContextPrefixRequest: Sendable {
     }
 }
 
+/// Result of a single prefix-generation call. `source` records which
+/// path produced the bytes so the persisted row can be inspected later
+/// ("how often did the LLM fall back to heuristic during this ingest?")
+/// without re-running the generator.
+public struct ContextPrefixResult: Sendable, Equatable {
+    public static let sourceLLM = "llm"
+    public static let sourceHeuristic = "heuristic"
+    public static let sourceHeuristicFallback = "heuristic-fallback"
+
+    public let text: String
+    public let source: String
+
+    public init(text: String, source: String) {
+        self.text = text
+        self.source = source
+    }
+}
+
 public protocol ContextPrefixGenerator: Sendable {
     /// Returns a one-sentence prefix describing `request.chunkText`'s
-    /// role within its parent document. Returns nil to indicate
-    /// "no useful prefix" (callers leave context_prefix NULL).
-    func prefix(for request: ContextPrefixRequest) async -> String?
+    /// role within its parent document plus a `source` label. Returns
+    /// nil to indicate "no useful prefix" (callers leave both
+    /// context_prefix AND context_prefix_source NULL).
+    func prefix(for request: ContextPrefixRequest) async -> ContextPrefixResult?
 }
 
 // MARK: - Heuristic
@@ -62,7 +81,9 @@ public protocol ContextPrefixGenerator: Sendable {
 public struct HeuristicContextPrefixGenerator: ContextPrefixGenerator {
     public init() {}
 
-    public func prefix(for request: ContextPrefixRequest) async -> String? {
+    /// Synchronous helper — useful when an LLM generator wants to call
+    /// the heuristic as a fallback without the actor-hop overhead.
+    public nonisolated func heuristicText(for request: ContextPrefixRequest) -> String? {
         var parts: [String] = []
         if !request.filename.isEmpty {
             parts.append("In \(request.filename)")
@@ -77,6 +98,14 @@ public struct HeuristicContextPrefixGenerator: ContextPrefixGenerator {
         }
         let prefix = parts.joined()
         return prefix.isEmpty ? nil : prefix
+    }
+
+    public func prefix(for request: ContextPrefixRequest) async -> ContextPrefixResult? {
+        guard let text = heuristicText(for: request) else { return nil }
+        return ContextPrefixResult(
+            text: text,
+            source: ContextPrefixResult.sourceHeuristic
+        )
     }
 }
 
@@ -96,15 +125,16 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
         self.fallback = HeuristicContextPrefixGenerator()
     }
 
-    public func prefix(for request: ContextPrefixRequest) async -> String? {
-        // Resolve a reasoning provider; identity-fallback if absent.
+    public func prefix(for request: ContextPrefixRequest) async -> ContextPrefixResult? {
+        // Resolve a reasoning provider; fall back to heuristic if
+        // none resolves or it isn't currently available.
         let spec = CapabilitySpec.reasoning(
             contextTokens: 1_500,
             purpose: "ingest.contextPrefix"
         )
         guard let provider = try? await capabilities.resolve(spec),
               await provider.isAvailable() else {
-            return await fallback.prefix(for: request)
+            return heuristicFallback(for: request)
         }
 
         let userPrompt = buildPrompt(request: request)
@@ -138,10 +168,24 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
         if let raw = llmResponse {
             let cleaned = clean(raw)
             if !cleaned.isEmpty {
-                return cleaned
+                return ContextPrefixResult(
+                    text: cleaned,
+                    source: ContextPrefixResult.sourceLLM
+                )
             }
         }
-        return await fallback.prefix(for: request)
+        return heuristicFallback(for: request)
+    }
+
+    /// Wrap heuristic output with the "heuristic-fallback" source
+    /// label so chunk rows persist a distinct marker from the case
+    /// where the heuristic generator was wired directly.
+    private nonisolated func heuristicFallback(for request: ContextPrefixRequest) -> ContextPrefixResult? {
+        guard let text = fallback.heuristicText(for: request) else { return nil }
+        return ContextPrefixResult(
+            text: text,
+            source: ContextPrefixResult.sourceHeuristicFallback
+        )
     }
 
     private nonisolated func buildPrompt(request: ContextPrefixRequest) -> String {
