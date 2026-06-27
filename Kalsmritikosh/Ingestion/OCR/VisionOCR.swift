@@ -16,7 +16,30 @@ import Vision
 import AppKit
 #endif
 
-public actor VisionOCR {
+/// Format-specialist abstraction for OCR. Apple Vision is the
+/// default; future swap-ins (PaddleOCR-VL, Surya, TrOCR for
+/// handwriting, Mistral OCR as a cloud variant) conform to this
+/// protocol and ImageLoader / PDFLoader pick them up via
+/// constructor injection.
+///
+/// Quality ranking on 2026 benchmarks (printed text):
+///   PaddleOCR-VL ~94.5% OmniDocBench
+///   Mistral OCR  (cloud, paid, single forward pass)
+///   Surya v2     (open weights, layout-aware)
+///   Apple Vision (current, excellent printed text, weak on handwriting)
+///   Tesseract    (CPU only, legacy)
+///
+/// Handwriting specifically: TrOCR / Donut / DTrOCR are leaders.
+public protocol OCREngine: Sendable {
+    nonisolated var engineID: String { get }
+    func recognizePrinted(at url: URL) async -> [String]
+    func recognizeHandwritten(at url: URL) async -> [String]
+    func recognizeTable(at url: URL) async -> [[String]]
+}
+
+public actor VisionOCR: OCREngine {
+    public nonisolated let engineID = "apple-vision"
+
     public init() {}
 
     public func recognizePrinted(at url: URL) async -> [String] {

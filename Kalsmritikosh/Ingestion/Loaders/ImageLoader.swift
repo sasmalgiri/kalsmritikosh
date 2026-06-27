@@ -15,16 +15,16 @@ import ImageIO
 public struct ImageLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.png, .jpg, .heic, .tiff, .webp]
     public let primaryLane: ResourceLane = .neuralEngine // Vision OCR runs on the NE
-    private let ocr: VisionOCR
+    private let ocr: any OCREngine
 
-    public nonisolated init(ocr: VisionOCR = VisionOCR()) {
+    public nonisolated init(ocr: any OCREngine = VisionOCR()) {
         self.ocr = ocr
     }
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         var meta: [String: AnyCodable] = [
             "filename": AnyCodable(.string(url.lastPathComponent)),
-            "loader": AnyCodable(.string("vision-ocr"))
+            "loader": AnyCodable(.string("ocr:\(ocr.engineID)"))
         ]
 
         #if canImport(ImageIO)

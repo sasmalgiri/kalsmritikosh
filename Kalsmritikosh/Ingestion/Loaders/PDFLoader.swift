@@ -19,9 +19,9 @@ public struct PDFLoader: Ingestor {
     // PDFKit is CPU-bound; the OCR fallback hits the NE but the
     // dominant path on clean digital PDFs is pure parsing.
     public let primaryLane: ResourceLane = .cpu
-    private let ocr: VisionOCR
+    private let ocr: any OCREngine
 
-    public nonisolated init(ocr: VisionOCR = VisionOCR()) {
+    public nonisolated init(ocr: any OCREngine = VisionOCR()) {
         self.ocr = ocr
     }
 
