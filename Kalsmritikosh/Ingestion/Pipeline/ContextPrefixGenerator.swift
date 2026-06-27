@@ -118,20 +118,46 @@ public struct HeuristicContextPrefixGenerator: ContextPrefixGenerator {
 
 public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
     private let capabilities: CapabilityRegistry
-    private let timeoutMilliseconds: UInt64
+    /// Initial per-attempt timeout in milliseconds. The first attempt
+    /// runs with this budget; each retry doubles, capped at `maxTimeoutMs`.
+    private let initialTimeoutMs: UInt64
+    /// Hard upper bound on a single attempt's timeout. The doubling
+    /// stops here — beyond this we give up rather than let a single
+    /// chunk consume unbounded ingest time.
+    private let maxTimeoutMs: UInt64
+    /// Maximum number of attempts per chunk. Counts the first try.
+    /// `maxAttempts=3` with `initial=8s, max=32s` gives 8s, 16s, 32s
+    /// across three tries — total worst case 56s per chunk.
+    private let maxAttempts: Int
 
     public init(
         capabilities: CapabilityRegistry,
-        timeoutMilliseconds: UInt64 = 2_000
+        initialTimeoutMs: UInt64 = 8_000,
+        maxTimeoutMs: UInt64 = 32_000,
+        maxAttempts: Int = 3
     ) {
         self.capabilities = capabilities
-        self.timeoutMilliseconds = timeoutMilliseconds
+        self.initialTimeoutMs = initialTimeoutMs
+        self.maxTimeoutMs = maxTimeoutMs
+        self.maxAttempts = max(1, maxAttempts)
+    }
+
+    /// Backward-compat constructor — keeps existing call sites that
+    /// supply a single `timeoutMilliseconds:` working. Sets the same
+    /// value for initial AND max with 1 attempt (no escalation).
+    public init(
+        capabilities: CapabilityRegistry,
+        timeoutMilliseconds: UInt64
+    ) {
+        self.capabilities = capabilities
+        self.initialTimeoutMs = timeoutMilliseconds
+        self.maxTimeoutMs = timeoutMilliseconds
+        self.maxAttempts = 1
     }
 
     public func prefix(for request: ContextPrefixRequest) async -> ContextPrefixResult? {
         // Resolve a reasoning provider. NO fallback: if none resolves
-        // or it isn't available, this chunk gets no prefix. The user
-        // explicitly forbade silent quality degradation here.
+        // or it isn't available, this chunk gets no prefix.
         let spec = CapabilitySpec.reasoning(
             contextTokens: 1_500,
             purpose: "ingest.contextPrefix"
@@ -149,35 +175,83 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
             systemPrompt: "You write a single sentence that locates a passage within its document. No preamble, no quotes. Output ONE sentence, max 25 words."
         )
 
-        // Per-chunk timeout so an unresponsive provider can't stall
-        // ingest. On timeout / error / empty response we return nil
-        // — the row stays without a prefix instead of being polluted
-        // with heuristic noise. Quality or nothing.
-        let llmResponse: String? = await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                do {
-                    return try await provider.generate(prompt: userPrompt, options: options)
-                } catch {
-                    AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) call failed; chunk left without prefix")
-                    return nil
+        // Incremental retry: try with the initial budget; on timeout,
+        // double it (capped at maxTimeoutMs) and try again, up to
+        // maxAttempts. A real provider error (non-timeout) breaks
+        // the loop immediately — errors are signal, retry won't help.
+        var attemptTimeout = initialTimeoutMs
+        for attempt in 1...maxAttempts {
+            let (response, timedOut) = await runOnce(
+                provider: provider,
+                prompt: userPrompt,
+                options: options,
+                timeoutMs: attemptTimeout
+            )
+            if let raw = response {
+                let cleaned = clean(raw)
+                if !cleaned.isEmpty {
+                    if attempt > 1 {
+                        AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) recovered on attempt \(attempt, privacy: .public) with \(attemptTimeout, privacy: .public)ms")
+                    }
+                    return ContextPrefixResult(
+                        text: cleaned,
+                        source: ContextPrefixResult.sourceLLM
+                    )
                 }
-            }
-            group.addTask { [timeoutMilliseconds] in
-                try? await Task.sleep(nanoseconds: timeoutMilliseconds * 1_000_000)
+                // Non-empty raw but cleaned was empty — likely a
+                // refusal / weird formatting. Don't retry; treat as
+                // a real failure.
                 return nil
             }
-            let first = await group.next() ?? nil
+            if !timedOut {
+                // Provider returned a real error (not a timeout).
+                // Retrying won't change the answer.
+                return nil
+            }
+            // Timeout — escalate and try again, unless we hit max.
+            if attempt >= maxAttempts { break }
+            attemptTimeout = min(attemptTimeout * 2, maxTimeoutMs)
+        }
+        AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) exhausted \(self.maxAttempts, privacy: .public) attempts (final \(attemptTimeout, privacy: .public)ms); chunk left without prefix")
+        return nil
+    }
+
+    /// One bounded call. Returns (response, timedOut). `response` is
+    /// nil when the call timed out OR errored; the timedOut flag
+    /// distinguishes those so the retry loop knows whether to escalate.
+    private func runOnce(
+        provider: any ModelProvider,
+        prompt: String,
+        options: GenerationOptions,
+        timeoutMs: UInt64
+    ) async -> (String?, Bool) {
+        enum Outcome: Sendable {
+            case response(String)
+            case timeout
+            case error
+        }
+        let outcome: Outcome = await withTaskGroup(of: Outcome.self) { group in
+            group.addTask {
+                do {
+                    let raw = try await provider.generate(prompt: prompt, options: options)
+                    return .response(raw)
+                } catch {
+                    return .error
+                }
+            }
+            group.addTask { [timeoutMs] in
+                try? await Task.sleep(nanoseconds: timeoutMs * 1_000_000)
+                return .timeout
+            }
+            let first = await group.next() ?? .error
             group.cancelAll()
             return first
         }
-
-        guard let raw = llmResponse else { return nil }
-        let cleaned = clean(raw)
-        guard !cleaned.isEmpty else { return nil }
-        return ContextPrefixResult(
-            text: cleaned,
-            source: ContextPrefixResult.sourceLLM
-        )
+        switch outcome {
+        case .response(let s): return (s, false)
+        case .timeout: return (nil, true)
+        case .error: return (nil, false)
+        }
     }
 
     private nonisolated func buildPrompt(request: ContextPrefixRequest) -> String {

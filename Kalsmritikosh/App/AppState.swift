@@ -369,7 +369,30 @@ public final class AppState {
                 repository: syntheticQuestionsRepo
             )
 
+            // G2-3 — derive chunk size from the resolved reasoning
+            // provider's context window so chunks always fit the
+            // user's chosen model (and the user's machine). The
+            // resolved manifest carries `contextWindow` in tokens;
+            // hardware tier shrinks the target on small-RAM Macs.
+            // Defaults if no provider resolves: 8K tokens (llama3
+            // 8B) on the hardware-detected tier.
+            let resolvedReasoningTokens: Int = await {
+                let spec = CapabilitySpec.reasoning(
+                    contextTokens: 1_500,
+                    purpose: "appstate.chunker.sizing"
+                )
+                guard let p = try? await capabilities.resolve(spec) else { return 8_192 }
+                return p.manifest.contextWindow
+            }()
+            let chunkerTarget = Chunker.targetForContextWindow(
+                tokens: resolvedReasoningTokens,
+                hardwareTier: hardware.tier
+            )
+            AtlasLog.app.info("Chunker target=\(chunkerTarget, privacy: .public) chars (modelTokens=\(resolvedReasoningTokens, privacy: .public), tier=\(hardware.tier.rawValue, privacy: .public))")
+            let dynamicChunker = Chunker(targetCharacterCount: chunkerTarget)
+
             let ingest = IngestCoordinator(
+                chunker: dynamicChunker,
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
                 entityQualityGate: EntityQualityGate.bundled(),
@@ -410,7 +433,9 @@ public final class AppState {
                 // selection time so the user makes an informed call.
                 contextPrefixGenerator: LLMContextPrefixGenerator(
                     capabilities: capabilities,
-                    timeoutMilliseconds: 20_000
+                    initialTimeoutMs: 8_000,
+                    maxTimeoutMs: 32_000,
+                    maxAttempts: 3
                 )
             )
 

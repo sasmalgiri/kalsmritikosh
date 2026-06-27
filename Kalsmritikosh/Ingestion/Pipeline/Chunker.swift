@@ -48,6 +48,45 @@ public struct Chunker: Sendable {
         self.minChunkCharacterCount = minChunkCharacterCount
     }
 
+    /// Derive a sensible `targetCharacterCount` from the resolved
+    /// reasoning model's context window AND the user's hardware
+    /// tier, so the per-chunk LLM calls (context-prefix generator,
+    /// extractor prompts) have room for prompt scaffolding + answer
+    /// + buffer AND so a low-RAM machine isn't asked to hold many
+    /// huge chunks in flight.
+    ///
+    /// Why we DON'T just maximize: bigger chunks dilute embeddings
+    /// (one vector represents too many topics, vector similarity
+    /// loses its sharpness for lookups). Gate-1 retrieval recall on
+    /// 1200-char chunks was 0.88 on lookup. Doubling the chunk size
+    /// is a measured trade-off; quadrupling would hurt precision.
+    /// The cap of 2400 chars is set there for that reason.
+    ///
+    /// Formula:
+    ///   chars   = max(1, tokens) × 4 / 12     (English ≈ 4 chars/token)
+    ///   chars  *= tierFactor                  (small=0.6, medium=0.85, large=1.0)
+    ///   chars   = clamp(chars, 800, 2400)
+    ///
+    /// Worked examples (large-tier Mac):
+    ///   llama3 8B,    8K tokens →   2400  (clamped)
+    ///   qwen2.5 14B, 32K tokens →   2400  (clamped)
+    ///   tiny 2B,      2K tokens →    800  (floored)
+    public static func targetForContextWindow(
+        tokens: Int,
+        hardwareTier: ModelManifest.Tier = .large
+    ) -> Int {
+        let base = max(1, tokens) * 4 / 12
+        let tierFactor: Double = {
+            switch hardwareTier {
+            case .small: return 0.6
+            case .medium: return 0.85
+            case .large: return 1.0
+            }
+        }()
+        let scaled = Int(Double(base) * tierFactor)
+        return max(800, min(scaled, 2400))
+    }
+
     public nonisolated func chunk(
         objectID: KnowledgeObject.ID,
         content: String,
