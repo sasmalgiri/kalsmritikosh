@@ -111,7 +111,8 @@ public actor FactBondsRepository {
     public func upsertBond(
         _ bond: BondUpsert,
         sourceObjectID: KnowledgeObject.ID,
-        confidence: Confidence = .medium
+        confidence: Confidence = .medium,
+        qualityTier: QualityTier = .t2
     ) async throws -> Bond? {
         let existing = try await database.query("""
         SELECT id, weight, evidence_object_ids_json
@@ -150,9 +151,10 @@ public actor FactBondsRepository {
             INSERT INTO fact_bonds (
                 id, bond_name, from_fact_kind, from_fact_id,
                 to_fact_kind, to_fact_id, source_object_id,
-                confidence, weight, evidence_object_ids_json, created_at
+                confidence, weight, evidence_object_ids_json, created_at,
+                quality_tier
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);
             """, [
                 .uuid(newID),
                 .text(bond.bondName),
@@ -163,7 +165,8 @@ public actor FactBondsRepository {
                 .uuid(sourceObjectID),
                 .real(confidence.value),
                 .text("[\"\(sourceObjectID.uuidString)\"]"),
-                .date(.init())
+                .date(.init()),
+                .text(qualityTier.rawValue)
             ])
             return Bond(
                 id: newID,

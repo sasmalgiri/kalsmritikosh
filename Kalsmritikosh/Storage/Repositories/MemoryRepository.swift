@@ -31,8 +31,9 @@ public actor MemoryRepository {
             key_decisions_json, key_event_ids_json,
             important_relationship_ids_json, risks_json,
             status, narrative, source_object_ids_json,
-            confidence, version, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            confidence, version, created_at, updated_at,
+            quality_tier
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(subject_kind, subject_identifier) DO UPDATE SET
             key_decisions_json = excluded.key_decisions_json,
             key_event_ids_json = excluded.key_event_ids_json,
@@ -43,7 +44,8 @@ public actor MemoryRepository {
             source_object_ids_json = excluded.source_object_ids_json,
             confidence = excluded.confidence,
             version = excluded.version,
-            updated_at = excluded.updated_at;
+            updated_at = excluded.updated_at,
+            quality_tier = MIN(memory_objects.quality_tier, excluded.quality_tier);
         """, [
             .uuid(memory.id),
             .text(memory.subjectKind.rawValue),
@@ -58,7 +60,8 @@ public actor MemoryRepository {
             .real(memory.confidence.value),
             .integer(Int64(memory.version)),
             .date(memory.createdAt),
-            .date(memory.updatedAt)
+            .date(memory.updatedAt),
+            .text(memory.qualityTier.rawValue)
         ])
     }
 
@@ -89,7 +92,7 @@ public actor MemoryRepository {
                key_decisions_json, key_event_ids_json,
                important_relationship_ids_json, risks_json,
                status, narrative, source_object_ids_json,
-               confidence, version, created_at, updated_at
+               confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
         WHERE subject_kind = ? AND subject_identifier = ?
         LIMIT 1;
@@ -107,7 +110,7 @@ public actor MemoryRepository {
                key_decisions_json, key_event_ids_json,
                important_relationship_ids_json, risks_json,
                status, narrative, source_object_ids_json,
-               confidence, version, created_at, updated_at
+               confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
         ORDER BY updated_at DESC
         LIMIT ? OFFSET ?;
@@ -122,7 +125,7 @@ public actor MemoryRepository {
                key_decisions_json, key_event_ids_json,
                important_relationship_ids_json, risks_json,
                status, narrative, source_object_ids_json,
-               confidence, version, created_at, updated_at
+               confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
         WHERE subject_identifier LIKE ? OR narrative LIKE ?
         ORDER BY updated_at DESC
@@ -199,6 +202,8 @@ public actor MemoryRepository {
         let sources = sourceJSON.data(using: .utf8)
             .flatMap { try? decoder.decode([KnowledgeObject.ID].self, from: $0) } ?? []
 
+        let tier = row.string(14).flatMap(QualityTier.init(rawValue:)) ?? .t2
+
         return MemoryObject(
             id: id,
             subjectKind: kind,
@@ -213,7 +218,8 @@ public actor MemoryRepository {
             confidence: Confidence(conf),
             version: Int(version),
             createdAt: created,
-            updatedAt: updated
+            updatedAt: updated,
+            qualityTier: tier
         )
     }
 

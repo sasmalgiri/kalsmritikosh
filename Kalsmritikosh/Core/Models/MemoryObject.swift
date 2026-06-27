@@ -30,6 +30,10 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
     public let version: Int
     public let createdAt: Date
     public let updatedAt: Date
+    /// HISTORY Phase A — best (highest-trust) tier across this
+    /// subject's contributing events. T1 if any event is T1, else
+    /// T2 if any event is T2, else T3.
+    public let qualityTier: QualityTier
 
     public nonisolated init(
         id: ID = UUID(),
@@ -45,7 +49,8 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
         confidence: Confidence = .medium,
         version: Int = 1,
         createdAt: Date = .init(),
-        updatedAt: Date = .init()
+        updatedAt: Date = .init(),
+        qualityTier: QualityTier = .t2
     ) {
         self.id = id
         self.subjectKind = subjectKind
@@ -61,6 +66,7 @@ public struct MemoryObject: Codable, Identifiable, Hashable, Sendable {
         self.version = version
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.qualityTier = qualityTier
     }
 
     public enum SubjectKind: String, Codable, Sendable, CaseIterable, Hashable {

@@ -85,6 +85,22 @@ public actor MemoryDistiller {
         let prior = try await memory.current(forSubject: subject.kind, identifier: subject.identifier)
         let nextVersion = (prior?.version ?? 0) + 1
 
+        // HISTORY Phase A.7 — memory inherits the BEST (highest-trust)
+        // tier across the subject's contributing events. 'T1' < 'T2' <
+        // 'T3' lexicographically, so MIN gives T1 if any event is T1.
+        // Fall back to T2 (the schema default) when no events match.
+        let memoryTier: QualityTier = {
+            let eventTiers = recentEvents.map(\.qualityTier)
+            guard let best = eventTiers.min(by: { $0.rawValue < $1.rawValue }) else {
+                return prior?.qualityTier ?? .t2
+            }
+            // If we also have a prior, keep whichever is better.
+            if let priorTier = prior?.qualityTier, priorTier.rawValue < best.rawValue {
+                return priorTier
+            }
+            return best
+        }()
+
         let next = MemoryObject(
             id: prior?.id ?? UUID(),
             subjectKind: subject.kind,
@@ -99,7 +115,8 @@ public actor MemoryDistiller {
             confidence: aggregateConfidence(events: recentEvents),
             version: nextVersion,
             createdAt: prior?.createdAt ?? Date(),
-            updatedAt: Date()
+            updatedAt: Date(),
+            qualityTier: memoryTier
         )
 
         guard !recentEvents.isEmpty || prior != nil else { return nil }
