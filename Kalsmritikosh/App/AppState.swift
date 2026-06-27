@@ -187,6 +187,38 @@ public final class AppState {
                 )
             )
             await capabilities.register(LlamaCppProvider())
+
+            // G2-3 — discover user-supplied MLX checkpoints in the
+            // app's user-models directory (~/Library/Application
+            // Support/Kalsmritikosh/MLXModels/<model-folder>/).
+            // Each subdirectory with config.json registers as one
+            // MLXProvider so the advisor can rank it among the user's
+            // other choices.
+            let mlxModels = MLXDiscovery.list()
+            if !mlxModels.isEmpty {
+                AtlasLog.app.info("MLX discovery: \(mlxModels.count, privacy: .public) user checkpoint(s)")
+                for m in mlxModels {
+                    let manifest = ModelManifest(
+                        id: m.id,
+                        displayName: m.displayName,
+                        capabilities: [
+                            .textGeneration, .reasoning, .summarization,
+                            .extraction, .classification
+                        ],
+                        minRAMBytes: m.estimatedRAMBytes,
+                        diskBytes: m.sizeBytes,
+                        contextWindow: m.contextWindow,
+                        privacyLevel: .onDevice,
+                        requiresDownload: false,
+                        tier: m.tier
+                    )
+                    await capabilities.register(MLXProvider(
+                        id: m.id,
+                        manifest: manifest,
+                        downloader: ModelDownloader()
+                    ))
+                }
+            }
             // Ollama is opt-in but on by default — when `ollama serve` is
             // running locally with the named models pulled, the registry
             // will rank it alongside Apple's model. When the server isn't
