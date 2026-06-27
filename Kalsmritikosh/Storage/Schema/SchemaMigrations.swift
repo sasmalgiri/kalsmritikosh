@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 15
+    public static let latestVersion = 21
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -57,7 +57,8 @@ public enum SchemaMigrations {
         (17, v17),
         (18, v18),
         (19, v19),
-        (20, v20)
+        (20, v20),
+        (21, v21)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -810,5 +811,23 @@ public enum SchemaMigrations {
         computed_at  REAL NOT NULL,
         PRIMARY KEY (community_id, level)
     );
+    """
+
+    // MARK: - v21 — HISTORY Phase C.1: per-event 5W+H narrative slots
+    //
+    // Adds `narrative_slots_json` to events. The column carries the
+    // JSON encoding of an `EventNarrativeSlots` struct (six lists of
+    // values keyed by who/what/when/where/why/how) with per-slot
+    // provenance — source KO + chunk IDs and an extractor tag.
+    //
+    // This column is COMPLEMENTARY to v12's `slot_values_json` (the
+    // FactSchema typed slot bag). FactSchema slots are typed and
+    // bond-walkable; narrative_slots_json is the surface-form 5W+H
+    // shape the Phase D composer reads to write chapter prose.
+    //
+    // Defaults to '{}' so existing rows decode as EventNarrativeSlots.empty.
+
+    private static let v21: String = """
+    ALTER TABLE events ADD COLUMN narrative_slots_json TEXT NOT NULL DEFAULT '{}';
     """
 }

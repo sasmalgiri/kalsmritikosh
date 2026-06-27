@@ -110,6 +110,62 @@ public actor EventsRepository {
         )
     }
 
+    // MARK: - HISTORY Phase C — 5W+H narrative slots (v21)
+
+    /// Persist the 5W+H bundle to `events.narrative_slots_json`. Empty
+    /// bundles encode as "{}" so a "clear all slots" pass round-trips
+    /// to the column default.
+    public func setNarrativeSlots(_ slots: EventNarrativeSlots, forEventID id: Event.ID) async throws {
+        try await database.exec(
+            "UPDATE events SET narrative_slots_json = ? WHERE id = ?;",
+            [.text(slots.encodedJSON()), .uuid(id)]
+        )
+    }
+
+    /// Read the 5W+H bundle for a single event. Missing or malformed
+    /// JSON decodes as `.empty` — column default is "{}", so missing
+    /// only happens for deleted rows.
+    public func narrativeSlots(forEventID id: Event.ID) async throws -> EventNarrativeSlots {
+        let rows = try await database.query(
+            "SELECT narrative_slots_json FROM events WHERE id = ? LIMIT 1;",
+            [.uuid(id)]
+        )
+        guard let row = rows.first, let json = row.string(0) else {
+            return .empty
+        }
+        return EventNarrativeSlots.decoded(from: json)
+    }
+
+    /// Batch read for the narrative composer (Phase D) — feeds chapter
+    /// rendering with one DB round-trip per chapter, not per event.
+    public func narrativeSlots(forEventIDs ids: [Event.ID]) async throws -> [Event.ID: EventNarrativeSlots] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [Event.ID: EventNarrativeSlots] = [:]
+        for id in ids {
+            let rows = try await database.query(
+                "SELECT narrative_slots_json FROM events WHERE id = ? LIMIT 1;",
+                [.uuid(id)]
+            )
+            guard let row = rows.first, let json = row.string(0) else { continue }
+            out[id] = EventNarrativeSlots.decoded(from: json)
+        }
+        return out
+    }
+
+    /// Phase C.2 backfill helper — list events whose narrative slots
+    /// have never been computed (column is the default '{}'). The
+    /// extractor pulls these in oldest-first batches.
+    public func listEventsMissingNarrativeSlots(limit: Int = 200) async throws -> [Event] {
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        FROM events
+        WHERE narrative_slots_json = '{}' OR narrative_slots_json IS NULL
+        ORDER BY date ASC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     /// G3.20 — read the persisted fact_type for a single row. Returns
     /// nil when the row isn't classified or doesn't exist. Used by the
     /// WalkExplainer to type each end of a bond step.
