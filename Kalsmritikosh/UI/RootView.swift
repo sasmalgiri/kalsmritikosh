@@ -90,6 +90,8 @@ public struct RootView: View {
                 .tabItem { Label("History", systemImage: "book.closed") }
             LibraryView()
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+            DossierView()
+                .tabItem { Label("Dossier", systemImage: "person.text.rectangle") }
             KnowledgeView()
                 .tabItem { Label("Knowledge", systemImage: "books.vertical") }
             SourcesView()
