@@ -14,6 +14,7 @@ import ImageIO
 
 public struct ImageLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.png, .jpg, .heic, .tiff, .webp]
+    public let primaryLane: ResourceLane = .neuralEngine // Vision OCR runs on the NE
     private let ocr: VisionOCR
 
     public nonisolated init(ocr: VisionOCR = VisionOCR()) {

@@ -682,38 +682,46 @@ public final class AppState {
             let watcher = FolderWatcher()
             // Capture weak — when AppState is deallocated the consumer
             // task observes that ingest/watcher are gone and exits.
-            self.watcherTask = Task { [weak self, weak ingest, weak watcher] in
+            // G4.4 + lane-based ingest. The prior shared
+            // `maxInFlight=4` capped all formats at one semaphore;
+            // a 4-PDF burst could stall image OCR even though Vision
+            // ran on a totally different resource (Neural Engine).
+            // Lanes give each hardware resource its own cap:
+            //   cpu          ≈ cores - 1   (text/PDF/DOCX/EML/...)
+            //   neuralEngine = 1           (Vision OCR, Apple Speech)
+            //   gpuModel     = 1..2        (future Whisper/PaddleOCR)
+            //   llm          = 1           (Ollama context-prefix)
+            //   diskIO       = 2..4        (PST/NSF B-tree walks)
+            //   network      = 4           (cloud OCR / reasoning)
+            // Mixed-format corpora hit ~3× speedup; same-format
+            // bursts unchanged (still bounded by their own lane).
+            let laneScheduler = LaneScheduler(
+                capacities: LaneScheduler.defaultCapacities(
+                    processorCount: ProcessInfo.processInfo.activeProcessorCount,
+                    availableRAMBytes: hardware.totalRAMBytes
+                )
+            )
+            let loaderRegistry = LoaderRegistry.standard()
+            self.watcherTask = Task { [weak self, weak ingest, weak watcher, laneScheduler, loaderRegistry] in
                 guard let watcher else { return }
-                // G4.4 — bounded ingest concurrency. Sequential per-url
-                // ingestion was the only path before; on a big drop
-                // (Gmail Takeout ZIP expansion = thousands of files)
-                // ingest was wall-clocked by file order. A TaskGroup
-                // with maxInFlight=4 (matching the expert WorkerPool
-                // cap) ingests up to 4 files in parallel with
-                // backpressure — drops shrink from N×t to N×t/4 while
-                // keeping the per-file pipeline (loader → chunker →
-                // embedder) serial inside each task.
-                let maxInFlight = 4
                 for await event in watcher.events {
                     guard let ingest, let self else { return }
                     await withTaskGroup(of: Void.self) { group in
-                        var inFlight = 0
                         for url in event.urls {
-                            if inFlight >= maxInFlight {
-                                _ = await group.next()
-                                inFlight -= 1
-                            }
                             group.addTask { [weak self, weak ingest] in
                                 guard let self, let ingest else { return }
-                                await self.withIngestActivity(file: url.lastPathComponent) {
-                                    do {
-                                        _ = try await ingest.ingest(fileAt: url)
-                                    } catch {
-                                        AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                                let type = SourceType.detect(from: url)
+                                let lane = loaderRegistry.loader(for: type).primaryLane
+                                await laneScheduler.withLane(lane) {
+                                    await self.withIngestActivity(file: url.lastPathComponent) {
+                                        do {
+                                            _ = try await ingest.ingest(fileAt: url)
+                                        } catch {
+                                            AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                                        }
                                     }
                                 }
                             }
-                            inFlight += 1
                         }
                     }
                 }

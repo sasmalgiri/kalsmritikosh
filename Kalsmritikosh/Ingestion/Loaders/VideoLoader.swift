@@ -14,6 +14,7 @@ import AVFoundation
 
 public struct VideoLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp4, .mov]
+    public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer over the audio track
     private let transcriber: SpeechTranscriber
 
     public nonisolated init(transcriber: SpeechTranscriber = SpeechTranscriber()) {

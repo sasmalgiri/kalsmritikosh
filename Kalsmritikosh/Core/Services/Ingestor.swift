@@ -13,6 +13,13 @@ public protocol Ingestor: Sendable {
     /// The source types this ingestor knows how to handle.
     nonisolated var supportedTypes: Set<SourceType> { get }
 
+    /// Primary hardware resource this ingestor saturates. The
+    /// `LaneScheduler` uses this to fan files across independent
+    /// lanes so a 4-PDF burst doesn't stall a 1-image OCR job.
+    /// Default `.cpu`; loaders that hit Neural Engine / GPU / Disk-I/O
+    /// override.
+    nonisolated var primaryLane: ResourceLane { get }
+
     /// Read the file at `url` (already resolved through a security-scoped
     /// bookmark) and return a fully-populated KnowledgeObject. Throws if
     /// the file can't be read or parsed. Must not write to the database.
@@ -26,6 +33,8 @@ public protocol Ingestor: Sendable {
 }
 
 extension Ingestor {
+    public var primaryLane: ResourceLane { .cpu }
+
     public func ingestMany(fileAt url: URL, type: SourceType) async throws -> [KnowledgeObject] {
         [try await ingest(fileAt: url, type: type)]
     }

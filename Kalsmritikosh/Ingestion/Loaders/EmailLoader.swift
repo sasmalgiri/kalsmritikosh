@@ -18,6 +18,12 @@ import Foundation
 
 public struct EmailLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail, .nsf]
+    // .eml + .msg = cheap CPU MIME parsing. .pst / .nsf are rare and
+    // big but still single-file workloads — they don't benefit from
+    // parallel scheduling against themselves. Pick .cpu since that's
+    // the heavy hitter on real corpora (Gmail Takeout = thousands of
+    // .eml files, no PST/NSF).
+    public let primaryLane: ResourceLane = .cpu
 
     /// Move-A feature flag. When `true`, mbox ingest emits one KO per
     /// reply-chain thread via ThreadCoalescer. When `false` (default),
