@@ -648,16 +648,63 @@ public actor HybridRetriever: Retriever {
         shortCircuit: RetrievalLayer?,
         walkSteps: [WalkStep] = []
     ) -> RetrievalResult {
-        RetrievalResult(
+        // HISTORY Phase A.4 — tier-aware re-ranking.
+        // Entities are sorted by (-tier.defaultWeight, originalIndex)
+        // so T1 leads, T2 follows, T3 trails — unless the user has
+        // toggled `showT3InResults` off, in which case T3 entities
+        // are filtered out entirely. Preserve-not-filter rule
+        // honored: T3 rows STAY ON DISK; only the result surface
+        // is affected.
+        //
+        // Events get the same treatment because EventExtractor
+        // (Phase A.5) will tag them; today every event is still T2
+        // by default which is a no-op until A.5 lands.
+        let showT3 = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
+        let rankedEntities = Self.rankByTier(entities, includeT3: showT3)
+        let rankedEvents   = Self.rankByTier(events,   includeT3: showT3, keyPath: \.qualityTier)
+
+        return RetrievalResult(
             chunks: chunks,
-            events: events,
-            entities: entities,
+            events: rankedEvents,
+            entities: rankedEntities,
             relationships: relationships,
             summaries: summaries,
             layersUsed: layers,
             shortCircuitedAt: shortCircuit,
             walkSteps: walkSteps
         )
+    }
+
+    /// Stable tier-aware sort. Items with higher
+    /// `tier.defaultWeight` come first; original order is preserved
+    /// within a tier. T3 items are dropped when `includeT3== false`.
+    private static func rankByTier(
+        _ entities: [Entity],
+        includeT3: Bool
+    ) -> [Entity] {
+        let filtered = includeT3 ? entities : entities.filter { $0.qualityTier != .t3 }
+        let indexed = filtered.enumerated().map { ($0.offset, $0.element) }
+        return indexed.sorted { a, b in
+            let wa = a.1.qualityTier.defaultWeight
+            let wb = b.1.qualityTier.defaultWeight
+            if wa != wb { return wa > wb }
+            return a.0 < b.0
+        }.map(\.1)
+    }
+
+    private static func rankByTier(
+        _ events: [Event],
+        includeT3: Bool,
+        keyPath: KeyPath<Event, QualityTier>
+    ) -> [Event] {
+        let filtered = includeT3 ? events : events.filter { $0[keyPath: keyPath] != .t3 }
+        let indexed = filtered.enumerated().map { ($0.offset, $0.element) }
+        return indexed.sorted { a, b in
+            let wa = a.1[keyPath: keyPath].defaultWeight
+            let wb = b.1[keyPath: keyPath].defaultWeight
+            if wa != wb { return wa > wb }
+            return a.0 < b.0
+        }.map(\.1)
     }
 }
 

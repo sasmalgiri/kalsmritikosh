@@ -22,6 +22,7 @@ public struct SettingsView: View {
     @State private var pins: [ModelCapability: String] = [:]
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+    @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
     @State private var baselineReportURL: URL?
@@ -619,6 +620,16 @@ public struct SettingsView: View {
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")
                 }
             Text("When on, email ingest folds an entire reply chain into a single KO instead of one KO per message. Memory distillation gets the whole conversation in one shot; storage drops on busy mailboxes. **Requires re-ingest of affected mailboxes** to take effect.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 4)
+
+            Toggle("Show low-quality (T3) entities in results", isOn: $showT3InResults)
+                .onChange(of: showT3InResults) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.history.showT3InResults")
+                }
+            Text("HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
