@@ -56,7 +56,8 @@ public enum SchemaMigrations {
         (16, v16),
         (17, v17),
         (18, v18),
-        (19, v19)
+        (19, v19),
+        (20, v20)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -770,5 +771,44 @@ public enum SchemaMigrations {
 
     CREATE INDEX IF NOT EXISTS idx_cooc_b_a   ON entity_cooccurrences(entity_b, entity_a);
     CREATE INDEX IF NOT EXISTS idx_cooc_weight ON entity_cooccurrences(weight DESC);
+    """
+
+    // MARK: - v20 — HISTORY Phase B.2: community detection results
+    //
+    // Two tables:
+    //   entity_communities   — membership (which entity in which community)
+    //   community_summaries  — LLM-generated per-community summary
+    //
+    // Why two: the detector (B.2) writes membership; the summarizer
+    // (B.3) writes the LLM-derived narrative without needing to
+    // rewrite memberships.
+    //
+    // A `level` column on entity_communities is reserved for the
+    // hierarchical detector (Leiden produces a tree); the
+    // agglomerative MVP shipped here uses level=0 only.
+
+    private static let v20: String = """
+    CREATE TABLE entity_communities (
+        community_id TEXT NOT NULL,
+        entity_id    TEXT NOT NULL,
+        level        INTEGER NOT NULL DEFAULT 0,
+        computed_at  REAL NOT NULL,
+        PRIMARY KEY (community_id, entity_id, level),
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_communities_entity ON entity_communities(entity_id);
+    CREATE INDEX IF NOT EXISTS idx_communities_level  ON entity_communities(level);
+
+    CREATE TABLE community_summaries (
+        community_id TEXT NOT NULL,
+        level        INTEGER NOT NULL DEFAULT 0,
+        title        TEXT NOT NULL,
+        summary      TEXT NOT NULL,
+        member_count INTEGER NOT NULL,
+        top_entity_ids_json TEXT NOT NULL DEFAULT '[]',
+        computed_at  REAL NOT NULL,
+        PRIMARY KEY (community_id, level)
+    );
     """
 }

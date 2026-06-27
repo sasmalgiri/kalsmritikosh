@@ -665,6 +665,15 @@ public final class AppState {
             let cooccurrenceBuilder = CooccurrenceGraphBuilder(database: db)
             await cooccurrenceBuilder.start()
 
+            // HISTORY Phase B.2 — community detection on the
+            // co-occurrence graph. Runs every 12h; greedy
+            // agglomerative algorithm with deterministic edge
+            // ordering. Communities capped at 100 members so a
+            // hub entity (gmail.com, common signatures) doesn't
+            // collapse the whole graph into one mega-cluster.
+            let communityDetector = AgglomerativeCommunityDetector(database: db)
+            await communityDetector.start()
+
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
             // and labels it via the rule-based classifier. Idempotent:
