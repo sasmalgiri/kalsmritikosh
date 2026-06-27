@@ -220,6 +220,88 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
                     to: .who
                 )
             }
+
+            // HISTORY follow-on — enrich non-email slots from
+            // entity kinds the WHO loop above didn't claim:
+            //   - .project / .deliverable → WHAT
+            //   - .address / .city / .country / .location → WHERE
+            //   - .money / .invoiceNumber / .paymentID → WHAT (the
+            //     event is "about" this money / invoice)
+            //   - .deadline / .milestone → WHY (the event was
+            //     prompted by this deadline / milestone)
+            for entity in entities {
+                guard canonicalIDs.contains(canonicalMapping[entity.id] ?? entity.id) else { continue }
+                let canon = canonicalMapping[entity.id] ?? entity.id
+                let conf = min(0.8, entity.confidence.value)
+                switch entity.kind {
+                case .project, .deliverable:
+                    slots.add(
+                        NarrativeSlotValue(
+                            text: entity.value,
+                            confidence: conf,
+                            provenance: .ruleBased,
+                            sourceObjectIDs: src,
+                            entityID: canon
+                        ),
+                        to: .what
+                    )
+                case .address, .city, .country, .location:
+                    slots.add(
+                        NarrativeSlotValue(
+                            text: entity.value,
+                            confidence: conf,
+                            provenance: .ruleBased,
+                            sourceObjectIDs: src,
+                            entityID: canon
+                        ),
+                        to: .where
+                    )
+                case .money, .invoiceNumber, .paymentID:
+                    slots.add(
+                        NarrativeSlotValue(
+                            text: entity.value,
+                            confidence: conf,
+                            provenance: .ruleBased,
+                            sourceObjectIDs: src,
+                            entityID: canon
+                        ),
+                        to: .what
+                    )
+                case .deadline, .milestone:
+                    slots.add(
+                        NarrativeSlotValue(
+                            text: entity.value,
+                            confidence: conf,
+                            provenance: .ruleBased,
+                            sourceObjectIDs: src,
+                            entityID: canon
+                        ),
+                        to: .why
+                    )
+                default:
+                    continue
+                }
+            }
+
+            // WHY heuristic — when the event has an explicit
+            // commitment / cause phrase in `summary` (the rule
+            // extractor in EventExtractor stamps this for
+            // taskAssigned / contractSigned / amendment / delivery
+            // events), surface it as a WHY value.
+            if let phrase = event.summary,
+               !phrase.isEmpty,
+               phrase.lowercased() != event.title.lowercased(),
+               slots.why.isEmpty {
+                slots.add(
+                    NarrativeSlotValue(
+                        text: phrase,
+                        confidence: event.confidence.value,
+                        provenance: .ruleBased,
+                        sourceObjectIDs: src
+                    ),
+                    to: .why
+                )
+            }
         }
 
         // ── WHERE for non-email: KO source type as channel. ──────

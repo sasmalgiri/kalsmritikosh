@@ -17,6 +17,9 @@
 //
 
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 public struct HistoryView: View {
     @Environment(AppState.self) private var appState
@@ -178,9 +181,7 @@ public struct HistoryView: View {
                     .foregroundStyle(.tint)
             }
             if !chapter.prose.isEmpty {
-                Text(chapter.prose)
-                    .font(.body)
-                    .textSelection(.enabled)
+                proseWithCitations(chapter)
             } else {
                 Text("(\(chapter.eventIDs.count) events in this chapter — no prose available.)")
                     .font(.callout.italic())
@@ -234,6 +235,88 @@ public struct HistoryView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.orange.opacity(0.08))
         .cornerRadius(10)
+    }
+
+    /// HISTORY follow-on — split the chapter prose into sentences and
+    /// render each with its `[E?]` citation pills inline. Tapping a
+    /// pill reveals the source KO in Finder. Falls back to the raw
+    /// prose when no claim citations were recorded for the chapter.
+    @ViewBuilder
+    private func proseWithCitations(_ chapter: NarrativeChapter) -> some View {
+        let sentences = splitSentences(chapter.prose)
+        if chapter.claimCitations.isEmpty || sentences.isEmpty {
+            Text(chapter.prose)
+                .font(.body)
+                .textSelection(.enabled)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(sentences.indices, id: \.self) { idx in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text(sentences[idx])
+                            .font(.body)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let citation = chapter.claimCitations.first(where: { $0.sentenceIndex == idx }) {
+                            citationPills(citation)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func citationPills(_ citation: NarrativeClaimCitation) -> some View {
+        HStack(spacing: 4) {
+            ForEach(citation.evidenceObjectIDs.prefix(3), id: \.self) { objID in
+                Button {
+                    revealSource(objectID: objID)
+                } label: {
+                    Text(objID.uuidString.prefix(4))
+                        .font(.caption2.monospaced())
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.18))
+                        .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+                .help("Reveal source")
+            }
+            if citation.evidenceObjectIDs.count > 3 {
+                Text("+\(citation.evidenceObjectIDs.count - 3)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func revealSource(objectID: UUID) {
+        Task { @MainActor in
+            guard let repo = appState.objects,
+                  let url = try? await repo.fetchSourceURL(id: objectID) else { return }
+            #if canImport(AppKit)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            #endif
+        }
+    }
+
+    /// Same splitter as `LLMNarrativeComposer.splitSentences` so the
+    /// `sentenceIndex` lookup stays consistent.
+    private func splitSentences(_ text: String) -> [String] {
+        var sentences: [String] = []
+        var current = ""
+        for c in text {
+            current.append(c)
+            if c == "." || c == "!" || c == "?" {
+                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { sentences.append(trimmed) }
+                current = ""
+            }
+        }
+        let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tail.isEmpty { sentences.append(tail) }
+        return sentences
     }
 
     private func timeframeText(start: Date, end: Date) -> String {

@@ -152,7 +152,14 @@ public struct AskView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    Text(turn.body)
+                    // HISTORY follow-on — assistant bodies may carry
+                    // `## Chapter heading` lines from the narrative
+                    // composer's folded VerifiedAnswer.body. Render
+                    // markdown so headings break visually. Falls back
+                    // to plain text when AttributedString parsing
+                    // fails (preserves prior behavior for non-markdown
+                    // bodies). Line splits keep paragraph spacing.
+                    assistantBody(turn.body)
                         .textSelection(.enabled)
                         .padding(10)
                         .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 10))
@@ -170,6 +177,23 @@ public struct AskView: View {
                 .frame(maxWidth: 620, alignment: .leading)
                 Spacer(minLength: 60)
             }
+        }
+    }
+
+    /// HISTORY follow-on — render an assistant body as markdown when
+    /// possible. The narrative composer's folded body carries `##
+    /// chapter headings` and bolded contradiction lines; plain Text()
+    /// would show the literal `##`. We parse with options that allow
+    /// inline + block formatting; failure falls back to plain text.
+    @ViewBuilder
+    private func assistantBody(_ raw: String) -> some View {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace
+        )
+        if let attributed = try? AttributedString(markdown: raw, options: options) {
+            Text(attributed)
+        } else {
+            Text(raw)
         }
     }
 

@@ -18,6 +18,10 @@ public struct LibraryView: View {
     @State private var topics: [TopicMatch] = []
     @State private var loading = true
     @State private var lastError: String?
+    /// HISTORY follow-on — when the user taps a topic, this opens
+    /// a sheet that runs the reconstructive composer scoped to the
+    /// topic's title. Sheet hosts a stripped HistoryView body.
+    @State private var openedTopic: TopicMatch?
 
     public init() {}
 
@@ -28,6 +32,13 @@ public struct LibraryView: View {
             content
         }
         .task { await reload() }
+        .sheet(item: $openedTopic) { topic in
+            TopicReconstructionSheet(topic: topic) {
+                openedTopic = nil
+            }
+            .environment(appState)
+            .frame(minWidth: 720, minHeight: 540)
+        }
     }
 
     private var header: some View {
@@ -94,28 +105,111 @@ public struct LibraryView: View {
     }
 
     private func topicRow(_ topic: TopicMatch) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(topic.title)
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Text("\(topic.memberCount) members")
-                    .font(.caption.weight(.medium))
+        Button {
+            openedTopic = topic
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(topic.title)
+                        .font(.title3.weight(.semibold))
+                    Spacer()
+                    Text("\(topic.memberCount) members")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Text(topic.summary)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                    .multilineTextAlignment(.leading)
             }
-            Text(topic.summary)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
+            )
+            .cornerRadius(10)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.05))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-        )
-        .cornerRadius(10)
+        .buttonStyle(.plain)
+    }
+
+    /// Reuses the brain's streaming path so the sheet renders chapter
+    /// cards as they arrive, just like the History tab does.
+    private struct TopicReconstructionSheet: View {
+        @Environment(AppState.self) private var appState
+        let topic: TopicMatch
+        let onClose: () -> Void
+        @State private var chapters: [NarrativeChapter] = []
+        @State private var finalAnswer: VerifiedAnswer?
+        @State private var streaming = false
+
+        var body: some View {
+            VStack(spacing: 0) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(topic.title).font(.title3.weight(.semibold))
+                        Text("\(topic.memberCount) members").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if streaming { ProgressView().controlSize(.small) }
+                    Button("Close", action: onClose).keyboardShortcut(.cancelAction)
+                }
+                .padding(14)
+                Divider()
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        Text(topic.summary).font(.body).foregroundStyle(.secondary)
+                        ForEach(chapters) { chapter in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(chapter.title).font(.headline)
+                                if !chapter.prose.isEmpty {
+                                    Text(chapter.prose).font(.body).textSelection(.enabled)
+                                } else {
+                                    Text("(\(chapter.eventIDs.count) events recorded.)")
+                                        .font(.callout.italic())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.secondary.opacity(0.05))
+                            .cornerRadius(8)
+                        }
+                        if let answer = finalAnswer, !answer.contradictions.isEmpty {
+                            ForEach(answer.contradictions, id: \.description) { c in
+                                Label(c.description, systemImage: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                                    .font(.callout)
+                            }
+                        }
+                    }
+                    .padding(14)
+                }
+            }
+            .task { await run() }
+        }
+
+        private func run() async {
+            guard !streaming else { return }
+            streaming = true
+            defer { streaming = false }
+            let q = "Tell me the story of \(topic.title)."
+            for await update in await appState.brain.answerStream(question: q) {
+                switch update {
+                case .chapterReady(let c):
+                    await MainActor.run { chapters.append(c) }
+                case .verified(let a):
+                    await MainActor.run { finalAnswer = a }
+                default:
+                    continue
+                }
+            }
+        }
     }
 
     private func reload() async {

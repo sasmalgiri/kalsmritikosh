@@ -18,7 +18,7 @@
 import Foundation
 import OSLog
 
-public struct TopicMatch: Sendable {
+public struct TopicMatch: Sendable, Identifiable {
     public let communityID: UUID
     public let title: String
     public let summary: String
@@ -28,6 +28,9 @@ public struct TopicMatch: Sendable {
     /// community (used by callers to decide whether the match is
     /// strong enough to act on).
     public let hintOverlap: Int
+
+    /// Identifiable conformance for SwiftUI ForEach / sheet(item:).
+    public var id: UUID { communityID }
 }
 
 public actor TopicRetriever {
