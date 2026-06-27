@@ -199,9 +199,21 @@ public actor HybridRetriever: Retriever {
             walkSteps = []
         }
 
+        // HISTORY Phase C.4 — slot-aware boost. Events whose 5W+H
+        // slots mention a question entity hint (WHO/WHAT/etc.) bubble
+        // up; events with denser slot fills get a tiebreak nudge so
+        // narrative-grade events outrank thinly-slotted ones. The
+        // boost runs BEFORE the tier sort in `assemble` — rankByTier
+        // is stable on input order, so within a tier the slot order
+        // is preserved.
+        let boostedEvents = await boostEventsBySlots(
+            events: collectedEvents,
+            hints: intent.entityHints
+        )
+
         return assemble(
             chunks: collectedChunks,
-            events: collectedEvents,
+            events: boostedEvents,
             entities: collectedEntities,
             relationships: collectedRelationships,
             summaries: collectedSummaries,
@@ -209,6 +221,52 @@ public actor HybridRetriever: Retriever {
             shortCircuit: nil,
             walkSteps: walkSteps
         )
+    }
+
+    /// Re-orders events by 5W+H slot relevance:
+    ///   score = (# question hints found in any slot value) * 2
+    ///         + slot density (count of populated slots) * 0.5
+    /// Ties keep the original order so layered priority is respected.
+    /// Returns the input list verbatim when there are no events or no
+    /// hints — both the fetch and the rank are pure work to skip then.
+    private func boostEventsBySlots(
+        events: [Event],
+        hints: [String]
+    ) async -> [Event] {
+        guard !events.isEmpty else { return events }
+        let bundles = (try? await self.events.narrativeSlots(forEventIDs: events.map(\.id))) ?? [:]
+        guard !bundles.isEmpty else { return events }
+        let normalizedHints = hints
+            .map { $0.lowercased() }
+            .filter { !$0.isEmpty }
+        let indexed = events.enumerated().map { (idx, event) -> (Int, Event, Double) in
+            let slots = bundles[event.id] ?? .empty
+            let score = Self.slotScore(slots: slots, hints: normalizedHints)
+            return (idx, event, score)
+        }
+        let sorted = indexed.sorted { a, b in
+            if a.2 != b.2 { return a.2 > b.2 }
+            return a.0 < b.0
+        }
+        return sorted.map(\.1)
+    }
+
+    private nonisolated static func slotScore(slots: EventNarrativeSlots, hints: [String]) -> Double {
+        if slots.isEmpty { return 0 }
+        var hintScore = 0.0
+        if !hints.isEmpty {
+            for slot in NarrativeSlot.allCases {
+                for value in slots.values(for: slot) {
+                    let text = value.text.lowercased()
+                    for hint in hints where text.contains(hint) {
+                        hintScore += 2.0
+                        break // one hit per value
+                    }
+                }
+            }
+        }
+        let density = Double(slots.filledSlotCount) * 0.5
+        return hintScore + density
     }
 
     // MARK: - Layers
