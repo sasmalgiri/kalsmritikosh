@@ -51,13 +51,18 @@ public struct ContextPrefixRequest: Sendable {
 }
 
 /// Result of a single prefix-generation call. `source` records which
-/// path produced the bytes so the persisted row can be inspected later
-/// ("how often did the LLM fall back to heuristic during this ingest?")
-/// without re-running the generator.
+/// generator path produced the bytes so the persisted row can be
+/// inspected later (e.g. "did the LLM actually run on this chunk, or
+/// did we fall through to no-prefix?") without re-running the
+/// generator.
+///
+/// Note: there is intentionally NO heuristic-fallback path inside
+/// `LLMContextPrefixGenerator`. Per the project's quality-or-nothing
+/// rule, the LLM either produces a prefix or no prefix is written —
+/// we don't silently substitute heuristic noise into the embedding.
 public struct ContextPrefixResult: Sendable, Equatable {
     public static let sourceLLM = "llm"
     public static let sourceHeuristic = "heuristic"
-    public static let sourceHeuristicFallback = "heuristic-fallback"
 
     public let text: String
     public let source: String
@@ -114,7 +119,6 @@ public struct HeuristicContextPrefixGenerator: ContextPrefixGenerator {
 public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
     private let capabilities: CapabilityRegistry
     private let timeoutMilliseconds: UInt64
-    private let fallback: HeuristicContextPrefixGenerator
 
     public init(
         capabilities: CapabilityRegistry,
@@ -122,19 +126,20 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
     ) {
         self.capabilities = capabilities
         self.timeoutMilliseconds = timeoutMilliseconds
-        self.fallback = HeuristicContextPrefixGenerator()
     }
 
     public func prefix(for request: ContextPrefixRequest) async -> ContextPrefixResult? {
-        // Resolve a reasoning provider; fall back to heuristic if
-        // none resolves or it isn't currently available.
+        // Resolve a reasoning provider. NO fallback: if none resolves
+        // or it isn't available, this chunk gets no prefix. The user
+        // explicitly forbade silent quality degradation here.
         let spec = CapabilitySpec.reasoning(
             contextTokens: 1_500,
             purpose: "ingest.contextPrefix"
         )
         guard let provider = try? await capabilities.resolve(spec),
               await provider.isAvailable() else {
-            return heuristicFallback(for: request)
+            AtlasLog.knowledge.info("contextPrefix: no reasoning provider available; chunk left without prefix")
+            return nil
         }
 
         let userPrompt = buildPrompt(request: request)
@@ -145,14 +150,15 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
         )
 
         // Per-chunk timeout so an unresponsive provider can't stall
-        // ingest. On timeout / error / empty response we use the
-        // heuristic, which always produces something.
+        // ingest. On timeout / error / empty response we return nil
+        // — the row stays without a prefix instead of being polluted
+        // with heuristic noise. Quality or nothing.
         let llmResponse: String? = await withTaskGroup(of: String?.self) { group in
             group.addTask {
                 do {
                     return try await provider.generate(prompt: userPrompt, options: options)
                 } catch {
-                    AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) call failed; using heuristic")
+                    AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) call failed; chunk left without prefix")
                     return nil
                 }
             }
@@ -165,26 +171,12 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
             return first
         }
 
-        if let raw = llmResponse {
-            let cleaned = clean(raw)
-            if !cleaned.isEmpty {
-                return ContextPrefixResult(
-                    text: cleaned,
-                    source: ContextPrefixResult.sourceLLM
-                )
-            }
-        }
-        return heuristicFallback(for: request)
-    }
-
-    /// Wrap heuristic output with the "heuristic-fallback" source
-    /// label so chunk rows persist a distinct marker from the case
-    /// where the heuristic generator was wired directly.
-    private nonisolated func heuristicFallback(for request: ContextPrefixRequest) -> ContextPrefixResult? {
-        guard let text = fallback.heuristicText(for: request) else { return nil }
+        guard let raw = llmResponse else { return nil }
+        let cleaned = clean(raw)
+        guard !cleaned.isEmpty else { return nil }
         return ContextPrefixResult(
-            text: text,
-            source: ContextPrefixResult.sourceHeuristicFallback
+            text: cleaned,
+            source: ContextPrefixResult.sourceLLM
         )
     }
 
