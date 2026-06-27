@@ -63,6 +63,11 @@ public struct RuleEventExtractor: EventExtractor {
         var events: [Event] = []
 
         if object.sourceType.category == .email {
+            // HISTORY Phase A.5 — date came from the structured email
+            // header (dateConfidence == 0.95 in EventExtractor's
+            // header path) → T1. Otherwise the date was inferred
+            // from content / mtime and the event drops to T2.
+            let headerDerived = dateConfidence >= 0.9
             events.append(.init(
                 kind: .emailReceived,
                 date: primaryDate,
@@ -71,7 +76,8 @@ public struct RuleEventExtractor: EventExtractor {
                 entityIDs: entityIDs,
                 sourceObjectID: object.id,
                 confidence: .high,
-                dateConfidence: dateConfidence
+                dateConfidence: dateConfidence,
+                qualityTier: headerDerived ? .t1 : .t2
             ))
         }
 
@@ -96,7 +102,8 @@ public struct RuleEventExtractor: EventExtractor {
                     entityIDs: entityIDs,
                     sourceObjectID: object.id,
                     confidence: .medium,
-                    dateConfidence: dateConfidence
+                    dateConfidence: dateConfidence,
+                    qualityTier: .t2 // Body-text rule match — Phase A.5
                 ))
                 break
             }
@@ -147,7 +154,11 @@ public struct RuleEventExtractor: EventExtractor {
                         entityIDs: entityIDs,
                         sourceObjectID: object.id,
                         confidence: .medium,
-                        dateConfidence: 0.85
+                        dateConfidence: 0.85,
+                        // Body-inferred event (not from the structured
+                        // header). Real proper-noun signal but not as
+                        // trustworthy as T1. Phase A.5.
+                        qualityTier: .t2
                     ))
                     emitted += 1
                 }
@@ -197,7 +208,8 @@ public struct RuleEventExtractor: EventExtractor {
                     entityIDs: entityIDs,
                     sourceObjectID: object.id,
                     confidence: .medium,
-                    dateConfidence: dueConfidence ?? (dateConfidence * 0.8)
+                    dateConfidence: dueConfidence ?? (dateConfidence * 0.8),
+                    qualityTier: .t2 // Commitment phrase detection — Phase A.5
                 ))
                 commitmentEvents += 1
             }

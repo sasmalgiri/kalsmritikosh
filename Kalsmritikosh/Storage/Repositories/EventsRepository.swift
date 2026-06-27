@@ -17,8 +17,8 @@ public actor EventsRepository {
         for e in events {
             let attrs = try encoder.encode(e.attributes)
             try await database.exec("""
-            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(e.id),
                 .text(e.kind.rawValue),
@@ -29,7 +29,8 @@ public actor EventsRepository {
                 .uuid(e.sourceObjectID),
                 .real(e.confidence.value),
                 .text(String(data: attrs, encoding: .utf8) ?? "{}"),
-                .real(e.dateConfidence)
+                .real(e.dateConfidence),
+                .text(e.qualityTier.rawValue)
             ])
             for entityID in e.entityIDs {
                 try await database.exec("""
@@ -46,7 +47,7 @@ public actor EventsRepository {
 
     public func between(start: Date, end: Date, limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events
         WHERE date BETWEEN ? AND ?
         ORDER BY date ASC
@@ -60,7 +61,7 @@ public actor EventsRepository {
         var results: [Event] = []
         for id in ids {
             let rows = try await database.query("""
-            SELECT id, kind, date, end_date, title, summary, source_object_id, confidence
+            SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
             FROM events WHERE id = ? LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let event = decode(row) {
@@ -72,7 +73,7 @@ public actor EventsRepository {
 
     public func recent(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events
         ORDER BY date DESC
         LIMIT ?;
@@ -86,7 +87,7 @@ public actor EventsRepository {
     /// OntologyBackfill can label them.
     public func listUnlabeledFactTypes(limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events WHERE fact_type IS NULL ORDER BY date DESC LIMIT ?;
         """, [.integer(Int64(limit))])
         return rows.compactMap(decode)
@@ -126,7 +127,7 @@ public actor EventsRepository {
     /// timelines.
     public func allWithParticipants(offset: Int = 0, pageSize: Int = 2_000) async throws -> [(Event, [Entity.ID])] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events
         ORDER BY date ASC
         LIMIT ? OFFSET ?;
@@ -166,7 +167,7 @@ public actor EventsRepository {
     /// an already-ingested corpus without re-running ingest.
     public func findBySourceObject(_ id: KnowledgeObject.ID) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events WHERE source_object_id = ? ORDER BY date ASC LIMIT 200;
         """, [.uuid(id)])
         var out: [Event] = []
@@ -223,6 +224,7 @@ public actor EventsRepository {
             let conf = row.double(7)
         else { return nil }
         let dateConf = row.double(8) ?? 0.5
+        let tier = row.string(9).flatMap(QualityTier.init(rawValue:)) ?? .t2
         return Event(
             id: id,
             kind: kind,
@@ -232,7 +234,8 @@ public actor EventsRepository {
             summary: row.string(5),
             sourceObjectID: sourceID,
             confidence: Confidence(conf),
-            dateConfidence: dateConf
+            dateConfidence: dateConf,
+            qualityTier: tier
         )
     }
 }
