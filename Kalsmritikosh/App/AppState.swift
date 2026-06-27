@@ -674,6 +674,18 @@ public final class AppState {
             let communityDetector = AgglomerativeCommunityDetector(database: db)
             await communityDetector.start()
 
+            // HISTORY Phase B.3 — per-community LLM
+            // summarization. Runs 1× per day; produces a title +
+            // 2-3 sentence summary per community detected in B.2.
+            // Quality-or-nothing: leaves rows blank when the LLM
+            // can't produce a clean response, never fabricates.
+            let communitySummarizer = CommunitySummarizer(
+                database: db,
+                entities: entities,
+                capabilities: capabilities
+            )
+            await communitySummarizer.start()
+
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
             // and labels it via the rule-based classifier. Idempotent:
