@@ -130,6 +130,42 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         failed.append("body lacks delivery/delay vocabulary")
     }
 
+    // HISTORY Phase F integration probe — ask a reconstructive
+    // question and confirm the brain routes through the narrative
+    // composer (D.6/D.7). This is a presence check, not a quality
+    // gate: the LLM may or may not be available depending on the
+    // dev machine, so we assert chapters arrived rather than that
+    // prose is non-empty. The full NarrativeEvalKit run with gold
+    // fixtures lands separately.
+    var historyChapters: [NarrativeChapter] = []
+    var historyVerified: VerifiedAnswer?
+    for await update in await state.brain.answerStream(
+        question: "Reconstruct the history of Project Delta."
+    ) {
+        switch update {
+        case .chapterReady(let chapter):
+            historyChapters.append(chapter)
+        case .verified(let answer):
+            historyVerified = answer
+        default:
+            continue
+        }
+    }
+    if !historyChapters.isEmpty {
+        passed.append("HISTORY: composer yielded \(historyChapters.count) chapter(s)")
+    } else if let v = historyVerified, !v.refused {
+        // No chapters but a verified answer means we routed through
+        // the legacy expert pipeline — acceptable if the intent
+        // detector classified the question as a flat lookup, but
+        // we surface it so the developer knows.
+        passed.append("HISTORY: legacy expert path (no chapters) — intent=\(v.intentKind ?? "unknown")")
+    } else {
+        failed.append("HISTORY: composer produced 0 chapters AND brain refused or returned nil")
+    }
+    if let v = historyVerified, !v.contradictions.isEmpty {
+        passed.append("HISTORY: surfaced \(v.contradictions.count) contradiction(s)")
+    }
+
     // T1 — calibrated confidence aggregation (replaces noisy-OR).
     let t1A = Confidence.aggregate(
         Array(repeating: Confidence(0.5), count: 94),
