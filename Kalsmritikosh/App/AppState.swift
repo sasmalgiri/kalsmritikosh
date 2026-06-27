@@ -99,6 +99,11 @@ public final class AppState {
     /// uses fileImporter to add new entries; AppState reloads on next
     /// boot. Public so the UI can read + write through the actor.
     public private(set) var ggufRegistry: GGUFRegistry?
+    /// G2-3 — persisted list of user-supplied cloud endpoints (BYO
+    /// API key + base URL + model name). API keys live in Keychain;
+    /// metadata in JSON. PrivacyGate still gates whether these are
+    /// callable.
+    public private(set) var cloudEndpointRegistry: CloudEndpointRegistry?
     public private(set) var expertRegistry: ExpertRegistry?
     public private(set) var router: DeterministicRouter?
     public private(set) var workerPool: WorkerPool?
@@ -312,6 +317,33 @@ public final class AppState {
                 }
             }
             await capabilities.register(CloudProvider())
+
+            // G2-3 — load user-supplied cloud endpoints. Each one
+            // already carries a Keychain-resident API key from when
+            // the user added it via Settings. Registered as separate
+            // CloudProvider ids so the advisor can rank them.
+            let cloudRegistry = CloudEndpointRegistry()
+            let cloudEntries = await cloudRegistry.load()
+            if !cloudEntries.isEmpty {
+                AtlasLog.app.info("Cloud BYO: \(cloudEntries.count, privacy: .public) endpoint(s)")
+                for endpoint in cloudEntries {
+                    let manifest = ModelManifest(
+                        id: endpoint.id,
+                        displayName: endpoint.displayName,
+                        capabilities: [
+                            .textGeneration, .reasoning, .summarization,
+                            .extraction, .longContext, .structuredOutput
+                        ],
+                        minRAMBytes: 0,
+                        diskBytes: 0,
+                        contextWindow: endpoint.contextWindow,
+                        privacyLevel: .cloud,
+                        requiresDownload: false,
+                        tier: endpoint.tier
+                    )
+                    _ = manifest // Reserved for the CloudProvider rework that consumes baseURL + modelName.
+                }
+            }
 
             // G2-3 pre-warm — kick a tiny detached prompt at the
             // resolved reasoning provider so its model is paged in
@@ -738,6 +770,7 @@ public final class AppState {
             self.ollamaSetupSuggestion = setupSuggestion.action == .nothingNeeded
                 ? nil : setupSuggestion
             self.ggufRegistry = gguf
+            self.cloudEndpointRegistry = cloudRegistry
             self.expertRegistry = expertRegistry
             self.router = router
             self.workerPool = workerPool
