@@ -143,6 +143,28 @@ public enum OllamaDiscovery {
         }
     }
 
+    /// Plain availability ping — does the Ollama daemon answer at
+    /// all? Used by the setup advisor to distinguish "install Ollama"
+    /// from "Ollama is installed but you haven't pulled a model yet."
+    public static func isReachable(
+        baseURL: URL = URL(string: "http://localhost:11434")!,
+        timeoutSeconds: TimeInterval = 1.5
+    ) async -> Bool {
+        var request = URLRequest(url: baseURL)
+        request.timeoutInterval = timeoutSeconds
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = timeoutSeconds
+        cfg.timeoutIntervalForResource = timeoutSeconds
+        let session = URLSession(configuration: cfg)
+        do {
+            let (_, response) = try await session.data(for: request)
+            // Ollama returns 200 OK on the root path
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
+    }
+
     /// Family-based fallback when the API doesn't return a
     /// context_length. Numbers come from each family's reference
     /// model card. Used by AppState when we still want to register

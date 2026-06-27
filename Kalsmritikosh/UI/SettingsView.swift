@@ -42,6 +42,9 @@ public struct SettingsView: View {
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
     @State private var modelAdviceExpanded: Bool = false
+    @State private var ollamaPullRunning: Bool = false
+    @State private var ollamaPullStatus: String?
+    @State private var ollamaPullFraction: Double = 0
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -54,6 +57,10 @@ public struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text("Settings").font(.largeTitle.bold())
+
+                if let setup = appState.ollamaSetupSuggestion {
+                    ollamaSetupSection(setup)
+                }
 
                 if let advice = appState.modelChoiceAdvice,
                    advice.severity != .ok {
@@ -582,6 +589,139 @@ public struct SettingsView: View {
             Text("When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. Local-network providers (Ollama on this machine) are always allowed regardless.")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    /// G2-3 onboarding — first-launch flow when the user has no
+    /// reasoning model yet. Walks them through installing Ollama
+    /// and pulling the recommended model. The pull runs in-app
+    /// with a live progress bar; the user can also reveal the
+    /// terminal command if they prefer to do it themselves.
+    @ViewBuilder
+    private func ollamaSetupSection(_ setup: OllamaSetupAdvisor.SetupSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: setup.action == .installOllama ? "arrow.down.app" : "square.and.arrow.down")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(setup.action == .installOllama
+                         ? "Install a local model to enable answers"
+                         : "Download a reasoning model")
+                        .font(.headline)
+                    Text(setup.summary)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            switch setup.action {
+            case .installOllama:
+                Text("Step 1 — install Ollama")
+                    .font(.callout.weight(.medium))
+                Text(setup.ollamaInstallInstructions)
+                    .font(.caption.monospaced())
+                    .padding(8)
+                    .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    .textSelection(.enabled)
+                if let url = URL(string: "https://ollama.com/download") {
+                    Link("Open ollama.com/download", destination: url)
+                        .font(.callout)
+                }
+                if let model = setup.recommendedModel {
+                    Divider().padding(.vertical, 4)
+                    Text("Step 2 — pull \(model.displayName)")
+                        .font(.callout.weight(.medium))
+                    Text("After Ollama is running, return to Atlas and Settings will offer a one-tap download.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+            case .pullRecommendedModel:
+                if let model = setup.recommendedModel {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("Ollama is running")
+                            .font(.callout)
+                    }
+                    Divider().padding(.vertical, 4)
+                    Text("Recommended model: \(model.displayName)")
+                        .font(.callout.weight(.medium))
+                    Text(model.reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Download size: \(formatBytes(model.approxDiskBytes))  •  context: \(model.contextWindow) tokens")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Button {
+                            Task { await pullModel(modelTag: model.modelTag) }
+                        } label: {
+                            if ollamaPullRunning {
+                                Label("Downloading…", systemImage: "hourglass")
+                            } else {
+                                Label("Download with Ollama", systemImage: "arrow.down.circle.fill")
+                            }
+                        }
+                        .disabled(ollamaPullRunning)
+                        Text("or run:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("ollama pull \(model.modelTag)")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    }
+                    if ollamaPullRunning {
+                        ProgressView(value: ollamaPullFraction)
+                            .progressViewStyle(.linear)
+                    }
+                    if let status = ollamaPullStatus {
+                        Text(status)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+            case .nothingNeeded:
+                EmptyView()
+            }
+        }
+        .padding(12)
+        .background(Color.blue.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.blue.opacity(0.30), lineWidth: 1)
+        )
+    }
+
+    private func pullModel(modelTag: String) async {
+        ollamaPullRunning = true
+        ollamaPullStatus = "Connecting…"
+        ollamaPullFraction = 0
+        defer { ollamaPullRunning = false }
+        let installer = OllamaInstaller()
+        let stream = await installer.pull(modelTag: modelTag)
+        for await event in stream {
+            switch event {
+            case .success(let progress):
+                ollamaPullStatus = progress.status
+                ollamaPullFraction = progress.fractionComplete
+                if progress.isComplete {
+                    ollamaPullStatus = "Downloaded \(modelTag). Relaunch Atlas to start using it."
+                }
+            case .failure(let err):
+                ollamaPullStatus = "Download failed: \(err)"
+            }
+        }
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let gb = Double(bytes) / 1_073_741_824
+        if gb >= 1 { return String(format: "%.1f GB", gb) }
+        let mb = Double(bytes) / 1_048_576
+        return String(format: "%.0f MB", mb)
     }
 
     /// G2-3 — surfaces ModelChoiceAdvisor's output to the user.

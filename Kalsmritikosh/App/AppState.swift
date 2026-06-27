@@ -91,6 +91,10 @@ public final class AppState {
     /// in SettingsView as a banner so the user is informed when their
     /// current model is a poor fit for the device. Nil while booting.
     public private(set) var modelChoiceAdvice: ModelChoiceRecommendation?
+    /// G2-3 onboarding — present when the user needs to install
+    /// Ollama and/or pull a model. Drives the "Setup" section in
+    /// SettingsView. Nil when a reasoning model is already running.
+    public private(set) var ollamaSetupSuggestion: OllamaSetupAdvisor.SetupSuggestion?
     public private(set) var expertRegistry: ExpertRegistry?
     public private(set) var router: DeterministicRouter?
     public private(set) var workerPool: WorkerPool?
@@ -193,11 +197,25 @@ public final class AppState {
             // and register one provider per model. The advisor then
             // ranks them by device-fit, surfaces the best, and warns
             // when the user has picked something that won't run well.
-            // Falls back to a single hardcoded llama3:latest entry
-            // when Ollama isn't reachable (so existing flows still
-            // work when the user hasn't installed Ollama yet).
+            // When the daemon isn't reachable OR no model is pulled,
+            // we compute an OllamaSetupSuggestion so SettingsView can
+            // walk the user through installing + downloading.
             let ollamaBase = URL(string: "http://localhost:11434")!
             let detectedOllama = await OllamaDiscovery.list(baseURL: ollamaBase)
+            let ollamaReachable: Bool
+            if !detectedOllama.isEmpty {
+                ollamaReachable = true
+            } else {
+                ollamaReachable = await OllamaDiscovery.isReachable(baseURL: ollamaBase)
+            }
+            let setupSuggestion = OllamaSetupAdvisor.advise(
+                ollamaReachable: ollamaReachable,
+                installedReasoningModels: detectedOllama.map(\.name),
+                totalRAMBytes: hardware.totalRAMBytes
+            )
+            if setupSuggestion.action != .nothingNeeded {
+                AtlasLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
+            }
             if detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(
                     id: "provider.local.network",
@@ -655,6 +673,8 @@ public final class AppState {
             self.benchmark = benchmark
             self.capabilities = capabilities
             self.modelChoiceAdvice = advice
+            self.ollamaSetupSuggestion = setupSuggestion.action == .nothingNeeded
+                ? nil : setupSuggestion
             self.expertRegistry = expertRegistry
             self.router = router
             self.workerPool = workerPool
