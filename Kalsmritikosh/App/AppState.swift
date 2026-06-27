@@ -491,6 +491,19 @@ public final class AppState {
             )
 
             // ── Brain ────────────────────────────────────────────────
+            // HISTORY Phase D.6 — narrative composer wired in. The
+            // brain runs it for reconstructive intents and falls back
+            // to the legacy expert pipeline for everything else. The
+            // composer takes the chronological planner (B.2 topic
+            // anchoring) and the capability registry; rule-based
+            // fallback runs when no `.reasoning` provider clears the
+            // privacy gate.
+            let chronoPlanner = ChronologicalPlanner(database: db)
+            let narrativeComposer: any NarrativeComposer = LLMNarrativeComposer(
+                planner: chronoPlanner,
+                capabilities: capabilities
+            )
+
             let brain = MasterBrain(
                 intentDetector: intentDetector,
                 router: router,
@@ -500,7 +513,9 @@ public final class AppState {
                 verifier: verifier,
                 weeklyBriefing: weeklyBriefing,
                 sessionProfile: sessionProfile,
-                memoryRepo: memoryRepo
+                memoryRepo: memoryRepo,
+                narrativeComposer: narrativeComposer,
+                eventsRepo: events
             )
 
             // ── Ingestion ────────────────────────────────────────────

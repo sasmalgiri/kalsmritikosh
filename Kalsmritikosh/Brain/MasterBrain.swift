@@ -33,6 +33,18 @@ public actor MasterBrain {
     /// IF the resolved subject has a distilled MemoryObject whose
     /// narrative is non-empty. The UI tags this read as "verifying…".
     private let memoryRepo: MemoryRepository?
+    /// HISTORY Phase D.6 — optional. When present AND the intent is
+    /// reconstructive (.reconstructTimeline / .reconstructProject /
+    /// .reconstructRelationship), the brain runs the composer
+    /// alongside the expert pipeline and emits chapter-shaped prose
+    /// rather than just expert-finding bullets. Nil = legacy expert
+    /// pipeline is the only path (existing eval and old UI still
+    /// work unchanged).
+    private let narrativeComposer: NarrativeComposer?
+    /// HISTORY Phase D.6 — events repo so the brain can hydrate
+    /// 5W+H slot bundles for the composer's input. Required when
+    /// `narrativeComposer` is wired; ignored otherwise.
+    private let eventsRepo: EventsRepository?
 
     public init(
         intentDetector: IntentDetector? = nil,
@@ -43,7 +55,9 @@ public actor MasterBrain {
         verifier: Verifier? = nil,
         weeklyBriefing: WeeklyBriefingGenerator? = nil,
         sessionProfile: SessionProfile? = nil,
-        memoryRepo: MemoryRepository? = nil
+        memoryRepo: MemoryRepository? = nil,
+        narrativeComposer: NarrativeComposer? = nil,
+        eventsRepo: EventsRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -54,6 +68,8 @@ public actor MasterBrain {
         self.weeklyBriefing = weeklyBriefing
         self.sessionProfile = sessionProfile
         self.memoryRepo = memoryRepo
+        self.narrativeComposer = narrativeComposer
+        self.eventsRepo = eventsRepo
     }
 
     /// Clear the in-memory SessionProfile. The eval harness calls this
@@ -91,11 +107,146 @@ public actor MasterBrain {
                     continuation.yield(instant)
                 }
 
+                // HISTORY Phase D.7 — reconstructive intents route
+                // through the narrative composer. Each chapter is
+                // yielded as it lands so the UI can render the story
+                // top-down; the terminal `.verified` carries the same
+                // chapters folded into a VerifiedAnswer for legacy
+                // callers (EvalKit, the chat-shaped path).
+                if let reconstructed = await self.tryReconstructHistoryStreaming(
+                    question: question,
+                    yield: { continuation.yield($0) }
+                ) {
+                    continuation.yield(.verified(reconstructed))
+                    continuation.finish()
+                    return
+                }
+
                 let final = await self.computeVerified(question: question)
                 continuation.yield(.verified(final))
                 continuation.finish()
             }
         }
+    }
+
+    /// HISTORY Phase D.6 + D.7 — reconstructive intent fast-path.
+    /// Returns nil when the intent isn't reconstructive OR when the
+    /// composer isn't wired so the caller falls through to the
+    /// legacy expert pipeline.
+    private func tryReconstructHistoryStreaming(
+        question: String,
+        yield: @Sendable (AnswerUpdate) -> Void
+    ) async -> VerifiedAnswer? {
+        guard let narrativeComposer,
+              let eventsRepo,
+              let intentDetector,
+              let router,
+              let retriever else {
+            return nil
+        }
+        guard let intent = try? await intentDetector.detect(question: question) else {
+            return nil
+        }
+        switch intent.kind {
+        case .reconstructTimeline, .reconstructProject, .reconstructRelationship:
+            break
+        default:
+            return nil
+        }
+
+        await sessionProfile?.recordTurn(
+            question: question,
+            intentKind: intent.kind.rawValue,
+            entityHints: intent.entityHints
+        )
+
+        let decision = (try? await router.route(intent: intent)) ?? RoutingDecision(
+            answerSpec: CapabilitySpec.reasoning(contextTokens: 6_000, purpose: "history.narrative"),
+            expertIDs: [],
+            retrievalLayers: RetrievalLayer.priorityOrder,
+            parallelism: 1,
+            complexity: 4,
+            rationale: "Reconstructive intent — narrative path"
+        )
+
+        let retrieval = (try? await retriever.retrieve(
+            for: intent,
+            layers: decision.retrievalLayers
+        )) ?? RetrievalResult()
+
+        // Hydrate 5W+H slot bundles for the composer's input.
+        let slotBundles = (try? await eventsRepo.narrativeSlots(
+            forEventIDs: retrieval.events.map(\.id)
+        )) ?? [:]
+
+        let narrative: ReconstructedNarrative
+        do {
+            narrative = try await narrativeComposer.compose(
+                intent: intent,
+                retrieval: retrieval,
+                eventSlots: slotBundles
+            )
+        } catch {
+            return VerifiedAnswer(
+                body: "Atlas couldn't reconstruct that history.",
+                citations: [],
+                confidence: .zero,
+                refused: true,
+                refusalReason: "Composer failed: \(error)"
+            )
+        }
+
+        for chapter in narrative.chapters {
+            yield(.chapterReady(chapter))
+        }
+
+        // Fold the narrative into a VerifiedAnswer the legacy
+        // callers (EvalKit, old UI) can consume unchanged.
+        let body = Self.foldNarrativeToBody(narrative)
+        let contradictions = narrative.chapters.flatMap(\.contradictions)
+        let chapterConfs = narrative.chapters.map(\.confidence)
+        let avgConf = chapterConfs.isEmpty ? 0.4
+            : chapterConfs.reduce(0, +) / Double(chapterConfs.count)
+        return VerifiedAnswer(
+            body: body,
+            answerText: body,
+            intentKind: intent.kind.rawValue,
+            citations: narrative.citations,
+            confidence: Confidence(avgConf),
+            contradictions: contradictions,
+            refused: false,
+            refusalReason: nil,
+            report: nil,
+            walkSteps: retrieval.walkSteps
+        )
+    }
+
+    /// Fold a ReconstructedNarrative into a plain-text body for
+    /// legacy `VerifiedAnswer.body` callers. The new NarrativeView
+    /// (Phase E) renders from `narrative.chapters` directly and
+    /// doesn't use this; EvalKit + the chat-shaped UI do.
+    private static func foldNarrativeToBody(_ narrative: ReconstructedNarrative) -> String {
+        var out: [String] = [narrative.title, "", narrative.summary]
+        if !narrative.downgrades.isEmpty {
+            out.append("")
+            out.append("(\(narrative.downgrades.joined(separator: "; ")))")
+        }
+        for chapter in narrative.chapters {
+            out.append("")
+            out.append("## \(chapter.title)")
+            if let subtitle = chapter.subtitle, !subtitle.isEmpty {
+                out.append("_\(subtitle)_")
+            }
+            if !chapter.prose.isEmpty {
+                out.append(chapter.prose)
+            } else {
+                out.append("(No prose available for this chapter — \(chapter.eventIDs.count) events recorded.)")
+            }
+            for contradiction in chapter.contradictions {
+                out.append("⚠️ \(contradiction.description): \"\(contradiction.claimA)\" vs \"\(contradiction.claimB)\"")
+            }
+        }
+        return out.joined(separator: "\n")
     }
 
     /// Phase 1 cache probe. Returns an `.instant` update only when:

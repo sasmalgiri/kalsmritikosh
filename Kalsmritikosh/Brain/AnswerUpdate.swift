@@ -36,6 +36,14 @@ public enum AnswerUpdate: Sendable {
     /// the body. Tag: "🔍 Reading sources… N citations".
     case expertFindingsArrived(ExpertFindings)
 
+    /// HISTORY Phase D.7 — one narrative chapter just landed from the
+    /// composer. The UI renders the chapter's title + subtitle
+    /// immediately and streams its prose into a card. Tag: "📖
+    /// Composing chapter N…". Emitted ONLY for reconstructive
+    /// intents (.reconstructTimeline / .reconstructProject /
+    /// .reconstructRelationship); flat factual questions never see it.
+    case chapterReady(NarrativeChapter)
+
     /// Phase 4 — locked, verified answer (30-60 s typical). This is
     /// the SAME value the legacy `MasterBrain.answer(question:)`
     /// returns; the legacy method is now a thin wrapper that collects
