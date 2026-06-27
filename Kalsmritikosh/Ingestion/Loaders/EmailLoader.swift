@@ -36,7 +36,28 @@ public struct EmailLoader: Ingestor {
     /// Flip to `true` only when the fanout is in place AND a fresh
     /// re-ingest is acceptable. ThreadCoalescer.swift stays in the
     /// tree either way — the helper is ready when we are.
-    public nonisolated static let threadCoalescingEnabled: Bool = false
+    /// Move A — collapse a reply chain into one KO per thread.
+    /// Defaults OFF (the safe, validated pre-Move-A behavior). The
+    /// user can flip via UserDefaults key
+    /// `"kalsmritikosh.moveA.threadCoalescing"` (Settings → Privacy
+    /// & ingestion → Coalesce email threads), no rebuild required.
+    ///
+    /// Pre-flip checklist (documented for reuse):
+    ///   1. ThreadCoalescer's 14-day subject-fallback window is
+    ///      validated against the user's real archive (over-merge
+    ///      bug from prior 180-day window is fixed)
+    ///   2. A fresh re-ingest of the affected mailbox is acceptable
+    ///      — Move A changes the KO shape, so the file-hash dedup
+    ///      will re-extract messages even though file rows already
+    ///      exist
+    ///   3. Downstream IngestCoordinator.processKnowledgeObject
+    ///      fanout (entity / event / mention extraction over the
+    ///      thread KO body, not per-message) is healthy — currently
+    ///      tested by smoke; the per-thread KOs produce richer
+    ///      memory_objects at the cost of slightly larger chunks.
+    public nonisolated static var threadCoalescingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+    }
 
     public nonisolated init() {}
 

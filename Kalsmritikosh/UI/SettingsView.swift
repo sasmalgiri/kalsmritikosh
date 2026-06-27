@@ -21,6 +21,7 @@ public struct SettingsView: View {
     @State private var manifests: [ModelManifest] = []
     @State private var pins: [ModelCapability: String] = [:]
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
+    @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
     @State private var baselineReportURL: URL?
@@ -610,6 +611,16 @@ public struct SettingsView: View {
                 }
             Text("When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. Local-network providers (Ollama on this machine) are always allowed regardless.")
                 .font(.caption).foregroundStyle(.secondary)
+
+            Divider().padding(.vertical, 4)
+
+            Toggle("Coalesce email threads (Move A)", isOn: $threadCoalescing)
+                .onChange(of: threadCoalescing) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.moveA.threadCoalescing")
+                }
+            Text("When on, email ingest folds an entire reply chain into a single KO instead of one KO per message. Memory distillation gets the whole conversation in one shot; storage drops on busy mailboxes. **Requires re-ingest of affected mailboxes** to take effect.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
