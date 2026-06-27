@@ -41,6 +41,7 @@ public struct SettingsView: View {
     @State private var inventoryRunning = false
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
+    @State private var modelAdviceExpanded: Bool = false
 
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
@@ -53,6 +54,11 @@ public struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text("Settings").font(.largeTitle.bold())
+
+                if let advice = appState.modelChoiceAdvice,
+                   advice.severity != .ok {
+                    modelChoiceBanner(advice)
+                }
 
                 privacySection
                 Divider()
@@ -575,6 +581,85 @@ public struct SettingsView: View {
                 }
             Text("When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. Local-network providers (Ollama on this machine) are always allowed regardless.")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// G2-3 — surfaces ModelChoiceAdvisor's output to the user.
+    /// Hidden when severity is `.ok` (current model is the best fit).
+    /// Expandable on tap to show the detail bullets (RAM math etc.).
+    @ViewBuilder
+    private func modelChoiceBanner(_ advice: ModelChoiceRecommendation) -> some View {
+        let palette = bannerPalette(for: advice.severity)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: palette.icon)
+                    .foregroundStyle(palette.foreground)
+                    .font(.title3)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(palette.title)
+                        .font(.headline)
+                        .foregroundStyle(palette.foreground)
+                    Text(advice.summary)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button {
+                    withAnimation { modelAdviceExpanded.toggle() }
+                } label: {
+                    Image(systemName: modelAdviceExpanded ? "chevron.up" : "chevron.down")
+                }
+                .buttonStyle(.borderless)
+            }
+            if modelAdviceExpanded {
+                Divider()
+                ForEach(advice.details, id: \.self) { line in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•").foregroundStyle(.secondary)
+                        Text(line)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let name = advice.recommendedProviderName {
+                    Text("Recommended: \(name)")
+                        .font(.caption.monospaced())
+                        .padding(.top, 2)
+                        .foregroundStyle(palette.foreground)
+                }
+            }
+        }
+        .padding(12)
+        .background(palette.background.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(palette.background.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private struct BannerPalette {
+        let icon: String
+        let title: String
+        let foreground: Color
+        let background: Color
+    }
+
+    private func bannerPalette(for severity: ModelChoiceRecommendation.Severity) -> BannerPalette {
+        switch severity {
+        case .ok:
+            return .init(icon: "checkmark.seal.fill", title: "Model fits your device",
+                        foreground: .green, background: .green)
+        case .suggestion:
+            return .init(icon: "lightbulb", title: "Upgrade available",
+                        foreground: .blue, background: .blue)
+        case .warning:
+            return .init(icon: "exclamationmark.triangle", title: "Tight fit",
+                        foreground: .orange, background: .orange)
+        case .critical:
+            return .init(icon: "exclamationmark.octagon.fill", title: "Model won't run well",
+                        foreground: .red, background: .red)
         }
     }
 

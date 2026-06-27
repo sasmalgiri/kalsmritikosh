@@ -87,6 +87,10 @@ public final class AppState {
     public private(set) var hardware: HardwareProfile?
     public private(set) var benchmark: PerformanceBenchmark?
     public private(set) var capabilities: CapabilityRegistry?
+    /// G2-3 — model-choice advisor result computed at boot. Surfaced
+    /// in SettingsView as a banner so the user is informed when their
+    /// current model is a poor fit for the device. Nil while booting.
+    public private(set) var modelChoiceAdvice: ModelChoiceRecommendation?
     public private(set) var expertRegistry: ExpertRegistry?
     public private(set) var router: DeterministicRouter?
     public private(set) var workerPool: WorkerPool?
@@ -395,6 +399,24 @@ public final class AppState {
             }
             let dynamicChunker = Chunker(targetCharacterCount: sizing.target)
 
+            // G2-3 — compute the user-facing model-choice
+            // recommendation. Surfaced in SettingsView as a banner.
+            let resolvedReasoningManifest: ModelManifest? = await {
+                let spec = CapabilitySpec.reasoning(
+                    contextTokens: 1_500,
+                    purpose: "appstate.advisor"
+                )
+                guard let p = try? await capabilities.resolve(spec) else { return nil }
+                return p.manifest
+            }()
+            let allReasoningManifests: [ModelManifest] = await capabilities.allManifests()
+            let advice = ModelChoiceAdvisor.advise(
+                hardware: hardware,
+                currentReasoning: resolvedReasoningManifest,
+                availableReasoning: allReasoningManifests
+            )
+            AtlasLog.app.info("ModelChoiceAdvice severity=\(advice.severity.rawValue, privacy: .public): \(advice.summary, privacy: .public)")
+
             let ingest = IngestCoordinator(
                 chunker: dynamicChunker,
                 entityExtractor: NLEntityExtractor(),
@@ -596,6 +618,7 @@ public final class AppState {
             self.hardware = hardware
             self.benchmark = benchmark
             self.capabilities = capabilities
+            self.modelChoiceAdvice = advice
             self.expertRegistry = expertRegistry
             self.router = router
             self.workerPool = workerPool
