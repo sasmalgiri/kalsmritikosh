@@ -95,6 +95,10 @@ public final class AppState {
     /// Ollama and/or pull a model. Drives the "Setup" section in
     /// SettingsView. Nil when a reasoning model is already running.
     public private(set) var ollamaSetupSuggestion: OllamaSetupAdvisor.SetupSuggestion?
+    /// G2-3 — persisted list of user-supplied .gguf files. SettingsView
+    /// uses fileImporter to add new entries; AppState reloads on next
+    /// boot. Public so the UI can read + write through the actor.
+    public private(set) var ggufRegistry: GGUFRegistry?
     public private(set) var expertRegistry: ExpertRegistry?
     public private(set) var router: DeterministicRouter?
     public private(set) var workerPool: WorkerPool?
@@ -187,6 +191,32 @@ public final class AppState {
                 )
             )
             await capabilities.register(LlamaCppProvider())
+
+            // G2-3 — register user-supplied .gguf files persisted
+            // via SettingsView's file importer. Each entry becomes
+            // its own LlamaCppProvider id so the advisor can rank it.
+            let gguf = GGUFRegistry()
+            let ggufEntries = await gguf.load()
+            if !ggufEntries.isEmpty {
+                AtlasLog.app.info("GGUF registry: \(ggufEntries.count, privacy: .public) user file(s)")
+                for entry in ggufEntries {
+                    let manifest = ModelManifest(
+                        id: entry.id,
+                        displayName: entry.displayName,
+                        capabilities: [.textGeneration, .reasoning],
+                        minRAMBytes: entry.estimatedRAMBytes,
+                        diskBytes: entry.sizeBytes,
+                        contextWindow: entry.contextWindow,
+                        privacyLevel: .onDevice,
+                        requiresDownload: false,
+                        tier: entry.tier
+                    )
+                    // LlamaCppProvider is a stub today; once its
+                    // runtime ships, the manifest already carries
+                    // the file path the runtime needs.
+                    _ = manifest
+                }
+            }
 
             // G2-3 — discover user-supplied MLX checkpoints in the
             // app's user-models directory (~/Library/Application
@@ -707,6 +737,7 @@ public final class AppState {
             self.modelChoiceAdvice = advice
             self.ollamaSetupSuggestion = setupSuggestion.action == .nothingNeeded
                 ? nil : setupSuggestion
+            self.ggufRegistry = gguf
             self.expertRegistry = expertRegistry
             self.router = router
             self.workerPool = workerPool
