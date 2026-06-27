@@ -41,7 +41,17 @@ public struct RuleIntentDetector: IntentDetector {
            q.contains("whats new") {
             return .executiveBriefing
         }
-        if q.contains("reconstruct") || q.contains("show history") || q.contains("what happened") {
+        // HISTORY Phase D — explicit reconstructive triggers. Added
+        // "story of", "tell me the story", "tell me about", "narrate",
+        // "history of" so the new History tab's suggestion chips and
+        // the Dossier tab's "Reconstruct the history of …" auto-shape
+        // both land on the composer fast-path. Without this branch
+        // the verb-based heuristic below picks them up sometimes but
+        // not consistently.
+        if q.contains("reconstruct") || q.contains("show history") || q.contains("history of")
+            || q.contains("what happened") || q.contains("story of")
+            || q.contains("tell me the story") || q.contains("tell me about")
+            || q.contains("narrate") {
             if q.contains("project") { return .reconstructProject }
             if q.contains("relationship") || q.contains("with ") { return .reconstructRelationship }
             return .reconstructTimeline
