@@ -164,9 +164,48 @@ public actor CloudProvider: ModelProvider {
     }
 
     public func embed(text: String) async throws -> [Float] {
-        // Embedding capability NOT declared above — the
-        // CapabilityRegistry won't route .embedding spec to this
-        // provider, but the protocol requires the method to exist.
-        throw ModelProviderError.capabilityMissing(providerID: id, capability: .embedding)
+        // OpenAI-compatible /v1/embeddings call. Uses the same
+        // modelName as generate() unless the user has registered a
+        // dedicated embedding endpoint (e.g. text-embedding-3-large).
+        // Note: capabilities Set doesn't include .embedding by
+        // default; only providers explicitly registered as
+        // embedding-capable will be resolved for that spec. This
+        // method exists so a future BYO endpoint type
+        // "embedding-only" can use the same actor implementation.
+        guard await isAvailable() else {
+            throw ModelProviderError.unavailable(providerID: id)
+        }
+        let body: [String: Any] = [
+            "model": modelName,
+            "input": text
+        ]
+        var request = URLRequest(url: baseURL.appendingPathComponent("embeddings"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw ModelProviderError.generationFailed(reason: "\(error)")
+        }
+        if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+            let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
+            throw ModelProviderError.generationFailed(
+                reason: "HTTP \(http.statusCode): \(bodyStr.prefix(400))"
+            )
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let dataArr = root["data"] as? [[String: Any]],
+              let first = dataArr.first,
+              let embedding = first["embedding"] as? [Double]
+        else {
+            throw ModelProviderError.generationFailed(
+                reason: "Unparseable embeddings response from \(id)"
+            )
+        }
+        return embedding.map(Float.init)
     }
 }
