@@ -33,6 +33,10 @@ public actor IngestCoordinator {
     private let entityLinker: EntityLinker?
     private let entityQualityGate: EntityQualityGate?
     private let eventExtractor: EventExtractor?
+    /// HISTORY Phase C.2 — produces 5W+H slots per event for the
+    /// Phase D narrative composer. Nil = events still get inserted
+    /// but `narrative_slots_json` stays as the column default '{}'.
+    private let narrativeSlotExtractor: NarrativeSlotExtractor?
     private let relationshipExtractor: Tier1RelationshipExtractor?
     private let embedder: Embedder?
 
@@ -88,6 +92,7 @@ public actor IngestCoordinator {
         entityLinker: EntityLinker? = nil,
         entityQualityGate: EntityQualityGate? = nil,
         eventExtractor: EventExtractor? = nil,
+        narrativeSlotExtractor: NarrativeSlotExtractor? = nil,
         relationshipExtractor: Tier1RelationshipExtractor? = nil,
         embedder: Embedder? = nil,
         files: FilesRepository,
@@ -113,6 +118,7 @@ public actor IngestCoordinator {
         self.entityLinker = entityLinker
         self.entityQualityGate = entityQualityGate
         self.eventExtractor = eventExtractor
+        self.narrativeSlotExtractor = narrativeSlotExtractor
         self.relationshipExtractor = relationshipExtractor
         self.embedder = embedder
         self.files = files
@@ -666,6 +672,34 @@ public actor IngestCoordinator {
             extractedEntities: extractedEntities,
             mapping: canonicalMapping
         )
+
+        // HISTORY Phase C.2 — populate 5W+H slots for each event so
+        // the Phase D narrative composer can render chapters from
+        // structured slot prose instead of bullet titles. Runs after
+        // participant resolution (above) so email WHO slots get the
+        // canonical sender + recipient ids attached. Failure here
+        // leaves narrative_slots_json at the column default '{}' —
+        // the column is not load-bearing for retrieval.
+        if let narrativeSlotExtractor, let events, !extractedEvents.isEmpty {
+            let participantsBridge: NarrativeSlotEmailParticipants? = resolvedParticipants.map {
+                NarrativeSlotEmailParticipants(
+                    senderID: $0.senderID,
+                    recipientIDs: $0.recipientIDs
+                )
+            }
+            for event in extractedEvents {
+                let slots = await narrativeSlotExtractor.extract(
+                    event: event,
+                    object: object,
+                    entities: extractedEntities,
+                    canonicalMapping: canonicalMapping,
+                    emailParticipants: participantsBridge
+                )
+                if !slots.isEmpty {
+                    try? await events.setNarrativeSlots(slots, forEventID: event.id)
+                }
+            }
+        }
 
         if let relationshipExtractor, let relationships {
             let canonicalIDs = extractedEntities.compactMap { canonicalMapping[$0.id] }

@@ -571,6 +571,7 @@ public final class AppState {
                 entityLinker: EntityLinker(),
                 entityQualityGate: EntityQualityGate.bundled(),
                 eventExtractor: RuleEventExtractor(),
+                narrativeSlotExtractor: RuleNarrativeSlotExtractor(),
                 relationshipExtractor: Tier1RelationshipExtractor(),
                 embedder: embedder,
                 files: files,

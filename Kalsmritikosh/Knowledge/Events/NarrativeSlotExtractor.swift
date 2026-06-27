@@ -44,28 +44,19 @@ public protocol NarrativeSlotExtractor: Sendable {
     ) async -> EventNarrativeSlots
 }
 
-/// Mirror of `Tier1RelationshipExtractor.EmailParticipants` kept here
-/// so the slot extractor doesn't import the Tier1 module just for
-/// the type. The IngestCoordinator translates between them.
+/// Carries the canonical entity ids the IngestCoordinator has
+/// already resolved for the email's sender + recipients. The slot
+/// extractor reads display labels straight from
+/// `object.metadata["from"|"to"|"cc"]` and zips them positionally
+/// with the IDs to build WHO entries with both a readable label and
+/// a click-through entity id.
 public nonisolated struct NarrativeSlotEmailParticipants: Sendable {
     public let senderID: Entity.ID
-    public let senderAddress: String?
-    public let senderName: String?
     public let recipientIDs: [Entity.ID]
-    public let recipientLabels: [String]
 
-    public init(
-        senderID: Entity.ID,
-        senderAddress: String?,
-        senderName: String?,
-        recipientIDs: [Entity.ID],
-        recipientLabels: [String]
-    ) {
+    public init(senderID: Entity.ID, recipientIDs: [Entity.ID]) {
         self.senderID = senderID
-        self.senderAddress = senderAddress
-        self.senderName = senderName
         self.recipientIDs = recipientIDs
-        self.recipientLabels = recipientLabels
     }
 }
 
@@ -132,43 +123,46 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
 
         // ── Email-specific slot fills ────────────────────────────
         if object.sourceType.category == .email {
-            // WHO sender
-            if let participants = emailParticipants {
-                let senderText: String = {
-                    if let name = participants.senderName, !name.isEmpty {
-                        if let addr = participants.senderAddress, !addr.isEmpty {
-                            return "\(name) <\(addr)>"
-                        }
-                        return name
-                    }
-                    return participants.senderAddress ?? "(unknown sender)"
-                }()
+            // WHO sender: prefer the display string straight from the
+            // From: header (which preserves "Name <addr@host>" form);
+            // attach the canonical entity id when known.
+            let fromHeader = Self.stringValue(object.metadata["from"]) ?? ""
+            let toHeader = Self.stringValue(object.metadata["to"]) ?? ""
+            let ccHeader = Self.stringValue(object.metadata["cc"]) ?? ""
+
+            if !fromHeader.isEmpty {
                 slots.add(
                     NarrativeSlotValue(
-                        text: senderText,
+                        text: fromHeader.trimmingCharacters(in: .whitespacesAndNewlines),
                         confidence: 0.95,
                         provenance: .structuredHeader,
                         sourceObjectIDs: src,
-                        entityID: participants.senderID
+                        entityID: emailParticipants?.senderID
                     ),
                     to: .who
                 )
-                // WHO recipients
-                let recipientLabels = participants.recipientLabels
-                for (idx, recID) in participants.recipientIDs.enumerated() {
-                    let label = idx < recipientLabels.count ? recipientLabels[idx] : nil
-                    let recValue = label ?? "(recipient)"
-                    slots.add(
-                        NarrativeSlotValue(
-                            text: recValue,
-                            confidence: 0.9,
-                            provenance: .structuredHeader,
-                            sourceObjectIDs: src,
-                            entityID: recID
-                        ),
-                        to: .who
-                    )
-                }
+            }
+            // Recipients: split the To/Cc strings on comma/semicolon
+            // and emit one WHO per address. If we have canonical IDs
+            // for them, zip positionally — strict positional match
+            // is good enough because the IngestCoordinator builds
+            // recipientIDs from the same split.
+            let recipientStrings: [String] = (Self.splitRecipients(toHeader) + Self.splitRecipients(ccHeader))
+            let recipientIDs = emailParticipants?.recipientIDs ?? []
+            for (idx, raw) in recipientStrings.enumerated() {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                let id: Entity.ID? = idx < recipientIDs.count ? recipientIDs[idx] : nil
+                slots.add(
+                    NarrativeSlotValue(
+                        text: trimmed,
+                        confidence: 0.9,
+                        provenance: .structuredHeader,
+                        sourceObjectIDs: src,
+                        entityID: id
+                    ),
+                    to: .who
+                )
             }
             // WHERE: the channel ("email") for the composer's
             // "exchanged over email" phrasing.
@@ -232,15 +226,15 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         if object.sourceType.category != .email {
             let channel: String? = {
                 switch object.sourceType.category {
-                case .document:    return "document"
-                case .spreadsheet: return "spreadsheet"
-                case .image:       return "image"
-                case .audio:       return "recording"
-                case .video:       return "video"
-                case .email:       return nil
-                case .calendar:    return "calendar"
-                case .archive:     return "archive"
-                case .other:       return nil
+                case .document:     return "document"
+                case .spreadsheet:  return "spreadsheet"
+                case .presentation: return "presentation"
+                case .image:        return "image"
+                case .audio:        return "recording"
+                case .video:        return "video"
+                case .email:        return nil
+                case .archive:      return "archive"
+                case .unknown:      return nil
                 }
             }()
             if let channel {
@@ -263,6 +257,7 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
 
     private static func howForKind(_ kind: Event.Kind) -> String? {
         switch kind {
+        case .emailSent:           return "email"
         case .emailReceived:       return "email"
         case .meetingHeld:         return "meeting"
         case .contractSigned:      return "signed agreement"
@@ -272,7 +267,7 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         case .taskAssigned:        return "assignment"
         case .deliveryDelayed:     return "delivery (delayed)"
         case .deliveryCompleted:   return "delivery"
-        @unknown default:          return nil
+        case .other:               return nil
         }
     }
 
@@ -294,5 +289,17 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         guard let value else { return nil }
         if case .string(let s) = value.value { return s }
         return nil
+    }
+
+    /// Split an RFC 5322-style address list on commas / semicolons,
+    /// keeping the display-name + address pairs together. Naive
+    /// split is fine here — the strings round-trip into WHO text
+    /// only, and the canonical entity id is attached separately.
+    private static func splitRecipients(_ header: String) -> [String] {
+        guard !header.isEmpty else { return [] }
+        let parts = header
+            .replacingOccurrences(of: ";", with: ",")
+            .split(separator: ",", omittingEmptySubsequences: true)
+        return parts.map { String($0) }
     }
 }
