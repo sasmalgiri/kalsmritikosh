@@ -123,12 +123,28 @@ public actor ChronologicalPlanner {
     }
 
     /// Coalesce stub chapters when the plan has > minEventsPerChapter
-    /// chapters total. Stubs are folded into the previous chapter.
+    /// chapters total. Stubs are folded into the previous chapter
+    /// ONLY when the gap to the previous chapter is small — a
+    /// singleton event sitting across a major time gap is a real
+    /// narrative beat, not a stub.
+    ///
+    /// Without the gap guard, an aggressive minEventsPerChapter would
+    /// undo the gap-based split: every single-event chapter (which
+    /// often falls across the largest gaps) would fold back into the
+    /// previous cluster, collapsing a 3-chapter "Spring → silence →
+    /// Fall" narrative back to one bloated chapter. See the
+    /// 2026-06-28 verification run for the original symptom.
     private func coalesceStubs(_ chapters: [[Event]]) -> [[Event]] {
         guard chapters.count > minEventsPerChapter else { return chapters }
         var out: [[Event]] = []
         for chapter in chapters {
-            if chapter.count < minEventsPerChapter, var last = out.popLast() {
+            if chapter.count < minEventsPerChapter,
+               var last = out.last,
+               let lastEnd = last.last?.date,
+               let curStart = chapter.first?.date,
+               (Calendar.current.dateComponents([.day], from: lastEnd, to: curStart).day ?? 0) <= gapDaysThreshold
+            {
+                _ = out.popLast()
                 last.append(contentsOf: chapter)
                 out.append(last)
             } else {
