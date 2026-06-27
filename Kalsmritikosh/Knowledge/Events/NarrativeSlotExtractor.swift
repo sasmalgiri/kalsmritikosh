@@ -77,10 +77,23 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         // The event's primary date is always present. Trust matches
         // dateConfidence so the composer can render "around" vs
         // exact phrasings later.
+        //
+        // Real-data discovery (2026-06-28 production audit): emails
+        // were stamping WHEN as `ruleBased` even when the date came
+        // from a Date: header, because event.dateConfidence wasn't
+        // always >= 0.9. For email-category KOs with ANY parseable
+        // header date (object.metadata["date"] present), promote to
+        // structuredHeader regardless of the event's own
+        // dateConfidence — the header IS the structured source.
+        let isEmailWithHeaderDate = object.sourceType.category == .email
+            && Self.stringValue(object.metadata["date"])?.isEmpty == false
+        let provenance: SlotProvenance = (event.dateConfidence >= 0.9 || isEmailWithHeaderDate)
+            ? .structuredHeader : .ruleBased
+        let whenConfidence = isEmailWithHeaderDate ? max(0.9, event.dateConfidence) : event.dateConfidence
         let whenValue = NarrativeSlotValue(
             text: Self.formatWhen(event.date),
-            confidence: event.dateConfidence,
-            provenance: event.dateConfidence >= 0.9 ? .structuredHeader : .ruleBased,
+            confidence: whenConfidence,
+            provenance: provenance,
             sourceObjectIDs: src
         )
         slots.add(whenValue, to: .when)
@@ -198,12 +211,21 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
             // attach the canonical entity id so the composer can
             // link to the dossier.
             let canonicalIDs = Set(event.entityIDs.compactMap { canonicalMapping[$0] ?? $0 })
+            // Real-data discovery (2026-06-28 production audit): 256
+            // of 828 events came from forensic GDPR-export PDFs.
+            // These have lots of `.emailAddress` entities but few
+            // `.person` ones — the original WHO filter excluded
+            // emailAddress, so WHO stayed empty and the composer
+            // had nothing to anchor on. Including .emailAddress
+            // turns "(no who)" into "sasmalgiri@gmail.com" — a real
+            // name the composer can write a sentence around.
             let candidates = entities.filter { entity in
                 guard canonicalIDs.contains(canonicalMapping[entity.id] ?? entity.id) else { return false }
                 return entity.kind == .person
                     || entity.kind == .organization
                     || entity.kind == .vendor
                     || entity.kind == .client
+                    || entity.kind == .emailAddress
             }
             // Cap to avoid flooding the WHO slot with every entity.
             // The composer doesn't need every dim co-mention; 6 is

@@ -159,28 +159,63 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         }
 
         // Step 5 — write to DB. Replace contents.
+        //
+        // Real-data audit (2026-06-28): production DB had 23,581
+        // edges with weight ≥ 3 and 127,989 total cooccurrence rows,
+        // but entity_communities was EMPTY. Root cause: a single
+        // failing INSERT inside the for-loop bubbled to the outer
+        // catch, abandoning ALL membership writes even though the
+        // preceding DELETE had committed. The detector then returned
+        // 0 and logged ONE error — easy to miss in production logs.
+        //
+        // Fix: per-row error swallow + counters so one FK violation
+        // doesn't kill the whole pass. SAVEPOINT wrap so the DELETE
+        // rolls back when the membership write fails ENTIRELY (zero
+        // INSERTs succeeded), so the table never ends up emptier than
+        // before.
         let level0: Int64 = 0
         let ts = started.timeIntervalSince1970
+        var insertedRows = 0
+        var insertFailures = 0
+        let savepointName = "atlas_communities_write"
         do {
+            try await database.exec("SAVEPOINT \(savepointName);")
             try await database.exec("DELETE FROM entity_communities WHERE level = ?;", [.integer(level0)])
             for (root, members) in membership {
-                // Deterministic community id: hash the sorted member
-                // list so re-running with the same graph produces
-                // the same community ids — important for the Phase
-                // B.3 summarizer's "did this community change?"
-                // check.
                 let sortedMembers = members.sorted { $0.uuidString < $1.uuidString }
                 let stableID = sortedMembers.first ?? root
                 for member in sortedMembers {
-                    try await database.exec(
-                        "INSERT INTO entity_communities (community_id, entity_id, level, computed_at) VALUES (?, ?, ?, ?);",
-                        [.uuid(stableID), .uuid(member), .integer(level0), .real(ts)]
-                    )
+                    do {
+                        try await database.exec(
+                            "INSERT INTO entity_communities (community_id, entity_id, level, computed_at) VALUES (?, ?, ?, ?);",
+                            [.uuid(stableID), .uuid(member), .integer(level0), .real(ts)]
+                        )
+                        insertedRows += 1
+                    } catch {
+                        insertFailures += 1
+                        if insertFailures <= 3 {
+                            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: insert failed for member \(member.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                        }
+                    }
                 }
             }
+            // Roll back the DELETE if literally nothing landed; we
+            // don't want to empty the table on a wholesale failure.
+            if insertedRows == 0 {
+                try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
+                try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
+                AtlasLog.knowledge.error("AgglomerativeCommunityDetector: ALL inserts failed (\(insertFailures, privacy: .public) failures); kept previous communities table contents")
+                return 0
+            }
+            try await database.exec("RELEASE SAVEPOINT \(savepointName);")
         } catch {
-            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: write failed — \(String(describing: error), privacy: .public)")
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
+            try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
+            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: write block failed — \(String(describing: error), privacy: .public)")
             return 0
+        }
+        if insertFailures > 0 {
+            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: \(insertFailures, privacy: .public) of \(insertedRows + insertFailures, privacy: .public) inserts failed (likely FK violations from cooccurrence edges pointing at deleted entity ids)")
         }
 
         let elapsed = Int(Date().timeIntervalSince(started))

@@ -85,14 +85,37 @@ public actor QualityTierBackfiller: BackgroundService {
         }
         guard !candidates.isEmpty else { return 0 }
 
-        var changed = 0
+        // Build the structured-header allow-list ONCE per pass: any
+        // entity value that appears in a KO's `t13_structuredEntities`
+        // metadata is, by construction, header-derived. The audit on
+        // 2026-06-28 surfaced 8972 entities with ZERO T1 because the
+        // structured-header tagging code shipped AFTER the user's
+        // archive was already ingested. Without this promotion pass,
+        // T1 stays empty forever even though the source signal lives
+        // intact in the KO metadata.
+        let headerValues = await loadStructuredHeaderValues()
+
+        var demoted = 0
+        var promoted = 0
         for (id, value, kindRaw) in candidates {
             let kind = Entity.Kind(rawValue: kindRaw) ?? .other
-            // We don't know the original source (header vs NER) on a
-            // backfilled row. Run the SHAPE-only rules: anything T2
-            // that the classifier would now flag as T3 gets demoted.
-            // Promotions (T2 → T1) are skipped — without the source
-            // signal we can't claim header-derived.
+            let normalized = value.lowercased()
+            // T2 → T1 promotion: header-derived values get the upgrade
+            // they would have received at ingest time.
+            if headerValues.contains(normalized) {
+                do {
+                    try await database.exec(
+                        "UPDATE entities SET quality_tier = 'T1' WHERE id = ?;",
+                        [.uuid(id)]
+                    )
+                    promoted += 1
+                    continue
+                } catch {
+                    AtlasLog.knowledge.error("QualityTierBackfiller: promote failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                }
+            }
+            // T2 → T3 demotion: shape-only rules; anything the classifier
+            // would flag as T3 today gets demoted.
             let proposed = QualityTierClassifier.tier(
                 value: value,
                 kind: kind,
@@ -104,14 +127,54 @@ public actor QualityTierBackfiller: BackgroundService {
                     "UPDATE entities SET quality_tier = ? WHERE id = ?;",
                     [.text(proposed.rawValue), .uuid(id)]
                 )
-                changed += 1
+                demoted += 1
             } catch {
                 AtlasLog.knowledge.error("QualityTierBackfiller: update failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
-        if changed > 0 {
-            AtlasLog.knowledge.info("QualityTierBackfiller: re-tiered \(changed, privacy: .public) of \(candidates.count, privacy: .public) entities to T3")
+        if promoted > 0 || demoted > 0 {
+            AtlasLog.knowledge.info("QualityTierBackfiller: promoted \(promoted, privacy: .public) T2→T1, demoted \(demoted, privacy: .public) T2→T3 of \(candidates.count, privacy: .public) candidates")
         }
-        return changed
+        return promoted + demoted
+    }
+
+    /// Scan the `t13_structuredEntities` metadata column on every KO
+    /// and collect the lowercased VALUES of the structured entities.
+    /// Returns a flat set so the per-entity check is O(1).
+    ///
+    /// Cost: one paged scan over knowledge_objects per pass. Bounded
+    /// to mbox / eml / appleMail rows because only those carry
+    /// structured headers — there's no point scanning every PDF /
+    /// spreadsheet for keys that aren't there.
+    private func loadStructuredHeaderValues() async -> Set<String> {
+        var out: Set<String> = []
+        do {
+            let rows = try await database.query("""
+            SELECT metadata_json FROM knowledge_objects
+            WHERE source_type IN ('mbox','eml','appleMail')
+              AND metadata_json LIKE '%t13_structuredEntities%';
+            """, [])
+            for row in rows {
+                guard let json = row.string(0),
+                      let data = json.data(using: .utf8),
+                      let meta = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let raw = meta["t13_structuredEntities"] as? String,
+                      let entitiesData = raw.data(using: .utf8),
+                      let entities = try? JSONSerialization.jsonObject(with: entitiesData) as? [[String: Any]]
+                else { continue }
+                for entity in entities {
+                    if let value = entity["value"] as? String {
+                        out.insert(value.lowercased())
+                    }
+                    if let normalized = entity["normalizedValue"] as? String {
+                        out.insert(normalized.lowercased())
+                    }
+                }
+            }
+        } catch {
+            AtlasLog.knowledge.error("QualityTierBackfiller: header scan failed — \(String(describing: error), privacy: .public)")
+        }
+        AtlasLog.knowledge.info("QualityTierBackfiller: collected \(out.count, privacy: .public) structured-header values for promotion")
+        return out
     }
 }
