@@ -68,6 +68,13 @@ public actor IngestCoordinator {
     /// relationship write block. Nil = phase-3 bonds disabled
     /// (older boot paths, smoke tests).
     private let bondConstructor: BondConstructor?
+    /// G2-3 — per-chunk contextual retrieval. When wired, produces a
+    /// one-sentence prefix for each chunk that describes the chunk's
+    /// role in the parent document. Prepended ONLY at embed time so
+    /// the stored chunk.text + FTS rows are untouched. Nil = chunks
+    /// embed without per-chunk context (heuristic doc-context still
+    /// applies).
+    private let contextPrefixGenerator: (any ContextPrefixGenerator)?
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -95,7 +102,8 @@ public actor IngestCoordinator {
         synthQueue: SyntheticQuestionQueue? = nil,
         qaPairs: QAPairsRepository? = nil,
         qaPairExtractor: (any QAPairExtractor)? = nil,
-        bondConstructor: BondConstructor? = nil
+        bondConstructor: BondConstructor? = nil,
+        contextPrefixGenerator: (any ContextPrefixGenerator)? = nil
     ) {
         self.loaders = loaders
         self.cleaner = cleaner
@@ -121,6 +129,7 @@ public actor IngestCoordinator {
         self.qaPairs = qaPairs
         self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
         self.bondConstructor = bondConstructor
+        self.contextPrefixGenerator = contextPrefixGenerator
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
         let stream = AsyncStream<SubjectInvalidation> { c in continuation = c }
@@ -463,7 +472,34 @@ public actor IngestCoordinator {
             throw error
         }
 
-        let chunked = chunker.chunk(objectID: object.id, content: object.content)
+        var chunked = chunker.chunk(objectID: object.id, content: object.content)
+        // G2-3 — populate per-chunk context_prefix BEFORE persisting +
+        // embedding so the embed pass and the persisted row carry the
+        // same prefix. Skipped when chunks.count < 2 (single-chunk
+        // small docs already are their own context) or when no
+        // generator is wired.
+        if let gen = contextPrefixGenerator, chunked.count >= 2 {
+            let opening = String(object.content.prefix(1_500))
+            let filename = object.sourceFile.lastPathComponent
+            let total = chunked.count
+            chunked = await withTaskGroup(of: (Int, String?).self) { group in
+                for (i, c) in chunked.enumerated() {
+                    let req = ContextPrefixRequest(
+                        chunkText: c.text,
+                        chunkOrdinal: c.ordinal,
+                        totalChunks: total,
+                        filename: filename,
+                        documentOpening: opening
+                    )
+                    group.addTask { (i, await gen.prefix(for: req)) }
+                }
+                var prefixes: [Int: String?] = [:]
+                for await (i, p) in group { prefixes[i] = p }
+                return chunked.enumerated().map { idx, c in
+                    c.withContextPrefix(prefixes[idx] ?? nil)
+                }
+            }
+        }
         try? await chunks.insertBatch(chunked)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per
@@ -646,11 +682,20 @@ public actor IngestCoordinator {
             // lost to (e.g. contract.md vs invoice-432.eml on
             // "delivery date" similarity, per UPDATE_09 Item 1).
             let docContext = Self.documentContext(for: object)
-            let texts: [String]
-            if docContext.isEmpty {
-                texts = chunked.map(\.text)
-            } else {
-                texts = chunked.map { "\(docContext)\n---\n\($0.text)" }
+            // G2-3 — per-chunk context wins over the per-document
+            // heuristic when present. Per-chunk prefixes contain
+            // section-specific context the heuristic can't ("This
+            // section lists Project Delta's amendment terms"), which
+            // is what widens the vector-similarity gap between an
+            // on-target chunk and its off-topic neighbors.
+            let texts: [String] = chunked.map { chunk in
+                if let prefix = chunk.contextPrefix, !prefix.isEmpty {
+                    return "\(prefix)\n---\n\(chunk.text)"
+                }
+                if !docContext.isEmpty {
+                    return "\(docContext)\n---\n\(chunk.text)"
+                }
+                return chunk.text
             }
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {

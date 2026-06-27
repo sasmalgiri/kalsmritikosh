@@ -24,6 +24,12 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     public let characterRange: Range<Int>
     public let pageNumber: Int?
     public let createdAt: Date
+    /// G2-3 contextual retrieval — one-sentence summary of this chunk's
+    /// role in the parent document. Used ONLY at embed time; never
+    /// shown to the user, never indexed in FTS. Nil for chunks whose
+    /// whole content IS the document and for chunks ingested before
+    /// schema v16.
+    public let contextPrefix: String?
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -35,7 +41,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         text: String,
         characterRange: Range<Int>,
         pageNumber: Int? = nil,
-        createdAt: Date = .init()
+        createdAt: Date = .init(),
+        contextPrefix: String? = nil
     ) {
         self.id = id
         self.objectID = objectID
@@ -44,12 +51,29 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.characterRange = characterRange
         self.pageNumber = pageNumber
         self.createdAt = createdAt
+        self.contextPrefix = contextPrefix
+    }
+
+    /// Returns a new Chunk identical to `self` except `contextPrefix`
+    /// is replaced. Used by IngestCoordinator after the per-chunk
+    /// context generator runs.
+    public func withContextPrefix(_ prefix: String?) -> Chunk {
+        Chunk(
+            id: id,
+            objectID: objectID,
+            ordinal: ordinal,
+            text: text,
+            characterRange: characterRange,
+            pageNumber: pageNumber,
+            createdAt: createdAt,
+            contextPrefix: prefix
+        )
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
-        case pageNumber, createdAt
+        case pageNumber, createdAt, contextPrefix
     }
 
     public init(from decoder: Decoder) throws {
@@ -63,6 +87,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.characterRange = lower..<max(lower, upper)
         self.pageNumber = try c.decodeIfPresent(Int.self, forKey: .pageNumber)
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.contextPrefix = try c.decodeIfPresent(String.self, forKey: .contextPrefix)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -75,5 +100,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encode(characterRange.upperBound, forKey: .characterRangeUpper)
         try c.encodeIfPresent(pageNumber, forKey: .pageNumber)
         try c.encode(createdAt, forKey: .createdAt)
+        try c.encodeIfPresent(contextPrefix, forKey: .contextPrefix)
     }
 }

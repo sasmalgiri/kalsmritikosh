@@ -15,8 +15,8 @@ public actor ChunksRepository {
     public func insertBatch(_ chunks: [Chunk]) async throws {
         for chunk in chunks {
             try await database.exec("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -25,9 +25,20 @@ public actor ChunksRepository {
                 .integer(Int64(chunk.characterRange.lowerBound)),
                 .integer(Int64(chunk.characterRange.upperBound)),
                 chunk.pageNumber.map { .integer(Int64($0)) } ?? .null,
-                .date(chunk.createdAt)
+                .date(chunk.createdAt),
+                chunk.contextPrefix.map { .text($0) } ?? .null
             ])
         }
+    }
+
+    /// G2-3 — update only the context_prefix for one chunk. Used when
+    /// the per-chunk context generator runs AFTER insertBatch (e.g.
+    /// async backfill) or to overwrite a generator's prior output.
+    public func updateContextPrefix(_ chunkID: Chunk.ID, prefix: String?) async throws {
+        try await database.exec(
+            "UPDATE chunks SET context_prefix = ? WHERE id = ?;",
+            [prefix.map { .text($0) } ?? .null, .uuid(chunkID)]
+        )
     }
 
     public func count(forObject id: KnowledgeObject.ID) async throws -> Int {
@@ -44,7 +55,7 @@ public actor ChunksRepository {
     /// writer.
     public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix
         FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
         """, [.uuid(id)])
         return rows.compactMap(decode)
@@ -55,7 +66,7 @@ public actor ChunksRepository {
     /// hydrates the answer-side KO into a `RetrievedChunk`.
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix
         FROM chunks WHERE object_id = ? ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return rows.first.flatMap(decode)
@@ -66,7 +77,7 @@ public actor ChunksRepository {
         var chunks: [Chunk] = []
         for id in ids {
             let rows = try await database.query("""
-            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at
+            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix
             FROM chunks WHERE id = ? LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let chunk = decode(row) {
@@ -106,7 +117,8 @@ public actor ChunksRepository {
             text: text,
             characterRange: Int(start)..<Int(end),
             pageNumber: row.int(6).map(Int.init),
-            createdAt: created
+            createdAt: created,
+            contextPrefix: row.string(8)
         )
     }
 }

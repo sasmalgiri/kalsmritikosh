@@ -361,7 +361,11 @@ public final class AppState {
                 synthQueue: synthQueue,
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
-                bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache)
+                bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache),
+                contextPrefixGenerator: LLMContextPrefixGenerator(
+                    capabilities: capabilities,
+                    timeoutMilliseconds: 2_000
+                )
             )
 
             // ── Concurrency + Live wiring ────────────────────────────

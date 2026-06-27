@@ -52,7 +52,8 @@ public enum SchemaMigrations {
         (12, v12),
         (13, v13),
         (14, v14),
-        (15, v15)
+        (15, v15),
+        (16, v16)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -668,5 +669,19 @@ public enum SchemaMigrations {
 
     CREATE INDEX IF NOT EXISTS idx_boilerplate_uses_ko
         ON boilerplate_uses(ko_id);
+    """
+
+    // MARK: - v16 — G2-3 contextual retrieval (per-chunk context prefix)
+    //
+    // Anthropic-style contextual retrieval. Each chunk carries a one-
+    // sentence summary of its role inside the parent document. The
+    // prefix is prepended ONLY at embed time so display, FTS, and
+    // citation snippets are unaffected — the stored `chunk.text` and
+    // `chunks_fts.text` keep their original bytes. The column is
+    // nullable so chunks ingested before this migration (and small-
+    // doc chunks whose whole doc fits in one chunk) carry NULL.
+
+    private static let v16: String = """
+    ALTER TABLE chunks ADD COLUMN context_prefix TEXT;
     """
 }
