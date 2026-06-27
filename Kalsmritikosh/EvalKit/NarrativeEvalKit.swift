@@ -63,6 +63,12 @@ public nonisolated enum NarrativeEvalKit {
         /// include. Used by chapter_coverage. nil = the metric
         /// reports N/A for this question.
         public let expectedEventIDs: [UUID]?
+        /// HISTORY F follow-on — STABLE coverage gold. The chapter
+        /// list's events are resolved to their source filenames; the
+        /// metric reports the fraction of these filenames that
+        /// appear at least once in the chapter list. Survives
+        /// re-ingest (filenames are stable; UUIDs aren't).
+        public let expectedSourceFilenames: [String]
 
         public init(
             id: String,
@@ -70,7 +76,8 @@ public nonisolated enum NarrativeEvalKit {
             expectedEntityIDs: [UUID] = [],
             expectedContradictions: [String] = [],
             goldConfidence: Double? = nil,
-            expectedEventIDs: [UUID]? = nil
+            expectedEventIDs: [UUID]? = nil,
+            expectedSourceFilenames: [String] = []
         ) {
             self.id = id
             self.text = text
@@ -78,12 +85,13 @@ public nonisolated enum NarrativeEvalKit {
             self.expectedContradictions = expectedContradictions
             self.goldConfidence = goldConfidence
             self.expectedEventIDs = expectedEventIDs
+            self.expectedSourceFilenames = expectedSourceFilenames
         }
     }
 
     /// Per-question scored row. The aggregator folds these into a
     /// Markdown table.
-    public struct Score: Sendable {
+    public struct Score: Sendable, Codable {
         public let questionID: String
         public let chapterCoverage: Double?
         public let citationDensity: Double
@@ -96,7 +104,7 @@ public nonisolated enum NarrativeEvalKit {
     }
 
     /// Aggregate report for a run.
-    public struct Report: Sendable {
+    public struct Report: Sendable, Codable {
         public let timestamp: Date
         public let scores: [Score]
         public let avgChapterCoverage: Double
@@ -140,7 +148,8 @@ public nonisolated enum NarrativeEvalKit {
     /// would just thrash the model.
     public static func run(
         questions: [Question],
-        brain: MasterBrain
+        brain: MasterBrain,
+        events: EventsRepository? = nil
     ) async -> Report {
         var scores: [Score] = []
         for question in questions {
@@ -153,10 +162,18 @@ public nonisolated enum NarrativeEvalKit {
                 case .instant, .synthesisToken, .expertFindingsArrived: continue
                 }
             }
+            // Resolve chapter event ids to source filenames so the
+            // filename-based chapter_coverage metric has data to score.
+            var filenames: [Event.ID: String] = [:]
+            if let events {
+                let allIDs = chapters.flatMap(\.eventIDs)
+                filenames = (try? await events.sourceFilenames(forEventIDs: allIDs)) ?? [:]
+            }
             let score = scoreAnswer(
                 question: question,
                 chapters: chapters,
-                verified: verified
+                verified: verified,
+                eventFilenames: filenames
             )
             scores.append(score)
         }
@@ -193,14 +210,31 @@ public nonisolated enum NarrativeEvalKit {
     static func scoreAnswer(
         question: Question,
         chapters: [NarrativeChapter],
-        verified: VerifiedAnswer?
+        verified: VerifiedAnswer?,
+        eventFilenames: [Event.ID: String] = [:]
     ) -> Score {
         let allEventIDs = Set(chapters.flatMap(\.eventIDs))
-        let chapterCoverage: Double? = question.expectedEventIDs.map { expected in
-            guard !expected.isEmpty else { return 0.0 }
-            let hits = expected.filter { allEventIDs.contains($0) }.count
-            return Double(hits) / Double(expected.count)
-        }
+        // Prefer the stable filename-based coverage when the question
+        // ships expectedSourceFilenames; fall back to UUID-based when
+        // only expectedEventIDs is set; n/a otherwise.
+        let chapterCoverage: Double? = {
+            if !question.expectedSourceFilenames.isEmpty {
+                let citedFilenames = Set(
+                    allEventIDs.compactMap { eventFilenames[$0] }
+                        .map { $0.lowercased() }
+                )
+                let hits = question.expectedSourceFilenames
+                    .filter { citedFilenames.contains($0.lowercased()) }
+                    .count
+                return Double(hits) / Double(question.expectedSourceFilenames.count)
+            }
+            if let expected = question.expectedEventIDs {
+                guard !expected.isEmpty else { return 0.0 }
+                let hits = expected.filter { allEventIDs.contains($0) }.count
+                return Double(hits) / Double(expected.count)
+            }
+            return nil
+        }()
 
         let totalSentences = chapters
             .map { $0.prose.split(whereSeparator: { ".!?".contains($0) }).count }
@@ -288,24 +322,35 @@ public nonisolated enum NarrativeEvalKit {
         Question(
             id: "N1",
             text: "Reconstruct the history of Project Delta.",
-            goldConfidence: 0.65
+            goldConfidence: 0.65,
+            // Reuses the same stable filename contract that
+            // questions.json already uses for the keyword eval — see
+            // EvalKitRunner.Question.expectedSourceFiles for the
+            // existing fixture's filenames.
+            expectedSourceFilenames: [
+                "contract.md", "amendment-7.md",
+                "invoice-401.md", "delivery-report.md"
+            ]
         ),
         Question(
             id: "N2",
             text: "Tell me the story of Supplier ABC.",
             expectedContradictions: ["delivery"],
-            goldConfidence: 0.55
+            goldConfidence: 0.55,
+            expectedSourceFilenames: ["delivery-report.md", "invoice-401.md"]
         ),
         Question(
             id: "N3",
             text: "What happened with the contract amendments?",
-            goldConfidence: 0.60
+            goldConfidence: 0.60,
+            expectedSourceFilenames: ["amendment-7.md", "contract.md"]
         ),
         Question(
             id: "N4",
             text: "Narrate the Project Delta delivery timeline.",
             expectedContradictions: ["delivery"],
-            goldConfidence: 0.55
+            goldConfidence: 0.55,
+            expectedSourceFilenames: ["delivery-report.md"]
         ),
     ]
 }

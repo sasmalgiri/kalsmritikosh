@@ -210,4 +210,53 @@ public protocol NarrativeComposer: Sendable {
         retrieval: RetrievalResult,
         eventSlots: [Event.ID: EventNarrativeSlots]
     ) async throws -> ReconstructedNarrative
+
+    /// HISTORY Phase D.7 true-streaming variant. Yields each
+    /// chapter as it finishes composing, then the final
+    /// `ReconstructedNarrative` (with coverage + flattened
+    /// citations) as the last event so the brain has both the
+    /// streamed pieces AND a final fold for VerifiedAnswer.
+    ///
+    /// Default implementation calls `compose` and replays the
+    /// chapter list — implementations override to gain real
+    /// progressive delivery.
+    func composeStreaming(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots]
+    ) -> AsyncStream<NarrativeStreamEvent>
+}
+
+public extension NarrativeComposer {
+    func composeStreaming(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots]
+    ) -> AsyncStream<NarrativeStreamEvent> {
+        AsyncStream { continuation in
+            Task {
+                do {
+                    let narrative = try await compose(
+                        intent: intent,
+                        retrieval: retrieval,
+                        eventSlots: eventSlots
+                    )
+                    for chapter in narrative.chapters {
+                        continuation.yield(.chapter(chapter))
+                    }
+                    continuation.yield(.completed(narrative))
+                } catch {
+                    continuation.yield(.failed("\(error)"))
+                }
+                continuation.finish()
+            }
+        }
+    }
+}
+
+/// One progressive event in the streaming composition pipeline.
+public nonisolated enum NarrativeStreamEvent: Sendable {
+    case chapter(NarrativeChapter)
+    case completed(ReconstructedNarrative)
+    case failed(String)
 }

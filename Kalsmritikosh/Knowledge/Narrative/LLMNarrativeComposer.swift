@@ -54,6 +54,92 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         self.verifier = verifier
     }
 
+    /// HISTORY Phase D.7 true-streaming entry point. Yields each
+    /// chapter as the LLM finishes it (instead of batching them
+    /// all at the end like the default protocol implementation).
+    /// The brain re-emits via `AnswerUpdate.chapterReady`.
+    public nonisolated func composeStreaming(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots]
+    ) -> AsyncStream<NarrativeStreamEvent> {
+        AsyncStream { continuation in
+            Task {
+                let result = await self.runStreaming(
+                    intent: intent,
+                    retrieval: retrieval,
+                    eventSlots: eventSlots,
+                    yield: { continuation.yield($0) }
+                )
+                continuation.yield(.completed(result))
+                continuation.finish()
+            }
+        }
+    }
+
+    /// Body of the streaming entry — runs inside the actor so we can
+    /// touch `planner` and `verifier`. Yields each chapter via the
+    /// passed-in closure right after it finishes verifying.
+    private func runStreaming(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        yield: @Sendable (NarrativeStreamEvent) -> Void
+    ) async -> ReconstructedNarrative {
+        let scope = Self.scope(from: intent)
+        var downgrades: [String] = []
+
+        let plannedChapters = await planner.plan(events: retrieval.events)
+        let limited = Array(plannedChapters.prefix(maxChapters))
+        if plannedChapters.count > maxChapters {
+            downgrades.append("Capped at \(maxChapters) of \(plannedChapters.count) chapters")
+        }
+
+        let spec = CapabilitySpec.reasoning(
+            contextTokens: 6_000,
+            purpose: "history.narrative.compose"
+        )
+        let provider: (any ModelProvider)?
+        do {
+            let p = try await capabilities.resolve(spec)
+            provider = await p.isAvailable() ? p : nil
+        } catch {
+            provider = nil
+        }
+        if provider == nil {
+            downgrades.append("No reasoning provider available — chapters ship without LLM prose")
+        }
+
+        var chapters: [NarrativeChapter] = []
+        for planned in limited {
+            let composed = await composeChapter(
+                planned: planned,
+                eventSlots: eventSlots,
+                provider: provider,
+                scope: scope
+            )
+            let verified = verifier.verify(chapter: composed, events: planned.events)
+            chapters.append(verified)
+            // Yield right after verification so the UI gets the
+            // chapter the instant it's safe to show.
+            yield(.chapter(verified))
+        }
+
+        let coverage = Self.coverage(over: chapters)
+        let title = Self.title(for: scope, chapters: chapters)
+        let summary = Self.summary(chapters: chapters, scope: scope)
+        let citations = Self.flattenCitations(chapters: chapters, slots: eventSlots)
+        return ReconstructedNarrative(
+            title: title,
+            summary: summary,
+            scope: scope,
+            chapters: chapters,
+            coverage: coverage,
+            citations: citations,
+            downgrades: downgrades
+        )
+    }
+
     public func compose(
         intent: UserIntent,
         retrieval: RetrievalResult,

@@ -174,10 +174,14 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     if ProcessInfo.processInfo.environment["ATLAS_NARRATIVE_EVAL"] == "1" {
         let report = await NarrativeEvalKit.run(
             questions: NarrativeEvalKit.projectDeltaQuestions,
-            brain: state.brain
+            brain: state.brain,
+            events: events
         )
         AtlasLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .public)")
         print(report.markdownTable)
+        // HISTORY F.4 — persist each run to Application Support so
+        // the EvalDashboardView can render trend lines across runs.
+        try? await NarrativeEvalReportStore.shared.save(report)
         if report.avgCitationDensity > 0 {
             passed.append("HISTORY F: eval cite/sent=\(String(format: "%.2f", report.avgCitationDensity)) over \(report.scores.count) Q")
         } else {

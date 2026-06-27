@@ -154,6 +154,30 @@ public actor EventsRepository {
         return out
     }
 
+    /// HISTORY F follow-on — resolve a batch of event IDs to the
+    /// last-path component of their source file's URL. Lets the
+    /// NarrativeEvalKit measure chapter_coverage against stable
+    /// filenames (in questions.json) instead of per-machine UUIDs.
+    public func sourceFilenames(forEventIDs ids: [Event.ID]) async throws -> [Event.ID: String] {
+        guard !ids.isEmpty else { return [:] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT e.id, f.url FROM events e
+        JOIN knowledge_objects k ON k.id = e.source_object_id
+        JOIN files f ON f.id = k.file_id
+        WHERE e.id IN (\(placeholders));
+        """, ids.map { .uuid($0) })
+        var out: [Event.ID: String] = [:]
+        for row in rows {
+            guard let id = row.uuid(0), let urlString = row.string(1) else { continue }
+            let filename = URL(fileURLWithPath: urlString).lastPathComponent
+            out[id] = filename.isEmpty
+                ? (URL(string: urlString)?.lastPathComponent ?? urlString)
+                : filename
+        }
+        return out
+    }
+
     /// Phase C.2 backfill helper — list events whose narrative slots
     /// have never been computed (column is the default '{}'). The
     /// extractor pulls these in oldest-first batches.

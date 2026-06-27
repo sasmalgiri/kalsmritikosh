@@ -179,25 +179,35 @@ public actor MasterBrain {
             forEventIDs: retrieval.events.map(\.id)
         )) ?? [:]
 
-        let narrative: ReconstructedNarrative
-        do {
-            narrative = try await narrativeComposer.compose(
-                intent: intent,
-                retrieval: retrieval,
-                eventSlots: slotBundles
-            )
-        } catch {
+        // HISTORY Phase D.10 — true streaming. Consume the
+        // composer's AsyncStream so each chapter is yielded into
+        // AnswerUpdate.chapterReady the instant it finishes
+        // composing instead of waiting for the whole narrative.
+        var narrative: ReconstructedNarrative?
+        var failureReason: String?
+        let stream = narrativeComposer.composeStreaming(
+            intent: intent,
+            retrieval: retrieval,
+            eventSlots: slotBundles
+        )
+        for await event in stream {
+            switch event {
+            case .chapter(let chapter):
+                yield(.chapterReady(chapter))
+            case .completed(let result):
+                narrative = result
+            case .failed(let reason):
+                failureReason = reason
+            }
+        }
+        guard let narrative else {
             return VerifiedAnswer(
                 body: "Atlas couldn't reconstruct that history.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
-                refusalReason: "Composer failed: \(error)"
+                refusalReason: "Composer failed: \(failureReason ?? "unknown")"
             )
-        }
-
-        for chapter in narrative.chapters {
-            yield(.chapterReady(chapter))
         }
 
         // Fold the narrative into a VerifiedAnswer the legacy

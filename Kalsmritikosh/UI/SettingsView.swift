@@ -98,11 +98,27 @@ public struct SettingsView: View {
                 pinningSection
                 Divider()
                 diagnosticsSection
+                Divider()
+                narrativeEvalSection
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
         }
         .task { await reload() }
+    }
+
+    /// HISTORY Phase F.4 — narrative-eval history. The
+    /// EvalDashboardView reads NarrativeEvalReportStore for past runs
+    /// (persisted by SmokeTest when ATLAS_NARRATIVE_EVAL=1) and
+    /// renders each with delta arrows vs the previous run.
+    private var narrativeEvalSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Narrative Eval History").font(.title3.bold())
+            Text("Each run of the in-app SmokeTest with `ATLAS_NARRATIVE_EVAL=1` lands here. Coverage / citation density / contradiction recall / confidence RMSE — arrows show movement vs the previous run.")
+                .font(.caption).foregroundStyle(.secondary)
+            EvalDashboardView()
+                .frame(minHeight: 300)
+        }
     }
 
     private var diagnosticsSection: some View {
