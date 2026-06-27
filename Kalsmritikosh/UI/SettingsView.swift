@@ -9,6 +9,11 @@
 //
 
 import SwiftUI
+import OSLog
+import UniformTypeIdentifiers
+#if canImport(AppKit)
+import AppKit
+#endif
 
 public struct SettingsView: View {
     @Environment(AppState.self) private var appState
@@ -46,6 +51,21 @@ public struct SettingsView: View {
     @State private var ollamaPullStatus: String?
     @State private var ollamaPullFraction: Double = 0
 
+    // G2-3 BYO — bring-your-own model registries surfaced in Settings.
+    @State private var ggufEntries: [GGUFRegistry.Entry] = []
+    @State private var cloudEntries: [CloudEndpointRegistry.Endpoint] = []
+    @State private var mlxModels: [MLXDiscovery.UserMLXModel] = []
+    @State private var ggufImporterPresented: Bool = false
+    // Cloud endpoint form fields.
+    @State private var newCloudName: String = ""
+    @State private var newCloudBaseURL: String = "https://api.openai.com/v1"
+    @State private var newCloudModelName: String = "gpt-4o-mini"
+    @State private var newCloudAPIKey: String = ""
+    @State private var newCloudContextWindow: String = "128000"
+    @State private var newCloudFamily: String = "openai"
+    @State private var newCloudTier: ModelManifest.Tier = .large
+    @State private var cloudFormError: String?
+
     private let surfacedCapabilities: [ModelCapability] = [
         .reasoning, .summarization, .extraction,
         .classification, .routing, .embedding
@@ -70,6 +90,8 @@ public struct SettingsView: View {
                 privacySection
                 Divider()
                 providersSection
+                Divider()
+                userModelsSection
                 Divider()
                 pinningSection
                 Divider()
@@ -801,6 +823,259 @@ public struct SettingsView: View {
             return .init(icon: "exclamationmark.octagon.fill", title: "Model won't run well",
                         foreground: .red, background: .red)
         }
+    }
+
+    /// G2-3 BYO — three subsections so the user can bring their own
+    /// MLX checkpoints, GGUF files, and cloud endpoints. Each subsection
+    /// surfaces what's currently registered + actions to add / remove.
+    private var userModelsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Your models").font(.title3.bold())
+            Text("Atlas auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            mlxSubsection
+            Divider().padding(.vertical, 4)
+            ggufSubsection
+            Divider().padding(.vertical, 4)
+            cloudSubsection
+        }
+        .task { await reloadUserModels() }
+    }
+
+    // MARK: - MLX
+
+    private var mlxSubsection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "cpu").foregroundStyle(.purple)
+                Text("MLX checkpoints").font(.body.weight(.medium))
+                Spacer()
+                Text("\(mlxModels.count) detected").font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Drop an MLX model directory into the folder below; Atlas reads its `config.json` and registers it at the next launch.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button {
+                    revealMLXFolder()
+                } label: {
+                    Label("Open MLX Models folder", systemImage: "folder")
+                }
+                Button {
+                    Task { mlxModels = MLXDiscovery.list() }
+                } label: {
+                    Label("Rescan", systemImage: "arrow.clockwise")
+                }
+            }
+            if mlxModels.isEmpty {
+                Text("No MLX checkpoints registered.")
+                    .font(.caption.italic()).foregroundStyle(.secondary)
+            } else {
+                ForEach(mlxModels, id: \.id) { m in
+                    HStack {
+                        Text(m.displayName).font(.callout)
+                        Spacer()
+                        Text("\(formatBytes(m.sizeBytes)) · ctx \(m.contextWindow) · \(m.tier.rawValue)")
+                            .font(.caption.monospaced()).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func revealMLXFolder() {
+        let dir = MLXDiscovery.defaultUserModelsDirectory()
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        #if canImport(AppKit)
+        NSWorkspace.shared.open(dir)
+        #endif
+    }
+
+    // MARK: - GGUF
+
+    private var ggufSubsection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "doc.badge.plus").foregroundStyle(.indigo)
+                Text("GGUF files").font(.body.weight(.medium))
+                Spacer()
+                Text("\(ggufEntries.count) added").font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Atlas parses its header for context-length + family.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button {
+                ggufImporterPresented = true
+            } label: {
+                Label("Add .gguf file…", systemImage: "plus.circle")
+            }
+            .fileImporter(
+                isPresented: $ggufImporterPresented,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                Task { await handleGGUFImport(result) }
+            }
+            if ggufEntries.isEmpty {
+                Text("No GGUF files added.")
+                    .font(.caption.italic()).foregroundStyle(.secondary)
+            } else {
+                ForEach(ggufEntries, id: \.id) { e in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(e.displayName).font(.callout)
+                            Text(e.filePath).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("\(formatBytes(e.sizeBytes)) · ctx \(e.contextWindow)")
+                            .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Button {
+                            Task {
+                                if let reg = appState.ggufRegistry {
+                                    await reg.remove(id: e.id)
+                                    ggufEntries = await reg.load()
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    private func handleGGUFImport(_ result: Result<[URL], Error>) async {
+        guard let reg = appState.ggufRegistry else { return }
+        switch result {
+        case .success(let urls):
+            for url in urls {
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+                _ = try? await reg.add(fileURL: url)
+            }
+            ggufEntries = await reg.load()
+        case .failure(let err):
+            AtlasLog.app.error("GGUF import failed: \(String(describing: err), privacy: .public)")
+        }
+    }
+
+    // MARK: - Cloud
+
+    private var cloudSubsection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "cloud").foregroundStyle(.blue)
+                Text("Cloud endpoints").font(.body.weight(.medium))
+                Spacer()
+                Text("\(cloudEntries.count) added").font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Bring your own OpenAI / Anthropic / Azure / custom endpoint. API keys are stored in macOS Keychain. PrivacyGate still gates whether cloud calls are made.")
+                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Group {
+                    TextField("Display name (e.g. \"OpenAI 4o-mini\")", text: $newCloudName)
+                    TextField("Base URL", text: $newCloudBaseURL)
+                    TextField("Model name", text: $newCloudModelName)
+                    SecureField("API key (stored in Keychain)", text: $newCloudAPIKey)
+                    HStack {
+                        TextField("Context window (tokens)", text: $newCloudContextWindow)
+                        TextField("Family", text: $newCloudFamily)
+                        Picker("Tier", selection: $newCloudTier) {
+                            Text("small").tag(ModelManifest.Tier.small)
+                            Text("medium").tag(ModelManifest.Tier.medium)
+                            Text("large").tag(ModelManifest.Tier.large)
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .font(.caption)
+                HStack {
+                    Button {
+                        Task { await addCloudEndpoint() }
+                    } label: {
+                        Label("Add endpoint", systemImage: "plus.circle.fill")
+                    }
+                    if let err = cloudFormError {
+                        Text(err).font(.caption).foregroundStyle(.red)
+                    }
+                }
+            }
+            .padding(8)
+            .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
+            if cloudEntries.isEmpty {
+                Text("No cloud endpoints added.")
+                    .font(.caption.italic()).foregroundStyle(.secondary)
+            } else {
+                ForEach(cloudEntries, id: \.id) { e in
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text(e.displayName).font(.callout)
+                            Text("\(e.baseURL) · \(e.modelName)").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("ctx \(e.contextWindow) · \(e.tier.rawValue)")
+                            .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Button {
+                            Task {
+                                if let reg = appState.cloudEndpointRegistry {
+                                    await reg.remove(id: e.id)
+                                    cloudEntries = await reg.load()
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+            }
+        }
+    }
+
+    private func addCloudEndpoint() async {
+        guard let reg = appState.cloudEndpointRegistry else { return }
+        guard !newCloudName.isEmpty, !newCloudBaseURL.isEmpty,
+              !newCloudModelName.isEmpty, !newCloudAPIKey.isEmpty
+        else {
+            cloudFormError = "All fields are required."
+            return
+        }
+        guard let ctx = Int(newCloudContextWindow), ctx > 0 else {
+            cloudFormError = "Context window must be a positive integer."
+            return
+        }
+        let id = "provider.cloud.byo.\(newCloudName.replacingOccurrences(of: " ", with: "_").lowercased())"
+        let endpoint = CloudEndpointRegistry.Endpoint(
+            id: id,
+            displayName: newCloudName,
+            baseURL: newCloudBaseURL,
+            modelName: newCloudModelName,
+            contextWindow: ctx,
+            tier: newCloudTier,
+            family: newCloudFamily
+        )
+        do {
+            try await reg.add(endpoint, apiKey: newCloudAPIKey)
+            cloudEntries = await reg.load()
+            cloudFormError = nil
+            // Clear the API key only — keep the URL+model so the user
+            // can quickly add a sibling endpoint variant.
+            newCloudAPIKey = ""
+            newCloudName = ""
+        } catch {
+            cloudFormError = "Save failed: \(error)"
+        }
+    }
+
+    // MARK: - Reload helpers
+
+    private func reloadUserModels() async {
+        mlxModels = MLXDiscovery.list()
+        if let g = appState.ggufRegistry { ggufEntries = await g.load() }
+        if let c = appState.cloudEndpointRegistry { cloudEntries = await c.load() }
     }
 
     private var providersSection: some View {
