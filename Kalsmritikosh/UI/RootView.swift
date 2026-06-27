@@ -92,6 +92,8 @@ public struct RootView: View {
                 .tabItem { Label("Sources", systemImage: "folder") }
             CompletenessView()
                 .tabItem { Label("Completeness", systemImage: "checklist") }
+            ConvertView()
+                .tabItem { Label("Convert", systemImage: "arrow.right.doc.on.clipboard") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
