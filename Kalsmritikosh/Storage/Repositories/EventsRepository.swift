@@ -179,13 +179,26 @@ public actor EventsRepository {
     }
 
     /// Phase C.2 backfill helper — list events whose narrative slots
-    /// have never been computed (column is the default '{}'). The
-    /// extractor pulls these in oldest-first batches.
+    /// need (re-)extraction. Covers three real-data shapes the
+    /// 2026-06-28 production audit surfaced:
+    ///   1. Default '{}' — column never written (pre-v21 ingest).
+    ///   2. Empty WHO — bundle exists but WHO is `[]` (the
+    ///      forensic-PDF / mbox case where the older extractor
+    ///      didn't pull from .emailAddress entities; now fixed).
+    ///   3. Empty WHAT or WHEN — defensive; should never happen
+    ///      but if it does the extractor will refill it.
+    /// Sorted oldest-first so a multi-pass backfill drains the
+    /// archive's earliest events first (the ones most likely to
+    /// anchor topic narratives).
     public func listEventsMissingNarrativeSlots(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
         FROM events
-        WHERE narrative_slots_json = '{}' OR narrative_slots_json IS NULL
+        WHERE narrative_slots_json IS NULL
+           OR narrative_slots_json = '{}'
+           OR narrative_slots_json LIKE '%"who":[]%'
+           OR narrative_slots_json LIKE '%"what":[]%'
+           OR narrative_slots_json LIKE '%"when":[]%'
         ORDER BY date ASC
         LIMIT ?;
         """, [.integer(Int64(limit))])

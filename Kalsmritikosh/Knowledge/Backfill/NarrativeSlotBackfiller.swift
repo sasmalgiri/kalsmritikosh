@@ -106,12 +106,26 @@ public actor NarrativeSlotBackfiller: BackgroundService {
             }
 
             // Load the event's participating canonical entities.
-            // Identity mapping is correct for backfill: the entities
-            // table already holds canonical ids; the ingest-time
-            // mention→canonical map isn't reproducible after the fact.
+            // EventsRepository.decode() leaves `entityIDs` empty by
+            // construction (it's a normalized field — the join table
+            // is the source of truth). Pulling them from
+            // `event_entities` is what the ingest path does too.
+            // Without this hop the backfill couldn't surface any
+            // entities to the extractor, leaving WHO stuck empty
+            // for the 256 events that needed it (2026-06-28 audit).
+            let participatingIDs: [Entity.ID]
+            do {
+                let rows = try await database.query(
+                    "SELECT entity_id FROM event_entities WHERE event_id = ?;",
+                    [.uuid(event.id)]
+                )
+                participatingIDs = rows.compactMap { $0.uuid(0) }
+            } catch {
+                continue
+            }
             let participating: [Entity]
             do {
-                participating = try await entities.findByIDs(event.entityIDs, limit: event.entityIDs.count + 1)
+                participating = try await entities.findByIDs(participatingIDs, limit: max(participatingIDs.count, 1))
             } catch {
                 continue
             }
@@ -119,8 +133,30 @@ public actor NarrativeSlotBackfiller: BackgroundService {
                 uniqueKeysWithValues: participating.map { ($0.id, $0.id) }
             )
 
+            // Rebuild the event with entityIDs populated. The
+            // EventsRepository.decode() that fed this loop leaves
+            // entityIDs empty (the join table is the source of
+            // truth), but the extractor reads event.entityIDs to
+            // gate which entities can fill WHO/WHAT slots. Without
+            // this rebuild, the gate rejected every entity.
+            let hydratedEvent = Event(
+                id: event.id,
+                kind: event.kind,
+                date: event.date,
+                endDate: event.endDate,
+                title: event.title,
+                summary: event.summary,
+                entityIDs: participatingIDs,
+                sourceObjectID: event.sourceObjectID,
+                sourceRange: event.sourceRange,
+                confidence: event.confidence,
+                dateConfidence: event.dateConfidence,
+                attributes: event.attributes,
+                qualityTier: event.qualityTier
+            )
+
             let slots = await extractor.extract(
-                event: event,
+                event: hydratedEvent,
                 object: object,
                 entities: participating,
                 canonicalMapping: identityMapping,
