@@ -137,7 +137,16 @@ public final class AppState {
         self.init(bookmarks: BookmarkStore.shared)
     }
 
-    public func boot(databaseURL: URL? = nil) async {
+    /// Boots AppState. Eval / Gate1Baseline / smoke harnesses pass
+    /// `suppressAutoReingest: true` when they want a clean isolated DB
+    /// without re-ingesting the user's persisted bookmarked roots —
+    /// without this flag, any tempdir-DB-based test cascaded into a
+    /// full archive replay (the v6/v7/v8 memory-drift attempts each
+    /// timed out for exactly this reason).
+    public func boot(
+        databaseURL: URL? = nil,
+        suppressAutoReingest: Bool = false
+    ) async {
         do {
             // ── Storage ──────────────────────────────────────────────
             // `databaseURL` lets callers (Gate1Baseline) point AppState
@@ -820,8 +829,17 @@ public final class AppState {
             // that dropped rows), kick off a one-shot ingest for that root
             // so the user doesn't have to re-pick the same folder. Runs
             // detached so boot completes immediately.
-            Task { [weak self] in
-                await self?.autoReingestEmptyRoots()
+            //
+            // Eval / Gate1Baseline / smoke harnesses skip this — they
+            // run against an isolated tempdir DB and don't want the
+            // user's persisted bookmarks pulled in (that cascade was
+            // the v6/v7/v8 memory-drift timeout root cause).
+            if !suppressAutoReingest {
+                Task { [weak self] in
+                    await self?.autoReingestEmptyRoots()
+                }
+            } else {
+                AtlasLog.app.info("AppState: auto-reingest suppressed (eval / smoke boot)")
             }
         } catch {
             AtlasLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
