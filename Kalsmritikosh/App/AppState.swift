@@ -628,6 +628,27 @@ public final class AppState {
             )
             await updater.start()
 
+            // G2-3 — periodic backfill that re-runs the LLM context-
+            // prefix generator on chunks whose row landed with NULL
+            // because the LLM timed out during ingest. Per the
+            // "quality or nothing" rule, we never substitute heuristic
+            // noise into the embedding at ingest; this catches the
+            // misses retroactively when the system is idle. Source
+            // label is "<source>-backfill" so the operator can
+            // distinguish ingest-time from backfilled rows in the
+            // data.
+            let contextPrefixBackfiller = ContextPrefixBackfiller(
+                chunks: chunks,
+                objects: objects,
+                generator: LLMContextPrefixGenerator(
+                    capabilities: capabilities,
+                    initialTimeoutMs: 8_000,
+                    maxTimeoutMs: 32_000,
+                    maxAttempts: 3
+                )
+            )
+            await contextPrefixBackfiller.start()
+
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
             // and labels it via the rule-based classifier. Idempotent:

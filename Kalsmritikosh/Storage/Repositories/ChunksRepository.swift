@@ -32,6 +32,38 @@ public actor ChunksRepository {
         }
     }
 
+    /// G2-3 backfill — return chunks whose `context_prefix` is NULL
+    /// AND that belong to a multi-chunk KO (single-chunk KOs are
+    /// their own context — no prefix needed). Used by
+    /// `ContextPrefixBackfiller` to fill in rows that timed out on
+    /// the LLM during ingest.
+    public func findChunksMissingContextPrefix(limit: Int = 100) async throws -> [Chunk] {
+        let rows = try await database.query("""
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        FROM chunks
+        WHERE context_prefix IS NULL
+          AND object_id IN (
+            SELECT object_id FROM chunks GROUP BY object_id HAVING COUNT(*) >= 2
+          )
+        ORDER BY object_id ASC, ordinal ASC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
+    /// G2-3 backfill counter — fast count for the Settings panel to
+    /// surface "N chunks awaiting context backfill".
+    public func countChunksMissingContextPrefix() async throws -> Int {
+        let rows = try await database.query("""
+        SELECT COUNT(*) FROM chunks
+        WHERE context_prefix IS NULL
+          AND object_id IN (
+            SELECT object_id FROM chunks GROUP BY object_id HAVING COUNT(*) >= 2
+          );
+        """, [])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     /// G2-3 — update only the context_prefix + source for one chunk.
     /// Used when the per-chunk context generator runs AFTER insertBatch
     /// (e.g. async backfill) or to overwrite a generator's prior output.
