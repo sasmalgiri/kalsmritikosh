@@ -479,27 +479,49 @@ public actor IngestCoordinator {
         // small docs already are their own context) or when no
         // generator is wired.
         if let gen = contextPrefixGenerator, chunked.count >= 2 {
-            let opening = String(object.content.prefix(1_500))
+            // Sequential — Ollama serializes inference internally, so a
+            // parallel TaskGroup only stacks per-chunk timeouts on top
+            // of each other (the 4th queued chunk waits for 3 chunks
+            // worth of inference, blowing past its own timeout budget).
+            // Running one at a time gives each chunk the FULL provider
+            // bandwidth and the FULL configured timeout.
+            //
+            // Brain-carries-meaning forward: after each successful
+            // LLM call we fold the produced prefix into a running
+            // context that REPLACES the doc opening for the next
+            // chunk. The brain's prompt for chunk N therefore sees
+            // "what was understood about chunks 0..N-1" instead of
+            // re-reading the raw opening every time. This shortens
+            // each prompt over time AND helps the model produce a
+            // more cohesive prefix because it knows what's already
+            // been said.
             let filename = object.sourceFile.lastPathComponent
             let total = chunked.count
-            chunked = await withTaskGroup(of: (Int, ContextPrefixResult?).self) { group in
-                for (i, c) in chunked.enumerated() {
-                    let req = ContextPrefixRequest(
-                        chunkText: c.text,
-                        chunkOrdinal: c.ordinal,
-                        totalChunks: total,
-                        filename: filename,
-                        documentOpening: opening
-                    )
-                    group.addTask { (i, await gen.prefix(for: req)) }
-                }
-                var results: [Int: ContextPrefixResult?] = [:]
-                for await (i, r) in group { results[i] = r }
-                return chunked.enumerated().map { idx, c in
-                    let result = results[idx] ?? nil
-                    return c.withContextPrefix(result?.text, source: result?.source)
+            let runningContextCap = 1_500
+            var runningContext = String(object.content.prefix(runningContextCap))
+            var withPrefix: [Chunk] = []
+            withPrefix.reserveCapacity(chunked.count)
+            for c in chunked {
+                let req = ContextPrefixRequest(
+                    chunkText: c.text,
+                    chunkOrdinal: c.ordinal,
+                    totalChunks: total,
+                    filename: filename,
+                    documentOpening: runningContext
+                )
+                let result = await gen.prefix(for: req)
+                withPrefix.append(c.withContextPrefix(result?.text, source: result?.source))
+                // Fold the successful prefix into a running summary
+                // capped at `runningContextCap`. Keeps the prompt
+                // bounded while preserving the most recent N
+                // section summaries — the local context that
+                // matters most for chunk N+1.
+                if let prefix = result?.text, !prefix.isEmpty {
+                    let updated = "Sections so far: \(prefix)\n" + runningContext
+                    runningContext = String(updated.prefix(runningContextCap))
                 }
             }
+            chunked = withPrefix
         }
         try? await chunks.insertBatch(chunked)
 

@@ -193,6 +193,33 @@ public final class AppState {
             ))
             await capabilities.register(CloudProvider())
 
+            // G2-3 pre-warm — kick a tiny detached prompt at the
+            // resolved reasoning provider so its model is paged in
+            // (and, for Ollama, the daemon has already done its
+            // first-token warmup) BEFORE the ingest pipeline asks
+            // for per-chunk context_prefix generations. Without this
+            // the first ~5 chunks each pay the cold-load tax and
+            // time out on a per-chunk budget, leaving rows with NULL
+            // prefix even though the provider would have answered
+            // sub-second once warm. Detached so boot is not delayed.
+            Task.detached(priority: .utility) { [capabilities] in
+                let spec = CapabilitySpec.reasoning(
+                    contextTokens: 256,
+                    purpose: "appstate.boot.prewarm"
+                )
+                guard let provider = try? await capabilities.resolve(spec),
+                      await provider.isAvailable() else { return }
+                _ = try? await provider.generate(
+                    prompt: "Reply with the single word: ready",
+                    options: GenerationOptions(
+                        maxTokens: 4,
+                        temperature: 0.0,
+                        systemPrompt: nil
+                    )
+                )
+                AtlasLog.app.info("Reasoning provider pre-warmed: \(provider.id, privacy: .public)")
+            }
+
             // ── Knowledge ────────────────────────────────────────────
             // Embedder goes through the CapabilityRegistry — when an
             // Ollama embedding model is reachable it wins; otherwise
@@ -362,9 +389,28 @@ public final class AppState {
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
                 bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache),
+                // G2-3 — LLM is the final path. No silent heuristic
+                // substitution; the row's context_prefix stays NULL
+                // when the LLM doesn't answer in budget. Timeout sized
+                // for warm Ollama on a modest model (llama3 8B Q4 hits
+                // sub-2s per chunk warm; bigger reasoning models can
+                // take 6–15s per chunk, which we accept by default).
+                //
+                // PITFALL — bigger models:
+                //   * a 14B Q4 model needs ~10GB RAM; on a 16GB Mac
+                //     this evicts everything else and ingest slows by
+                //     5–10x
+                //   * cold-start can be 30+ seconds for a 14B; the
+                //     boot pre-warm only helps if the user keeps the
+                //     model loaded between sessions
+                //   * inference is roughly linear in active params;
+                //     14B is ~2x slower per token than 8B and 4x
+                //     slower than a 3B distill
+                // Settings UI surfaces these trade-offs at model
+                // selection time so the user makes an informed call.
                 contextPrefixGenerator: LLMContextPrefixGenerator(
                     capabilities: capabilities,
-                    timeoutMilliseconds: 2_000
+                    timeoutMilliseconds: 20_000
                 )
             )
 
