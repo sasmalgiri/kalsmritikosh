@@ -136,17 +136,19 @@ public actor EventsRepository {
         return EventNarrativeSlots.decoded(from: json)
     }
 
-    /// Batch read for the narrative composer (Phase D) — feeds chapter
-    /// rendering with one DB round-trip per chapter, not per event.
+    /// Batch read for the narrative composer (Phase D) — single
+    /// `WHERE id IN (...)` query so the retrieval boost (which calls
+    /// this on every reconstructive query over ~200 events) stays
+    /// O(1) round-trips instead of O(N).
     public func narrativeSlots(forEventIDs ids: [Event.ID]) async throws -> [Event.ID: EventNarrativeSlots] {
         guard !ids.isEmpty else { return [:] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT id, narrative_slots_json FROM events WHERE id IN (\(placeholders));
+        """, ids.map { .uuid($0) })
         var out: [Event.ID: EventNarrativeSlots] = [:]
-        for id in ids {
-            let rows = try await database.query(
-                "SELECT narrative_slots_json FROM events WHERE id = ? LIMIT 1;",
-                [.uuid(id)]
-            )
-            guard let row = rows.first, let json = row.string(0) else { continue }
+        for row in rows {
+            guard let id = row.uuid(0), let json = row.string(1) else { continue }
             out[id] = EventNarrativeSlots.decoded(from: json)
         }
         return out

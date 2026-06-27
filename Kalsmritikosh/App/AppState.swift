@@ -678,6 +678,21 @@ public final class AppState {
             let qualityTierBackfiller = QualityTierBackfiller(database: db)
             await qualityTierBackfiller.start()
 
+            // HISTORY Phase C follow-on — populate 5W+H slots for
+            // events ingested before schema v21 landed. Without this
+            // backfill, the reconstructive path retrieves events the
+            // composer can barely describe (every old event's
+            // narrative_slots_json is the default '{}'). 6-hour
+            // cadence with 200-row batches; idempotent (only touches
+            // events whose slot bundle is still empty).
+            let narrativeSlotBackfiller = NarrativeSlotBackfiller(
+                database: db,
+                events: events,
+                objects: objects,
+                entities: entities
+            )
+            await narrativeSlotBackfiller.start()
+
             // HISTORY Phase B.1 — entity co-occurrence graph
             // builder. Rebuilds 4× per day; community detection
             // (B.2) consumes the table. Skips T3 entities so the
