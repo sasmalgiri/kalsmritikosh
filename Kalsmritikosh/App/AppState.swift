@@ -118,6 +118,10 @@ public final class AppState {
 
     public private(set) var ingest: IngestCoordinator?
     public private(set) var brain: MasterBrain
+    /// HISTORY Phase E.2 — exposed so the LibraryView can list the
+    /// Phase B.2 communities + their LLM summaries. Nil until boot
+    /// completes; UI guards on it.
+    public private(set) var topicRetriever: TopicRetriever?
 
     private var watcherTask: Task<Void, Never>?
 
@@ -503,6 +507,7 @@ public final class AppState {
                 planner: chronoPlanner,
                 capabilities: capabilities
             )
+            self.topicRetriever = TopicRetriever(database: db, entities: entities)
 
             let brain = MasterBrain(
                 intentDetector: intentDetector,

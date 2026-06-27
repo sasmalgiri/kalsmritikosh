@@ -88,6 +88,8 @@ public struct RootView: View {
                 .tabItem { Label("Timeline", systemImage: "calendar.day.timeline.left") }
             HistoryView()
                 .tabItem { Label("History", systemImage: "book.closed") }
+            LibraryView()
+                .tabItem { Label("Library", systemImage: "books.vertical.fill") }
             KnowledgeView()
                 .tabItem { Label("Knowledge", systemImage: "books.vertical") }
             SourcesView()
