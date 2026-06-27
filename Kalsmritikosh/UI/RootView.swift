@@ -86,6 +86,8 @@ public struct RootView: View {
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
             TimelineView()
                 .tabItem { Label("Timeline", systemImage: "calendar.day.timeline.left") }
+            HistoryView()
+                .tabItem { Label("History", systemImage: "book.closed") }
             KnowledgeView()
                 .tabItem { Label("Knowledge", systemImage: "books.vertical") }
             SourcesView()
