@@ -19,6 +19,17 @@ public actor IncrementalUpdater: BackgroundService {
     private var consumerTask: Task<Void, Never>?
     private var pending: [String: (subject: SubjectInvalidation.Subject, trigger: KnowledgeObject.ID)] = [:]
     private var debounceTask: Task<Void, Never>?
+    /// Batch-mode counter. When > 0, `scheduleFlush()` is a no-op —
+    /// subjects accumulate without firing the debounce. `endBatch()`
+    /// decrements; when it reaches 0, a single deterministic flush
+    /// fires with the full events table populated.
+    ///
+    /// This is the fix for the "memory_objects varies per run" race:
+    /// without batch mode, the 1.5 s debounce can fire mid-ingest,
+    /// calling `MemoryDistiller.distill()` with a partial events
+    /// table — subjects whose evidence is in not-yet-ingested files
+    /// hit the `recentEvents.isEmpty` guard and never get a row.
+    private var batchDepth: Int = 0
 
     public init(
         stream: AsyncStream<SubjectInvalidation>,
@@ -59,11 +70,51 @@ public actor IncrementalUpdater: BackgroundService {
     }
 
     private func scheduleFlush() {
+        // Batch mode — caller has explicitly opted into "accumulate
+        // everything, distill once at the end." The debounce timer
+        // is suppressed; subjects pile into `pending` and wait for
+        // `endBatch()` to drain them.
+        if batchDepth > 0 { return }
         debounceTask?.cancel()
         let waitNs = debounceMs * 1_000_000
         debounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: waitNs)
             await self?.flush()
+        }
+    }
+
+    /// Open a batch. Pairs with `endBatch()`; counter-based so nested
+    /// callers (smoke test inside an eval round inside an outer
+    /// driver) all share one outer drain. While `batchDepth > 0` the
+    /// debounce timer is suppressed and subjects accumulate.
+    ///
+    /// Eval / smoke / bulk-ingest callers wrap their workload:
+    ///   await updater.beginBatch()
+    ///   for url in files { try await ingest.ingest(fileAt: url) }
+    ///   await updater.endBatch()
+    ///   await updater.waitForIdle()  // catches late stream events
+    ///
+    /// Production (live folder watcher) does NOT call these — the
+    /// debounce is correct for streaming user-driven activity.
+    public func beginBatch() async {
+        batchDepth += 1
+        // Kill any in-flight debounce so a stale timer from a
+        // previous burst doesn't fire mid-batch.
+        debounceTask?.cancel()
+        debounceTask = nil
+    }
+
+    /// Close a batch. When the outermost batch closes, one deterministic
+    /// `flush()` runs inline with whatever's in `pending` — at this
+    /// point the events / mentions tables are fully populated, so
+    /// every subject sees the same global state and the
+    /// `recentEvents.isEmpty` guard doesn't accidentally null-out
+    /// subjects whose evidence was in not-yet-ingested files.
+    public func endBatch() async {
+        batchDepth = max(0, batchDepth - 1)
+        guard batchDepth == 0 else { return }
+        if !pending.isEmpty {
+            await flush()
         }
     }
 
