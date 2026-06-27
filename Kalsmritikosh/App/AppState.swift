@@ -329,28 +329,19 @@ public final class AppState {
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when
-            // the user added it via Settings. Registered as separate
-            // CloudProvider ids so the advisor can rank them.
+            // the user added it via Settings. Register one
+            // CloudProvider per endpoint so the advisor can rank
+            // them and the resolver can route to a specific one.
             let cloudRegistry = CloudEndpointRegistry()
             let cloudEntries = await cloudRegistry.load()
             if !cloudEntries.isEmpty {
                 AtlasLog.app.info("Cloud BYO: \(cloudEntries.count, privacy: .public) endpoint(s)")
                 for endpoint in cloudEntries {
-                    let manifest = ModelManifest(
-                        id: endpoint.id,
-                        displayName: endpoint.displayName,
-                        capabilities: [
-                            .textGeneration, .reasoning, .summarization,
-                            .extraction, .longContext, .structuredOutput
-                        ],
-                        minRAMBytes: 0,
-                        diskBytes: 0,
-                        contextWindow: endpoint.contextWindow,
-                        privacyLevel: .cloud,
-                        requiresDownload: false,
-                        tier: endpoint.tier
-                    )
-                    _ = manifest // Reserved for the CloudProvider rework that consumes baseURL + modelName.
+                    guard let key = await cloudRegistry.apiKey(for: endpoint.id) else {
+                        AtlasLog.app.warning("Cloud BYO: missing keychain entry for \(endpoint.id, privacy: .public); skipping")
+                        continue
+                    }
+                    await capabilities.register(CloudProvider(endpoint: endpoint, apiKey: key))
                 }
             }
 
