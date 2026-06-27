@@ -166,6 +166,25 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         passed.append("HISTORY: surfaced \(v.contradictions.count) contradiction(s)")
     }
 
+    // HISTORY Phase F — optional full eval. Off by default (one
+    // composer call per question is slow); developers opt in with
+    // ATLAS_NARRATIVE_EVAL=1 in the scheme environment so a regular
+    // smoke run stays fast. The report prints to stdout (and to
+    // AtlasLog) so the dev sees it next to the smoke pass / fail list.
+    if ProcessInfo.processInfo.environment["ATLAS_NARRATIVE_EVAL"] == "1" {
+        let report = await NarrativeEvalKit.run(
+            questions: NarrativeEvalKit.projectDeltaQuestions,
+            brain: state.brain
+        )
+        AtlasLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .public)")
+        print(report.markdownTable)
+        if report.avgCitationDensity > 0 {
+            passed.append("HISTORY F: eval cite/sent=\(String(format: "%.2f", report.avgCitationDensity)) over \(report.scores.count) Q")
+        } else {
+            failed.append("HISTORY F: eval produced 0 citation density — composer not generating prose with [E?] tags")
+        }
+    }
+
     // T1 — calibrated confidence aggregation (replaces noisy-OR).
     let t1A = Confidence.aggregate(
         Array(repeating: Confidence(0.5), count: 94),

@@ -266,4 +266,46 @@ public nonisolated enum NarrativeEvalKit {
         }
         return questions
     }
+
+    /// The default fixture: hand-curated reconstructive questions
+    /// against the ProjectDelta corpus. Entity IDs and event IDs are
+    /// intentionally omitted — they're UUIDs generated at ingest time
+    /// per machine, so we can't predict them. The metrics we DO get
+    /// from this fixture:
+    ///
+    ///   citation_density   — every question, every run
+    ///   contradiction_recall — for questions whose gold list is
+    ///                          non-empty
+    ///   confidence_calibration — when goldConfidence is set
+    ///   chapterCount / sentenceCount — diagnostics only
+    ///
+    /// The fixture lives in code (not Resources/) so the smoke test
+    /// can call it without registering a new bundle resource. A
+    /// future commit can swap in a JSON fixture with real
+    /// entity / event UUIDs once we have a per-machine fingerprint
+    /// step that resolves the canonical IDs post-ingest.
+    public nonisolated static let projectDeltaQuestions: [Question] = [
+        Question(
+            id: "N1",
+            text: "Reconstruct the history of Project Delta.",
+            goldConfidence: 0.65
+        ),
+        Question(
+            id: "N2",
+            text: "Tell me the story of Supplier ABC.",
+            expectedContradictions: ["delivery"],
+            goldConfidence: 0.55
+        ),
+        Question(
+            id: "N3",
+            text: "What happened with the contract amendments?",
+            goldConfidence: 0.60
+        ),
+        Question(
+            id: "N4",
+            text: "Narrate the Project Delta delivery timeline.",
+            expectedContradictions: ["delivery"],
+            goldConfidence: 0.55
+        ),
+    ]
 }
