@@ -657,6 +657,14 @@ public final class AppState {
             let qualityTierBackfiller = QualityTierBackfiller(database: db)
             await qualityTierBackfiller.start()
 
+            // HISTORY Phase B.1 — entity co-occurrence graph
+            // builder. Rebuilds 4× per day; community detection
+            // (B.2) consumes the table. Skips T3 entities so the
+            // topic graph doesn't get polluted by hostname-shape
+            // noise.
+            let cooccurrenceBuilder = CooccurrenceGraphBuilder(database: db)
+            await cooccurrenceBuilder.start()
+
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
             // and labels it via the rule-based classifier. Idempotent:

@@ -55,7 +55,8 @@ public enum SchemaMigrations {
         (15, v15),
         (16, v16),
         (17, v17),
-        (18, v18)
+        (18, v18),
+        (19, v19)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -737,5 +738,37 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_events_quality_tier         ON events(quality_tier);
     CREATE INDEX IF NOT EXISTS idx_memory_objects_quality_tier ON memory_objects(quality_tier);
     CREATE INDEX IF NOT EXISTS idx_fact_bonds_quality_tier     ON fact_bonds(quality_tier);
+    """
+
+    // MARK: - v19 — HISTORY Phase B.1: entity co-occurrence graph
+    //
+    // An edge in this graph means two entities appear in at least
+    // one shared KnowledgeObject. weight = number of shared KOs. The
+    // Phase B community detector (Leiden / agglomerative) walks this
+    // graph; the Phase D narrative composer uses the resolved
+    // communities as the "topic" of a chapter.
+    //
+    // Schema:
+    //   entity_a / entity_b — ordered lexicographically so each pair
+    //     appears once (avoids both (A,B) and (B,A) edges)
+    //   weight              — shared-KO count
+    //   computed_at         — when this row was last rebuilt
+    //
+    // Index on (entity_a, entity_b) is the PK; reverse-direction
+    // queries hit idx_cooc_b_a.
+
+    private static let v19: String = """
+    CREATE TABLE entity_cooccurrences (
+        entity_a    TEXT NOT NULL,
+        entity_b    TEXT NOT NULL,
+        weight      INTEGER NOT NULL DEFAULT 1,
+        computed_at REAL NOT NULL,
+        PRIMARY KEY (entity_a, entity_b),
+        FOREIGN KEY (entity_a) REFERENCES entities(id) ON DELETE CASCADE,
+        FOREIGN KEY (entity_b) REFERENCES entities(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cooc_b_a   ON entity_cooccurrences(entity_b, entity_a);
+    CREATE INDEX IF NOT EXISTS idx_cooc_weight ON entity_cooccurrences(weight DESC);
     """
 }
