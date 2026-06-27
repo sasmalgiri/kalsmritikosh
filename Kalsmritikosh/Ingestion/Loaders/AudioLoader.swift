@@ -14,16 +14,16 @@ import AVFoundation
 public struct AudioLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp3, .wav, .m4a, .aac]
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer
-    private let transcriber: SpeechTranscriber
+    private let transcriber: any AudioTranscribing
 
-    public nonisolated init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
+    public nonisolated init(transcriber: any AudioTranscribing = SpeechTranscriber()) {
         self.transcriber = transcriber
     }
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         var meta: [String: AnyCodable] = [
             "filename": AnyCodable(.string(url.lastPathComponent)),
-            "loader": AnyCodable(.string("apple-speech"))
+            "loader": AnyCodable(.string(transcriber.engineID))
         ]
         #if canImport(AVFoundation)
         let asset = AVURLAsset(url: url)

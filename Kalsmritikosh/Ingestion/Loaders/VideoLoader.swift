@@ -15,16 +15,16 @@ import AVFoundation
 public struct VideoLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.mp4, .mov]
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer over the audio track
-    private let transcriber: SpeechTranscriber
+    private let transcriber: any AudioTranscribing
 
-    public nonisolated init(transcriber: SpeechTranscriber = SpeechTranscriber()) {
+    public nonisolated init(transcriber: any AudioTranscribing = SpeechTranscriber()) {
         self.transcriber = transcriber
     }
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {
         var meta: [String: AnyCodable] = [
             "filename": AnyCodable(.string(url.lastPathComponent)),
-            "loader": AnyCodable(.string("video-asr"))
+            "loader": AnyCodable(.string("video-asr:\(transcriber.engineID)"))
         ]
         var content = ""
         var confidence = Confidence.low

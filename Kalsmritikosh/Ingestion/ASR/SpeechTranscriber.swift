@@ -13,7 +13,28 @@ import Foundation
 import Speech
 #endif
 
-public actor SpeechTranscriber {
+/// Format-specialist abstraction for audio transcription. The current
+/// implementation is `SpeechTranscriber` (Apple Speech). Future swap-
+/// ins (WhisperKit, Parakeet, Canary) conform to this protocol and
+/// AudioLoader / VideoLoader pick them up via constructor injection
+/// without any further code change.
+///
+/// Quality ranking on Apple Silicon (from 2026 benchmarks):
+///   1. Parakeet v2 — best English WER, ~80 ms latency
+///   2. WhisperKit (Whisper Large v3) — best multilingual (99 langs)
+///   3. Apple SpeechAnalyzer (macOS 26) — mid-tier; on-device
+///   4. SFSpeechRecognizer (current) — mid-tier; requires online for
+///      some languages
+public protocol AudioTranscribing: Sendable {
+    /// Identifier surfaced in logs and KO metadata so the user can
+    /// tell which engine transcribed a given file.
+    nonisolated var engineID: String { get }
+    func transcribe(audioAt url: URL) async throws -> String
+}
+
+public actor SpeechTranscriber: AudioTranscribing {
+    public nonisolated let engineID = "apple-speech"
+
     public init() {}
 
     public func transcribe(audioAt url: URL) async throws -> String {
