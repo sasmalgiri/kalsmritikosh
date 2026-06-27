@@ -485,15 +485,20 @@ public actor EntitiesRepository {
     private func upsertCanonical(_ e: Entity, normalized: String) async throws -> Entity.ID {
         let attrs = try encoder.encode(e.attributes)
         let attrsStr = String(data: attrs, encoding: .utf8) ?? "{}"
+        // HISTORY Phase A — quality_tier participates in upsert. On
+        // conflict, MIN keeps the best (highest-trust) tier seen so
+        // far: 'T1' < 'T2' < 'T3' lexicographically, so MIN selects
+        // T1 over T2/T3. Same row, best-known tier.
         let rows = try await database.query("""
-        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json, quality_tier)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(kind, normalized) DO UPDATE SET
             confidence = max(entities.confidence, excluded.confidence),
             value = CASE WHEN excluded.confidence > entities.confidence
                          THEN excluded.value
                          ELSE entities.value
-                    END
+                    END,
+            quality_tier = MIN(entities.quality_tier, excluded.quality_tier)
         RETURNING id;
         """, [
             .uuid(e.id),
@@ -502,7 +507,8 @@ public actor EntitiesRepository {
             .text(normalized),
             .uuid(e.sourceObjectID),
             .real(e.confidence.value),
-            .text(attrsStr)
+            .text(attrsStr),
+            .text(e.qualityTier.rawValue)
         ])
         guard let id = rows.first?.uuid(0) else {
             throw NSError(domain: "EntitiesRepository", code: 3)

@@ -20,6 +20,11 @@ public struct Entity: Codable, Identifiable, Hashable, Sendable {
     public let sourceRange: SourceRange?
     public let confidence: Confidence
     public let attributes: [String: AnyCodable]
+    /// HISTORY Phase A — assigned by QualityTierClassifier at insert
+    /// time. T1 = trusted structured fact; T2 = body NER; T3 = noise
+    /// preserved on disk but demoted at retrieval. Defaults to T2 so
+    /// pre-Phase-A call sites stay correct without modification.
+    public let qualityTier: QualityTier
 
     public nonisolated init(
         id: ID = UUID(),
@@ -29,7 +34,8 @@ public struct Entity: Codable, Identifiable, Hashable, Sendable {
         sourceObjectID: KnowledgeObject.ID,
         sourceRange: SourceRange? = nil,
         confidence: Confidence = .medium,
-        attributes: [String: AnyCodable] = [:]
+        attributes: [String: AnyCodable] = [:],
+        qualityTier: QualityTier = .t2
     ) {
         self.id = id
         self.kind = kind
@@ -39,6 +45,7 @@ public struct Entity: Codable, Identifiable, Hashable, Sendable {
         self.sourceRange = sourceRange
         self.confidence = confidence
         self.attributes = attributes
+        self.qualityTier = qualityTier
     }
 
     public enum Kind: String, Codable, CaseIterable, Sendable {

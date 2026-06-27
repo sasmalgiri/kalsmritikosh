@@ -22,7 +22,7 @@
 
 import Foundation
 
-public enum QualityTier: String, Sendable, Equatable, CaseIterable {
+public enum QualityTier: String, Codable, Sendable, Hashable, CaseIterable {
     case t1 = "T1"
     case t2 = "T2"
     case t3 = "T3"

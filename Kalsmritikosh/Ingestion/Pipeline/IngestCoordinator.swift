@@ -600,12 +600,22 @@ public actor IngestCoordinator {
             // (From/To/Cc/Date) BEFORE running NER over the content. NER
             // augments; loader entities are already high-confidence.
             var raw: [Entity] = []
+            // HISTORY Phase A — annotate every entity with its
+            // quality_tier at extraction time. Structured-header
+            // entities short-circuit to T1; NER entities run through
+            // the shape rules and land in T2 (real proper noun) or
+            // T3 (noise — hostname, weekday token, base64-ish, etc.).
             if let value = object.metadata[EmailLoader.structuredEntitiesMetaKey],
                case .string(let json) = value.value {
-                raw.append(contentsOf: EmailLoader.decodeStructuredEntities(from: json))
+                let structured = EmailLoader.decodeStructuredEntities(from: json)
+                raw.append(contentsOf: structured.map { entity in
+                    annotate(entity, source: .structuredHeader)
+                })
             }
             let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
-            raw.append(contentsOf: nerExtracted)
+            raw.append(contentsOf: nerExtracted.map { entity in
+                annotate(entity, source: .ner)
+            })
             // Deterministic input order so EntityLinker's
             // first-wins canonical resolution is reproducible.
             // Without this, the merge winner for a (kind,
@@ -1006,5 +1016,31 @@ public actor IngestCoordinator {
         }
 
         return out
+    }
+
+    /// HISTORY Phase A — rebuild an Entity with its quality_tier
+    /// computed from value + kind + source. Pure value transform;
+    /// the original Entity is immutable, so we produce a fresh
+    /// instance with the same fields plus the tier.
+    private nonisolated func annotate(
+        _ entity: Entity,
+        source: QualityTierClassifier.Source
+    ) -> Entity {
+        let tier = QualityTierClassifier.tier(
+            value: entity.value,
+            kind: entity.kind,
+            source: source
+        )
+        return Entity(
+            id: entity.id,
+            kind: entity.kind,
+            value: entity.value,
+            normalizedValue: entity.normalizedValue,
+            sourceObjectID: entity.sourceObjectID,
+            sourceRange: entity.sourceRange,
+            confidence: entity.confidence,
+            attributes: entity.attributes,
+            qualityTier: tier
+        )
     }
 }

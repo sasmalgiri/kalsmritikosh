@@ -27,6 +27,9 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     /// 0.5 for "unknown source" backfills.
     public let dateConfidence: Double
     public let attributes: [String: AnyCodable]
+    /// HISTORY Phase A — set by QualityTierClassifier at extraction
+    /// time. Same semantics as Entity.qualityTier.
+    public let qualityTier: QualityTier
 
     public nonisolated init(
         id: ID = UUID(),
@@ -40,7 +43,8 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         sourceRange: SourceRange? = nil,
         confidence: Confidence = .medium,
         dateConfidence: Double = 0.5,
-        attributes: [String: AnyCodable] = [:]
+        attributes: [String: AnyCodable] = [:],
+        qualityTier: QualityTier = .t2
     ) {
         self.id = id
         self.kind = kind
@@ -54,11 +58,13 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         self.confidence = confidence
         self.dateConfidence = dateConfidence
         self.attributes = attributes
+        self.qualityTier = qualityTier
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, date, endDate, title, summary, entityIDs,
-             sourceObjectID, sourceRange, confidence, dateConfidence, attributes
+             sourceObjectID, sourceRange, confidence, dateConfidence, attributes,
+             qualityTier
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -75,6 +81,7 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         self.confidence = try c.decode(Confidence.self, forKey: .confidence)
         self.dateConfidence = try c.decodeIfPresent(Double.self, forKey: .dateConfidence) ?? 0.5
         self.attributes = try c.decodeIfPresent([String: AnyCodable].self, forKey: .attributes) ?? [:]
+        self.qualityTier = try c.decodeIfPresent(QualityTier.self, forKey: .qualityTier) ?? .t2
     }
 
     /// The 10 event kinds from Phase 6 of the roadmap, plus an
