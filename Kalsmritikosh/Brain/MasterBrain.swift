@@ -201,6 +201,14 @@ public actor MasterBrain {
             }
         }
         guard let narrative else {
+            // Composer crashed outright — try the chunk RAG fallback
+            // before refusing. Gives the user the "normal AI" answer
+            // shape even when structured reconstruction can't fire.
+            if let rag = await chunkBasedFallback(
+                question: question, intent: intent, retrieval: retrieval
+            ) {
+                return rag
+            }
             return VerifiedAnswer(
                 body: "Atlas couldn't reconstruct that history.",
                 citations: [],
@@ -208,6 +216,19 @@ public actor MasterBrain {
                 refused: true,
                 refusalReason: "Composer failed: \(failureReason ?? "unknown")"
             )
+        }
+
+        // Quality gate: if the composer produced no chapters OR every
+        // chapter has empty prose (verifier stripped everything),
+        // fall through to the chunk RAG path so the user gets a
+        // grounded answer instead of a header-only narrative.
+        let hasUsefulChapters = narrative.chapters.contains { !$0.prose.isEmpty }
+        if !hasUsefulChapters {
+            if let rag = await chunkBasedFallback(
+                question: question, intent: intent, retrieval: retrieval
+            ) {
+                return rag
+            }
         }
 
         // Fold the narrative into a VerifiedAnswer the legacy
@@ -227,7 +248,126 @@ public actor MasterBrain {
             refused: false,
             refusalReason: nil,
             report: nil,
-            walkSteps: retrieval.walkSteps
+            walkSteps: retrieval.walkSteps,
+            source: .historical
+        )
+    }
+
+    /// "Normal AI" RAG fallback. When the structured composer can't
+    /// produce useful chapters (no events match, or every chapter's
+    /// prose got stripped by the verifier), we still want to give
+    /// the user *something* grounded in their archive — the same
+    /// thing a generic ChatGPT-with-files setup would do.
+    ///
+    /// Strategy: take the top retrieved chunks, label them `[C1]`,
+    /// `[C2]`, …, hand them to the reasoning provider with strict
+    /// "answer only from these chunks, cite labels inline, refuse
+    /// honestly if you can't" instructions. Parse the labels back
+    /// out into `VerifiedAnswer.Citation` rows keyed on chunk + KO
+    /// so the UI's source-clickthrough still works.
+    ///
+    /// Quality-or-nothing: returns nil when no provider is available
+    /// or no chunks were retrieved. The caller falls back to the
+    /// existing "Atlas couldn't reconstruct" refusal in those cases.
+    private func chunkBasedFallback(
+        question: String,
+        intent: UserIntent,
+        retrieval: RetrievalResult
+    ) async -> VerifiedAnswer? {
+        guard let capabilities else { return nil }
+        let spec = CapabilitySpec.reasoning(
+            contextTokens: 8_000,
+            purpose: "history.chunk.fallback"
+        )
+        let provider: any ModelProvider
+        do {
+            provider = try await capabilities.resolve(spec)
+        } catch {
+            return nil
+        }
+        guard await provider.isAvailable() else { return nil }
+
+        // Top chunks first; cap at 12 to leave room in the prompt
+        // budget for instruction + answer tokens.
+        let topChunks = Array(retrieval.chunks.prefix(12))
+        guard !topChunks.isEmpty else { return nil }
+
+        let blocks = topChunks.enumerated().map { idx, c -> String in
+            let label = "[C\(idx + 1)]"
+            let snippet = c.chunk.text
+                .replacingOccurrences(of: "\n", with: " ")
+                .prefix(600)
+            return "\(label) \(snippet)"
+        }.joined(separator: "\n\n")
+
+        let prompt = """
+        Question: \(question)
+
+        Use ONLY the chunks below to answer. After every fact, cite the chunk label like [C3]. If the chunks don't contain enough information to answer, say "I don't have enough in your archive to answer this confidently." — do not invent.
+
+        Chunks:
+        \(blocks)
+
+        Answer:
+        """
+        let options = GenerationOptions(
+            maxTokens: 500,
+            temperature: 0.2,
+            systemPrompt: "You are an evidence-grounded research assistant. Cite chunk labels inline like [C3]. Refuse honestly when the chunks lack the answer."
+        )
+
+        let response: String
+        do {
+            response = try await provider.generate(prompt: prompt, options: options)
+        } catch {
+            return nil
+        }
+        let body = response.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+
+        // Map [C?] labels back to chunk + KO ids for clickable
+        // citations. De-duped by chunk id so the UI doesn't show
+        // the same source twice.
+        var citations: [VerifiedAnswer.Citation] = []
+        var seenChunks: Set<Chunk.ID> = []
+        if let regex = try? NSRegularExpression(pattern: #"\[C(\d+)\]"#) {
+            let ns = body as NSString
+            for m in regex.matches(in: body, range: NSRange(location: 0, length: ns.length)) {
+                guard m.numberOfRanges >= 2 else { continue }
+                let nStr = ns.substring(with: m.range(at: 1))
+                guard let n = Int(nStr), n >= 1, n <= topChunks.count else { continue }
+                let chunk = topChunks[n - 1]
+                guard seenChunks.insert(chunk.chunk.id).inserted else { continue }
+                citations.append(
+                    VerifiedAnswer.Citation(
+                        objectID: chunk.chunk.objectID,
+                        chunkID: chunk.chunk.id,
+                        eventID: nil,
+                        snippet: String(chunk.chunk.text.prefix(160))
+                    )
+                )
+            }
+        }
+
+        let refusedShape = body.lowercased().contains("don't have enough")
+            || body.lowercased().contains("not enough")
+        let conf: Double = {
+            if refusedShape { return 0.2 }
+            if citations.isEmpty { return 0.3 }
+            return 0.55
+        }()
+        return VerifiedAnswer(
+            body: body,
+            answerText: body,
+            intentKind: intent.kind.rawValue,
+            citations: citations,
+            confidence: Confidence(conf),
+            contradictions: [],
+            refused: refusedShape && citations.isEmpty,
+            refusalReason: refusedShape ? "Chunk RAG fallback couldn't ground an answer." : nil,
+            report: nil,
+            walkSteps: retrieval.walkSteps,
+            source: .ragFallback
         )
     }
 
@@ -428,13 +568,21 @@ public actor MasterBrain {
 
         let retrievalForVerifier = sharedRetrieval
 
+        let verified: VerifiedAnswer
         do {
-            return try await verifier.verify(
+            verified = try await verifier.verify(
                 intent: intent,
                 findings: findings,
                 retrieval: retrievalForVerifier
             )
         } catch {
+            // Verifier itself crashed — chunk RAG fallback so we
+            // still hand the user *something* instead of a refusal.
+            if let rag = await chunkBasedFallback(
+                question: question, intent: intent, retrieval: retrievalForVerifier
+            ) {
+                return rag
+            }
             return VerifiedAnswer(
                 body: "Atlas couldn't verify a response.",
                 citations: [],
@@ -443,5 +591,40 @@ public actor MasterBrain {
                 refusalReason: "Verification failed: \(error)"
             )
         }
+
+        // If the expert pipeline returned a refusal OR landed with
+        // zero citations, try the chunk RAG fallback. Mimics the
+        // generic AI-with-files experience: when structured experts
+        // can't ground a claim, fall through to chunks. Only kicks
+        // in when the verifier explicitly refused or surfaced no
+        // sources — confident answers with citations pass through.
+        if verified.refused || verified.citations.isEmpty {
+            if let rag = await chunkBasedFallback(
+                question: question, intent: intent, retrieval: retrievalForVerifier
+            ), !rag.refused {
+                return rag
+            }
+        }
+        // Tag the expert-pipeline answer with `.experts` so the UI
+        // can distinguish it from the historical / RAG paths. The
+        // existing Verifier doesn't set `source`, so we re-emit
+        // the value with the field stamped in.
+        return Self.tag(verified, as: .experts)
+    }
+
+    private static func tag(_ a: VerifiedAnswer, as source: AnswerSource) -> VerifiedAnswer {
+        VerifiedAnswer(
+            body: a.body,
+            answerText: a.answerText,
+            intentKind: a.intentKind,
+            citations: a.citations,
+            confidence: a.confidence,
+            contradictions: a.contradictions,
+            refused: a.refused,
+            refusalReason: a.refusalReason,
+            report: a.report,
+            walkSteps: a.walkSteps,
+            source: source
+        )
     }
 }

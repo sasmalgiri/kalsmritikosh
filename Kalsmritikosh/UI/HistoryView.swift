@@ -134,10 +134,14 @@ public struct HistoryView: View {
 
     private func narrativeSummary(answer: VerifiedAnswer) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let intent = answer.intentKind {
-                Text(intent.replacingOccurrences(of: "reconstruct", with: "Reconstruct: "))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tint)
+            HStack(spacing: 8) {
+                if let intent = answer.intentKind {
+                    Text(intent.replacingOccurrences(of: "reconstruct", with: "Reconstruct: "))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                }
+                Spacer()
+                sourceBadge(answer.source)
             }
             Text(answer.body.components(separatedBy: "\n").first ?? "")
                 .font(.title2.weight(.semibold))
@@ -163,6 +167,39 @@ public struct HistoryView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.secondary.opacity(0.06))
         .cornerRadius(10)
+    }
+
+    /// HISTORY follow-on — small pill showing which path produced
+    /// this answer. Helps the user distinguish a real structured
+    /// reconstruction (high trust, dated events with per-sentence
+    /// event citations) from a generic RAG synthesis (lower trust,
+    /// chunks fed to an LLM).
+    @ViewBuilder
+    private func sourceBadge(_ source: AnswerSource) -> some View {
+        let (icon, label, tint): (String, String, Color) = {
+            switch source {
+            case .historical:
+                return ("book.closed.fill", "Historical", .green)
+            case .ragFallback:
+                return ("sparkles", "AI / RAG", .orange)
+            case .experts:
+                return ("brain.head.profile", "Experts", .blue)
+            case .memoryCache:
+                return ("clock.arrow.circlepath", "Cached", .gray)
+            case .unknown:
+                return ("questionmark.circle", "Unknown", .gray)
+            }
+        }()
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+            Text(label)
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(tint.opacity(0.18))
+        .foregroundStyle(tint)
+        .cornerRadius(6)
     }
 
     private func chapterCard(chapter: NarrativeChapter) -> some View {

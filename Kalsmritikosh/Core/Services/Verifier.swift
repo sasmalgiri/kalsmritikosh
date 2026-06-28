@@ -17,6 +17,36 @@ public protocol Verifier: Sendable {
     ) async throws -> VerifiedAnswer
 }
 
+/// HISTORY follow-on — which retrieval shape produced the answer.
+/// The UI surfaces this so the user knows whether they're looking at
+/// a structured-event reconstruction (high trust, every claim tied
+/// to a dated Event) or a chunk-grounded LLM synthesis (lower trust,
+/// the same shape a generic ChatGPT-with-files setup produces).
+public nonisolated enum AnswerSource: String, Codable, Sendable, Hashable {
+    /// Structured ledger answer — narrative composer built chapters
+    /// from Events with 5W+H slots and per-sentence event citations.
+    case historical
+    /// "Normal AI" RAG fallback — the chunk-LLM path. Used when the
+    /// structured composer can't produce useful chapters.
+    case ragFallback
+    /// Expert pipeline answer — verifier-graded, multi-source.
+    case experts
+    /// Cached memory hit (Phase 1 instant read).
+    case memoryCache
+    /// Generic / unknown source (legacy callers, refusals).
+    case unknown
+
+    public var displayName: String {
+        switch self {
+        case .historical:  return "Historical reconstruction"
+        case .ragFallback: return "RAG (chunk grounded)"
+        case .experts:     return "Expert pipeline"
+        case .memoryCache: return "Memory cache"
+        case .unknown:     return "Unknown"
+        }
+    }
+}
+
 public struct VerifiedAnswer: Codable, Sendable {
     public let body: String
     /// Just the answer portion of `body`, with any subject heading or
@@ -44,6 +74,13 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// Empty when the answer wasn't bond-walked (no entity seed, no
     /// walker wired, or non-multihop intent).
     public let walkSteps: [WalkStep]
+    /// HISTORY follow-on — which retrieval shape produced this
+    /// answer (historical / RAG / experts / memory / unknown). The
+    /// UI surfaces this as a small badge so the user can tell a
+    /// "real reconstruction from dated events" apart from a
+    /// "generic chunk-RAG synthesis". Defaults to .unknown for
+    /// legacy callers that don't set it.
+    public let source: AnswerSource
 
     public nonisolated init(
         body: String,
@@ -55,7 +92,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         refused: Bool = false,
         refusalReason: String? = nil,
         report: ConfidenceReport? = nil,
-        walkSteps: [WalkStep] = []
+        walkSteps: [WalkStep] = [],
+        source: AnswerSource = .unknown
     ) {
         self.body = body
         self.answerText = answerText
@@ -67,10 +105,11 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.refusalReason = refusalReason
         self.report = report
         self.walkSteps = walkSteps
+        self.source = source
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -85,6 +124,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.refusalReason = try c.decodeIfPresent(String.self, forKey: .refusalReason)
         self.report = try c.decodeIfPresent(ConfidenceReport.self, forKey: .report)
         self.walkSteps = try c.decodeIfPresent([WalkStep].self, forKey: .walkSteps) ?? []
+        self.source = try c.decodeIfPresent(AnswerSource.self, forKey: .source) ?? .unknown
     }
 
     public struct Citation: Codable, Sendable, Hashable {
