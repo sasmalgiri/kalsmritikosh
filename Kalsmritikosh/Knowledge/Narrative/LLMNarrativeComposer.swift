@@ -445,19 +445,48 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         return out
     }
 
-    /// Heuristic sentence splitter: terminal punctuation (.!?) + a
-    /// trailing whitespace or newline. Robust enough for narrative
-    /// prose; the citation parser only needs indexable sentences.
+    /// Sentence splitter: terminal punctuation (.!?) followed by
+    /// whitespace, end-of-string, or a citation token. The
+    /// whitespace check is critical — without it, periods INSIDE
+    /// filenames ("Investigation.pdf") and inside paren-nested
+    /// abbreviations (".com", "e.g.") split the sentence and the
+    /// verifier downstream then strips the leading half as
+    /// ungrounded because it lacks the citation token. Real-data
+    /// audit (2026-06-28) caught this on forensic-PDF events whose
+    /// titles end in ".pdf" — the prose rendered as "pdf) via
+    /// email [E1]." with the leading half thrown away.
+    ///
+    /// Also tracks paren depth so periods inside `(...)` (file paths,
+    /// inline asides) never split.
     nonisolated static func splitSentences(_ text: String) -> [String] {
         var sentences: [String] = []
         var current = ""
-        for c in text {
+        var parenDepth = 0
+        let chars = Array(text)
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
             current.append(c)
-            if c == "." || c == "!" || c == "?" {
-                let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { sentences.append(trimmed) }
-                current = ""
+            if c == "(" || c == "[" || c == "{" { parenDepth += 1 }
+            if c == ")" || c == "]" || c == "}" { parenDepth = max(0, parenDepth - 1) }
+            if parenDepth == 0, c == "." || c == "!" || c == "?" {
+                // Look ahead: only split when the next non-space char
+                // is end-of-string, a newline, or a capital letter
+                // (start of a new sentence) — NOT a lowercase letter
+                // (filename / abbreviation) or a citation token.
+                let next: Character? = (i + 1 < chars.count) ? chars[i + 1] : nil
+                let isBoundary: Bool = {
+                    guard let n = next else { return true }
+                    if n.isWhitespace || n.isNewline { return true }
+                    return false
+                }()
+                if isBoundary {
+                    let trimmed = current.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { sentences.append(trimmed) }
+                    current = ""
+                }
             }
+            i += 1
         }
         let tail = current.trimmingCharacters(in: .whitespacesAndNewlines)
         if !tail.isEmpty { sentences.append(tail) }
