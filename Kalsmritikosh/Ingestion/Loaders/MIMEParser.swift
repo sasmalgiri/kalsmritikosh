@@ -120,7 +120,27 @@ public enum MIMEParser {
     }
 
     private nonisolated static func parseSinglePart(_ text: String) -> MIMEPart {
-        guard let blank = text.range(of: "\n\n") else {
+        // Real-data audit (2026-06-28): CRLF emails ("\r\n" line
+        // terminators, the vast majority of mail) were silently
+        // failing attachment extraction because the previous
+        // `text.range(of: "\n\n")` never matched — `\r\n\r\n` has no
+        // two consecutive `\n` chars. Every multipart leaf then
+        // parsed with empty headers, defaulted to text/plain,
+        // landed in textPieces instead of being staged as an
+        // attachment. The user's mbox had 221 attachments (incl.
+        // patent grant PDFs) — zero were ingested.
+        // Fix: accept both "\r\n\r\n" (CRLF) and "\n\n" (LF),
+        // preferring whichever comes first.
+        let crlfBlank = text.range(of: "\r\n\r\n")
+        let lfBlank   = text.range(of: "\n\n")
+        let blank: Range<String.Index>?
+        switch (crlfBlank, lfBlank) {
+        case (let c?, let l?): blank = (c.lowerBound < l.lowerBound) ? c : l
+        case (let c?, nil):    blank = c
+        case (nil, let l?):    blank = l
+        default:               blank = nil
+        }
+        guard let blank else {
             return MIMEPart(headers: [:], body: text.data(using: .utf8) ?? Data())
         }
         let headerBlock = String(text[..<blank.lowerBound])
