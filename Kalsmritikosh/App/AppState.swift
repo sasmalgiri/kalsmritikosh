@@ -626,12 +626,19 @@ public final class AppState {
                 //     slower than a 3B distill
                 // Settings UI surfaces these trade-offs at model
                 // selection time so the user makes an informed call.
-                contextPrefixGenerator: LLMContextPrefixGenerator(
-                    capabilities: capabilities,
-                    initialTimeoutMs: 8_000,
-                    maxTimeoutMs: 32_000,
-                    maxAttempts: 3
-                )
+                // 2026-06-28 throughput fix — inline LLMContextPrefix
+                // generation was the dominant ingest cost (8-24 s per
+                // chunk × thousands of chunks = many hours of wait
+                // time on a small archive). The
+                // ContextPrefixBackfiller wired below already catches
+                // missing prefixes in the background; setting this to
+                // nil makes the ingest path fly through (chunk +
+                // entity + event + slot work only) and lets the
+                // backfiller fill prefixes opportunistically while
+                // the user is already querying. Quality-or-nothing
+                // still holds — chunks land with NULL prefix and get
+                // re-enriched later, never with heuristic noise.
+                contextPrefixGenerator: nil
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
