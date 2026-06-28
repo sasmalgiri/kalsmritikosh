@@ -39,19 +39,26 @@ public actor LLMNarrativeComposer: NarrativeComposer {
     private let objectsRepo: KnowledgeObjectRepository?
     private let maxChapters: Int
     private let verifier: NarrativeClaimVerifier
+    /// Phase G.5 — optional. When wired, the composer pulls the
+    /// causal links touching each chapter's events and stamps them
+    /// on the resulting NarrativeChapter so the UI surface can
+    /// render the causal-chain badge. Nil = no causal text.
+    private let links: EventLinksRepository?
 
     public init(
         planner: ChronologicalPlanner,
         capabilities: CapabilityRegistry,
         objectsRepo: KnowledgeObjectRepository? = nil,
         maxChapters: Int = 8,
-        verifier: NarrativeClaimVerifier = NarrativeClaimVerifier()
+        verifier: NarrativeClaimVerifier = NarrativeClaimVerifier(),
+        links: EventLinksRepository? = nil
     ) {
         self.planner = planner
         self.capabilities = capabilities
         self.objectsRepo = objectsRepo
         self.maxChapters = maxChapters
         self.verifier = verifier
+        self.links = links
     }
 
     /// HISTORY Phase D.7 true-streaming entry point. Yields each
@@ -301,6 +308,21 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             citationCoverage: claimCitations.count
         )
 
+        // Phase G.5 — read causal links touching this chapter's events
+        // so the UI badge surface can render the chain. We don't
+        // splice a causal coda into the LLM prose (the model already
+        // wrote prose using the events directly); the badge lives on
+        // the chapter struct and is shown next to the citation row.
+        var chapterCausalLinks: [CausalLink] = []
+        if let links {
+            let chapterEventSet = Set(eventIDs)
+            let raw = (try? await links.links(in: eventIDs)) ?? []
+            chapterCausalLinks = raw.filter {
+                chapterEventSet.contains($0.sourceEventID)
+                && chapterEventSet.contains($0.targetEventID)
+            }.sorted { $0.confidence > $1.confidence }
+        }
+
         return NarrativeChapter(
             title: title,
             subtitle: subtitle,
@@ -311,6 +333,7 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             prose: prose,
             claimCitations: claimCitations,
             contradictions: [],
+            causalLinks: chapterCausalLinks,
             confidence: confidence
         )
     }

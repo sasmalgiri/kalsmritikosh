@@ -232,10 +232,17 @@ public struct HistoryView: View {
                     Label("\(chapter.contradictions.count)", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
+                if !chapter.causalLinks.isEmpty {
+                    Label("\(chapter.causalLinks.count) causal", systemImage: "arrow.triangle.branch")
+                        .foregroundStyle(.purple)
+                }
                 Spacer()
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
+            if !chapter.causalLinks.isEmpty {
+                causalChainStrip(chapter)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -245,6 +252,40 @@ public struct HistoryView: View {
                 .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
         )
         .cornerRadius(10)
+    }
+
+    /// HISTORY Phase G.7 — small strip rendering the chapter's top 3
+    /// causal links as verb-bearing chips ("E2 caused E5", "E1
+    /// enabled E3"). Top by confidence; full list available on
+    /// expand-on-tap (not in v1 to avoid scope creep).
+    @ViewBuilder
+    private func causalChainStrip(_ chapter: NarrativeChapter) -> some View {
+        let idxByID: [Event.ID: Int] = Dictionary(
+            uniqueKeysWithValues: chapter.eventIDs.enumerated().map { ($1, $0 + 1) }
+        )
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Causal chain")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.purple)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(chapter.causalLinks.prefix(6), id: \.id) { link in
+                        let si = idxByID[link.sourceEventID] ?? 0
+                        let ti = idxByID[link.targetEventID] ?? 0
+                        let label = "E\(si) \(link.relation.renderVerb) E\(ti)"
+                        Text(label)
+                            .font(.caption2.monospaced())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.purple.opacity(link.relation.isCausal ? 0.20 : 0.10))
+                            .foregroundStyle(.purple)
+                            .cornerRadius(5)
+                            .help((link.reason ?? "heuristic match") + String(format: " — %.0f%%", link.confidence * 100))
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
     }
 
     private func contradictionsBlock(_ contradictions: [VerifiedAnswer.Contradiction]) -> some View {

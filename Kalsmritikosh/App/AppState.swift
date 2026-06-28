@@ -503,11 +503,28 @@ public final class AppState {
             // fallback runs when no `.reasoning` provider clears the
             // privacy gate.
             let chronoPlanner = ChronologicalPlanner(database: db)
+            // Phase G.3-G.5 — typed causal links between events. The
+            // EventLinksRepository is shared by the discoverer (writes)
+            // and the composers (reads).
+            let eventLinksRepo = EventLinksRepository(database: db)
             let narrativeComposer: any NarrativeComposer = LLMNarrativeComposer(
                 planner: chronoPlanner,
-                capabilities: capabilities
+                capabilities: capabilities,
+                links: eventLinksRepo
             )
             self.topicRetriever = TopicRetriever(database: db, entities: entities)
+            // Phase G.4 — background discoverer that proposes typed
+            // causal links between adjacent events. 4× per day; first
+            // pass runs at boot so the History tab gets causal
+            // chains immediately on a fresh ingest.
+            let causalDiscoverer = CausalDiscoverer(
+                database: db,
+                events: events,
+                entities: entities,
+                objects: objects,
+                links: eventLinksRepo
+            )
+            await causalDiscoverer.start()
 
             let brain = MasterBrain(
                 intentDetector: intentDetector,

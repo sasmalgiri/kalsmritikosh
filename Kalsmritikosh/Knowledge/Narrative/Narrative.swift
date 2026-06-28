@@ -61,6 +61,13 @@ public nonisolated struct NarrativeChapter: Sendable, Codable, Hashable {
     /// (e.g. two competing dates for the same fact, two contradictory
     /// status assertions). Phase D.5.
     public let contradictions: [VerifiedAnswer.Contradiction]
+    /// HISTORY Phase G.5 — typed causal / temporal links between the
+    /// events in this chapter. Surfaced in the composer's prose as
+    /// inline "led to" / "enabled" / "followed" verbs, AND in the UI
+    /// as a small badge surface ("3 causal links" + expandable list).
+    /// Empty when the CausalDiscoverer hasn't proposed any link
+    /// touching this chapter's events.
+    public let causalLinks: [CausalLink]
     /// 0..1 composer-side confidence for the chapter. Drops when:
     ///   - the LLM refused / returned empty
     ///   - too few populated slots fed the LLM
@@ -78,6 +85,7 @@ public nonisolated struct NarrativeChapter: Sendable, Codable, Hashable {
         prose: String,
         claimCitations: [NarrativeClaimCitation] = [],
         contradictions: [VerifiedAnswer.Contradiction] = [],
+        causalLinks: [CausalLink] = [],
         confidence: Double
     ) {
         self.id = id
@@ -90,6 +98,7 @@ public nonisolated struct NarrativeChapter: Sendable, Codable, Hashable {
         self.prose = prose
         self.claimCitations = claimCitations
         self.contradictions = contradictions
+        self.causalLinks = causalLinks
         self.confidence = max(0.0, min(1.0, confidence))
     }
 }

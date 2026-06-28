@@ -30,15 +30,22 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
     private let planner: ChronologicalPlanner
     private let verifier: NarrativeClaimVerifier
     private let maxChapters: Int
+    /// Phase G.5 — optional. When wired, the composer looks up
+    /// causal links touching each chapter's events and renders them
+    /// as an inline coda ("This led to …"). Nil = no causal text;
+    /// existing prose unchanged.
+    private let links: EventLinksRepository?
 
     public init(
         planner: ChronologicalPlanner,
         verifier: NarrativeClaimVerifier = NarrativeClaimVerifier(),
-        maxChapters: Int = 8
+        maxChapters: Int = 8,
+        links: EventLinksRepository? = nil
     ) {
         self.planner = planner
         self.verifier = verifier
         self.maxChapters = maxChapters
+        self.links = links
     }
 
     public func compose(
@@ -52,7 +59,7 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
 
         var chapters: [NarrativeChapter] = []
         for chapter in limited {
-            let composed = composeChapter(planned: chapter, slots: eventSlots)
+            let composed = await composeChapter(planned: chapter, slots: eventSlots)
             let verified = verifier.verify(chapter: composed, events: chapter.events)
             chapters.append(verified)
         }
@@ -80,7 +87,7 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
     private func composeChapter(
         planned: ChronologicalPlanner.PlannedChapter,
         slots: [Event.ID: EventNarrativeSlots]
-    ) -> NarrativeChapter {
+    ) async -> NarrativeChapter {
         let title = LLMNarrativeComposer.chapterTitle(planned: planned)
         let subtitle = planned.topicTitle
 
@@ -105,6 +112,32 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
             )
         }
 
+        // Phase G.5 — pull causal links touching this chapter's events
+        // and render a one-sentence coda summarizing the strongest
+        // ones in causal-verb form. Composer reads at most 4 inline
+        // (top-confidence first); the rest stay on the chapter for
+        // the UI's expand-on-tap surface.
+        var causalLinks: [CausalLink] = []
+        if let links {
+            let raw = (try? await links.links(in: planned.events.map(\.id))) ?? []
+            // Restrict to links whose BOTH endpoints are inside this
+            // chapter — inter-chapter links surface elsewhere.
+            let chapterEventSet = Set(planned.events.map(\.id))
+            causalLinks = raw.filter {
+                chapterEventSet.contains($0.sourceEventID)
+                && chapterEventSet.contains($0.targetEventID)
+            }.sorted { $0.confidence > $1.confidence }
+        }
+        if !causalLinks.isEmpty,
+           let coda = Self.renderCausalCoda(
+            chapterEvents: planned.events,
+            links: causalLinks,
+            startSentenceIndex: sentences.count
+           ) {
+            sentences.append(coda.sentence)
+            claimCitations.append(coda.citation)
+        }
+
         let prose = sentences.joined(separator: " ")
         let conf = LLMNarrativeComposer.chapterConfidence(
             events: planned.events,
@@ -122,8 +155,42 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
             prose: prose,
             claimCitations: claimCitations,
             contradictions: [],
+            causalLinks: causalLinks,
             confidence: conf
         )
+    }
+
+    /// Build a one-sentence causal coda from the chapter's strongest
+    /// links. Returns nil when nothing meaningful surfaces.
+    nonisolated static func renderCausalCoda(
+        chapterEvents: [Event],
+        links: [CausalLink],
+        startSentenceIndex: Int
+    ) -> (sentence: String, citation: NarrativeClaimCitation)? {
+        guard !links.isEmpty else { return nil }
+        let idxByID: [Event.ID: Int] = Dictionary(
+            uniqueKeysWithValues: chapterEvents.enumerated().map { ($1.id, $0 + 1) }
+        )
+        var phrases: [String] = []
+        var citedObjectIDs: [KnowledgeObject.ID] = []
+        var citedEventIDs: [Event.ID] = []
+        for link in links.prefix(4) {
+            guard let si = idxByID[link.sourceEventID],
+                  let ti = idxByID[link.targetEventID] else { continue }
+            phrases.append("[E\(si)] \(link.relation.renderVerb) [E\(ti)]")
+            citedObjectIDs.append(contentsOf: link.evidenceObjectIDs)
+            citedEventIDs.append(link.sourceEventID)
+            citedEventIDs.append(link.targetEventID)
+        }
+        guard !phrases.isEmpty else { return nil }
+        let sentence = "Causal chain: " + phrases.joined(separator: "; ") + "."
+        let citation = NarrativeClaimCitation(
+            sentenceIndex: startSentenceIndex,
+            evidenceObjectIDs: Array(Set(citedObjectIDs)),
+            evidenceEventIDs: Array(Set(citedEventIDs)),
+            confidence: links.map(\.confidence).reduce(0, +) / Double(links.count)
+        )
+        return (sentence, citation)
     }
 
     /// Build one sentence per event from its 5W+H slots. Falls back

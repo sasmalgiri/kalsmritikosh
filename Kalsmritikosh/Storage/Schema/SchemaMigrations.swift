@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 22
+    public static let latestVersion = 23
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -59,7 +59,8 @@ public enum SchemaMigrations {
         (19, v19),
         (20, v20),
         (21, v21),
-        (22, v22)
+        (22, v22),
+        (23, v23)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -849,5 +850,64 @@ public enum SchemaMigrations {
     private static let v22: String = """
     ALTER TABLE events ADD COLUMN date_precision INTEGER NOT NULL DEFAULT 5;
     CREATE INDEX IF NOT EXISTS idx_events_precision ON events(date_precision);
+    """
+
+    // MARK: - v23 — HISTORY Phase G.3: typed causal links between events
+    //
+    // ONE table for all 5 relations (CAUSED / CONTRIBUTED_TO / ENABLED
+    // / PREVENTED / FOLLOWED), append-only. Counterfactuals (hypothetical
+    // "what-if" links) live in a SEPARATE table so they never UNION
+    // into the verified history view — this honors the design research's
+    // hard separation between verified-history and what-if reasoning.
+    //
+    // evidence_object_ids_json carries the source KOs that justify the
+    // link (the composer cites these inline when rendering the
+    // relation in prose). reason is an optional free-text snippet —
+    // either the lexical trigger phrase that fired ("because of") or
+    // a one-line heuristic description.
+    //
+    // superseded_by lets the Phase G.4 discoverer replace a link
+    // without deleting its history; the link chain follows the same
+    // append-only pattern as event_communities.
+
+    private static let v23: String = """
+    CREATE TABLE event_links (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        source_event_id      TEXT NOT NULL,
+        target_event_id      TEXT NOT NULL,
+        relation             TEXT NOT NULL,
+        confidence           REAL NOT NULL DEFAULT 0.5,
+        evidence_object_ids_json TEXT NOT NULL DEFAULT '[]',
+        allen                TEXT,
+        source               TEXT NOT NULL DEFAULT 'heuristic',
+        reason               TEXT,
+        created_at           REAL NOT NULL,
+        superseded_by        TEXT,
+        FOREIGN KEY (source_event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_event_id) REFERENCES events(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_event_links_source ON event_links(source_event_id, relation);
+    CREATE INDEX IF NOT EXISTS idx_event_links_target ON event_links(target_event_id, relation);
+    CREATE INDEX IF NOT EXISTS idx_event_links_current ON event_links(superseded_by) WHERE superseded_by IS NULL;
+
+    -- Parallel hypothetical-link table for Phase G future-work
+    -- counterfactual reasoning. Never UNIONed into the verified-history
+    -- timeline view. Same shape as event_links + a hypothesis note.
+    CREATE TABLE event_links_hypothetical (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        source_event_id      TEXT NOT NULL,
+        target_event_id      TEXT NOT NULL,
+        relation             TEXT NOT NULL,
+        confidence           REAL NOT NULL DEFAULT 0.5,
+        evidence_object_ids_json TEXT NOT NULL DEFAULT '[]',
+        allen                TEXT,
+        source               TEXT NOT NULL DEFAULT 'user',
+        reason               TEXT,
+        hypothesis_note      TEXT,
+        created_at           REAL NOT NULL,
+        FOREIGN KEY (source_event_id) REFERENCES events(id) ON DELETE CASCADE,
+        FOREIGN KEY (target_event_id) REFERENCES events(id) ON DELETE CASCADE
+    );
     """
 }
