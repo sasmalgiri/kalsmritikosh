@@ -153,9 +153,17 @@ public enum MIMEParser {
     }
 
     private nonisolated static func parseHeaders(_ block: String) -> [String: String] {
+        // Real-data audit (2026-06-28) found Content-Transfer-Encoding
+        // was missing from MIME parts because lines split on "\n" still
+        // had trailing "\r" in CRLF emails, and adjacent headers
+        // weren't separating cleanly under all Substring vs String
+        // edge cases. Normalize once up-front: drop every CR so the
+        // split sees clean line boundaries regardless of source
+        // mailer's line terminator choice.
+        let normalized = block.replacingOccurrences(of: "\r", with: "")
         var headers: [String: String] = [:]
         var current: (String, String)?
-        for line in block.split(separator: "\n", omittingEmptySubsequences: false) {
+        for line in normalized.split(separator: "\n", omittingEmptySubsequences: false) {
             if line.first == " " || line.first == "\t" {
                 if let (k, v) = current {
                     current = (k, v + " " + line.trimmingCharacters(in: .whitespaces))

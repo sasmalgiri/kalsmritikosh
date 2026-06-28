@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 21
+    public static let latestVersion = 22
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -58,7 +58,8 @@ public enum SchemaMigrations {
         (18, v18),
         (19, v19),
         (20, v20),
-        (21, v21)
+        (21, v21),
+        (22, v22)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -829,5 +830,24 @@ public enum SchemaMigrations {
 
     private static let v21: String = """
     ALTER TABLE events ADD COLUMN narrative_slots_json TEXT NOT NULL DEFAULT '{}';
+    """
+
+    // MARK: - v22 — HISTORY Phase G.1: temporal precision column
+    //
+    // Wikidata-style integer precision (0=unknown, 5=day, 7=instant,
+    // see DatePrecision.swift). Default 5 = .day, which matches the
+    // safest assumption for legacy rows: we know the date but not the
+    // time. The G.2 composer reads this to render precision-aware
+    // phrases ("in March 2025" vs "On Mar 14 at 09:00 UTC") instead
+    // of falsely claiming midnight when the source was month-only.
+    //
+    // The G.2 backfill pass re-infers precision from each existing
+    // event's dateConfidence (>=0.95 → instant, 0.85-0.94 → day,
+    // 0.40-0.69 → month, <0.40 → unknown). New ingests will stamp
+    // precision explicitly via the extractor.
+
+    private static let v22: String = """
+    ALTER TABLE events ADD COLUMN date_precision INTEGER NOT NULL DEFAULT 5;
+    CREATE INDEX IF NOT EXISTS idx_events_precision ON events(date_precision);
     """
 }

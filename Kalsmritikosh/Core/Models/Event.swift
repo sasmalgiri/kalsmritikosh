@@ -30,6 +30,19 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
     /// HISTORY Phase A — set by QualityTierClassifier at extraction
     /// time. Same semantics as Entity.qualityTier.
     public let qualityTier: QualityTier
+    /// HISTORY Phase G.1 — temporal precision (Wikidata-style integer
+    /// scale, EDTF-inspired). Lets the composer say "in March 2025"
+    /// for month-precision events vs "On Mar 14, 2025 at 09:00" for
+    /// instants. Email-header events ship as .instant; forensic PDF
+    /// events with day-only dates ship as .day; events extracted from
+    /// "Q1 2025" or "early 2025" body text downgrade to .quarter /
+    /// .year. Critical anti-pattern note from the design research:
+    /// NEVER pad a low-precision date to midnight and forget the
+    /// precision flag — that's how you get false "08:00 AM" claims
+    /// in prose and a permanently corrupted ledger. Precision MUST
+    /// travel with the timestamp; never reconstruct from "the time
+    /// is exactly midnight, must be month-only".
+    public let datePrecision: DatePrecision
 
     public nonisolated init(
         id: ID = UUID(),
@@ -44,7 +57,8 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         confidence: Confidence = .medium,
         dateConfidence: Double = 0.5,
         attributes: [String: AnyCodable] = [:],
-        qualityTier: QualityTier = .t2
+        qualityTier: QualityTier = .t2,
+        datePrecision: DatePrecision = .day
     ) {
         self.id = id
         self.kind = kind
@@ -59,12 +73,13 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         self.dateConfidence = dateConfidence
         self.attributes = attributes
         self.qualityTier = qualityTier
+        self.datePrecision = datePrecision
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, date, endDate, title, summary, entityIDs,
              sourceObjectID, sourceRange, confidence, dateConfidence, attributes,
-             qualityTier
+             qualityTier, datePrecision
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -82,6 +97,7 @@ public struct Event: Codable, Identifiable, Hashable, Sendable {
         self.dateConfidence = try c.decodeIfPresent(Double.self, forKey: .dateConfidence) ?? 0.5
         self.attributes = try c.decodeIfPresent([String: AnyCodable].self, forKey: .attributes) ?? [:]
         self.qualityTier = try c.decodeIfPresent(QualityTier.self, forKey: .qualityTier) ?? .t2
+        self.datePrecision = try c.decodeIfPresent(DatePrecision.self, forKey: .datePrecision) ?? .day
     }
 
     /// The 10 event kinds from Phase 6 of the roadmap, plus an

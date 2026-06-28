@@ -128,18 +128,34 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
 
     /// Build one sentence per event from its 5W+H slots. Falls back
     /// to bare "On DATE, kind K" when slots are empty.
+    ///
+    /// Phase G.2 — date phrasing reads `event.datePrecision`:
+    ///   .instant → "On Mar 14, 2025 at 09:12 UTC, …"
+    ///   .day     → "On Mar 14, 2025, …"
+    ///   .month   → "In March 2025, …"
+    ///   .quarter → "In Q1 2025, …"
+    ///   .year    → "During 2025, …"
+    ///   .decade  → "In the 2020s, …"
+    ///   .unknown → "At an unknown time, …"
+    /// Critical anti-pattern guarded: we NEVER render a time component
+    /// for an event whose precision is coarser than .minute. That kept
+    /// the old composer claiming "00:00" on month-precision events.
     nonisolated static func render(
         event: Event,
         slots: EventNarrativeSlots,
         label: String,
         formatter: DateFormatter
     ) -> String {
-        let dateText = formatter.string(from: event.date)
+        let dateText = event.datePrecision.renderPhrase(date: event.date)
+        // dateText is already lowercased and begins with a preposition
+        // ("on …", "in …", "during …"). Capitalize the first letter
+        // for sentence-start.
+        let datePhrase = dateText.prefix(1).uppercased() + dateText.dropFirst()
         if slots.isEmpty {
-            return "On \(dateText), a \(humanize(event.kind)) was recorded: \(event.title) \(label)."
+            return "\(datePhrase), a \(humanize(event.kind)) was recorded: \(event.title) \(label)."
         }
         var parts: [String] = []
-        parts.append("On \(dateText),")
+        parts.append("\(datePhrase),")
         if let who = slots.who.first?.text {
             // Strip any embedded email "<addr>" so the prose stays readable.
             let cleanedWho = who.replacingOccurrences(of: #"\s*<[^>]+>"#, with: "", options: .regularExpression)

@@ -17,8 +17,8 @@ public actor EventsRepository {
         for e in events {
             let attrs = try encoder.encode(e.attributes)
             try await database.exec("""
-            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(e.id),
                 .text(e.kind.rawValue),
@@ -30,7 +30,8 @@ public actor EventsRepository {
                 .real(e.confidence.value),
                 .text(String(data: attrs, encoding: .utf8) ?? "{}"),
                 .real(e.dateConfidence),
-                .text(e.qualityTier.rawValue)
+                .text(e.qualityTier.rawValue),
+                .integer(Int64(e.datePrecision.rawValue))
             ])
             for entityID in e.entityIDs {
                 try await database.exec("""
@@ -47,7 +48,7 @@ public actor EventsRepository {
 
     public func between(start: Date, end: Date, limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events
         WHERE date BETWEEN ? AND ?
         ORDER BY date ASC
@@ -61,7 +62,7 @@ public actor EventsRepository {
         var results: [Event] = []
         for id in ids {
             let rows = try await database.query("""
-            SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+            SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
             FROM events WHERE id = ? LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let event = decode(row) {
@@ -73,7 +74,7 @@ public actor EventsRepository {
 
     public func recent(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events
         ORDER BY date DESC
         LIMIT ?;
@@ -87,7 +88,7 @@ public actor EventsRepository {
     /// OntologyBackfill can label them.
     public func listUnlabeledFactTypes(limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events WHERE fact_type IS NULL ORDER BY date DESC LIMIT ?;
         """, [.integer(Int64(limit))])
         return rows.compactMap(decode)
@@ -192,7 +193,7 @@ public actor EventsRepository {
     /// anchor topic narratives).
     public func listEventsMissingNarrativeSlots(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events
         WHERE narrative_slots_json IS NULL
            OR narrative_slots_json = '{}'
@@ -222,7 +223,7 @@ public actor EventsRepository {
     /// timelines.
     public func allWithParticipants(offset: Int = 0, pageSize: Int = 2_000) async throws -> [(Event, [Entity.ID])] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events
         ORDER BY date ASC
         LIMIT ? OFFSET ?;
@@ -262,7 +263,7 @@ public actor EventsRepository {
     /// an already-ingested corpus without re-running ingest.
     public func findBySourceObject(_ id: KnowledgeObject.ID) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
         FROM events WHERE source_object_id = ? ORDER BY date ASC LIMIT 200;
         """, [.uuid(id)])
         var out: [Event] = []
@@ -320,6 +321,15 @@ public actor EventsRepository {
         else { return nil }
         let dateConf = row.double(8) ?? 0.5
         let tier = row.string(9).flatMap(QualityTier.init(rawValue:)) ?? .t2
+        // HISTORY Phase G.1 — precision read at index 10. Legacy rows
+        // from before v22 default to .day (column NOT NULL DEFAULT 5).
+        // Inference fallback runs when the column genuinely missing
+        // (e.g. SELECT shapes that didn't include it).
+        let precisionRaw = row.int(10).map { Int($0) }
+        let precision: DatePrecision = {
+            if let raw = precisionRaw, let p = DatePrecision(rawValue: raw) { return p }
+            return DatePrecision.inferFromConfidence(dateConf)
+        }()
         return Event(
             id: id,
             kind: kind,
@@ -330,7 +340,8 @@ public actor EventsRepository {
             sourceObjectID: sourceID,
             confidence: Confidence(conf),
             dateConfidence: dateConf,
-            qualityTier: tier
+            qualityTier: tier,
+            datePrecision: precision
         )
     }
 }

@@ -67,6 +67,13 @@ public struct RuleEventExtractor: EventExtractor {
             // header (dateConfidence == 0.95 in EventExtractor's
             // header path) → T1. Otherwise the date was inferred
             // from content / mtime and the event drops to T2.
+            //
+            // Phase G.1 — precision: header-derived dates are .instant
+            // (the RFC 2822 Date header carries minute resolution at
+            // minimum). Content-extracted dates are .day. Mtime
+            // fallback is .day. The composer reads this to render
+            // "On Mar 14, 2025 at 09:12 UTC" vs "On Mar 14, 2025"
+            // instead of falsely claiming a time when it doesn't know.
             let headerDerived = dateConfidence >= 0.9
             events.append(.init(
                 kind: .emailReceived,
@@ -77,7 +84,8 @@ public struct RuleEventExtractor: EventExtractor {
                 sourceObjectID: object.id,
                 confidence: .high,
                 dateConfidence: dateConfidence,
-                qualityTier: headerDerived ? .t1 : .t2
+                qualityTier: headerDerived ? .t1 : .t2,
+                datePrecision: headerDerived ? .instant : .day
             ))
         }
 
@@ -103,7 +111,8 @@ public struct RuleEventExtractor: EventExtractor {
                     sourceObjectID: object.id,
                     confidence: .medium,
                     dateConfidence: dateConfidence,
-                    qualityTier: .t2 // Body-text rule match — Phase A.5
+                    qualityTier: .t2, // Body-text rule match — Phase A.5
+                    datePrecision: .day // Body-text dates: day precision; the marker phrase rarely carries time
                 ))
                 break
             }
@@ -158,7 +167,14 @@ public struct RuleEventExtractor: EventExtractor {
                         // Body-inferred event (not from the structured
                         // header). Real proper-noun signal but not as
                         // trustworthy as T1. Phase A.5.
-                        qualityTier: .t2
+                        qualityTier: .t2,
+                        // Phase G.1 — forensic-PDF dates are typically
+                        // day-precision (the export shows "21 May 2026
+                        // at 10:45 AM" but the source isn't a true
+                        // header — the time can be drift / TZ-confused,
+                        // so we mark as .day to avoid claiming a time
+                        // we can't fully trust).
+                        datePrecision: .day
                     ))
                     emitted += 1
                 }
@@ -209,7 +225,11 @@ public struct RuleEventExtractor: EventExtractor {
                     sourceObjectID: object.id,
                     confidence: .medium,
                     dateConfidence: dueConfidence ?? (dateConfidence * 0.8),
-                    qualityTier: .t2 // Commitment phrase detection — Phase A.5
+                    qualityTier: .t2, // Commitment phrase detection — Phase A.5
+                    // Phase G.1 — "by tomorrow"/"end of week" phrases
+                    // are inherently day-precision at best; some are
+                    // month or unknown. Stay conservative at .day.
+                    datePrecision: phraseDate != nil ? .day : .month
                 ))
                 commitmentEvents += 1
             }

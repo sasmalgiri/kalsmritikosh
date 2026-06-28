@@ -74,24 +74,20 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         let src = [object.id]
 
         // ── WHEN ─────────────────────────────────────────────────
-        // The event's primary date is always present. Trust matches
-        // dateConfidence so the composer can render "around" vs
-        // exact phrasings later.
-        //
-        // Real-data discovery (2026-06-28 production audit): emails
-        // were stamping WHEN as `ruleBased` even when the date came
-        // from a Date: header, because event.dateConfidence wasn't
-        // always >= 0.9. For email-category KOs with ANY parseable
-        // header date (object.metadata["date"] present), promote to
-        // structuredHeader regardless of the event's own
-        // dateConfidence — the header IS the structured source.
+        // Phase G.2 — render precision-aware. For day-precision
+        // events we surface "March 14, 2025"; for instant events we
+        // include the time ("March 14, 2025 at 09:12 UTC"); for
+        // month-precision we say "March 2025". The text-only slot
+        // value still ships an ISO date as a structured anchor for
+        // downstream sorting; the prose phrase is constructed by the
+        // composer at render time.
         let isEmailWithHeaderDate = object.sourceType.category == .email
             && Self.stringValue(object.metadata["date"])?.isEmpty == false
         let provenance: SlotProvenance = (event.dateConfidence >= 0.9 || isEmailWithHeaderDate)
             ? .structuredHeader : .ruleBased
         let whenConfidence = isEmailWithHeaderDate ? max(0.9, event.dateConfidence) : event.dateConfidence
         let whenValue = NarrativeSlotValue(
-            text: Self.formatWhen(event.date),
+            text: Self.formatWhen(event.date, precision: event.datePrecision),
             confidence: whenConfidence,
             provenance: provenance,
             sourceObjectIDs: src
@@ -377,14 +373,30 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
 
     // MARK: - WHEN formatting
 
-    private static let whenFormatter: ISO8601DateFormatter = {
+    private static let whenFormatterFullDate: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withFullDate]
         return f
     }()
 
-    private static func formatWhen(_ date: Date) -> String {
-        whenFormatter.string(from: date)
+    private static let whenFormatterFullTime: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private static func formatWhen(_ date: Date, precision: DatePrecision = .day) -> String {
+        // Anchor string is ISO 8601 — the structured form downstream
+        // ranking needs. The composer renders prose from the Event's
+        // datePrecision separately (DatePrecision.renderPhrase). We
+        // include time only when precision is .instant / .minute so
+        // a month-precision event doesn't lie about "00:00".
+        switch precision {
+        case .instant, .minute:
+            return whenFormatterFullTime.string(from: date)
+        default:
+            return whenFormatterFullDate.string(from: date)
+        }
     }
 
     // MARK: - metadata helpers
