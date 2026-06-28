@@ -17,9 +17,20 @@ public struct EntityLinker: Sendable {
         // Group by (kind, normalized), keep the highest-confidence
         // representative. Source IDs of merged duplicates AND their
         // attributes get folded into the representative — no data lost.
+        //
+        // Real-data audit (2026-06-28) caught the silent-T1-drop bug
+        // here: the previous version's `Entity(id:, kind:, value:, …)`
+        // initializer call omitted `qualityTier:`, so the default
+        // `.t2` clobbered any structured-header T1 tag the upstream
+        // annotate() had set. Result: 0 T1 entities in the entire
+        // database even though the EmailLoader was writing them
+        // correctly. Fix: explicitly carry qualityTier through
+        // AND promote on merge (MIN by raw string is correct because
+        // "T1" < "T2" < "T3" alphabetically).
         var representatives: [Key: Entity] = [:]
         var mergedSources: [Key: [KnowledgeObject.ID]] = [:]
         var mergedAttributes: [Key: [String: AnyCodable]] = [:]
+        var bestTier: [Key: QualityTier] = [:]
 
         for entity in entities {
             let key = Key(kind: entity.kind, normalized: normalize(entity))
@@ -30,6 +41,16 @@ public struct EntityLinker: Sendable {
                 attrs[k] = v
             }
             mergedAttributes[key] = attrs
+
+            // Promote-only tier merge: if either the existing or the
+            // new entity carries a better (alphabetically smaller)
+            // tier, the merged row inherits it.
+            let priorTier = bestTier[key]
+            if let priorTier {
+                bestTier[key] = (entity.qualityTier.rawValue < priorTier.rawValue) ? entity.qualityTier : priorTier
+            } else {
+                bestTier[key] = entity.qualityTier
+            }
 
             if let existing = representatives[key] {
                 if entity.confidence > existing.confidence {
@@ -61,7 +82,8 @@ public struct EntityLinker: Sendable {
                 sourceObjectID: entity.sourceObjectID,
                 sourceRange: entity.sourceRange,
                 confidence: entity.confidence,
-                attributes: attrs
+                attributes: attrs,
+                qualityTier: bestTier[key] ?? entity.qualityTier
             )
         }
     }
