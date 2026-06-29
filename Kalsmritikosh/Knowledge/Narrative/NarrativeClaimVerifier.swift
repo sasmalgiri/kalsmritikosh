@@ -95,6 +95,13 @@ public nonisolated struct NarrativeClaimVerifier: Sendable {
             prose: kept,
             claimCitations: newCitations,
             contradictions: contradictions,
+            // Phase G.5 — preserve the causal links the composer
+            // attached. Without this, the verifier's NarrativeChapter
+            // rebuild defaulted causalLinks to [] and dropped every
+            // link the composer surfaced — exactly the "intra-chapter
+            // links exist but causal=0 in rendered chapter" symptom
+            // the real-data probe just exposed.
+            causalLinks: chapter.causalLinks,
             confidence: newConfidence
         )
     }
