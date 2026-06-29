@@ -81,6 +81,13 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// "generic chunk-RAG synthesis". Defaults to .unknown for
     /// legacy callers that don't set it.
     public let source: AnswerSource
+    /// Phase J.1 — "ExplainPlan" trace. When the brain has captured
+    /// the path (which layers fired, which experts ran, which LLM
+    /// purposes were invoked, assumptions + uncertainties), the
+    /// Quality Strip's "Why this answer?" disclosure renders it.
+    /// Optional — legacy callers that don't set it just don't show
+    /// the disclosure.
+    public let reasoningTrace: ReasoningTrace?
 
     public nonisolated init(
         body: String,
@@ -93,7 +100,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         refusalReason: String? = nil,
         report: ConfidenceReport? = nil,
         walkSteps: [WalkStep] = [],
-        source: AnswerSource = .unknown
+        source: AnswerSource = .unknown,
+        reasoningTrace: ReasoningTrace? = nil
     ) {
         self.body = body
         self.answerText = answerText
@@ -106,10 +114,11 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.report = report
         self.walkSteps = walkSteps
         self.source = source
+        self.reasoningTrace = reasoningTrace
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -125,6 +134,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.report = try c.decodeIfPresent(ConfidenceReport.self, forKey: .report)
         self.walkSteps = try c.decodeIfPresent([WalkStep].self, forKey: .walkSteps) ?? []
         self.source = try c.decodeIfPresent(AnswerSource.self, forKey: .source) ?? .unknown
+        self.reasoningTrace = try c.decodeIfPresent(ReasoningTrace.self, forKey: .reasoningTrace)
     }
 
     public struct Citation: Codable, Sendable, Hashable {

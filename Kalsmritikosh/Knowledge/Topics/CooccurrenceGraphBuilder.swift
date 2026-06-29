@@ -29,6 +29,8 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
     /// chance one-shot co-mentions that aren't real topic signal.
     private let minWeight: Int
     private var runTask: Task<Void, Never>?
+    private var lastRunStatus = LastRunStatus(serviceID: "atlas.cooccurrence.builder")
+    public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
         database: Database,
@@ -45,9 +47,20 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         AtlasLog.knowledge.info("CooccurrenceGraphBuilder: starting (interval=\(self.intervalSeconds, privacy: .public)s, minWeight=\(self.minWeight, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
+            // Boot-warmup window — on a fresh DB, the first pass at
+            // boot time finds zero entity mentions (ingestion hasn't
+            // produced any yet). Without this short retry the graph
+            // stays empty for the full 6-hour interval. We keep
+            // retrying every 5 minutes for the first 2 hours after
+            // start; after that we trust the steady-state cadence.
+            let bootTime = Date()
             while !Task.isCancelled {
-                await self.runOnce()
-                let ns = await UInt64(self.intervalSeconds * 1_000_000_000)
+                let produced = await self.runOnce()
+                let warmupActive = Date().timeIntervalSince(bootTime) < 2 * 3_600
+                let sleepSeconds: TimeInterval = (produced == 0 && warmupActive)
+                    ? 5 * 60
+                    : await self.intervalSeconds
+                let ns = UInt64(sleepSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }
         }
@@ -63,6 +76,22 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
     @discardableResult
     public func runOnce() async -> Int {
         let started = Date()
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: started, finishedAt: nil,
+            resultCount: 0,
+            runCount: lastRunStatus.runCount
+        )
+        defer {
+            lastRunStatus = LastRunStatus(
+                serviceID: lastRunStatus.serviceID,
+                startedAt: started,
+                finishedAt: Date(),
+                resultCount: lastRunStatus.resultCount,
+                runCount: lastRunStatus.runCount + 1,
+                lastError: lastRunStatus.lastError
+            )
+        }
         // Step 1 — clear the existing graph. The cost of a rebuild
         // is dominated by step 2; the truncate is cheap.
         do {
@@ -115,6 +144,13 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         }
         let elapsed = Int(Date().timeIntervalSince(started))
         AtlasLog.knowledge.info("CooccurrenceGraphBuilder: rebuilt \(count, privacy: .public) edges in \(elapsed, privacy: .public)s")
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: lastRunStatus.startedAt,
+            finishedAt: nil,
+            resultCount: max(0, count),
+            runCount: lastRunStatus.runCount
+        )
         return count
     }
 

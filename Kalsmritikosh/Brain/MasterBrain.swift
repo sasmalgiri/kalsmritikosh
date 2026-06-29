@@ -45,6 +45,12 @@ public actor MasterBrain {
     /// 5W+H slot bundles for the composer's input. Required when
     /// `narrativeComposer` is wired; ignored otherwise.
     private let eventsRepo: EventsRepository?
+    /// Phase J.2 — typed causal links repo. Optional; when present
+    /// the global ContradictionFinder runs over the retrieval set's
+    /// links so cross-chapter conflicts (cycles, opposing claims)
+    /// surface alongside per-chapter contradictions. Nil = the
+    /// finder only sees date conflicts (degraded but still useful).
+    private let eventLinks: EventLinksRepository?
 
     public init(
         intentDetector: IntentDetector? = nil,
@@ -57,7 +63,8 @@ public actor MasterBrain {
         sessionProfile: SessionProfile? = nil,
         memoryRepo: MemoryRepository? = nil,
         narrativeComposer: NarrativeComposer? = nil,
-        eventsRepo: EventsRepository? = nil
+        eventsRepo: EventsRepository? = nil,
+        eventLinks: EventLinksRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -70,6 +77,7 @@ public actor MasterBrain {
         self.memoryRepo = memoryRepo
         self.narrativeComposer = narrativeComposer
         self.eventsRepo = eventsRepo
+        self.eventLinks = eventLinks
     }
 
     /// Clear the in-memory SessionProfile. The eval harness calls this
@@ -234,10 +242,48 @@ public actor MasterBrain {
         // Fold the narrative into a VerifiedAnswer the legacy
         // callers (EvalKit, old UI) can consume unchanged.
         let body = Self.foldNarrativeToBody(narrative)
-        let contradictions = narrative.chapters.flatMap(\.contradictions)
+        // Phase J.2 — global Contradiction Finder. Runs over the
+        // retrieval set + the causal links touching it so date
+        // conflicts that cross chapter boundaries, causal cycles,
+        // and opposing causal claims all surface alongside the
+        // per-chapter contradictions the verifier already caught.
+        let perChapter = narrative.chapters.flatMap(\.contradictions)
+        let crossChapter = await Self.findCrossRetrievalContradictions(
+            events: retrieval.events,
+            eventLinks: eventLinks
+        )
+        let contradictions = Self.dedupeContradictions(perChapter + crossChapter)
         let chapterConfs = narrative.chapters.map(\.confidence)
         let avgConf = chapterConfs.isEmpty ? 0.4
             : chapterConfs.reduce(0, +) / Double(chapterConfs.count)
+        // Phase J.1 — capture the reasoning trace. The fields the brain
+        // already knows about (intent, retrieval shape, walk steps,
+        // contradictions, downgrades) feed the trace verbatim; the
+        // path label is the canonical "historical reconstruction".
+        let category = QueryCategoryClassifier().classify(question: question, intent: intent)
+        let trace = ReasoningTrace(
+            pathTaken: ReasoningTrace.pathHistorical,
+            intent: intent.kind.rawValue,
+            queryCategory: category.rawValue,
+            retrievalLayers: retrieval.layersUsed.map(\.rawValue),
+            shortCircuitedAt: retrieval.shortCircuitedAt?.rawValue,
+            expertIDs: decision.expertIDs,
+            llmPurposes: [
+                "history.narrative",
+                "history.community.summary",
+                "history.slot.extract"
+            ],
+            retrievalCounts: ReasoningTrace.RetrievalCounts(
+                events: retrieval.events.count,
+                entities: retrieval.entities.count,
+                chunks: retrieval.chunks.count,
+                relationships: retrieval.relationships.count,
+                summaries: retrieval.summaries.count,
+                walkSteps: retrieval.walkSteps.count
+            ),
+            assumptions: Self.assumptionsFromNarrative(narrative),
+            uncertainties: contradictions.map(\.description)
+        )
         return VerifiedAnswer(
             body: body,
             answerText: body,
@@ -249,8 +295,66 @@ public actor MasterBrain {
             refusalReason: nil,
             report: nil,
             walkSteps: retrieval.walkSteps,
-            source: .historical
+            source: .historical,
+            reasoningTrace: trace
         )
+    }
+
+    /// Phase J.2 — call the ContradictionFinder on the retrieval set
+    /// + the causal links touching it. Static so the call site can
+    /// be `await Self.findCrossRetrievalContradictions(...)` from
+    /// within actor-isolated code without re-entry; the actual work
+    /// is async only because the link fetch is.
+    nonisolated static func findCrossRetrievalContradictions(
+        events: [Event],
+        eventLinks: EventLinksRepository?
+    ) async -> [VerifiedAnswer.Contradiction] {
+        guard !events.isEmpty else { return [] }
+        let links: [CausalLink]
+        if let eventLinks {
+            links = (try? await eventLinks.links(in: events.map(\.id))) ?? []
+        } else {
+            links = []
+        }
+        let finder = ContradictionFinder()
+        return finder.find(events: events, links: links)
+    }
+
+    /// De-dupe contradictions by their (description, claimA, claimB)
+    /// triple so the per-chapter + cross-chapter passes can be
+    /// concatenated without showing the same conflict twice.
+    nonisolated static func dedupeContradictions(
+        _ contradictions: [VerifiedAnswer.Contradiction]
+    ) -> [VerifiedAnswer.Contradiction] {
+        var seen: Set<String> = []
+        return contradictions.filter { c in
+            let key = "\(c.description)|\(c.claimA)|\(c.claimB)"
+            return seen.insert(key).inserted
+        }
+    }
+
+    /// Pull free-text assumptions / downgrades from the composed
+    /// narrative. These surface in the trace's "what we noticed"
+    /// list so the user understands the answer's edges.
+    nonisolated private static func assumptionsFromNarrative(
+        _ narrative: ReconstructedNarrative
+    ) -> [String] {
+        var out: [String] = []
+        let empties = narrative.chapters.filter { $0.prose.isEmpty }
+        if !empties.isEmpty {
+            out.append("\(empties.count) chapter(s) had no grounded prose and were rendered as bullets only")
+        }
+        let lowConf = narrative.chapters.filter { $0.confidence < 0.5 }
+        if !lowConf.isEmpty {
+            out.append("\(lowConf.count) chapter(s) shipped with < 50% confidence")
+        }
+        if !narrative.downgrades.isEmpty {
+            out.append(contentsOf: narrative.downgrades)
+        }
+        if narrative.coverage.largestGapDays > 365 {
+            out.append("Largest temporal gap is \(narrative.coverage.largestGapDays) days — coverage is sparse")
+        }
+        return out
     }
 
     /// "Normal AI" RAG fallback. When the structured composer can't
@@ -356,6 +460,33 @@ public actor MasterBrain {
             if citations.isEmpty { return 0.3 }
             return 0.55
         }()
+        let category = QueryCategoryClassifier().classify(question: question, intent: intent)
+        let trace = ReasoningTrace(
+            pathTaken: ReasoningTrace.pathChunkRAG,
+            intent: intent.kind.rawValue,
+            queryCategory: category.rawValue,
+            retrievalLayers: retrieval.layersUsed.map(\.rawValue),
+            shortCircuitedAt: retrieval.shortCircuitedAt?.rawValue,
+            expertIDs: [],
+            llmPurposes: ["history.chunk.fallback"],
+            retrievalCounts: ReasoningTrace.RetrievalCounts(
+                events: retrieval.events.count,
+                entities: retrieval.entities.count,
+                chunks: retrieval.chunks.count,
+                relationships: retrieval.relationships.count,
+                summaries: retrieval.summaries.count,
+                walkSteps: retrieval.walkSteps.count
+            ),
+            assumptions: [
+                "Used the chunk-RAG fallback because structured reconstruction produced no usable chapters.",
+                citations.isEmpty
+                    ? "No chunk labels in the response — the model didn't cite."
+                    : "\(citations.count) chunk(s) cited inline."
+            ],
+            uncertainties: refusedShape
+                ? ["Model said the archive lacks the answer."]
+                : []
+        )
         return VerifiedAnswer(
             body: body,
             answerText: body,
@@ -367,7 +498,8 @@ public actor MasterBrain {
             refusalReason: refusedShape ? "Chunk RAG fallback couldn't ground an answer." : nil,
             report: nil,
             walkSteps: retrieval.walkSteps,
-            source: .ragFallback
+            source: .ragFallback,
+            reasoningTrace: trace
         )
     }
 
@@ -609,10 +741,52 @@ public actor MasterBrain {
         // can distinguish it from the historical / RAG paths. The
         // existing Verifier doesn't set `source`, so we re-emit
         // the value with the field stamped in.
-        return Self.tag(verified, as: .experts)
+        let category = QueryCategoryClassifier().classify(question: question, intent: intent)
+        let trace = ReasoningTrace(
+            pathTaken: ReasoningTrace.pathExpertPipeline,
+            intent: intent.kind.rawValue,
+            queryCategory: category.rawValue,
+            retrievalLayers: sharedRetrieval.layersUsed.map(\.rawValue),
+            shortCircuitedAt: sharedRetrieval.shortCircuitedAt?.rawValue,
+            expertIDs: decision.expertIDs,
+            llmPurposes: findings.map { "expert.\($0.expertID)" },
+            retrievalCounts: ReasoningTrace.RetrievalCounts(
+                events: sharedRetrieval.events.count,
+                entities: sharedRetrieval.entities.count,
+                chunks: sharedRetrieval.chunks.count,
+                relationships: sharedRetrieval.relationships.count,
+                summaries: sharedRetrieval.summaries.count,
+                walkSteps: sharedRetrieval.walkSteps.count
+            ),
+            assumptions: Self.assumptionsFromExpertReport(verified),
+            uncertainties: verified.contradictions.map(\.description)
+        )
+        return Self.tag(verified, as: .experts, trace: trace)
     }
 
-    private static func tag(_ a: VerifiedAnswer, as source: AnswerSource) -> VerifiedAnswer {
+    /// Pull free-text assumptions / downgrades from the verifier's
+    /// ConfidenceReport when present. Mirrors `assumptionsFromNarrative`
+    /// for the expert-pipeline path.
+    nonisolated private static func assumptionsFromExpertReport(_ a: VerifiedAnswer) -> [String] {
+        var out: [String] = []
+        if let report = a.report {
+            if report.droppedUnverifiable > 0 {
+                out.append("\(report.droppedUnverifiable) LLM claim(s) dropped — their cited evidence didn't resolve against the retrieval set.")
+            }
+            if report.distinctSourceObjectIDs < 2 {
+                out.append("Only \(report.distinctSourceObjectIDs) distinct source(s) backed the answer — corroboration is thin.")
+            }
+            if report.agreementScore < 0.6 && report.sourceCount > 1 {
+                out.append(String(format: "Cross-source agreement was %.0f%% — the verifier softened confidence.", report.agreementScore * 100))
+            }
+        }
+        if a.citations.isEmpty {
+            out.append("No citations attached — answer is ungrounded.")
+        }
+        return out
+    }
+
+    private static func tag(_ a: VerifiedAnswer, as source: AnswerSource, trace: ReasoningTrace? = nil) -> VerifiedAnswer {
         VerifiedAnswer(
             body: a.body,
             answerText: a.answerText,
@@ -624,7 +798,8 @@ public actor MasterBrain {
             refusalReason: a.refusalReason,
             report: a.report,
             walkSteps: a.walkSteps,
-            source: source
+            source: source,
+            reasoningTrace: trace ?? a.reasoningTrace
         )
     }
 }

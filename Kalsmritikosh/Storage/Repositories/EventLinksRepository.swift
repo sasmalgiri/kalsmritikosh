@@ -49,6 +49,18 @@ public actor EventLinksRepository {
         ])
     }
 
+    /// Soft-delete: mark the link self-superseded so reads stop
+    /// returning it but the row stays for audit. Used by the History
+    /// tab's "Reject" affordance when a user disagrees with a
+    /// discoverer-emitted link entirely (vs. wanting to demote /
+    /// promote, which uses `supersede` instead).
+    public func delete(_ linkID: UUID) async throws {
+        try await database.exec(
+            "UPDATE event_links SET superseded_by = ? WHERE id = ?;",
+            [.uuid(linkID), .uuid(linkID)]
+        )
+    }
+
     /// Replace `oldLinkID` with `newLink` in a single transaction:
     /// stamp `superseded_by = newLink.id` on the old row, then insert
     /// the new row. Both stay queryable; reads filter on
@@ -137,7 +149,105 @@ public actor EventLinksRepository {
         return out
     }
 
+    // MARK: - Counterfactuals (event_links_hypothetical)
+
+    /// Append a user-proposed counterfactual. Idempotent dedup is NOT
+    /// performed — the user might author two counterfactuals over the
+    /// same event pair with different hypothesis notes, and the UI
+    /// shows them all.
+    public func insertHypothetical(_ link: HypotheticalCausalLink) async throws {
+        let evidenceData = try encoder.encode(link.evidenceObjectIDs)
+        let evidenceJSON = String(data: evidenceData, encoding: .utf8) ?? "[]"
+        try await database.exec("""
+        INSERT INTO event_links_hypothetical
+            (id, source_event_id, target_event_id, relation, confidence,
+             evidence_object_ids_json, allen, source, reason, hypothesis_note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [
+            .uuid(link.id),
+            .uuid(link.sourceEventID),
+            .uuid(link.targetEventID),
+            .text(link.relation.rawValue),
+            .real(link.confidence),
+            .text(evidenceJSON),
+            link.allen.map { .text($0.rawValue) } ?? .null,
+            .text(link.source.rawValue),
+            link.reason.map { .text($0) } ?? .null,
+            .text(link.hypothesisNote),
+            .real(link.createdAt.timeIntervalSince1970)
+        ])
+    }
+
+    /// Remove a single counterfactual by id (hard delete — these are
+    /// user-authored notes; if they want it gone, it's gone).
+    public func deleteHypothetical(_ linkID: UUID) async throws {
+        try await database.exec(
+            "DELETE FROM event_links_hypothetical WHERE id = ?;",
+            [.uuid(linkID)]
+        )
+    }
+
+    /// Counterfactuals touching any of the supplied events. Drives the
+    /// History tab's "What if" annotation row next to the verified
+    /// causal chain.
+    public func hypotheticals(in eventIDs: [Event.ID]) async throws -> [HypotheticalCausalLink] {
+        guard !eventIDs.isEmpty else { return [] }
+        let placeholders = eventIDs.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT id, source_event_id, target_event_id, relation, confidence,
+               evidence_object_ids_json, allen, source, reason,
+               hypothesis_note, created_at
+        FROM event_links_hypothetical
+        WHERE source_event_id IN (\(placeholders))
+           OR target_event_id IN (\(placeholders))
+        ORDER BY created_at DESC;
+        """, eventIDs.map { .uuid($0) } + eventIDs.map { .uuid($0) })
+        return rows.compactMap(decodeHypotheticalRow)
+    }
+
+    public func hypotheticalCount() async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM event_links_hypothetical;",
+            []
+        )
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     // MARK: - Internals
+
+    private func decodeHypotheticalRow(_ row: SQLRow) -> HypotheticalCausalLink? {
+        guard
+            let id = row.uuid(0),
+            let source = row.uuid(1),
+            let target = row.uuid(2),
+            let relRaw = row.string(3),
+            let relation = CausalRelation(rawValue: relRaw),
+            let conf = row.double(4),
+            let note = row.string(9),
+            let createdAt = row.double(10)
+        else { return nil }
+        let evidenceJSON = row.string(5) ?? "[]"
+        let evidenceIDs: [KnowledgeObject.ID] = {
+            guard let data = evidenceJSON.data(using: .utf8) else { return [] }
+            return (try? decoder.decode([KnowledgeObject.ID].self, from: data)) ?? []
+        }()
+        let allen = row.string(6).flatMap(AllenRelation.init(rawValue:))
+        let src = row.string(7).flatMap(CausalLinkSource.init(rawValue:)) ?? .user
+        let reason = row.string(8)
+        return HypotheticalCausalLink(
+            id: id,
+            sourceEventID: source,
+            targetEventID: target,
+            relation: relation,
+            confidence: conf,
+            evidenceObjectIDs: evidenceIDs,
+            allen: allen,
+            source: src,
+            reason: reason,
+            hypothesisNote: note,
+            createdAt: Date(timeIntervalSince1970: createdAt)
+        )
+    }
 
     private func decodeRow(_ row: SQLRow) -> CausalLink? {
         guard

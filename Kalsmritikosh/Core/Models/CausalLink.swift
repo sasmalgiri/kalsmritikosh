@@ -96,6 +96,57 @@ public nonisolated enum CausalLinkSource: String, Codable, Sendable, Hashable {
     case ontology         // BondConstructor-style domain rule
 }
 
+/// A user-proposed counterfactual edge between two events. Lives in
+/// the parallel `event_links_hypothetical` table; reads NEVER UNION
+/// these with verified causal links — the design rule from the
+/// reference standard is "counterfactuals are claims about what
+/// didn't happen and must stay structurally separate from history".
+/// Surfaced in the UI as "what if" annotations next to the verified
+/// causal chain, never inside the chain itself.
+public nonisolated struct HypotheticalCausalLink: Codable, Sendable, Hashable, Identifiable {
+    public let id: UUID
+    public let sourceEventID: Event.ID
+    public let targetEventID: Event.ID
+    public let relation: CausalRelation
+    public let confidence: Double
+    public let evidenceObjectIDs: [KnowledgeObject.ID]
+    public let allen: AllenRelation?
+    public let source: CausalLinkSource
+    public let reason: String?
+    /// User's free-text hypothesis ("if the maintenance budget had
+    /// covered the bearing replacement, the failure wouldn't have
+    /// happened"). Required field — a counterfactual without a note
+    /// is just noise.
+    public let hypothesisNote: String
+    public let createdAt: Date
+
+    public nonisolated init(
+        id: UUID = UUID(),
+        sourceEventID: Event.ID,
+        targetEventID: Event.ID,
+        relation: CausalRelation = .prevented,
+        confidence: Double = 0.5,
+        evidenceObjectIDs: [KnowledgeObject.ID] = [],
+        allen: AllenRelation? = nil,
+        source: CausalLinkSource = .user,
+        reason: String? = nil,
+        hypothesisNote: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.sourceEventID = sourceEventID
+        self.targetEventID = targetEventID
+        self.relation = relation
+        self.confidence = max(0.0, min(1.0, confidence))
+        self.evidenceObjectIDs = evidenceObjectIDs
+        self.allen = allen
+        self.source = source
+        self.reason = reason
+        self.hypothesisNote = hypothesisNote
+        self.createdAt = createdAt
+    }
+}
+
 /// A typed edge between two events. Append-only; supersession is
 /// handled via the `superseded_by` column (G.4 follow-on).
 public nonisolated struct CausalLink: Codable, Sendable, Hashable, Identifiable {

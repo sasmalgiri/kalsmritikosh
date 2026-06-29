@@ -25,6 +25,16 @@ public struct AskView: View {
     /// can render the quality strip directly (instead of folding it
     /// into a plain-text body line).
     @State private var verifiedAnswers: [UUID: VerifiedAnswer] = [:]
+    /// Phase H — currently-open investigation sheet. Holds the
+    /// in-flight Investigation as the runner streams updates. nil
+    /// when no sheet is showing.
+    @State private var activeInvestigation: Investigation?
+    /// Phase H — true while the planner+runner are working. Drives the
+    /// spinner on the Investigate button.
+    @State private var investigationInFlight: Bool = false
+    /// Phase H — terminal failure message from the runner. Surfaced
+    /// inside the sheet so the user knows why no answer appeared.
+    @State private var investigationError: String?
 
     public init() {}
 
@@ -53,6 +63,115 @@ public struct AskView: View {
             input
         }
         .task { await loadOrCreateConversation() }
+        .sheet(item: $activeInvestigation) { inv in
+            InvestigationSheet(
+                investigation: inv,
+                inFlight: investigationInFlight,
+                error: investigationError,
+                onDismiss: { activeInvestigation = nil },
+                onAcceptAsAnswer: { synthesis in
+                    Task { await acceptInvestigationAsAnswer(synthesis) }
+                }
+            )
+        }
+    }
+
+    /// Phase J.7 — bookmark the current question. Doesn't submit it;
+    /// just persists for later via the Saved Queries tab.
+    private func saveCurrentQuestion() async {
+        guard let repo = appState.savedQueries else { return }
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        let category = QueryCategoryClassifier().classify(question: q).rawValue
+        let saved = SavedQuery(question: q, category: category)
+        try? await repo.insert(saved)
+    }
+
+    private func startInvestigation() {
+        guard let runner = appState.investigationRunner else { return }
+        let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        investigationError = nil
+        investigationInFlight = true
+        // Seed the sheet with a skeleton investigation so it opens
+        // immediately; the runner overwrites it as updates arrive.
+        activeInvestigation = Investigation(question: q)
+        Task {
+            for await update in runner.investigate(question: q) {
+                await MainActor.run {
+                    apply(update: update)
+                }
+            }
+            await MainActor.run {
+                investigationInFlight = false
+            }
+        }
+    }
+
+    private func apply(update: InvestigationUpdate) {
+        switch update {
+        case .planReady(let plan):
+            activeInvestigation = plan
+        case .stepStarted:
+            // No-op — UI reads each step's `answer == nil` to render
+            // an "in progress" row; nothing to flip explicitly.
+            break
+        case .stepCompleted(let stepID, let answer):
+            guard var inv = activeInvestigation,
+                  let idx = inv.steps.firstIndex(where: { $0.id == stepID }) else { return }
+            inv.steps[idx].answer = answer
+            activeInvestigation = inv
+        case .synthesizing:
+            // Sheet shows the synthesizing label when synthesis is nil
+            // and all steps are done. No state change required.
+            break
+        case .finished(let finalInv):
+            activeInvestigation = finalInv
+            investigationInFlight = false
+        case .failed(let reason):
+            investigationError = reason
+            investigationInFlight = false
+        }
+    }
+
+    /// Insert the synthesis as an assistant turn so it lands in the
+    /// regular chat history. Useful when the user wants to keep the
+    /// investigation's conclusion as part of the conversation.
+    private func acceptInvestigationAsAnswer(_ synthesis: String) async {
+        guard let repo = appState.conversations,
+              let convID = conversationID else {
+            activeInvestigation = nil
+            return
+        }
+        let qText = (activeInvestigation?.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSynthesis = synthesis.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !qText.isEmpty, !trimmedSynthesis.isEmpty else {
+            activeInvestigation = nil
+            return
+        }
+        let userOrdinal = (try? await repo.nextOrdinal(for: convID)) ?? 0
+        let userTurn = ConversationTurn(
+            conversationID: convID,
+            ordinal: userOrdinal,
+            role: .user,
+            body: qText
+        )
+        try? await repo.appendTurn(userTurn)
+
+        let assistantOrdinal = (try? await repo.nextOrdinal(for: convID)) ?? userOrdinal + 1
+        let assistantTurn = ConversationTurn(
+            conversationID: convID,
+            ordinal: assistantOrdinal,
+            role: .assistant,
+            body: trimmedSynthesis
+        )
+        try? await repo.appendTurn(assistantTurn)
+
+        await MainActor.run {
+            turns.append(userTurn)
+            turns.append(assistantTurn)
+            activeInvestigation = nil
+        }
     }
 
     private var header: some View {
@@ -115,6 +234,32 @@ public struct AskView: View {
             TextField("e.g. What happened with Supplier ABC?", text: $question)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(submit)
+            Button {
+                Task { await saveCurrentQuestion() }
+            } label: {
+                Image(systemName: "bookmark")
+            }
+            .help("Save this question for later (visible in the Saved tab).")
+            .disabled(
+                appState.savedQueries == nil
+                || question.trimmingCharacters(in: .whitespaces).isEmpty
+            )
+            Button {
+                startInvestigation()
+            } label: {
+                if investigationInFlight {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Investigate", systemImage: "magnifyingglass.circle")
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .help("Decompose this question into focused sub-questions and synthesize an answer.")
+            .disabled(
+                appState.investigationRunner == nil
+                || investigationInFlight
+                || question.trimmingCharacters(in: .whitespaces).isEmpty
+            )
             Button(action: submit) {
                 if asking {
                     ProgressView().controlSize(.small)
@@ -390,3 +535,138 @@ public struct AskView: View {
         return lines.joined(separator: "\n")
     }
 }
+
+// MARK: - Phase H Investigation sheet
+
+/// Sheet that renders an in-flight (or finished) Investigation.
+/// Shows: original question, per-step sub-question rows (each
+/// rendering the verified answer body once it arrives), and a final
+/// synthesis block when ready. Accepts an "Add to chat" button that
+/// posts the synthesis back into the AskView conversation.
+private struct InvestigationSheet: View {
+    let investigation: Investigation
+    let inFlight: Bool
+    let error: String?
+    let onDismiss: () -> Void
+    let onAcceptAsAnswer: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "magnifyingglass.circle")
+                    .foregroundStyle(.tint)
+                Text("Investigation")
+                    .font(.headline)
+                Spacer()
+                if inFlight {
+                    ProgressView().controlSize(.small)
+                }
+                Button("Close", action: onDismiss)
+                    .keyboardShortcut(.cancelAction)
+            }
+            Text(investigation.question)
+                .font(.title3.weight(.medium))
+                .textSelection(.enabled)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .padding(8)
+                    .background(Color.orange.opacity(0.08))
+                    .cornerRadius(8)
+            }
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    if investigation.steps.isEmpty {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Planning sub-questions…")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    ForEach(Array(investigation.steps.enumerated()), id: \.element.id) { idx, step in
+                        stepRow(idx: idx + 1, step: step)
+                    }
+                    if let synthesis = investigation.synthesis, !synthesis.isEmpty {
+                        synthesisBlock(synthesis)
+                    } else if !investigation.steps.isEmpty
+                        && investigation.steps.allSatisfy({ $0.answer != nil })
+                        && inFlight {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Synthesizing final answer…")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 6)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .frame(minHeight: 320, maxHeight: 520)
+        }
+        .padding(20)
+        .frame(width: 640)
+    }
+
+    @ViewBuilder
+    private func stepRow(idx: Int, step: InvestigationStep) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(idx).")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.tint)
+                Text(step.question)
+                    .font(.callout.weight(.medium))
+                    .textSelection(.enabled)
+                Spacer()
+                if step.answer == nil {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+            if let answer = step.answer {
+                Text(answer.answerText ?? answer.body)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.leading, 18)
+                let pct = Int(answer.confidence.value * 100)
+                Text("Confidence \(pct)% · \(answer.citations.count) citation(s)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 18)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func synthesisBlock(_ synthesis: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.tint)
+                Text("Synthesis")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    onAcceptAsAnswer(synthesis)
+                } label: {
+                    Label("Add to chat", systemImage: "plus.bubble")
+                }
+            }
+            Text(synthesis)
+                .font(.body)
+                .textSelection(.enabled)
+                .padding(10)
+                .background(.tint.opacity(0.08), in: .rect(cornerRadius: 8))
+        }
+        .padding(.top, 6)
+    }
+}
+
+

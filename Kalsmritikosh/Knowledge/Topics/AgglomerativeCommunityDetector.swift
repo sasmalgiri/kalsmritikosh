@@ -50,6 +50,8 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
     /// community.
     private let maxCommunitySize: Int
     private var runTask: Task<Void, Never>?
+    private var lastRunStatus = LastRunStatus(serviceID: "atlas.community.detect")
+    public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
         database: Database,
@@ -68,9 +70,21 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         AtlasLog.knowledge.info("AgglomerativeCommunityDetector: starting (interval=\(self.intervalSeconds, privacy: .public)s, minMergeWeight=\(self.minMergeWeight, privacy: .public), maxCommunitySize=\(self.maxCommunitySize, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
+            // Boot-warmup window — same rationale as
+            // CooccurrenceGraphBuilder. On a fresh DB the first run
+            // finds no co-occurrence edges, so the 12-hour interval
+            // would leave the communities table empty for half a day
+            // after ingestion produces edges. Retry every 5 min for
+            // the first 2 hours, then back off to the configured
+            // cadence.
+            let bootTime = Date()
             while !Task.isCancelled {
-                await self.runOnce()
-                let ns = await UInt64(self.intervalSeconds * 1_000_000_000)
+                let produced = await self.runOnce()
+                let warmupActive = Date().timeIntervalSince(bootTime) < 2 * 3_600
+                let sleepSeconds: TimeInterval = (produced == 0 && warmupActive)
+                    ? 5 * 60
+                    : await self.intervalSeconds
+                let ns = UInt64(sleepSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }
         }
@@ -87,6 +101,22 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
     @discardableResult
     public func runOnce() async -> Int {
         let started = Date()
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: started, finishedAt: nil,
+            resultCount: 0,
+            runCount: lastRunStatus.runCount
+        )
+        defer {
+            lastRunStatus = LastRunStatus(
+                serviceID: lastRunStatus.serviceID,
+                startedAt: started,
+                finishedAt: Date(),
+                resultCount: lastRunStatus.resultCount,
+                runCount: lastRunStatus.runCount + 1,
+                lastError: lastRunStatus.lastError
+            )
+        }
 
         // Step 1 — load edges sorted DESC by weight.
         let edges: [(a: UUID, b: UUID, w: Int)]
@@ -220,6 +250,13 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
 
         let elapsed = Int(Date().timeIntervalSince(started))
         AtlasLog.knowledge.info("AgglomerativeCommunityDetector: built \(membership.count, privacy: .public) communities from \(edges.count, privacy: .public) edges (merges=\(mergeCount, privacy: .public)) in \(elapsed, privacy: .public)s")
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: lastRunStatus.startedAt,
+            finishedAt: nil,
+            resultCount: membership.count,
+            runCount: lastRunStatus.runCount
+        )
         return membership.count
     }
 

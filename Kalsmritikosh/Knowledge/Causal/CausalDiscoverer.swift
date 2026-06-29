@@ -62,6 +62,8 @@ public actor CausalDiscoverer: BackgroundService {
     private let maxEventsPerPass: Int
     private let intervalSeconds: TimeInterval
     private var runTask: Task<Void, Never>?
+    private var lastRunStatus: LastRunStatus
+    public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
         database: Database,
@@ -83,6 +85,7 @@ public actor CausalDiscoverer: BackgroundService {
         self.threshold = threshold
         self.maxEventsPerPass = maxEventsPerPass
         self.intervalSeconds = intervalSeconds
+        self.lastRunStatus = LastRunStatus(serviceID: "atlas.causal.discover")
     }
 
     public func start() async {
@@ -106,6 +109,25 @@ public actor CausalDiscoverer: BackgroundService {
     /// One discovery pass. Returns the number of new links emitted.
     @discardableResult
     public func runOnce() async -> Int {
+        let startedAt = Date()
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: startedAt,
+            finishedAt: nil,
+            resultCount: 0,
+            runCount: lastRunStatus.runCount,
+            lastError: nil
+        )
+        defer {
+            lastRunStatus = LastRunStatus(
+                serviceID: lastRunStatus.serviceID,
+                startedAt: startedAt,
+                finishedAt: Date(),
+                resultCount: lastRunStatus.resultCount,
+                runCount: lastRunStatus.runCount + 1,
+                lastError: lastRunStatus.lastError
+            )
+        }
         let candidates: [Event]
         do {
             candidates = try await events.recent(limit: maxEventsPerPass)
@@ -143,6 +165,42 @@ public actor CausalDiscoverer: BackgroundService {
         }
         let sorted = hydrated.sorted { $0.date < $1.date }
 
+        // Phase G.4 follow-up — body-text trigger scan. The original
+        // score() only looked at b.title + b.summary, but in real
+        // correspondence the causal phrase usually lives in the body
+        // ("we were delayed due to the customs hold") while the
+        // subject is administrative ("Re: Order #4231"). Without
+        // this, only ~30% of real triggers fire, so every link
+        // emitted ends up stamped CONTRIBUTED_TO (heuristic) instead
+        // of CAUSED (lexical). We pre-fetch the body once per unique
+        // KO and extract a ±400-char window around each event's
+        // sourceRange so the per-pair score() call gets the snippet
+        // already lowercased.
+        let uniqueKOIDs = Set(sorted.map(\.sourceObjectID))
+        var contentByKO: [KnowledgeObject.ID: String] = [:]
+        if !uniqueKOIDs.isEmpty {
+            let koList = Array(uniqueKOIDs)
+            let koPlaceholders = koList.map { _ in "?" }.joined(separator: ",")
+            if let rows = try? await database.query("""
+            SELECT id, content FROM knowledge_objects WHERE id IN (\(koPlaceholders));
+            """, koList.map { .uuid($0) }) {
+                for row in rows {
+                    if let id = row.uuid(0), let content = row.string(1) {
+                        contentByKO[id] = content
+                    }
+                }
+            }
+        }
+        var bodySnippetByEvent: [Event.ID: String] = [:]
+        for ev in sorted {
+            guard let content = contentByKO[ev.sourceObjectID],
+                  !content.isEmpty else { continue }
+            let snippet = Self.bodySnippet(from: content, around: ev.sourceRange)
+            if !snippet.isEmpty {
+                bodySnippetByEvent[ev.id] = snippet.lowercased()
+            }
+        }
+
         // Existing-triple set lets us skip pairs we've already linked.
         let existing: Set<String>
         do {
@@ -166,6 +224,7 @@ public actor CausalDiscoverer: BackgroundService {
 
                 let score = Self.score(
                     a: a, b: b,
+                    bBodyText: bodySnippetByEvent[b.id],
                     gapDays: gapDays,
                     maxGapDays: maxGapDays
                 )
@@ -207,6 +266,14 @@ public actor CausalDiscoverer: BackgroundService {
             }
         }
         AtlasLog.knowledge.info("CausalDiscoverer: emitted \(emitted, privacy: .public) new links from \(sorted.count, privacy: .public) events")
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: lastRunStatus.startedAt,
+            finishedAt: nil,
+            resultCount: emitted,
+            runCount: lastRunStatus.runCount,
+            lastError: nil
+        )
         return emitted
     }
 
@@ -222,6 +289,7 @@ public actor CausalDiscoverer: BackgroundService {
 
     nonisolated static func score(
         a: Event, b: Event,
+        bBodyText: String?,
         gapDays: Int,
         maxGapDays: Int
     ) -> ScoreResult {
@@ -236,13 +304,24 @@ public actor CausalDiscoverer: BackgroundService {
         let confidenceAvg = (a.confidence.value + b.confidence.value) / 2.0
 
         // Lexical trigger check: does B's title or summary contain a
-        // causal trigger phrase near an A-entity mention? Simple
-        // substring scan is fine for the size of these strings.
+        // causal trigger phrase? Subject lines rarely carry causal
+        // language, so the title+summary scan misses most real
+        // triggers. The body scan below picks up the long tail.
         var lexical: String? = nil
         let bText = ((b.title) + " " + (b.summary ?? "")).lowercased()
         for trigger in Self.causalTriggers where bText.contains(trigger) {
             lexical = trigger
             break
+        }
+        // Body-text fallback — a ±400-char snippet around B's
+        // sourceRange, pre-fetched and lowercased by runOnce(). When
+        // the snippet contains a trigger phrase, we treat the link as
+        // lexically grounded (CAUSED, not CONTRIBUTED_TO).
+        if lexical == nil, let body = bBodyText, !body.isEmpty {
+            for trigger in Self.causalTriggers where body.contains(trigger) {
+                lexical = trigger
+                break
+            }
         }
 
         let lexicalScore: Double = lexical != nil ? 0.4 : 0.0
@@ -256,6 +335,30 @@ public actor CausalDiscoverer: BackgroundService {
             entityOverlap: entityOverlap,
             lexicalTrigger: lexical
         )
+    }
+
+    /// Extract a substring of `content` centered on `range`, padded by
+    /// ±`radius` characters, clamped to the content's bounds. When no
+    /// range is recorded (older events, summaries, attachment
+    /// extractions) we fall back to the first 1200 characters — short
+    /// emails put their causal framing in the opening sentence, which
+    /// almost always fits in that window.
+    nonisolated static func bodySnippet(
+        from content: String,
+        around range: SourceRange?,
+        radius: Int = 400
+    ) -> String {
+        let nsContent = content as NSString
+        let total = nsContent.length
+        guard total > 0 else { return "" }
+        if let r = range?.characterRange {
+            let lower = max(0, r.lowerBound - radius)
+            let upper = min(total, r.upperBound + radius)
+            guard upper > lower else { return "" }
+            return nsContent.substring(with: NSRange(location: lower, length: upper - lower))
+        }
+        let cap = min(1200, total)
+        return nsContent.substring(with: NSRange(location: 0, length: cap))
     }
 
     /// Pair-kinds that the heuristic treats as ENABLED rather than

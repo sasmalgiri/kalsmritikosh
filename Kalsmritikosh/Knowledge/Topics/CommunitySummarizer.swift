@@ -35,6 +35,8 @@ public actor CommunitySummarizer: BackgroundService {
     private let intervalSeconds: TimeInterval
     private let topEntityCount: Int
     private var runTask: Task<Void, Never>?
+    private var lastRunStatus = LastRunStatus(serviceID: "atlas.community.summarize")
+    public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
         database: Database,
@@ -55,9 +57,22 @@ public actor CommunitySummarizer: BackgroundService {
         AtlasLog.knowledge.info("CommunitySummarizer: starting (interval=\(self.intervalSeconds, privacy: .public)s, topN=\(self.topEntityCount, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
+            // Boot-warmup window — on a fresh DB no communities have
+            // been detected at boot time, so runOnce returns 0 and
+            // the 24-hour cadence would leave summaries blank for a
+            // full day. Retry every 15 minutes for the first 2 hours
+            // (slightly slower than the upstream services since the
+            // LLM call per community has real cost when communities
+            // do exist). After warmup, fall back to the configured
+            // daily cadence.
+            let bootTime = Date()
             while !Task.isCancelled {
-                await self.runOnce()
-                let ns = await UInt64(self.intervalSeconds * 1_000_000_000)
+                let produced = await self.runOnce()
+                let warmupActive = Date().timeIntervalSince(bootTime) < 2 * 3_600
+                let sleepSeconds: TimeInterval = (produced == 0 && warmupActive)
+                    ? 15 * 60
+                    : await self.intervalSeconds
+                let ns = UInt64(sleepSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }
         }
@@ -73,6 +88,23 @@ public actor CommunitySummarizer: BackgroundService {
     /// summary). Returns the number of communities summarized.
     @discardableResult
     public func runOnce() async -> Int {
+        let started = Date()
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: started, finishedAt: nil,
+            resultCount: 0,
+            runCount: lastRunStatus.runCount
+        )
+        defer {
+            lastRunStatus = LastRunStatus(
+                serviceID: lastRunStatus.serviceID,
+                startedAt: started,
+                finishedAt: Date(),
+                resultCount: lastRunStatus.resultCount,
+                runCount: lastRunStatus.runCount + 1,
+                lastError: lastRunStatus.lastError
+            )
+        }
         let spec = CapabilitySpec.summarization(contextTokens: 2_000, purpose: "history.community.summary")
         let provider: any ModelProvider
         do {
@@ -173,6 +205,13 @@ public actor CommunitySummarizer: BackgroundService {
             }
         }
         AtlasLog.knowledge.info("CommunitySummarizer: produced \(produced, privacy: .public) summaries of \(communities.count, privacy: .public) communities")
+        lastRunStatus = LastRunStatus(
+            serviceID: lastRunStatus.serviceID,
+            startedAt: lastRunStatus.startedAt,
+            finishedAt: nil,
+            resultCount: produced,
+            runCount: lastRunStatus.runCount
+        )
         return produced
     }
 

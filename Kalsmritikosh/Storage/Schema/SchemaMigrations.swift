@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 23
+    public static let latestVersion = 27
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -60,7 +60,11 @@ public enum SchemaMigrations {
         (20, v20),
         (21, v21),
         (22, v22),
-        (23, v23)
+        (23, v23),
+        (24, v24),
+        (25, v25),
+        (26, v26),
+        (27, v27)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -909,5 +913,158 @@ public enum SchemaMigrations {
         FOREIGN KEY (source_event_id) REFERENCES events(id) ON DELETE CASCADE,
         FOREIGN KEY (target_event_id) REFERENCES events(id) ON DELETE CASCADE
     );
+    """
+
+    // MARK: - v24 — HISTORY Phase I.A: event versioning (SCD2 + PROV-O)
+    //
+    // Slowly Changing Dimension Type 2: when an event's payload changes
+    // (user correction, LLM re-enrichment refining a date, ontology
+    // backfill flipping a kind), the existing row's `valid_to` is
+    // closed and a new row is appended carrying the same `event_id`
+    // and an incremented `version`. The current view is
+    // `valid_to IS NULL`. Queries that want history walk the version
+    // chain ordered by `version`.
+    //
+    // PROV-O light: every version carries (agent, activity) — who/what
+    // proposed the change ("system.eventExtractor", "system.llmRefiner",
+    // "user.correction", "ontology.backfill") and why. The compact form
+    // here is deliberate — the full W3C PROV-O ontology is overkill for
+    // a personal archive; the four fields cover the audit needs without
+    // exploding the schema.
+    //
+    // No cascade on events(id) — the canonical row in `events` is the
+    // current snapshot; version rows are an audit log that can outlive
+    // a future events-table redesign.
+
+    private static let v24: String = """
+    CREATE TABLE event_versions (
+        id              TEXT PRIMARY KEY NOT NULL,
+        event_id        TEXT NOT NULL,
+        version         INTEGER NOT NULL,
+        valid_from      REAL NOT NULL,
+        valid_to        REAL,
+        payload_json    TEXT NOT NULL,
+        agent           TEXT NOT NULL DEFAULT 'system',
+        activity        TEXT,
+        reason          TEXT,
+        recorded_at     REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_event_versions_event ON event_versions(event_id, version);
+    CREATE INDEX IF NOT EXISTS idx_event_versions_current ON event_versions(event_id) WHERE valid_to IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_event_versions_recorded ON event_versions(recorded_at);
+    """
+
+    // MARK: - v25 — HISTORY Phase I.B: investigation notebook
+    //
+    // Persisted Plan-and-Solve investigations. Each investigation row
+    // is the user's original question + the runner's final synthesis;
+    // the steps live in a separate child table to keep updates cheap
+    // when the runner streams.
+    //
+    // FK cascade so deleting an investigation also drops its steps —
+    // the user-facing "delete from notebook" action is a single row
+    // delete from `investigations` and SQLite handles the rest.
+    //
+    // answer_body / answer_confidence / answer_citations_json store
+    // the per-step VerifiedAnswer in a compact denormalized form so
+    // the notebook detail view doesn't need to re-run anything. The
+    // citations array is just the object-id list (the file resolution
+    // happens at render time).
+
+    private static let v25: String = """
+    CREATE TABLE investigations (
+        id              TEXT PRIMARY KEY NOT NULL,
+        question        TEXT NOT NULL,
+        synthesis       TEXT,
+        created_at      REAL NOT NULL,
+        finished_at     REAL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_investigations_created ON investigations(created_at DESC);
+
+    CREATE TABLE investigation_steps (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        investigation_id     TEXT NOT NULL,
+        ordinal              INTEGER NOT NULL,
+        question             TEXT NOT NULL,
+        answer_body          TEXT,
+        answer_confidence    REAL,
+        answer_citations_json TEXT NOT NULL DEFAULT '[]',
+        created_at           REAL NOT NULL,
+        FOREIGN KEY (investigation_id) REFERENCES investigations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_investigation_steps_inv
+        ON investigation_steps(investigation_id, ordinal);
+    """
+
+    // MARK: - v26 — Saved queries (Vol 28 §Core Workspace)
+    //
+    // Lightweight bookmarking: the user marks a question (with
+    // optional notes) so they can re-run it later without retyping.
+    // No retrieval-result snapshot stored — re-running the question
+    // re-walks the live ledger, which is the right semantic on a
+    // continuously-ingesting personal archive (yesterday's "what
+    // did supplier X send me" gains new evidence today).
+
+    private static let v26: String = """
+    CREATE TABLE saved_queries (
+        id              TEXT PRIMARY KEY NOT NULL,
+        question        TEXT NOT NULL,
+        title           TEXT,
+        notes           TEXT,
+        category        TEXT,
+        created_at      REAL NOT NULL,
+        last_run_at     REAL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_saved_queries_created
+        ON saved_queries(created_at DESC);
+    """
+
+    // MARK: - v27 — Assertion substrate (Vol 17 §A3)
+    //
+    // Subject-predicate-object triple that sits between extraction
+    // and events. The full V17 §A3 refactor would derive events
+    // from assertions, but the substrate ships first as an additive
+    // table so user-asserted claims + future LLM extractions can
+    // start landing without disturbing the existing event pipeline.
+    //
+    // Polymorphic object: an assertion can target another entity
+    // (subject relates to entity X), an event (subject did event Y),
+    // or a literal value (subject has property Z). Exactly one of
+    // object_entity_id / object_event_id / object_value is set.
+    //
+    // Evidence + agent + recorded_at + retracted_at mirror the
+    // PROV-O fields already on event_versions, so future tooling
+    // can query both stores with one shape.
+
+    private static let v27: String = """
+    CREATE TABLE assertions (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        subject_kind         TEXT NOT NULL,
+        subject_id           TEXT NOT NULL,
+        predicate            TEXT NOT NULL,
+        object_kind          TEXT NOT NULL,
+        object_value         TEXT,
+        object_entity_id     TEXT,
+        object_event_id      TEXT,
+        confidence           REAL NOT NULL DEFAULT 0.5,
+        evidence_object_ids_json TEXT NOT NULL DEFAULT '[]',
+        agent                TEXT NOT NULL DEFAULT 'user',
+        reason               TEXT,
+        recorded_at          REAL NOT NULL,
+        retracted_at         REAL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_assertions_subject
+        ON assertions(subject_kind, subject_id);
+    CREATE INDEX IF NOT EXISTS idx_assertions_predicate
+        ON assertions(predicate);
+    CREATE INDEX IF NOT EXISTS idx_assertions_recorded
+        ON assertions(recorded_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_assertions_current
+        ON assertions(retracted_at) WHERE retracted_at IS NULL;
     """
 }

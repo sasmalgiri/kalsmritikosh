@@ -13,6 +13,14 @@ import Observation
 import OSLog
 import NaturalLanguage
 
+/// Tiny Sendable counter for the parallel `ingestAllRoots()` task group.
+/// Kept at file scope so callers can pass it across actor boundaries.
+public actor IngestCounter {
+    public private(set) var value: Int = 0
+    public init() {}
+    public func increment() { value += 1 }
+}
+
 @MainActor
 @Observable
 public final class AppState {
@@ -122,6 +130,68 @@ public final class AppState {
     /// Phase B.2 communities + their LLM summaries. Nil until boot
     /// completes; UI guards on it.
     public private(set) var topicRetriever: TopicRetriever?
+    /// Phase G.4 follow-on — exposed so HistoryView can let the user
+    /// promote / demote / reject causal links the discoverer emitted.
+    /// User assertions land as superseding rows with source=.user; the
+    /// Hume guard stays intact since only an explicit user click can
+    /// upgrade a heuristic link to CAUSED.
+    public private(set) var eventLinks: EventLinksRepository?
+    /// Phase H — LLM-driven investigation runner. Decomposes a complex
+    /// question into sub-questions, runs each via the brain, and
+    /// synthesizes a final answer. Nil while booting; the UI's
+    /// "Investigate" affordance only fires when this is non-nil.
+    public private(set) var investigationRunner: InvestigationRunner?
+    /// Phase I.A — versioned audit log over `events` (SCD2 + PROV-O
+    /// light). Future LLM-enrichment and user-correction paths write
+    /// to this to keep an auditable history of every event change.
+    public private(set) var eventVersions: EventVersionsRepository?
+    /// Phase I.B — persisted Plan-and-Solve investigations. The
+    /// Notebook tab reads from this; the InvestigationRunner saves
+    /// here automatically on `.finished`.
+    public private(set) var investigations: InvestigationsRepository?
+    /// Phase J.5 — Vol 17 §A9 ProvenanceTracer. Single entry point
+    /// for walking a citation back through the full ledger chain
+    /// (file → KO → chunks → entities → events → causal links).
+    /// Future "trace this claim" UI + the audit appendix in the
+    /// report builder both call it.
+    public private(set) var provenance: ProvenanceTracer?
+    /// Phase J.7 — Vol 28 §Core Workspace. Persisted question
+    /// bookmarks: the AskView's "save" button appends a row, the
+    /// Saved Queries view lists + re-runs them.
+    public private(set) var savedQueries: SavedQueriesRepository?
+    /// Phase J.8 — Vol 17 §A8 ConfidencePropagator. Recomputes the
+    /// confidence of every non-superseded causal link touching a
+    /// corrected event. Future user-correction surfaces call this
+    /// after writing a new event version so the link layer stays
+    /// in sync with the updated event payload.
+    public private(set) var confidencePropagator: ConfidencePropagator?
+    /// Phase J.11 — Vol 17 §A6 EventMutator. Merge and split events
+    /// with SCD2 audit through `event_versions` and atomic
+    /// re-targeting of `event_entities` + `event_links`. Exposed so
+    /// a future Timeline-edit affordance can call merge/split
+    /// directly.
+    public private(set) var eventMutator: EventMutator?
+    /// Phase J.19 — Vol 17 §A3 assertion substrate. User-asserted
+    /// claims + future LLM extractions land here as
+    /// (subject, predicate, object, confidence, evidence) triples
+    /// without disturbing the existing event/entity tables.
+    public private(set) var assertions: AssertionsRepository?
+    /// Phase J.13 — live observability. Per-stage ingest counters
+    /// the pipeline bumps as files move through it; the Live tab
+    /// reads these for the workflow strip.
+    public private(set) var pipelineMetrics: PipelineMetrics?
+    /// Phase J.13 — observable that polls the ledger + services
+    /// every ~2s. The Live tab binds directly to its `current`
+    /// sample and `throughput` window.
+    public private(set) var liveMetrics: LiveMetrics?
+    /// Phase J.13 — references to the four most user-visible
+    /// background services so the Live tab can read each one's
+    /// `currentStatus()`. Other services that don't yet expose a
+    /// LastRunStatus are surfaced via the boolean health pill only.
+    public private(set) var causalDiscovererService: CausalDiscoverer?
+    public private(set) var cooccurrenceBuilderService: CooccurrenceGraphBuilder?
+    public private(set) var communityDetectorService: AgglomerativeCommunityDetector?
+    public private(set) var communitySummarizerService: CommunitySummarizer?
 
     private var watcherTask: Task<Void, Never>?
 
@@ -537,7 +607,8 @@ public final class AppState {
                 sessionProfile: sessionProfile,
                 memoryRepo: memoryRepo,
                 narrativeComposer: narrativeComposer,
-                eventsRepo: events
+                eventsRepo: events,
+                eventLinks: eventLinksRepo
             )
 
             // ── Ingestion ────────────────────────────────────────────
@@ -602,6 +673,10 @@ public final class AppState {
             )
             AtlasLog.app.info("ModelChoiceAdvice severity=\(advice.severity.rawValue, privacy: .public): \(advice.summary, privacy: .public)")
 
+            // Phase J.13 — created before IngestCoordinator so it can
+            // be passed in; LiveMetrics polls it once it starts.
+            let pipelineMetricsActor = PipelineMetrics()
+
             let ingest = IngestCoordinator(
                 chunker: dynamicChunker,
                 entityExtractor: NLEntityExtractor(),
@@ -655,7 +730,8 @@ public final class AppState {
                 // the user is already querying. Quality-or-nothing
                 // still holds — chunks land with NULL prefix and get
                 // re-enriched later, never with heuristic noise.
-                contextPrefixGenerator: nil
+                contextPrefixGenerator: nil,
+                pipelineMetrics: pipelineMetricsActor
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -820,7 +896,17 @@ public final class AppState {
                 )
             )
             let loaderRegistry = LoaderRegistry.standard()
-            self.watcherTask = Task { [weak self, weak ingest, weak watcher, laneScheduler, loaderRegistry] in
+            // 2026-06-28 focus-suspension fix — the watcher consumer
+            // previously ran as a plain `Task { ... }` spawned from
+            // boot()'s MainActor context. That task inherited
+            // MainActor isolation, which meant the `for await event`
+            // loop and every `withIngestActivity` continuation got
+            // queued through the AppKit main run loop. When the user
+            // backgrounded the window, App Nap throttled the main run
+            // loop and ingest visibly idled at 0% CPU for minutes at
+            // a time. `Task.detached` runs on the cooperative thread
+            // pool, immune to MainActor scheduling pressure.
+            self.watcherTask = Task.detached(priority: .utility) { [weak self, weak ingest, weak watcher, laneScheduler, loaderRegistry] in
                 guard let watcher else { return }
                 for await event in watcher.events {
                     guard let ingest, let self else { return }
@@ -872,6 +958,60 @@ public final class AppState {
             self.memoryRepo = memoryRepo
             self.conversations = conversationsRepo
             self.factBonds = factBondsRepo
+            self.eventLinks = eventLinksRepo
+            let investigationsRepo = InvestigationsRepository(database: db)
+            self.investigations = investigationsRepo
+            self.investigationRunner = InvestigationRunner(
+                brain: brain,
+                capabilities: capabilities,
+                investigations: investigationsRepo
+            )
+            self.eventVersions = EventVersionsRepository(database: db)
+            self.provenance = ProvenanceTracer(
+                objects: objects,
+                chunks: chunks,
+                entities: entities,
+                events: events,
+                links: eventLinksRepo
+            )
+            self.savedQueries = SavedQueriesRepository(database: db)
+            let confidencePropagatorActor = ConfidencePropagator(
+                links: eventLinksRepo,
+                events: events,
+                database: db
+            )
+            self.confidencePropagator = confidencePropagatorActor
+            let eventVersionsRepo = EventVersionsRepository(database: db)
+            // Phase J.15 — Vol 25 ¶10. When any event version lands
+            // (user correction, ontology backfill, future LLM
+            // refiner), automatically recompute the confidence of
+            // every causal link touching that event. The propagator
+            // logs its own outcomes; this wiring just connects the
+            // two actors.
+            await eventVersionsRepo.setOnVersionRecorded { [weak confidencePropagatorActor] eventID in
+                await confidencePropagatorActor?.propagate(forEvent: eventID)
+            }
+            self.eventMutator = EventMutator(
+                database: db,
+                events: events,
+                versions: eventVersionsRepo
+            )
+            self.assertions = AssertionsRepository(database: db)
+            // Phase J.13 — live observability. The pipeline-metrics
+            // actor was created earlier (above the IngestCoordinator)
+            // so the ingest path could be wired with it; here we just
+            // stash a reference and start the polling task.
+            self.pipelineMetrics = pipelineMetricsActor
+            let live = LiveMetrics(appState: self, pipeline: pipelineMetricsActor)
+            self.liveMetrics = live
+            self.causalDiscovererService = causalDiscoverer
+            self.cooccurrenceBuilderService = cooccurrenceBuilder
+            self.communityDetectorService = communityDetector
+            self.communitySummarizerService = communitySummarizer
+            // Phase J.13 — polling is on-demand. LiveDashboardView
+            // calls `live.start()` from `.onAppear` and `live.stop()`
+            // from `.onDisappear`, so the 13 COUNT queries only fire
+            // while the user is actually on the Live tab.
             self.syntheticQuestions = syntheticQuestionsRepo
             self.syntheticQuestionQueue = synthQueue
             // Exposed so smoke / DataHealthCheck can poke stats; warm
@@ -923,7 +1063,11 @@ public final class AppState {
             // user's persisted bookmarks pulled in (that cascade was
             // the v6/v7/v8 memory-drift timeout root cause).
             if !suppressAutoReingest {
-                Task { [weak self] in
+                // Detached so the bulk re-ingest pass runs on the
+                // cooperative pool, not on MainActor. Pairs with the
+                // watcherTask fix above — both are long-running ingest
+                // dispatchers that the focus-suspension bug stalled.
+                Task.detached(priority: .utility) { [weak self] in
                     await self?.autoReingestEmptyRoots()
                 }
             } else {
@@ -938,22 +1082,35 @@ public final class AppState {
     /// Bumps the in-flight counter for the duration of `body`. Caller
     /// passes a display name so the banner can show "last: <file>"
     /// after the work finishes.
-    @MainActor
-    public func withIngestActivity<T>(
+    ///
+    /// `nonisolated` so detached ingest dispatchers (watcherTask,
+    /// autoReingest, boostIngestForQuestion) can wrap their per-file
+    /// work without re-pinning the closure body to MainActor. The
+    /// counter mutations explicitly hop to MainActor via
+    /// `MainActor.run`; the actual ingest work in `body` runs on
+    /// whichever executor its caller is on (usually the cooperative
+    /// pool, or the IngestCoordinator actor's own queue).
+    public nonisolated func withIngestActivity<T>(
         file displayName: String,
         body: () async throws -> T
     ) async rethrows -> T {
-        ingestActiveCount += 1
+        await MainActor.run {
+            self.ingestActiveCount += 1
+        }
         defer {
-            ingestActiveCount = max(0, ingestActiveCount - 1)
-            ingestLastFile = displayName
-            if ingestActiveCount == 0 {
-                // Clear "last file" after a brief delay so the user sees
-                // it for a beat once everything finishes.
-                Task { @MainActor [weak self] in
+            // The end-state mutation is scheduled on MainActor but
+            // doesn't block the caller — once `body` returns the
+            // counter eventually decrements and the banner clears.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.ingestActiveCount = max(0, self.ingestActiveCount - 1)
+                self.ingestLastFile = displayName
+                if self.ingestActiveCount == 0 {
+                    // Clear "last file" after a brief delay so the user
+                    // sees it for a beat once everything finishes.
                     try? await Task.sleep(nanoseconds: 4_000_000_000)
-                    if self?.ingestActiveCount == 0 {
-                        self?.ingestLastFile = nil
+                    if self.ingestActiveCount == 0 {
+                        self.ingestLastFile = nil
                     }
                 }
             }
@@ -993,7 +1150,12 @@ public final class AppState {
         }
         AtlasLog.ingestion.info("Boost: queueing \(collected.count, privacy: .public) file(s) for priority ingest")
         for matchURL in collected {
-            Task { @MainActor [weak self] in
+            // Detached so the per-file ingest runs on the cooperative
+            // pool and the boost path doesn't pile MainActor tasks
+            // behind any in-flight SwiftUI work. The IngestCoordinator
+            // is its own actor, so the actual work runs on its queue
+            // regardless of how the caller is scheduled.
+            Task.detached(priority: .utility) { [weak self] in
                 guard let self else { return }
                 await self.withIngestActivity(file: matchURL.lastPathComponent) {
                     _ = try? await ingest.ingest(fileAt: matchURL)
@@ -1135,8 +1297,20 @@ public final class AppState {
     /// DB. Called once at the end of boot(). Each root with > 0 existing
     /// file rows is left alone — FolderWatcher handles the incremental
     /// case. Idempotent at the ingestor level (content-hash dedup).
+    ///
+    /// The function itself stays on MainActor (BookmarkStore lives
+    /// there), but the per-file enumeration + ingest loop is handed
+    /// off to a nonisolated helper so it runs on the cooperative pool.
+    /// Without this the per-file `await ingest.ingest()` continuations
+    /// queued back through the AppKit main run loop and stalled under
+    /// App Nap when the window lost focus.
     public func autoReingestEmptyRoots() async {
         guard let ingest, let files else { return }
+        // Snapshot the URLs that need a fresh pass while we're still on
+        // MainActor (bookmarks resolution requires it). Each URL keeps
+        // its security-scoped access live until the detached worker
+        // releases it below.
+        var rootsToIngest: [(displayName: String, url: URL)] = []
         for root in bookmarks.roots {
             guard let url = try? bookmarks.resolve(root) else { continue }
             let existing = (try? await files.countUnderRoot(url)) ?? 0
@@ -1145,23 +1319,22 @@ public final class AppState {
                 continue
             }
             AtlasLog.app.info("Auto-reingest: root \(root.displayName, privacy: .public) has 0 files in DB — kicking off bulk ingest")
-            let enumerator = FileManager.default.enumerator(
-                at: url,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            )
-            while let next = enumerator?.nextObject() as? URL {
-                let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
-                guard isRegular else { continue }
-                await withIngestActivity(file: next.lastPathComponent) {
-                    do {
-                        _ = try await ingest.ingest(fileAt: next)
-                    } catch {
-                        AtlasLog.ingestion.error("Auto-reingest failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            rootsToIngest.append((root.displayName, url))
+        }
+
+        // Hand each root to the nonisolated enumerator so the
+        // per-file loop runs without MainActor scheduling pressure.
+        let bookmarksRef = bookmarks
+        await withTaskGroup(of: Void.self) { group in
+            for (_, url) in rootsToIngest {
+                group.addTask { [weak self] in
+                    guard let self else { return }
+                    await self.enumerateAndIngest(url: url, ingest: ingest, label: "Auto-reingest")
+                    await MainActor.run {
+                        bookmarksRef.stopAccessing(url)
                     }
                 }
             }
-            bookmarks.stopAccessing(url)
         }
         AtlasLog.app.info("Auto-reingest pass complete")
     }
@@ -1169,30 +1342,62 @@ public final class AppState {
     @discardableResult
     public func ingestAllRoots() async -> Int {
         guard let ingest else { return 0 }
-        var count = 0
+        // Snapshot URLs on MainActor (BookmarkStore is MainActor-isolated).
+        var urls: [URL] = []
         for root in bookmarks.roots {
             guard let url = try? bookmarks.resolve(root) else { continue }
-            defer { bookmarks.stopAccessing(url) }
-            let enumerator = FileManager.default.enumerator(
-                at: url,
-                includingPropertiesForKeys: [.isRegularFileKey],
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            )
-            while let next = enumerator?.nextObject() as? URL {
-                let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey])
-                    .isRegularFile) ?? false
-                guard isRegular else { continue }
-                await withIngestActivity(file: next.lastPathComponent) {
-                    do {
-                        _ = try await ingest.ingest(fileAt: next)
-                        count += 1
-                    } catch {
-                        AtlasLog.ingestion.error("Bulk ingest failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            urls.append(url)
+        }
+        let bookmarksRef = bookmarks
+        // Counter must be Sendable + actor-safe; a tiny actor is enough.
+        let counter = IngestCounter()
+        await withTaskGroup(of: Void.self) { group in
+            for url in urls {
+                group.addTask { [weak self] in
+                    guard let self else { return }
+                    await self.enumerateAndIngest(
+                        url: url,
+                        ingest: ingest,
+                        label: "Bulk ingest",
+                        counter: counter
+                    )
+                    await MainActor.run {
+                        bookmarksRef.stopAccessing(url)
                     }
                 }
             }
         }
-        return count
+        return await counter.value
+    }
+
+    /// Per-root walker. `nonisolated` so the loop runs on whatever
+    /// executor the caller picks (autoReingest uses a TaskGroup child
+    /// from MainActor, which inherits a nonisolated context). Without
+    /// this opt-out, the `while let next = enumerator?.nextObject()`
+    /// loop pinned to MainActor and stalled under App Nap.
+    nonisolated func enumerateAndIngest(
+        url: URL,
+        ingest: IngestCoordinator,
+        label: String,
+        counter: IngestCounter? = nil
+    ) async {
+        let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+        while let next = enumerator?.nextObject() as? URL {
+            let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
+            guard isRegular else { continue }
+            await self.withIngestActivity(file: next.lastPathComponent) {
+                do {
+                    _ = try await ingest.ingest(fileAt: next)
+                    if let counter { await counter.increment() }
+                } catch {
+                    AtlasLog.ingestion.error("\(label, privacy: .public) failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
     }
 
     /// Deterministically release every resource the boot() flow opened.

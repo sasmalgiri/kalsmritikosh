@@ -16,6 +16,10 @@ public struct QualityStrip: View {
     /// G3 Phase 5 — "Why this answer?" disclosure. Renders the typed
     /// walk-path chain that the bond engine produced for this answer.
     @State private var walkExpanded = false
+    /// Phase J.1 — "How did Atlas answer this?" disclosure. Renders
+    /// the captured ReasoningTrace: path, retrieval shape, expert
+    /// pipeline membership, assumptions, uncertainties.
+    @State private var planExpanded = false
     /// G3 Phase 5 UI — optional callback for walk-step row taps. When
     /// non-nil, tapping a step row hands the first evidence KO id back
     /// so the parent can reveal the source (typically in Finder). nil =
@@ -70,7 +74,168 @@ public struct QualityStrip: View {
             if !answer.walkSteps.isEmpty {
                 whyThisAnswer(steps: answer.walkSteps)
             }
+            if let trace = answer.reasoningTrace {
+                explainPlanDisclosure(trace)
+            }
+            if answer.citations.count >= 2 {
+                evidenceRankingDisclosure(answer.citations)
+            }
         }
+    }
+
+    /// Phase J.14 — top-3 citations by composite EvidenceScore. The
+    /// ranker doesn't have access to event dates from this view, so
+    /// freshness defaults to 0.5; independence + corroboration +
+    /// provenance still produce a meaningful ordering.
+    @State private var evidenceRankExpanded: Bool = false
+
+    @ViewBuilder
+    private func evidenceRankingDisclosure(_ citations: [VerifiedAnswer.Citation]) -> some View {
+        Button {
+            evidenceRankExpanded.toggle()
+        } label: {
+            Label(
+                evidenceRankExpanded ? "Hide evidence ranking" : "Rank evidence",
+                systemImage: evidenceRankExpanded ? "chevron.up" : "chevron.down"
+            )
+            .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        if evidenceRankExpanded {
+            let ranked = EvidenceRanker().ranked(citations: citations).prefix(3)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(ranked.enumerated()), id: \.offset) { _, pair in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(String(format: "%.0f%%", pair.score.composite * 100))
+                            .font(.caption.monospacedDigit().weight(.semibold))
+                            .frame(width: 44, alignment: .trailing)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pair.citation.snippet.isEmpty
+                                 ? "object \(pair.citation.objectID.uuidString.prefix(8))"
+                                 : String(pair.citation.snippet.prefix(120)))
+                                .font(.caption)
+                                .lineLimit(2)
+                            HStack(spacing: 8) {
+                                miniTerm("ind", value: pair.score.independence)
+                                miniTerm("corr", value: pair.score.corroboration)
+                                miniTerm("fresh", value: pair.score.freshness)
+                                miniTerm("prov", value: pair.score.provenance)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.tint.opacity(0.06), in: .rect(cornerRadius: 6))
+        }
+    }
+
+    @ViewBuilder
+    private func miniTerm(_ label: String, value: Double) -> some View {
+        HStack(spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(String(format: "%.0f", value * 100))
+                .font(.caption2.monospacedDigit())
+        }
+    }
+
+    // MARK: - Phase J.1: ExplainPlan disclosure
+
+    @ViewBuilder
+    private func explainPlanDisclosure(_ trace: ReasoningTrace) -> some View {
+        Button {
+            planExpanded.toggle()
+        } label: {
+            Label(
+                planExpanded
+                    ? "Hide reasoning plan"
+                    : "How did Atlas answer this?",
+                systemImage: planExpanded ? "chevron.up" : "chevron.down"
+            )
+            .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        if planExpanded {
+            VStack(alignment: .leading, spacing: 6) {
+                planRow(label: "Path", value: trace.pathTaken)
+                planRow(label: "Intent", value: trace.intent)
+                if let category = trace.queryCategory {
+                    planRow(label: "Category", value: category)
+                }
+                if !trace.retrievalLayers.isEmpty {
+                    planRow(
+                        label: "Retrieval",
+                        value: trace.retrievalLayers.joined(separator: " → ")
+                            + (trace.shortCircuitedAt.map { " (short-circuited at \($0))" } ?? "")
+                    )
+                }
+                planRow(
+                    label: "Counts",
+                    value: countsLine(trace.retrievalCounts)
+                )
+                if !trace.expertIDs.isEmpty {
+                    planRow(label: "Experts", value: trace.expertIDs.joined(separator: ", "))
+                }
+                if !trace.llmPurposes.isEmpty {
+                    planRow(label: "LLM calls", value: trace.llmPurposes.joined(separator: ", "))
+                }
+                if !trace.assumptions.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Assumptions / downgrades")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(Array(trace.assumptions.enumerated()), id: \.offset) { _, line in
+                            Text("• \(line)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !trace.uncertainties.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open uncertainties")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
+                        ForEach(Array(trace.uncertainties.enumerated()), id: \.offset) { _, line in
+                            Text("• \(line)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.tint.opacity(0.06), in: .rect(cornerRadius: 6))
+        }
+    }
+
+    @ViewBuilder
+    private func planRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("\(label):")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 70, alignment: .leading)
+            Text(value)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.primary)
+                .textSelection(.enabled)
+        }
+    }
+
+    private func countsLine(_ c: ReasoningTrace.RetrievalCounts) -> String {
+        var parts: [String] = []
+        if c.events > 0 { parts.append("\(c.events) ev") }
+        if c.entities > 0 { parts.append("\(c.entities) ent") }
+        if c.chunks > 0 { parts.append("\(c.chunks) chunk") }
+        if c.summaries > 0 { parts.append("\(c.summaries) sum") }
+        if c.relationships > 0 { parts.append("\(c.relationships) rel") }
+        if c.walkSteps > 0 { parts.append("\(c.walkSteps) walk") }
+        return parts.isEmpty ? "none" : parts.joined(separator: " · ")
     }
 
     // MARK: - G3 Phase 5: Why this answer?

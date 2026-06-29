@@ -79,6 +79,11 @@ public actor IngestCoordinator {
     /// embed without per-chunk context (heuristic doc-context still
     /// applies).
     private let contextPrefixGenerator: (any ContextPrefixGenerator)?
+    /// Phase J.13 — live observability. Bumped at each pipeline
+    /// stage so the Live tab's workflow strip shows real counts.
+    /// Optional — when nil the bumps are no-ops and ingest behaves
+    /// exactly as before.
+    private let pipelineMetrics: PipelineMetrics?
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -108,7 +113,8 @@ public actor IngestCoordinator {
         qaPairs: QAPairsRepository? = nil,
         qaPairExtractor: (any QAPairExtractor)? = nil,
         bondConstructor: BondConstructor? = nil,
-        contextPrefixGenerator: (any ContextPrefixGenerator)? = nil
+        contextPrefixGenerator: (any ContextPrefixGenerator)? = nil,
+        pipelineMetrics: PipelineMetrics? = nil
     ) {
         self.loaders = loaders
         self.cleaner = cleaner
@@ -136,6 +142,7 @@ public actor IngestCoordinator {
         self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
         self.bondConstructor = bondConstructor
         self.contextPrefixGenerator = contextPrefixGenerator
+        self.pipelineMetrics = pipelineMetrics
 
         var continuation: AsyncStream<SubjectInvalidation>.Continuation!
         let stream = AsyncStream<SubjectInvalidation> { c in continuation = c }
@@ -148,6 +155,7 @@ public actor IngestCoordinator {
     }
 
     public func ingest(fileAt url: URL) async throws -> Result {
+        await pipelineMetrics?.bump(.discovered)
         let type = SourceType.detect(from: url)
 
         // ZIP archives expand recursively. We still emit a manifest KO for
@@ -473,6 +481,7 @@ public actor IngestCoordinator {
 
         do {
             try await objects.insert(object, fileID: fileID)
+            await pipelineMetrics?.bump(.loaded)
         } catch {
             AtlasLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
@@ -530,6 +539,7 @@ public actor IngestCoordinator {
             chunked = withPrefix
         }
         try? await chunks.insertBatch(chunked)
+        await pipelineMetrics?.bump(.chunked, by: chunked.count)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per
         // chunk and persist them so the retriever can match question-
@@ -646,6 +656,7 @@ public actor IngestCoordinator {
             }
             canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
             extractedEntities = raw
+            await pipelineMetrics?.bump(.entities, by: raw.count)
             await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
@@ -659,6 +670,7 @@ public actor IngestCoordinator {
                 remapEventToCanonical(event, mapping: canonicalMapping)
             }
             try? await events.insertBatch(remapped)
+            await pipelineMetrics?.bump(.events, by: remapped.count)
             extractedEvents = remapped
         }
 
@@ -765,6 +777,7 @@ public actor IngestCoordinator {
                 return chunk.text
             }
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+            await pipelineMetrics?.bump(.embedded, by: vectorsList.count)
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
                 try? await vectors.upsert(chunkID: chunk.id, embedding: vectorsList[i])
             }

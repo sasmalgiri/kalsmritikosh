@@ -196,6 +196,22 @@ public actor FilesRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// Phase J.13 — per-format file census for the Live tab's
+    /// "format breakdown" panel. One row per distinct source_type
+    /// with its file count, sorted desc by count.
+    public func countsBySourceType() async throws -> [(sourceType: String, count: Int)] {
+        let rows = try await database.query("""
+        SELECT source_type, COUNT(*) AS c
+        FROM files
+        GROUP BY source_type
+        ORDER BY c DESC;
+        """)
+        return rows.compactMap { row in
+            guard let type = row.string(0), let c = row.int(1) else { return nil }
+            return (type, Int(c))
+        }
+    }
+
     /// Deletes the file row + everything tied to it via FK cascade
     /// (knowledge_objects → chunks / entities / events / relationships /
     /// summaries — see schema v1 for the cascade chain).

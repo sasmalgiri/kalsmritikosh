@@ -88,10 +88,20 @@ public struct RootView: View {
                 .tabItem { Label("Timeline", systemImage: "calendar.day.timeline.left") }
             HistoryView()
                 .tabItem { Label("History", systemImage: "book.closed") }
+            NotebookView()
+                .tabItem { Label("Notebook", systemImage: "notebook") }
+            SavedQueriesView()
+                .tabItem { Label("Saved", systemImage: "bookmark") }
+            LiveDashboardView()
+                .tabItem { Label("Live", systemImage: "waveform.path.ecg") }
             LibraryView()
                 .tabItem { Label("Library", systemImage: "books.vertical.fill") }
             DossierView()
                 .tabItem { Label("Dossier", systemImage: "person.text.rectangle") }
+            ExplorerView()
+                .tabItem { Label("Explore", systemImage: "point.3.connected.trianglepath.dotted") }
+            AssertionsView()
+                .tabItem { Label("Assertions", systemImage: "scroll") }
             KnowledgeView()
                 .tabItem { Label("Knowledge", systemImage: "books.vertical") }
             SourcesView()

@@ -17,6 +17,7 @@
 //
 
 import SwiftUI
+import OSLog
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -29,6 +30,32 @@ public struct HistoryView: View {
     @State private var chapters: [NarrativeChapter] = []
     @State private var finalAnswer: VerifiedAnswer?
     @State private var error: String?
+    /// Phase G.4 follow-on — when the user picks "Propose counterfactual…"
+    /// from a causal-chip context menu we open a sheet to capture the
+    /// hypothesis note. The optional carries the seed values; nil = no
+    /// sheet visible.
+    @State private var counterfactualDraft: CounterfactualDraft?
+    /// Counterfactuals authored this session, indexed by chapter ID, so
+    /// the strip can render a "what-if" annotation row next to the
+    /// verified causal chain without re-querying the DB on every render.
+    @State private var counterfactualsByChapter: [NarrativeChapter.ID: [HypotheticalCausalLink]] = [:]
+    /// Phase J.10 — simulator output per hypothetical id. Updated
+    /// inside the what-if strip's `.task` whenever the list of
+    /// counterfactuals for the chapter changes; cached by id so
+    /// SwiftUI doesn't re-simulate on every render.
+    @State private var counterfactualImpacts: [HypotheticalCausalLink.ID: [CounterfactualImpact]] = [:]
+
+    /// Seed payload for the counterfactual-author sheet.
+    fileprivate struct CounterfactualDraft: Identifiable {
+        let id = UUID()
+        let chapterID: NarrativeChapter.ID
+        let sourceEventID: Event.ID
+        let targetEventID: Event.ID
+        let sourceLabel: String       // "E2"
+        let targetLabel: String       // "E5"
+        var relation: CausalRelation
+        var note: String
+    }
 
     public init() {}
 
@@ -39,6 +66,9 @@ public struct HistoryView: View {
             content
             Divider()
             input
+        }
+        .sheet(item: $counterfactualDraft) { draft in
+            counterfactualSheet(draft: draft)
         }
     }
 
@@ -243,6 +273,9 @@ public struct HistoryView: View {
             if !chapter.causalLinks.isEmpty {
                 causalChainStrip(chapter)
             }
+            if let cfs = counterfactualsByChapter[chapter.id], !cfs.isEmpty {
+                counterfactualStrip(cfs, chapter: chapter)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -258,6 +291,12 @@ public struct HistoryView: View {
     /// causal links as verb-bearing chips ("E2 caused E5", "E1
     /// enabled E3"). Top by confidence; full list available on
     /// expand-on-tap (not in v1 to avoid scope creep).
+    ///
+    /// Phase G.4 follow-on — each chip carries a context menu so the
+    /// user can promote / demote / reject the link. User assertions
+    /// land via `EventLinksRepository.supersede` with source=.user;
+    /// the local `chapters` state mirrors the change so the strip
+    /// refreshes without a full re-compose.
     @ViewBuilder
     private func causalChainStrip(_ chapter: NarrativeChapter) -> some View {
         let idxByID: [Event.ID: Int] = Dictionary(
@@ -270,22 +309,294 @@ public struct HistoryView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(chapter.causalLinks.prefix(6), id: \.id) { link in
-                        let si = idxByID[link.sourceEventID] ?? 0
-                        let ti = idxByID[link.targetEventID] ?? 0
-                        let label = "E\(si) \(link.relation.renderVerb) E\(ti)"
-                        Text(label)
-                            .font(.caption2.monospaced())
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.purple.opacity(link.relation.isCausal ? 0.20 : 0.10))
-                            .foregroundStyle(.purple)
-                            .cornerRadius(5)
-                            .help((link.reason ?? "heuristic match") + String(format: " — %.0f%%", link.confidence * 100))
+                        causalChip(for: link, in: chapter, idxByID: idxByID)
                     }
                 }
             }
         }
         .padding(.top, 4)
+    }
+
+    @ViewBuilder
+    private func causalChip(
+        for link: CausalLink,
+        in chapter: NarrativeChapter,
+        idxByID: [Event.ID: Int]
+    ) -> some View {
+        let si = idxByID[link.sourceEventID] ?? 0
+        let ti = idxByID[link.targetEventID] ?? 0
+        let label = "E\(si) \(link.relation.renderVerb) E\(ti)"
+        let isUser = link.source == .user
+        let helpText = (link.reason ?? "heuristic match")
+            + String(format: " — %.0f%%", link.confidence * 100)
+            + (isUser ? " (your assertion)" : "")
+            + "\nRight-click to change or reject."
+        Text(label)
+            .font(.caption2.monospaced())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                isUser
+                    ? Color.purple.opacity(0.35)
+                    : Color.purple.opacity(link.relation.isCausal ? 0.20 : 0.10)
+            )
+            .foregroundStyle(.purple)
+            .cornerRadius(5)
+            .help(helpText)
+            .contextMenu {
+                ForEach(CausalRelation.allCases, id: \.self) { rel in
+                    if rel != link.relation {
+                        Button("Set to \(rel.rawValue)") {
+                            assertLink(link, in: chapter, newRelation: rel)
+                        }
+                    }
+                }
+                Divider()
+                Button("Propose counterfactual…") {
+                    counterfactualDraft = CounterfactualDraft(
+                        chapterID: chapter.id,
+                        sourceEventID: link.sourceEventID,
+                        targetEventID: link.targetEventID,
+                        sourceLabel: "E\(si)",
+                        targetLabel: "E\(ti)",
+                        relation: .prevented,
+                        note: ""
+                    )
+                }
+                Divider()
+                Button("Reject this link", role: .destructive) {
+                    rejectLink(link, in: chapter)
+                }
+            }
+    }
+
+    // MARK: - User assertion plumbing
+
+    /// Promote / demote the link via EventLinksRepository.supersede.
+    /// The new row carries source=.user and confidence bumped to 0.95
+    /// (user assertions are treated as ground-truth-level by the
+    /// evidence verifier). UI state is refreshed in-place — no full
+    /// re-compose so the chapter cards don't jump.
+    private func assertLink(
+        _ link: CausalLink,
+        in chapter: NarrativeChapter,
+        newRelation: CausalRelation
+    ) {
+        Task {
+            guard let repo = appState.eventLinks else { return }
+            let newLink = CausalLink(
+                sourceEventID: link.sourceEventID,
+                targetEventID: link.targetEventID,
+                relation: newRelation,
+                confidence: max(link.confidence, 0.95),
+                evidenceObjectIDs: link.evidenceObjectIDs,
+                allen: link.allen,
+                source: .user,
+                reason: "User assertion: \(newRelation.rawValue)"
+            )
+            do {
+                try await repo.supersede(oldLinkID: link.id, with: newLink)
+                await MainActor.run {
+                    replaceLink(oldID: link.id, with: newLink, inChapterID: chapter.id)
+                }
+            } catch {
+                AtlasLog.app.error("HistoryView: link supersede failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    private func rejectLink(_ link: CausalLink, in chapter: NarrativeChapter) {
+        Task {
+            guard let repo = appState.eventLinks else { return }
+            do {
+                try await repo.delete(link.id)
+                await MainActor.run {
+                    removeLink(id: link.id, fromChapterID: chapter.id)
+                }
+            } catch {
+                AtlasLog.app.error("HistoryView: link delete failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    private func replaceLink(
+        oldID: UUID,
+        with newLink: CausalLink,
+        inChapterID: NarrativeChapter.ID
+    ) {
+        guard let chapIdx = chapters.firstIndex(where: { $0.id == inChapterID }) else { return }
+        let chap = chapters[chapIdx]
+        var newLinks = chap.causalLinks
+        if let li = newLinks.firstIndex(where: { $0.id == oldID }) {
+            newLinks[li] = newLink
+        }
+        chapters[chapIdx] = NarrativeChapter(
+            id: chap.id, title: chap.title, subtitle: chap.subtitle,
+            timeframeStart: chap.timeframeStart, timeframeEnd: chap.timeframeEnd,
+            eventIDs: chap.eventIDs, topicCommunityID: chap.topicCommunityID,
+            prose: chap.prose, claimCitations: chap.claimCitations,
+            contradictions: chap.contradictions, causalLinks: newLinks,
+            confidence: chap.confidence
+        )
+    }
+
+    private func removeLink(id: UUID, fromChapterID: NarrativeChapter.ID) {
+        guard let chapIdx = chapters.firstIndex(where: { $0.id == fromChapterID }) else { return }
+        let chap = chapters[chapIdx]
+        let newLinks = chap.causalLinks.filter { $0.id != id }
+        chapters[chapIdx] = NarrativeChapter(
+            id: chap.id, title: chap.title, subtitle: chap.subtitle,
+            timeframeStart: chap.timeframeStart, timeframeEnd: chap.timeframeEnd,
+            eventIDs: chap.eventIDs, topicCommunityID: chap.topicCommunityID,
+            prose: chap.prose, claimCitations: chap.claimCitations,
+            contradictions: chap.contradictions, causalLinks: newLinks,
+            confidence: chap.confidence
+        )
+    }
+
+    /// "What-if" annotation row sitting BELOW the verified causal chain.
+    /// Different visual treatment (dashed border, italic) so the user
+    /// can never confuse a hypothesis with a real link.
+    @ViewBuilder
+    private func counterfactualStrip(
+        _ cfs: [HypotheticalCausalLink],
+        chapter: NarrativeChapter
+    ) -> some View {
+        let idxByID: [Event.ID: Int] = Dictionary(
+            uniqueKeysWithValues: chapter.eventIDs.enumerated().map { ($1, $0 + 1) }
+        )
+        VStack(alignment: .leading, spacing: 4) {
+            Text("What-if hypotheses")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.indigo)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(cfs.prefix(4), id: \.id) { cf in
+                    let si = idxByID[cf.sourceEventID] ?? 0
+                    let ti = idxByID[cf.targetEventID] ?? 0
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("E\(si) \(cf.relation.renderVerb) E\(ti)")
+                            .font(.caption2.monospaced())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .strokeBorder(Color.indigo.opacity(0.4),
+                                                  style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                            )
+                            .foregroundStyle(.indigo)
+                        Text(cf.hypothesisNote)
+                            .font(.caption.italic())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Spacer()
+                        if let impacts = counterfactualImpacts[cf.id], !impacts.isEmpty {
+                            Text("⤷ \(impacts.count) event\(impacts.count == 1 ? "" : "s") affected")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.indigo)
+                                .help(impacts.prefix(3).map { $0.pathSummary }.joined(separator: "\n"))
+                        }
+                        Button {
+                            removeCounterfactual(cf, in: chapter)
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Remove this counterfactual")
+                    }
+                }
+            }
+        }
+        .padding(.top, 4)
+        .task(id: cfs.map(\.id)) {
+            await simulateCounterfactuals(cfs, chapter: chapter)
+        }
+    }
+
+    /// Phase J.10 — run the CounterfactualSimulator over the
+    /// chapter's verified causal links. The result lets us label
+    /// each hypothetical with "⤷ N events affected" so the user can
+    /// see, at a glance, the downstream blast radius of removing
+    /// the prevented event from history.
+    private func simulateCounterfactuals(
+        _ cfs: [HypotheticalCausalLink],
+        chapter: NarrativeChapter
+    ) async {
+        guard !cfs.isEmpty, let eventsRepo = appState.events else { return }
+        // The simulator needs the events touched by `chapter` so it
+        // can label paths; the chapter's event ids are sufficient.
+        let chapterEvents = (try? await eventsRepo.findByIDs(chapter.eventIDs)) ?? []
+        let simulator = CounterfactualSimulator()
+        var newImpacts: [HypotheticalCausalLink.ID: [CounterfactualImpact]] = [:]
+        for cf in cfs {
+            let impacts = simulator.simulate(
+                preventedEventID: cf.sourceEventID,
+                links: chapter.causalLinks,
+                events: chapterEvents
+            )
+            newImpacts[cf.id] = impacts
+        }
+        await MainActor.run {
+            counterfactualImpacts = newImpacts
+        }
+    }
+
+    private func removeCounterfactual(
+        _ link: HypotheticalCausalLink,
+        in chapter: NarrativeChapter
+    ) {
+        Task {
+            guard let repo = appState.eventLinks else { return }
+            do {
+                try await repo.deleteHypothetical(link.id)
+                await MainActor.run {
+                    var byChapter = counterfactualsByChapter
+                    byChapter[chapter.id] = (byChapter[chapter.id] ?? []).filter { $0.id != link.id }
+                    counterfactualsByChapter = byChapter
+                }
+            } catch {
+                AtlasLog.app.error("HistoryView: counterfactual delete failed — \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    // MARK: - Counterfactual sheet
+
+    @ViewBuilder
+    private func counterfactualSheet(draft: CounterfactualDraft) -> some View {
+        CounterfactualSheet(
+            seed: draft,
+            onCancel: { counterfactualDraft = nil },
+            onSave: { working in saveCounterfactual(working) }
+        )
+    }
+
+    private func saveCounterfactual(_ draft: CounterfactualDraft) {
+        let note = draft.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { return }
+        let link = HypotheticalCausalLink(
+            sourceEventID: draft.sourceEventID,
+            targetEventID: draft.targetEventID,
+            relation: draft.relation,
+            confidence: 0.5,
+            source: .user,
+            reason: "User counterfactual",
+            hypothesisNote: note
+        )
+        Task {
+            guard let repo = appState.eventLinks else { return }
+            do {
+                try await repo.insertHypothetical(link)
+                await MainActor.run {
+                    var byChapter = counterfactualsByChapter
+                    byChapter[draft.chapterID, default: []].insert(link, at: 0)
+                    counterfactualsByChapter = byChapter
+                    counterfactualDraft = nil
+                }
+            } catch {
+                AtlasLog.app.error("HistoryView: counterfactual insert failed — \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     private func contradictionsBlock(_ contradictions: [VerifiedAnswer.Contradiction]) -> some View {
@@ -458,3 +769,89 @@ public struct HistoryView: View {
 }
 
 extension NarrativeChapter: Identifiable {}
+
+/// Dedicated sheet view — kept as its own struct so SwiftUI tracks
+/// the @State edits to `relation` / `note` correctly. The parent
+/// HistoryView only sees the seed + the final committed draft.
+private struct CounterfactualSheet: View {
+    let seed: HistoryView.CounterfactualDraft
+    let onCancel: () -> Void
+    let onSave: (HistoryView.CounterfactualDraft) -> Void
+
+    @State private var relation: CausalRelation
+    @State private var note: String
+
+    init(
+        seed: HistoryView.CounterfactualDraft,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (HistoryView.CounterfactualDraft) -> Void
+    ) {
+        self.seed = seed
+        self.onCancel = onCancel
+        self.onSave = onSave
+        _relation = State(initialValue: seed.relation)
+        _note = State(initialValue: seed.note)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Image(systemName: "questionmark.bubble")
+                    .foregroundStyle(.purple)
+                Text("Propose a counterfactual")
+                    .font(.headline)
+                Spacer()
+            }
+            Text("This is stored as a hypothesis next to the verified history. It is never mixed into the timeline or used to answer questions as fact.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text(seed.sourceLabel)
+                    .font(.callout.monospaced())
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Color.purple.opacity(0.15))
+                    .cornerRadius(5)
+                Image(systemName: "arrow.right")
+                    .foregroundStyle(.secondary)
+                Text(seed.targetLabel)
+                    .font(.callout.monospaced())
+                    .padding(.horizontal, 7).padding(.vertical, 3)
+                    .background(Color.purple.opacity(0.15))
+                    .cornerRadius(5)
+                Picker("Relation", selection: $relation) {
+                    ForEach(CausalRelation.allCases, id: \.self) { rel in
+                        Text(rel.rawValue).tag(rel)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 180)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Hypothesis note")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $note)
+                    .font(.callout)
+                    .frame(minHeight: 110)
+                    .padding(6)
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(6)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Save counterfactual") {
+                    var working = seed
+                    working.relation = relation
+                    working.note = note
+                    onSave(working)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+    }
+}
