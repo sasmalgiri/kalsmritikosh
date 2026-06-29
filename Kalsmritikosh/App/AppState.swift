@@ -895,7 +895,16 @@ public final class AppState {
                     availableRAMBytes: hardware.totalRAMBytes
                 )
             )
-            let loaderRegistry = LoaderRegistry.standard()
+            // Phase L — chat + browser loaders are flag-gated for
+            // App Store compatibility. Default OFF; user opts in via
+            // Settings. Plain-text chat exports default ON since
+            // they don't touch any other app's data.
+            let flags = FeatureFlags.shared
+            let loaderRegistry = LoaderRegistry.standard(
+                iMessageEnabled: flags.iMessageLoaderEnabled,
+                browserHistoryEnabled: flags.browserHistoryLoaderEnabled,
+                chatExportEnabled: flags.chatExportLoaderEnabled
+            )
             // 2026-06-28 focus-suspension fix — the watcher consumer
             // previously ran as a plain `Task { ... }` spawned from
             // boot()'s MainActor context. That task inherited

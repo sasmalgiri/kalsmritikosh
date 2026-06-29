@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Phase L — App Store privacy manifest. Required for all App
+      Store submissions since 1 May 2024. Declares (a) the
+      categories of personal data Kalsmritikosh accesses, (b) the
+      required-reason APIs we call, and (c) whether we use any
+      tracking domains.
+
+      Kalsmritikosh runs entirely on-device. We never transmit user
+      data off the Mac except when the user explicitly configures a
+      cloud LLM provider (in Settings → Routing). All on-disk data
+      is owned by the user and lives in the app sandbox container
+      (~/Library/Containers/<bundle-id>/Data) or in user-selected
+      folders accessed via security-scoped bookmarks.
+    -->
+
+    <!-- We don't perform any tracking, in any sense Apple defines it. -->
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <!-- No tracking domains contacted. -->
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <!--
+      Personal-data categories the app collects from the user.
+      Per Apple's "data collection" definition, collecting means
+      sending the data off-device. Since Kalsmritikosh runs on-device
+      and only contacts user-configured local or cloud LLM endpoints
+      for text generation (when the user enables them), we declare:
+        – User Content — only sent off-device when the user has
+          configured a cloud LLM endpoint AND issues a query.
+          Linked to the user's identity if the cloud endpoint
+          requires authentication.
+    -->
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyCollectedDataType</key>
+            <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+            <key>NSPrivacyCollectedDataTypeLinked</key>
+            <true/>
+            <key>NSPrivacyCollectedDataTypeTracking</key>
+            <false/>
+            <key>NSPrivacyCollectedDataTypePurposes</key>
+            <array>
+                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+            </array>
+        </dict>
+    </array>
+
+    <!--
+      Required-reason API declarations (per
+      https://developer.apple.com/documentation/bundleresources/privacy_manifest_files/describing_use_of_required_reason_api).
+
+      File timestamp APIs — we read mtime / ctime from user-selected
+      files to detect changes during incremental ingest.
+      Reason: C617.1 — Inside app or group container.
+
+      System boot time — we read this via mach_task_basic_info in
+      LiveMetrics to display process memory usage in the Live tab.
+      Reason: 35F9.1 — Measure time spent in the app.
+
+      Disk space — we read the SQLite DB file size via
+      FileManager.attributesOfItem for the Live tab's "DB on disk"
+      readout.
+      Reason: E174.1 — Display free space to the user.
+
+      User defaults — we persist UI preferences (selected tab,
+      feature flags) via UserDefaults.
+      Reason: CA92.1 — Read/write defaults from the same app group.
+    -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>35F9.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>E174.1</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>
+

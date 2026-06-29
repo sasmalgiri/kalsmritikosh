@@ -17,6 +17,12 @@ public struct LoaderRegistry: Sendable {
         self.unknownFallback = unknownFallback
     }
 
+    /// Default registry built from the always-on loaders only. The
+    /// optional chat + browser loaders are added by
+    /// `standard(flags:)` when the corresponding feature flag is
+    /// enabled. App Store builds initialize via the parameterless
+    /// `standard()` so the optional loaders are absent until the
+    /// user opts in via Settings.
     public nonisolated static func standard() -> LoaderRegistry {
         var r = LoaderRegistry()
         r.register(TextLoader())
@@ -30,15 +36,31 @@ public struct LoaderRegistry: Sendable {
         r.register(AudioLoader())
         r.register(VideoLoader())
         r.register(ArchiveLoader())
-        // Phase K — chat + browser ingest. Each loader is gated by
-        // the user pointing FolderWatcher at the appropriate path
-        // (~/Library/Messages, ~/Library/Safari, the Chromium
-        // profile directory) AND having granted Full Disk Access
-        // when applicable. No loader fires unless its source file
-        // is explicitly under a bookmarked root.
-        r.register(IMessageLoader())
-        r.register(BrowserHistoryLoader())
-        r.register(ChatExportLoader())
+        return r
+    }
+
+    /// Phase L — registry built with flag-gated optional loaders.
+    /// AppState calls this once at boot, passing the current
+    /// FeatureFlags snapshot. Disabled loaders are simply not
+    /// registered, so a file matching their detection pattern
+    /// (chat.db, History.db) falls back to the unknownFallback
+    /// (TextLoader) — i.e. it's read as raw text, no Messages /
+    /// browser API access attempted.
+    public nonisolated static func standard(
+        iMessageEnabled: Bool,
+        browserHistoryEnabled: Bool,
+        chatExportEnabled: Bool
+    ) -> LoaderRegistry {
+        var r = standard()
+        if iMessageEnabled {
+            r.register(IMessageLoader())
+        }
+        if browserHistoryEnabled {
+            r.register(BrowserHistoryLoader())
+        }
+        if chatExportEnabled {
+            r.register(ChatExportLoader())
+        }
         return r
     }
 

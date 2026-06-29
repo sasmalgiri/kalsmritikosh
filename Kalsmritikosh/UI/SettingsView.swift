@@ -95,6 +95,8 @@ public struct SettingsView: View {
                 Divider()
                 userModelsSection
                 Divider()
+                optionalIngestSection
+                Divider()
                 pinningSection
                 Divider()
                 diagnosticsSection
@@ -616,6 +618,57 @@ public struct SettingsView: View {
         } catch {
             baselineReportURL = nil
             baselineStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    /// Phase L — App Store readiness. The chat + browser loaders
+    /// read SQLite files that, on a non-sandboxed install, live in
+    /// other apps' containers (`~/Library/Messages/chat.db`,
+    /// `~/Library/Safari/History.db`, browser profile dirs).
+    ///
+    /// **App Store builds**: the sandbox blocks direct reads of
+    /// those paths regardless of the flag. The user has to manually
+    /// export / copy the file to a folder they've already granted
+    /// the app access to (via the "Add folder" picker in Sources).
+    ///
+    /// **Developer ID / outside-the-store builds**: same flag, same
+    /// UI — but the user can also point the picker at the real
+    /// container path after granting Full Disk Access in System
+    /// Settings.
+    ///
+    /// All three flags default OFF (except plain-text chat exports,
+    /// which default ON because they're file-system-only and pose no
+    /// other-app-data risk).
+    private var optionalIngestSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Optional ingest").font(.title3.bold())
+            Text("These loaders read external chat + browser data that requires explicit user authorization. Off by default. **App Store**: the sandbox enforces this regardless of toggle.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
+            Toggle("iMessage (chat.db)", isOn: Binding(
+                get: { FeatureFlags.shared.iMessageLoaderEnabled },
+                set: { FeatureFlags.shared.iMessageLoaderEnabled = $0 }
+            ))
+            Text("Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Atlas-watched folder first. Takes effect on next app launch.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
+            Toggle("Browser history (Safari, Chrome, Brave, Edge, Arc)", isOn: Binding(
+                get: { FeatureFlags.shared.browserHistoryLoaderEnabled },
+                set: { FeatureFlags.shared.browserHistoryLoaderEnabled = $0 }
+            ))
+            Text("Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Atlas reads a copy. Takes effect on next app launch.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
+            Toggle("Chat exports (WhatsApp, Signal, Slack TXT)", isOn: Binding(
+                get: { FeatureFlags.shared.chatExportLoaderEnabled },
+                set: { FeatureFlags.shared.chatExportLoaderEnabled = $0 }
+            ))
+            Text("Plain-text exports — no system access required. Recognized by filename prefix (WhatsApp Chat …, _chat …, signal-…, slack-export…). Default on. Takes effect on next app launch.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
