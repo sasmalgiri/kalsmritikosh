@@ -202,12 +202,43 @@ public struct OnboardingView: View {
                     .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
+            // Phase L — App Store reviewer affordance. Lets a
+            // reviewer (or a curious user) ingest the bundled
+            // ProjectDelta fixture in one click instead of having
+            // to provide their own data.
+            if let demoURL = Self.bundledDemoArchiveURL() {
+                Button {
+                    tryDemoArchive(at: demoURL)
+                } label: {
+                    Label("Try the demo archive", systemImage: "sparkles")
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                }
+                .controlSize(.small)
+                Text("Loads the bundled ProjectDelta fixture (~8 sample emails + contracts) so you can see Atlas reconstruct a project narrative without ingesting your own data first.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 520, alignment: .leading)
+            }
             if !appState.bookmarks.roots.isEmpty {
                 Text("\(appState.bookmarks.roots.count) folder(s) added.")
                     .font(.caption)
                     .foregroundStyle(.green)
             }
         }
+    }
+
+    /// Resolve the bundled demo archive's URL. Returns nil when the
+    /// fixture isn't shipped in the bundle (e.g. unit-test builds
+    /// where Resources/Fixtures was stripped).
+    static func bundledDemoArchiveURL() -> URL? {
+        Bundle.main.url(forResource: "ProjectDelta",
+                        withExtension: nil,
+                        subdirectory: "Fixtures")
+    }
+
+    private func tryDemoArchive(at url: URL) {
+        try? appState.bookmarks.register(url: url)
     }
 
     private var doneStep: some View {
