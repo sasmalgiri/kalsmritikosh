@@ -69,8 +69,8 @@ public actor CausalDiscoverer: BackgroundService {
         entities: EntitiesRepository,
         objects: KnowledgeObjectRepository,
         links: EventLinksRepository,
-        maxGapDays: Int = 90,
-        threshold: Double = 0.45,
+        maxGapDays: Int = 120,
+        threshold: Double = 0.35,
         maxEventsPerPass: Int = 2000,
         intervalSeconds: TimeInterval = 6 * 3_600   // 4× per day
     ) {
@@ -114,7 +114,34 @@ public actor CausalDiscoverer: BackgroundService {
             return 0
         }
         guard candidates.count >= 2 else { return 0 }
-        let sorted = candidates.sorted { $0.date < $1.date }
+        // EventsRepository.decode() leaves entityIDs empty — the join
+        // table is the source of truth (same hydration issue as
+        // NarrativeSlotBackfiller). Pull participants per event so
+        // the entity-overlap signal in score() actually fires.
+        let placeholders = candidates.map { _ in "?" }.joined(separator: ",")
+        var entityIDsByEvent: [Event.ID: [Entity.ID]] = [:]
+        if let rows = try? await database.query("""
+        SELECT event_id, entity_id FROM event_entities WHERE event_id IN (\(placeholders));
+        """, candidates.map { .uuid($0.id) }) {
+            for row in rows {
+                guard let evID = row.uuid(0), let entID = row.uuid(1) else { continue }
+                entityIDsByEvent[evID, default: []].append(entID)
+            }
+        }
+        // Rebuild events with hydrated entityIDs.
+        let hydrated = candidates.map { ev -> Event in
+            guard let eIDs = entityIDsByEvent[ev.id], !eIDs.isEmpty else { return ev }
+            return Event(
+                id: ev.id, kind: ev.kind, date: ev.date, endDate: ev.endDate,
+                title: ev.title, summary: ev.summary,
+                entityIDs: eIDs,
+                sourceObjectID: ev.sourceObjectID, sourceRange: ev.sourceRange,
+                confidence: ev.confidence, dateConfidence: ev.dateConfidence,
+                attributes: ev.attributes, qualityTier: ev.qualityTier,
+                datePrecision: ev.datePrecision
+            )
+        }
+        let sorted = hydrated.sorted { $0.date < $1.date }
 
         // Existing-triple set lets us skip pairs we've already linked.
         let existing: Set<String>
