@@ -34,11 +34,46 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Archives
     case zip, rar, sevenZip
 
+    // Phase K — chat + browser ingest. Each maps to a dedicated
+    // loader that knows how to read the source's schema (SQLite for
+    // imessage / browser history; structured text for chat exports).
+    case imessage
+    case safariHistory
+    case chromeHistory
+    case chatExport
+
     // Fallback
     case unknown
 
     /// Best-effort detection from a file URL.
     public nonisolated static func detect(from url: URL) -> SourceType {
+        // Phase K — pattern-based detection for sources whose
+        // canonical filename / location is meaningful (chat.db lives
+        // at ~/Library/Messages/chat.db; History.db is Safari;
+        // bare "History" is Chrome's profile DB).
+        let name = url.lastPathComponent.lowercased()
+        let path = url.path.lowercased()
+        if name == "chat.db"
+            || path.contains("/library/messages/") {
+            return .imessage
+        }
+        if name == "history.db"
+            || path.contains("/library/safari/history") {
+            return .safariHistory
+        }
+        if name == "history"
+            && (path.contains("/google/chrome/")
+                || path.contains("/brave-browser/")
+                || path.contains("/microsoft/edge/")
+                || path.contains("/arc/user data/")) {
+            return .chromeHistory
+        }
+        if name.hasPrefix("whatsapp chat ")
+            || name.hasPrefix("_chat ")
+            || name.contains("signal-")
+            || name.contains("slack-export") {
+            return .chatExport
+        }
         switch url.pathExtension.lowercased() {
         case "pdf": return .pdf
         case "docx": return .docx
@@ -89,11 +124,14 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .mp3, .wav, .m4a, .aac: return .audio
         case .mp4, .mov: return .video
         case .zip, .rar, .sevenZip: return .archive
+        case .imessage, .chatExport: return .chat
+        case .safariHistory, .chromeHistory: return .browserHistory
         case .unknown: return .unknown
         }
     }
 
     public enum Category: String, Codable, Sendable {
-        case document, spreadsheet, presentation, email, image, audio, video, archive, unknown
+        case document, spreadsheet, presentation, email, image, audio, video,
+             archive, chat, browserHistory, unknown
     }
 }

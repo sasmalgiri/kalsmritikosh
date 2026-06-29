@@ -326,15 +326,17 @@ public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
         if object.sourceType.category != .email {
             let channel: String? = {
                 switch object.sourceType.category {
-                case .document:     return "document"
-                case .spreadsheet:  return "spreadsheet"
-                case .presentation: return "presentation"
-                case .image:        return "image"
-                case .audio:        return "recording"
-                case .video:        return "video"
-                case .email:        return nil
-                case .archive:      return "archive"
-                case .unknown:      return nil
+                case .document:       return "document"
+                case .spreadsheet:    return "spreadsheet"
+                case .presentation:   return "presentation"
+                case .image:          return "image"
+                case .audio:          return "recording"
+                case .video:          return "video"
+                case .email:          return nil
+                case .archive:        return "archive"
+                case .chat:           return "chat"
+                case .browserHistory: return "browser"
+                case .unknown:        return nil
                 }
             }()
             if let channel {

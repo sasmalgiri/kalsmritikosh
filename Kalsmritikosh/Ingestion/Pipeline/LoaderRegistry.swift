@@ -30,6 +30,15 @@ public struct LoaderRegistry: Sendable {
         r.register(AudioLoader())
         r.register(VideoLoader())
         r.register(ArchiveLoader())
+        // Phase K — chat + browser ingest. Each loader is gated by
+        // the user pointing FolderWatcher at the appropriate path
+        // (~/Library/Messages, ~/Library/Safari, the Chromium
+        // profile directory) AND having granted Full Disk Access
+        // when applicable. No loader fires unless its source file
+        // is explicitly under a bookmarked root.
+        r.register(IMessageLoader())
+        r.register(BrowserHistoryLoader())
+        r.register(ChatExportLoader())
         return r
     }
 

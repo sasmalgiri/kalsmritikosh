@@ -210,6 +210,8 @@ public struct SourcesView: View {
         case .audio: return "waveform"
         case .video: return "video"
         case .archive: return "archivebox"
+        case .chat: return "message"
+        case .browserHistory: return "safari"
         case .unknown: return "doc"
         }
     }

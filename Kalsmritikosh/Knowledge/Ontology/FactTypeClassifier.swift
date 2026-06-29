@@ -156,6 +156,15 @@ public struct FactTypeClassifier: Sendable {
             return Result(type: .meeting, confidence: 0.50, reason: "sourceType.category=transcript (default → Meeting)")
         case .spreadsheet, .image, .archive, .unknown:
             return nil
+        case .chat:
+            // Chat exports / iMessage threads behave like email
+            // threads ontologically — conversations between people.
+            return Result(type: .email, confidence: 0.70, reason: "sourceType.category=chat")
+        case .browserHistory:
+            // Browser history doesn't fit any fact type cleanly;
+            // leave it unclassified and let the extractor enrich
+            // per-visit when it ships.
+            return nil
         }
     }
 
