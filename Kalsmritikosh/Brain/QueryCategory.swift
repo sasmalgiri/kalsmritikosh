@@ -97,10 +97,14 @@ public struct QueryCategoryClassifier: Sendable {
         return bestScore <= 0 ? .fact : best
     }
 
-    /// Tiebreaker order — earlier wins on equal score.
+    /// Tiebreaker order — earlier wins on equal score. `.narrative`
+    /// is placed ahead of `.timeline` so a question like "tell me the
+    /// story of Project Delta" (which matches "tell me the story" in
+    /// narrative AND "story of" in timeline) classifies as narrative.
+    /// Bug found by running the executable test snippet 2026-06-30.
     static let priorityOrder: [QueryCategory] = [
         .counterfactual, .rootCause, .risk, .compliance,
-        .comparison, .trend, .timeline, .narrative, .fact
+        .comparison, .trend, .narrative, .timeline, .fact
     ]
 
     /// Lowercased substring keywords per category. Curated for

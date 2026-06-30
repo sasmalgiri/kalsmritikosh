@@ -10,9 +10,22 @@
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B4620EA82FF2C8ED00D4A6CF /* Exceptions for "Kalsmritikosh" folder in "Kalsmritikosh" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B4B18B402FD0E4B300840C82 /* Kalsmritikosh */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B4620EA82FF2C8ED00D4A6CF /* Exceptions for "Kalsmritikosh" folder in "Kalsmritikosh" target */,
+			);
 			path = Kalsmritikosh;
 			sourceTree = "<group>";
 		};
@@ -271,8 +284,14 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Atlas chronica memora";
+				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "alsmritikosh connects to your local Ollama daemon (http://localhost:11434) for on-device LLM generation when you have configured it in Settings. ";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -321,8 +340,14 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Atlas chronica memora";
+				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "";
+				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
+				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "alsmritikosh connects to your local Ollama daemon (http://localhost:11434) for on-device LLM generation when you have configured it in Settings. ";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
