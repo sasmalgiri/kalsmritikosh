@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 public struct EmailLoader: Ingestor {
     public let supportedTypes: Set<SourceType> = [.eml, .mbox, .pst, .msg, .appleMail, .nsf]
@@ -654,12 +655,27 @@ public struct EmailLoader: Ingestor {
                 }
             } else {
                 // Real attachment. Write to disk and record the URL.
-                let fname = part.filename ?? "attachment-\(UUID().uuidString.prefix(8))"
+                // 2026-06-30 fix — prepend a short content-hash to the
+                // filename so two messages in the same mbox that
+                // attach files with identical filenames but DIFFERENT
+                // bytes don't overwrite each other's staged file.
+                // Identical bytes across multiple emails still produce
+                // the same on-disk filename (correct — T7's hash-first
+                // dedup folds them into one canonical KO downstream).
+                let raw = part.filename ?? "attachment-\(UUID().uuidString.prefix(8))"
+                let safe = sanitizeFilename(raw)
+                let hashTag = Self.shortContentHash(part.body)
+                let uniqueName: String = {
+                    if let dot = safe.lastIndex(of: ".") {
+                        return safe[safe.startIndex..<dot] + "-" + hashTag + safe[dot...]
+                    }
+                    return safe + "-" + hashTag
+                }()
                 if !didWriteAttachmentDir {
                     try? FileManager.default.createDirectory(at: attachmentDir, withIntermediateDirectories: true)
                     didWriteAttachmentDir = true
                 }
-                let url = attachmentDir.appendingPathComponent(sanitizeFilename(fname))
+                let url = attachmentDir.appendingPathComponent(uniqueName)
                 if (try? part.body.write(to: url, options: .atomic)) != nil {
                     attachmentURLs.append(url)
                 }
@@ -687,6 +703,17 @@ public struct EmailLoader: Ingestor {
         let bad = CharacterSet(charactersIn: "/\\?%*|\"<>:")
         return name.components(separatedBy: bad).joined(separator: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 8-char SHA-256 prefix used to disambiguate two attachments
+    /// with the same filename but different bytes (Bug fix
+    /// 2026-06-30 — without this, two messages in one mbox attaching
+    /// "receipt.pdf" with different contents would overwrite each
+    /// other on disk before recursive ingest reads either).
+    private static func shortContentHash(_ data: Data) -> String {
+        let digest = SHA256.hash(data: data)
+        let hex = digest.compactMap { String(format: "%02x", $0) }.joined()
+        return String(hex.prefix(8))
     }
 
     static func encodeAttachmentURLs(_ urls: [URL]) -> String? {
