@@ -133,6 +133,8 @@ public final class AppState {
     /// The one active system engine for this launch (built from SystemMode).
     /// Owns this system's background maintenance; see Knowledge/Ledger/SystemEngine.swift.
     public private(set) var systemEngine: (any SystemEngine)?
+    /// Retains the context-prefix / document-card backfiller (Systems 1-3).
+    public private(set) var contextPrefixBackfiller: ContextPrefixBackfiller?
     public private(set) var proactiveGapCount: Int = 0
     public private(set) var ledgerLastMaintainedAt: Date?
     /// G3.22 — exposed so smoke / eval rigs can assert against the
@@ -915,9 +917,16 @@ public final class AppState {
             // System-mode preset: Full LLM turns the LLM context-prefix
             // sweep ON (deep); the other modes leave it off. Individual
             // flag is an advanced override.
+            // Context-prefix work, driven by the engine's ingest policy:
+            //   • Full LLM  → full sweep: an LLM prefix on EVERY chunk (+re-embed).
+            //   • Hot/W/C + Ledger → one document-card call per file (first
+            //     chunk only) — the Stage-2 "document card."
+            // The advanced FeatureFlag forces the full sweep on regardless.
             let prefixOverride = await MainActor.run { FeatureFlags.shared.contextPrefixBackfillEnabled }
-            let contextPrefixBackfillEnabled = basePolicy.contextPrefixBackfill || prefixOverride
-            if contextPrefixBackfillEnabled {
+            let fullPrefixSweep = basePolicy.contextPrefixBackfill || prefixOverride
+            let firstChunkCardOnly = basePolicy.firstChunkCard && !fullPrefixSweep
+            var startedBackfiller: ContextPrefixBackfiller? = nil
+            if fullPrefixSweep || firstChunkCardOnly {
                 let contextPrefixBackfiller = ContextPrefixBackfiller(
                     chunks: chunks,
                     objects: objects,
@@ -928,11 +937,14 @@ public final class AppState {
                         maxAttempts: 3
                     ),
                     embedder: embedder,
-                    vectors: vectors
+                    vectors: vectors,
+                    firstChunkPerObjectOnly: firstChunkCardOnly
                 )
                 await contextPrefixBackfiller.start()
+                startedBackfiller = contextPrefixBackfiller
+                AtlasLog.app.info("ContextPrefixBackfiller started (mode: \(firstChunkCardOnly ? "document-card/file" : "full sweep", privacy: .public))")
             } else {
-                AtlasLog.app.info("ContextPrefixBackfiller disabled (Ledger-AI v28 default — enable in Settings for hot/pinned data)")
+                AtlasLog.app.info("ContextPrefixBackfiller disabled")
             }
 
             // HISTORY Phase A.8 — periodic re-tier of pre-Phase-A
@@ -1226,6 +1238,7 @@ public final class AppState {
             self.folderWatcher = watcher
             self.incrementalUpdater = updater
             self.systemEngine = engine
+            self.contextPrefixBackfiller = startedBackfiller
             self.brain = brain
             self.ingest = ingest
             self.phase = .ready

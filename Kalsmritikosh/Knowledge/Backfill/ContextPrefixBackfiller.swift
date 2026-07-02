@@ -39,6 +39,12 @@ public actor ContextPrefixBackfiller: BackgroundService {
     private let vectors: (any VectorStore)?
     private let intervalSeconds: TimeInterval
     private let batchSize: Int
+    /// System 3 / Stage-2 "Document Card" mode. When true, the backfiller
+    /// runs exactly ONE LLM call per file — on the file's FIRST chunk — to
+    /// produce a document-level gist (and re-embeds it). It never touches
+    /// the other chunks. This is the ledger-first "one document-card call
+    /// per file" strategy; leave false for the full every-chunk sweep.
+    private let firstChunkPerObjectOnly: Bool
     private var runTask: Task<Void, Never>?
 
     public init(
@@ -48,7 +54,8 @@ public actor ContextPrefixBackfiller: BackgroundService {
         embedder: (any Embedder)? = nil,
         vectors: (any VectorStore)? = nil,
         intervalSeconds: TimeInterval = 300, // 5 minutes
-        batchSize: Int = 50
+        batchSize: Int = 50,
+        firstChunkPerObjectOnly: Bool = false
     ) {
         self.chunks = chunks
         self.objects = objects
@@ -57,6 +64,7 @@ public actor ContextPrefixBackfiller: BackgroundService {
         self.vectors = vectors
         self.intervalSeconds = intervalSeconds
         self.batchSize = batchSize
+        self.firstChunkPerObjectOnly = firstChunkPerObjectOnly
     }
 
     public func start() async {
@@ -89,6 +97,12 @@ public actor ContextPrefixBackfiller: BackgroundService {
             return 0
         }
         guard !pending.isEmpty else { return 0 }
+
+        // System 3 / Stage-2: one document-card call per file, first chunk only.
+        if firstChunkPerObjectOnly {
+            return await runFirstChunkCardPass(pending)
+        }
+
         AtlasLog.knowledge.info("ContextPrefixBackfiller: processing \(pending.count, privacy: .public) NULL chunks")
 
         // Group by parent KO so we read each KO's content + KO-level
@@ -169,5 +183,63 @@ public actor ContextPrefixBackfiller: BackgroundService {
         }
         AtlasLog.knowledge.info("ContextPrefixBackfiller: filled \(filled, privacy: .public) / \(pending.count, privacy: .public)")
         return filled
+    }
+
+    /// Document-card pass (Systems 2 & 3): exactly ONE LLM call per file,
+    /// on the file's first chunk, producing a document-level gist that is
+    /// written + re-embedded. A file whose first chunk is already carded is
+    /// skipped, so this stays one call per file no matter how often it runs.
+    private func runFirstChunkCardPass(_ pending: [Chunk]) async -> Int {
+        let koIDs = Set(pending.map(\.objectID))
+        var carded = 0
+        for koID in koIDs {
+            // The true first chunk of the file — not just the first NULL
+            // chunk that happened to land in this batch.
+            guard let first = try? await chunks.firstChunk(forObjectID: koID) else { continue }
+            if first.contextPrefix != nil { continue }   // already carded → one/file
+
+            let content = (try? await objects.fetchContent(id: koID)) ?? ""
+            let opening = String(content.prefix(1_500))
+            let filename: String = await {
+                if let url = try? await objects.fetchSourceURL(id: koID) {
+                    return url.lastPathComponent
+                }
+                return String(koID.uuidString.prefix(8))
+            }()
+            let total = (try? await chunks.count(forObject: koID)) ?? 1
+
+            let req = ContextPrefixRequest(
+                chunkText: first.text,
+                chunkOrdinal: first.ordinal,
+                totalChunks: total,
+                filename: filename,
+                documentOpening: opening
+            )
+            guard let result = await generator.prefix(for: req) else { continue }
+            do {
+                try await chunks.updateContextPrefix(
+                    first.id,
+                    prefix: result.text,
+                    source: "\(result.source)-card"
+                )
+                carded += 1
+                // Re-embed so the card actually feeds retrieval.
+                if let embedder, let vectors {
+                    let combined = "\(result.text)\n---\n\(first.text)"
+                    let vector = await embedder.embed(combined)
+                    do {
+                        try await vectors.upsert(chunkID: first.id, embedding: vector)
+                    } catch {
+                        AtlasLog.knowledge.error("ContextPrefixBackfiller(card): re-embed failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                    }
+                }
+            } catch {
+                AtlasLog.knowledge.error("ContextPrefixBackfiller(card): update failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+            }
+        }
+        if carded > 0 {
+            AtlasLog.knowledge.info("ContextPrefixBackfiller(card): carded \(carded, privacy: .public) file(s), one LLM call each")
+        }
+        return carded
     }
 }

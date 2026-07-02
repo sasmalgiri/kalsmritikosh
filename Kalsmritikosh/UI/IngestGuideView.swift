@@ -47,11 +47,31 @@ public struct IngestGuideView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("How long to ingest 100 MB")
                 .font(Theme.display(22, .bold))
-            Text("Estimated wall-clock time for 100 MB of a single file type, in each system mode. Scanned PDFs, images and audio cost far more (OCR / transcription). Numbers are approximate and depend on your Mac + chosen model.")
+            Text("Estimated wall-clock time for 100 MB of a single file type, in each system mode. Scanned PDFs, images and audio cost far more (OCR / transcription).")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            basisLine
         }
+    }
+
+    /// States clearly whose machine the numbers reflect: a reference
+    /// configuration until this Mac has been measured, then this Mac.
+    private var basisLine: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: CalibrationStore.isCalibrated ? "checkmark.seal.fill" : "gauge.with.dots.needle.33percent")
+                .foregroundStyle(CalibrationStore.isCalibrated ? .green : .orange)
+                .imageScale(.small)
+            Text(CalibrationStore.isCalibrated
+                 ? "Calibrated to THIS Mac (\(CalibrationStore.sampleCount) LLM calls, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)."
+                 : "These figures assume a \(IngestEstimator.referenceMachineDescription) — NOT your Mac. After your first LLM-heavy ingest they self-calibrate to this Mac.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private var modeHeaderRow: some View {
@@ -101,7 +121,7 @@ public struct IngestGuideView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Why the difference")
                 .font(.caption.weight(.semibold))
-            Text("• Ledger mode does rule-based extraction only at ingest — no generative LLM — so time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold adds deep LLM only for the important slice (~5%).\n• Full LLM runs deep extraction on everything, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) and transcription (audio, video) are expensive in every mode because the text has to be recovered first.")
+            Text("• Ledger mode: rule-based extraction + one document-card LLM call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep LLM only for the important (hot) slice.\n• Full LLM runs an LLM pass on every chunk, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) and transcription (audio, video) are expensive in every mode because the text has to be recovered first.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

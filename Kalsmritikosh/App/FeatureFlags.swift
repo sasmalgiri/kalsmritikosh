@@ -72,14 +72,34 @@ public enum SystemMode: String, CaseIterable, Identifiable, Sendable {
     public struct EnrichmentPolicy: Sendable {
         public let eagerMemoryDistillation: Bool
         public let contextPrefixBackfill: Bool
+        /// System 3 / Stage-2 — one document-card LLM call per file (first
+        /// chunk only). Mutually exclusive with `contextPrefixBackfill`
+        /// (which already covers every chunk, so the card is redundant).
+        public let firstChunkCard: Bool
+
+        public init(
+            eagerMemoryDistillation: Bool,
+            contextPrefixBackfill: Bool,
+            firstChunkCard: Bool = false
+        ) {
+            self.eagerMemoryDistillation = eagerMemoryDistillation
+            self.contextPrefixBackfill = contextPrefixBackfill
+            self.firstChunkCard = firstChunkCard
+        }
     }
 
     public var policy: EnrichmentPolicy {
         switch self {
         case .fullLLM:
             return .init(eagerMemoryDistillation: true, contextPrefixBackfill: true)
-        case .hotWarmCold, .ledgerEventDriven:
-            return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false)
+        case .hotWarmCold:
+            // Cheap ingest + one document-card call per file; deep LLM only
+            // for the hot slice (TierPromoter).
+            return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
+        case .ledgerEventDriven:
+            // Rules + one document-card call per file; LLM otherwise reserved
+            // for query time.
+            return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
         }
     }
 }

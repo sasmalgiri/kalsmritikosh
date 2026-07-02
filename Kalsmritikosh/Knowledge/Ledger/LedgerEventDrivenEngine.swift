@@ -2,9 +2,10 @@
 //  LedgerEventDrivenEngine.swift
 //  Kalsmritikosh
 //
-//  System 3 — ledger-first, event-driven. Near-zero-LLM ingest
-//  (`ingestPolicy` off): rule extractors fill the ledger, memory is
-//  warmed on demand at query time, and the LLM is reserved for query-time
+//  System 3 — ledger-first, event-driven. Near-zero-LLM ingest: rule
+//  extractors fill the ledger, plus exactly ONE document-card LLM call per
+//  file (the first chunk → a doc-level gist, re-embedded). Memory is warmed
+//  on demand at query time, and the LLM is otherwise reserved for query-time
 //  interpretation. Fastest ingest of the three.
 //
 //  The distinguishing background behaviour is `LedgerPromoter`: while the
@@ -21,7 +22,9 @@ public actor LedgerEventDrivenEngine: SystemEngine {
     public nonisolated var mode: SystemMode { .ledgerEventDriven }
 
     public nonisolated var ingestPolicy: SystemMode.EnrichmentPolicy {
-        .init(eagerMemoryDistillation: false, contextPrefixBackfill: false)
+        // Rules + one document-card LLM call per file (first chunk); all
+        // other LLM work is reserved for query time.
+        .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
     }
 
     private var promoter: LedgerPromoter?

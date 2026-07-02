@@ -27,7 +27,9 @@ public actor HotWarmColdEngine: SystemEngine {
     public nonisolated var mode: SystemMode { .hotWarmCold }
 
     public nonisolated var ingestPolicy: SystemMode.EnrichmentPolicy {
-        .init(eagerMemoryDistillation: false, contextPrefixBackfill: false)
+        // Cheap ingest + one document-card LLM call per file; deep LLM only
+        // for the hot slice (TierPromoter).
+        .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
     }
 
     private var promoter: TierPromoter?

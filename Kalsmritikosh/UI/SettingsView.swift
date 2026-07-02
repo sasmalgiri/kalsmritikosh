@@ -889,12 +889,13 @@ public struct SettingsView: View {
                     .foregroundStyle(CalibrationStore.isCalibrated ? .green : .secondary)
                     .imageScale(.small)
                 Text(CalibrationStore.isCalibrated
-                     ? "Calibrated to your Mac (\(CalibrationStore.sampleCount) LLM calls measured, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)"
-                     : "Using default estimate — will calibrate to your Mac after the first LLM-heavy ingest.")
+                     ? "Calibrated to THIS Mac (\(CalibrationStore.sampleCount) LLM calls measured, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)"
+                     : "Reference-config estimate — NOT your Mac (\(IngestEstimator.referenceMachineDescription)). Calibrates to this Mac after the first LLM-heavy ingest.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Per 100 MB. Approximate. Rule work + LLM calls estimated from a typical email-heavy archive. Tap the guide for per-file-type times.")
+            Text("Per 100 MB. Approximate. Until calibrated, figures assume a reference machine configuration (not your Mac). Rule work + LLM calls estimated from a typical email-heavy archive. Tap the guide for per-file-type times.")
                 .font(.caption2).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }

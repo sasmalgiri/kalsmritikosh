@@ -98,6 +98,15 @@ public struct IngestEstimator: Sendable {
     /// have been observed on this machine.
     public static let defaultEffectiveSecondsPerLLMCall: Double = 3.5
 
+    /// The BASELINE hardware the default numbers assume. Surfaced in the
+    /// UI so the per-100 MB figures read honestly as a *reference-config*
+    /// estimate — measured on the developer's machine, NOT the user's —
+    /// until self-calibration replaces the default with this Mac's measured
+    /// throughput. Once `CalibrationStore.isCalibrated`, the estimate is
+    /// this Mac's, not the reference.
+    public static let referenceMachineDescription =
+        "reference machine config — a modern Apple-silicon Mac running a local ~8B model at ~3.5 s per LLM call"
+
     /// Effective seconds per LLM call — the MEASURED value from
     /// CalibrationStore once ≥ minSamples calls have run on this Mac,
     /// otherwise the built-in default. This is what makes the estimates
@@ -106,14 +115,20 @@ public struct IngestEstimator: Sendable {
         CalibrationStore.measuredEffectiveSecondsPerCall ?? defaultEffectiveSecondsPerLLMCall
     }
 
-    /// LLM calls per chunk, by system mode. Full = context-prefix per
-    /// multi-chunk doc + a share of memory distillation. Hot/Warm/Cold
-    /// = only the hot fraction. Ledger = zero at ingest.
+    /// LLM calls per chunk, by system mode.
+    ///   • Full LLM   = an LLM context-prefix on every chunk + a share of
+    ///     memory distillation (deepest).
+    ///   • Hot/Warm/Cold = one document-card call per file (small per-chunk
+    ///     fraction) + deep LLM on the ~hot slice.
+    ///   • Ledger     = one document-card call per file, nothing else at
+    ///     ingest (query-time LLM is separate).
+    /// The per-file card is amortized over a file's chunks, so it lands as a
+    /// small per-chunk number rather than zero.
     public static func llmCallsPerChunk(_ mode: SystemMode) -> Double {
         switch mode {
-        case .fullLLM:          return 0.40
-        case .hotWarmCold:      return 0.05
-        case .ledgerEventDriven: return 0.0
+        case .fullLLM:           return 0.40
+        case .hotWarmCold:       return 0.06
+        case .ledgerEventDriven: return 0.02
         }
     }
 
