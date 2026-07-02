@@ -55,6 +55,24 @@ public enum SystemMode: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Compact label for the always-visible active-mode badge.
+    public var shortLabel: String {
+        switch self {
+        case .fullLLM:           return "Full LLM"
+        case .hotWarmCold:       return "Hot / Warm / Cold"
+        case .ledgerEventDriven: return "Ledger"
+        }
+    }
+
+    /// SF Symbol used by the chooser + badge.
+    public var symbolName: String {
+        switch self {
+        case .fullLLM:           return "brain.head.profile"
+        case .hotWarmCold:       return "flame"
+        case .ledgerEventDriven: return "bolt"
+        }
+    }
+
     public var detail: String {
         switch self {
         case .fullLLM:
@@ -195,6 +213,14 @@ public final class FeatureFlags {
         return mode
     }
 
+    /// Whether the user has EXPLICITLY chosen a system mode. False on a
+    /// fresh install, which triggers the first-run mode chooser before the
+    /// engine boots. Set true the first time the user picks a mode.
+    public var systemModeChosen: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.kSystemModeChosen) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kSystemModeChosen) }
+    }
+
     /// Ledger-AI v28 — global context-prefix backfill. OFF by default.
     ///
     /// When enabled, the backfiller writes `context_prefix` AND re-embeds
@@ -254,6 +280,7 @@ public final class FeatureFlags {
     // MARK: - Storage keys
 
     private nonisolated static let kSystemMode             = "atlas.feature.systemMode"
+    private nonisolated static let kSystemModeChosen       = "atlas.feature.systemModeChosen"
     private nonisolated static let kMaintenanceMode        = "atlas.feature.maintenance.mode"
     private nonisolated static let kMaintenanceIdleMinutes = "atlas.feature.maintenance.idleMinutes"
     private static let kIngestDistill    = "atlas.feature.ingestTimeMemoryDistillation.enabled"

@@ -215,6 +215,23 @@ the relevant shape (invoice sequences / causal links).
 
 ---
 
+## 6b. Choosing a mode (UI)
+
+- **First run** (`FeatureFlags.systemModeChosen == false`): the app entry awaits
+  `AppState.awaitModeSelectionIfNeeded()` **before** `boot()`, so a `ModeChooserView`
+  sheet (three cards with label, detail, and est /100 MB) is shown first and boot waits
+  on a continuation. Picking a mode (`chooseMode`) writes the flag + mode and unblocks
+  boot — the engine builds in the chosen mode, **no relaunch**. The sheet can't be
+  dismissed without choosing on first run.
+- **Active-mode badge**: the sidebar shows the running mode (icon + short label) at all
+  times, plus an "N new" chip counting files the folder watcher discovered this launch
+  (`AppState.newFilesSinceLaunch`). Tapping it re-opens the chooser.
+- **Changing mode later / new files mid-session**: mode is a **boot-time** decision (the
+  ingest `invalidations` stream has a single consumer, so the running engine can't be
+  hot-swapped). A change made after boot is saved and applies on the next launch; the
+  chooser shows an "applies on next launch" note in that case. New files are surfaced via
+  the badge rather than a blocking modal, so the user is never interrupted mid-work.
+
 ## 7. Next steps (when you compare the three and pick a winner)
 
 1. **Relaunch** and let each mode's idle maintenance populate its tables; compare the

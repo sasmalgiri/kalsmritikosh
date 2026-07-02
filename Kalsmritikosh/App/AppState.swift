@@ -130,6 +130,15 @@ public final class AppState {
     public private(set) var contradictions: ContradictionsRepository?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
+
+    // MARK: - System-mode chooser (first run + manual)
+    /// Drives the system-mode chooser sheet (RootView presents it).
+    public var showModeChooser: Bool = false
+    /// Files the folder watcher has discovered this launch — shown on the
+    /// active-mode badge so the user knows new material arrived.
+    public private(set) var newFilesSinceLaunch: Int = 0
+    /// Suspends first-run boot until the user picks a mode.
+    private var modeSelectionContinuation: CheckedContinuation<Void, Never>?
     /// The one active system engine for this launch (built from SystemMode).
     /// Owns this system's background maintenance; see Knowledge/Ledger/SystemEngine.swift.
     public private(set) var systemEngine: (any SystemEngine)?
@@ -1096,6 +1105,10 @@ public final class AppState {
                 guard let watcher else { return }
                 for await event in watcher.events {
                     guard let ingest, let self else { return }
+                    let discovered = event.urls.count
+                    if discovered > 0 {
+                        await MainActor.run { self.noteDiscoveredFiles(discovered) }
+                    }
                     await withTaskGroup(of: Void.self) { group in
                         for url in event.urls {
                             group.addTask { [weak self, weak ingest] in
@@ -1370,6 +1383,47 @@ public final class AppState {
             ledgeredCount: ledgered,
             failedCount: 0
         )
+    }
+
+    // MARK: - System-mode selection
+
+    /// Called from the app entry BEFORE `boot()`. On a fresh install this
+    /// suspends until the user picks a mode, so the engine boots in the
+    /// chosen mode with no relaunch. On later launches it returns at once.
+    public func awaitModeSelectionIfNeeded() async {
+        if FeatureFlags.shared.systemModeChosen { return }
+        showModeChooser = true
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            self.modeSelectionContinuation = cont
+        }
+    }
+
+    /// Persist the chosen mode and dismiss the chooser. On first run this
+    /// unblocks `boot()`. After boot, the change is saved but the running
+    /// engine keeps its mode until the next launch (the ingest stream has a
+    /// single consumer, so mode is a boot-time decision) — the chooser
+    /// surfaces that via `modeAppliesNextLaunch`.
+    public func chooseMode(_ mode: SystemMode) {
+        FeatureFlags.shared.systemMode = mode
+        FeatureFlags.shared.systemModeChosen = true
+        showModeChooser = false
+        if let cont = modeSelectionContinuation {
+            modeSelectionContinuation = nil
+            cont.resume()
+        }
+    }
+
+    /// True once the engine has already booted, so a mode change now only
+    /// takes effect on the next launch.
+    public var modeAppliesNextLaunch: Bool {
+        if case .ready = phase { return true }
+        return false
+    }
+
+    /// Folder watcher hook — record newly discovered files for the badge.
+    public func noteDiscoveredFiles(_ count: Int) {
+        guard count > 0 else { return }
+        newFilesSinceLaunch += count
     }
 
     // MARK: - System 3: gap detection + investigation (rule-based)

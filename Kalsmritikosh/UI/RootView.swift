@@ -104,6 +104,20 @@ public struct RootView: View {
     public init() {}
 
     public var body: some View {
+        phaseContent
+            // Attached at the top level so the first-run chooser shows even
+            // while the app is still in `.starting` (boot waits for it).
+            .sheet(isPresented: Binding(
+                get: { appState.showModeChooser },
+                set: { appState.showModeChooser = $0 }
+            )) {
+                ModeChooserView(mustChoose: !FeatureFlags.shared.systemModeChosen)
+                    .environment(appState)
+            }
+    }
+
+    @ViewBuilder
+    private var phaseContent: some View {
         switch appState.phase {
         case .starting:
             loadingView
@@ -178,6 +192,8 @@ public struct RootView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
                 brandHeader
+                    .padding(.bottom, 4)
+                modeBadge
                     .padding(.bottom, 6)
                 ForEach(Destination.Group.allCases) { group in
                     Text(group.rawValue.uppercased())
@@ -316,6 +332,52 @@ public struct RootView: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 6)
+    }
+
+    /// Always-visible badge showing the active system mode. Tapping opens
+    /// the chooser (a change applies on next launch once booted). Also
+    /// surfaces the count of files discovered this launch.
+    private var modeBadge: some View {
+        let mode = FeatureFlags.shared.systemMode
+        return Button {
+            appState.showModeChooser = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: mode.symbolName)
+                    .imageScale(.small)
+                    .foregroundStyle(Theme.brand)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("MODE")
+                        .font(.system(size: 8, weight: .heavy))
+                        .foregroundStyle(.tertiary)
+                        .tracking(0.5)
+                    Text(mode.shortLabel)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if appState.newFilesSinceLaunch > 0 {
+                    Text("\(appState.newFilesSinceLaunch) new")
+                        .font(.caption2.weight(.bold))
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Theme.brandAlt.opacity(0.16), in: .capsule)
+                        .foregroundStyle(Theme.brandAlt)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(Theme.brand.opacity(0.18), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
     }
 
     // MARK: Detail router

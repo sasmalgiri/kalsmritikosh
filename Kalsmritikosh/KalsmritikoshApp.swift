@@ -20,6 +20,10 @@ struct KalsmritikoshApp: App {
                 .environment(appState)
                 .preferredColorScheme(.light)   // light UI across all phases
                 .task {
+                    // First run: wait for the user to pick a system mode so
+                    // the engine boots in the chosen mode. Returns at once on
+                    // later launches.
+                    await appState.awaitModeSelectionIfNeeded()
                     await appState.boot()
                 }
         }
