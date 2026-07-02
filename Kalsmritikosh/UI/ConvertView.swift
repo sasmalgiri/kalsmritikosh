@@ -48,6 +48,8 @@ public struct ConvertView: View {
     @State private var converting: Bool = false
     @State private var output: String = ""
     @State private var statusLine: String = ""
+    /// Hybrid Apple-AI + NLP proofread of the extracted text before display.
+    @State private var aiProofread: Bool = true
 
     public init() {}
 
@@ -151,6 +153,12 @@ public struct ConvertView: View {
             }
             .pickerStyle(.segmented)
             .fixedSize()
+
+            Toggle(isOn: $aiProofread) {
+                Label("AI proofread", systemImage: "wand.and.stars")
+            }
+            .toggleStyle(.checkbox)
+            .help("Hybrid on-device Apple AI + NLP: fixes OCR typos/names using the document's own context. Never changes numbers, dates or IDs.")
 
             Spacer()
 
@@ -303,8 +311,37 @@ public struct ConvertView: View {
             }
         }
 
+        // Hybrid Apple-AI + NLP proofread of the extracted text before it's
+        // shown. Non-destructive + facts-preserving; falls back to the raw
+        // text if no model is available or a rewrite looks unsafe.
+        var contributingExperts = Set<String>()
+        if aiProofread, !pieces.isEmpty {
+            statusLine = "Proofreading with on-device AI…"
+            let corrector = AITextCorrector()
+            var proofed: [(URL, KnowledgeObject)] = []
+            for (url, ko) in pieces {
+                let result = await corrector.correct(ko.content, using: appState.capabilities)
+                result.experts.forEach { contributingExperts.insert($0) }
+                if result.corrected {
+                    proofed.append((url, KnowledgeObject(
+                        sourceFile: ko.sourceFile,
+                        sourceType: ko.sourceType,
+                        content: result.text,
+                        metadata: ko.metadata
+                    )))
+                } else {
+                    proofed.append((url, ko))
+                }
+            }
+            pieces = proofed
+        }
+
         output = format(pieces: pieces, failures: failed, as: outputFormat)
-        statusLine = "Parsed \(pieces.count) record\(pieces.count == 1 ? "" : "s"), failed \(failed.count)"
+        var status = "Parsed \(pieces.count) record\(pieces.count == 1 ? "" : "s"), failed \(failed.count)"
+        if !contributingExperts.isEmpty {
+            status += " · proofread (\(contributingExperts.sorted().joined(separator: "+")))"
+        }
+        statusLine = status
     }
 
     private func format(
