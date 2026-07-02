@@ -647,7 +647,9 @@ public struct EmailLoader: Ingestor {
                 // Prefer text/plain; fall back to text/html with the
                 // tags stripped (cheap). Multiple text parts get
                 // concatenated so we never lose body content.
-                let text = String(data: part.body, encoding: .utf8) ?? ""
+                // Charset-aware: windows-1252 / ISO-8859-1 bodies would
+                // otherwise be read as UTF-8 and come out as mojibake.
+                let text = part.decodedText()
                 if part.contentType == "text/html" {
                     textPieces.append(stripHTML(text))
                 } else {

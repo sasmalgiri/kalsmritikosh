@@ -38,6 +38,41 @@ public nonisolated struct MIMEPart: Sendable {
 
     public var isText: Bool { contentType.hasPrefix("text/") }
 
+    /// Charset declared in this part's Content-Type (e.g. "windows-1252").
+    public var charset: String? {
+        headers["content-type"].flatMap { Self.extractParam($0, key: "charset") }
+    }
+
+    /// Map a MIME charset name to a Foundation encoding. Covers the
+    /// western-European sets that dominate legacy mail — without this,
+    /// windows-1252 / ISO-8859-1 bodies read as UTF-8 turn accented
+    /// characters into mojibake (é → Ã©, ' → â€™).
+    public nonisolated static func encoding(forCharset charset: String?) -> String.Encoding? {
+        guard let raw = charset?.lowercased().trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        if raw.contains("utf-8") || raw == "utf8" { return .utf8 }
+        if raw.contains("utf-16") { return .utf16 }
+        if raw.contains("1252") || raw.contains("windows-125") { return .windowsCP1252 }
+        // ISO-8859-15 (Latin-9) adds €/Š/etc.; CP1252 is the closest
+        // Foundation encoding that round-trips those glyphs.
+        if raw.contains("8859-15") || raw.contains("latin-9") || raw.contains("latin9") { return .windowsCP1252 }
+        if raw.contains("8859-1") || raw.contains("latin-1") || raw.contains("latin1") { return .isoLatin1 }
+        if raw.contains("8859-2") || raw.contains("latin-2") || raw.contains("latin2") { return .isoLatin2 }
+        if raw.contains("ascii") { return .ascii }
+        return nil
+    }
+
+    /// Decode the (already transfer-decoded) body bytes to text using the
+    /// part's declared charset, falling back to UTF-8 then Windows-1252.
+    /// Never returns raw bytes.
+    public nonisolated func decodedText() -> String {
+        if let enc = Self.encoding(forCharset: charset), let s = String(data: body, encoding: enc) {
+            return s
+        }
+        if let s = String(data: body, encoding: .utf8) { return s }
+        if let s = String(data: body, encoding: .windowsCP1252) { return s }
+        return String(decoding: body, as: UTF8.self)
+    }
+
     public var filename: String? {
         if let cd = headers["content-disposition"],
            let name = Self.extractParam(cd, key: "filename") {
