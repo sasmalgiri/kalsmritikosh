@@ -193,6 +193,9 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
                     if attempt > 1 {
                         AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) recovered on attempt \(attempt, privacy: .public) with \(attemptTimeout, privacy: .public)ms")
                     }
+                    await LLMCallCounters.shared.recordCall(purpose: "contextPrefix")
+                    // Healthy — clear any accrued failure/cooldown.
+                    await capabilities.reportOutcome(providerID: provider.id, success: true)
                     return ContextPrefixResult(
                         text: cleaned,
                         source: ContextPrefixResult.sourceLLM
@@ -200,19 +203,27 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
                 }
                 // Non-empty raw but cleaned was empty — likely a
                 // refusal / weird formatting. Don't retry; treat as
-                // a real failure.
+                // a real failure. Provider still responded, so not a
+                // health failure.
                 return nil
             }
             if !timedOut {
                 // Provider returned a real error (not a timeout).
-                // Retrying won't change the answer.
+                // Retrying won't change the answer — count it against
+                // the provider's health so a hard-down provider cools.
+                await capabilities.reportOutcome(providerID: provider.id, success: false)
                 return nil
             }
             // Timeout — escalate and try again, unless we hit max.
+            await LLMCallCounters.shared.recordTimeout()
             if attempt >= maxAttempts { break }
             attemptTimeout = min(attemptTimeout * 2, maxTimeoutMs)
         }
         AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) exhausted \(self.maxAttempts, privacy: .public) attempts (final \(attemptTimeout, privacy: .public)ms); chunk left without prefix")
+        // Sustained timeouts count against the provider's health so the
+        // registry cools it down and later chunks skip it instantly
+        // instead of each paying the full retry budget again.
+        await capabilities.reportOutcome(providerID: provider.id, success: false)
         return nil
     }
 

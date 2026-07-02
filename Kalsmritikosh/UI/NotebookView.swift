@@ -38,6 +38,7 @@ public struct NotebookView: View {
             detailPane
         }
         .task { await refresh() }
+        .background(AuroraBackdrop(intensity: 0.5))
     }
 
     // MARK: - List
@@ -48,7 +49,7 @@ public struct NotebookView: View {
                 Image(systemName: "notebook")
                     .foregroundStyle(.tint)
                 Text("Notebook")
-                    .font(.headline)
+                    .font(Theme.display(28, .bold))
                 Spacer()
                 Button {
                     Task { await refresh() }

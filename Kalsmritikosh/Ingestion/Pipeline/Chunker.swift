@@ -39,13 +39,23 @@ public struct Chunker: Sendable {
     /// (single-line headings) from being treated as standalone
     /// retrieval candidates.
     public let minChunkCharacterCount: Int
+    /// Sentence-level overlap (in characters) carried between
+    /// consecutive sub-chunks when a large block is split by sentence.
+    /// Standard RAG practice: ~10-15% overlap so an answer that
+    /// straddles a chunk boundary isn't severed across two unrelated
+    /// vectors. Only applies inside `sentenceSplit` — the block-packing
+    /// path is already boundary-aware (paragraphs / headings), so no
+    /// overlap is needed there. 0 disables overlap.
+    public let overlapCharacterCount: Int
 
     public nonisolated init(
         targetCharacterCount: Int = 1200,
-        minChunkCharacterCount: Int = 80
+        minChunkCharacterCount: Int = 80,
+        overlapCharacterCount: Int = 160
     ) {
         self.targetCharacterCount = targetCharacterCount
         self.minChunkCharacterCount = minChunkCharacterCount
+        self.overlapCharacterCount = overlapCharacterCount
     }
 
     // MARK: - Adaptive sizing for ANY model / device / context
@@ -385,40 +395,53 @@ public struct Chunker: Sendable {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = content
 
-        var out: [SentenceChunk] = []
-        var bufferStart: Int = range.lowerBound
-        var bufferLen: Int = 0
-
+        // Collect sentence spans (UTF-16 offsets) so we can pack them
+        // with overlap in a second pass — the enumerate closure is
+        // forward-only, which can't look back to carry overlap.
+        var sentences: [(lower: Int, upper: Int)] = []
         tokenizer.enumerateTokens(in: stringFrom..<stringTo) { tokenRange, _ in
             let lower = utf16.distance(from: utf16.startIndex, to: tokenRange.lowerBound)
             let upper = utf16.distance(from: utf16.startIndex, to: tokenRange.upperBound)
-            let length = upper - lower
-
-            if bufferLen == 0 {
-                bufferStart = lower
-                bufferLen = length
-            } else if bufferLen + length > targetCharacterCount {
-                let end = bufferStart + bufferLen
-                out.append(SentenceChunk(
-                    text: substring(content, lower: bufferStart, upper: end),
-                    start: bufferStart,
-                    end: end
-                ))
-                bufferStart = lower
-                bufferLen = length
-            } else {
-                bufferLen += length
-            }
+            if upper > lower { sentences.append((lower, upper)) }
             return true
         }
+        guard !sentences.isEmpty else { return [] }
 
-        if bufferLen > 0 {
-            let end = bufferStart + bufferLen
+        func sentLen(_ i: Int) -> Int { sentences[i].upper - sentences[i].lower }
+
+        var out: [SentenceChunk] = []
+        var i = 0
+        while i < sentences.count {
+            // Greedily fill a chunk from sentence i up to the budget
+            // (always take at least one sentence, even if oversized).
+            var j = i
+            var len = 0
+            while j < sentences.count {
+                let next = sentLen(j)
+                if j > i && len + next > targetCharacterCount { break }
+                len += next
+                j += 1
+            }
+            let start = sentences[i].lower
+            let end = sentences[j - 1].upper
             out.append(SentenceChunk(
-                text: substring(content, lower: bufferStart, upper: end),
-                start: bufferStart,
+                text: substring(content, lower: start, upper: end),
+                start: start,
                 end: end
             ))
+
+            if j >= sentences.count { break }
+
+            // Overlap: rewind the next chunk's start by trailing
+            // sentences totalling ≤ overlapCharacterCount, while always
+            // guaranteeing forward progress (i strictly increases).
+            var back = j - 1
+            var acc = 0
+            while back > i && acc + sentLen(back) <= overlapCharacterCount {
+                acc += sentLen(back)
+                back -= 1
+            }
+            i = max(i + 1, back + 1)
         }
 
         return out

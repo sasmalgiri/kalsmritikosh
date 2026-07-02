@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor CapabilityRegistry {
     public let hardware: HardwareProfile
@@ -28,6 +29,24 @@ public actor CapabilityRegistry {
     private let benchmark: PerformanceBenchmark
     private let preferences: ModelUserPreferences
     private let privacyGate: PrivacyGate
+
+    // MARK: Provider health / cooldown (in-memory)
+    //
+    // A provider that keeps timing out (e.g. an overloaded local Ollama
+    // under ingest load) is put on a cooldown so `resolve` SKIPS it
+    // instead of every caller blindly waiting the full per-call timeout
+    // again — that blind retry-storm is what burned hours in the logs.
+    // Cooldown is deliberately in-memory: it should reset on relaunch so
+    // a fresh launch always re-probes rather than staying disabled after
+    // a transient blip. Exponential backoff after N consecutive fails.
+    private var consecutiveFailures: [String: Int] = [:]
+    private var cooldownUntil: [String: Date] = [:]
+    /// Consecutive failures before the first cooldown kicks in (so a
+    /// single slow call doesn't sideline a provider).
+    private let failuresBeforeCooldown = 3
+    /// Base cooldown; doubles per extra failure, capped at `maxCooldown`.
+    private let baseCooldown: TimeInterval = 20
+    private let maxCooldown: TimeInterval = 120
 
     public init(
         hardware: HardwareProfile,
@@ -74,10 +93,40 @@ public actor CapabilityRegistry {
     /// in the registry can fulfil the spec under the current privacy gate.
     public func resolve(_ spec: CapabilitySpec) async throws -> any ModelProvider {
         let candidates = try await rankedCandidates(for: spec)
+        let now = Date()
         for candidate in candidates {
+            // Skip providers currently cooling down after repeated
+            // failures — don't pay their timeout again.
+            if let until = cooldownUntil[candidate.id], until > now { continue }
             if await candidate.isAvailable() { return candidate }
         }
         throw ModelProviderError.noProviderForSpec(spec: spec)
+    }
+
+    // MARK: - Health reporting
+
+    /// Callers that use a resolved provider report the outcome so the
+    /// registry can cool down a failing provider (skip it in `resolve`)
+    /// and recover it on the next success. Cheap to call; safe to spam.
+    public func reportOutcome(providerID: String, success: Bool) {
+        if success {
+            consecutiveFailures[providerID] = 0
+            cooldownUntil[providerID] = nil
+            return
+        }
+        let fails = (consecutiveFailures[providerID] ?? 0) + 1
+        consecutiveFailures[providerID] = fails
+        guard fails >= failuresBeforeCooldown else { return }
+        let over = fails - failuresBeforeCooldown        // 0,1,2,…
+        let backoff = min(baseCooldown * pow(2, Double(over)), maxCooldown)
+        cooldownUntil[providerID] = Date().addingTimeInterval(backoff)
+        AtlasLog.routing.info("Provider \(providerID, privacy: .public) cooled down for \(Int(backoff), privacy: .public)s after \(fails, privacy: .public) consecutive failures")
+    }
+
+    /// True if the provider is currently on cooldown.
+    public func isCooledDown(_ providerID: String) -> Bool {
+        guard let until = cooldownUntil[providerID] else { return false }
+        return until > Date()
     }
 
     /// Returns a list of providers that could fulfil the spec, in ranked

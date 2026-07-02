@@ -16,6 +16,13 @@ public actor IncrementalUpdater: BackgroundService {
     private let distiller: MemoryDistiller
     private let debounceMs: UInt64
     private let notifier: MaturationNotifier?
+    /// Ledger-first LLM-reduction gate. When false, the updater still
+    /// DRAINS the invalidation stream (so it never backs up) but SKIPS
+    /// the per-subject LLM distillation — memory becomes a hot-data /
+    /// on-demand optimization instead of an eager per-ingest cost. The
+    /// lower ledger layers (events, entities, timeline, FTS) still
+    /// answer, so turning this off doesn't blind the app.
+    private let distillationEnabled: Bool
     private var consumerTask: Task<Void, Never>?
     private var pending: [String: (subject: SubjectInvalidation.Subject, trigger: KnowledgeObject.ID)] = [:]
     private var debounceTask: Task<Void, Never>?
@@ -35,12 +42,14 @@ public actor IncrementalUpdater: BackgroundService {
         stream: AsyncStream<SubjectInvalidation>,
         distiller: MemoryDistiller,
         debounceMilliseconds: UInt64 = 1_500,
-        notifier: MaturationNotifier? = nil
+        notifier: MaturationNotifier? = nil,
+        distillationEnabled: Bool = true
     ) {
         self.stream = stream
         self.distiller = distiller
         self.debounceMs = debounceMilliseconds
         self.notifier = notifier
+        self.distillationEnabled = distillationEnabled
     }
 
     public func start() async {
@@ -167,6 +176,16 @@ public actor IncrementalUpdater: BackgroundService {
         // that no flush is scheduled. The task itself has already
         // completed (we're inside its body).
         debounceTask = nil
+
+        // Ledger-first: when distillation is disabled we've still
+        // drained the stream into `pending` (no backlog) but we skip
+        // the LLM cost. Memory is warmed on demand instead.
+        guard distillationEnabled else {
+            if !snapshot.isEmpty {
+                await LLMCallCounters.shared.recordSkip(purpose: "memoryDistill", count: snapshot.count)
+            }
+            return
+        }
         for (_, entry) in snapshot {
             do {
                 _ = try await distiller.distill(

@@ -51,27 +51,76 @@ public struct ConvertView: View {
 
     public init() {}
 
+    @State private var dropTargeted: Bool = false
+
     public var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            header
-            controls
-            inputsList
-            outputArea
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                dropZone
+                if !inputs.isEmpty { inputsList }
+                controls
+                outputArea
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(AuroraBackdrop(intensity: 0.7))
     }
 
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Convert")
-                .font(.largeTitle.bold())
-            Text("Parse any supported file (PDF, image, audio, email, mbox, PST, NSF, DOCX, XLSX, …) and export clean text, Markdown, or JSON. Nothing is added to your knowledge ledger — this is a one-shot conversion.")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.right.doc.on.clipboard")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: Theme.brand.opacity(0.3), radius: 8, y: 3)
+                Text("Convert")
+                    .font(Theme.display(34, .bold))
+            }
+            Text("Parse any supported file (PDF, image, audio, email, mbox, PST, NSF, DOCX, XLSX…) and export clean text, Markdown, or JSON. Nothing is added to your knowledge ledger — this is a one-shot conversion.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 620, alignment: .leading)
+        }
+    }
+
+    // MARK: - Drop zone
+
+    private var dropZone: some View {
+        VStack(spacing: 12) {
+            Image(systemName: dropTargeted ? "tray.and.arrow.down.fill" : "tray.and.arrow.down")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(dropTargeted ? Theme.brand : .secondary)
+                .symbolEffect(.bounce, value: dropTargeted)
+            Text("Drop files here")
+                .font(.headline)
+            Text("or click **Add file(s)…** below")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 160)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
+                .fill(dropTargeted ? Theme.brand.opacity(0.10) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.lg, style: .continuous)
+                .stroke(
+                    dropTargeted ? Theme.brand : Color.secondary.opacity(0.35),
+                    style: StrokeStyle(lineWidth: dropTargeted ? 2 : 1.5, dash: [7, 5])
+                )
+        )
+        .animation(Theme.springFast, value: dropTargeted)
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            handleDrop(providers)
+            return true
         }
     }
 
@@ -84,6 +133,7 @@ public struct ConvertView: View {
             } label: {
                 Label("Add file(s)…", systemImage: "doc.badge.plus")
             }
+            .buttonStyle(.pressable)
             .fileImporter(
                 isPresented: $importerPresented,
                 allowedContentTypes: [.data],
@@ -94,101 +144,103 @@ public struct ConvertView: View {
                 }
             }
 
-            Picker("Output", selection: $outputFormat) {
+            Picker("", selection: $outputFormat) {
                 ForEach(OutputFormat.allCases) { f in
                     Text(f.rawValue).tag(f)
                 }
             }
-            .pickerStyle(.menu)
+            .pickerStyle(.segmented)
             .fixedSize()
-
-            Button {
-                Task { await runConversion() }
-            } label: {
-                if converting {
-                    Label("Converting…", systemImage: "hourglass")
-                } else {
-                    Label("Convert", systemImage: "arrow.right.circle.fill")
-                }
-            }
-            .disabled(inputs.isEmpty || converting)
 
             Spacer()
 
             if !output.isEmpty {
-                Button {
-                    saveOutput()
-                } label: {
+                Button { saveOutput() } label: {
                     Label("Save as…", systemImage: "square.and.arrow.down")
                 }
-                Button {
-                    copyOutput()
-                } label: {
+                .buttonStyle(.pressable)
+                Button { copyOutput() } label: {
                     Label("Copy", systemImage: "doc.on.doc")
                 }
+                .buttonStyle(.pressable)
             }
+
+            convertButton
         }
+    }
+
+    private var convertButton: some View {
+        let disabled = inputs.isEmpty || converting
+        return Button {
+            Task { await runConversion() }
+        } label: {
+            HStack(spacing: 6) {
+                if converting {
+                    ProgressView().controlSize(.small).tint(.white)
+                } else {
+                    Image(systemName: "sparkles")
+                }
+                Text(converting ? "Converting…" : "Convert")
+                    .fontWeight(.semibold)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(Theme.brandGradient(), in: Capsule())
+            .shadow(color: Theme.brand.opacity(0.3), radius: 6, y: 2)
+            .opacity(disabled ? 0.5 : 1)
+        }
+        .buttonStyle(.pressable)
+        .disabled(disabled)
     }
 
     // MARK: - Inputs list
 
     @ViewBuilder
     private var inputsList: some View {
-        if inputs.isEmpty {
-            VStack(spacing: 6) {
-                Image(systemName: "tray.and.arrow.down")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("Drop files here or use **Add file(s)…**")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 120)
-            .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(style: StrokeStyle(lineWidth: 1, dash: [4]))
-                    .foregroundStyle(.secondary.opacity(0.4))
-            )
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                handleDrop(providers)
-                return true
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(inputs.enumerated()), id: \.offset) { idx, url in
-                    HStack {
-                        Image(systemName: "doc")
-                            .foregroundStyle(.secondary)
-                        Text(url.lastPathComponent)
-                            .font(.callout)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Text(SourceType.detect(from: url).rawValue)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Button {
-                            inputs.remove(at: idx)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                }
-            }
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                handleDrop(providers)
-                return true
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(inputs.enumerated()), id: \.offset) { idx, url in
+                inputRow(idx: idx, url: url)
             }
         }
     }
 
+    @ViewBuilder
+    private func inputRow(idx: Int, url: URL) -> some View {
+        let typeLabel = SourceType.detect(from: url).rawValue
+        HStack(spacing: 10) {
+            Image(systemName: "doc.fill")
+                .foregroundStyle(Theme.brand)
+            Text(url.lastPathComponent)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+            Text(typeLabel)
+                .font(.caption2.monospaced())
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Theme.brand.opacity(0.12), in: Capsule())
+                .foregroundStyle(Theme.brand)
+            Button {
+                withAnimation(Theme.springFast) { _ = inputs.remove(at: idx) }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .cardSurface(cornerRadius: Theme.Radius.sm)
+        .transition(.popIn)
+    }
+
     // MARK: - Output area
 
+    @ViewBuilder
     private var outputArea: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Output").font(.headline)
                 Spacer()
@@ -199,18 +251,15 @@ public struct ConvertView: View {
                 }
             }
             ScrollView {
-                Text(output.isEmpty ? "Output will appear here." : output)
-                    .font(.system(.body, design: .monospaced))
+                Text(output.isEmpty ? "Output will appear here after you convert." : output)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(output.isEmpty ? .secondary : .primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                    .padding(10)
+                    .padding(14)
             }
-            .frame(maxHeight: .infinity)
-            .background(Color.gray.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-            )
+            .frame(minHeight: 220, maxHeight: 420)
+            .cardSurface(cornerRadius: Theme.Radius.md)
         }
     }
 

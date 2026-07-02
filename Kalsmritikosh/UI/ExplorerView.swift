@@ -47,6 +47,7 @@ public struct ExplorerView: View {
             Divider()
             content
         }
+        .background(AuroraBackdrop(intensity: 0.5))
     }
 
     // MARK: - Header / search
@@ -56,7 +57,7 @@ public struct ExplorerView: View {
             Image(systemName: "point.3.connected.trianglepath.dotted")
                 .foregroundStyle(.tint)
             Text("Explore")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             Spacer()
             if !navigationStack.isEmpty {
                 Button {

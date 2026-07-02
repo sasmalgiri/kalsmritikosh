@@ -13,16 +13,49 @@ public actor CachedEmbedder: Embedder {
     public let dimension: Int
     private let underlying: any Embedder
     private let cache: EmbeddingCache
+    /// Optional persistent L2 (schema v29). When present, embeddings
+    /// survive across launches and re-ingests. Model-scoped by
+    /// `modelID` so switching embedders never returns a stale vector.
+    private let persistent: EmbeddingCacheRepository?
+    private let modelID: String
 
-    public init(wrapping underlying: any Embedder, cache: EmbeddingCache = EmbeddingCache()) {
+    public init(
+        wrapping underlying: any Embedder,
+        cache: EmbeddingCache = EmbeddingCache(),
+        persistent: EmbeddingCacheRepository? = nil,
+        modelID: String? = nil
+    ) {
         self.underlying = underlying
         self.dimension = underlying.dimension
         self.cache = cache
+        self.persistent = persistent
+        // Default model id includes the dimension so a change of encoder
+        // (e.g. NL 300-dim → BGE 1024-dim) is automatically a cache miss.
+        self.modelID = modelID ?? "embedder-\(underlying.dimension)"
     }
 
     public func embed(_ text: String) async -> [Float] {
         let key = cacheKey(text)
-        if let cached = await cache.value(for: key) { return cached }
+        // L1 — in-memory LRU.
+        if let cached = await cache.value(for: key) {
+            await LLMCallCounters.shared.recordEmbedCacheHit()
+            return cached
+        }
+        // L2 — persistent SQLite cache.
+        if let persistent {
+            let hash = EmbeddingCacheRepository.hash(text)
+            if let hit = await persistent.lookup(modelID: modelID, textHash: hash), !hit.isEmpty {
+                await LLMCallCounters.shared.recordEmbedCacheHit()
+                await cache.set(key, hit)
+                return hit
+            }
+            await LLMCallCounters.shared.recordEmbedCacheMiss()
+            let vector = await underlying.embed(text)
+            await cache.set(key, vector)
+            await persistent.store(modelID: modelID, textHash: hash, vector: vector)
+            return vector
+        }
+        await LLMCallCounters.shared.recordEmbedCacheMiss()
         let vector = await underlying.embed(text)
         await cache.set(key, vector)
         return vector
@@ -35,6 +68,7 @@ public actor CachedEmbedder: Embedder {
         var missIndices: [Int] = []
         var missTexts: [String] = []
         var missKeys: [String] = []
+        // L1 pass.
         for (i, text) in texts.enumerated() {
             let key = cacheKey(text)
             if let hit = await cache.value(for: key) {
@@ -45,12 +79,37 @@ public actor CachedEmbedder: Embedder {
                 missKeys.append(key)
             }
         }
+        // L2 pass over the L1-misses — pull persisted vectors before
+        // paying the underlying embedder for them.
+        if let persistent, !missIndices.isEmpty {
+            var stillMissIdx: [Int] = []
+            var stillMissText: [String] = []
+            var stillMissKey: [String] = []
+            for (k, idx) in missIndices.enumerated() {
+                let hash = EmbeddingCacheRepository.hash(missTexts[k])
+                if let hit = await persistent.lookup(modelID: modelID, textHash: hash), !hit.isEmpty {
+                    results[idx] = hit
+                    await cache.set(missKeys[k], hit)
+                } else {
+                    stillMissIdx.append(idx)
+                    stillMissText.append(missTexts[k])
+                    stillMissKey.append(missKeys[k])
+                }
+            }
+            missIndices = stillMissIdx
+            missTexts = stillMissText
+            missKeys = stillMissKey
+        }
         if !missTexts.isEmpty {
             let fresh = await underlying.embedBatch(missTexts)
             for (k, idx) in missIndices.enumerated() {
                 guard k < fresh.count else { break }
                 results[idx] = fresh[k]
                 await cache.set(missKeys[k], fresh[k])
+                if let persistent {
+                    let hash = EmbeddingCacheRepository.hash(missTexts[k])
+                    await persistent.store(modelID: modelID, textHash: hash, vector: fresh[k])
+                }
             }
         }
         return results.map { $0 ?? [] }

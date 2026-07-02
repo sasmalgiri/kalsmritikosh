@@ -47,6 +47,39 @@ public nonisolated enum AnswerSource: String, Codable, Sendable, Hashable {
     }
 }
 
+/// Closed-corpus answer state (Ledger AI contract). Distinct from
+/// `AnswerSource` (which says HOW the answer was produced): this says
+/// WHETHER the ingested corpus supports the claim. The brain's
+/// answerability gate resolves this before prose generation so the
+/// UI can show an honest, evidence-bounded verdict.
+public nonisolated enum AnswerState: String, Codable, Sendable, Hashable {
+    /// The archive contains evidence that directly supports the answer.
+    case supported
+    /// The archive supports part of the answer but not all of it (e.g.
+    /// a cause is named but not proven to be the only cause).
+    case partiallySupported = "partially_supported"
+    /// Sources disagree — the answer surfaces both sides as a conflict.
+    case contradicted
+    /// No evidence for this was found in the ingested archive.
+    case notFound = "not_found"
+    /// Relevant files exist but are still pending OCR / indexing /
+    /// enrichment, so the answer may be incomplete.
+    case insufficientlyIndexed = "insufficiently_indexed"
+    /// Legacy / not-yet-classified (default for pre-v28 callers).
+    case unknown
+
+    public var displayName: String {
+        switch self {
+        case .supported:             return "Supported"
+        case .partiallySupported:    return "Partially supported"
+        case .contradicted:          return "Contradicted"
+        case .notFound:              return "Not found"
+        case .insufficientlyIndexed: return "Insufficiently indexed"
+        case .unknown:               return "Unknown"
+        }
+    }
+}
+
 public struct VerifiedAnswer: Codable, Sendable {
     public let body: String
     /// Just the answer portion of `body`, with any subject heading or
@@ -88,6 +121,12 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// Optional — legacy callers that don't set it just don't show
     /// the disclosure.
     public let reasoningTrace: ReasoningTrace?
+    /// Closed-corpus answer state (v28 Ledger AI contract). Whether the
+    /// ingested archive SUPPORTS / PARTIALLY_SUPPORTS / CONTRADICTS the
+    /// answer, or the corpus has NOT_FOUND / INSUFFICIENTLY_INDEXED
+    /// evidence. Defaults to `.unknown` for legacy callers that don't
+    /// run the answerability gate yet.
+    public let answerState: AnswerState
 
     public nonisolated init(
         body: String,
@@ -101,7 +140,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         report: ConfidenceReport? = nil,
         walkSteps: [WalkStep] = [],
         source: AnswerSource = .unknown,
-        reasoningTrace: ReasoningTrace? = nil
+        reasoningTrace: ReasoningTrace? = nil,
+        answerState: AnswerState = .unknown
     ) {
         self.body = body
         self.answerText = answerText
@@ -115,10 +155,11 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.walkSteps = walkSteps
         self.source = source
         self.reasoningTrace = reasoningTrace
+        self.answerState = answerState
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -135,6 +176,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.walkSteps = try c.decodeIfPresent([WalkStep].self, forKey: .walkSteps) ?? []
         self.source = try c.decodeIfPresent(AnswerSource.self, forKey: .source) ?? .unknown
         self.reasoningTrace = try c.decodeIfPresent(ReasoningTrace.self, forKey: .reasoningTrace)
+        self.answerState = try c.decodeIfPresent(AnswerState.self, forKey: .answerState) ?? .unknown
     }
 
     public struct Citation: Codable, Sendable, Hashable {

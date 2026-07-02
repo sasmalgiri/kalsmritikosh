@@ -41,27 +41,31 @@ public struct AskView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
                         if turns.isEmpty {
-                            placeholder.padding(40)
+                            placeholder.padding(.horizontal, 40).padding(.top, 20)
+                                .transition(.opacity)
                         } else {
                             ForEach(turns) { turn in
-                                turnBubble(turn).id(turn.id)
+                                turnBubble(turn)
+                                    .id(turn.id)
+                                    .transition(.popIn)
                             }
                         }
                     }
                     .padding()
+                    .animation(Theme.springSoft, value: turns.count)
                 }
                 .onChange(of: turns.count) { _, _ in
                     if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
+                .scrollContentBackground(.hidden)
             }
-            Divider()
             input
         }
+        .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(
@@ -176,70 +180,100 @@ public struct AskView: View {
 
     private var header: some View {
         HStack {
-            Text("Ask Atlas")
-                .font(.headline)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Ask")
+                    .font(Theme.display(24, .bold))
+                Text("Grounded in your archive — every answer cites its evidence")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Spacer()
             Button {
                 Task { await startNewConversation() }
             } label: {
                 Label("New", systemImage: "plus.bubble")
             }
+            .buttonStyle(.pressable)
             .controlSize(.small)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial)
     }
 
     private var placeholder: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "brain")
-                .font(.system(size: 36))
-                .foregroundStyle(.tint)
-            Text("Ask about projects, people, contracts, money, events.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 480)
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.accentColor.opacity(0.28), Color.accentColor.opacity(0.04)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 92, height: 92)
+                Circle()
+                    .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
+                    .frame(width: 92, height: 92)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 40, weight: .light))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.accentColor, Color.accentColor.opacity(0.6)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .symbolEffect(.pulse)
+            }
+            VStack(spacing: 8) {
+                Text("What do you want to know?")
+                    .font(Theme.display(32, .bold))
+                    .multilineTextAlignment(.center)
+                Text("Kalsmritikosh reconstructs answers only from your ingested files — every claim carries its evidence.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
             suggestionGrid
         }
+        .padding(.top, 24)
     }
 
     private var suggestionGrid: some View {
-        let suggestions = [
-            "What happened with Supplier ABC?",
-            "Reconstruct Project Delta.",
-            "What changed this week?",
-            "What risks exist?"
+        let suggestions: [(icon: String, tint: Color, text: String)] = [
+            ("shippingbox.fill",         .orange, "What happened with Supplier ABC?"),
+            ("map.fill",                 .blue,   "Reconstruct Project Delta."),
+            ("clock.arrow.circlepath",   .green,  "What changed this week?"),
+            ("exclamationmark.shield.fill", .red, "What risks exist?")
         ]
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-            ForEach(suggestions, id: \.self) { s in
-                Button {
-                    question = s
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(suggestions, id: \.text) { s in
+                SuggestionCard(icon: s.icon, tint: s.tint, text: s.text) {
+                    question = s.text
                     submit()
-                } label: {
-                    Text(s)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
                 }
-                .buttonStyle(.plain)
             }
         }
-        .frame(maxWidth: 520)
-        .padding(.top)
+        .frame(maxWidth: 560)
+        .padding(.top, 10)
     }
 
     private var input: some View {
-        HStack(spacing: 8) {
-            TextField("e.g. What happened with Supplier ABC?", text: $question)
-                .textFieldStyle(.roundedBorder)
+        HStack(spacing: 10) {
+            TextField("Ask about projects, people, contracts, money…", text: $question)
+                .textFieldStyle(.plain)
+                .padding(.leading, 16)
+                .padding(.vertical, 10)
                 .onSubmit(submit)
             Button {
                 Task { await saveCurrentQuestion() }
             } label: {
                 Image(systemName: "bookmark")
+                    .frame(width: 30, height: 30)
             }
-            .help("Save this question for later (visible in the Saved tab).")
+            .buttonStyle(.borderless)
+            .help("Save this question for later (visible in the Saved surface).")
             .disabled(
                 appState.savedQueries == nil
                 || question.trimmingCharacters(in: .whitespaces).isEmpty
@@ -248,12 +282,13 @@ public struct AskView: View {
                 startInvestigation()
             } label: {
                 if investigationInFlight {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).frame(width: 30, height: 30)
                 } else {
-                    Label("Investigate", systemImage: "magnifyingglass.circle")
-                        .labelStyle(.iconOnly)
+                    Image(systemName: "magnifyingglass.circle")
+                        .frame(width: 30, height: 30)
                 }
             }
+            .buttonStyle(.borderless)
             .help("Decompose this question into focused sub-questions and synthesize an answer.")
             .disabled(
                 appState.investigationRunner == nil
@@ -261,16 +296,33 @@ public struct AskView: View {
                 || question.trimmingCharacters(in: .whitespaces).isEmpty
             )
             Button(action: submit) {
-                if asking {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "paperplane.fill")
+                ZStack {
+                    Circle().fill(Theme.brandGradient())
+                        .frame(width: 34, height: 34)
+                        .shadow(color: Color.accentColor.opacity(0.35), radius: 6, y: 2)
+                    if asking {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
                 }
             }
+            .buttonStyle(.pressable)
             .keyboardShortcut(.return, modifiers: [])
             .disabled(asking || question.trimmingCharacters(in: .whitespaces).isEmpty)
+            .opacity(question.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+            .animation(Theme.springFast, value: asking)
         }
-        .padding(12)
+        .padding(8)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Theme.brand.opacity(0.18), lineWidth: 1))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
     }
 
     // MARK: - Turn bubbles
@@ -282,15 +334,19 @@ public struct AskView: View {
             HStack {
                 Spacer(minLength: 60)
                 Text(turn.body)
-                    .padding(10)
-                    .background(.tint.opacity(0.15), in: .rect(cornerRadius: 10))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 11)
+                    .background(Theme.bubbleGradient, in: .rect(cornerRadius: 18, style: .continuous))
+                    .shadow(color: Theme.brand.opacity(0.28), radius: 8, y: 3)
                     .frame(maxWidth: 520, alignment: .trailing)
+                    .textSelection(.enabled)
             }
         case .assistant:
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Image(systemName: "brain")
+                        Image(systemName: "sparkles")
                             .foregroundStyle(.tint)
                             .imageScale(.small)
                         Text(turn.createdAt.formatted(date: .omitted, time: .shortened))
@@ -304,10 +360,28 @@ public struct AskView: View {
                     // to plain text when AttributedString parsing
                     // fails (preserves prior behavior for non-markdown
                     // bodies). Line splits keep paragraph spacing.
-                    assistantBody(turn.body)
-                        .textSelection(.enabled)
-                        .padding(10)
-                        .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 10))
+                    Group {
+                        if turn.body.isEmpty {
+                            // Streaming/verifying — show the animated
+                            // thinking indicator until the first token
+                            // or the verified answer lands.
+                            HStack(spacing: 8) {
+                                ThinkingIndicator()
+                                Text("Reconstructing from your archive…")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .cardSurface(cornerRadius: 16)
+                        } else {
+                            assistantBody(turn.body)
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 11)
+                                .cardSurface(cornerRadius: 16)
+                        }
+                    }
                     if let verified = verifiedAnswers[turn.id] {
                         QualityStrip(
                             answer: verified,
@@ -467,6 +541,10 @@ public struct AskView: View {
                 self.asking = false
             }
 
+            // Ledger-AI v28 — persist the answer against a fresh corpus
+            // snapshot (closed-corpus contract). Best-effort.
+            await appState.recordAnswer(question: q, answer: answer)
+
             if userOrdinal == 0 {
                 let head = String(q.prefix(60))
                 try? await repo.updateTitle(head, for: convID)
@@ -533,6 +611,58 @@ public struct AskView: View {
             }
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Suggestion card
+
+/// Polished starter-prompt card: colored icon chip, material surface,
+/// hover lift + accent ring. Extracted so each card owns its hover
+/// state (a ForEach can't hold per-row @State cleanly).
+private struct SuggestionCard: View {
+    let icon: String
+    let tint: Color
+    let text: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        LinearGradient(
+                            colors: [tint, tint.opacity(0.72)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        in: RoundedRectangle(cornerRadius: 9)
+                    )
+                Text(text)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(tint)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .padding(14)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(hovering ? tint.opacity(0.5) : Color.secondary.opacity(0.12), lineWidth: 1)
+            )
+            .shadow(color: hovering ? tint.opacity(0.22) : .clear, radius: 9, y: 3)
+            .scaleEffect(hovering ? 1.015 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { h in
+            withAnimation(.easeOut(duration: 0.15)) { hovering = h }
+        }
     }
 }
 

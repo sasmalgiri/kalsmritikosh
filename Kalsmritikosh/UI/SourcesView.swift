@@ -32,7 +32,9 @@ public struct SourcesView: View {
                 recentsSection
                     .padding(.horizontal)
             }
+            .scrollContentBackground(.hidden)
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task {
             // Initial load + cheap polling refresh while the view is
             // visible. The task is cancelled by SwiftUI when the view
@@ -87,7 +89,7 @@ public struct SourcesView: View {
         HStack {
             VStack(alignment: .leading) {
                 Text("Sources")
-                    .font(.title2.bold())
+                    .font(Theme.display(28, .bold))
                 Text("\(fileCount) file(s) ingested")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -122,6 +124,7 @@ public struct SourcesView: View {
                 ForEach(appState.bookmarks.roots) { root in
                     HStack {
                         Image(systemName: "folder")
+                            .foregroundStyle(Theme.brand)
                         VStack(alignment: .leading) {
                             Text(root.displayName)
                             Text(resolvedPath(for: root))
@@ -139,7 +142,8 @@ public struct SourcesView: View {
                         } label: { Image(systemName: "trash") }
                         .buttonStyle(.borderless)
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
+                    .cardSurface(cornerRadius: 12)
                 }
             }
         }
@@ -157,7 +161,7 @@ public struct SourcesView: View {
                 ForEach(recents) { row in
                     HStack(alignment: .top) {
                         Image(systemName: icon(for: row.sourceType))
-                            .foregroundStyle(.tint)
+                            .foregroundStyle(Theme.brand)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(row.sourceFile.lastPathComponent)
                                 .font(.body)
@@ -171,7 +175,8 @@ public struct SourcesView: View {
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
+                    .cardSurface(cornerRadius: 12)
                 }
             }
         }

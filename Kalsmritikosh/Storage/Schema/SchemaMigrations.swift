@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 27
+    public static let latestVersion = 31
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -64,7 +64,11 @@ public enum SchemaMigrations {
         (24, v24),
         (25, v25),
         (26, v26),
-        (27, v27)
+        (27, v27),
+        (28, v28),
+        (29, v29),
+        (30, v30),
+        (31, v31)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1066,5 +1070,201 @@ public enum SchemaMigrations {
         ON assertions(recorded_at DESC);
     CREATE INDEX IF NOT EXISTS idx_assertions_current
         ON assertions(retracted_at) WHERE retracted_at IS NULL;
+    """
+
+    // MARK: - v28 — Closed-corpus answer contract
+    //
+    // Kalsmritikosh is a ledger-based historical intelligence system,
+    // not a chat-with-files RAG app. This migration adds the substrate
+    // for "no citation, no factual claim":
+    //
+    //   corpus_snapshots  — a point-in-time census of the archive
+    //       (files registered / parsed / searchable / ledgered /
+    //       pending / failed) plus a content-manifest hash. Every
+    //       answer is tied to the snapshot it was produced against, so
+    //       the UI can say "answered from a corpus that was 87%
+    //       ledgered, 1,204 files pending OCR".
+    //
+    //   answers           — the persisted answer object. The LLM prose
+    //       is NOT the truth object; it's the human-facing rendering of
+    //       a set of claims. Each answer carries an answer_state
+    //       (SUPPORTED / PARTIALLY_SUPPORTED / CONTRADICTED /
+    //       NOT_FOUND / INSUFFICIENTLY_INDEXED) and a confidence.
+    //
+    //   answer_claims     — one row per atomic claim inside an answer,
+    //       each with its own support_status + confidence.
+    //
+    //   claim_evidence    — the claim→evidence contract, persisted.
+    //       Polymorphic: a claim can be supported by a KO, a chunk, an
+    //       event, or an entity. evidence_role distinguishes supports
+    //       vs. contradicts vs. context.
+    //
+    // All four are additive; no existing table is touched. The brain
+    // wires into these in a later change (answerability gate + persist
+    // on answer) — the substrate ships first so the schema is stable.
+
+    private static let v28: String = """
+    CREATE TABLE corpus_snapshots (
+        id                       TEXT PRIMARY KEY NOT NULL,
+        created_at               REAL NOT NULL,
+        schema_version           INTEGER NOT NULL,
+        file_count               INTEGER NOT NULL DEFAULT 0,
+        parsed_count             INTEGER NOT NULL DEFAULT 0,
+        indexed_count            INTEGER NOT NULL DEFAULT 0,
+        ledgered_count           INTEGER NOT NULL DEFAULT 0,
+        failed_count             INTEGER NOT NULL DEFAULT 0,
+        pending_ocr_count        INTEGER NOT NULL DEFAULT 0,
+        pending_enrichment_count INTEGER NOT NULL DEFAULT 0,
+        content_manifest_hash    TEXT NOT NULL DEFAULT ''
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_corpus_snapshots_created
+        ON corpus_snapshots(created_at DESC);
+
+    CREATE TABLE answers (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        question           TEXT NOT NULL,
+        answer_state       TEXT NOT NULL,
+        corpus_snapshot_id TEXT,
+        body               TEXT NOT NULL,
+        confidence         REAL NOT NULL DEFAULT 0.0,
+        source             TEXT,
+        created_at         REAL NOT NULL,
+        FOREIGN KEY(corpus_snapshot_id) REFERENCES corpus_snapshots(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_answers_created
+        ON answers(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_answers_state
+        ON answers(answer_state);
+
+    CREATE TABLE answer_claims (
+        id             TEXT PRIMARY KEY NOT NULL,
+        answer_id      TEXT NOT NULL,
+        claim_text     TEXT NOT NULL,
+        support_status TEXT NOT NULL,
+        confidence     REAL NOT NULL DEFAULT 0.0,
+        ordinal        INTEGER NOT NULL DEFAULT 0,
+        created_at     REAL NOT NULL,
+        FOREIGN KEY(answer_id) REFERENCES answers(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_answer_claims_answer
+        ON answer_claims(answer_id);
+
+    CREATE TABLE claim_evidence (
+        claim_id      TEXT NOT NULL,
+        object_id     TEXT,
+        chunk_id      TEXT,
+        event_id      TEXT,
+        entity_id     TEXT,
+        evidence_role TEXT NOT NULL DEFAULT 'supports',
+        PRIMARY KEY(claim_id, object_id, chunk_id, event_id, entity_id),
+        FOREIGN KEY(claim_id) REFERENCES answer_claims(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim
+        ON claim_evidence(claim_id);
+    """
+
+    // MARK: - v29 — Persistent embedding cache
+    //
+    // An L2 behind the in-memory LRU: identical text (email signatures,
+    // legal disclaimers, quoted footers, and re-ingested files) doesn't
+    // pay the embedding cost again across launches. Keyed by
+    // (model_id, text_hash) so switching embedders (e.g. NL → BGE-M3)
+    // never returns a stale vector — a different model_id is a cache
+    // miss. Vector is stored as a raw Float32 BLOB (full fidelity; the
+    // quantized copy still lives in `vectors` for the ANN index).
+    //
+    // This is a cache, not ledger data — safe to DELETE wholesale; it
+    // rebuilds on demand. No foreign keys.
+
+    private static let v29: String = """
+    CREATE TABLE embedding_cache (
+        model_id   TEXT NOT NULL,
+        text_hash  TEXT NOT NULL,
+        dimension  INTEGER NOT NULL,
+        vector     BLOB NOT NULL,
+        created_at REAL NOT NULL,
+        PRIMARY KEY (model_id, text_hash)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_embedding_cache_created
+        ON embedding_cache(created_at DESC);
+    """
+
+    // MARK: - v30 — Enrichment tiers (System 2: Hot / Warm / Cold)
+    //
+    // Per-document importance + tier. The TierPromoter recomputes
+    // importance from cheap signals (citations, query hits, pins,
+    // recency) and assigns a tier; in Hot/Warm/Cold mode only HOT
+    // documents get deep LLM enrichment, cold stays rule-only. Additive
+    // + cache-like: safe to clear (it rebuilds from signals).
+
+    private static let v30: String = """
+    CREATE TABLE enrichment_status (
+        object_id      TEXT PRIMARY KEY NOT NULL,
+        tier           TEXT NOT NULL DEFAULT 'cold',   -- cold | warm | hot
+        importance     REAL NOT NULL DEFAULT 0,
+        query_hits     INTEGER NOT NULL DEFAULT 0,
+        citation_count INTEGER NOT NULL DEFAULT 0,
+        pinned         INTEGER NOT NULL DEFAULT 0,
+        enriched       INTEGER NOT NULL DEFAULT 0,      -- deep pass done?
+        updated_at     REAL NOT NULL,
+        FOREIGN KEY(object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_enrichment_tier
+        ON enrichment_status(tier);
+    CREATE INDEX IF NOT EXISTS idx_enrichment_importance
+        ON enrichment_status(importance DESC);
+    """
+
+    // MARK: - v31 — Gap nodes + persisted contradictions (System 3)
+    //
+    // `gap_nodes` — INFERRED expected-but-missing evidence (a reply with
+    // no ingested parent, a hole in a numbered/dated sequence, a
+    // reference to an absent document). Never asserted as fact; low
+    // confidence, always shown as "likely missing" with a reason. This
+    // is the historiographical "silence" discipline: a gap is not a
+    // negation.
+    //
+    // `contradictions` — persist conflicts the ContradictionFinder
+    // detects so they accumulate in the ledger instead of being
+    // recomputed per query.
+
+    private static let v31: String = """
+    CREATE TABLE gap_nodes (
+        id            TEXT PRIMARY KEY NOT NULL,
+        kind          TEXT NOT NULL,          -- threadParent | sequenceHole | danglingReference | cadenceBreak
+        description   TEXT NOT NULL,
+        reason        TEXT NOT NULL,
+        confidence    REAL NOT NULL DEFAULT 0.3,
+        near_entity   TEXT,
+        before_event  TEXT,
+        after_event   TEXT,
+        evidence_object_id TEXT,
+        detected_at   REAL NOT NULL,
+        dismissed     INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_gap_nodes_kind ON gap_nodes(kind);
+    CREATE INDEX IF NOT EXISTS idx_gap_nodes_entity ON gap_nodes(near_entity);
+
+    CREATE TABLE contradictions (
+        id           TEXT PRIMARY KEY NOT NULL,
+        description  TEXT NOT NULL,
+        claim_a      TEXT NOT NULL,
+        claim_b      TEXT NOT NULL,
+        evidence_a   TEXT,
+        evidence_b   TEXT,
+        severity     TEXT NOT NULL DEFAULT 'medium',
+        status       TEXT NOT NULL DEFAULT 'open',
+        detected_at  REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_contradictions_status
+        ON contradictions(status);
     """
 }

@@ -262,11 +262,29 @@ public struct SpreadsheetLoader: Ingestor {
                       let cellGT = row.range(of: ">", range: cellOpen.upperBound..<row.endIndex)
                 else { break }
                 let cellHeader = String(row[cellOpen.upperBound..<cellGT.lowerBound])
-                let cellEnd = row.range(of: "</c>", range: cellGT.upperBound..<row.endIndex)
-                    ?? row.range(of: "/>", range: cellOpen.upperBound..<cellGT.upperBound)
-                let cellBodyStart = cellGT.upperBound
-                let cellBodyEnd = cellEnd?.lowerBound ?? cellBodyStart
-                let body = String(row[cellBodyStart..<cellBodyEnd])
+                // A self-closing cell `<c .../>` has no body. Detect it by
+                // checking the character immediately before `>`: a slash
+                // means the header itself terminates the element. Without
+                // this branch the legacy code searched for `/>` in a
+                // backward range and produced an inverted slice that
+                // crashed Swift's String.subscript with "Range requires
+                // lowerBound <= upperBound".
+                let isSelfClosing = cellHeader.hasSuffix("/")
+                let body: String
+                let advanceTo: String.Index
+                if isSelfClosing {
+                    body = ""
+                    advanceTo = cellGT.upperBound
+                } else if let cellEnd = row.range(of: "</c>", range: cellGT.upperBound..<row.endIndex) {
+                    body = String(row[cellGT.upperBound..<cellEnd.lowerBound])
+                    advanceTo = cellEnd.upperBound
+                } else {
+                    // Malformed cell — no closing tag found. Skip body
+                    // and resume scanning after the `>` so the loop
+                    // doesn't spin in place.
+                    body = ""
+                    advanceTo = cellGT.upperBound
+                }
                 let isString = cellHeader.contains("t=\"s\"")
                 let isInlineStr = cellHeader.contains("t=\"inlineStr\"")
                 let plain = DocxLoader.stripTags(body)
@@ -278,7 +296,7 @@ public struct SpreadsheetLoader: Ingestor {
                 } else if !plain.isEmpty {
                     cellValues.append(plain)
                 }
-                inner = (cellEnd?.upperBound) ?? cellGT.upperBound
+                inner = advanceTo
             }
             if !cellValues.isEmpty {
                 lines.append(cellValues.joined(separator: "\t"))

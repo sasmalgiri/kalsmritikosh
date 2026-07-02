@@ -18,6 +18,7 @@ struct KalsmritikoshApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .preferredColorScheme(.light)   // light UI across all phases
                 .task {
                     await appState.boot()
                 }

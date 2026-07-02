@@ -28,6 +28,7 @@ public struct CompletenessView: View {
             Divider()
             content
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task {
             await reload()
         }
@@ -40,7 +41,7 @@ public struct CompletenessView: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text("Completeness")
-                        .font(.title2.bold())
+                        .font(Theme.display(28, .bold))
                     Text(summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -116,6 +117,7 @@ public struct CompletenessView: View {
                 rowView(row)
             }
             .listStyle(.inset)
+            .scrollContentBackground(.hidden)
         }
     }
 

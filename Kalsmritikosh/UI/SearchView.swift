@@ -18,43 +18,104 @@ public struct SearchView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search timelines, entities, summaries…", text: $query)
-                    .textFieldStyle(.plain)
-                    .onSubmit(runSearch)
-                if searching { ProgressView().controlSize(.small) }
-            }
-            .padding(10)
-            .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
-            .padding()
-
+            searchBar
             if hits.isEmpty {
-                Spacer()
-                VStack(spacing: 8) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 32))
-                        .foregroundStyle(.secondary)
-                    Text("Type to search across your knowledge base.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
+                emptyState
             } else {
-                List(hits) { chunk in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(chunk.text)
-                            .lineLimit(4)
-                        Text("KO \(chunk.objectID.uuidString.prefix(8)) · chunk #\(chunk.ordinal)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-                }
-                .listStyle(.inset)
+                resultsList
             }
         }
+        .background(AuroraBackdrop(intensity: 0.6))
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(searching ? Theme.brand : .secondary)
+            TextField("Search chunks, entities, summaries…", text: $query)
+                .textFieldStyle(.plain)
+                .font(.title3)
+                .onSubmit(runSearch)
+            if searching {
+                ProgressView().controlSize(.small)
+            } else if !query.isEmpty {
+                Button {
+                    query = ""
+                    hits = []
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Theme.brand.opacity(0.2), lineWidth: 1))
+        .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(Theme.brandGradient(0.16))
+                    .frame(width: 84, height: 84)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(Theme.brandGradient())
+            }
+            Text("Search your knowledge base")
+                .font(Theme.display(24, .bold))
+            Text("Full-text search runs instantly across every chunk — no waiting for AI enrichment.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var resultsList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                Text("\(hits.count) result\(hits.count == 1 ? "" : "s")")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                ForEach(hits) { chunk in
+                    resultCard(chunk)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+        }
+    }
+
+    private func resultCard(_ chunk: Chunk) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(chunk.text)
+                .font(.callout)
+                .lineLimit(4)
+                .textSelection(.enabled)
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text")
+                    .imageScale(.small)
+                    .foregroundStyle(Theme.brand)
+                Text("KO \(chunk.objectID.uuidString.prefix(8)) · chunk #\(chunk.ordinal)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: Theme.Radius.md)
     }
 
     private func runSearch() {

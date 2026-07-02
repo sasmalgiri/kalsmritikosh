@@ -64,8 +64,10 @@ public struct TimelineView: View {
                     }
                 }
                 .listStyle(.inset)
+                .scrollContentBackground(.hidden)
             }
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task { await refresh() }
         .task(id: events.map(\.id)) { await loadVersionCounts() }
         .sheet(item: $versionSheetEvent) { ev in
@@ -120,15 +122,22 @@ public struct TimelineView: View {
     }
 
     private var placeholder: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "calendar.day.timeline.left")
-                .font(.system(size: 36))
-                .foregroundStyle(.tint)
-            Text("Timeline").font(.title2)
-            Text("Ingest a folder and Atlas will reconstruct events here.")
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Theme.brandGradient(0.16))
+                    .frame(width: 84, height: 84)
+                Image(systemName: "calendar.day.timeline.left")
+                    .font(.system(size: 34, weight: .light))
+                    .foregroundStyle(Theme.brandGradient())
+            }
+            Text("Your timeline")
+                .font(Theme.display(24, .bold))
+            Text("Ingest a folder and Kalsmritikosh reconstructs dated events into a timeline here.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

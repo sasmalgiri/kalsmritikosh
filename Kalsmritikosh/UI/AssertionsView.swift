@@ -33,6 +33,7 @@ public struct AssertionsView: View {
             Divider()
             content
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
     }
 
@@ -41,7 +42,7 @@ public struct AssertionsView: View {
             Image(systemName: "scroll")
                 .foregroundStyle(.tint)
             Text("Assertions")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             Spacer()
             Text("\(filtered.count) of \(items.count) shown · \(totalCount) total")
                 .font(.caption2.monospacedDigit())
@@ -85,13 +86,14 @@ public struct AssertionsView: View {
             empty
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
+                LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(filtered, id: \.id) { a in
                         row(a)
                     }
                 }
                 .padding(12)
             }
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -152,11 +154,9 @@ public struct AssertionsView: View {
             .font(.caption2.monospacedDigit())
             .foregroundStyle(.secondary)
         }
-        .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.04))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.12), lineWidth: 1))
-        .cornerRadius(8)
+        .padding(12)
+        .cardSurface(cornerRadius: 12)
     }
 
     // MARK: - I/O

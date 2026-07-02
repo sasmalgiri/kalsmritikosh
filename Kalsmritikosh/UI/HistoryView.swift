@@ -70,6 +70,7 @@ public struct HistoryView: View {
         .sheet(item: $counterfactualDraft) { draft in
             counterfactualSheet(draft: draft)
         }
+        .background(AuroraBackdrop(intensity: 0.5))
     }
 
     // MARK: - Header
@@ -79,7 +80,7 @@ public struct HistoryView: View {
             Image(systemName: "book.closed")
                 .foregroundStyle(.tint)
             Text("History")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             Spacer()
             if streaming {
                 ProgressView().controlSize(.small)
@@ -277,14 +278,9 @@ public struct HistoryView: View {
                 counterfactualStrip(cfs, chapter: chapter)
             }
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.04))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-        )
-        .cornerRadius(10)
+        .padding(12)
+        .cardSurface(cornerRadius: 12)
     }
 
     /// HISTORY Phase G.7 — small strip rendering the chapter's top 3

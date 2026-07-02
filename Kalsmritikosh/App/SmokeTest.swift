@@ -118,10 +118,30 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     else { failed.append("answer had zero citations") }
 
     let body = answer.body.lowercased()
-    if body.contains("supplier abc") || body.contains("supplier_abc") {
-        passed.append("body mentions Supplier ABC")
+    // Ledger-AI contract: the correct smoke check for a citation-first
+    // system is "did the answer draw on the RIGHT EVIDENCE", NOT "did
+    // the stochastic LLM emit a literal string". A local model may
+    // write "the vendor" / "the supplier" / "the external provider"
+    // instead of "Supplier ABC" and still be correct. So the primary
+    // assertion resolves each citation's KO to its source filename and
+    // checks whether any resolves to a supplier_abc_* fixture. The
+    // body-wording check survives only as a soft secondary signal.
+    var citedSupplierEvidence = false
+    if let objectsRepo = state.objects {
+        for citation in answer.citations {
+            if let url = try? await objectsRepo.fetchSourceURL(id: citation.objectID),
+               url.lastPathComponent.lowercased().contains("supplier_abc") {
+                citedSupplierEvidence = true
+                break
+            }
+        }
+    }
+    if citedSupplierEvidence {
+        passed.append("cited Supplier ABC evidence file (deterministic citation-source check)")
+    } else if body.contains("supplier abc") || body.contains("supplier_abc") {
+        passed.append("body mentions Supplier ABC (soft signal — no citation resolved to a supplier_abc_* file)")
     } else {
-        failed.append("body never mentions Supplier ABC")
+        failed.append("answer neither cited a supplier_abc_* file nor mentioned Supplier ABC")
     }
 
     if body.contains("delivery") || body.contains("delayed") || body.contains("amendment") {

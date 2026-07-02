@@ -31,6 +31,7 @@ public struct LibraryView: View {
             Divider()
             content
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
         .sheet(item: $openedTopic) { topic in
             TopicReconstructionSheet(topic: topic) {
@@ -46,7 +47,7 @@ public struct LibraryView: View {
             Image(systemName: "books.vertical.fill")
                 .foregroundStyle(.tint)
             Text("Library")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             Spacer()
             Text("\(topics.count) topics")
                 .font(.caption)
@@ -101,6 +102,7 @@ public struct LibraryView: View {
                 }
                 .padding(14)
             }
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -126,14 +128,9 @@ public struct LibraryView: View {
                     .lineLimit(4)
                     .multilineTextAlignment(.leading)
             }
-            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.secondary.opacity(0.05))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-            )
-            .cornerRadius(10)
+            .padding(12)
+            .cardSurface(cornerRadius: 12)
         }
         .buttonStyle(.plain)
     }

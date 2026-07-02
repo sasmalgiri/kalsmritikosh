@@ -36,6 +36,7 @@ public struct SavedQueriesView: View {
             Divider()
             content
         }
+        .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
         .sheet(item: $activeInvestigation) { inv in
             SavedQueryInvestigationSheet(
@@ -56,7 +57,7 @@ public struct SavedQueriesView: View {
             Image(systemName: "bookmark")
                 .foregroundStyle(.tint)
             Text("Saved questions")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             Spacer()
             Text("\(items.count)")
                 .font(.caption)
@@ -86,6 +87,7 @@ public struct SavedQueriesView: View {
                 }
                 .padding(14)
             }
+            .scrollContentBackground(.hidden)
         }
     }
 
@@ -162,14 +164,9 @@ public struct SavedQueriesView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
-        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.04))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.secondary.opacity(0.12), lineWidth: 1)
-        )
-        .cornerRadius(10)
+        .padding(12)
+        .cardSurface(cornerRadius: 12)
     }
 
     // MARK: - I/O

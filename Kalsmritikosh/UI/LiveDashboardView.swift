@@ -18,6 +18,8 @@ import Charts
 public struct LiveDashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var rootCoverage: [(displayName: String, fileCount: Int)] = []
+    @State private var tierCounts: [EnrichmentTier: Int] = [:]
+    @State private var gapCount: Int = 0
 
     public init() {}
 
@@ -27,6 +29,8 @@ public struct LiveDashboardView: View {
                 header
                 if let live = appState.liveMetrics {
                     snapshotRow(live.current)
+                    llmBudgetPanel(live.current)
+                    enrichmentTiersPanel()
                     pipelineStrip(live.current.pipelineCounters)
                     throughputChart(live.throughput)
                     Divider().padding(.vertical, 4)
@@ -58,6 +62,9 @@ public struct LiveDashboardView: View {
         }
         .task {
             await loadRootCoverage()
+        }
+        .task {
+            await loadEnrichmentTiers()
         }
         .onAppear {
             // Phase J.13 — start polling only while the Live tab is
@@ -115,22 +122,114 @@ public struct LiveDashboardView: View {
 
     @ViewBuilder
     private func snapshotCell(_ label: String, _ value: Int, _ icon: String, tint: Color = .tint) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .foregroundStyle(tint)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        LinearGradient(colors: [tint, tint.opacity(0.7)],
+                                       startPoint: .top, endPoint: .bottom),
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
                 Text(label)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            Text(value.formatted())
-                .font(.title3.weight(.semibold))
+            CountUpText(value) { $0.formatted() }
+                .font(.title2.weight(.bold))
                 .monospacedDigit()
+                .contentTransition(.numericText())
         }
-        .padding(10)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.06))
-        .cornerRadius(8)
+        .cardSurface(cornerRadius: 12, tint: tint)
+    }
+
+    // MARK: - LLM budget (ledger-first reduction)
+
+    @ViewBuilder
+    private func llmBudgetPanel(_ sample: LiveMetrics.Sample) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "bolt.badge.clock")
+                    .foregroundStyle(Theme.brand)
+                Text("LLM budget")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(Int(sample.llmSkipRate * 100))% skipped")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.green)
+            }
+            HStack(spacing: 10) {
+                budgetTile("Calls run", sample.llmCallsRun, "waveform", .blue)
+                budgetTile("Skipped", sample.llmCallsSkipped, "bolt.slash", .green)
+                budgetTile("Timeouts", sample.llmTimeouts, "clock.badge.exclamationmark", .orange)
+                budgetTile("Embed cache", Int(sample.embedHitRate * 100), "externaldrive.badge.checkmark", .purple, suffix: "%")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
+    }
+
+    @ViewBuilder
+    private func budgetTile(_ label: String, _ value: Int, _ icon: String, _ tint: Color, suffix: String = "") -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).foregroundStyle(tint).imageScale(.small)
+                Text(label).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            HStack(spacing: 0) {
+                CountUpText(value).font(.title3.weight(.bold)).monospacedDigit()
+                if !suffix.isEmpty { Text(suffix).font(.callout.weight(.semibold)).foregroundStyle(.secondary) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Enrichment tiers (Hot / Warm / Cold)
+
+    @ViewBuilder
+    private func enrichmentTiersPanel() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "thermometer.medium")
+                    .foregroundStyle(Theme.brand)
+                Text("Enrichment tiers (Hot / Warm / Cold)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            HStack(spacing: 10) {
+                tierTile(EnrichmentTier.hot.displayName, tierCounts[.hot] ?? 0, "flame", Theme.brand)
+                tierTile(EnrichmentTier.warm.displayName, tierCounts[.warm] ?? 0, "sun.max", .orange)
+                tierTile(EnrichmentTier.cold.displayName, tierCounts[.cold] ?? 0, "snowflake", .secondary)
+                tierTile("Gaps flagged", gapCount, "questionmark.diamond", .pink)
+            }
+            Text("Only hot documents get deep LLM enrichment in Hot/Warm/Cold mode.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
+    }
+
+    @ViewBuilder
+    private func tierTile(_ label: String, _ value: Int, _ icon: String, _ tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                Image(systemName: icon).foregroundStyle(tint).imageScale(.small)
+                Text(label).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            CountUpText(value).font(.title3.weight(.bold)).monospacedDigit()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Pipeline swim-lane
@@ -550,6 +649,15 @@ public struct LiveDashboardView: View {
             rows.append((root.displayName, count))
         }
         await MainActor.run { self.rootCoverage = rows }
+    }
+
+    private func loadEnrichmentTiers() async {
+        let counts = await appState.enrichment?.countsByTier() ?? [:]
+        let gaps = await appState.gapNodes?.count() ?? 0
+        await MainActor.run {
+            self.tierCounts = counts
+            self.gapCount = gaps
+        }
     }
 
     private static func formatBytes(_ bytes: Int64) -> String {

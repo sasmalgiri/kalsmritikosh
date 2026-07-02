@@ -41,6 +41,69 @@ public final class AppState {
     /// — "last: invoice-432.eml"). Cleared when the counter hits 0.
     public private(set) var ingestLastFile: String?
 
+    // Idle maintenance (idle-driven summarization/distillation). The UI
+    // shows a banner when a pass is running so the user knows the app is
+    // working while their machine is idle — and that it stops the moment
+    // they return.
+    public private(set) var maintenanceActive: Bool = false
+    /// Human-readable status line for the maintenance banner.
+    public private(set) var maintenanceStatus: String?
+    /// When the last maintenance transition happened (for "· 2m ago").
+    public private(set) var maintenanceLastEventAt: Date?
+
+    /// True while an "Ask first" prompt is waiting for the user's answer.
+    public private(set) var maintenanceAskPending: Bool = false
+    private var maintenanceAskContinuation: CheckedContinuation<Bool, Never>?
+
+    /// Applied on the main actor whenever the idle scheduler transitions.
+    /// Silent in Automatic mode — we still track `maintenanceActive` for
+    /// internal logic but never surface a banner.
+    func applyMaintenanceEvent(_ event: MaintenanceEvent) {
+        let silent = FeatureFlags.shared.maintenanceMode == .automatic
+        maintenanceLastEventAt = Date()
+        switch event {
+        case .started:
+            maintenanceActive = true
+            maintenanceStatus = silent ? nil : "Tidying your knowledge while your Mac is idle…"
+        case .completed(let rows):
+            maintenanceActive = false
+            maintenanceStatus = silent ? nil : "Maintenance complete · \(rows) memories refreshed"
+        case .paused:
+            maintenanceActive = false
+            maintenanceStatus = silent ? nil : "Maintenance paused — you're back"
+        }
+    }
+
+    /// Policy gate consulted by the scheduler before each pass. Off →
+    /// never; Automatic / Notify → always; Ask → surface a prompt and
+    /// await the user's choice.
+    func maintenanceGate() async -> Bool {
+        switch FeatureFlags.shared.maintenanceMode {
+        case .off:
+            return false
+        case .automatic, .notify:
+            return true
+        case .ask:
+            guard !maintenanceAskPending else { return false }
+            maintenanceAskPending = true
+            maintenanceStatus = "Run maintenance now? Your Mac is idle."
+            maintenanceLastEventAt = Date()
+            let answer = await withCheckedContinuation { cont in
+                maintenanceAskContinuation = cont
+            }
+            maintenanceAskPending = false
+            maintenanceStatus = nil
+            return answer
+        }
+    }
+
+    /// Called by the UI when the user answers the "Ask first" prompt.
+    public func respondToMaintenancePrompt(_ run: Bool) {
+        maintenanceAskContinuation?.resume(returning: run)
+        maintenanceAskContinuation = nil
+        maintenanceAskPending = false
+    }
+
     // Storage
     public private(set) var database: Database?
     public private(set) var vectorStore: SQLiteVectorStore?
@@ -53,6 +116,25 @@ public final class AppState {
     public private(set) var relationships: RelationshipsRepository?
     public private(set) var memoryRepo: MemoryRepository?
     public private(set) var conversations: ConversationsRepository?
+    /// Ledger-AI v28 — closed-corpus answer contract stores. A corpus
+    /// snapshot is taken per answer; the answer + its claims + evidence
+    /// are persisted so "Why this answer?" can reconstruct the ledger
+    /// state each answer was produced against.
+    public private(set) var corpusSnapshots: CorpusSnapshotRepository?
+    public private(set) var answerLedger: AnswerLedgerRepository?
+    /// System 2 (Hot/Warm/Cold) — per-document importance + tier.
+    public private(set) var enrichment: EnrichmentStatusRepository?
+    /// System 3 — inferred missing-evidence gap nodes.
+    public private(set) var gapNodes: GapNodeRepository?
+    /// System 3 — persisted conflicts between simultaneously-supported claims.
+    public private(set) var contradictions: ContradictionsRepository?
+    /// Count of open contradictions from the last proactive/maintenance scan.
+    public private(set) var proactiveContradictionCount: Int = 0
+    /// The one active system engine for this launch (built from SystemMode).
+    /// Owns this system's background maintenance; see Knowledge/Ledger/SystemEngine.swift.
+    public private(set) var systemEngine: (any SystemEngine)?
+    public private(set) var proactiveGapCount: Int = 0
+    public private(set) var ledgerLastMaintainedAt: Date?
     /// G3.22 — exposed so smoke / eval rigs can assert against the
     /// typed-bond engine end-to-end.
     public private(set) var factBonds: FactBondsRepository?
@@ -247,6 +329,11 @@ public final class AppState {
             let relationships = RelationshipsRepository(database: db)
             let memoryRepo = MemoryRepository(database: db)
             let conversationsRepo = ConversationsRepository(database: db)
+            let corpusSnapshotsRepo = CorpusSnapshotRepository(database: db)
+            let answerLedgerRepo = AnswerLedgerRepository(database: db)
+            let enrichmentRepo = EnrichmentStatusRepository(database: db)
+            let gapNodesRepo = GapNodeRepository(database: db)
+            let contradictionsRepo = ContradictionsRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -450,8 +537,11 @@ public final class AppState {
             // Embedder goes through the CapabilityRegistry — when an
             // Ollama embedding model is reachable it wins; otherwise
             // we fall back to NLEmbedder. CachedEmbedder LRUs the result.
+            let resolvedEmbedder = CapabilityResolvedEmbedder(capabilities: capabilities)
             let embedder: any Embedder = CachedEmbedder(
-                wrapping: CapabilityResolvedEmbedder(capabilities: capabilities)
+                wrapping: resolvedEmbedder,
+                persistent: EmbeddingCacheRepository(database: db),
+                modelID: "embedder-\(resolvedEmbedder.dimension)"
             )
             let timelineEngine = TimelineEngine(events: events)
             let summarizer = LLMSummarizer(
@@ -608,7 +698,8 @@ public final class AppState {
                 memoryRepo: memoryRepo,
                 narrativeComposer: narrativeComposer,
                 eventsRepo: events,
-                eventLinks: eventLinksRepo
+                eventLinks: eventLinksRepo,
+                onDemandDistiller: memoryDistiller
             )
 
             // ── Ingestion ────────────────────────────────────────────
@@ -739,15 +830,73 @@ public final class AppState {
             let compression = NightlyCompressionScheduler(
                 summarizer: summarizer,
                 memoryRepo: memoryRepo,
-                scheduler: backgroundScheduler
+                idleThreshold: {
+                    // Read live from Settings so changes apply without a
+                    // relaunch. UserDefaults read is thread-safe.
+                    let minutes = FeatureFlags.maintenanceIdleMinutesValue()
+                    return TimeInterval(max(1, minutes) * 60)
+                },
+                gate: { [weak self] in
+                    await self?.maintenanceGate() ?? false
+                },
+                onEvent: { [weak self] event in
+                    Task { @MainActor in self?.applyMaintenanceEvent(event) }
+                }
             )
             await compression.start()
 
+            // ── System engine (the three independent architectures) ──
+            // Exactly one engine is built per launch from the active mode.
+            // It owns this system's background maintenance; the ingest
+            // plumbing below is generic and driven by `engine.ingestPolicy`.
+            // Advanced FeatureFlags toggles are OR'd in as overrides. No
+            // cross-mode gating lives in AppState any more — each engine is
+            // self-contained (Knowledge/Ledger/*Engine.swift).
+            let engine = SystemEngineFactory.make(FeatureFlags.systemModeValue())
+            let basePolicy = engine.ingestPolicy
+
+            // Ingest-time memory distillation: eager only if the engine's
+            // policy wants it (Full LLM) or the advanced flag forces it.
+            let distillOverride = await MainActor.run { FeatureFlags.shared.ingestTimeMemoryDistillation }
+            let distillOnIngest = basePolicy.eagerMemoryDistillation || distillOverride
             let updater = IncrementalUpdater(
                 stream: ingest.invalidations,
-                distiller: memoryDistiller
+                distiller: memoryDistiller,
+                distillationEnabled: distillOnIngest
             )
             await updater.start()
+            if !distillOnIngest {
+                AtlasLog.app.info("Ingest-time memory distillation OFF (ledger-first default — memory warmed on demand)")
+            }
+
+            // Hand the engine everything its maintenance needs, then
+            // activate it. Only this engine's promoter runs — the others
+            // are never even constructed.
+            let engineContext = SystemEngineContext(
+                enrichment: enrichmentRepo,
+                objects: objects,
+                entities: entities,
+                events: events,
+                distiller: memoryDistiller,
+                scanForGaps: { [weak self] in
+                    // System 3 idle maintenance re-derives BOTH the gap
+                    // layer and the contradiction layer (both rule-based).
+                    let gaps = await self?.scanForGaps() ?? 0
+                    await self?.scanForContradictions()
+                    return gaps
+                },
+                onGapScan: { [weak self] count in
+                    Task { @MainActor in
+                        self?.proactiveGapCount = count
+                        self?.ledgerLastMaintainedAt = Date()
+                    }
+                },
+                bumpCitations: { [enrichmentRepo] ids in
+                    for id in ids { await enrichmentRepo.bumpCitation(id) }
+                }
+            )
+            await engine.activate(engineContext)
+            AtlasLog.app.info("System engine active: \(engine.mode.rawValue, privacy: .public)")
 
             // G2-3 — periodic backfill that re-runs the LLM context-
             // prefix generator on chunks whose row landed with NULL
@@ -758,17 +907,33 @@ public final class AppState {
             // label is "<source>-backfill" so the operator can
             // distinguish ingest-time from backfilled rows in the
             // data.
-            let contextPrefixBackfiller = ContextPrefixBackfiller(
-                chunks: chunks,
-                objects: objects,
-                generator: LLMContextPrefixGenerator(
-                    capabilities: capabilities,
-                    initialTimeoutMs: 8_000,
-                    maxTimeoutMs: 32_000,
-                    maxAttempts: 3
+            // Ledger-AI v28 — OFF by default. When enabled, the
+            // backfiller now writes the prefix AND re-embeds the chunk's
+            // vector (prefix + text), so the LLM work actually improves
+            // retrieval. Still opt-in because it's LLM-heavy; the archive
+            // stays fully FTS + entity + event searchable regardless.
+            // System-mode preset: Full LLM turns the LLM context-prefix
+            // sweep ON (deep); the other modes leave it off. Individual
+            // flag is an advanced override.
+            let prefixOverride = await MainActor.run { FeatureFlags.shared.contextPrefixBackfillEnabled }
+            let contextPrefixBackfillEnabled = basePolicy.contextPrefixBackfill || prefixOverride
+            if contextPrefixBackfillEnabled {
+                let contextPrefixBackfiller = ContextPrefixBackfiller(
+                    chunks: chunks,
+                    objects: objects,
+                    generator: LLMContextPrefixGenerator(
+                        capabilities: capabilities,
+                        initialTimeoutMs: 8_000,
+                        maxTimeoutMs: 32_000,
+                        maxAttempts: 3
+                    ),
+                    embedder: embedder,
+                    vectors: vectors
                 )
-            )
-            await contextPrefixBackfiller.start()
+                await contextPrefixBackfiller.start()
+            } else {
+                AtlasLog.app.info("ContextPrefixBackfiller disabled (Ledger-AI v28 default — enable in Settings for hot/pinned data)")
+            }
 
             // HISTORY Phase A.8 — periodic re-tier of pre-Phase-A
             // entity rows. Hourly cadence with 500-row batches;
@@ -966,6 +1131,11 @@ public final class AppState {
             self.relationships = relationships
             self.memoryRepo = memoryRepo
             self.conversations = conversationsRepo
+            self.corpusSnapshots = corpusSnapshotsRepo
+            self.answerLedger = answerLedgerRepo
+            self.enrichment = enrichmentRepo
+            self.gapNodes = gapNodesRepo
+            self.contradictions = contradictionsRepo
             self.factBonds = factBondsRepo
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)
@@ -1055,6 +1225,7 @@ public final class AppState {
             self.backgroundScheduler = backgroundScheduler
             self.folderWatcher = watcher
             self.incrementalUpdater = updater
+            self.systemEngine = engine
             self.brain = brain
             self.ingest = ingest
             self.phase = .ready
@@ -1139,6 +1310,216 @@ public final class AppState {
     /// next, and T8's hash-idempotent path no-ops on files already
     /// ingested. Fire-and-forget — the brain's own answer call runs in
     /// parallel and gets refined on the user's next question.
+    /// Ledger-AI v28 — take a fresh corpus snapshot and persist the
+    /// answer (with its claims + citation evidence) against it. Called
+    /// after every user-facing answer so the ledger records what the
+    /// archive looked like when each answer was produced. Best-effort:
+    /// failures are logged, never surfaced to the user.
+    public func recordAnswer(question: String, answer: VerifiedAnswer) async {
+        guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return }
+        let snapshot = await currentCorpusSnapshot()
+        do {
+            if let snapshot { try await snapshots.insert(snapshot) }
+            try await ledger.persist(
+                question: question,
+                answer: answer,
+                corpusSnapshotID: snapshot?.id
+            )
+        } catch {
+            AtlasLog.app.error("recordAnswer failed: \(String(describing: error), privacy: .public)")
+        }
+
+        // Hand the shipped answer to the active system engine. System 2
+        // (Hot/Warm/Cold) folds the citation signal into importance on its
+        // next idle scoring pass; the other engines no-op. All mode-
+        // specific behaviour now lives in the engine, not here.
+        await systemEngine?.onAnswer(answer)
+    }
+
+    /// Build a point-in-time census of the archive from the live repos.
+    /// FTS is populated synchronously at chunk insert, so parsed KOs are
+    /// immediately searchable — indexedCount tracks parsedCount. Returns
+    /// nil if the core repos aren't booted.
+    public func currentCorpusSnapshot() async -> CorpusSnapshot? {
+        guard let files, let objects else { return nil }
+        let fileCount = (try? await files.count()) ?? 0
+        let parsed = (try? await objects.count()) ?? 0
+        let eventCount = (try? await events?.count() ?? 0) ?? 0
+        // Ledgered = parsed KOs that have contributed structured facts.
+        // Approximate as parsed when any events exist (the extractor ran);
+        // 0 before the first extraction pass.
+        let ledgered = eventCount > 0 ? parsed : 0
+        return CorpusSnapshot(
+            schemaVersion: SchemaMigrations.latestVersion,
+            fileCount: fileCount,
+            parsedCount: parsed,
+            indexedCount: parsed,      // FTS is synchronous at insert
+            ledgeredCount: ledgered,
+            failedCount: 0
+        )
+    }
+
+    // MARK: - System 3: gap detection + investigation (rule-based)
+
+    /// Scan the ledger for expected-but-missing evidence and persist
+    /// GapNodes. Rule-based, no LLM. Runs all three GapDetector rules:
+    ///   1. sequence holes in numbered IDs (invoice / payment),
+    ///   2. dangling references ("invoice #42" with no such invoice ingested),
+    ///   3. reply threads whose original message wasn't ingested.
+    /// Returns the count found.
+    @discardableResult
+    public func scanForGaps() async -> Int {
+        guard let entities, let gapNodes else { return 0 }
+        await gapNodes.clear()
+        let detector = GapDetector()
+        var found: [GapNode] = []
+
+        // Rule 1 — holes in numbered sequences. Also collect the known
+        // invoice numbers to feed the dangling-reference rule below.
+        let numbered: [(Entity.Kind, String)] = [
+            (.invoiceNumber, "Invoice"),
+            (.paymentID, "Payment")
+        ]
+        var knownInvoiceNumbers = Set<Int>()
+        for (kind, hint) in numbered {
+            let rows = (try? await entities.list(kind: kind, limit: 500)) ?? []
+            let labels = rows.map(\.value)
+            found += detector.detectSequenceGaps(labels: labels, kindHint: hint)
+            if kind == .invoiceNumber {
+                for label in labels { knownInvoiceNumbers.formUnion(Self.integers(in: label)) }
+            }
+        }
+
+        // Rules 2 & 3 need document bodies + subjects. Load a bounded
+        // sample so one huge archive can't make an idle scan expensive.
+        if let objects {
+            let sample = await loadObjectSample(objects: objects, limit: 300)
+
+            // Rule 2 — dangling references to invoices not in the archive.
+            let texts = sample.map { (objectID: $0.id, text: $0.content) }
+            found += detector.detectDanglingReferences(
+                texts: texts,
+                knownNumbers: knownInvoiceNumbers,
+                referenceKeyword: "invoice"
+            )
+
+            // Rule 3 — replies whose original (thread root) wasn't ingested.
+            // A message is a "root" if its subject carries no reply prefix;
+            // a reply hasParent iff some root shares its normalized subject.
+            let rootSubjects = Set(
+                sample.compactMap { row -> String? in
+                    guard let s = row.subject, !s.isEmpty, !Self.isReplySubject(s) else { return nil }
+                    let n = Self.normalizeSubject(s)
+                    return n.isEmpty ? nil : n
+                }
+            )
+            let replySubjects: [(objectID: UUID, subject: String, hasParent: Bool)] =
+                sample.compactMap { row in
+                    guard let s = row.subject, !s.isEmpty else { return nil }
+                    let hasParent = rootSubjects.contains(Self.normalizeSubject(s))
+                    return (objectID: row.id, subject: s, hasParent: hasParent)
+                }
+            found += detector.detectThreadParent(replySubjects: replySubjects)
+        }
+
+        await gapNodes.insertMany(found)
+        AtlasLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent)")
+        return found.count
+    }
+
+    /// Scan the ledger for CONTRADICTIONS — conflicts the archive
+    /// supports simultaneously (currently: the same event dated
+    /// differently by two independent sources). Rule-based, no LLM.
+    /// Persists the open set (replacing the prior scan) and returns the count.
+    @discardableResult
+    public func scanForContradictions() async -> Int {
+        guard let events, let contradictions else { return 0 }
+        let recent = (try? await events.recent(limit: 2_000)) ?? []
+        let found = ContradictionDetector().detectEventDateConflicts(recent)
+        await contradictions.clear()
+        await contradictions.insertMany(found)
+        let openCount = await contradictions.count()
+        self.proactiveContradictionCount = openCount
+        AtlasLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflicting-date pair(s)")
+        return found.count
+    }
+
+    /// Load a bounded sample of objects with their body + email subject
+    /// (from metadata) for the rule-based gap detectors. No LLM.
+    private func loadObjectSample(
+        objects: KnowledgeObjectRepository,
+        limit: Int
+    ) async -> [(id: UUID, content: String, subject: String?)] {
+        let ids = (try? await objects.allIDs(offset: 0, pageSize: limit)) ?? []
+        var out: [(id: UUID, content: String, subject: String?)] = []
+        out.reserveCapacity(ids.count)
+        for id in ids {
+            guard let obj = (try? await objects.load(id: id)) ?? nil else { continue }
+            var subject: String?
+            if case .string(let s)? = obj.metadata["subject"]?.value { subject = s }
+            out.append((id: obj.id, content: obj.content, subject: subject))
+        }
+        return out
+    }
+
+    /// True if a subject line is a reply / forward.
+    private static func isReplySubject(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return t.hasPrefix("re:") || t.hasPrefix("re ")
+            || t.hasPrefix("fwd:") || t.hasPrefix("fwd ")
+            || t.hasPrefix("fw:") || t.hasPrefix("fw ")
+    }
+
+    /// Strip leading reply / forward prefixes and normalize for matching.
+    private static func normalizeSubject(_ s: String) -> String {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        var changed = true
+        while changed {
+            changed = false
+            for p in ["re:", "fwd:", "fw:", "re ", "fwd ", "fw "] where t.hasPrefix(p) {
+                t = String(t.dropFirst(p.count)).trimmingCharacters(in: .whitespaces)
+                changed = true
+            }
+        }
+        return t
+    }
+
+    /// Every run of digits in a string, parsed to Int (for known-number sets).
+    private static func integers(in s: String) -> [Int] {
+        var out: [Int] = []
+        var current = ""
+        for ch in s {
+            if ch.isNumber { current.append(ch) }
+            else if let n = Int(current) { out.append(n); current = "" }
+            else { current = "" }
+        }
+        if let n = Int(current) { out.append(n) }
+        return out
+    }
+
+    /// Fishbone (Ishikawa) cause-and-effect for one event — deterministic
+    /// graph query over the causal-link ledger. No LLM.
+    public func fishbone(forEventID id: Event.ID) async -> Fishbone? {
+        guard let events, let eventLinks else { return nil }
+        guard let effect = (try? await events.findByIDs([id]))?.first else { return nil }
+        let incoming = (try? await eventLinks.incoming(to: id)) ?? []
+        let sourceIDs = incoming.map(\.sourceEventID)
+        let causeEvents = (try? await events.findByIDs(sourceIDs)) ?? []
+        return FishboneAnalyzer().analyze(effect: effect, links: incoming, events: causeEvents)
+    }
+
+    /// 5-Whys root-cause chain for one event — walks the causal graph.
+    public func fiveWhys(forEventID id: Event.ID, maxDepth: Int = 5) async -> FiveWhysResult? {
+        guard let events, let eventLinks else { return nil }
+        guard let effect = (try? await events.findByIDs([id]))?.first else { return nil }
+        // Pull a generous slice of links + events to walk. For a modest
+        // archive this is fine; a huge one would page this.
+        let allEvents = (try? await events.recent(limit: 2_000)) ?? []
+        let ids = allEvents.map(\.id)
+        let links = (try? await eventLinks.links(in: ids)) ?? []
+        return FiveWhysAnalyzer().analyze(effect: effect, links: links, events: allEvents, maxDepth: maxDepth)
+    }
+
     public func boostIngestForQuestion(_ question: String) async {
         guard let ingest else { return }
         let nouns = Self.extractNouns(from: question)

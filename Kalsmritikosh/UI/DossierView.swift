@@ -33,6 +33,7 @@ public struct DossierView: View {
             Divider()
             input
         }
+        .background(AuroraBackdrop(intensity: 0.5))
     }
 
     private var header: some View {
@@ -40,7 +41,7 @@ public struct DossierView: View {
             Image(systemName: "person.text.rectangle")
                 .foregroundStyle(.tint)
             Text("Dossier")
-                .font(.headline)
+                .font(Theme.display(28, .bold))
             if !subject.isEmpty {
                 Text("— \(subject)")
                     .font(.headline)

@@ -40,6 +40,16 @@ public final class LiveMetrics {
         public let pipelineCounters: [PipelineMetrics.Stage: Int]
         public let dbBytes: Int64
         public let processMemoryBytes: UInt64
+        // Ledger-first LLM budget (LLMCallCounters snapshot).
+        public var llmCallsRun: Int = 0
+        public var llmCallsSkipped: Int = 0
+        public var llmTimeouts: Int = 0
+        public var embedHitRate: Double = 0
+        /// Fraction of would-be LLM work skipped by the reduction policy.
+        public var llmSkipRate: Double {
+            let total = llmCallsRun + llmCallsSkipped
+            return total > 0 ? Double(llmCallsSkipped) / Double(total) : 0
+        }
     }
 
     public struct ThroughputPoint: Sendable, Hashable, Identifiable {
@@ -165,7 +175,8 @@ public final class LiveMetrics {
         async let counters: [PipelineMetrics.Stage: Int] = pipeline.snapshot()
 
         let pipelineSnapshot = await counters
-        let sample = await Sample(
+        let llm = await LLMCallCounters.shared.snapshot()
+        var sample = await Sample(
             capturedAt: Date(),
             fileCount: fileCount,
             objectCount: objectCount,
@@ -185,6 +196,10 @@ public final class LiveMetrics {
             dbBytes: Self.databaseSizeBytes(from: app.database),
             processMemoryBytes: Self.processMemoryBytes()
         )
+        sample.llmCallsRun = llm.callsRun
+        sample.llmCallsSkipped = llm.callsSkipped
+        sample.llmTimeouts = llm.timeouts
+        sample.embedHitRate = llm.embedHitRate
 
         // Diff per-stage to compute the throughput point.
         let previous = self.current.pipelineCounters

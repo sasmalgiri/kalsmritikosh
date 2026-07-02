@@ -34,8 +34,40 @@ public struct QualityStrip: View {
         self.onEvidenceTap = onEvidenceTap
     }
 
+    /// Closed-corpus answer-state chip (Ledger-AI v28). Colour-codes the
+    /// verdict so the user sees at a glance whether the archive actually
+    /// supports the answer. Hidden when `.unknown` (gate not run yet).
+    @ViewBuilder
+    private var answerStatePill: some View {
+        let state = answer.answerState
+        let (color, icon): (Color, String) = {
+            switch state {
+            case .supported:             return (.green, "checkmark.seal.fill")
+            case .partiallySupported:    return (.yellow, "circle.lefthalf.filled")
+            case .contradicted:          return (.orange, "exclamationmark.triangle.fill")
+            case .notFound:              return (.secondary, "questionmark.circle")
+            case .insufficientlyIndexed: return (.blue, "hourglass")
+            case .unknown:               return (.secondary, "circle")
+            }
+        }()
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .imageScale(.small)
+            Text(state.displayName)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.12), in: Capsule())
+        .overlay(Capsule().stroke(color.opacity(0.3), lineWidth: 1))
+    }
+
     public var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if answer.answerState != .unknown {
+                answerStatePill
+            }
             if let report = answer.report,
                report.ingestCoverage < 1.0 {
                 Text("Answered from \(Int(report.ingestCoverage * 100))% of your archive")

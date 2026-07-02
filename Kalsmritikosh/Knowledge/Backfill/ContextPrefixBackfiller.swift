@@ -30,6 +30,13 @@ public actor ContextPrefixBackfiller: BackgroundService {
     private let chunks: ChunksRepository
     private let objects: KnowledgeObjectRepository
     private let generator: any ContextPrefixGenerator
+    /// Re-embedding pair (Ledger-AI): after a prefix is written, the
+    /// chunk's vector is recomputed from `prefix + text` and upserted,
+    /// so the expensive LLM prefix actually improves semantic retrieval
+    /// instead of only changing a text column. Optional — when nil the
+    /// backfiller only writes the prefix (legacy behaviour).
+    private let embedder: (any Embedder)?
+    private let vectors: (any VectorStore)?
     private let intervalSeconds: TimeInterval
     private let batchSize: Int
     private var runTask: Task<Void, Never>?
@@ -38,12 +45,16 @@ public actor ContextPrefixBackfiller: BackgroundService {
         chunks: ChunksRepository,
         objects: KnowledgeObjectRepository,
         generator: any ContextPrefixGenerator,
+        embedder: (any Embedder)? = nil,
+        vectors: (any VectorStore)? = nil,
         intervalSeconds: TimeInterval = 300, // 5 minutes
         batchSize: Int = 50
     ) {
         self.chunks = chunks
         self.objects = objects
         self.generator = generator
+        self.embedder = embedder
+        self.vectors = vectors
         self.intervalSeconds = intervalSeconds
         self.batchSize = batchSize
     }
@@ -135,6 +146,20 @@ public actor ContextPrefixBackfiller: BackgroundService {
                         source: backfillSource
                     )
                     filled += 1
+                    // Re-embed the chunk from prefix + text so the new
+                    // prefix actually feeds vector retrieval. Mirrors the
+                    // at-ingest embedding format ("<prefix>\n---\n<text>").
+                    // Best-effort: a failed re-embed leaves the old
+                    // vector in place; the prefix text is still written.
+                    if let embedder, let vectors {
+                        let combined = "\(result.text)\n---\n\(c.text)"
+                        let vector = await embedder.embed(combined)
+                        do {
+                            try await vectors.upsert(chunkID: c.id, embedding: vector)
+                        } catch {
+                            AtlasLog.knowledge.error("ContextPrefixBackfiller: re-embed failed for chunk \(c.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                        }
+                    }
                     let updated = "Sections so far: \(result.text)\n" + runningContext
                     runningContext = String(updated.prefix(1_500))
                 } catch {

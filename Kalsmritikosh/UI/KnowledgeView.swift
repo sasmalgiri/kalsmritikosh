@@ -50,6 +50,7 @@ public struct KnowledgeView: View {
                     .padding(.vertical, 4)
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Knowledge")
             .frame(minWidth: 220)
         } detail: {
@@ -60,6 +61,7 @@ public struct KnowledgeView: View {
             case .killer: KillerFeaturesView()
             }
         }
+        .background(AuroraBackdrop(intensity: 0.5))
     }
 }
 

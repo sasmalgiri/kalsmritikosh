@@ -22,6 +22,10 @@ public struct SettingsView: View {
     @State private var pins: [ModelCapability: String] = [:]
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
+    @State private var contextPrefixBackfill: Bool = FeatureFlags.shared.contextPrefixBackfillEnabled
+    @State private var ingestTimeDistill: Bool = FeatureFlags.shared.ingestTimeMemoryDistillation
+    @State private var systemMode: SystemMode = FeatureFlags.shared.systemMode
+    @State private var showIngestGuide = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -38,6 +42,9 @@ public struct SettingsView: View {
     @State private var allDiagnosticsRunning = false
     @State private var allDiagnosticsStatus: String?
     @State private var allDiagnosticsURL: URL?
+    @State private var releaseReadinessRunning = false
+    @State private var releaseReadinessReport: ReleaseReadiness.Report?
+    @State private var releaseReadinessStatus: String?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -78,7 +85,10 @@ public struct SettingsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text("Settings").font(.largeTitle.bold())
+                Text("Settings").font(Theme.display(28, .bold))
+
+                systemModeSection
+                Divider()
 
                 if let setup = appState.ollamaSetupSuggestion {
                     ollamaSetupSection(setup)
@@ -90,6 +100,10 @@ public struct SettingsView: View {
                 }
 
                 privacySection
+                Divider()
+                ledgerDepthSection
+                Divider()
+                maintenanceSection
                 Divider()
                 providersSection
                 Divider()
@@ -106,6 +120,8 @@ public struct SettingsView: View {
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
         }
+        .scrollContentBackground(.hidden)
+        .background(AuroraBackdrop(intensity: 0.5))
         .task { await reload() }
     }
 
@@ -126,6 +142,10 @@ public struct SettingsView: View {
     private var diagnosticsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Diagnostics").font(.title3.bold())
+
+            releaseReadinessBanner
+
+            Divider().padding(.vertical, 4)
 
             Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -397,6 +417,120 @@ public struct SettingsView: View {
                 .padding(.leading, 8)
             }
         }
+    }
+
+    /// One-button release gate. Visually distinct from the other
+    /// diagnostics buttons so the user knows this is THE check to
+    /// run before public distribution. PASS → safe to ship without
+    /// TestFlight; FAIL → see report for blockers.
+    @ViewBuilder
+    private var releaseReadinessBanner: some View {
+        let verdictColor: Color = {
+            guard let r = releaseReadinessReport else { return .blue }
+            return r.releaseReady ? .green : .red
+        }()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: releaseReadinessReport.map { $0.releaseReady ? "checkmark.seal.fill" : "exclamationmark.octagon.fill" } ?? "shippingbox.fill")
+                    .font(.title)
+                    .foregroundStyle(verdictColor)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Release Readiness")
+                        .font(.title3.bold())
+                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. ~12–15 minutes end-to-end.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runReleaseReadiness(mode: .fast) }
+                } label: {
+                    if releaseReadinessRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Fast Gate (2–5 min)", systemImage: "bolt.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(verdictColor)
+                .disabled(releaseReadinessRunning)
+
+                Button {
+                    Task { await runReleaseReadiness(mode: .deep) }
+                } label: {
+                    if releaseReadinessRunning {
+                        Label("Running…", systemImage: "hourglass")
+                    } else {
+                        Label("Deep Eval (overnight)", systemImage: "moon.stars.fill")
+                    }
+                }
+                .disabled(releaseReadinessRunning)
+
+                if let report = releaseReadinessReport {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([report.reportURL])
+                        #endif
+                    } label: {
+                        Label("Reveal report", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let report = releaseReadinessReport {
+                HStack(spacing: 6) {
+                    Image(systemName: report.releaseReady ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                        .foregroundStyle(verdictColor)
+                    Text(report.releaseReady ? "RELEASE READY: YES" : "RELEASE READY: NO")
+                        .font(.headline)
+                        .foregroundStyle(verdictColor)
+                    Text(String(format: "· %.1fs · %d checks", report.totalSeconds, report.checks.count))
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(report.checks.enumerated()), id: \.offset) { _, check in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text(check.passed ? "✓" : (check.blocker ? "✗" : "⚠"))
+                                .foregroundStyle(check.passed ? .green : (check.blocker ? .red : .orange))
+                                .frame(width: 14, alignment: .leading)
+                            Text(check.name).font(.caption.monospaced())
+                            Spacer()
+                            Text(check.detail)
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+                    }
+                }
+                .padding(.leading, 4)
+                .padding(.top, 4)
+            } else if let status = releaseReadinessStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(verdictColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(verdictColor.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private func runReleaseReadiness(mode: ReleaseReadiness.Mode) async {
+        releaseReadinessRunning = true
+        releaseReadinessReport = nil
+        releaseReadinessStatus = mode == .fast
+            ? "Fast gate — schema → deterministic logic → bundle → capability → live health (no LLM)…"
+            : "Deep eval — everything in Fast PLUS smoke + Fast Eval + Gate 3 (LLM-heavy, may take hours)…"
+        defer { releaseReadinessRunning = false }
+        let result = await ReleaseReadiness.run(appState, mode: mode)
+        releaseReadinessReport = result
+        releaseReadinessStatus = nil
     }
 
     private func runFastEval() async {
@@ -672,6 +806,167 @@ public struct SettingsView: View {
         }
     }
 
+    /// Background maintenance controls. Idle-driven summarization /
+    /// distillation runs only while the Mac is idle; the user chooses
+    /// how it behaves (Off / Ask first / Automatic+notify / silent) and
+    /// how long the machine must be idle first.
+    @State private var maintenanceMode: MaintenanceMode = FeatureFlags.shared.maintenanceMode
+    @State private var maintenanceIdleMinutes: Int = FeatureFlags.shared.maintenanceIdleMinutes
+
+    /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
+    /// historical AI, not a RAG chatbot — it spends its LLM budget on
+    /// durable ledger objects, not on generating data for every chunk.
+    /// These toggles control the expensive optional enrichment passes;
+    /// all default OFF so ingest is fast and the app is usable while the
+    /// ledger fills.
+    /// Master architecture selector — the three systems we're comparing.
+    /// Switching presets the whole enrichment pipeline; the RAG + expert
+    /// + ledger answer stack is identical across modes.
+    private var systemModeSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "square.3.layers.3d")
+                    .foregroundStyle(Theme.brand)
+                Text("System mode").font(.title3.bold())
+            }
+            Text("Three architectures, one app. Switch, re-ingest, and compare. The retrieval + experts + ledger that answer your questions are the same in all three — only how much meaning is extracted, and when, changes.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Picker("System", selection: $systemMode) {
+                ForEach(SystemMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: systemMode) { _, newValue in
+                FeatureFlags.shared.systemMode = newValue
+            }
+
+            Text(systemMode.detail)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ingestEstimateComparison
+
+            Label("Changing the mode takes effect on next app launch + re-ingest.", systemImage: "arrow.clockwise.circle")
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
+    }
+
+    /// Compact "100 MB mixed archive" estimate across the three modes,
+    /// with the active mode highlighted, plus a link to the full guide.
+    private var ingestEstimateComparison: some View {
+        let est = IngestEstimator()
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Est. ingest · 100 MB mixed archive")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("File-type guide") { showIngestGuide = true }
+                    .font(.caption)
+                    .buttonStyle(.borderless)
+            }
+            ForEach(SystemMode.allCases) { mode in
+                let e = est.estimateMixed(sizeMB: 100, mode: mode)
+                HStack {
+                    Image(systemName: mode == systemMode ? "largecircle.fill.circle" : "circle")
+                        .foregroundStyle(mode == systemMode ? Theme.brand : .secondary)
+                        .imageScale(.small)
+                    Text(mode.label)
+                        .font(.caption)
+                        .foregroundStyle(mode == systemMode ? .primary : .secondary)
+                    Spacer()
+                    Text("\(IngestEstimator.humanDuration(e.totalSeconds)) / 100 MB")
+                        .font(.caption.monospacedDigit().weight(mode == systemMode ? .bold : .regular))
+                        .foregroundStyle(mode == systemMode ? Theme.brand : .secondary)
+                }
+            }
+            HStack(spacing: 5) {
+                Image(systemName: CalibrationStore.isCalibrated ? "checkmark.seal.fill" : "gauge.with.dots.needle.33percent")
+                    .foregroundStyle(CalibrationStore.isCalibrated ? .green : .secondary)
+                    .imageScale(.small)
+                Text(CalibrationStore.isCalibrated
+                     ? "Calibrated to your Mac (\(CalibrationStore.sampleCount) LLM calls measured, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)"
+                     : "Using default estimate — will calibrate to your Mac after the first LLM-heavy ingest.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Text("Per 100 MB. Approximate. Rule work + LLM calls estimated from a typical email-heavy archive. Tap the guide for per-file-type times.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var ledgerDepthSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Ledger depth (LLM budget)").font(.title3.bold())
+            Text("Kalsmritikosh answers from a structured evidence ledger first (events, entities, timeline, citations) and uses the LLM sparingly. These optional passes cost real LLM time — off by default so ingest stays fast. Your archive is fully searchable and answerable without them.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
+            Toggle("Pre-warm memory during ingest", isOn: $ingestTimeDistill)
+                .onChange(of: ingestTimeDistill) { _, newValue in
+                    FeatureFlags.shared.ingestTimeMemoryDistillation = newValue
+                }
+            Text("When OFF (default), the app skips per-subject memory distillation during ingest — the single biggest ingest LLM cost. Memory is instead built on demand for the things you actually ask about. Answers still come from the ledger. Turn ON only if you want richer memory summaries pre-built up front (much slower ingest). Takes effect on next launch.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var maintenanceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Background maintenance").font(.title3.bold())
+            Text("Kalsmritikosh keeps your knowledge base tidy (summaries + distilled memories) while your Mac is idle, and stops the moment you come back. Choose how it behaves.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Picker("Mode", selection: $maintenanceMode) {
+                ForEach(MaintenanceMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: maintenanceMode) { _, newValue in
+                FeatureFlags.shared.maintenanceMode = newValue
+            }
+            Text(maintenanceMode.detail)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if maintenanceMode != .off {
+                Divider().padding(.vertical, 2)
+                HStack {
+                    Text("Start after idle for")
+                        .font(.callout)
+                    Picker("", selection: $maintenanceIdleMinutes) {
+                        Text("1 min").tag(1)
+                        Text("2 min").tag(2)
+                        Text("5 min").tag(5)
+                        Text("10 min").tag(10)
+                        Text("15 min").tag(15)
+                        Text("30 min").tag(30)
+                    }
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .onChange(of: maintenanceIdleMinutes) { _, newValue in
+                        FeatureFlags.shared.maintenanceIdleMinutes = newValue
+                    }
+                    Spacer()
+                }
+                Text("Takes effect immediately — no relaunch needed.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Privacy").font(.title3.bold())
@@ -699,6 +994,16 @@ public struct SettingsView: View {
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.history.showT3InResults")
                 }
             Text("HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 4)
+
+            Toggle("Context-prefix backfill (LLM-heavy)", isOn: $contextPrefixBackfill)
+                .onChange(of: contextPrefixBackfill) { _, newValue in
+                    FeatureFlags.shared.contextPrefixBackfillEnabled = newValue
+                }
+            Text("Ledger-AI v28. OFF by default. Your archive is fully keyword (FTS) + entity + event searchable immediately after ingest regardless of this. When on, the background sweep fills in missing LLM semantic prefixes AND re-embeds those chunks' vectors so retrieval quality improves — it's LLM-heavy, so reserve it for when your Mac is idle. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

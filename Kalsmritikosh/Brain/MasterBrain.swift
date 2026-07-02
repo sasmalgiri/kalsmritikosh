@@ -51,6 +51,15 @@ public actor MasterBrain {
     /// surface alongside per-chapter contradictions. Nil = the
     /// finder only sees date conflicts (degraded but still useful).
     private let eventLinks: EventLinksRepository?
+    /// Ledger-first on-demand memory warming. When present, the brain
+    /// distills the memory for the entities a question is ABOUT — in the
+    /// background, fire-and-forget — so the next ask about them has a
+    /// memory object. This is the complement to ingest-time distillation
+    /// being off: cold data stays cheap, asked-about data warms lazily.
+    private let onDemandDistiller: MemoryDistiller?
+    /// Entities already warmed this session, so repeated questions about
+    /// the same subject don't re-distill it.
+    private var warmedEntities: Set<String> = []
 
     public init(
         intentDetector: IntentDetector? = nil,
@@ -64,7 +73,8 @@ public actor MasterBrain {
         memoryRepo: MemoryRepository? = nil,
         narrativeComposer: NarrativeComposer? = nil,
         eventsRepo: EventsRepository? = nil,
-        eventLinks: EventLinksRepository? = nil
+        eventLinks: EventLinksRepository? = nil,
+        onDemandDistiller: MemoryDistiller? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -78,6 +88,21 @@ public actor MasterBrain {
         self.narrativeComposer = narrativeComposer
         self.eventsRepo = eventsRepo
         self.eventLinks = eventLinks
+        self.onDemandDistiller = onDemandDistiller
+    }
+
+    /// Fire-and-forget: warm memory for the question's entities (once per
+    /// session each). No latency to the current answer — the ledger
+    /// layers already cover it; this just enriches future asks. Skips
+    /// automatically when the reasoning provider is on cooldown.
+    private func warmMemoryOnDemand(for hints: [String]) {
+        guard let onDemandDistiller, !hints.isEmpty else { return }
+        let fresh = hints.filter { !warmedEntities.contains($0.lowercased()) }
+        guard !fresh.isEmpty else { return }
+        fresh.forEach { warmedEntities.insert($0.lowercased()) }
+        Task.detached(priority: .utility) {
+            _ = try? await onDemandDistiller.distillSubjects(forEntities: fresh)
+        }
     }
 
     /// Clear the in-memory SessionProfile. The eval harness calls this
@@ -632,6 +657,11 @@ public actor MasterBrain {
             entityHints: intent.entityHints
         )
 
+        // Ledger-first: warm memory for what the user actually asked
+        // about, in the background. Complements ingest-time distillation
+        // being off — cold entities stay cheap; asked-about ones enrich.
+        warmMemoryOnDemand(for: intent.entityHints)
+
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
         // is intentionally narrow so "new project" / "new supplier" don't
@@ -799,7 +829,33 @@ public actor MasterBrain {
             report: a.report,
             walkSteps: a.walkSteps,
             source: source,
-            reasoningTrace: trace ?? a.reasoningTrace
+            reasoningTrace: trace ?? a.reasoningTrace,
+            answerState: a.answerState == .unknown ? deriveAnswerState(a) : a.answerState
         )
+    }
+
+    /// Ledger-AI v28 answerability gate — resolve the closed-corpus
+    /// answer state from the verified answer's evidence shape. Pure and
+    /// deterministic (no extra LLM): the contract is "no citation, no
+    /// factual claim", so an answer with no citations is NOT_FOUND
+    /// regardless of how fluent the prose is.
+    ///
+    ///  - refused / zero citations        → notFound
+    ///  - conflicting sources             → contradicted
+    ///  - corpus materially un-indexed    → insufficientlyIndexed
+    ///  - ≥2 distinct sources + confident → supported
+    ///  - otherwise                       → partiallySupported
+    nonisolated private static func deriveAnswerState(_ a: VerifiedAnswer) -> AnswerState {
+        if a.refused || a.citations.isEmpty { return .notFound }
+        if !a.contradictions.isEmpty { return .contradicted }
+        if let report = a.report, report.ingestCoverage < 0.85 {
+            return .insufficientlyIndexed
+        }
+        let distinctSources = a.report?.distinctSourceObjectIDs
+            ?? Set(a.citations.map(\.objectID)).count
+        if distinctSources >= 2 && a.confidence.value >= 0.6 {
+            return .supported
+        }
+        return .partiallySupported
     }
 }
