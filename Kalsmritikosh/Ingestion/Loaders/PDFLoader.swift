@@ -201,18 +201,18 @@ public struct PDFLoader: Ingestor {
 
     #if canImport(AppKit) && canImport(PDFKit)
     private func renderAndOCR(page: PDFPage, index: Int) async -> String {
+        // Render UPRIGHT via PDFKit's own rasterizer. The previous manual
+        // NSImage.lockFocus() path applied an extra vertical flip on top of
+        // lockFocus's already-y-up context, so the page was drawn mirrored /
+        // upside-down and Vision OCR'd mirror text — reversed words
+        // ("Agent" → "tnegA") and Cyrillic misreads (observed on
+        // Final POA.pdf, a scanned image-only PDF). `thumbnail(of:for:)`
+        // renders correctly and honors the page's /Rotate.
         let bounds = page.bounds(for: .mediaBox)
-        let size = NSSize(width: bounds.width * 2, height: bounds.height * 2)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        if let ctx = NSGraphicsContext.current?.cgContext {
-            ctx.saveGState()
-            ctx.translateBy(x: 0, y: size.height)
-            ctx.scaleBy(x: 2.0, y: -2.0)
-            page.draw(with: .mediaBox, to: ctx)
-            ctx.restoreGState()
-        }
-        image.unlockFocus()
+        let scale: CGFloat = 2.0
+        let size = NSSize(width: bounds.width * scale, height: bounds.height * scale)
+        guard size.width > 1, size.height > 1 else { return "" }
+        let image = page.thumbnail(of: size, for: .mediaBox)
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("atlas-pdfpage-\(UUID().uuidString).png")
