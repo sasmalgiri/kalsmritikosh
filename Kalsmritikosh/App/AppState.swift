@@ -144,6 +144,8 @@ public final class AppState {
     public private(set) var systemEngine: (any SystemEngine)?
     /// Retains the context-prefix / document-card backfiller (Systems 1-3).
     public private(set) var contextPrefixBackfiller: ContextPrefixBackfiller?
+    /// On-device idle name self-correction (mode-independent).
+    public private(set) var entityReconciler: EntityReconciler?
     public private(set) var proactiveGapCount: Int = 0
     public private(set) var ledgerLastMaintainedAt: Date?
     /// G3.22 — exposed so smoke / eval rigs can assert against the
@@ -909,6 +911,14 @@ public final class AppState {
             await engine.activate(engineContext)
             AtlasLog.app.info("System engine active: \(engine.mode.rawValue, privacy: .public)")
 
+            // On-device name self-correction — mode-independent, idle-gated.
+            // Folds OCR/typo name variants into the corroborated spelling
+            // (aliases + tier demotion; never deletes).
+            let entityReconciler = EntityReconciler(
+                reconcile: { [weak self] in await self?.reconcileEntityNames() ?? 0 }
+            )
+            await entityReconciler.start()
+
             // G2-3 — periodic backfill that re-runs the LLM context-
             // prefix generator on chunks whose row landed with NULL
             // because the LLM timed out during ingest. Per the
@@ -1252,6 +1262,7 @@ public final class AppState {
             self.incrementalUpdater = updater
             self.systemEngine = engine
             self.contextPrefixBackfiller = startedBackfiller
+            self.entityReconciler = entityReconciler
             self.brain = brain
             self.ingest = ingest
             self.phase = .ready
@@ -1424,6 +1435,61 @@ public final class AppState {
     public func noteDiscoveredFiles(_ count: Int) {
         guard count > 0 else { return }
         newFilesSinceLaunch += count
+    }
+
+    // MARK: - Entity name self-correction (on-device, non-destructive)
+
+    /// Fold single-occurrence OCR/typo name variants into the corroborated
+    /// spelling — e.g. a garbled signature-line "Thirshendus Sasmal" becomes
+    /// an alias of "Shirshendu Sasmal" (seen cleanly several times). Rule-
+    /// based, no LLM, no deletes: the variant is aliased + demoted in trust
+    /// (T3 / low confidence), so lookups + answers resolve to the winner
+    /// while the original row is preserved. Returns how many were folded.
+    @discardableResult
+    public func reconcileEntityNames() async -> Int {
+        guard let entities else { return 0 }
+        let people = (try? await entities.canonicalsWithMentionCounts(kind: .person, limit: 2_000)) ?? []
+        guard people.count > 1 else { return 0 }
+        // Most-corroborated names first — they become the winners.
+        let ranked = people.sorted { $0.mentionCount > $1.mentionCount }
+        var claimed = Set<UUID>()
+        var folded = 0
+        for i in 0..<ranked.count {
+            let winner = ranked[i]
+            if claimed.contains(winner.id) { continue }
+            guard winner.mentionCount >= 2 else { break }   // list is sorted; rest are <2 too
+            for j in (i + 1)..<ranked.count {
+                let loser = ranked[j]
+                if claimed.contains(loser.id) { continue }
+                guard loser.mentionCount <= 1 else { continue }   // only lone slips fold in
+                guard Self.plausibleOCRVariant(winner: winner.normalized, loser: loser.normalized) else { continue }
+                do {
+                    try await entities.markOCRVariant(
+                        loserID: loser.id,
+                        winnerID: winner.id,
+                        loserNormalized: loser.normalized
+                    )
+                    claimed.insert(loser.id)
+                    folded += 1
+                    AtlasLog.knowledge.info("Reconcile: '\(loser.value, privacy: .public)' → variant of '\(winner.value, privacy: .public)'")
+                } catch {
+                    AtlasLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+        return folded
+    }
+
+    /// Conservative same-person test: identical surname, both multi-token,
+    /// high Jaro-Winkler. Tuned to catch "thirshendus sasmal" ≈
+    /// "shirshendu sasmal" while never merging two genuinely different people.
+    private static func plausibleOCRVariant(winner: String, loser: String) -> Bool {
+        guard winner != loser else { return false }
+        let w = winner.split(separator: " ")
+        let l = loser.split(separator: " ")
+        guard w.count >= 2, l.count >= 2 else { return false }
+        guard let ws = w.last, let ls = l.last, ws == ls else { return false }  // same surname
+        return NameSimilarity.jaroWinkler(winner, loser) >= 0.88
     }
 
     // MARK: - System 3: gap detection + investigation (rule-based)

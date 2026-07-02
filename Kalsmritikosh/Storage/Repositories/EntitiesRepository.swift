@@ -360,6 +360,46 @@ public actor EntitiesRepository {
         }
     }
 
+    /// Canonical rows of a kind with their mention counts — the corpus-wide
+    /// corroboration signal the on-device reconciler uses to pick the
+    /// authoritative spelling of a name over an OCR/typo variant.
+    public func canonicalsWithMentionCounts(kind: Entity.Kind, limit: Int = 2_000) async throws -> [EntityCanonicalRow] {
+        let rows = try await database.query("""
+        SELECT e.id, e.value, e.normalized, e.confidence, e.quality_tier, COUNT(m.id) AS mentions
+        FROM entities e
+        LEFT JOIN entity_mentions m ON m.entity_id = e.id
+        WHERE e.kind = ?
+        GROUP BY e.id
+        ORDER BY mentions DESC
+        LIMIT ?;
+        """, [.text(kind.rawValue), .integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let value = row.string(1) else { return nil }
+            return EntityCanonicalRow(
+                id: id,
+                value: value,
+                normalized: row.string(2) ?? value.lowercased(),
+                confidence: row.double(3) ?? 0.5,
+                qualityTier: row.string(4) ?? "T2",
+                mentionCount: Int(row.int(5) ?? 0)
+            )
+        }
+    }
+
+    /// Fold an OCR/typo variant into the authoritative entity WITHOUT
+    /// deleting it (data-safety rule: preserve everything, tier by trust).
+    /// The variant is registered as an alias of the winner (so lookups by
+    /// the mis-spelling resolve correctly) and demoted to T3 / low confidence
+    /// so listings + confidence-ordered answers prefer the winner.
+    public func markOCRVariant(loserID: Entity.ID, winnerID: Entity.ID, loserNormalized: String) async throws {
+        try await database.exec("""
+        UPDATE entities
+        SET quality_tier = 'T3', confidence = MIN(confidence, 0.35)
+        WHERE id = ?;
+        """, [.uuid(loserID)])
+        try await addAlias(entityID: winnerID, aliasNormalized: loserNormalized, source: "ocr-variant")
+    }
+
     public func find(byID id: Entity.ID) async throws -> Entity? {
         let rows = try await database.query("""
         SELECT id, kind, value, normalized, source_object_id, confidence
@@ -557,6 +597,15 @@ public actor EntitiesRepository {
             confidence: Confidence(conf)
         )
     }
+}
+
+public struct EntityCanonicalRow: Sendable, Hashable {
+    public let id: Entity.ID
+    public let value: String
+    public let normalized: String
+    public let confidence: Double
+    public let qualityTier: String
+    public let mentionCount: Int
 }
 
 public struct EntitySummaryRow: Identifiable, Sendable, Hashable {
