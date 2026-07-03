@@ -791,7 +791,23 @@ public actor MasterBrain {
             assumptions: Self.assumptionsFromExpertReport(verified),
             uncertainties: verified.contradictions.map(\.description)
         )
-        return Self.tag(verified, as: .experts, trace: trace)
+
+        // Apple AI is the brain: when a generative model resolves (i.e. NOT
+        // the fully-private no-LLM mode), let it compose the final answer
+        // prose from the experts' verified findings — the experts are the
+        // helpers that supply grounded facts + citations, the model only
+        // presents them. Offline / no model → keep the deterministic body.
+        var synthesizedBody: String? = nil
+        if FeatureFlags.llmAnswerSynthesisValue(),
+           !verified.refused, !verified.citations.isEmpty {
+            synthesizedBody = await AnswerSynthesizer().synthesize(
+                question: question,
+                verifiedBody: verified.body,
+                citations: verified.citations,
+                capabilities: capabilities
+            )
+        }
+        return Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
     }
 
     /// Pull free-text assumptions / downgrades from the verifier's
@@ -816,9 +832,9 @@ public actor MasterBrain {
         return out
     }
 
-    private static func tag(_ a: VerifiedAnswer, as source: AnswerSource, trace: ReasoningTrace? = nil) -> VerifiedAnswer {
+    private static func tag(_ a: VerifiedAnswer, as source: AnswerSource, trace: ReasoningTrace? = nil, bodyOverride: String? = nil) -> VerifiedAnswer {
         VerifiedAnswer(
-            body: a.body,
+            body: bodyOverride ?? a.body,
             answerText: a.answerText,
             intentKind: a.intentKind,
             citations: a.citations,

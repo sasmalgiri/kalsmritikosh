@@ -231,6 +231,23 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kExpertGating)
     }
 
+    /// "Apple AI is the brain": when on (default), the resolved generative
+    /// model composes the FINAL answer prose from the experts' verified
+    /// findings. Auto-inert when no model resolves (offline / no-LLM), where
+    /// the deterministic expert render is used instead. Switchable in code.
+    public var llmAnswerSynthesis: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Self.kLLMSynthesis) == nil { return true }
+            return UserDefaults.standard.bool(forKey: Self.kLLMSynthesis)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kLLMSynthesis) }
+    }
+
+    public nonisolated static func llmAnswerSynthesisValue() -> Bool {
+        if UserDefaults.standard.object(forKey: kLLMSynthesis) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kLLMSynthesis)
+    }
+
     /// Whether the user has EXPLICITLY chosen a system mode. False on a
     /// fresh install, which triggers the first-run mode chooser before the
     /// engine boots. Set true the first time the user picks a mode.
@@ -300,6 +317,7 @@ public final class FeatureFlags {
     private nonisolated static let kSystemMode             = "atlas.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "atlas.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "atlas.feature.expertRelevanceGating"
+    private nonisolated static let kLLMSynthesis           = "atlas.feature.llmAnswerSynthesis"
     private nonisolated static let kMaintenanceMode        = "atlas.feature.maintenance.mode"
     private nonisolated static let kMaintenanceIdleMinutes = "atlas.feature.maintenance.idleMinutes"
     private static let kIngestDistill    = "atlas.feature.ingestTimeMemoryDistillation.enabled"
