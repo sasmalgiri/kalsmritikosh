@@ -10,6 +10,9 @@
 //
 
 import SwiftUI
+#if canImport(TipKit)
+import TipKit
+#endif
 
 // MARK: - Navigation model
 
@@ -195,6 +198,7 @@ public struct RootView: View {
                     .padding(.bottom, 4)
                 modeBadge
                     .padding(.bottom, 6)
+                onboardingTip
                 ForEach(Destination.Group.allCases) { group in
                     Text(group.rawValue.uppercased())
                         .font(.caption2.weight(.semibold))
@@ -378,6 +382,20 @@ public struct RootView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
+    }
+
+    /// First-run walkthrough tip (TipKit) — one ordered tip at a time,
+    /// shown inline at the top of the sidebar. No-op once all are dismissed.
+    @ViewBuilder
+    private var onboardingTip: some View {
+        #if canImport(TipKit)
+        if #available(macOS 15.0, *), let tip = Onboarding.group.currentTip {
+            TipView(tip)
+                .tipBackground(.regularMaterial)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+        }
+        #endif
     }
 
     // MARK: Detail router

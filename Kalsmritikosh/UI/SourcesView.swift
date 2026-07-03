@@ -94,6 +94,16 @@ public struct SourcesView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            InfoPopoverButton(
+                title: "Sources = your knowledge base",
+                message: "Add folders here. Kalsmritikosh watches them and ingests every supported file into the searchable, answerable ledger.",
+                systemImage: "folder.badge.plus",
+                bullets: [
+                    "New files dropped into a watched folder are ingested automatically",
+                    "“Ingest All” re-scans every folder now",
+                    "This is different from Convert, which is one-shot and saves nothing"
+                ]
+            )
             Spacer()
             Button {
                 Task { await runIngestion() }

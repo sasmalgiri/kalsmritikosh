@@ -84,8 +84,20 @@ public struct LiveDashboardView: View {
             Image(systemName: "waveform.path.ecg")
                 .foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Live")
-                    .font(.title2.weight(.semibold))
+                HStack(spacing: 6) {
+                    Text("Live")
+                        .font(.title2.weight(.semibold))
+                    InfoPopoverButton(
+                        title: "Live dashboard",
+                        message: "A real-time window into ingestion and the engine while you work — updates as files are processed and questions are answered.",
+                        systemImage: "waveform.path.ecg",
+                        bullets: [
+                            "Pipeline stages + throughput (files/sec)",
+                            "Enrichment tiers (hot/warm/cold) and detected gaps",
+                            "Provider health, cache hit-rate, LLM call counts"
+                        ]
+                    )
+                }
                 Text("Real-time view of ingestion and the engine — pipeline stages, throughput, enrichment tiers, gaps and service health.")
                     .font(.caption).foregroundStyle(.secondary)
             }

@@ -9,10 +9,24 @@
 //
 
 import SwiftUI
+#if canImport(TipKit)
+import TipKit
+#endif
 
 @main
 struct KalsmritikoshApp: App {
     @State private var appState = AppState()
+
+    init() {
+        #if canImport(TipKit)
+        if #available(macOS 15.0, *) {
+            try? Tips.configure([
+                .displayFrequency(.immediate),
+                .datastoreLocation(.applicationDefault)
+            ])
+        }
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {

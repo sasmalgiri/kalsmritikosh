@@ -187,6 +187,16 @@ public struct AskView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            InfoPopoverButton(
+                title: "How answers work",
+                message: "Ask in plain language. The engine retrieves evidence from your files, has domain experts analyse it, then composes an answer that cites its sources.",
+                systemImage: "sparkles",
+                bullets: [
+                    "Every claim is grounded in your documents",
+                    "Sources are listed under each answer",
+                    "Tune depth vs. speed in Settings → Answering intelligence"
+                ]
+            )
             Spacer()
             Button {
                 Task { await startNewConversation() }

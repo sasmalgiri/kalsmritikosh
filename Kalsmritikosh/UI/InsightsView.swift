@@ -62,9 +62,21 @@ public struct InsightsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Insights")
-                .font(Theme.display(34, .bold))
-                .foregroundStyle(Theme.brandGradient())
+            HStack(spacing: 6) {
+                Text("Insights")
+                    .font(Theme.display(34, .bold))
+                    .foregroundStyle(Theme.brandGradient())
+                InfoPopoverButton(
+                    title: "What Insights finds",
+                    message: "Rule-based analysis over your ledger — no LLM. Surfaces likely-missing documents and facts your sources disagree on, and lets you interrogate any event.",
+                    systemImage: "lightbulb.max",
+                    bullets: [
+                        "Gaps: numbered-sequence holes, dangling references, orphaned replies",
+                        "Contradictions: the same fact stated differently by two sources",
+                        "Fishbone & 5-Whys: trace an event's causes"
+                    ]
+                )
+            }
             Text("Missing links and rule-based investigation — no LLM, all from your ledger.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
