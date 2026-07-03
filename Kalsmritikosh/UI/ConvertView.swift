@@ -108,11 +108,14 @@ public struct ConvertView: View {
                 Text("Convert")
                     .font(Theme.display(34, .bold))
             }
-            Text("Parse any supported file (PDF, image, audio, email, mbox, PST, NSF, DOCX, XLSX…) and export clean text, Markdown, or JSON. Nothing is added to your knowledge ledger — this is a one-shot conversion.")
+            Text("A one-shot file converter — nothing here is saved to your knowledge base. Reads PDF, Word, Excel, images (OCR), email/PST/NSF, and audio & video (transcribed); exports to text, Markdown, JSON, HTML, CSV, PDF, RTF, Word, Excel, or PNG.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 620, alignment: .leading)
+                .frame(maxWidth: 640, alignment: .leading)
+            Label("1. Add files   2. Pick an output format   3. Convert, then Save as…", systemImage: "info.circle")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -170,6 +173,9 @@ public struct ConvertView: View {
                 }
             }
 
+            Text("Output:")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             Picker("", selection: $outputFormat) {
                 ForEach(OutputFormat.allCases) { f in
                     Text(f.rawValue).tag(f)
@@ -177,6 +183,7 @@ public struct ConvertView: View {
             }
             .pickerStyle(.menu)
             .fixedSize()
+            .help("The format your files are converted to.")
 
             Toggle(isOn: $aiProofread) {
                 Label("AI proofread", systemImage: "wand.and.stars")

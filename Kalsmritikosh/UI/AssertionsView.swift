@@ -41,8 +41,12 @@ public struct AssertionsView: View {
         HStack {
             Image(systemName: "scroll")
                 .foregroundStyle(.tint)
-            Text("Assertions")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Assertions")
+                    .font(Theme.display(28, .bold))
+                Text("Every fact the app (or you) has asserted — filter by predicate or agent, and retract any you don't trust.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             Text("\(filtered.count) of \(items.count) shown · \(totalCount) total")
                 .font(.caption2.monospacedDigit())

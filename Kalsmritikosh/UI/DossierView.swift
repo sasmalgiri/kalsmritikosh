@@ -40,8 +40,12 @@ public struct DossierView: View {
         HStack {
             Image(systemName: "person.text.rectangle")
                 .foregroundStyle(.tint)
-            Text("Dossier")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Dossier")
+                    .font(Theme.display(28, .bold))
+                Text("A focused history of one entity — every chapter about a chosen person, org or project.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if !subject.isEmpty {
                 Text("— \(subject)")
                     .font(.headline)

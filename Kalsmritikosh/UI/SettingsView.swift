@@ -85,7 +85,11 @@ public struct SettingsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text("Settings").font(Theme.display(28, .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Settings").font(Theme.display(28, .bold))
+                    Text("Choose the system mode, tune answering depth vs. speed, set privacy, manage models, and run diagnostics.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
 
                 systemModeSection
                 Divider()

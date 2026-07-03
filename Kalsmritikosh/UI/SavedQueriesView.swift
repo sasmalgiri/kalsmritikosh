@@ -56,8 +56,12 @@ public struct SavedQueriesView: View {
         HStack {
             Image(systemName: "bookmark")
                 .foregroundStyle(.tint)
-            Text("Saved questions")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Saved questions")
+                    .font(Theme.display(28, .bold))
+                Text("Questions you bookmarked — re-ask them in Ask or re-run an investigation in one click.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             Text("\(items.count)")
                 .font(.caption)

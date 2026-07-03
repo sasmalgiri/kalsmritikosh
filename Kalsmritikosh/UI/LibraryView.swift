@@ -46,8 +46,12 @@ public struct LibraryView: View {
         HStack {
             Image(systemName: "books.vertical.fill")
                 .foregroundStyle(.tint)
-            Text("Library")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Library")
+                    .font(Theme.display(28, .bold))
+                Text("Topics discovered across your archive — tap one to reconstruct the story of that subject.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             Text("\(topics.count) topics")
                 .font(.caption)

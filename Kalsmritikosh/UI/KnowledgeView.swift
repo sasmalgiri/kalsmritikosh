@@ -33,6 +33,10 @@ public struct KnowledgeView: View {
     public var body: some View {
         NavigationSplitView {
             List {
+                Text("Browse the entities extracted from your files — people, companies, projects — with their mentions and export.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
                 ForEach(KnowledgeTab.allCases) { tab in
                     Button {
                         selection = tab

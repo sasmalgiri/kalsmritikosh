@@ -56,8 +56,12 @@ public struct ExplorerView: View {
         HStack {
             Image(systemName: "point.3.connected.trianglepath.dotted")
                 .foregroundStyle(.tint)
-            Text("Explore")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Explore")
+                    .font(Theme.display(28, .bold))
+                Text("Walk the entity graph — click through neighbours, events, causal links and assertions.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             if !navigationStack.isEmpty {
                 Button {

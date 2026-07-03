@@ -83,8 +83,12 @@ public struct LiveDashboardView: View {
         HStack {
             Image(systemName: "waveform.path.ecg")
                 .foregroundStyle(.tint)
-            Text("Live")
-                .font(.title2.weight(.semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Live")
+                    .font(.title2.weight(.semibold))
+                Text("Real-time view of ingestion and the engine — pipeline stages, throughput, enrichment tiers, gaps and service health.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             if let last = appState.liveMetrics?.current.capturedAt,
                last > .distantPast {

@@ -79,8 +79,12 @@ public struct HistoryView: View {
         HStack {
             Image(systemName: "book.closed")
                 .foregroundStyle(.tint)
-            Text("History")
-                .font(Theme.display(28, .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("History")
+                    .font(Theme.display(28, .bold))
+                Text("Reconstructs narratives from your archive — each chapter is built from dated events and cited sources.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
             if streaming {
                 ProgressView().controlSize(.small)

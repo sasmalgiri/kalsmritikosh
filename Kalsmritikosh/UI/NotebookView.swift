@@ -48,8 +48,12 @@ public struct NotebookView: View {
             HStack {
                 Image(systemName: "notebook")
                     .foregroundStyle(.tint)
-                Text("Notebook")
-                    .font(Theme.display(28, .bold))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Notebook")
+                        .font(Theme.display(28, .bold))
+                    Text("Your saved investigations — revisit questions, sub-answers and syntheses without re-running them.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     Task { await refresh() }
