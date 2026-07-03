@@ -32,17 +32,20 @@ public actor ExpertRegistry {
     }
 
     private func domains(for intent: UserIntent) -> Set<ExpertDomain> {
+        // The generalist `.reasoning` expert joins every domain-gated panel
+        // so cross-source reasoning is always available. (Empty set = ALL
+        // experts, which already includes it.)
         switch intent.kind {
         case .reconstructTimeline, .reconstructProject:
-            return [.timeline, .project, .email]
+            return [.timeline, .project, .email, .reasoning]
         case .reconstructRelationship:
-            return [.email, .timeline, .project, .financial]
+            return [.email, .timeline, .project, .financial, .reasoning]
         case .executiveBriefing:
-            return [.project, .financial, .legal, .email]
+            return [.project, .financial, .legal, .email, .reasoning]
         case .riskDetection:
-            return [.legal, .financial, .project]
+            return [.legal, .financial, .project, .reasoning]
         case .missingInformation:
-            return [.project, .timeline]
+            return [.project, .timeline, .reasoning]
         case .factualLookup, .semanticSearch, .unknown:
             return []
         }

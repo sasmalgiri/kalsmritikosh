@@ -47,6 +47,7 @@ public enum ExpertCapability: String, Codable, Sendable, Hashable {
     case historyReconstruction
     case projectReconstruction
     case stakeholderMapping
+    case generalReasoning
 }
 
 public enum ExpertDomain: String, Codable, Sendable, Hashable {
@@ -57,6 +58,9 @@ public enum ExpertDomain: String, Codable, Sendable, Hashable {
     case ocr
     case timeline
     case project
+    /// Generalist: reasons across all retrieved evidence (chunks + entities
+    /// + events), not one narrow domain. Always relevant.
+    case reasoning
 }
 
 /// Read-only handles given to an expert so it can pull retrieved evidence

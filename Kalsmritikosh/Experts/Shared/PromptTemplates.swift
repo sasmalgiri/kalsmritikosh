@@ -406,6 +406,47 @@ public enum PromptTemplates {
         """
         return PromptFrame(prompt: prompt, evidenceMap: map)
     }
+
+    // MARK: - Reasoning (generalist)
+
+    /// Generalist frame: reasons across ALL retrieved evidence — document
+    /// snippets, entities, AND events together — rather than one domain.
+    /// This is the "connect the dots" expert that broadens the panel toward
+    /// large-model breadth on grounded questions.
+    public static func reasoningAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+        var lines: [String] = []
+        var map: [String: EvidenceCitation] = [:]
+        var index = 1
+        // Events first (the "what happened / when / who" spine).
+        for event in retrieval.events.prefix(12) {
+            let tag = "E\(index)"
+            lines.append("[\(tag)] EVENT [\(event.date.formatted(date: .abbreviated, time: .omitted))] \(event.kind.rawValue): \(event.title)")
+            map[tag] = EvidenceCitation(
+                supportingObjectIDs: [event.sourceObjectID],
+                supportingEventIDs: [event.id],
+                supportingEntityIDs: event.entityIDs
+            )
+            index += 1
+        }
+        index = appendChunkEvidence(retrieval, startingIndex: index, limit: 8, lines: &lines, map: &map)
+        index = appendEntityEvidence(retrieval, startingIndex: index, limit: 12, lines: &lines, map: &map)
+        let evidenceBlock = lines.isEmpty ? "(no evidence found)" : lines.joined(separator: "\n")
+        let prompt = """
+        Task: Reason across ALL the evidence below — events, document
+        snippets, and entities — to answer the question. Connect facts that
+        span multiple sources; prefer the most directly supported conclusion.
+        Question: "\(intent.rawQuestion)"
+
+        Lead with the direct answer. Do NOT invent facts or names; every claim
+        must cite evidence E-ids.
+
+        Evidence (cite by E-id; EVENT = dated event, DOC = document snippet,
+        ENT = retrieved entity):
+        \(evidenceBlock)
+        \(jsonContract)
+        """
+        return PromptFrame(prompt: prompt, evidenceMap: map)
+    }
 }
 
 // MARK: - Findings parsing

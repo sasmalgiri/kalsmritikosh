@@ -63,7 +63,7 @@ public enum ExpertRelevanceScorer {
             case .project:   return project
             case .timeline:  return anyEvents
             case .email:     return email
-            case .research, .ocr: return true   // generalists — always relevant
+            case .research, .ocr, .reasoning: return true   // generalists — always relevant
             }
         }
     }

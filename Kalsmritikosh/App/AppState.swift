@@ -608,6 +608,7 @@ public final class AppState {
             await expertRegistry.register(OCRExpert())
             await expertRegistry.register(TimelineExpert())
             await expertRegistry.register(ProjectExpert())
+            await expertRegistry.register(ReasoningExpert())   // generalist cross-source expert
 
             let router = DeterministicRouter(expertRegistry: expertRegistry)
             // G2-0 measurement (commit 0320a5a vs Gate 1 lock 4bcf4e5):
