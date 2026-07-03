@@ -32,6 +32,11 @@ public struct ConvertView: View {
         case json = "JSON"
         case html = "HTML"
         case csv = "CSV"
+        case pdf = "PDF"
+        case rtf = "RTF (Word)"
+        case docx = "Word (.docx)"
+        case xlsx = "Excel (.xlsx)"
+        case png = "Image (PNG)"
 
         public var id: String { rawValue }
 
@@ -42,6 +47,19 @@ public struct ConvertView: View {
             case .json:      return "json"
             case .html:      return "html"
             case .csv:       return "csv"
+            case .pdf:       return "pdf"
+            case .rtf:       return "rtf"
+            case .docx:      return "docx"
+            case .xlsx:      return "xlsx"
+            case .png:       return "png"
+            }
+        }
+
+        /// Binary formats produce Data (no meaningful text preview).
+        public var isBinary: Bool {
+            switch self {
+            case .plainText, .markdown, .json, .html, .csv: return false
+            case .pdf, .rtf, .docx, .xlsx, .png: return true
             }
         }
     }
@@ -51,6 +69,8 @@ public struct ConvertView: View {
     @State private var outputFormat: OutputFormat = .plainText
     @State private var converting: Bool = false
     @State private var output: String = ""
+    /// Binary payload for PDF/RTF/DOCX/XLSX/PNG output (nil for text formats).
+    @State private var outputData: Data? = nil
     @State private var statusLine: String = ""
     /// Hybrid Apple-AI + NLP proofread of the extracted text before display.
     @State private var aiProofread: Bool = true
@@ -296,6 +316,7 @@ public struct ConvertView: View {
         converting = true
         statusLine = ""
         output = ""
+        outputData = nil
         defer { converting = false }
         let registry = LoaderRegistry.standard()
         var pieces: [(URL, KnowledgeObject)] = []
@@ -340,12 +361,41 @@ public struct ConvertView: View {
             pieces = proofed
         }
 
-        output = format(pieces: pieces, failures: failed, as: outputFormat)
+        if outputFormat.isBinary {
+            let records = pieces.map {
+                ExportRecord(title: $0.0.lastPathComponent, sourceType: $0.1.sourceType.rawValue, text: $0.1.content)
+            }
+            let data: Data?
+            switch outputFormat {
+            case .pdf:  data = DocumentExporter.pdf(records)
+            case .rtf:  data = DocumentExporter.rtf(records)
+            case .docx: data = DocumentExporter.docx(records)
+            case .xlsx: data = DocumentExporter.xlsx(records)
+            case .png:  data = DocumentExporter.png(records)
+            default:    data = nil
+            }
+            outputData = data
+            if let data {
+                output = "✅ \(outputFormat.rawValue) ready — \(pieces.count) record\(pieces.count == 1 ? "" : "s"), \(Self.humanBytes(data.count)).\nUse “Save as…” to write the file."
+            } else {
+                output = "Couldn't build \(outputFormat.rawValue) output for these files."
+            }
+        } else {
+            outputData = nil
+            output = format(pieces: pieces, failures: failed, as: outputFormat)
+        }
+
         var status = "Parsed \(pieces.count) record\(pieces.count == 1 ? "" : "s"), failed \(failed.count)"
         if !contributingExperts.isEmpty {
             status += " · proofread (\(contributingExperts.sorted().joined(separator: "+")))"
         }
         statusLine = status
+    }
+
+    private static func humanBytes(_ n: Int) -> String {
+        if n < 1024 { return "\(n) B" }
+        if n < 1024 * 1024 { return String(format: "%.0f KB", Double(n) / 1024) }
+        return String(format: "%.1f MB", Double(n) / (1024 * 1024))
     }
 
     private func format(
@@ -422,6 +472,8 @@ public struct ConvertView: View {
                 out += Self.csvRow([url.lastPathComponent, "ERROR", err])
             }
             return out
+        case .pdf, .rtf, .docx, .xlsx, .png:
+            return ""   // binary formats are produced via DocumentExporter, not here
         }
     }
 
@@ -470,12 +522,18 @@ public struct ConvertView: View {
             case .html:      return .html
             case .csv:       return .commaSeparatedText
             case .plainText: return .plainText
+            case .pdf:       return .pdf
+            case .rtf:       return .rtf
+            case .png:       return .png
+            case .docx:      return UTType(filenameExtension: "docx") ?? .data
+            case .xlsx:      return UTType(filenameExtension: "xlsx") ?? .data
             }
         }()
         panel.allowedContentTypes = [contentType]
         panel.nameFieldStringValue = "atlas-convert.\(outputFormat.fileExtension)"
         if panel.runModal() == .OK, let url = panel.url {
-            try? output.data(using: .utf8)?.write(to: url, options: .atomic)
+            let data = outputData ?? output.data(using: .utf8) ?? Data()
+            try? data.write(to: url, options: .atomic)
         }
         #endif
     }
