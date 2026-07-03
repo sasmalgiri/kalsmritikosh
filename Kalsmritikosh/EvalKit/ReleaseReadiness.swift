@@ -93,6 +93,8 @@ public enum ReleaseReadiness {
         checks.append(checkIMessageEpochConversion())
         checks.append(checkConfidenceAggregateClamp())
         checks.append(checkRerankerQuestionShape())
+        checks.append(checkConversionExporters())
+        checks.append(checkSystemModesWireUp())
 
         // 3. Bundle integrity ────────────────────────────────────────
         checks.append(checkProjectDeltaFixturePresent())
@@ -145,6 +147,139 @@ public enum ReleaseReadiness {
                 ? "SchemaMigrations.latestVersion = \(got)"
                 : "expected \(expected), got \(got) — migration list desynced with this code",
             blocker: true,
+            secondsTaken: Date().timeIntervalSince(t0)
+        )
+    }
+
+    // MARK: - Category 2b: Convert exporters (all formats, one pass)
+
+    /// Runs DocumentExporter for a sample record in every output format and
+    /// validates the bytes — so the user never has to open Convert and try
+    /// each format by hand. DOCX/XLSX are re-parsed with ZIPReader to prove
+    /// the OOXML archive is structurally valid (required parts present) and
+    /// that the main part decompresses (CRC/STORE round-trip). This is the
+    /// only automated check the hand-rolled ZipWriter/OOXML writers get.
+    private static func checkConversionExporters() -> Check {
+        let t0 = Date()
+        let records = [
+            ExportRecord(
+                title: "SelfTest",
+                sourceType: "plainText",
+                text: "Kalsmritikosh self-check.\nLine two — 123, 456.\nUnicode: café, naïve, 日本語."
+            )
+        ]
+        var fails: [String] = []
+
+        // PDF — must exist and carry the %PDF signature.
+        if let pdf = DocumentExporter.pdf(records) {
+            if pdf.count < 100 || !pdf.starts(with: Array("%PDF".utf8)) {
+                fails.append("PDF header/size (\(pdf.count)B)")
+            }
+        } else { fails.append("PDF returned nil") }
+
+        // RTF — must contain the {\rtf control word.
+        if let rtf = DocumentExporter.rtf(records), let s = String(data: rtf, encoding: .utf8) {
+            if !s.contains("{\\rtf") { fails.append("RTF signature") }
+        } else { fails.append("RTF returned nil/undecodable") }
+
+        // PNG — must carry the 8-byte PNG magic.
+        if let png = DocumentExporter.png(records) {
+            let magic: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+            if png.count < 100 || Array(png.prefix(8)) != magic {
+                fails.append("PNG magic (\(png.count)B)")
+            }
+        } else { fails.append("PNG returned nil") }
+
+        // DOCX / XLSX — round-trip through ZIPReader.
+        fails.append(contentsOf: validateOOXML(
+            DocumentExporter.docx(records),
+            required: ["[Content_Types].xml", "word/document.xml"],
+            mainPart: "word/document.xml",
+            label: "DOCX"
+        ))
+        fails.append(contentsOf: validateOOXML(
+            DocumentExporter.xlsx(records),
+            required: ["[Content_Types].xml", "xl/workbook.xml", "xl/worksheets/sheet1.xml"],
+            mainPart: "xl/worksheets/sheet1.xml",
+            label: "XLSX"
+        ))
+
+        let pass = fails.isEmpty
+        return Check(
+            id: "convert.exporters",
+            name: "Convert exporters (PDF/RTF/PNG/DOCX/XLSX)",
+            passed: pass,
+            detail: pass
+                ? "all 5 formats produced valid output; DOCX/XLSX re-parsed as valid OOXML archives (parts present + main part decompresses)"
+                : "problems: \(fails.joined(separator: "; "))",
+            blocker: false,
+            secondsTaken: Date().timeIntervalSince(t0)
+        )
+    }
+
+    /// Parses `data` as a ZIP, confirms every `required` part is present, and
+    /// reads `mainPart` back out (which throws on CRC/decompress failure).
+    /// Returns a list of human-readable problems (empty == valid).
+    private static func validateOOXML(
+        _ data: Data,
+        required: [String],
+        mainPart: String,
+        label: String
+    ) -> [String] {
+        guard data.count > 100 else { return ["\(label) too small (\(data.count)B)"] }
+        do {
+            let reader = ZIPReader(data: data)
+            let names = Set(try reader.entries().map(\.name))
+            let problems = required
+                .filter { !names.contains($0) }
+                .map { "\(label) missing \($0)" }
+            // Reading the main part validates the local header + CRC-32.
+            _ = try reader.read(mainPart)
+            return problems
+        } catch {
+            return ["\(label) not a valid archive (\(error))"]
+        }
+    }
+
+    // MARK: - Category 2c: System modes + MoE wiring (all three, one pass)
+
+    /// Confirms every SystemMode resolves to an engine with the correct ingest
+    /// policy, and that the super-expert council gate returns its backbone.
+    /// Lets the user verify all three modes at once instead of switching mode,
+    /// relaunching, and inspecting behaviour three separate times.
+    private static func checkSystemModesWireUp() -> Check {
+        let t0 = Date()
+        var fails: [String] = []
+        for mode in SystemMode.allCases {
+            let engine = SystemEngineFactory.make(mode)
+            if engine.mode != mode {
+                fails.append("\(mode.rawValue): engine.mode = \(engine.mode.rawValue)")
+            }
+            let p = engine.ingestPolicy
+            switch mode {
+            case .fullLLM:
+                if !(p.eagerMemoryDistillation && p.contextPrefixBackfill) {
+                    fails.append("fullLLM should eager-distill + prefix-backfill")
+                }
+            case .hotWarmCold, .ledgerEventDriven:
+                if !p.firstChunkCard || p.eagerMemoryDistillation || p.contextPrefixBackfill {
+                    fails.append("\(mode.rawValue) should be firstChunkCard-only")
+                }
+            }
+        }
+        let gated = ExpertCouncil.gate(question: "Why was Project Delta delayed?", k: 3)
+        if gated.count < 2 {
+            fails.append("council gate returned \(gated.count) experts (< backbone)")
+        }
+        let pass = fails.isEmpty
+        return Check(
+            id: "engines.modes",
+            name: "System modes + MoE council (all 3 modes)",
+            passed: pass,
+            detail: pass
+                ? "all 3 engines resolve with correct ingest policy; council gate returns \(gated.count) super-experts"
+                : "problems: \(fails.joined(separator: "; "))",
+            blocker: false,
             secondsTaken: Date().timeIntervalSince(t0)
         )
     }

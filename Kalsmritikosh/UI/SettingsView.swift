@@ -443,7 +443,7 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Release Readiness")
                         .font(.title3.bold())
-                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. ~12–15 minutes end-to-end.")
+                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and all 3 system modes + the MoE council in one pass, so you never have to try each format or mode by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -531,7 +531,7 @@ public struct SettingsView: View {
         releaseReadinessRunning = true
         releaseReadinessReport = nil
         releaseReadinessStatus = mode == .fast
-            ? "Fast gate — schema → deterministic logic → bundle → capability → live health (no LLM)…"
+            ? "Fast gate — schema → deterministic logic → convert exporters → system modes/MoE → bundle → capability → live health (no LLM)…"
             : "Deep eval — everything in Fast PLUS smoke + Fast Eval + Gate 3 (LLM-heavy, may take hours)…"
         defer { releaseReadinessRunning = false }
         let result = await ReleaseReadiness.run(appState, mode: mode)
