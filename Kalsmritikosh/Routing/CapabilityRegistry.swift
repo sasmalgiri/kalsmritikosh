@@ -155,6 +155,14 @@ public actor CapabilityRegistry {
     // MARK: - Ranking
 
     private func rankedCandidates(for spec: CapabilitySpec) async throws -> [any ModelProvider] {
+        // Fully-private / no-LLM stance: refuse any GENERATIVE spec so every
+        // caller falls back to its deterministic rule/NL/extractive path.
+        // Embedding specs (no `.textGeneration`) are untouched, so vector
+        // retrieval still works entirely on-device. This is the master lever
+        // for the "substitute the LLM" private facility.
+        if privacyGate.offlineNoLLM && spec.requires.contains(.textGeneration) {
+            throw ModelProviderError.noProviderForSpec(spec: spec)
+        }
         // Filter by capability coverage + privacy.
         let eligible = providers.values.filter { provider -> Bool in
             let manifest = provider.manifest
