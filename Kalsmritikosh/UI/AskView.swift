@@ -18,6 +18,10 @@ import AppKit
 public struct AskView: View {
     @Environment(AppState.self) private var appState
     @State private var question: String = ""
+    /// Minimum-touch: the input is focused on appear and after each send /
+    /// new conversation, so the flow is simply type → Enter → answer with no
+    /// click into the field first.
+    @FocusState private var inputFocused: Bool
     @State private var asking = false
     @State private var conversationID: UUID?
     @State private var turns: [ConversationTurn] = []
@@ -67,6 +71,7 @@ public struct AskView: View {
         }
         .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
+        .onAppear { inputFocused = true }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(
                 investigation: inv,
@@ -275,6 +280,7 @@ public struct AskView: View {
                 .textFieldStyle(.plain)
                 .padding(.leading, 16)
                 .padding(.vertical, 10)
+                .focused($inputFocused)
                 .onSubmit(submit)
             Button {
                 Task { await saveCurrentQuestion() }
@@ -467,6 +473,7 @@ public struct AskView: View {
             await MainActor.run {
                 self.conversationID = conv.id
                 self.turns = []
+                self.inputFocused = true
             }
         } catch {
             AtlasLog.ui.error("Failed to start conversation: \(String(describing: error), privacy: .public)")

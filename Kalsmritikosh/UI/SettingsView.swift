@@ -85,10 +85,11 @@ public struct SettingsView: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Settings").font(Theme.display(28, .bold))
                     Text("Choose the system mode, tune answering depth vs. speed, set privacy, manage models, and run diagnostics.")
                         .font(.caption).foregroundStyle(.secondary)
+                    selfCheckChip
                 }
 
                 systemModeSection
@@ -128,7 +129,57 @@ public struct SettingsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(AuroraBackdrop(intensity: 0.5))
-        .task { await reload() }
+        .task {
+            await reload()
+            // Zero-touch: run the fast self-check automatically the first
+            // time Settings opens (no LLM, seconds) so the verdict is shown
+            // without the user hunting for a button. Cached on AppState, so
+            // navigating away and back does not re-run it.
+            await appState.runFastSelfCheckIfNeeded()
+        }
+    }
+
+    /// Compact, always-visible self-check verdict at the very top of
+    /// Settings. Auto-populated — the user never clicks to see it. Tapping
+    /// re-runs the fast checks on demand.
+    @ViewBuilder
+    private var selfCheckChip: some View {
+        if let r = appState.selfCheckReport {
+            let passed = r.checks.filter(\.passed).count
+            let ok = r.checks.allSatisfy { $0.passed || !$0.blocker }
+            Button {
+                Task { await runReleaseReadiness(mode: .fast) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: ok ? "checkmark.seal.fill" : "exclamationmark.octagon.fill")
+                        .foregroundStyle(ok ? .green : .red)
+                    Text(ok ? "Self-check passed" : "Self-check found issues")
+                        .font(.caption.weight(.semibold))
+                    Text("\(passed)/\(r.checks.count) checks · all formats + all 3 modes")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                    if releaseReadinessRunning {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background((ok ? Color.green : Color.red).opacity(0.10), in: Capsule())
+                .overlay(Capsule().stroke((ok ? Color.green : Color.red).opacity(0.30), lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .help("Re-run the fast self-check (deterministic logic + all Convert formats + all 3 system modes). No LLM, a few seconds.")
+        } else {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Running self-check…")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }
     }
 
     /// HISTORY Phase F.4 — narrative-eval history. The
@@ -431,13 +482,17 @@ public struct SettingsView: View {
     /// TestFlight; FAIL → see report for blockers.
     @ViewBuilder
     private var releaseReadinessBanner: some View {
+        // Prefer a run started here; otherwise show the auto self-check that
+        // ran when Settings first opened — so the verdict + per-check list is
+        // visible with zero clicks.
+        let displayed = releaseReadinessReport ?? appState.selfCheckReport
         let verdictColor: Color = {
-            guard let r = releaseReadinessReport else { return .blue }
+            guard let r = displayed else { return .blue }
             return r.releaseReady ? .green : .red
         }()
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: releaseReadinessReport.map { $0.releaseReady ? "checkmark.seal.fill" : "exclamationmark.octagon.fill" } ?? "shippingbox.fill")
+                Image(systemName: displayed.map { $0.releaseReady ? "checkmark.seal.fill" : "exclamationmark.octagon.fill" } ?? "shippingbox.fill")
                     .font(.title)
                     .foregroundStyle(verdictColor)
                 VStack(alignment: .leading, spacing: 4) {
@@ -484,7 +539,7 @@ public struct SettingsView: View {
                     }
                 }
             }
-            if let report = releaseReadinessReport {
+            if let report = displayed {
                 HStack(spacing: 6) {
                     Image(systemName: report.releaseReady ? "checkmark.circle.fill" : "xmark.octagon.fill")
                         .foregroundStyle(verdictColor)
@@ -536,6 +591,7 @@ public struct SettingsView: View {
         defer { releaseReadinessRunning = false }
         let result = await ReleaseReadiness.run(appState, mode: mode)
         releaseReadinessReport = result
+        appState.recordSelfCheck(result)
         releaseReadinessStatus = nil
     }
 

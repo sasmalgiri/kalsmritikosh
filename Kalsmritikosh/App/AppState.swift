@@ -131,6 +131,27 @@ public final class AppState {
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
+    // MARK: - Self-check (auto, zero-touch)
+    /// Result of the fast self-check (deterministic logic + all Convert
+    /// formats + all 3 system modes/MoE). Auto-run once when Settings first
+    /// appears and cached here, so the verdict shows with no clicks and does
+    /// not re-run on every navigation. `nil` until the first run completes.
+    public private(set) var selfCheckReport: ReleaseReadiness.Report?
+
+    /// Runs the fast (no-LLM, seconds) self-check once and caches it.
+    /// Idempotent: returns immediately if already run this session.
+    public func runFastSelfCheckIfNeeded() async {
+        guard selfCheckReport == nil else { return }
+        let report = await ReleaseReadiness.run(self, mode: .fast)
+        selfCheckReport = report
+    }
+
+    /// Caches a self-check report produced by a manual run (Settings) so the
+    /// always-visible verdict chip reflects it.
+    public func recordSelfCheck(_ report: ReleaseReadiness.Report) {
+        selfCheckReport = report
+    }
+
     // MARK: - System-mode chooser (first run + manual)
     /// Drives the system-mode chooser sheet (RootView presents it).
     public var showModeChooser: Bool = false

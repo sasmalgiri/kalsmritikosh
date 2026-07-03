@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import OSLog
+import UniformTypeIdentifiers
 
 #if canImport(AppKit)
 import AppKit
@@ -18,6 +20,9 @@ public struct SourcesView: View {
     @State private var ingesting = false
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
+    /// Minimum-touch: drop folders anywhere on this screen to add them —
+    /// no picker panel needed.
+    @State private var dropTargeted = false
 
     public init() {}
 
@@ -35,6 +40,25 @@ public struct SourcesView: View {
             .scrollContentBackground(.hidden)
         }
         .background(AuroraBackdrop(intensity: 0.5))
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            handleFolderDrop(providers)
+        }
+        .overlay {
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Theme.brand, style: StrokeStyle(lineWidth: 3, dash: [9]))
+                    .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        Label("Drop folders to add them", systemImage: "folder.badge.plus")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Theme.brand)
+                    )
+                    .padding(10)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: dropTargeted)
         .task {
             // Initial load + cheap polling refresh while the view is
             // visible. The task is cancelled by SwiftUI when the view
@@ -127,9 +151,19 @@ public struct SourcesView: View {
             Text("Folders")
                 .font(.headline)
             if appState.bookmarks.roots.isEmpty {
-                Text("Add a folder to start building your knowledge base.")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Add a folder to start building your knowledge base.")
+                        .foregroundStyle(.secondary)
+                    // Minimum-touch: the primary action lives right in the
+                    // empty state, so the user doesn't have to find the
+                    // button in the header.
+                    Button(action: pickFolder) {
+                        Label("Add Folder…", systemImage: "folder.badge.plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                }
+                .padding(.vertical, 8)
             } else {
                 ForEach(appState.bookmarks.roots) { root in
                     HStack {
@@ -229,6 +263,24 @@ public struct SourcesView: View {
         case .browserHistory: return "safari"
         case .unknown: return "doc"
         }
+    }
+
+    /// Register every dropped directory as a watched root. Files (non-dirs)
+    /// are ignored — this screen watches folders, not individual files.
+    private func handleFolderDrop(_ providers: [NSItemProvider]) -> Bool {
+        var handled = false
+        for provider in providers where provider.canLoadObject(ofClass: URL.self) {
+            handled = true
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url, url.hasDirectoryPath else { return }
+                Task { @MainActor in
+                    do { try appState.bookmarks.register(url: url) }
+                    catch { AtlasLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)") }
+                    await refresh()
+                }
+            }
+        }
+        return handled
     }
 
     private func pickFolder() {

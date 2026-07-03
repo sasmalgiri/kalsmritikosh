@@ -13,6 +13,9 @@ import SwiftUI
 #if canImport(TipKit)
 import TipKit
 #endif
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // MARK: - Navigation model
 
@@ -73,6 +76,20 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         }
     }
 
+    /// Curated ⌘1…⌘9 quick-jumps — a game-style "hotbar" of the nine
+    /// most-used screens. Shown as hints in the sidebar rows.
+    static let quickShortcuts: [(key: KeyEquivalent, dest: Destination)] = [
+        ("1", .ask), ("2", .search), ("3", .timeline), ("4", .insights),
+        ("5", .knowledge), ("6", .sources), ("7", .convert),
+        ("8", .live), ("9", .settings)
+    ]
+
+    /// The visible "⌘N" hint for a hotbar screen, or nil if it has none.
+    var shortcutHint: String? {
+        Self.quickShortcuts.first { $0.dest == self }
+            .map { "⌘\($0.key.character)" }
+    }
+
     enum Group: String, CaseIterable, Identifiable {
         case converse   = "Ask & Search"
         case reconstruct = "Reconstruct"
@@ -101,8 +118,20 @@ public struct RootView: View {
     @AppStorage("atlas.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
     @State private var selection: Destination? = .ask
+    /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
+    /// straight back to it (like weapon quick-swap in shooters).
+    @State private var previousSelection: Destination = .ask
     @State private var showMaintenance: Bool = true
+    /// ⌘K command palette visibility.
+    @State private var showPalette: Bool = false
     @Namespace private var sidebarNS
+
+    /// Single navigation entry point. Records the outgoing screen for the
+    /// ⌘\ quick-swap, then animates to the new one.
+    private func navigate(to dest: Destination) {
+        if let current = selection, current != dest { previousSelection = current }
+        withAnimation(Theme.springFast) { selection = dest }
+    }
 
     public init() {}
 
@@ -179,6 +208,8 @@ public struct RootView: View {
         .tint(Theme.brand)
         .preferredColorScheme(.light)
         .frame(minWidth: 980, minHeight: 660)
+        .background(shortcutButtons)
+        .overlay(paletteOverlay)
         .sheet(isPresented: $presentingOnboarding) {
             OnboardingView()
                 .environment(appState)
@@ -198,6 +229,8 @@ public struct RootView: View {
                     .padding(.bottom, 4)
                 modeBadge
                     .padding(.bottom, 6)
+                paletteButton
+                    .padding(.bottom, 6)
                 onboardingTip
                 ForEach(Destination.Group.allCases) { group in
                     Text(group.rawValue.uppercased())
@@ -213,7 +246,7 @@ public struct RootView: View {
                             isSelected: selection == dest,
                             namespace: sidebarNS
                         ) {
-                            withAnimation(Theme.springFast) { selection = dest }
+                            navigate(to: dest)
                         }
                     }
                 }
@@ -398,6 +431,91 @@ public struct RootView: View {
         #endif
     }
 
+    // MARK: Command palette + keyboard shortcuts
+
+    /// Visible ⌘K affordance (best practice: pair a visible trigger with the
+    /// hidden shortcut so the feature is discoverable).
+    private var paletteButton: some View {
+        Button { showPalette = true } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .imageScale(.small)
+                    .foregroundStyle(.secondary)
+                Text("Jump to…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 4)
+                Text("⌘K")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .help("Jump to any screen or run a command (⌘K)")
+    }
+
+    /// Zero-size, invisible buttons that carry the app's window-scoped
+    /// keyboard shortcuts: ⌘K palette, ⌘1…⌘9 hotbar (game-style quick
+    /// slots), and ⌘\ quick-swap to the previous screen.
+    private var shortcutButtons: some View {
+        Group {
+            Button("") { showPalette.toggle() }
+                .keyboardShortcut("k", modifiers: .command)
+            Button("") { navigate(to: previousSelection) }
+                .keyboardShortcut("\\", modifiers: .command)
+            ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
+                Button("") { navigate(to: item.dest) }
+                    .keyboardShortcut(item.key, modifiers: .command)
+            }
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var paletteOverlay: some View {
+        if showPalette {
+            ZStack(alignment: .top) {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .onTapGesture { showPalette = false }
+                CommandPaletteView(
+                    isPresented: $showPalette,
+                    onNavigate: { navigate(to: $0) },
+                    onAddFolder: addFolderFromPalette,
+                    onIngestAll: { Task { await appState.ingestAllRoots() } },
+                    onChangeMode: { appState.showModeChooser = true }
+                )
+                .padding(.top, 90)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    /// Open a folder picker directly from the palette, register it, and jump
+    /// to Sources — the whole "add source" flow in one keyboard-driven pass.
+    private func addFolderFromPalette() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Select Folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? appState.bookmarks.register(url: url)
+        navigate(to: .sources)
+        #endif
+    }
+
     // MARK: Detail router
 
     @ViewBuilder
@@ -487,6 +605,12 @@ private struct SidebarRow: View {
                     .font(.callout.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                 Spacer(minLength: 0)
+                if let hint = dest.shortcutHint {
+                    Text(hint)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(isSelected ? .secondary : .tertiary)
+                        .opacity(hovering || isSelected ? 1 : 0.5)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -526,4 +650,174 @@ private struct SidebarRow: View {
                 .fill(Color.primary.opacity(0.05))
         }
     }
+}
+
+// MARK: - Command palette (⌘K)
+
+/// One executable entry in the palette — a screen jump or a top action.
+private struct PaletteCommand: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let icon: String
+    let run: () -> Void
+}
+
+/// ⌘K command palette. The keyboard-first way to reach any screen or run a
+/// top action without touching the sidebar — the pattern popularized by
+/// Linear / Raycast / Superhuman. Autofocused, fuzzy subsequence match
+/// (type "cvt" → Convert), Enter runs the top hit, ↑/↓ move, Esc closes.
+private struct CommandPaletteView: View {
+    @Binding var isPresented: Bool
+    let onNavigate: (Destination) -> Void
+    let onAddFolder: () -> Void
+    let onIngestAll: () -> Void
+    let onChangeMode: () -> Void
+
+    @State private var query = ""
+    @State private var highlighted = 0
+    @FocusState private var fieldFocused: Bool
+
+    private var commands: [PaletteCommand] {
+        var cmds: [PaletteCommand] = Destination.allCases.map { dest in
+            PaletteCommand(
+                id: "go.\(dest.rawValue)",
+                title: dest.title,
+                subtitle: "Go to \(dest.title)",
+                icon: dest.icon
+            ) { onNavigate(dest) }
+        }
+        cmds.append(PaletteCommand(
+            id: "act.addFolder", title: "Add Folder…",
+            subtitle: "Watch a new folder", icon: "folder.badge.plus",
+            run: onAddFolder))
+        cmds.append(PaletteCommand(
+            id: "act.ingest", title: "Ingest All",
+            subtitle: "Re-scan every watched folder now",
+            icon: "arrow.triangle.2.circlepath", run: onIngestAll))
+        cmds.append(PaletteCommand(
+            id: "act.mode", title: "Change System Mode…",
+            subtitle: "Full LLM · Hot-Warm-Cold · Ledger",
+            icon: "slider.horizontal.3", run: onChangeMode))
+        return cmds
+    }
+
+    private var filtered: [PaletteCommand] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return commands }
+        return commands.filter { paletteFuzzyMatch(q, $0.title) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Jump to a screen or run a command…", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .focused($fieldFocused)
+                    .onSubmit(runHighlighted)
+                keycap("esc")
+            }
+            .padding(14)
+            Divider()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        if filtered.isEmpty {
+                            Text("No matches")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 24)
+                        } else {
+                            ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, cmd in
+                                paletteRow(cmd, index: idx).id(idx)
+                            }
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(maxHeight: 340)
+                .onChange(of: highlighted) { _, new in
+                    withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(new, anchor: .center) }
+                }
+            }
+        }
+        .frame(width: 560)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.3), radius: 30, y: 12)
+        .onAppear { fieldFocused = true; highlighted = 0 }
+        .onChange(of: query) { _, _ in highlighted = 0 }
+        .onKeyPress(.downArrow) { move(1); return .handled }
+        .onKeyPress(.upArrow) { move(-1); return .handled }
+        .onKeyPress(.escape) { isPresented = false; return .handled }
+    }
+
+    private func paletteRow(_ cmd: PaletteCommand, index: Int) -> some View {
+        Button { run(cmd) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: cmd.icon)
+                    .frame(width: 22)
+                    .foregroundStyle(Theme.brand)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(cmd.title).font(.callout.weight(.medium))
+                    Text(cmd.subtitle).font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if index == highlighted { keycap("return") }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                index == highlighted ? Theme.brand.opacity(0.14) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func keycap(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.monospaced())
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
+    private func move(_ delta: Int) {
+        let n = filtered.count
+        guard n > 0 else { return }
+        highlighted = (highlighted + delta + n) % n
+    }
+
+    private func runHighlighted() {
+        guard filtered.indices.contains(highlighted) else { return }
+        run(filtered[highlighted])
+    }
+
+    private func run(_ cmd: PaletteCommand) {
+        isPresented = false
+        cmd.run()
+    }
+}
+
+/// Case-insensitive subsequence match: every character of `needle` appears
+/// in order (not necessarily adjacent) within `haystack`. So "cvt" matches
+/// "Convert" and "tgl" matches "Toggle".
+private func paletteFuzzyMatch(_ needle: String, _ haystack: String) -> Bool {
+    var iterator = haystack.lowercased().makeIterator()
+    for ch in needle.lowercased() {
+        var found = false
+        while let h = iterator.next() {
+            if h == ch { found = true; break }
+        }
+        if !found { return false }
+    }
+    return true
 }
