@@ -933,7 +933,19 @@ public struct SettingsView: View {
     /// they take effect on the next question (no relaunch needed).
     private var intelligenceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Answering intelligence").font(.title3.bold())
+            HStack(spacing: 6) {
+                Text("Answering intelligence").font(.title3.bold())
+                InfoPopoverButton(
+                    title: "Speed vs. depth",
+                    message: "Each option below adds on-device model passes: better, more faithful answers but slower replies. Turn them off for speed — answers stay grounded in your evidence either way.",
+                    systemImage: "brain.head.profile",
+                    bullets: [
+                        "Fully private (no LLM) — fastest, rule-based only",
+                        "Parallel expert council + Self-critique — deepest, slowest",
+                        "Off ⇒ ~1 pass · All on ⇒ several passes per answer"
+                    ]
+                )
+            }
             Text("How the on-device brain composes answers. The deeper options give better, more faithful answers but run more model passes, so replies take longer. Turn them off for speed. All answers stay grounded in your evidence either way.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

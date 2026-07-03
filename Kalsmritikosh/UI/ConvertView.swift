@@ -107,6 +107,17 @@ public struct ConvertView: View {
                     .shadow(color: Theme.brand.opacity(0.3), radius: 8, y: 3)
                 Text("Convert")
                     .font(Theme.display(34, .bold))
+                InfoPopoverButton(
+                    title: "How Convert works",
+                    message: "Add files, choose an output format, then Convert and Save as… It's one-shot — nothing here is added to your knowledge base.",
+                    systemImage: "arrow.right.doc.on.clipboard",
+                    bullets: [
+                        "Reads PDF, Word, Excel, images (OCR), email/PST/NSF, audio & video",
+                        "Writes text, Markdown, JSON, HTML, CSV, PDF, RTF, Word, Excel, PNG",
+                        "AI proofread fixes OCR typos but never changes numbers or dates"
+                    ]
+                )
+                Spacer()
             }
             Text("A one-shot file converter — nothing here is saved to your knowledge base. Reads PDF, Word, Excel, images (OCR), email/PST/NSF, and audio & video (transcribed); exports to text, Markdown, JSON, HTML, CSV, PDF, RTF, Word, Excel, or PNG.")
                 .font(.callout)
