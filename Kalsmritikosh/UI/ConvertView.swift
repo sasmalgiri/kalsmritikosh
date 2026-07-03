@@ -30,6 +30,8 @@ public struct ConvertView: View {
         case plainText = "Plain text"
         case markdown = "Markdown"
         case json = "JSON"
+        case html = "HTML"
+        case csv = "CSV"
 
         public var id: String { rawValue }
 
@@ -38,6 +40,8 @@ public struct ConvertView: View {
             case .plainText: return "txt"
             case .markdown:  return "md"
             case .json:      return "json"
+            case .html:      return "html"
+            case .csv:       return "csv"
             }
         }
     }
@@ -151,7 +155,7 @@ public struct ConvertView: View {
                     Text(f.rawValue).tag(f)
                 }
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.menu)
             .fixedSize()
 
             Toggle(isOn: $aiProofread) {
@@ -395,7 +399,42 @@ public struct ConvertView: View {
                 return s
             }
             return "[]"
+        case .html:
+            var out = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Kalsmritikosh conversion</title>\n"
+            out += "<style>body{font:14px -apple-system,system-ui,sans-serif;max-width:820px;margin:2rem auto;padding:0 1rem;color:#1c1c1e}"
+            out += "h2{border-bottom:1px solid #ddd;padding-bottom:.25rem} .meta{color:#8a8a8e;font-size:12px} pre{white-space:pre-wrap;word-wrap:break-word} .fail{color:#c0392b}</style>\n</head>\n<body>\n"
+            for (url, ko) in pieces {
+                out += "<h2>\(Self.htmlEscape(url.lastPathComponent))</h2>\n"
+                out += "<div class=\"meta\">\(Self.htmlEscape(ko.sourceType.rawValue))</div>\n"
+                out += "<pre>\(Self.htmlEscape(ko.content))</pre>\n"
+            }
+            for (url, err) in failures {
+                out += "<p class=\"fail\">FAILED: \(Self.htmlEscape(url.lastPathComponent)) — \(Self.htmlEscape(err))</p>\n"
+            }
+            out += "</body>\n</html>\n"
+            return out
+        case .csv:
+            var out = "file,source_type,content\n"
+            for (url, ko) in pieces {
+                out += Self.csvRow([url.lastPathComponent, ko.sourceType.rawValue, ko.content])
+            }
+            for (url, err) in failures {
+                out += Self.csvRow([url.lastPathComponent, "ERROR", err])
+            }
+            return out
         }
+    }
+
+    /// RFC-4180 CSV row: quote every field, double internal quotes.
+    private static func csvRow(_ fields: [String]) -> String {
+        fields.map { "\"" + $0.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+            .joined(separator: ",") + "\n"
+    }
+
+    private static func htmlEscape(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private static func jsonMetadata(_ meta: [String: AnyCodable]) -> [String: Any] {
@@ -424,11 +463,16 @@ public struct ConvertView: View {
     private func saveOutput() {
         #if canImport(AppKit)
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [
-            outputFormat == .json
-                ? UTType.json
-                : (outputFormat == .markdown ? UTType(filenameExtension: "md") ?? .plainText : .plainText)
-        ]
+        let contentType: UTType = {
+            switch outputFormat {
+            case .json:      return .json
+            case .markdown:  return UTType(filenameExtension: "md") ?? .plainText
+            case .html:      return .html
+            case .csv:       return .commaSeparatedText
+            case .plainText: return .plainText
+            }
+        }()
+        panel.allowedContentTypes = [contentType]
         panel.nameFieldStringValue = "atlas-convert.\(outputFormat.fileExtension)"
         if panel.runModal() == .OK, let url = panel.url {
             try? output.data(using: .utf8)?.write(to: url, options: .atomic)
