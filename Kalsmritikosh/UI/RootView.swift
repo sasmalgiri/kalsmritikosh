@@ -203,6 +203,7 @@ public struct RootView: View {
             NavigationStack {
                 detail
                     .navigationTitle(selection?.title ?? "Kalsmritikosh")
+                    .toolbar { headerNav }
             }
         }
         .tint(Theme.brand)
@@ -429,6 +430,36 @@ public struct RootView: View {
                 .padding(.bottom, 4)
         }
         #endif
+    }
+
+    // MARK: Header icon nav
+
+    /// Icon navigation in the window toolbar: one button per hotbar screen
+    /// (centered), highlighted when active, tooltip showing name + ⌘N. A
+    /// trailing ⌘K search icon opens the command palette. Always-visible
+    /// one-click access to the most-used screens.
+    @ToolbarContentBuilder
+    private var headerNav: some ToolbarContent {
+        ToolbarItemGroup(placement: .principal) {
+            ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
+                Button {
+                    navigate(to: item.dest)
+                } label: {
+                    Image(systemName: item.dest.icon)
+                        .fontWeight(selection == item.dest ? .bold : .regular)
+                }
+                .foregroundStyle(selection == item.dest ? Theme.brand : .secondary)
+                .help("\(item.dest.title)  (⌘\(item.key.character))")
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showPalette = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .help("Jump to any screen or command  (⌘K)")
+        }
     }
 
     // MARK: Command palette + keyboard shortcuts
