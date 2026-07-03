@@ -49,6 +49,25 @@ public struct AnswerSynthesizer: Sendable {
         let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_500)
         let evidence = Self.evidenceBlock(citations, maxTokens: 800)
 
+        // ── MoE gate → top-k super-experts deliberate IN PARALLEL ──
+        // Their perspectives advise the draft; facts stay bound to the
+        // findings/evidence. (Mixtral-style: gate → parallel experts →
+        // combine — combination happens in the draft/refine below.)
+        var councilBlock = ""
+        if FeatureFlags.moeCouncilValue() {
+            let perspectives = await ExpertCouncil().deliberate(
+                question: question,
+                findings: boundedFindings,
+                evidence: evidence,
+                capabilities: capabilities,
+                k: 3
+            )
+            if !perspectives.isEmpty {
+                councilBlock = "\n\nSpecialist perspectives (advisory — still ground every statement in the findings/evidence above):\n"
+                    + perspectives.map { "• \($0.title): \($0.text)" }.joined(separator: "\n")
+            }
+        }
+
         // ── Stage 1: DRAFT ──
         let draftSystem = """
         You are the answering brain of a closed-corpus knowledge system. Domain \
@@ -64,7 +83,7 @@ public struct AnswerSynthesizer: Sendable {
         \(boundedFindings)
 
         Supporting evidence snippets:
-        \(evidence)
+        \(evidence)\(councilBlock)
         """
         guard let draftRaw = await Self.respond(
             provider: provider, prompt: draftPrompt, system: draftSystem, maxTokens: 700

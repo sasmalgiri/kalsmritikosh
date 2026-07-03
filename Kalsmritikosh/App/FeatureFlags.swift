@@ -265,6 +265,23 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kLLMSelfCritique)
     }
 
+    /// Mixtral-style MoE emulation: a top-k gate selects specialist
+    /// "super-experts" that deliberate IN PARALLEL over the evidence, and
+    /// their perspectives feed the answer draft. Default on; auto-inert
+    /// offline. Switchable in code.
+    public var moeCouncil: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Self.kMoECouncil) == nil { return true }
+            return UserDefaults.standard.bool(forKey: Self.kMoECouncil)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kMoECouncil) }
+    }
+
+    public nonisolated static func moeCouncilValue() -> Bool {
+        if UserDefaults.standard.object(forKey: kMoECouncil) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kMoECouncil)
+    }
+
     /// Whether the user has EXPLICITLY chosen a system mode. False on a
     /// fresh install, which triggers the first-run mode chooser before the
     /// engine boots. Set true the first time the user picks a mode.
@@ -336,6 +353,7 @@ public final class FeatureFlags {
     private nonisolated static let kExpertGating           = "atlas.feature.expertRelevanceGating"
     private nonisolated static let kLLMSynthesis           = "atlas.feature.llmAnswerSynthesis"
     private nonisolated static let kLLMSelfCritique        = "atlas.feature.llmSelfCritique"
+    private nonisolated static let kMoECouncil             = "atlas.feature.moeCouncil"
     private nonisolated static let kMaintenanceMode        = "atlas.feature.maintenance.mode"
     private nonisolated static let kMaintenanceIdleMinutes = "atlas.feature.maintenance.idleMinutes"
     private static let kIngestDistill    = "atlas.feature.ingestTimeMemoryDistillation.enabled"
