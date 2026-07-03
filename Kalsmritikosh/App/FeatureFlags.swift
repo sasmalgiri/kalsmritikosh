@@ -248,6 +248,23 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kLLMSynthesis)
     }
 
+    /// MoE depth: after the brain drafts an answer, a critic pass checks it
+    /// against the experts' findings and a refine pass fixes any gaps
+    /// (draft → self-critique → refine). Raises faithfulness at ~2-3× the
+    /// LLM calls. Default on; auto-inert offline. Switchable in code.
+    public var llmSelfCritique: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Self.kLLMSelfCritique) == nil { return true }
+            return UserDefaults.standard.bool(forKey: Self.kLLMSelfCritique)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kLLMSelfCritique) }
+    }
+
+    public nonisolated static func llmSelfCritiqueValue() -> Bool {
+        if UserDefaults.standard.object(forKey: kLLMSelfCritique) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kLLMSelfCritique)
+    }
+
     /// Whether the user has EXPLICITLY chosen a system mode. False on a
     /// fresh install, which triggers the first-run mode chooser before the
     /// engine boots. Set true the first time the user picks a mode.
@@ -318,6 +335,7 @@ public final class FeatureFlags {
     private nonisolated static let kSystemModeChosen       = "atlas.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "atlas.feature.expertRelevanceGating"
     private nonisolated static let kLLMSynthesis           = "atlas.feature.llmAnswerSynthesis"
+    private nonisolated static let kLLMSelfCritique        = "atlas.feature.llmSelfCritique"
     private nonisolated static let kMaintenanceMode        = "atlas.feature.maintenance.mode"
     private nonisolated static let kMaintenanceIdleMinutes = "atlas.feature.maintenance.idleMinutes"
     private static let kIngestDistill    = "atlas.feature.ingestTimeMemoryDistillation.enabled"
