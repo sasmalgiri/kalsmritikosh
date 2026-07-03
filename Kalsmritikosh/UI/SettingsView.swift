@@ -101,6 +101,8 @@ public struct SettingsView: View {
 
                 privacySection
                 Divider()
+                intelligenceSection
+                Divider()
                 ledgerDepthSection
                 Divider()
                 maintenanceSection
@@ -917,6 +919,63 @@ public struct SettingsView: View {
                     FeatureFlags.shared.ingestTimeMemoryDistillation = newValue
                 }
             Text("When OFF (default), the app skips per-subject memory distillation during ingest — the single biggest ingest LLM cost. Memory is instead built on demand for the things you actually ask about. Answers still come from the ledger. Turn ON only if you want richer memory summaries pre-built up front (much slower ingest). Takes effect on next launch.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Answering intelligence — the on-device MoE reasoning dials + the
+    /// fully-private switch. All read/write FeatureFlags / PrivacyGate live;
+    /// they take effect on the next question (no relaunch needed).
+    private var intelligenceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Answering intelligence").font(.title3.bold())
+            Text("How the on-device brain composes answers. The deeper options give better, more faithful answers but run more model passes, so replies take longer. Turn them off for speed. All answers stay grounded in your evidence either way.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
+            // Fully private (no LLM) — PrivacyGate.
+            Toggle("Fully private (no LLM)", isOn: Binding(
+                get: { PrivacyGate.shared.offlineNoLLM },
+                set: { PrivacyGate.shared.offlineNoLLM = $0 }
+            ))
+            Text("Uses NO generative model at all (on-device or cloud). Answers come purely from the rule-based ledger + experts. Maximum privacy and speed; plainer, bullet-style answers. On-device search/embeddings still work.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
+            Toggle("Apple AI writes the final answer", isOn: Binding(
+                get: { FeatureFlags.shared.llmAnswerSynthesis },
+                set: { FeatureFlags.shared.llmAnswerSynthesis = $0 }
+            ))
+            Text("The on-device model composes the answer prose from the experts' verified findings. Off = deterministic bullet answer from the ledger (fast).")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("Parallel expert council (MoE)", isOn: Binding(
+                get: { FeatureFlags.shared.moeCouncil },
+                set: { FeatureFlags.shared.moeCouncil = $0 }
+            ))
+            Text("A top-k gate runs specialist \u{201C}super-experts\u{201D} (Analyst, Skeptic, Historian, Connector, Quant) in parallel and folds their perspectives into the answer. Highest quality; adds several model passes (slower).")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("Self-critique + refine", isOn: Binding(
+                get: { FeatureFlags.shared.llmSelfCritique },
+                set: { FeatureFlags.shared.llmSelfCritique = $0 }
+            ))
+            Text("After drafting, the model fact-checks itself against the findings and revises. Improves faithfulness; adds ~2 model passes.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Toggle("Relevance-gated experts", isOn: Binding(
+                get: { FeatureFlags.shared.expertRelevanceGating },
+                set: { FeatureFlags.shared.expertRelevanceGating = $0 }
+            ))
+            Text("Only runs the experts that have supporting evidence for the question instead of all of them. Recommended on — faster with no quality loss.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
