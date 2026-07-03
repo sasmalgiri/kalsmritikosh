@@ -18,7 +18,8 @@ public struct SearchView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            searchBar
+            // The search box lives in the always-visible app header now;
+            // this screen just renders results for the current query.
             if hits.isEmpty {
                 emptyState
             } else {
@@ -37,37 +38,6 @@ public struct SearchView: View {
         query = pending
         appState.pendingSearchQuery = nil
         runSearch()
-    }
-
-    private var searchBar: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(searching ? Theme.brand : .secondary)
-            TextField("Search chunks, entities, summaries…", text: $query)
-                .textFieldStyle(.plain)
-                .font(.title3)
-                .onSubmit(runSearch)
-            if searching {
-                ProgressView().controlSize(.small)
-            } else if !query.isEmpty {
-                Button {
-                    query = ""
-                    hits = []
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.borderless)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Theme.brand.opacity(0.2), lineWidth: 1))
-        .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
-        .padding(.horizontal, 20)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
     }
 
     private var emptyState: some View {
