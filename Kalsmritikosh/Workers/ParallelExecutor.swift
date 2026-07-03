@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor ParallelExecutor {
     private let pool: WorkerPool
@@ -23,7 +24,19 @@ public actor ParallelExecutor {
         decision: RoutingDecision,
         context: ExpertContext
     ) async -> [ExpertFindings] {
-        let resolved = await experts.all().filter { decision.expertIDs.contains($0.id) }
+        var resolved = await experts.all().filter { decision.expertIDs.contains($0.id) }
+        // MoE gating — trim experts with no evidence for their domain (they
+        // would produce nothing). Conservative: only when we have retrieval
+        // to score against and more than a handful are in play; never starves.
+        if FeatureFlags.expertRelevanceGatingValue(),
+           let retrieval = context.sharedRetrieval,
+           resolved.count > 3 {
+            let selected = ExpertRelevanceScorer.select(from: resolved, intent: intent, retrieval: retrieval)
+            if selected.count < resolved.count {
+                AtlasLog.brain.info("MoE gating: \(resolved.count, privacy: .public) → \(selected.count, privacy: .public) experts [\(selected.map(\.id).joined(separator: ","), privacy: .public)]")
+                resolved = selected
+            }
+        }
         let tasks: [@Sendable () async throws -> ExpertFindings] = resolved.map { expert in
             { try await expert.analyze(intent: intent, context: context) }
         }

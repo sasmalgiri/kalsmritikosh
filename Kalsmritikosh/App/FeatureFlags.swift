@@ -213,6 +213,24 @@ public final class FeatureFlags {
         return mode
     }
 
+    /// Mixture-of-Experts gating. When on (default), the expert executor
+    /// skips domain experts with no supporting evidence for a query instead
+    /// of always running all seven. Reversible; falls back to all experts
+    /// whenever selection is inconclusive.
+    public var expertRelevanceGating: Bool {
+        get {
+            if UserDefaults.standard.object(forKey: Self.kExpertGating) == nil { return true }
+            return UserDefaults.standard.bool(forKey: Self.kExpertGating)
+        }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kExpertGating) }
+    }
+
+    /// Thread-safe read for the non-main-actor expert executor.
+    public nonisolated static func expertRelevanceGatingValue() -> Bool {
+        if UserDefaults.standard.object(forKey: kExpertGating) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kExpertGating)
+    }
+
     /// Whether the user has EXPLICITLY chosen a system mode. False on a
     /// fresh install, which triggers the first-run mode chooser before the
     /// engine boots. Set true the first time the user picks a mode.
@@ -281,6 +299,7 @@ public final class FeatureFlags {
 
     private nonisolated static let kSystemMode             = "atlas.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "atlas.feature.systemModeChosen"
+    private nonisolated static let kExpertGating           = "atlas.feature.expertRelevanceGating"
     private nonisolated static let kMaintenanceMode        = "atlas.feature.maintenance.mode"
     private nonisolated static let kMaintenanceIdleMinutes = "atlas.feature.maintenance.idleMinutes"
     private static let kIngestDistill    = "atlas.feature.ingestTimeMemoryDistillation.enabled"
