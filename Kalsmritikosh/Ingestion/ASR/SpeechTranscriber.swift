@@ -32,6 +32,12 @@ public protocol AudioTranscribing: Sendable {
     func transcribe(audioAt url: URL) async throws -> String
 }
 
+public struct ASRError: LocalizedError, Sendable {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
+}
+
 public actor SpeechTranscriber: AudioTranscribing {
     public nonisolated let engineID = "apple-speech"
 
@@ -39,30 +45,86 @@ public actor SpeechTranscriber: AudioTranscribing {
 
     public func transcribe(audioAt url: URL) async throws -> String {
         #if canImport(Speech)
+        // 1. Permission — REQUIRED before any recognition. Without the
+        //    Info.plist usage string this call would trap, so the key must
+        //    be present (see NSSpeechRecognitionUsageDescription).
+        try await Self.ensureAuthorized()
+
         let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         guard let recognizer, recognizer.isAvailable else {
-            throw NSError(
-                domain: "atlas.asr",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Speech recognizer unavailable."]
-            )
+            throw ASRError("Speech recognizer unavailable (check language + Apple Intelligence/Dictation availability).")
         }
+
         let request = SFSpeechURLRecognitionRequest(url: url)
-        return try await withCheckedThrowingContinuation { continuation in
+        // 2. Privacy-first: keep audio ON DEVICE. Only fall back to Apple's
+        //    servers if the user has explicitly enabled cloud routing.
+        if recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        } else if !PrivacyGate.shared.allowCloudRouting {
+            throw ASRError("On-device transcription isn't available for this language and cloud routing is off. Enable 'Allow cloud-routed providers' in Settings, or use a supported language.")
+        }
+        if #available(macOS 13.0, iOS 16.0, *) {
+            request.addsPunctuation = true
+        }
+
+        // 3. Bridge the callback API to async, guaranteeing exactly one resume.
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+            let gate = ResumeOnce(continuation)
             recognizer.recognitionTask(with: request) { result, error in
-                if let result, result.isFinal {
-                    continuation.resume(returning: result.bestTranscription.formattedString)
-                } else if let error {
-                    continuation.resume(throwing: error)
+                if let error {
+                    gate.resume(throwing: error)
+                } else if let result, result.isFinal {
+                    gate.resume(returning: result.bestTranscription.formattedString)
                 }
             }
         }
         #else
-        throw NSError(
-            domain: "atlas.asr",
-            code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Speech framework unavailable on this platform."]
-        )
+        throw ASRError("Speech framework unavailable on this platform.")
         #endif
     }
+
+    #if canImport(Speech)
+    /// Request Speech authorization once; throw a clear error if unavailable.
+    private static func ensureAuthorized() async throws {
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized:
+            return
+        case .denied, .restricted:
+            throw ASRError("Speech recognition permission was denied. Enable it in System Settings → Privacy & Security → Speech Recognition.")
+        case .notDetermined:
+            let status = await withCheckedContinuation { (c: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+                SFSpeechRecognizer.requestAuthorization { c.resume(returning: $0) }
+            }
+            guard status == .authorized else {
+                throw ASRError("Speech recognition wasn't authorized.")
+            }
+        @unknown default:
+            throw ASRError("Speech recognition is unavailable.")
+        }
+    }
+
+    /// Ensures a CheckedContinuation is resumed at most once, from any queue
+    /// (SFSpeechRecognitionTask may deliver partials + a final on arbitrary
+    /// threads).
+    private final class ResumeOnce: @unchecked Sendable {
+        private let continuation: CheckedContinuation<String, Error>
+        private var resumed = false
+        private let lock = NSLock()
+        init(_ continuation: CheckedContinuation<String, Error>) {
+            self.continuation = continuation
+        }
+        func resume(returning value: String) {
+            lock.lock(); defer { lock.unlock() }
+            guard !resumed else { return }
+            resumed = true
+            continuation.resume(returning: value)
+        }
+        func resume(throwing error: Error) {
+            lock.lock(); defer { lock.unlock() }
+            guard !resumed else { return }
+            resumed = true
+            continuation.resume(throwing: error)
+        }
+    }
+    #endif
 }
