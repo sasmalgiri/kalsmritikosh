@@ -31,7 +31,10 @@ public struct FoundationModelsProvider: ModelProvider {
             ],
             minRAMBytes: 0,
             diskBytes: 0,
-            contextWindow: 8192,
+            // Apple on-device SystemLanguageModel is a fixed 4,096-token window
+            // (instructions + prompt + @Generable schema + output all count).
+            // Not enlargeable — callers chunk to fit; see TokenBudget.
+            contextWindow: 4096,
             privacyLevel: .onDevice,
             requiresDownload: false,
             tier: .medium

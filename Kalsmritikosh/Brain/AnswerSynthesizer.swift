@@ -37,9 +37,18 @@ public struct AnswerSynthesizer: Sendable {
         guard let provider = try? await capabilities.resolve(spec),
               await provider.isAvailable() else { return nil }
 
-        let evidence = citations.prefix(8).enumerated()
-            .map { "[\($0.offset + 1)] \($0.element.snippet)" }
-            .joined(separator: "\n")
+        // Fit the Apple 4,096-token window: reserve ~700 for the answer +
+        // ~250 for instructions, leaving ~3,000 for findings + evidence.
+        // Findings take priority; evidence fills the remainder.
+        let boundedFindings = TokenBudget.clamp(findings, maxTokens: 1_800)
+        let evidenceBudgetChars = TokenBudget.approxChars(tokens: 1_000)
+        var evidence = ""
+        for (i, c) in citations.prefix(8).enumerated() {
+            let line = "[\(i + 1)] \(c.snippet)\n"
+            if evidence.count + line.count > evidenceBudgetChars { break }
+            evidence += line
+        }
+        evidence = evidence.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let system = """
         You are the answering brain of a closed-corpus knowledge system. Domain \
@@ -55,7 +64,7 @@ public struct AnswerSynthesizer: Sendable {
         Question: \(question)
 
         Verified findings (from the domain experts):
-        \(findings)
+        \(boundedFindings)
 
         Supporting evidence snippets:
         \(evidence.isEmpty ? "(none)" : evidence)

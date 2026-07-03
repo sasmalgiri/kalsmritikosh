@@ -53,7 +53,9 @@ public struct AITextCorrector: Sendable {
         var working = nlpText
 
         // ── Expert 2 — Apple on-device AI proofread (hybrid) ──
-        if let capabilities, working.count <= 12_000,
+        // No size cap here: appleAIProofread chunks to fit the 4,096-token
+        // window and processes chunks in parallel sessions.
+        if let capabilities,
            let aiText = await Self.appleAIProofread(
                working,
                knownNames: Self.frequentPersonNames(trimmed),
@@ -136,9 +138,17 @@ public struct AITextCorrector: Sendable {
     // MARK: - Expert 2: Apple on-device AI
 
     /// Returns a SAFE proofread of `text`, or nil if no model is available.
+    ///
+    /// The Apple on-device model has a FIXED 4,096-token window and proofread
+    /// output ≈ input, so a whole document rarely fits. We split into chunks
+    /// small enough that input + its rewrite + instructions stay under the
+    /// window, proofread each chunk in its OWN session (run concurrently —
+    /// separate sessions are allowed), then stitch the results back. Each
+    /// chunk is independently safety-guarded; an unsafe/failed chunk keeps
+    /// its original text, so the whole never degrades.
     static func appleAIProofread(_ text: String, knownNames: [String], using capabilities: CapabilityRegistry) async -> String? {
         let spec = CapabilitySpec.reasoning(
-            contextTokens: 6_000,
+            contextTokens: 4_000,
             purpose: "OCR/extraction proofread (facts-preserving)"
         )
         guard let provider = try? await capabilities.resolve(spec),
@@ -156,18 +166,36 @@ public struct AITextCorrector: Sendable {
         - When unsure, leave the text exactly as it is.
         Output ONLY the corrected text — no preamble, no commentary.\(namesLine)
         """
-        let options = GenerationOptions(maxTokens: 4_096, temperature: 0.0, systemPrompt: system)
-        guard let raw = try? await provider.generate(
-            prompt: "Proofread this document text:\n\n\(text)",
-            options: options
-        ) else { return nil }
 
-        let candidate = Self.stripPreamble(raw.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard Self.isSafeCorrection(original: text, candidate: candidate) else {
-            AtlasLog.knowledge.info("AITextCorrector[apple-ai]: rejected unsafe rewrite — kept prior text")
-            return text   // safe: no change
+        // Reserve room for the rewrite (~equal to input) + instructions.
+        // ~1,500 input tokens/chunk → input + output (~1,500) + instructions
+        // (~250) ≈ 3,250, comfortably under 4,096.
+        let chunks = TokenBudget.chunk(text, maxTokens: 1_500)
+
+        // Fan out: each chunk in its own concurrent session (index-tagged so
+        // we can reassemble in order).
+        let corrected = await withTaskGroup(of: (Int, String).self) { group -> [String] in
+            for (i, chunk) in chunks.enumerated() {
+                group.addTask {
+                    let options = GenerationOptions(maxTokens: 2_048, temperature: 0.0, systemPrompt: system)
+                    guard let raw = try? await provider.generate(
+                        prompt: "Proofread this document text:\n\n\(chunk)",
+                        options: options
+                    ) else { return (i, chunk) }   // failed → keep original chunk
+                    let candidate = Self.stripPreamble(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+                    return (i, Self.isSafeCorrection(original: chunk, candidate: candidate) ? candidate : chunk)
+                }
+            }
+            var out = Array(repeating: "", count: chunks.count)
+            for await (i, piece) in group { out[i] = piece }
+            return out
         }
-        return candidate
+
+        let joined = corrected.joined()
+        if joined == text {
+            AtlasLog.knowledge.info("AITextCorrector[apple-ai]: no safe change across \(chunks.count, privacy: .public) chunk(s)")
+        }
+        return joined
     }
 
     // MARK: - Guards
