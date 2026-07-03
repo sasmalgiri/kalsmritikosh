@@ -131,6 +131,12 @@ public final class AppState {
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
+    // MARK: - Header search hand-off
+    /// A query typed into the always-visible header search box. SearchView
+    /// picks it up on appear / change, runs it, then clears this. Lets the
+    /// user search from anywhere without first navigating to Search.
+    public var pendingSearchQuery: String?
+
     // MARK: - Self-check (auto, zero-touch)
     /// Result of the fast self-check (deterministic logic + all Convert
     /// formats + all 3 system modes/MoE). Auto-run once when Settings first

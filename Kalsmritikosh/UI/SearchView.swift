@@ -26,6 +26,17 @@ public struct SearchView: View {
             }
         }
         .background(AuroraBackdrop(intensity: 0.6))
+        .onAppear { consumePendingQuery() }
+        .onChange(of: appState.pendingSearchQuery) { _, _ in consumePendingQuery() }
+    }
+
+    /// Pick up a query typed into the always-visible header search box.
+    private func consumePendingQuery() {
+        guard let pending = appState.pendingSearchQuery,
+              !pending.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        query = pending
+        appState.pendingSearchQuery = nil
+        runSearch()
     }
 
     private var searchBar: some View {

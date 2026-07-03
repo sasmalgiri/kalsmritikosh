@@ -90,6 +90,30 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             .map { "⌘\($0.key.character)" }
     }
 
+    /// One-line explanation of what each screen is for. Shown in header
+    /// tooltips and as the command-palette subtitle.
+    var blurb: String {
+        switch self {
+        case .ask:          return "Ask in plain language; answers cite their evidence"
+        case .search:       return "Instant full-text search across every chunk"
+        case .timeline:     return "Chronological view of all dated events"
+        case .history:      return "Narrative reconstruction of what happened"
+        case .notebook:     return "Your saved notes and working pages"
+        case .dossier:      return "Everything known about a person or entity"
+        case .explore:      return "Entity graph — see who and what connects"
+        case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
+        case .knowledge:    return "Canonical entities, events and distilled memory"
+        case .assertions:   return "Extracted claims with their supporting evidence"
+        case .library:      return "Every document you've ingested"
+        case .saved:        return "Your bookmarked questions"
+        case .sources:      return "Folders being watched and ingested"
+        case .convert:      return "Turn files between formats, back and forth"
+        case .completeness: return "How fully your archive has been processed"
+        case .live:         return "Live pipeline and background activity"
+        case .settings:     return "Modes, privacy, models and diagnostics"
+        }
+    }
+
     enum Group: String, CaseIterable, Identifiable {
         case converse   = "Ask & Search"
         case reconstruct = "Reconstruct"
@@ -108,6 +132,28 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             case .system:      return [.settings]
             }
         }
+
+        /// Short uppercase caption shown under each header group.
+        var shortTitle: String {
+            switch self {
+            case .converse:    return "ASK"
+            case .reconstruct: return "REBUILD"
+            case .knowledge:   return "KNOW"
+            case .workspace:   return "WORK"
+            case .system:      return "SYSTEM"
+            }
+        }
+
+        /// One-line explanation of what the group is for (header tooltip).
+        var blurb: String {
+            switch self {
+            case .converse:    return "Ask questions and search your archive"
+            case .reconstruct: return "Rebuild timelines, histories and dossiers"
+            case .knowledge:   return "Browse the structured knowledge base"
+            case .workspace:   return "Add sources, convert files, watch activity"
+            case .system:      return "Settings and diagnostics"
+            }
+        }
     }
 }
 
@@ -124,6 +170,8 @@ public struct RootView: View {
     @State private var showMaintenance: Bool = true
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
+    /// Text in the always-visible header search box.
+    @State private var headerSearch: String = ""
     @Namespace private var sidebarNS
 
     /// Single navigation entry point. Records the outgoing screen for the
@@ -201,9 +249,20 @@ public struct RootView: View {
             sidebar
         } detail: {
             NavigationStack {
-                detail
-                    .navigationTitle(selection?.title ?? "Kalsmritikosh")
-                    .toolbar { headerNav }
+                VStack(spacing: 0) {
+                    appHeader
+                    Divider()
+                    detail
+                }
+                .navigationTitle(selection?.title ?? "Kalsmritikosh")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { showPalette = true } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .help("Jump to any screen or command  (⌘K)")
+                    }
+                }
             }
         }
         .tint(Theme.brand)
@@ -432,34 +491,103 @@ public struct RootView: View {
         #endif
     }
 
-    // MARK: Header icon nav
+    // MARK: Header (grouped icon nav + always-on search)
 
-    /// Icon navigation in the window toolbar: one button per hotbar screen
-    /// (centered), highlighted when active, tooltip showing name + ⌘N. A
-    /// trailing ⌘K search icon opens the command palette. Always-visible
-    /// one-click access to the most-used screens.
-    @ToolbarContentBuilder
-    private var headerNav: some ToolbarContent {
-        ToolbarItemGroup(placement: .principal) {
-            ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
-                Button {
-                    navigate(to: item.dest)
-                } label: {
-                    Image(systemName: item.dest.icon)
-                        .fontWeight(selection == item.dest ? .bold : .regular)
+    /// Two-row app header shown above every screen:
+    ///  • Row 1 — every screen as an icon, grouped (Ask · Rebuild · Know ·
+    ///    Work · System) with a caption under each group. Active screen is
+    ///    highlighted; hovering any icon or group caption shows a one-line
+    ///    explanation.
+    ///  • Row 2 — an always-visible search box: type and press return to
+    ///    search the archive from anywhere, no navigation first.
+    private var appHeader: some View {
+        VStack(spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(Destination.Group.allCases) { group in
+                        headerGroup(group)
+                        if group != .system {
+                            Divider().frame(height: 30)
+                        }
+                    }
                 }
-                .foregroundStyle(selection == item.dest ? Theme.brand : .secondary)
-                .help("\(item.dest.title)  (⌘\(item.key.character))")
+                .padding(.horizontal, 16)
             }
+            headerSearchBar
+                .padding(.horizontal, 16)
         }
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                showPalette = true
-            } label: {
-                Image(systemName: "magnifyingglass")
+        .padding(.vertical, 10)
+        .background(.regularMaterial)
+    }
+
+    /// One group of the header: its icons in a row, a short caption below.
+    private func headerGroup(_ group: Destination.Group) -> some View {
+        VStack(spacing: 3) {
+            HStack(spacing: 4) {
+                ForEach(group.items) { dest in
+                    headerIcon(dest)
+                }
             }
-            .help("Jump to any screen or command  (⌘K)")
+            Text(group.shortTitle)
+                .font(.system(size: 8, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(.tertiary)
+                .help(group.blurb)
         }
+    }
+
+    /// A single header icon button. Filled/brand when active; tooltip gives
+    /// the screen's name, one-line explanation, and its ⌘N shortcut.
+    private func headerIcon(_ dest: Destination) -> some View {
+        let isSelected = selection == dest
+        return Button {
+            navigate(to: dest)
+        } label: {
+            Image(systemName: dest.icon)
+                .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(Theme.brand))
+                .frame(width: 30, height: 26)
+                .background(
+                    isSelected
+                        ? AnyShapeStyle(Theme.brandGradient())
+                        : AnyShapeStyle(Theme.brand.opacity(0.10)),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("\(dest.title) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
+    }
+
+    /// Always-visible archive search. Enter seeds SearchView and jumps to it.
+    private var headerSearchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search your archive — type and press return…", text: $headerSearch)
+                .textFieldStyle(.plain)
+                .onSubmit(runHeaderSearch)
+            if !headerSearch.isEmpty {
+                Button { headerSearch = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            Button { showPalette = true } label: {
+                Text("⌘K").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+            .help("Jump to any screen or command (⌘K)")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color.primary.opacity(0.05), in: Capsule())
+        .overlay(Capsule().stroke(Theme.brand.opacity(0.15), lineWidth: 1))
+    }
+
+    private func runHeaderSearch() {
+        let q = headerSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        appState.pendingSearchQuery = q
+        navigate(to: .search)
     }
 
     // MARK: Command palette + keyboard shortcuts
@@ -714,7 +842,7 @@ private struct CommandPaletteView: View {
             PaletteCommand(
                 id: "go.\(dest.rawValue)",
                 title: dest.title,
-                subtitle: "Go to \(dest.title)",
+                subtitle: dest.blurb,
                 icon: dest.icon
             ) { onNavigate(dest) }
         }
