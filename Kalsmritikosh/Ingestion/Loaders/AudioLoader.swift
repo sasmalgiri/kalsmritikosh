@@ -16,7 +16,7 @@ public struct AudioLoader: Ingestor {
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer
     private let transcriber: any AudioTranscribing
 
-    public nonisolated init(transcriber: any AudioTranscribing = SpeechTranscriber()) {
+    public nonisolated init(transcriber: any AudioTranscribing) {
         self.transcriber = transcriber
     }
 

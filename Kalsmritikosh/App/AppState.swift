@@ -810,6 +810,7 @@ public final class AppState {
             let pipelineMetricsActor = PipelineMetrics()
 
             let ingest = IngestCoordinator(
+                loaders: .standard(),
                 chunker: dynamicChunker,
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
@@ -880,8 +881,12 @@ public final class AppState {
                 gate: { [weak self] in
                     await self?.maintenanceGate() ?? false
                 },
-                onEvent: { [weak self] event in
-                    Task { @MainActor in self?.applyMaintenanceEvent(event) }
+                onEvent: { event in
+                    // Strong self is intentional: AppState is the app-lifetime
+                    // root, so the scheduler→closure→AppState reference is not a
+                    // leak, and a strong Sendable capture avoids the weak-optional
+                    // read that Swift 6 flags inside a @Sendable closure.
+                    Task { @MainActor in self.applyMaintenanceEvent(event) }
                 }
             )
             await compression.start()
@@ -926,10 +931,10 @@ public final class AppState {
                     await self?.scanForContradictions()
                     return gaps
                 },
-                onGapScan: { [weak self] count in
+                onGapScan: { count in
                     Task { @MainActor in
-                        self?.proactiveGapCount = count
-                        self?.ledgerLastMaintainedAt = Date()
+                        self.proactiveGapCount = count
+                        self.ledgerLastMaintainedAt = Date()
                     }
                 },
                 bumpCitations: { [enrichmentRepo] ids in
@@ -1013,7 +1018,8 @@ public final class AppState {
                 database: db,
                 events: events,
                 objects: objects,
-                entities: entities
+                entities: entities,
+                extractor: RuleNarrativeSlotExtractor()
             )
             await narrativeSlotBackfiller.start()
 

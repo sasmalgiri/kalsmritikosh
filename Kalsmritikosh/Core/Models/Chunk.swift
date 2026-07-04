@@ -65,7 +65,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// Returns a new Chunk identical to `self` except `contextPrefix`
     /// + `contextPrefixSource` are replaced. Used by IngestCoordinator
     /// after the per-chunk context generator runs.
-    public func withContextPrefix(_ prefix: String?, source: String?) -> Chunk {
+    public nonisolated func withContextPrefix(_ prefix: String?, source: String?) -> Chunk {
         Chunk(
             id: id,
             objectID: objectID,

@@ -47,14 +47,19 @@ public actor HotWarmColdEngine: SystemEngine {
             AtlasLog.knowledge.error("HotWarmColdEngine missing repositories — tiering disabled")
             return
         }
-        let promoter = TierPromoter(
-            enrichment: enrichment,
-            objects: objects,
-            entities: entities,
-            events: context.events,
-            distiller: context.distiller,
-            isActive: { true }   // this engine only exists in Hot/Warm/Cold mode
-        )
+        // TierPromoter's init is main-actor-isolated under the module's
+        // default isolation; hop to the main actor to construct it, then
+        // drive it from here (it's an actor, safe to hold).
+        let promoter = await MainActor.run {
+            TierPromoter(
+                enrichment: enrichment,
+                objects: objects,
+                entities: entities,
+                events: context.events,
+                distiller: context.distiller,
+                isActive: { true }   // this engine only exists in Hot/Warm/Cold mode
+            )
+        }
         await promoter.start()
         self.promoter = promoter
         AtlasLog.knowledge.info("HotWarmColdEngine active — proactive structural tiering + hot-slice deep enrichment")

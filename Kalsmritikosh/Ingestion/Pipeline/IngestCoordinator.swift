@@ -89,7 +89,7 @@ public actor IngestCoordinator {
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
 
     public init(
-        loaders: LoaderRegistry = .standard(),
+        loaders: LoaderRegistry,
         cleaner: Cleaner = .init(),
         classifier: DocumentClassifier = .init(),
         chunker: Chunker = .init(),

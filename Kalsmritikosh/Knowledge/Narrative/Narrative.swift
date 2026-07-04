@@ -229,7 +229,7 @@ public protocol NarrativeComposer: Sendable {
     /// Default implementation calls `compose` and replays the
     /// chapter list — implementations override to gain real
     /// progressive delivery.
-    func composeStreaming(
+    nonisolated func composeStreaming(
         intent: UserIntent,
         retrieval: RetrievalResult,
         eventSlots: [Event.ID: EventNarrativeSlots]
@@ -237,7 +237,7 @@ public protocol NarrativeComposer: Sendable {
 }
 
 public extension NarrativeComposer {
-    func composeStreaming(
+    nonisolated func composeStreaming(
         intent: UserIntent,
         retrieval: RetrievalResult,
         eventSlots: [Event.ID: EventNarrativeSlots]

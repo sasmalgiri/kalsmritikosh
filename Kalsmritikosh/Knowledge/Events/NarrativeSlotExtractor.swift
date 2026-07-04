@@ -60,8 +60,8 @@ public nonisolated struct NarrativeSlotEmailParticipants: Sendable {
     }
 }
 
-public struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
-    public init() {}
+public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
+    public nonisolated init() {}
 
     public func extract(
         event: Event,

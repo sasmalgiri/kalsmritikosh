@@ -207,5 +207,17 @@ public struct VerifiedAnswer: Codable, Sendable {
             self.claimA = claimA
             self.claimB = claimB
         }
+
+        // Explicit nonisolated Hashable/Equatable — the synthesized witnesses
+        // are main-actor under the module's default isolation.
+        public nonisolated static func == (lhs: Contradiction, rhs: Contradiction) -> Bool {
+            lhs.description == rhs.description && lhs.claimA == rhs.claimA && lhs.claimB == rhs.claimB
+        }
+
+        public nonisolated func hash(into hasher: inout Hasher) {
+            hasher.combine(description)
+            hasher.combine(claimA)
+            hasher.combine(claimB)
+        }
     }
 }

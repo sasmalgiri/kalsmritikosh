@@ -45,7 +45,7 @@ public actor NarrativeSlotBackfiller: BackgroundService {
         events: EventsRepository,
         objects: KnowledgeObjectRepository,
         entities: EntitiesRepository,
-        extractor: NarrativeSlotExtractor = RuleNarrativeSlotExtractor(),
+        extractor: NarrativeSlotExtractor,
         intervalSeconds: TimeInterval = 6 * 3_600, // 4× per day
         batchSize: Int = 200
     ) {

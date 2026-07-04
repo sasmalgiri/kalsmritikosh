@@ -21,7 +21,7 @@ public struct PDFLoader: Ingestor {
     public let primaryLane: ResourceLane = .cpu
     private let ocr: any OCREngine
 
-    public nonisolated init(ocr: any OCREngine = VisionOCR()) {
+    public nonisolated init(ocr: any OCREngine) {
         self.ocr = ocr
     }
 

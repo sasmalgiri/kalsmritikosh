@@ -67,4 +67,23 @@ public nonisolated struct SourceRange: Codable, Hashable, Sendable {
         try c.encodeIfPresent(pageNumber, forKey: .pageNumber)
         try c.encodeIfPresent(line, forKey: .line)
     }
+
+    // Explicit nonisolated Hashable/Equatable. Under the module's default
+    // main-actor isolation the *synthesized* witnesses are main-actor, which
+    // makes the conformance unusable from nonisolated code; spelling them out
+    // as `nonisolated` keeps SourceRange usable everywhere.
+    public nonisolated static func == (lhs: SourceRange, rhs: SourceRange) -> Bool {
+        lhs.chunkID == rhs.chunkID
+            && lhs.characterRange == rhs.characterRange
+            && lhs.pageNumber == rhs.pageNumber
+            && lhs.line == rhs.line
+    }
+
+    public nonisolated func hash(into hasher: inout Hasher) {
+        hasher.combine(chunkID)
+        hasher.combine(characterRange?.lowerBound)
+        hasher.combine(characterRange?.upperBound)
+        hasher.combine(pageNumber)
+        hasher.combine(line)
+    }
 }

@@ -32,11 +32,15 @@ public actor LedgerEventDrivenEngine: SystemEngine {
     public init() {}
 
     public func activate(_ context: SystemEngineContext) async {
-        let promoter = LedgerPromoter(
-            isActive: { true },   // this engine only exists in Ledger mode
-            scan: context.scanForGaps,
-            onScan: context.onGapScan
-        )
+        // LedgerPromoter's init is main-actor-isolated under the module's
+        // default isolation; construct it on the main actor.
+        let promoter = await MainActor.run {
+            LedgerPromoter(
+                isActive: { true },   // this engine only exists in Ledger mode
+                scan: context.scanForGaps,
+                onScan: context.onGapScan
+            )
+        }
         await promoter.start()
         self.promoter = promoter
         AtlasLog.knowledge.info("LedgerEventDrivenEngine active — proactive rule-based gap maintenance; memory warmed on demand")

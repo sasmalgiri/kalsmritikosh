@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import OSLog
 #if canImport(AVFoundation)
 import AVFoundation
 #endif
@@ -17,7 +18,7 @@ public struct VideoLoader: Ingestor {
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer over the audio track
     private let transcriber: any AudioTranscribing
 
-    public nonisolated init(transcriber: any AudioTranscribing = SpeechTranscriber()) {
+    public nonisolated init(transcriber: any AudioTranscribing) {
         self.transcriber = transcriber
     }
 
@@ -62,10 +63,15 @@ public struct VideoLoader: Ingestor {
             asset: asset,
             presetName: AVAssetExportPresetAppleM4A
         ) else { return nil }
-        export.outputURL = outputURL
-        export.outputFileType = .m4a
-        await export.export()
-        return export.status == .completed ? outputURL : nil
+        // macOS 15+ async throwing export API (replaces the deprecated
+        // outputURL/outputFileType + export() + status dance).
+        do {
+            try await export.export(to: outputURL, as: .m4a)
+            return outputURL
+        } catch {
+            AtlasLog.knowledge.error("VideoLoader: audio export failed for \(original.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
     #endif
 }

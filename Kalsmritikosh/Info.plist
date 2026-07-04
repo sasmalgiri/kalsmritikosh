@@ -4,7 +4,5 @@
 <dict>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Kalsmritikosh transcribes audio and video you convert or ingest, on-device, to make them searchable.</string>
-	<key>NSDesktopFolderUsageDescription</key>
-	<string>To ingest files you keep on your Desktop into your private knowledge ledger.</string>
 </dict>
 </plist>

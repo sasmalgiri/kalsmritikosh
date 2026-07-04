@@ -17,7 +17,7 @@ public struct ImageLoader: Ingestor {
     public let primaryLane: ResourceLane = .neuralEngine // Vision OCR runs on the NE
     private let ocr: any OCREngine
 
-    public nonisolated init(ocr: any OCREngine = VisionOCR()) {
+    public nonisolated init(ocr: any OCREngine) {
         self.ocr = ocr
     }
 

@@ -23,18 +23,18 @@ public struct LoaderRegistry: Sendable {
     /// enabled. App Store builds initialize via the parameterless
     /// `standard()` so the optional loaders are absent until the
     /// user opts in via Settings.
-    public nonisolated static func standard() -> LoaderRegistry {
+    @MainActor public static func standard() -> LoaderRegistry {
         var r = LoaderRegistry()
         r.register(TextLoader())
-        r.register(PDFLoader())
+        r.register(PDFLoader(ocr: VisionOCR()))
         r.register(DocxLoader())
         r.register(SpreadsheetLoader())
         r.register(PresentationLoader())
         r.register(EpubLoader())
         r.register(EmailLoader())
-        r.register(ImageLoader())
-        r.register(AudioLoader())
-        r.register(VideoLoader())
+        r.register(ImageLoader(ocr: VisionOCR()))
+        r.register(AudioLoader(transcriber: SpeechTranscriber()))
+        r.register(VideoLoader(transcriber: SpeechTranscriber()))
         r.register(ArchiveLoader())
         return r
     }
@@ -46,7 +46,7 @@ public struct LoaderRegistry: Sendable {
     /// (chat.db, History.db) falls back to the unknownFallback
     /// (TextLoader) — i.e. it's read as raw text, no Messages /
     /// browser API access attempted.
-    public nonisolated static func standard(
+    @MainActor public static func standard(
         iMessageEnabled: Bool,
         browserHistoryEnabled: Bool,
         chatExportEnabled: Bool

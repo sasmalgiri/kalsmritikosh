@@ -287,7 +287,7 @@
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "";
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
@@ -343,7 +343,7 @@
 				INFOPLIST_FILE = Kalsmritikosh/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Kalsmritikosh;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "";
+				INFOPLIST_KEY_NSDesktopFolderUsageDescription = "To ingest files you keep on your Desktop into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
