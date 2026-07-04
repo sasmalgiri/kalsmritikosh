@@ -46,7 +46,7 @@ public struct NotebookView: View {
     private var list: some View {
         VStack(spacing: 0) {
             HStack {
-                Image(systemName: "notebook")
+                Image(systemName: "note.text")
                     .foregroundStyle(.tint)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Notebook")

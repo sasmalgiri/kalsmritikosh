@@ -39,6 +39,12 @@ public struct AskView: View {
     /// Phase H — terminal failure message from the runner. Surfaced
     /// inside the sheet so the user knows why no answer appeared.
     @State private var investigationError: String?
+    /// Conversation-history browser. Every Ask is persisted in SQLite
+    /// (ConversationsRepository); this lets the user return to an old
+    /// thread after starting a new one — they were never lost, just not
+    /// previously reachable from the UI.
+    @State private var showHistory = false
+    @State private var pastConversations: [Conversation] = []
 
     public init() {}
 
@@ -72,6 +78,15 @@ public struct AskView: View {
         .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
         .onAppear { inputFocused = true }
+        .sheet(isPresented: $showHistory) {
+            ConversationHistorySheet(
+                conversations: pastConversations,
+                currentID: conversationID,
+                onOpen: { id in Task { await openConversation(id) } },
+                onDelete: { id in Task { await deleteConversation(id) } },
+                onClose: { showHistory = false }
+            )
+        }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(
                 investigation: inv,
@@ -203,6 +218,14 @@ public struct AskView: View {
                 ]
             )
             Spacer()
+            Button {
+                Task { await loadHistory(); showHistory = true }
+            } label: {
+                Label("History", systemImage: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.pressable)
+            .controlSize(.small)
+            .help("Browse past conversations — every Ask is saved.")
             Button {
                 Task { await startNewConversation() }
             } label: {
@@ -466,6 +489,39 @@ public struct AskView: View {
         await startNewConversation()
     }
 
+    // MARK: - Conversation history
+
+    /// Load the list of past conversations for the history sheet.
+    private func loadHistory() async {
+        guard let repo = appState.conversations else { return }
+        let convs = (try? await repo.recent(limit: 200)) ?? []
+        await MainActor.run { self.pastConversations = convs }
+    }
+
+    /// Open a past conversation: hydrate its turns into the transcript.
+    private func openConversation(_ id: UUID) async {
+        guard let repo = appState.conversations else { return }
+        let existing = (try? await repo.turns(for: id)) ?? []
+        await MainActor.run {
+            self.conversationID = id
+            self.turns = existing
+            // Verified quality strips only re-hydrate for the live session;
+            // the answer text itself is persisted in each turn's body.
+            self.verifiedAnswers = [:]
+            self.showHistory = false
+            self.inputFocused = true
+        }
+    }
+
+    /// Delete a conversation (cascades to its turns). If it's the one on
+    /// screen, start a fresh thread.
+    private func deleteConversation(_ id: UUID) async {
+        guard let repo = appState.conversations else { return }
+        try? await repo.delete(id)
+        await loadHistory()
+        if id == conversationID { await startNewConversation() }
+    }
+
     private func startNewConversation() async {
         guard let repo = appState.conversations else { return }
         do {
@@ -680,6 +736,93 @@ private struct SuggestionCard: View {
         .onHover { h in
             withAnimation(.easeOut(duration: 0.15)) { hovering = h }
         }
+    }
+}
+
+// MARK: - Conversation history sheet
+
+/// Browses past Ask conversations (persisted in SQLite). Tapping a row
+/// reopens that thread; the trash button deletes it (turns cascade).
+private struct ConversationHistorySheet: View {
+    let conversations: [Conversation]
+    let currentID: UUID?
+    let onOpen: (UUID) -> Void
+    let onDelete: (UUID) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "clock.arrow.circlepath")
+                    .foregroundStyle(.tint)
+                Text("Past conversations")
+                    .font(.headline)
+                Spacer()
+                Button("Done", action: onClose)
+                    .keyboardShortcut(.cancelAction)
+            }
+            Text("Every question you ask is saved on this Mac. Reopen a thread to keep going where you left off.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Divider()
+            if conversations.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.secondary)
+                    Text("No past conversations yet.")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(conversations) { conv in
+                            row(conv)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 480, height: 540)
+    }
+
+    private func row(_ conv: Conversation) -> some View {
+        let isCurrent = conv.id == currentID
+        return HStack(spacing: 10) {
+            Image(systemName: isCurrent ? "bubble.left.fill" : "bubble.left")
+                .foregroundStyle(isCurrent ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+            VStack(alignment: .leading, spacing: 2) {
+                Text((conv.title?.isEmpty == false ? conv.title! : "Untitled conversation"))
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                Text(conv.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            if isCurrent {
+                Text("Open")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
+            Button(role: .destructive) {
+                onDelete(conv.id)
+            } label: {
+                Image(systemName: "trash").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("Delete this conversation")
+        }
+        .padding(10)
+        .background(
+            isCurrent ? Color.accentColor.opacity(0.10) : Color.primary.opacity(0.03),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onOpen(conv.id) }
     }
 }
 
