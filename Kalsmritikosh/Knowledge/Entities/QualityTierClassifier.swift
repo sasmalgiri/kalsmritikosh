@@ -39,7 +39,7 @@ public nonisolated enum QualityTier: String, Codable, Sendable, Hashable, CaseIt
     }
 }
 
-public enum QualityTierClassifier {
+public nonisolated enum QualityTierClassifier {
 
     /// Classify an entity. `source` is the loader / extractor that
     /// produced it — passing `.structuredHeader` short-circuits to
@@ -51,7 +51,7 @@ public enum QualityTierClassifier {
         case other
     }
 
-    public static func tier(
+    public nonisolated static func tier(
         value: String,
         kind: Entity.Kind,
         source: Source = .ner

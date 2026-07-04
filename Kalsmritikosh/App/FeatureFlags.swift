@@ -95,7 +95,7 @@ public enum SystemMode: String, CaseIterable, Identifiable, Sendable {
         /// (which already covers every chunk, so the card is redundant).
         public let firstChunkCard: Bool
 
-        public init(
+        public nonisolated init(
             eagerMemoryDistillation: Bool,
             contextPrefixBackfill: Bool,
             firstChunkCard: Bool = false

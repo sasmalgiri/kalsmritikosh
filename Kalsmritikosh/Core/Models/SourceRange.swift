@@ -17,7 +17,7 @@
 
 import Foundation
 
-public struct SourceRange: Codable, Hashable, Sendable {
+public nonisolated struct SourceRange: Codable, Hashable, Sendable {
     public let chunkID: UUID?
     public let characterRange: Range<Int>?
     public let pageNumber: Int?

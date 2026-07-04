@@ -200,7 +200,7 @@ public struct AITextCorrector: Sendable {
 
     // MARK: - Guards
 
-    static func isSafeCorrection(original: String, candidate: String) -> Bool {
+    nonisolated static func isSafeCorrection(original: String, candidate: String) -> Bool {
         guard candidate.count >= 20 else { return false }
         let lo = Double(original.count) * 0.75
         let hi = Double(original.count) * 1.25
@@ -208,7 +208,7 @@ public struct AITextCorrector: Sendable {
         return digitRuns(original) == digitRuns(candidate)
     }
 
-    static func digitRuns(_ s: String) -> [String] {
+    nonisolated static func digitRuns(_ s: String) -> [String] {
         var runs: [String] = []
         var current = ""
         for ch in s {
@@ -219,7 +219,7 @@ public struct AITextCorrector: Sendable {
         return runs.sorted()
     }
 
-    private static func stripPreamble(_ s: String) -> String {
+    private nonisolated static func stripPreamble(_ s: String) -> String {
         guard let nl = s.firstIndex(of: "\n") else { return s }
         let firstLine = s[..<nl].lowercased()
         if firstLine.contains("corrected text") || firstLine.contains("here is") || firstLine.contains("here's") {

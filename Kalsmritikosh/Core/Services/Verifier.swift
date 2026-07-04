@@ -198,7 +198,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         }
     }
 
-    public struct Contradiction: Codable, Sendable, Hashable {
+    public nonisolated struct Contradiction: Codable, Sendable, Hashable {
         public let description: String
         public let claimA: String
         public let claimB: String

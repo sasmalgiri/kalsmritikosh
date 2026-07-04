@@ -143,7 +143,7 @@ public enum GGUFHeader {
         public let family: String?
     }
 
-    public static func parse(at url: URL) -> Info? {
+    public nonisolated static func parse(at url: URL) -> Info? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         // Read first 16 MB — should be plenty for the metadata block.
@@ -176,7 +176,7 @@ public enum GGUFHeader {
     /// Find the next string value following the named key. Strings
     /// in GGUF are length-prefixed (uint64 le); the scan reads the
     /// length, then that many ASCII bytes.
-    private static func findStringValue(after key: String, in bytes: [UInt8]) -> String? {
+    private nonisolated static func findStringValue(after key: String, in bytes: [UInt8]) -> String? {
         guard let range = bytes.firstRange(of: Array(key.utf8)) else { return nil }
         let cursor = range.upperBound + 1 // skip type byte that follows the key
         guard cursor + 8 <= bytes.count else { return nil }
@@ -190,7 +190,7 @@ public enum GGUFHeader {
         return String(bytes: bytes[strStart..<strEnd], encoding: .utf8)
     }
 
-    private static func findIntValue(after key: String, in bytes: [UInt8]) -> Int? {
+    private nonisolated static func findIntValue(after key: String, in bytes: [UInt8]) -> Int? {
         guard let range = bytes.firstRange(of: Array(key.utf8)) else { return nil }
         // Look for a uint32 value within the next 32 bytes after the key.
         let cursor = range.upperBound
@@ -212,7 +212,7 @@ public enum GGUFHeader {
 private extension Array where Element == UInt8 {
     /// Linear search for a needle byte sequence. Returns the first
     /// range or nil. Naive — fine for ≤ 16 MB header scans.
-    func firstRange(of needle: [UInt8]) -> Range<Int>? {
+    nonisolated func firstRange(of needle: [UInt8]) -> Range<Int>? {
         guard !needle.isEmpty, needle.count <= count else { return nil }
         outer: for i in 0...(count - needle.count) {
             for j in 0..<needle.count where self[i + j] != needle[j] {

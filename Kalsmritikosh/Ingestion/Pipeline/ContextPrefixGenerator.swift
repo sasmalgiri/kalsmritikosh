@@ -28,7 +28,7 @@
 import Foundation
 import OSLog
 
-public struct ContextPrefixRequest: Sendable {
+public nonisolated struct ContextPrefixRequest: Sendable {
     public let chunkText: String
     public let chunkOrdinal: Int
     public let totalChunks: Int
@@ -60,7 +60,7 @@ public struct ContextPrefixRequest: Sendable {
 /// `LLMContextPrefixGenerator`. Per the project's quality-or-nothing
 /// rule, the LLM either produces a prefix or no prefix is written —
 /// we don't silently substitute heuristic noise into the embedding.
-public struct ContextPrefixResult: Sendable, Equatable {
+public nonisolated struct ContextPrefixResult: Sendable, Equatable {
     public static let sourceLLM = "llm"
     public static let sourceHeuristic = "heuristic"
 

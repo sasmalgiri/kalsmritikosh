@@ -65,7 +65,7 @@ public actor NarrativeSlotBackfiller: BackgroundService {
             guard let self else { return }
             while !Task.isCancelled {
                 await self.runOnce()
-                let ns = await UInt64(self.intervalSeconds * 1_000_000_000)
+                let ns = UInt64(self.intervalSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }
         }

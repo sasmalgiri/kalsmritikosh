@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct Event: Codable, Identifiable, Hashable, Sendable {
+public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
     public typealias ID = UUID
 
     public let id: ID

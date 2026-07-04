@@ -21,7 +21,7 @@ import CoreGraphics
 public enum SystemActivity {
     /// Seconds since the last user input event. 0 == active right now.
     /// Returns 0 on platforms without an idle API.
-    public static func idleSeconds() -> TimeInterval {
+    public nonisolated static func idleSeconds() -> TimeInterval {
         #if os(macOS)
         // kCGAnyInputEventType == 0xFFFFFFFF — "time since ANY input".
         let anyInput = CGEventType(rawValue: ~0) ?? .null
@@ -37,7 +37,7 @@ public enum SystemActivity {
 
     /// True when the machine has been idle for at least `threshold`
     /// seconds (no keyboard/mouse activity).
-    public static func isIdle(threshold: TimeInterval) -> Bool {
+    public nonisolated static func isIdle(threshold: TimeInterval) -> Bool {
         idleSeconds() >= threshold
     }
 }

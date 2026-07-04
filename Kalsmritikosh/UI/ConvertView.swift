@@ -515,7 +515,7 @@ public struct ConvertView: View {
         return out
     }
 
-    private static func jsonAny(_ v: AnyCodable.AnySendable) -> Any {
+    private nonisolated static func jsonAny(_ v: AnyCodable.AnySendable) -> Any {
         switch v {
         case .null: return NSNull()
         case .bool(let b): return b

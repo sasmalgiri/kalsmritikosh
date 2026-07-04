@@ -35,7 +35,7 @@ public struct ImportanceScorer: Sendable {
     /// Importance at/above which an object is WARM (below hot). Public for UI.
     public let warmThreshold: Double
 
-    public init(
+    public nonisolated init(
         citationWeight: Double = 3.0,
         queryHitWeight: Double = 1.0,
         pinnedBonus: Double = 10.0,
@@ -62,7 +62,7 @@ public struct ImportanceScorer: Sendable {
     /// it has ever been cited. Usage signals (citations, pins) then push it
     /// further up. The recency boost adds up to +2 for brand-new objects
     /// and fades to 0 over ~60 days, so freshness never dominates.
-    public func score(
+    public nonisolated func score(
         citationCount: Int,
         queryHits: Int,
         pinned: Bool,
@@ -81,14 +81,14 @@ public struct ImportanceScorer: Sendable {
     }
 
     /// Map an already-computed importance score to a tier.
-    public func tier(forImportance importance: Double) -> EnrichmentTier {
+    public nonisolated func tier(forImportance importance: Double) -> EnrichmentTier {
         if importance >= hotThreshold { return .hot }
         if importance >= warmThreshold { return .warm }
         return .cold
     }
 
     /// Convenience: score the raw signals and map straight to a tier.
-    public func tier(citationCount: Int, queryHits: Int, pinned: Bool, ageDays: Double) -> EnrichmentTier {
+    public nonisolated func tier(citationCount: Int, queryHits: Int, pinned: Bool, ageDays: Double) -> EnrichmentTier {
         let importance = score(
             citationCount: citationCount,
             queryHits: queryHits,

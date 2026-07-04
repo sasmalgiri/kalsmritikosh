@@ -60,7 +60,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "magnifyingglass"
         case .timeline:     return "calendar.day.timeline.left"
         case .history:      return "book.closed"
-        case .notebook:     return "notebook"
+        case .notebook:     return "note.text"
         case .dossier:      return "person.text.rectangle"
         case .explore:      return "point.3.connected.trianglepath.dotted"
         case .insights:     return "lightbulb.max"

@@ -71,7 +71,7 @@ public actor CommunitySummarizer: BackgroundService {
                 let warmupActive = Date().timeIntervalSince(bootTime) < 2 * 3_600
                 let sleepSeconds: TimeInterval = (produced == 0 && warmupActive)
                     ? 15 * 60
-                    : await self.intervalSeconds
+                    : self.intervalSeconds
                 let ns = UInt64(sleepSeconds * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }

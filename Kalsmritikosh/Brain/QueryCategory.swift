@@ -56,7 +56,7 @@ public enum QueryCategory: String, Codable, Sendable, Hashable, CaseIterable {
 /// The intent-detector's `UserIntent.Kind` is used as a tiebreaker:
 /// reconstructive intents prefer .narrative; executive briefings
 /// prefer .trend.
-public struct QueryCategoryClassifier: Sendable {
+public nonisolated struct QueryCategoryClassifier: Sendable {
     public init() {}
 
     public func classify(question: String, intent: UserIntent? = nil) -> QueryCategory {

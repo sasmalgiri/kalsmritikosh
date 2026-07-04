@@ -18,9 +18,9 @@
 
 import Foundation
 
-public enum ExpertRelevanceScorer {
+public nonisolated enum ExpertRelevanceScorer {
 
-    public static func select(
+    public nonisolated static func select(
         from experts: [any Expert],
         intent: UserIntent,
         retrieval: RetrievalResult

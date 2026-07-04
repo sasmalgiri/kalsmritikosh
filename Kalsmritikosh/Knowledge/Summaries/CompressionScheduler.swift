@@ -87,7 +87,7 @@ public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundServic
             guard let self else { return }
             while !Task.isCancelled {
                 await self.tick()
-                let ns = await UInt64(self.pollInterval * 1_000_000_000)
+                let ns = UInt64(self.pollInterval * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: ns)
             }
         }

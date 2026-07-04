@@ -736,7 +736,7 @@ public actor HybridRetriever: Retriever {
     /// Stable tier-aware sort. Items with higher
     /// `tier.defaultWeight` come first; original order is preserved
     /// within a tier. T3 items are dropped when `includeT3== false`.
-    private static func rankByTier(
+    private nonisolated static func rankByTier(
         _ entities: [Entity],
         includeT3: Bool
     ) -> [Entity] {
@@ -750,7 +750,7 @@ public actor HybridRetriever: Retriever {
         }.map(\.1)
     }
 
-    private static func rankByTier(
+    private nonisolated static func rankByTier(
         _ events: [Event],
         includeT3: Bool,
         keyPath: KeyPath<Event, QualityTier>

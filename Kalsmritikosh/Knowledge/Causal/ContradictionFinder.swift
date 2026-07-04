@@ -26,7 +26,7 @@
 
 import Foundation
 
-public struct ContradictionFinder: Sendable {
+public nonisolated struct ContradictionFinder: Sendable {
     public init() {}
 
     public func find(

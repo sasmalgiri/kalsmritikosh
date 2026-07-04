@@ -15,12 +15,12 @@
 import Foundation
 
 public enum CalibrationStore {
-    private static let kEffSeconds = "atlas.calib.effSecPerLLMCall"
-    private static let kSamples    = "atlas.calib.llmSamples"
+    private nonisolated static let kEffSeconds = "atlas.calib.effSecPerLLMCall"
+    private nonisolated static let kSamples    = "atlas.calib.llmSamples"
 
     /// Minimum observed calls before the measurement is trusted over the
     /// built-in default.
-    public static let minSamples = 30
+    public nonisolated static let minSamples = 30
 
     /// Record the current effective throughput (seconds per call, over
     /// the active window). Called by LLMCallCounters as calls accrue.

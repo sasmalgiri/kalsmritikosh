@@ -18,7 +18,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
     private let defaultsKey = "atlas.model.preferences"
     private let queue = DispatchQueue(label: "atlas.preferences", attributes: .concurrent)
 
-    public struct Pin: Codable, Sendable, Hashable {
+    public nonisolated struct Pin: Codable, Sendable, Hashable {
         public let capability: ModelCapability
         public let providerID: String
         public init(capability: ModelCapability, providerID: String) {
@@ -56,7 +56,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
 
     // MARK: - Internals
 
-    private func pinsByCapability() -> [ModelCapability: String] {
+    private nonisolated func pinsByCapability() -> [ModelCapability: String] {
         guard let data = UserDefaults.standard.data(forKey: defaultsKey),
               let pins = try? JSONDecoder().decode([Pin].self, from: data) else {
             return [:]
@@ -66,7 +66,7 @@ public final class ModelUserPreferences: @unchecked Sendable {
         return dict
     }
 
-    private func persist(pins: [ModelCapability: String]) {
+    private nonisolated func persist(pins: [ModelCapability: String]) {
         let array = pins.map { Pin(capability: $0.key, providerID: $0.value) }
         if let data = try? JSONEncoder().encode(array) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
