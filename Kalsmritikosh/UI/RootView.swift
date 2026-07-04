@@ -513,6 +513,11 @@ public struct RootView: View {
                 }
                 .padding(.horizontal, 16)
             }
+            // A horizontal ScrollView is greedy vertically by default; without
+            // this it competes with the (greedy) detail view below and can
+            // collapse to zero height on some screens (e.g. History). Pin it
+            // to its natural content height.
+            .fixedSize(horizontal: false, vertical: true)
             headerSearchBar
                 .padding(.horizontal, 16)
         }
