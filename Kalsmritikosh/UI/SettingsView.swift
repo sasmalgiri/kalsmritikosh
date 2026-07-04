@@ -104,6 +104,9 @@ public struct SettingsView: View {
                     modelChoiceBanner(advice)
                 }
 
+                modelPickerSection
+                Divider()
+
                 privacySection
                 Divider()
                 intelligenceSection
@@ -1604,6 +1607,201 @@ public struct SettingsView: View {
         mlxModels = MLXDiscovery.list()
         if let g = appState.ggufRegistry { ggufEntries = await g.load() }
         if let c = appState.cloudEndpointRegistry { cloudEntries = await c.load() }
+    }
+
+    // MARK: - Device-aware model chooser
+
+    /// How well a model fits THIS device, from hardware RAM vs the model's
+    /// minimum. Built-in Apple / cloud models (minRAM == 0) always fit.
+    private enum DeviceFit {
+        case fits, tight, tooBig
+        var label: String {
+            switch self {
+            case .fits:   return "Fits your device"
+            case .tight:  return "Tight on this device"
+            case .tooBig: return "Too big for this device"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .fits:   return "checkmark.circle.fill"
+            case .tight:  return "exclamationmark.triangle.fill"
+            case .tooBig: return "xmark.octagon.fill"
+            }
+        }
+        var color: Color {
+            switch self {
+            case .fits:   return .green
+            case .tight:  return .orange
+            case .tooBig: return .red
+            }
+        }
+    }
+
+    private func deviceFit(_ m: ModelManifest) -> DeviceFit {
+        let ram = appState.hardware?.totalRAMBytes ?? 0
+        guard m.minRAMBytes > 0, ram > 0 else { return .fits }
+        if Double(m.minRAMBytes) <= Double(ram) * 0.7 { return .fits }
+        if m.minRAMBytes <= ram { return .tight }
+        return .tooBig
+    }
+
+    /// Reasoning-capable models the user can actually pin (manifest id is a
+    /// live provider id), sorted best-fit-first then by tier.
+    private var reasoningModels: [ModelManifest] {
+        manifests
+            .filter { $0.capabilities.contains(.reasoning) && providerIDs.contains($0.id) }
+            .sorted { a, b in
+                let fa = deviceFit(a), fb = deviceFit(b)
+                if fa != fb {
+                    // fits < tight < tooBig
+                    func rank(_ f: DeviceFit) -> Int { f == .fits ? 0 : (f == .tight ? 1 : 2) }
+                    return rank(fa) < rank(fb)
+                }
+                // bigger (more capable) tier first within a fit class
+                let order = ModelManifest.Tier.allCases
+                return (order.firstIndex(of: a.tier) ?? 0) > (order.firstIndex(of: b.tier) ?? 0)
+            }
+    }
+
+    private func manifestSubtitle(_ m: ModelManifest) -> String {
+        var parts: [String] = ["\(m.tier.rawValue) tier"]
+        if m.minRAMBytes > 0 {
+            parts.append("\(m.minRAMBytes / 1_073_741_824) GB RAM")
+        }
+        parts.append("\(max(1, m.contextWindow / 1000))K context")
+        parts.append(m.privacyLevel.rawValue)
+        return parts.joined(separator: " · ")
+    }
+
+    private func privacySymbol(_ p: PrivacyLevel) -> String {
+        switch p {
+        case .onDevice:     return "lock.fill"
+        case .localNetwork: return "network"
+        case .cloud:        return "cloud"
+        }
+    }
+
+    /// The primary "which model does the thinking" chooser. Selecting a model
+    /// pins the `.reasoning` capability (ModelUserPreferences), which
+    /// CapabilityRegistry honours first when resolving. "Auto" clears the pin.
+    private var modelPickerSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Your AI model").font(.title3.bold())
+                InfoPopoverButton(
+                    title: "Pick the model that fits your Mac",
+                    message: "This is the model the brain uses to reason over your archive. Bigger models are smarter but need more memory.",
+                    systemImage: "cpu",
+                    bullets: [
+                        "“Auto” picks the best fit for your hardware automatically",
+                        "Each option shows whether it fits your device’s memory",
+                        "On-device models keep everything private; cloud/LAN models leave your Mac"
+                    ]
+                )
+            }
+
+            if let hw = appState.hardware {
+                let gb = Double(hw.totalRAMBytes) / 1_073_741_824
+                HStack(spacing: 8) {
+                    Image(systemName: hw.isAppleSilicon ? "cpu.fill" : "cpu")
+                        .foregroundStyle(Theme.brand)
+                    Text("This Mac: \(hw.chipName) · \(String(format: "%.0f", gb)) GB RAM · \(hw.tier.rawValue) tier")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
+            Text("Choose which model reasons over your archive. Auto adapts to your device; pick one to override.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            // Auto (clears the reasoning pin)
+            modelRow(
+                title: "Auto — best fit for your device",
+                subtitle: appState.modelChoiceAdvice?.recommendedProviderName.map { "Currently favours: \($0)" }
+                    ?? "Ranks every model by your hardware + measured speed",
+                selected: pins[.reasoning] == nil,
+                fit: nil,
+                recommended: false,
+                symbol: "wand.and.stars"
+            ) {
+                ModelUserPreferences.shared.clearPin(for: .reasoning)
+                pins[.reasoning] = nil
+            }
+
+            ForEach(reasoningModels, id: \.id) { m in
+                modelRow(
+                    title: m.displayName,
+                    subtitle: manifestSubtitle(m),
+                    selected: pins[.reasoning] == m.id,
+                    fit: deviceFit(m),
+                    recommended: appState.modelChoiceAdvice?.recommendedProviderID == m.id,
+                    symbol: privacySymbol(m.privacyLevel)
+                ) {
+                    ModelUserPreferences.shared.setPin(m.id, for: .reasoning)
+                    pins[.reasoning] = m.id
+                }
+            }
+
+            if reasoningModels.isEmpty {
+                Text("Only the built-in Apple model is available right now. Add local models (Ollama / MLX / GGUF) or a cloud endpoint below to unlock more choices.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func modelRow(
+        title: String,
+        subtitle: String,
+        selected: Bool,
+        fit: DeviceFit?,
+        recommended: Bool,
+        symbol: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? Theme.brand : .secondary)
+                Image(systemName: symbol)
+                    .foregroundStyle(Theme.brand)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(title).font(.body.weight(.medium))
+                        if recommended {
+                            Text("Recommended")
+                                .font(.caption2.weight(.bold))
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Theme.brand.opacity(0.15), in: Capsule())
+                                .foregroundStyle(Theme.brand)
+                        }
+                    }
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                if let fit {
+                    HStack(spacing: 4) {
+                        Image(systemName: fit.symbol)
+                        Text(fit.label)
+                    }
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(fit.color)
+                }
+            }
+            .padding(10)
+            .background(
+                selected ? Theme.brand.opacity(0.08) : Color.primary.opacity(0.03),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(selected ? Theme.brand.opacity(0.40) : Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var providersSection: some View {
