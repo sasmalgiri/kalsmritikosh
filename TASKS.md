@@ -380,6 +380,102 @@ new Knowledge/Extraction guided-extraction call site, IngestCoordinator.
 
 ---
 
+## T14 — Fact Status Matrix: the four-tab evidence surface
+
+**Goal:** Ship the one product-facing feature the competitive/architecture review
+identified as the genuine market gap: a single surface that presents every
+reconstructed fact under an explicit status — **Proven / Inferred / Contradicted /
+Missing / Unverified** — each with its confidence, its one-line *reason*, and its
+source evidence one tap away. Four tabs: **Timeline · Evidence · Contradictions ·
+Missing Proof.**
+
+**Why:** The data to separate "directly proven" from "inferred", to show
+contradictions with both sides, and to flag missing evidence, ALREADY exists in the
+ledger — it is simply not surfaced as a first-class, at-a-glance status. Competitors
+(DISCO, Relativity aiR, Everlaw, CaseFleet) do timeline-with-citations; none cleanly
+separate proven-vs-inferred-vs-contradicted-vs-missing as the primary UI model. This
+task turns substrate we already have into the demo-able moat. It is a READ + CLASSIFY
++ PRESENT task. It must not add schema, must not touch ingestion/extraction, and must
+introduce zero new model names (grep guard clean).
+
+**Files:**
+- NEW `Core/Models/FactStatus.swift` — the status enum + a `FactStatusItem` view model.
+- NEW `Knowledge/Ledger/FactStatusClassifier.swift` — pure, rule-based classifier
+  (same philosophy as `GapDetector`: deterministic, no LLM, writes nothing).
+- NEW `UI/FactStatusView.swift` — the four-tab surface.
+- `UI/RootView.swift` — wire the new surface in as a tab/entry (do NOT rename or
+  remove existing tabs).
+- READ-ONLY consumers (no signature changes expected): `EventsRepository`,
+  `GapNodeRepository`, `ContradictionsRepository`, `AssertionsRepository`,
+  `KnowledgeObjectRepository`.
+- Reuse: `UI/QualityStrip.swift`, `UI/Shared/DesignSystem.swift`,
+  `UI/EventDetailSheet.swift`, `UI/Shared/SourceViewer.swift` for detail/citation.
+
+**Spec:**
+1. `FactStatus` enum (Codable, Sendable, CaseIterable) with cases
+   `.proven, .inferred, .contradicted, .missing, .unverified`, each exposing a
+   `displayName`, an SF Symbol, and a semantic color from DesignSystem. No raw
+   colors inline.
+2. `FactStatusItem` view model: `id`, `status`, `title`, `reason` (always present,
+   always specific — a blanket reason is a bug, per the GapNode contract), `date?`,
+   `confidence: Confidence`, `evidenceObjectIDs: [KnowledgeObject.ID]`,
+   `sourceKind` (event / assertion / contradiction / gap). The `reason` explains why
+   the classifier assigned THIS status.
+3. `FactStatusClassifier` — deterministic rules ONLY (no LLM, no capability calls,
+   no writes). Derive status from signals already in the ledger:
+   - **Contradicted:** any Event/Assertion referenced by a row in
+     `ContradictionsRepository` → `.contradicted` (both sides carried through so the
+     Contradictions tab can show them paired, never averaged away — per CLAUDE.md).
+   - **Missing:** every non-dismissed `GapNode` → `.missing`.
+   - **Proven:** Event/Assertion NOT contradicted, with `qualityTier == .t1`
+     (structured facts — e.g. email-header events, From/To/Date entities) AND high
+     confidence AND at least one evidence object. Assertions with
+     `agent == "user"` or a structured/ontology agent and non-empty evidence also
+     qualify.
+   - **Inferred:** NOT contradicted, but derived rather than directly asserted —
+     e.g. `Event.dateConfidence` below a named threshold, coarse `datePrecision`
+     (`.quarter`/`.year`), causal-link-origin events, or assertions with
+     `agent == "system.llm"`. Reason names the specific weak signal.
+   - **Unverified:** claims/assertions with empty or invalid evidence (the
+     `droppedUnverifiable` population from T2), or low confidence with no
+     corroboration. Never silently hidden — surfaced under its own status.
+   - Thresholds are named `static let`s with a one-line justification comment each.
+   - Precedence when multiple rules match: Contradicted > Missing > Unverified >
+     Inferred > Proven (a fact in conflict is shown as conflicted, not proven).
+4. `FactStatusView` — four tabs:
+   - **Timeline:** all non-missing items ordered by date, each row showing a status
+     chip + confidence + reason; tapping opens `EventDetailSheet` / `SourceViewer`.
+   - **Evidence:** items grouped by status (Proven / Inferred / Unverified), each row
+     linking to its evidence objects.
+   - **Contradictions:** paired view — claim A vs claim B, both sources shown, with
+     the contradiction's explanation. Never resolved automatically.
+   - **Missing Proof:** the GapNode surface (reuse HistoryView's gap presentation if
+     one exists; do not duplicate logic).
+   - A top strip shows counts per status. Reuse `QualityStrip` styling; do not invent
+     a parallel design language.
+5. CAPABILITY / PRIVACY / GREP discipline: no model names anywhere in the new files;
+   no network; classifier writes nothing to the ledger. Retrieval-priority invariant
+   is untouched (this reads the structured ledger directly, which is exactly the
+   priority order — Memory→Timeline→Entity→… ahead of vectors).
+6. OUT OF SCOPE for T14 (note only, do not build): human review actions
+   (accept/reject/correct) that would persist a review state. That needs an ADDITIVE
+   versioned migration (`fact_reviews`) and is a follow-up task — T14 is read-only
+   presentation. Do not add the migration here.
+
+**Acceptance:**
+- On the ProjectDelta fixture: the surface renders with a non-zero count in at least
+  three of the five statuses, and EVERY item shows a specific, non-generic reason.
+- At least one item classified `.contradicted` shows BOTH conflicting sources; no
+  contradiction is averaged or hidden.
+- Every non-missing item's "view evidence" resolves to real KnowledgeObject(s) via
+  the existing SourceViewer (no dead citations).
+- Precedence holds: no item appears as both Proven and Contradicted.
+- Classifier is pure: a unit check (SmokeTest if no test target) confirms it performs
+  zero writes and no capability/network calls.
+- BuildProject green; grep guard returns nothing; SmokeTest passes.
+
+---
+
 ## Gate 2 (outline — specs to be written after Gate 1 numbers exist)
 
 **Gate 1 is locked** (eval-report.md commit `4bcf4e5`, 18 Jun 2026). The

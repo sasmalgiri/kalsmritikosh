@@ -24,7 +24,7 @@ import AppKit
 /// the detail switch never drift apart.
 public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case ask, search
-    case timeline, history, notebook, dossier, explore
+    case timeline, history, findings, notebook, dossier, explore
     case insights
     case knowledge, assertions, library, saved
     case sources, convert, completeness, live
@@ -38,6 +38,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "Search"
         case .timeline:     return "Timeline"
         case .history:      return "History"
+        case .findings:     return "Findings"
         case .notebook:     return "Notebook"
         case .dossier:      return "Dossier"
         case .explore:      return "Explore"
@@ -60,6 +61,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "magnifyingglass"
         case .timeline:     return "calendar.day.timeline.left"
         case .history:      return "book.closed"
+        case .findings:     return "checkmark.seal"
         case .notebook:     return "note.text"
         case .dossier:      return "person.text.rectangle"
         case .explore:      return "point.3.connected.trianglepath.dotted"
@@ -98,6 +100,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "Instant full-text search across every chunk"
         case .timeline:     return "Chronological view of all dated events"
         case .history:      return "Narrative reconstruction of what happened"
+        case .findings:     return "Every fact by status — proven, inferred, contradicted, missing"
         case .notebook:     return "Your saved notes and working pages"
         case .dossier:      return "Everything known about a person or entity"
         case .explore:      return "Entity graph — see who and what connects"
@@ -126,7 +129,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.ask, .search]
-            case .reconstruct: return [.timeline, .history, .notebook, .dossier, .explore, .insights]
+            case .reconstruct: return [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
             case .knowledge:   return [.knowledge, .assertions, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.settings]
@@ -689,6 +692,7 @@ public struct RootView: View {
         case .search:       SearchView()
         case .timeline:     TimelineView()
         case .history:      HistoryView()
+        case .findings:     FactStatusView()
         case .notebook:     NotebookView()
         case .dossier:      DossierView()
         case .explore:      ExplorerView()
