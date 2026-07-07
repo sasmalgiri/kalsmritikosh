@@ -16,9 +16,19 @@ public actor EventsRepository {
     public func insertBatch(_ events: [Event]) async throws {
         for e in events {
             let attrs = try encoder.encode(e.attributes)
+            // T16 — persist an evidentiary status. If the event still carries
+            // the default (.inferred), derive it from its signals so the
+            // stored spread is meaningful; an explicitly-set status is kept.
+            let status: EventStatus = e.status == .inferred
+                ? EventStatus.derive(
+                    qualityTier: e.qualityTier,
+                    dateConfidence: e.dateConfidence,
+                    contentConfidence: e.confidence.value,
+                    kind: e.kind)
+                : e.status
             try await database.exec("""
-            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(e.id),
                 .text(e.kind.rawValue),
@@ -31,7 +41,8 @@ public actor EventsRepository {
                 .text(String(data: attrs, encoding: .utf8) ?? "{}"),
                 .real(e.dateConfidence),
                 .text(e.qualityTier.rawValue),
-                .integer(Int64(e.datePrecision.rawValue))
+                .integer(Int64(e.datePrecision.rawValue)),
+                .text(status.rawValue)
             ])
             for entityID in e.entityIDs {
                 try await database.exec("""
@@ -48,7 +59,7 @@ public actor EventsRepository {
 
     public func between(start: Date, end: Date, limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
         WHERE date BETWEEN ? AND ?
         ORDER BY date ASC
@@ -74,7 +85,7 @@ public actor EventsRepository {
 
     public func recent(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
         ORDER BY date DESC
         LIMIT ?;
@@ -88,7 +99,7 @@ public actor EventsRepository {
     /// OntologyBackfill can label them.
     public func listUnlabeledFactTypes(limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events WHERE fact_type IS NULL ORDER BY date DESC LIMIT ?;
         """, [.integer(Int64(limit))])
         return rows.compactMap(decode)
@@ -193,7 +204,7 @@ public actor EventsRepository {
     /// anchor topic narratives).
     public func listEventsMissingNarrativeSlots(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
         WHERE narrative_slots_json IS NULL
            OR narrative_slots_json = '{}'
@@ -223,7 +234,7 @@ public actor EventsRepository {
     /// timelines.
     public func allWithParticipants(offset: Int = 0, pageSize: Int = 2_000) async throws -> [(Event, [Entity.ID])] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
         ORDER BY date ASC
         LIMIT ? OFFSET ?;
@@ -263,7 +274,7 @@ public actor EventsRepository {
     /// an already-ingested corpus without re-running ingest.
     public func findBySourceObject(_ id: KnowledgeObject.ID) async throws -> [Event] {
         let rows = try await database.query("""
-        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events WHERE source_object_id = ? ORDER BY date ASC LIMIT 200;
         """, [.uuid(id)])
         var out: [Event] = []
@@ -285,7 +296,8 @@ public actor EventsRepository {
                 sourceRange: event.sourceRange,
                 confidence: event.confidence,
                 dateConfidence: event.dateConfidence,
-                attributes: event.attributes
+                attributes: event.attributes,
+                status: event.status
             )
             out.append(event)
         }
@@ -330,6 +342,9 @@ public actor EventsRepository {
             if let raw = precisionRaw, let p = DatePrecision(rawValue: raw) { return p }
             return DatePrecision.inferFromConfidence(dateConf)
         }()
+        // T16 — status at index 11. Legacy rows (pre-v32 SELECT shapes that
+        // omit it) default to .inferred.
+        let status = row.string(11).flatMap(EventStatus.init(rawValue:)) ?? .inferred
         return Event(
             id: id,
             kind: kind,
@@ -341,7 +356,8 @@ public actor EventsRepository {
             confidence: Confidence(conf),
             dateConfidence: dateConf,
             qualityTier: tier,
-            datePrecision: precision
+            datePrecision: precision,
+            status: status
         )
     }
 }

@@ -86,7 +86,7 @@ public struct FactStatusClassifier: Sendable {
     private func classifyEvent(_ e: Event, conflictedEvidence: Set<UUID>) -> FactStatusItem {
         let conf = e.confidence.value
 
-        // Precedence 1 — conflict.
+        // Precedence 1 — conflict overlay wins over the stored status.
         if conflictedEvidence.contains(e.sourceObjectID) {
             return FactStatusItem(
                 id: e.id, status: .contradicted, title: e.title,
@@ -96,43 +96,36 @@ public struct FactStatusClassifier: Sendable {
             )
         }
 
-        // Precedence 2 — too weak to trust.
-        if conf < Self.unverifiedCeiling {
-            return FactStatusItem(
-                id: e.id, status: .unverified, title: e.title,
-                reason: String(format: "Event confidence is low (%.0f%%) with no corroboration.", conf * 100),
-                date: e.date, confidence: conf,
-                evidenceObjectIDs: [e.sourceObjectID], sourceKind: .event
-            )
-        }
-
-        // Precedence 3 — directly observed structured fact.
-        if e.qualityTier == .t1 && conf >= Self.provenConfidenceFloor
-            && e.dateConfidence >= Self.inferredDateConfidenceCeiling {
-            return FactStatusItem(
-                id: e.id, status: .proven, title: e.title,
-                reason: "Structured T1 evidence with a high-confidence date — directly observed, not inferred.",
-                date: e.date, confidence: conf,
-                evidenceObjectIDs: [e.sourceObjectID], sourceKind: .event
-            )
-        }
-
-        // Otherwise — reconstructed/derived. Name the specific weak signal.
-        let why: String
-        if e.dateConfidence < Self.inferredDateConfidenceCeiling {
-            why = String(format: "Date is derived, not directly stated (date confidence %.0f%%).", e.dateConfidence * 100)
-        } else if e.kind == .other {
-            why = "Event type could not be pinned down at extraction; reconstructed from context."
-        } else if e.qualityTier == .t3 {
-            why = "Extracted from low-tier (T3) evidence; treated as an inference."
-        } else {
-            why = "Reconstructed from evidence rather than directly asserted by a single authoritative source."
-        }
+        // T16 — trust the PERSISTED evidentiary status; map §13 → UI status.
+        let (status, reason) = Self.map(e.status, dateConfidence: e.dateConfidence)
         return FactStatusItem(
-            id: e.id, status: .inferred, title: e.title,
-            reason: why, date: e.date, confidence: conf,
+            id: e.id, status: status, title: e.title,
+            reason: reason, date: e.date, confidence: conf,
             evidenceObjectIDs: [e.sourceObjectID], sourceKind: .event
         )
+    }
+
+    /// Map the persisted 8-state EventStatus onto the 5-state UI FactStatus,
+    /// with a specific reason. CONTRADICTED is handled by the overlay above.
+    static func map(_ s: EventStatus, dateConfidence: Double) -> (FactStatus, String) {
+        switch s {
+        case .observed:
+            return (.proven, "Directly observed in structured evidence (T1) — not inferred.")
+        case .reviewed:
+            return (.proven, "Accepted by a human reviewer.")
+        case .derived:
+            return (.inferred, String(format: "Deterministically derived from evidence (date confidence %.0f%%).", dateConfidence * 100))
+        case .asserted:
+            return (.inferred, "Asserted by a source — supported, but not independently proven.")
+        case .inferred:
+            return (.inferred, "Reconstructed from multiple evidence units rather than directly stated.")
+        case .unsupported:
+            return (.unverified, "No supporting evidence found for this event.")
+        case .rejected:
+            return (.unverified, "Rejected by a human reviewer (kept for the record).")
+        case .contradicted:
+            return (.contradicted, "Marked contradicted in the ledger.")
+        }
     }
 
     /// Retracted assertions are history, not current facts — omitted from the

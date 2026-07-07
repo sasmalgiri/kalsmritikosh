@@ -43,6 +43,13 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
     /// travel with the timestamp; never reconstruct from "the time
     /// is exactly midnight, must be month-only".
     public let datePrecision: DatePrecision
+    /// T16 — persisted evidentiary status (§13 vocabulary). Set at
+    /// extraction/insert time (see EventStatus.derive) and read back by the
+    /// Fact Status Matrix. Orthogonal to `kind` (the event TYPE): an
+    /// `emailSent` event can be OBSERVED, a `meetingHeld` INFERRED, etc.
+    /// CONTRADICTED is relational (derived from the contradictions table),
+    /// so it is NOT stored here — FactStatusClassifier overlays it.
+    public let status: EventStatus
 
     public nonisolated init(
         id: ID = UUID(),
@@ -58,7 +65,8 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         dateConfidence: Double = 0.5,
         attributes: [String: AnyCodable] = [:],
         qualityTier: QualityTier = .t2,
-        datePrecision: DatePrecision = .day
+        datePrecision: DatePrecision = .day,
+        status: EventStatus = .inferred
     ) {
         self.id = id
         self.kind = kind
@@ -74,12 +82,13 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         self.attributes = attributes
         self.qualityTier = qualityTier
         self.datePrecision = datePrecision
+        self.status = status
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, date, endDate, title, summary, entityIDs,
              sourceObjectID, sourceRange, confidence, dateConfidence, attributes,
-             qualityTier, datePrecision
+             qualityTier, datePrecision, status
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -98,6 +107,7 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         self.attributes = try c.decodeIfPresent([String: AnyCodable].self, forKey: .attributes) ?? [:]
         self.qualityTier = try c.decodeIfPresent(QualityTier.self, forKey: .qualityTier) ?? .t2
         self.datePrecision = try c.decodeIfPresent(DatePrecision.self, forKey: .datePrecision) ?? .day
+        self.status = try c.decodeIfPresent(EventStatus.self, forKey: .status) ?? .inferred
     }
 
     /// The 10 event kinds from Phase 6 of the roadmap, plus an
@@ -114,5 +124,50 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         case deliveryDelayed
         case deliveryCompleted
         case other
+    }
+}
+
+/// T16 — the §13 evidentiary-status vocabulary for a reconstructed event.
+/// Persisted on `events.status`. CONTRADICTED is derived relationally from
+/// the contradictions table (never stored); REVIEWED / REJECTED are written
+/// by the human-review workflow (T17).
+public nonisolated enum EventStatus: String, Codable, Sendable, CaseIterable, Hashable {
+    /// Directly visible in reliable structured evidence (email header, log).
+    case observed
+    /// Stated by a person/document/source — not automatically true.
+    case asserted
+    /// Deterministically calculated from evidence (invoice date + 30d).
+    case derived
+    /// Likely event reconstructed from multiple evidence units.
+    case inferred
+    /// Conflicts with other evidence (relational — set by the overlay).
+    case contradicted
+    /// No supporting evidence found.
+    case unsupported
+    /// A human reviewer accepted/corrected it.
+    case reviewed
+    /// A human reviewer rejected it (kept, never deleted).
+    case rejected
+
+    /// Derive the at-extraction status from an event's own signals. Pure.
+    /// OBSERVED for high-confidence structured (T1) facts with a trusted
+    /// date; DERIVED when the date is computed (low date-confidence but the
+    /// content is solid); UNSUPPORTED at the trust floor; else INFERRED.
+    /// CONTRADICTED / REVIEWED / REJECTED are never produced here — they are
+    /// applied later (overlay / human review).
+    public static func derive(
+        qualityTier: QualityTier,
+        dateConfidence: Double,
+        contentConfidence: Double,
+        kind: Event.Kind
+    ) -> EventStatus {
+        if contentConfidence < 0.33 { return .unsupported }
+        if qualityTier == .t1 && contentConfidence >= 0.75 && dateConfidence >= 0.60 {
+            return .observed
+        }
+        if dateConfidence < 0.60 && contentConfidence >= 0.60 {
+            return .derived
+        }
+        return .inferred
     }
 }

@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 31
+    public static let latestVersion = 32
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -68,7 +68,8 @@ public enum SchemaMigrations {
         (28, v28),
         (29, v29),
         (30, v30),
-        (31, v31)
+        (31, v31),
+        (32, v32)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1266,5 +1267,26 @@ public enum SchemaMigrations {
 
     CREATE INDEX IF NOT EXISTS idx_contradictions_status
         ON contradictions(status);
+    """
+
+    // T16 — persist an evidentiary status per event (§13 vocabulary).
+    // Backfill from each row's own signals so an existing corpus gets a
+    // realistic spread instead of all-one-value. Idempotent: the guards are
+    // mutually exclusive (observed/derived need confidence >= 0.60/0.75, so
+    // an unsupported row can never match them), so re-running yields the same
+    // result. CONTRADICTED/REVIEWED/REJECTED are never set here.
+    private static let v32: String = """
+    ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'inferred';
+
+    UPDATE events SET status = 'observed'
+        WHERE quality_tier = 'T1' AND confidence >= 0.75 AND date_confidence >= 0.60;
+
+    UPDATE events SET status = 'derived'
+        WHERE quality_tier != 'T1' AND date_confidence < 0.60 AND confidence >= 0.60;
+
+    UPDATE events SET status = 'unsupported'
+        WHERE confidence < 0.33;
+
+    CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
     """
 }
