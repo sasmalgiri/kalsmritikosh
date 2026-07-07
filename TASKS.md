@@ -476,6 +476,57 @@ introduce zero new model names (grep guard clean).
 
 ---
 
+## T15 — Fail loud when no embedder resolves (kill the zero-vector fallback)
+
+**Goal:** Remove the silent all-zeros embedding fallback so vector search never
+degrades to noise without anyone knowing.
+
+**Why:** `Storage/Vector/Embedder.swift` documents that it "falls back to an
+all-zeros vector when no embedding is available." A zero vector makes every
+chunk equidistant under cosine similarity — retrieval silently returns garbage
+ordering instead of failing. This violates the project's core directive:
+"No silent fallbacks without explicit permission — quality or nothing." In
+practice `NLEmbedding` is available on macOS so the real baseline runs, but the
+zero-vector path must not exist as a silent success.
+
+**Files:** `Storage/Vector/Embedder.swift`,
+`Storage/Vector/CapabilityResolvedEmbedder.swift`,
+`Storage/Vector/CachedEmbedder.swift`, call sites in
+`Ingestion/Pipeline/IngestCoordinator.swift` and `Retrieval/HybridRetriever.swift`
+(whoever consumes `embed`/`embedBatch`).
+
+**Spec:**
+- Change the embedding contract so "no embedder" is an explicit, observable
+  outcome, not a zero vector. Prefer returning `[Float]?` / `[[Float]]?` (nil =
+  no embedding produced) or throwing a typed `EmbedderError.unavailable`. Pick
+  ONE and apply consistently; do not leave a zero-vector path anywhere.
+- Ingest: when embedding is unavailable, do NOT write a zero vector to the
+  `vectors` table. Skip the write, mark the chunk's embedding status as pending
+  (reuse the existing enrichment-status mechanism), and log via AtlasLog.
+- Retrieval: the vector layer must treat "no query embedding" as "vector layer
+  unavailable for this query" and fall through to the structured layers
+  (Memory → Timeline → Entity → FTS) per the retrieval-priority invariant —
+  NOT return zero-similarity hits. Log that vector search was skipped.
+- Surface it: increment a counter / status the UI can read (e.g. LiveMetrics or
+  EnrichmentStatus) so "N chunks awaiting embeddings" is visible rather than
+  silently absent.
+- Capability discipline: no model names; resolve the embedding capability as
+  today. This task changes failure semantics, not the provider.
+
+**Acceptance:**
+- `grep -rn "zero" Storage/Vector` shows no code path that manufactures a
+  zero/empty vector as a stand-in for a real embedding.
+- With the embedder forcibly unavailable (test hook), ingest writes ZERO rows to
+  `vectors`, logs the skip, and the chunk is marked pending — verified in
+  SmokeTest.
+- With the embedder unavailable, a vector query still returns structured-layer
+  results (not zero-similarity noise) and logs that the vector layer was skipped.
+- On the ProjectDelta fixture with NLEmbedding available: unchanged behaviour
+  (real vectors written, search works).
+- BuildProject green; grep guard clean; SmokeTest passes.
+
+---
+
 ## Gate 2 (outline — specs to be written after Gate 1 numbers exist)
 
 **Gate 1 is locked** (eval-report.md commit `4bcf4e5`, 18 Jun 2026). The
