@@ -3,16 +3,26 @@
 //  Kalsmritikosh
 //
 //  Embedding provider protocol + NLEmbedding baseline. The MLX-backed
-//  sentence encoder swaps in at M3 via the ModelRegistry. Falls back
-//  to an all-zeros vector when no embedding is available so the
-//  rest of the retrieval pipeline still functions.
+//  sentence encoder swaps in at M3 via the ModelRegistry.
+//
+//  CONTRACT (T15): an EMPTY array is the "no embedding produced" sentinel.
+//  Embedders MUST NEVER return a zero vector as a stand-in — a zero vector
+//  makes every chunk equidistant under cosine similarity, silently turning
+//  vector search into noise. That violates the project's core directive
+//  ("no silent fallbacks — quality or nothing"). Callers MUST skip empty
+//  results: never persist them (SQLiteVectorStore.upsert already guards),
+//  and treat an empty QUERY embedding as "vector layer unavailable" so the
+//  structured layers answer instead.
 //
 
 import Foundation
 import NaturalLanguage
+import OSLog
 
 public protocol Embedder: Sendable {
     var dimension: Int { get }
+    /// Returns the embedding, or an EMPTY array when no embedding could be
+    /// produced (no model, or no in-vocabulary tokens). Never returns zeros.
     func embed(_ text: String) async -> [Float]
     /// Batch variant. Default impl loops over `embed`; providers that
     /// support a real batch endpoint (Ollama, etc.) override.
@@ -58,7 +68,10 @@ public struct NLEmbedder: Embedder {
 
     public func embed(_ text: String) async -> [Float] {
         guard let model = NLEmbedding.wordEmbedding(for: language) else {
-            return Array(repeating: 0, count: dimension)
+            // No embedding model on this device. Emit the empty sentinel
+            // (NOT zeros) so nothing downstream persists or searches noise.
+            AtlasLog.storage.error("NLEmbedder: no word-embedding model available — returning empty (no embedding produced)")
+            return []
         }
         var accumulator = [Double](repeating: 0, count: model.dimension)
         var count = 0
@@ -72,9 +85,10 @@ public struct NLEmbedder: Embedder {
                 count += 1
             }
         }
-        if count > 0 {
-            for i in 0..<accumulator.count { accumulator[i] /= Double(count) }
-        }
+        // No in-vocabulary tokens → averaging would produce a zero vector.
+        // Return the empty sentinel instead of manufacturing noise.
+        guard count > 0 else { return [] }
+        for i in 0..<accumulator.count { accumulator[i] /= Double(count) }
         return accumulator.map { Float($0) }
     }
 }

@@ -777,9 +777,22 @@ public actor IngestCoordinator {
                 return chunk.text
             }
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
-            await pipelineMetrics?.bump(.embedded, by: vectorsList.count)
+            var embeddedCount = 0
+            var skippedCount = 0
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
+                // Empty = "no embedding produced" (T15). NEVER persist a
+                // zero/empty vector — skip and leave the chunk without a
+                // vector so it re-embeds later, rather than poisoning search.
+                if vectorsList[i].isEmpty {
+                    skippedCount += 1
+                    continue
+                }
                 try? await vectors.upsert(chunkID: chunk.id, embedding: vectorsList[i])
+                embeddedCount += 1
+            }
+            await pipelineMetrics?.bump(.embedded, by: embeddedCount)
+            if skippedCount > 0 {
+                AtlasLog.ingestion.error("Ingest \(object.id, privacy: .public): \(skippedCount, privacy: .public) chunk(s) left WITHOUT embeddings (embedder unavailable) — vector search skips them until re-embedded. No zero vectors written.")
             }
         }
 

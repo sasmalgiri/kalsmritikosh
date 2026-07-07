@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import OSLog
 
 public actor HybridRetriever: Retriever {
     /// How many vector hits the vector layer asks for. Held as a property
@@ -670,6 +671,14 @@ public actor HybridRetriever: Retriever {
         candidateChunkIDs: [Chunk.ID]? = nil
     ) async throws -> [RetrievedChunk] {
         let query = await embedder.embed(intent.rawQuestion)
+        // Empty = no embedding produced (T15). Treat the vector layer as
+        // unavailable for this query and fall through to the structured
+        // layers — do NOT search with a zero/empty query (which would
+        // return noise). .vector is last in priority, so this is a no-op.
+        guard !query.isEmpty else {
+            AtlasLog.storage.notice("Vector layer skipped: no query embedding produced; using structured layers only.")
+            return []
+        }
         let hits = try await vectors.nearest(
             to: query,
             limit: vectorLayerLimit,
