@@ -527,6 +527,145 @@ zero-vector path must not exist as a silent success.
 
 ---
 
+## T16 — Persist event status + full 8-state vocabulary
+
+**Goal:** Give every Event a PERSISTED evidentiary status, using the attachment's
+§13 vocabulary — OBSERVED / ASSERTED / DERIVED / INFERRED / CONTRADICTED /
+UNSUPPORTED / REVIEWED / REJECTED — instead of deriving a coarse 5-state label
+only at view time.
+
+**Why:** Today `FactStatusClassifier` (T14) computes Proven/Inferred/Contradicted/
+Missing/Unverified on read. That's good for the UI but (a) collapses OBSERVED vs
+ASSERTED vs DERIVED into one bucket, (b) is not stored, so it can't be queried,
+audited, or reviewed, and (c) can't carry a human REVIEWED/REJECTED verdict.
+§13 requires status to be a first-class, persisted property of the reconstruction.
+
+**Files:** `Core/Models/Event.swift` (add `status: EventStatus`),
+new enum in `Core/Models/FactStatus.swift` or a sibling
+(`EventStatus` — the 8-state vocabulary), `Storage/Schema/SchemaMigrations.swift`
+(new **v32** migration, SAVEPOINT-wrapped — never edit a shipped migration),
+`Storage/Repositories/EventsRepository.swift` (read/write the column),
+`Knowledge/Events/EventExtractor.swift` (set status at extraction:
+header/structured→OBSERVED or ASSERTED; date-math→DERIVED; multi-evidence→INFERRED),
+`Knowledge/Ledger/FactStatusClassifier.swift` (map the persisted status → the UI's
+5-state FactStatus, so the view stays the same but reads truth from the ledger).
+
+**Spec:**
+- v32 migration: `ALTER TABLE events ADD COLUMN status TEXT NOT NULL DEFAULT 'inferred';`
+  Backfill: a one-shot pass sets OBSERVED for qualityTier==t1 structured events,
+  DERIVED where dateConfidence is math-derived, else INFERRED. Backfill is
+  idempotent and logged.
+- `EventStatus` enum matches §13 exactly. Keep the existing `Event.Kind` (event
+  TYPE) — status and kind are orthogonal; do not conflate them.
+- Extractor sets status at write time; contradictions still OVERRIDE to
+  CONTRADICTED via the existing contradiction linkage (don't bake CONTRADICTED
+  into the stored column — it's relational; keep FactStatusClassifier deriving it).
+- The classifier now prefers the persisted status and only computes the
+  contradiction/missing overlay.
+
+**Acceptance:**
+- Fresh fixture ingest: events carry a persisted `status`; a GROUP BY status query
+  shows a realistic spread (not 100% one value).
+- Re-running the backfill is a no-op (idempotent).
+- Findings tab unchanged visually, but its labels now trace to the stored column.
+- BuildProject green; grep guard clean; SmokeTest passes.
+
+---
+
+## T17 — Review ledger + human-review workflow (§20, §12.9, §3.8)
+
+**Goal:** Let an authorized user accept / reject / correct a reconstructed fact,
+recording each action as a NEW append-only ledger entry (never overwriting
+history), and surface a review queue. This is the `fact_reviews` migration T14
+deferred.
+
+**Why:** The attachment makes human review non-negotiable for criminal
+allegations, fraud/intent attribution, disputed facts, chain-of-custody breaks,
+and anything court-bound (§20). The corpus has no reviewer workflow today. §11
+rule 11: "every human correction must be preserved as a new ledger entry, not
+silently overwrite history."
+
+**Files:** new `Core/Models/FactReview.swift`,
+new `Storage/Repositories/FactReviewsRepository.swift` (append-only, mirrors
+`AnswerLedgerRepository` / `AssertionsRepository` style),
+`Storage/Schema/SchemaMigrations.swift` (new **v33** migration, SAVEPOINT-wrapped:
+`fact_reviews(id, subject_kind, subject_id, action, prior_value, new_value,
+reviewer, reason, reviewed_at)`), `UI/FactStatusView.swift` (per-item
+Accept / Reject / Correct actions + a "Needs Review" filter),
+`Knowledge/Ledger/FactStatusClassifier.swift` (apply the LATEST review verdict as
+an overlay: a REVIEWED/REJECTED review wins over the derived status).
+
+**Spec:**
+- Append-only: a correction inserts a new row; the prior value is preserved in
+  `prior_value`. No UPDATE/DELETE of history.
+- `action` ∈ accept / reject / correct. Reviewer identity captured (local user is
+  fine for v1). Reason required for reject/correct.
+- Review queue = items whose status is CONTRADICTED, UNSUPPORTED, or below a
+  confidence floor, minus those already reviewed — shown in a Findings "Needs
+  Review" tab/filter.
+- The classifier's precedence gains a top tier: an un-superseded review verdict
+  overrides everything (REVIEWED shows as its corrected status; REJECTED is shown
+  struck-through, not deleted — preserve-everything directive).
+- Never imply AI review replaces professional judgment (copy in the UI per §20).
+
+**Acceptance:**
+- Accepting/rejecting/correcting a fact writes a new `fact_reviews` row; the prior
+  value is still queryable; nothing is overwritten.
+- A rejected fact remains in the ledger (visible as rejected), never deleted.
+- The Needs-Review filter lists contradicted/unsupported/low-confidence items.
+- BuildProject green; grep guard clean; SmokeTest passes.
+
+---
+
+## T18 — Chain-of-custody + redaction + privilege (§21)
+
+**Goal:** Add the legal-defensibility layer: an append-only chain-of-custody log
+per source, a redaction facility, and a privileged-material flag — the §21
+requirements the app currently lacks.
+
+**Why:** For the legal / investigation / journalism positioning the attachment
+targets, provenance must be defensible: custody events, hash verification, the
+ability to redact, and to mark material privileged so it never leaks into an
+answer. Today only `files.content_hash` (SHA-256) exists; there is no custody log,
+no redaction, no privilege flag.
+
+**Files:** new `Core/Models/CustodyEvent.swift`,
+new `Storage/Repositories/CustodyRepository.swift` (append-only),
+`Storage/Schema/SchemaMigrations.swift` (new **v34** migration, SAVEPOINT-wrapped:
+`custody_events(id, file_id, event_type, actor, at, detail, hash_verified)` +
+`ADD COLUMN privileged INTEGER NOT NULL DEFAULT 0` on `files` and on
+`knowledge_objects`), `Ingestion/Pipeline/IngestCoordinator.swift` (write an
+`acquired` + `hash_computed` custody event at ingest; re-verify hash on re-ingest
+and log `hash_verified`/`hash_mismatch`), `Retrieval/HybridRetriever.swift` +
+experts (EXCLUDE privileged KOs from retrieval unless an explicit
+"include privileged" scope is set), new redaction path in
+`Ingestion/Export/DocumentExporter.swift`.
+
+**Spec:**
+- Custody is append-only; every acquisition, hash check, export, and disclosure is
+  a new row. Leverage existing `files.content_hash`; a mismatch on re-ingest logs
+  `hash_mismatch` and flags the source (never silently overwrites — surface it).
+- `privileged` flag on files/KOs. PrivacyGate-adjacent rule: privileged material is
+  filtered OUT of capability-resolved retrieval and out of answers by default,
+  exactly as cloud providers are filtered by PrivacyGate. This is enforced, not
+  advisory.
+- Redaction: a redacted span is stored as a redaction record over the evidence;
+  the ORIGINAL is preserved (preserve-everything), the redacted view is what
+  export/answers use.
+- Export: `DocumentExporter` honours redactions and privilege — never emits
+  redacted text or privileged material.
+
+**Acceptance:**
+- Ingest writes custody events; re-ingesting an unchanged file logs a verified
+  hash; a tampered file logs `hash_mismatch` and is flagged.
+- A KO marked privileged never appears in a retrieval result or an answer under
+  the default scope; it DOES appear under an explicit include-privileged scope.
+- Exporting a redacted document omits the redacted spans; the original is intact
+  in the ledger.
+- BuildProject green; grep guard clean; SmokeTest passes.
+
+---
+
 ## Gate 2 (outline — specs to be written after Gate 1 numbers exist)
 
 **Gate 1 is locked** (eval-report.md commit `4bcf4e5`, 18 Jun 2026). The
