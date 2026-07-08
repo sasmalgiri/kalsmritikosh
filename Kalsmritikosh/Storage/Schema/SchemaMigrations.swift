@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 33
+    public static let latestVersion = 34
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -70,7 +70,8 @@ public enum SchemaMigrations {
         (30, v30),
         (31, v31),
         (32, v32),
-        (33, v33)
+        (33, v33),
+        (34, v34)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1309,5 +1310,26 @@ public enum SchemaMigrations {
 
     CREATE INDEX IF NOT EXISTS idx_fact_reviews_subject ON fact_reviews(subject_id);
     CREATE INDEX IF NOT EXISTS idx_fact_reviews_at ON fact_reviews(reviewed_at);
+    """
+
+    // T18 — chain-of-custody ledger + privileged flags (§21). custody_events
+    // is append-only. `privileged` marks material that must be filtered out of
+    // answers by default (enforced like PrivacyGate filters cloud providers).
+    private static let v34: String = """
+    CREATE TABLE custody_events (
+        id       TEXT PRIMARY KEY NOT NULL,
+        file_id  TEXT NOT NULL,
+        kind     TEXT NOT NULL,        -- acquired | hash_computed | hash_verified | hash_mismatch | exported | disclosed
+        actor    TEXT NOT NULL DEFAULT 'system',
+        at       REAL NOT NULL,
+        detail   TEXT,
+        hash     TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_custody_file ON custody_events(file_id);
+    CREATE INDEX IF NOT EXISTS idx_custody_kind ON custody_events(kind);
+
+    ALTER TABLE files ADD COLUMN privileged INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE knowledge_objects ADD COLUMN privileged INTEGER NOT NULL DEFAULT 0;
     """
 }

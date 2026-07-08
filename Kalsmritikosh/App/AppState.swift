@@ -130,6 +130,8 @@ public final class AppState {
     public private(set) var contradictions: ContradictionsRepository?
     /// T17 — append-only human-review ledger over reconstructed facts.
     public private(set) var factReviews: FactReviewsRepository?
+    /// T18 — append-only chain-of-custody ledger over source files.
+    public private(set) var custody: CustodyRepository?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -377,6 +379,7 @@ public final class AppState {
             let gapNodesRepo = GapNodeRepository(database: db)
             let contradictionsRepo = ContradictionsRepository(database: db)
             let factReviewsRepo = FactReviewsRepository(database: db)
+            let custodyRepo = CustodyRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -867,7 +870,8 @@ public final class AppState {
                 // still holds — chunks land with NULL prefix and get
                 // re-enriched later, never with heuristic noise.
                 contextPrefixGenerator: nil,
-                pipelineMetrics: pipelineMetricsActor
+                pipelineMetrics: pipelineMetricsActor,
+                custody: custodyRepo
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -1209,6 +1213,7 @@ public final class AppState {
             self.gapNodes = gapNodesRepo
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
+            self.custody = custodyRepo
             self.factBonds = factBondsRepo
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)

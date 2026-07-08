@@ -84,6 +84,8 @@ public actor IngestCoordinator {
     /// Optional — when nil the bumps are no-ops and ingest behaves
     /// exactly as before.
     private let pipelineMetrics: PipelineMetrics?
+    /// T18 — optional chain-of-custody ledger. nil = custody logging off.
+    private let custody: CustodyRepository?
 
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
@@ -114,8 +116,10 @@ public actor IngestCoordinator {
         qaPairExtractor: (any QAPairExtractor)? = nil,
         bondConstructor: BondConstructor? = nil,
         contextPrefixGenerator: (any ContextPrefixGenerator)? = nil,
-        pipelineMetrics: PipelineMetrics? = nil
+        pipelineMetrics: PipelineMetrics? = nil,
+        custody: CustodyRepository? = nil
     ) {
+        self.custody = custody
         self.loaders = loaders
         self.cleaner = cleaner
         self.classifier = classifier
@@ -204,6 +208,10 @@ public actor IngestCoordinator {
         if let existing = try? await files.findByURL(url) {
             if let newHash, existing.contentHash == newHash {
                 AtlasLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .public)")
+                // T18 — re-ingest with a matching hash confirms custody.
+                try? await custody?.record(CustodyEvent(
+                    fileID: existing.id, kind: .hashVerified,
+                    detail: url.lastPathComponent, hash: newHash))
                 return Result(
                     fileRecord: existing,
                     object: cleaned,
@@ -214,6 +222,12 @@ public actor IngestCoordinator {
                     invalidations: []
                 )
             }
+            // T18 — the bytes at a known URL changed: record a mismatch
+            // (surfaced as a tamper signal) BEFORE wiping the stale row.
+            try? await custody?.record(CustodyEvent(
+                fileID: existing.id, kind: .hashMismatch,
+                detail: "content at \(url.lastPathComponent) changed since last ingest",
+                hash: newHash))
             // Content changed (or hash absent): wipe the prior record so we
             // don't accumulate duplicate rows in the dependent tables.
             try? await files.deleteByID(existing.id)
@@ -309,6 +323,14 @@ public actor IngestCoordinator {
         } catch {
             AtlasLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
+        }
+        // T18 — first acquisition of this file: open its chain of custody.
+        try? await custody?.record(CustodyEvent(
+            fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
+        if let h = contentHashForFile {
+            try? await custody?.record(CustodyEvent(
+                fileID: fileRecord.id, kind: .hashComputed,
+                detail: url.lastPathComponent, hash: h))
         }
 
         // T13.1 — one OR MORE KnowledgeObjects per file. mbox produces
