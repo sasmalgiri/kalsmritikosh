@@ -119,19 +119,25 @@ public struct ChatExportLoader: Ingestor {
     /// WhatsApp: `[3/14/25, 9:12:34 AM] Alice: body`
     nonisolated static let whatsappRegex: NSRegularExpression = {
         let pattern = #"^\[(\d{1,2}/\d{1,2}/\d{2,4},\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:[AaPp][Mm])?)\]\s*([^:]+?):\s*(.*)$"#
-        return try! NSRegularExpression(pattern: pattern)
+        // Patterns are compile-time literals; the fallback never triggers but
+        // keeps the codebase free of `try!` (empty regex matches nothing).
+        return (try? NSRegularExpression(pattern: pattern)) ?? NSRegularExpression()
     }()
 
     /// Signal Desktop: `2025-03-14 09:12:34 - Alice: body`
     nonisolated static let signalRegex: NSRegularExpression = {
         let pattern = #"^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)\s*-\s*([^:]+?):\s*(.*)$"#
-        return try! NSRegularExpression(pattern: pattern)
+        // Patterns are compile-time literals; the fallback never triggers but
+        // keeps the codebase free of `try!` (empty regex matches nothing).
+        return (try? NSRegularExpression(pattern: pattern)) ?? NSRegularExpression()
     }()
 
     /// Slack TXT export: `[2025-03-14, 09:12 AM] alice: body`
     nonisolated static let slackRegex: NSRegularExpression = {
         let pattern = #"^\[(\d{4}-\d{2}-\d{2},?\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:[AaPp][Mm])?)\]\s*([^:]+?):\s*(.*)$"#
-        return try! NSRegularExpression(pattern: pattern)
+        // Patterns are compile-time literals; the fallback never triggers but
+        // keeps the codebase free of `try!` (empty regex matches nothing).
+        return (try? NSRegularExpression(pattern: pattern)) ?? NSRegularExpression()
     }()
 }
 
