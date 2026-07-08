@@ -40,9 +40,24 @@ public struct ImageLoader: Ingestor {
         #endif
 
         let recognized = await ocr.recognizePrinted(at: url)
-        let content = recognized.joined(separator: "\n")
+        var content = recognized.joined(separator: "\n")
         let confidence: Confidence = recognized.isEmpty ? .low : .high
         meta["ocrLineCount"] = AnyCodable(.int(Int64(recognized.count)))
+
+        // Table pass (ocr-table-pipeline port). Printed OCR gives reading-order
+        // text; the table pass reconstructs the grid. We KEEP both and append
+        // a tab-separated grid only when the page is genuinely tabular (≥2 rows
+        // × ≥2 columns) so ordinary scans aren't polluted. Deterministic /
+        // non-generative (Apple Vision), so it's fine under the minimum-LLM rule.
+        let grid = await ocr.recognizeTable(at: url)
+        let columnCount = grid.map(\.count).max() ?? 0
+        if grid.count >= 2 && columnCount >= 2 {
+            let tsv = grid.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+            meta["tableRows"] = AnyCodable(.int(Int64(grid.count)))
+            meta["tableColumns"] = AnyCodable(.int(Int64(columnCount)))
+            let base = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            content = base.isEmpty ? tsv : "\(base)\n\n[TABLE]\n\(tsv)"
+        }
 
         if content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             // Still emit a KO so the file is tracked; downstream Memory
