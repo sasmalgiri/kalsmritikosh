@@ -77,6 +77,11 @@ public struct SettingsView: View {
         .classification, .routing, .embedding
     ]
 
+    /// Everyday users never need the model/provider/diagnostics machinery —
+    /// the app auto-selects the best model for the device. Those sections live
+    /// under a collapsed "Advanced" disclosure, off by default.
+    @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
+
     public init() {}
 
     public var body: some View {
@@ -84,43 +89,61 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Settings").font(Theme.display(28, .bold))
-                    Text("Tune answering depth vs. speed, set privacy, manage models, and run diagnostics.")
+                    Text("Kalsmritikosh runs itself — it picks the best on-device model for your Mac automatically. Set your privacy and background preferences here; everything technical is under Advanced.")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     selfCheckChip
                 }
 
+                // ── Everyday settings ─────────────────────────────────────
                 systemModeSection
                 Divider()
 
                 if let setup = appState.ollamaSetupSuggestion {
                     ollamaSetupSection(setup)
                 }
-
                 if let advice = appState.modelChoiceAdvice,
                    advice.severity != .ok {
                     modelChoiceBanner(advice)
                 }
 
-                modelPickerSection
-                Divider()
-
                 privacySection
-                Divider()
-                intelligenceSection
                 Divider()
                 maintenanceSection
                 Divider()
-                providersSection
-                Divider()
-                userModelsSection
-                Divider()
                 optionalIngestSection
+
+                // ── Advanced (collapsed by default) ───────────────────────
                 Divider()
-                pinningSection
-                Divider()
-                diagnosticsSection
-                Divider()
-                narrativeEvalSection
+                DisclosureGroup(isExpanded: $showAdvanced) {
+                    VStack(alignment: .leading, spacing: 24) {
+                        intelligenceSection
+                        Divider()
+                        modelPickerSection
+                        Divider()
+                        providersSection
+                        Divider()
+                        userModelsSection
+                        Divider()
+                        pinningSection
+                        Divider()
+                        diagnosticsSection
+                        Divider()
+                        narrativeEvalSection
+                    }
+                    .padding(.top, 12)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .foregroundStyle(Theme.brand)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Advanced").font(.title3.bold())
+                            Text("Answering depth, model choice, providers, pinning, diagnostics — power users only. The app works fully without touching these.")
+                                .font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
