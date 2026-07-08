@@ -137,7 +137,12 @@ public actor VisionOCR: OCREngine {
     }
 
     public func recognizeTable(at url: URL) async -> [[String]] {
+        // Ported ocr-table-pipeline: deskew → column/row structure → per-cell
+        // OCR → row×column grid (Apple-native, no third-party deps). Falls back
+        // to one cell per printed line if no table structure is found.
+        let result = await TableOCR(recognitionLanguages: recognitionLanguages).extract(at: url)
+        if !result.isEmpty { return result.asRows() }
         let lines = await recognizePrinted(at: url)
-        return lines.map { $0.split(separator: "\t").map(String.init) }
+        return lines.map { [$0] }
     }
 }
