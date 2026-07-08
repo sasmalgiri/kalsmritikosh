@@ -23,17 +23,19 @@ import AppKit
 /// source of truth for title + SF Symbol + section so the sidebar and
 /// the detail switch never drift apart.
 public enum Destination: String, CaseIterable, Identifiable, Hashable {
+    case home
     case ask, search
     case timeline, history, findings, notebook, dossier, explore
     case insights
     case knowledge, assertions, library, saved
     case sources, convert, completeness, live
-    case settings
+    case guide, settings
 
     public var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .home:         return "Home"
         case .ask:          return "Ask"
         case .search:       return "Search"
         case .timeline:     return "Timeline"
@@ -51,12 +53,14 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
         case .live:         return "Live"
+        case .guide:        return "Guide"
         case .settings:     return "Settings"
         }
     }
 
     var icon: String {
         switch self {
+        case .home:         return "house"
         case .ask:          return "bubble.left.and.text.bubble.right"
         case .search:       return "magnifyingglass"
         case .timeline:     return "calendar.day.timeline.left"
@@ -74,6 +78,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
         case .live:         return "waveform.path.ecg"
+        case .guide:        return "book"
         case .settings:     return "gearshape"
         }
     }
@@ -96,6 +101,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     /// tooltips and as the command-palette subtitle.
     var blurb: String {
         switch self {
+        case .home:         return "Start here — pick the lens that fits your work"
         case .ask:          return "Ask in plain language; answers cite their evidence"
         case .search:       return "Instant full-text search across every chunk"
         case .timeline:     return "Chronological view of all dated events"
@@ -113,6 +119,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
         case .live:         return "Live pipeline and background activity"
+        case .guide:        return "What every screen does, and how facts are graded"
         case .settings:     return "Modes, privacy, models and diagnostics"
         }
     }
@@ -128,11 +135,11 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
 
         var items: [Destination] {
             switch self {
-            case .converse:    return [.ask, .search]
+            case .converse:    return [.home, .ask, .search]
             case .reconstruct: return [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
             case .knowledge:   return [.knowledge, .assertions, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
-            case .system:      return [.settings]
+            case .system:      return [.guide, .settings]
             }
         }
 
@@ -166,7 +173,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("atlas.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .ask
+    @State private var selection: Destination? = .home
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -687,7 +694,8 @@ public struct RootView: View {
 
     @ViewBuilder
     private var detail: some View {
-        switch selection ?? .ask {
+        switch selection ?? .home {
+        case .home:         HomeView(onNavigate: { navigate(to: $0) })
         case .ask:          AskView()
         case .search:       SearchView()
         case .timeline:     TimelineView()
@@ -705,6 +713,7 @@ public struct RootView: View {
         case .convert:      ConvertView()
         case .completeness: CompletenessView()
         case .live:         LiveDashboardView()
+        case .guide:        GuideView(onNavigate: { navigate(to: $0) })
         case .settings:     SettingsView()
         }
     }

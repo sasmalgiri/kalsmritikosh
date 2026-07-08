@@ -140,6 +140,10 @@ public final class AppState {
     /// picks it up on appear / change, runs it, then clears this. Lets the
     /// user search from anywhere without first navigating to Search.
     public var pendingSearchQuery: String?
+    /// Set by Home persona cards ("try asking"); AskView seeds its input from
+    /// this on appear, then clears it. Lets a persona example open Ask ready
+    /// to run.
+    public var pendingAskQuestion: String?
 
     // MARK: - Self-check (auto, zero-touch)
     /// Result of the fast self-check (deterministic logic + all Convert

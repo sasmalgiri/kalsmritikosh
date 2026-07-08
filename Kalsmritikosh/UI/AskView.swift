@@ -77,7 +77,14 @@ public struct AskView: View {
         }
         .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
-        .onAppear { inputFocused = true }
+        .onAppear {
+            inputFocused = true
+            // Seed from a Home persona "try asking" example, if any.
+            if let seeded = appState.pendingAskQuestion, !seeded.isEmpty {
+                question = seeded
+                appState.pendingAskQuestion = nil
+            }
+        }
         .sheet(isPresented: $showHistory) {
             ConversationHistorySheet(
                 conversations: pastConversations,
