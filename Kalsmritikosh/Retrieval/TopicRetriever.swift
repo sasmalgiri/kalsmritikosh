@@ -75,7 +75,7 @@ public actor TopicRetriever {
             LIMIT 1;
             """, hintEntityIDs.map { .uuid($0) })
         } catch {
-            AtlasLog.knowledge.error("TopicRetriever: bestMatch query failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("TopicRetriever: bestMatch query failed — \(String(describing: error), privacy: .public)")
             return nil
         }
         guard let row = rows.first,
@@ -99,7 +99,7 @@ public actor TopicRetriever {
             LIMIT 1;
             """, [.uuid(communityID)])
         } catch {
-            AtlasLog.knowledge.error("TopicRetriever: fetch query failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("TopicRetriever: fetch query failed — \(String(describing: error), privacy: .public)")
             return nil
         }
         guard let row = rows.first,

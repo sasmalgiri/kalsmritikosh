@@ -64,7 +64,7 @@ public enum KnowledgeInventory {
         md += "Generated: \(Date().formatted(date: .abbreviated, time: .standard))\n"
         md += "Database: `\(database.url.path)`\n"
         md += "KOs audited: \(allKOIDs.count)\n\n"
-        md += "_This file pairs each ingested source against what Atlas extracted from it. Use it to compare against your original files and spot ingest gaps._\n\n"
+        md += "_This file pairs each ingested source against what Kalsmritikosh extracted from it. Use it to compare against your original files and spot ingest gaps._\n\n"
 
         // ── Per-file sections ────────────────────────────────────────
         var totalEnts = 0
@@ -213,7 +213,7 @@ public enum KnowledgeInventory {
         try md.data(using: .utf8)?.write(to: url, options: .atomic)
 
         let elapsed = Date().timeIntervalSince(started)
-        AtlasLog.app.info("KnowledgeInventory: wrote \(allKOIDs.count, privacy: .public) KOs to \(url.path, privacy: .public) in \(String(format: "%.1f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.app.info("KnowledgeInventory: wrote \(allKOIDs.count, privacy: .public) KOs to \(url.path, privacy: .public) in \(String(format: "%.1f", elapsed), privacy: .public)s")
         _ = filesRepo // suppress unused warning if we don't fan out further
         return Result(
             reportURL: url,

@@ -32,7 +32,7 @@ public struct ProjectDeltaSmokeResult: Sendable {
 
 @MainActor
 public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
-    AtlasLog.app.info("ProjectDelta smoke test starting")
+    KalsmritikoshLog.app.info("ProjectDelta smoke test starting")
 
     // 1. Use a fresh isolated bookmark store + fresh in-tmp AppState.
     // CRITICAL: boot must receive an isolated databaseURL — without it,
@@ -41,7 +41,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     // their real archive (observed: 549 memory rows = ~hours of work
     // before the smoke ever finishes). Mirror Gate1Baseline's pattern.
     let tempDir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("AtlasSmoke-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("KalsmritikoshSmoke-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -57,7 +57,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
           let memory = state.memoryRepo
     else {
         throw NSError(
-            domain: "atlas.smoke",
+            domain: "kalsmritikosh.smoke",
             code: 1,
             userInfo: [NSLocalizedDescriptionKey: "AppState failed to boot."]
         )
@@ -71,7 +71,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             _ = try await ingest.ingest(fileAt: url)
             ingested += 1
         } catch {
-            AtlasLog.app.error("Smoke ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Smoke ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -188,16 +188,16 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
 
     // HISTORY Phase F — optional full eval. Off by default (one
     // composer call per question is slow); developers opt in with
-    // ATLAS_NARRATIVE_EVAL=1 in the scheme environment so a regular
+    // KALSMRITIKOSH_NARRATIVE_EVAL=1 in the scheme environment so a regular
     // smoke run stays fast. The report prints to stdout (and to
-    // AtlasLog) so the dev sees it next to the smoke pass / fail list.
-    if ProcessInfo.processInfo.environment["ATLAS_NARRATIVE_EVAL"] == "1" {
+    // KalsmritikoshLog) so the dev sees it next to the smoke pass / fail list.
+    if ProcessInfo.processInfo.environment["KALSMRITIKOSH_NARRATIVE_EVAL"] == "1" {
         let report = await NarrativeEvalKit.run(
             questions: NarrativeEvalKit.projectDeltaQuestions,
             brain: state.brain,
             events: events
         )
-        AtlasLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .public)")
+        KalsmritikoshLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .public)")
         print(report.markdownTable)
         // HISTORY F.4 — persist each run to Application Support so
         // the EvalDashboardView can render trend lines across runs.
@@ -336,7 +336,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
         let co = (try? await relRepo.count(ofKind: .coOccurs)) ?? 0
         let ev = (try? await relRepo.count(ofKind: .eventLinked)) ?? 0
-        AtlasLog.app.info("T4 edge mix: co_occurs=\(co, privacy: .public) event_linked=\(ev, privacy: .public)")
+        KalsmritikoshLog.app.info("T4 edge mix: co_occurs=\(co, privacy: .public) event_linked=\(ev, privacy: .public)")
 
         // 2-hop traversal: find any project entity matching "Delta" and
         // check whether traversal reaches an org whose name mentions
@@ -1262,9 +1262,9 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         assertionsFailed: failed
     )
     if result.ok {
-        AtlasLog.app.info("ProjectDelta smoke test PASSED (\(result.assertionsPassed.count, privacy: .public) checks)")
+        KalsmritikoshLog.app.info("ProjectDelta smoke test PASSED (\(result.assertionsPassed.count, privacy: .public) checks)")
     } else {
-        AtlasLog.app.error("ProjectDelta smoke test FAILED — \(result.assertionsFailed.joined(separator: "; "), privacy: .public)")
+        KalsmritikoshLog.app.error("ProjectDelta smoke test FAILED — \(result.assertionsFailed.joined(separator: "; "), privacy: .public)")
     }
     return result
 }
@@ -1275,7 +1275,7 @@ private func fixtureURLs() throws -> [URL] {
     let bundle = Bundle.main
     guard let resourcePath = bundle.resourcePath else {
         throw NSError(
-            domain: "atlas.smoke",
+            domain: "kalsmritikosh.smoke",
             code: 2,
             userInfo: [NSLocalizedDescriptionKey: "Bundle has no resource path."]
         )

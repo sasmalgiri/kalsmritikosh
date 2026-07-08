@@ -61,7 +61,7 @@ public actor PerformanceBenchmark {
             appropriateFor: nil,
             create: true
         ))?
-            .appendingPathComponent("AtlasChronicaMemora", isDirectory: true)
+            .appendingPathComponent("KalsmritikoshChronicaMemora", isDirectory: true)
             ?? FileManager.default.temporaryDirectory
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         // G2-SWIFT6 — actor init is implicitly nonisolated and can't
@@ -83,7 +83,7 @@ public actor PerformanceBenchmark {
     /// invokes this from CapabilityRegistry.bootstrap after registration.
     public func benchmark(_ provider: any ModelProvider) async {
         guard cached[provider.id] == nil else { return }
-        let prompt = "Atlas warmup. Reply with one short sentence."
+        let prompt = "Kalsmritikosh warmup. Reply with one short sentence."
         let start = Date()
         let memoryBefore = currentResidentMemory()
         let response = try? await provider.generate(

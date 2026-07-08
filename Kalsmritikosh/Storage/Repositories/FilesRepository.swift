@@ -3,7 +3,7 @@
 //  Kalsmritikosh
 //
 //  Row-level access to the `files` table. Tracks the raw on-disk
-//  identities Atlas has discovered; KnowledgeObjects link back here.
+//  identities Kalsmritikosh has discovered; KnowledgeObjects link back here.
 //
 
 import Foundation

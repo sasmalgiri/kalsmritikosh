@@ -2,7 +2,7 @@
 //  OnboardingView.swift
 //  Kalsmritikosh
 //
-//  First-run flow: introduces Atlas, surfaces detected hardware tier,
+//  First-run flow: introduces Kalsmritikosh, surfaces detected hardware tier,
 //  lists which capability tiers will be auto-recommended, and lets the
 //  user pick their first folder to index. Skippable; reappears only
 //  when no folders + no KOs exist.
@@ -65,7 +65,7 @@ public struct OnboardingView: View {
             Image(systemName: "books.vertical.fill")
                 .font(.system(size: 32))
                 .foregroundStyle(.tint)
-            Text("Welcome to Atlas")
+            Text("Welcome to Kalsmritikosh")
                 .font(.title.bold())
             Text("Your private knowledge operating system")
                 .font(.subheadline)
@@ -151,7 +151,7 @@ public struct OnboardingView: View {
     private var welcomeStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             bullet("Everything stays on your Mac. No cloud unless you opt in.")
-            bullet("Atlas ingests documents, emails, spreadsheets, presentations, images, audio, and video.")
+            bullet("Kalsmritikosh ingests documents, emails, spreadsheets, presentations, images, audio, and video.")
             bullet("It extracts entities, events, timelines, summaries, and a memory layer per project / person / company.")
             bullet("Ask any question — answers come back with cited evidence and a confidence score.")
         }
@@ -180,7 +180,7 @@ public struct OnboardingView: View {
                     .font(.callout.monospaced())
             }
             Divider().padding(.vertical, 8)
-            Text("Atlas will dynamically pick a model that fits your hardware. You can override in Settings later.")
+            Text("Kalsmritikosh will dynamically pick a model that fits your hardware. You can override in Settings later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -190,7 +190,7 @@ public struct OnboardingView: View {
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Pick your first folder").font(.headline)
-            Text("Choose a folder Atlas should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab.")
+            Text("Choose a folder Kalsmritikosh should monitor. Documents inside become searchable, summarizable, and answerable. You can add more later from the Sources tab.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520, alignment: .leading)
@@ -215,7 +215,7 @@ public struct OnboardingView: View {
                         .padding(.vertical, 4)
                 }
                 .controlSize(.small)
-                Text("Loads the bundled ProjectDelta fixture (~8 sample emails + contracts) so you can see Atlas reconstruct a project narrative without ingesting your own data first.")
+                Text("Loads the bundled ProjectDelta fixture (~8 sample emails + contracts) so you can see Kalsmritikosh reconstruct a project narrative without ingesting your own data first.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)

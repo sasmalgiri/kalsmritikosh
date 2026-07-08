@@ -44,7 +44,7 @@ import Foundation
 import OSLog
 
 public actor CausalDiscoverer: BackgroundService {
-    public let id = "atlas.causal.discover"
+    public let id = "kalsmritikosh.causal.discover"
 
     private let database: Database
     private let events: EventsRepository
@@ -85,12 +85,12 @@ public actor CausalDiscoverer: BackgroundService {
         self.threshold = threshold
         self.maxEventsPerPass = maxEventsPerPass
         self.intervalSeconds = intervalSeconds
-        self.lastRunStatus = LastRunStatus(serviceID: "atlas.causal.discover")
+        self.lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.causal.discover")
     }
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("CausalDiscoverer: starting (gap=\(self.maxGapDays, privacy: .public)d threshold=\(self.threshold, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("CausalDiscoverer: starting (gap=\(self.maxGapDays, privacy: .public)d threshold=\(self.threshold, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -132,7 +132,7 @@ public actor CausalDiscoverer: BackgroundService {
         do {
             candidates = try await events.recent(limit: maxEventsPerPass)
         } catch {
-            AtlasLog.knowledge.error("CausalDiscoverer: load events failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("CausalDiscoverer: load events failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard candidates.count >= 2 else { return 0 }
@@ -261,11 +261,11 @@ public actor CausalDiscoverer: BackgroundService {
                     try await links.insert(link)
                     emitted += 1
                 } catch {
-                    AtlasLog.knowledge.error("CausalDiscoverer: insert failed for \(a.id.uuidString.prefix(8), privacy: .public)→\(b.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.knowledge.error("CausalDiscoverer: insert failed for \(a.id.uuidString.prefix(8), privacy: .public)→\(b.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                 }
             }
         }
-        AtlasLog.knowledge.info("CausalDiscoverer: emitted \(emitted, privacy: .public) new links from \(sorted.count, privacy: .public) events")
+        KalsmritikoshLog.knowledge.info("CausalDiscoverer: emitted \(emitted, privacy: .public) new links from \(sorted.count, privacy: .public) events")
         lastRunStatus = LastRunStatus(
             serviceID: lastRunStatus.serviceID,
             startedAt: lastRunStatus.startedAt,

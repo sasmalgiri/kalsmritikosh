@@ -117,7 +117,7 @@ private nonisolated final class WatchHandle {
         }
         self.stream = s
         if let s {
-            FSEventStreamSetDispatchQueue(s, DispatchQueue(label: "atlas.fsevents"))
+            FSEventStreamSetDispatchQueue(s, DispatchQueue(label: "kalsmritikosh.fsevents"))
             FSEventStreamStart(s)
         }
     }

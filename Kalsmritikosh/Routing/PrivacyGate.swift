@@ -12,10 +12,10 @@ import Foundation
 public final class PrivacyGate: @unchecked Sendable {
     public nonisolated static let shared = PrivacyGate()
 
-    private let defaultsKey = "atlas.privacy.allowCloud"
-    private let queue = DispatchQueue(label: "atlas.privacy")
+    private let defaultsKey = "kalsmritikosh.privacy.allowCloud"
+    private let queue = DispatchQueue(label: "kalsmritikosh.privacy")
 
-    private let noLLMKey = "atlas.privacy.offlineNoLLM"
+    private let noLLMKey = "kalsmritikosh.privacy.offlineNoLLM"
 
     public nonisolated var allowCloudRouting: Bool {
         get { queue.sync { UserDefaults.standard.bool(forKey: defaultsKey) } }

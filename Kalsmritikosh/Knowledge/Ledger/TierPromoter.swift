@@ -27,7 +27,7 @@ import Foundation
 import OSLog
 
 public actor TierPromoter: BackgroundService {
-    public let id = "atlas.tier.promoter"
+    public let id = "kalsmritikosh.tier.promoter"
 
     private let enrichment: EnrichmentStatusRepository
     private let objects: KnowledgeObjectRepository
@@ -80,7 +80,7 @@ public actor TierPromoter: BackgroundService {
 
     public func start() async {
         guard watchTask == nil else { return }
-        AtlasLog.knowledge.info("TierPromoter watching (System 2 proactive tiering + hot-slice enrichment)")
+        KalsmritikoshLog.knowledge.info("TierPromoter watching (System 2 proactive tiering + hot-slice enrichment)")
         watchTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -145,7 +145,7 @@ public actor TierPromoter: BackgroundService {
         }
         scoreOffset += ids.count
         if scored > 0 {
-            AtlasLog.knowledge.info("TierPromoter scored \(scored, privacy: .public) object(s) [offset now \(self.scoreOffset, privacy: .public)/\(total, privacy: .public)]")
+            KalsmritikoshLog.knowledge.info("TierPromoter scored \(scored, privacy: .public) object(s) [offset now \(self.scoreOffset, privacy: .public)/\(total, privacy: .public)]")
         }
     }
 
@@ -154,7 +154,7 @@ public actor TierPromoter: BackgroundService {
     private func enrichPass() async {
         let hot = await enrichment.needingEnrichment(tier: .hot, limit: enrichBatch)
         guard !hot.isEmpty else { return }
-        AtlasLog.knowledge.info("TierPromoter: deep-enriching \(hot.count, privacy: .public) hot document(s)")
+        KalsmritikoshLog.knowledge.info("TierPromoter: deep-enriching \(hot.count, privacy: .public) hot document(s)")
 
         for record in hot {
             if !SystemActivity.isIdle(threshold: 5) { break }

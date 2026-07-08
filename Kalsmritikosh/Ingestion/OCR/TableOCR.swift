@@ -109,7 +109,7 @@ public actor TableOCR {
         let rowGroups = groupRows(boxes)
         let grid = assembleGrid(rowGroups: rowGroups, columnCenters: cols)
         let meanConf = boxes.isEmpty ? 0 : boxes.map(\.confidence).reduce(0, +) / Float(boxes.count)
-        AtlasLog.knowledge.info("TableOCR: \(grid.count, privacy: .public) rows × \(cols.count, privacy: .public) cols (deskew \(String(format: "%.1f", deskew), privacy: .public)°, conf \(String(format: "%.2f", meanConf), privacy: .public))")
+        KalsmritikoshLog.knowledge.info("TableOCR: \(grid.count, privacy: .public) rows × \(cols.count, privacy: .public) cols (deskew \(String(format: "%.1f", deskew), privacy: .public)°, conf \(String(format: "%.2f", meanConf), privacy: .public))")
         return .init(rows: grid, columnCount: cols.count, confidence: meanConf, deskewApplied: deskew)
     }
     #endif

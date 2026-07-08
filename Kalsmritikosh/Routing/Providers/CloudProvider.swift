@@ -140,12 +140,12 @@ public actor CloudProvider: ModelProvider {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            AtlasLog.routing.error("CloudProvider \(self.id, privacy: .public) request failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.routing.error("CloudProvider \(self.id, privacy: .public) request failed: \(String(describing: error), privacy: .public)")
             throw ModelProviderError.generationFailed(reason: "\(error)")
         }
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            AtlasLog.routing.error("CloudProvider \(self.id, privacy: .public) HTTP \(http.statusCode, privacy: .public): \(bodyStr, privacy: .public)")
+            KalsmritikoshLog.routing.error("CloudProvider \(self.id, privacy: .public) HTTP \(http.statusCode, privacy: .public): \(bodyStr, privacy: .public)")
             throw ModelProviderError.generationFailed(
                 reason: "HTTP \(http.statusCode): \(bodyStr.prefix(400))"
             )

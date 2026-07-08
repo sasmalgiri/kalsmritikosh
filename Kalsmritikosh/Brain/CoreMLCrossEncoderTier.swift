@@ -49,11 +49,11 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
     ) async -> [Double]? {
         guard !candidates.isEmpty else { return [] }
         guard let modelURL = locateModelURL() else {
-            AtlasLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) not bundled; pass-through")
+            KalsmritikoshLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) not bundled; pass-through")
             return nil
         }
         guard let tokenizer = BGETokenizer(maxLength: maxSequenceLength) else {
-            AtlasLog.brain.info("\(id, privacy: .public): tokenizer.json not bundled; pass-through")
+            KalsmritikoshLog.brain.info("\(id, privacy: .public): tokenizer.json not bundled; pass-through")
             return nil
         }
         let model: MLModel
@@ -64,7 +64,7 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
             }()
             model = try MLModel(contentsOf: compiledURL)
         } catch {
-            AtlasLog.brain.error("\(id, privacy: .public): model load failed: \(String(describing: error), privacy: .public); pass-through")
+            KalsmritikoshLog.brain.error("\(id, privacy: .public): model load failed: \(String(describing: error), privacy: .public); pass-through")
             return nil
         }
 
@@ -81,11 +81,11 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
                 )
                 scores.append(Self.sigmoid(logit))
             } catch {
-                AtlasLog.brain.error("\(id, privacy: .public): forward pass failed: \(String(describing: error), privacy: .public); 0.5 score")
+                KalsmritikoshLog.brain.error("\(id, privacy: .public): forward pass failed: \(String(describing: error), privacy: .public); 0.5 score")
                 scores.append(0.5)
             }
         }
-        AtlasLog.brain.info("\(id, privacy: .public): scored \(scores.count, privacy: .public) candidates")
+        KalsmritikoshLog.brain.info("\(id, privacy: .public): scored \(scores.count, privacy: .public) candidates")
         return scores
     }
 

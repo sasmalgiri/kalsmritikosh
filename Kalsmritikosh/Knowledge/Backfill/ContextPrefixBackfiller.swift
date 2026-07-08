@@ -25,7 +25,7 @@ import Foundation
 import OSLog
 
 public actor ContextPrefixBackfiller: BackgroundService {
-    public let id = "atlas.contextPrefix.backfill"
+    public let id = "kalsmritikosh.contextPrefix.backfill"
 
     private let chunks: ChunksRepository
     private let objects: KnowledgeObjectRepository
@@ -69,7 +69,7 @@ public actor ContextPrefixBackfiller: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("ContextPrefixBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("ContextPrefixBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -93,7 +93,7 @@ public actor ContextPrefixBackfiller: BackgroundService {
         do {
             pending = try await chunks.findChunksMissingContextPrefix(limit: batchSize)
         } catch {
-            AtlasLog.knowledge.error("ContextPrefixBackfiller: query failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("ContextPrefixBackfiller: query failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !pending.isEmpty else { return 0 }
@@ -103,7 +103,7 @@ public actor ContextPrefixBackfiller: BackgroundService {
             return await runFirstChunkCardPass(pending)
         }
 
-        AtlasLog.knowledge.info("ContextPrefixBackfiller: processing \(pending.count, privacy: .public) NULL chunks")
+        KalsmritikoshLog.knowledge.info("ContextPrefixBackfiller: processing \(pending.count, privacy: .public) NULL chunks")
 
         // Group by parent KO so we read each KO's content + KO-level
         // metadata only once, then iterate its chunks sequentially.
@@ -171,17 +171,17 @@ public actor ContextPrefixBackfiller: BackgroundService {
                         do {
                             try await vectors.upsert(chunkID: c.id, embedding: vector)
                         } catch {
-                            AtlasLog.knowledge.error("ContextPrefixBackfiller: re-embed failed for chunk \(c.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                            KalsmritikoshLog.knowledge.error("ContextPrefixBackfiller: re-embed failed for chunk \(c.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                         }
                     }
                     let updated = "Sections so far: \(result.text)\n" + runningContext
                     runningContext = String(updated.prefix(1_500))
                 } catch {
-                    AtlasLog.knowledge.error("ContextPrefixBackfiller: update failed for chunk \(c.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.knowledge.error("ContextPrefixBackfiller: update failed for chunk \(c.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                 }
             }
         }
-        AtlasLog.knowledge.info("ContextPrefixBackfiller: filled \(filled, privacy: .public) / \(pending.count, privacy: .public)")
+        KalsmritikoshLog.knowledge.info("ContextPrefixBackfiller: filled \(filled, privacy: .public) / \(pending.count, privacy: .public)")
         return filled
     }
 
@@ -230,15 +230,15 @@ public actor ContextPrefixBackfiller: BackgroundService {
                     do {
                         try await vectors.upsert(chunkID: first.id, embedding: vector)
                     } catch {
-                        AtlasLog.knowledge.error("ContextPrefixBackfiller(card): re-embed failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.knowledge.error("ContextPrefixBackfiller(card): re-embed failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                     }
                 }
             } catch {
-                AtlasLog.knowledge.error("ContextPrefixBackfiller(card): update failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("ContextPrefixBackfiller(card): update failed for \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
         if carded > 0 {
-            AtlasLog.knowledge.info("ContextPrefixBackfiller(card): carded \(carded, privacy: .public) file(s), one LLM call each")
+            KalsmritikoshLog.knowledge.info("ContextPrefixBackfiller(card): carded \(carded, privacy: .public) file(s), one LLM call each")
         }
         return carded
     }

@@ -64,7 +64,7 @@ public actor EventMutator {
         reason: String? = nil
     ) async throws {
         let nontargetSources = sourceIDs.filter { $0 != target.id }
-        try await database.exec("SAVEPOINT atlas_event_merge;")
+        try await database.exec("SAVEPOINT kalsmritikosh_event_merge;")
         do {
             // 1. Close versions on every source.
             let sourceEvents = try await events.findByIDs(nontargetSources)
@@ -124,11 +124,11 @@ public actor EventMutator {
                     [.uuid(src)]
                 )
             }
-            try await database.exec("RELEASE SAVEPOINT atlas_event_merge;")
+            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_merge;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT atlas_event_merge;")
-            try? await database.exec("RELEASE SAVEPOINT atlas_event_merge;")
-            AtlasLog.knowledge.error("EventMutator.merge: \(String(describing: error), privacy: .public)")
+            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_event_merge;")
+            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_merge;")
+            KalsmritikoshLog.knowledge.error("EventMutator.merge: \(String(describing: error), privacy: .public)")
             throw error
         }
     }
@@ -146,10 +146,10 @@ public actor EventMutator {
     ) async throws {
         precondition(parts.count >= 2, "Split requires at least two parts.")
         guard let original = try await events.findByIDs([eventID]).first else {
-            AtlasLog.knowledge.info("EventMutator.split: event \(eventID.uuidString.prefix(8), privacy: .public) not found")
+            KalsmritikoshLog.knowledge.info("EventMutator.split: event \(eventID.uuidString.prefix(8), privacy: .public) not found")
             return
         }
-        try await database.exec("SAVEPOINT atlas_event_split;")
+        try await database.exec("SAVEPOINT kalsmritikosh_event_split;")
         do {
             // 1. Record the original's final version.
             _ = try await versions.recordVersion(
@@ -197,11 +197,11 @@ public actor EventMutator {
                 [.uuid(eventID)]
             )
 
-            try await database.exec("RELEASE SAVEPOINT atlas_event_split;")
+            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_split;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT atlas_event_split;")
-            try? await database.exec("RELEASE SAVEPOINT atlas_event_split;")
-            AtlasLog.knowledge.error("EventMutator.split: \(String(describing: error), privacy: .public)")
+            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_event_split;")
+            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_split;")
+            KalsmritikoshLog.knowledge.error("EventMutator.split: \(String(describing: error), privacy: .public)")
             throw error
         }
     }

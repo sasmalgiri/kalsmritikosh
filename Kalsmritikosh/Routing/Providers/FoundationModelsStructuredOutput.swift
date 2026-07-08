@@ -83,7 +83,7 @@ extension FoundationModelsProvider {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {
             let instructions = systemPrompt
-                ?? "You are Atlas. Reply ONLY with citation-shaped claims; never invent IDs."
+                ?? "You are Kalsmritikosh. Reply ONLY with citation-shaped claims; never invent IDs."
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(
                 to: Prompt(prompt),

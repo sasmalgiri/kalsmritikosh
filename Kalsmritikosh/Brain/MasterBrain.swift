@@ -243,7 +243,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Atlas couldn't reconstruct that history.",
+                body: "Kalsmritikosh couldn't reconstruct that history.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -397,7 +397,7 @@ public actor MasterBrain {
     ///
     /// Quality-or-nothing: returns nil when no provider is available
     /// or no chunks were retrieved. The caller falls back to the
-    /// existing "Atlas couldn't reconstruct" refusal in those cases.
+    /// existing "Kalsmritikosh couldn't reconstruct" refusal in those cases.
     private func chunkBasedFallback(
         question: String,
         intent: UserIntent,
@@ -603,7 +603,7 @@ public actor MasterBrain {
         }
         // Stream finished without emitting .verified — defensive.
         return VerifiedAnswer(
-            body: "Atlas produced no terminal answer.",
+            body: "Kalsmritikosh produced no terminal answer.",
             citations: [],
             confidence: .zero,
             refused: true,
@@ -624,7 +624,7 @@ public actor MasterBrain {
             let verifier
         else {
             return VerifiedAnswer(
-                body: "Atlas hasn't finished booting yet.",
+                body: "Kalsmritikosh hasn't finished booting yet.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -637,7 +637,7 @@ public actor MasterBrain {
             intent = try await intentDetector.detect(question: question)
         } catch {
             return VerifiedAnswer(
-                body: "Atlas couldn't parse that question.",
+                body: "Kalsmritikosh couldn't parse that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -698,7 +698,7 @@ public actor MasterBrain {
             decision = try await router.route(intent: intent)
         } catch {
             return VerifiedAnswer(
-                body: "Atlas couldn't route that question.",
+                body: "Kalsmritikosh couldn't route that question.",
                 citations: [],
                 confidence: .zero,
                 refused: true,
@@ -746,7 +746,7 @@ public actor MasterBrain {
                 return rag
             }
             return VerifiedAnswer(
-                body: "Atlas couldn't verify a response.",
+                body: "Kalsmritikosh couldn't verify a response.",
                 citations: [],
                 confidence: .zero,
                 refused: true,

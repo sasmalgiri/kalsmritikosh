@@ -54,11 +54,11 @@ public struct InvestigationPlanner: Sendable {
         do {
             provider = try await capabilities.resolve(spec)
         } catch {
-            AtlasLog.app.info("InvestigationPlanner: no reasoning provider — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.info("InvestigationPlanner: no reasoning provider — \(String(describing: error), privacy: .public)")
             return nil
         }
         guard await provider.isAvailable() else {
-            AtlasLog.app.info("InvestigationPlanner: provider \(provider.id, privacy: .public) unavailable")
+            KalsmritikoshLog.app.info("InvestigationPlanner: provider \(provider.id, privacy: .public) unavailable")
             return nil
         }
 
@@ -76,13 +76,13 @@ public struct InvestigationPlanner: Sendable {
                 )
             )
         } catch {
-            AtlasLog.app.error("InvestigationPlanner: generate failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("InvestigationPlanner: generate failed — \(String(describing: error), privacy: .public)")
             return nil
         }
 
         let subs = Self.parseSubQuestions(raw)
         guard !subs.isEmpty else {
-            AtlasLog.app.info("InvestigationPlanner: parser found no sub-questions in response")
+            KalsmritikoshLog.app.info("InvestigationPlanner: parser found no sub-questions in response")
             return nil
         }
         let steps = subs.prefix(Self.maxSteps).map { InvestigationStep(question: $0) }

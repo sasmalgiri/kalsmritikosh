@@ -83,14 +83,14 @@ public actor SyntheticQuestionQueue {
     }
 
     private func drain() async {
-        AtlasLog.ingestion.info("SynthQQueue: drain start, pending=\(self.pending.count, privacy: .public)")
+        KalsmritikoshLog.ingestion.info("SynthQQueue: drain start, pending=\(self.pending.count, privacy: .public)")
         while !pending.isEmpty {
             if Task.isCancelled { break }
             let job = pending.removeFirst()
             await process(job)
         }
         isProcessing = false
-        AtlasLog.ingestion.info("SynthQQueue: drain complete")
+        KalsmritikoshLog.ingestion.info("SynthQQueue: drain complete")
     }
 
     private func process(_ job: Job) async {
@@ -125,7 +125,7 @@ public actor SyntheticQuestionQueue {
         do {
             try await repository.insertBatch(rows)
         } catch {
-            AtlasLog.ingestion.error("SynthQQueue: insertBatch failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("SynthQQueue: insertBatch failed: \(String(describing: error), privacy: .public)")
         }
         rows.removeAll(keepingCapacity: true)
     }

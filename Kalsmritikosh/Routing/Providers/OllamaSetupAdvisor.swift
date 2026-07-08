@@ -166,7 +166,7 @@ public enum OllamaSetupAdvisor {
                 action: .installOllama,
                 recommendedModel: suggestion,
                 ollamaInstallInstructions: installLines,
-                summary: "Atlas needs a local reasoning model to answer questions. Install Ollama, then pull \(suggestion.displayName) — it's the right fit for your \(formatGB(totalRAMBytes)) device."
+                summary: "Kalsmritikosh needs a local reasoning model to answer questions. Install Ollama, then pull \(suggestion.displayName) — it's the right fit for your \(formatGB(totalRAMBytes)) device."
             )
         }
 

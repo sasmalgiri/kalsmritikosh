@@ -29,7 +29,7 @@ import Foundation
 import OSLog
 
 public actor NarrativeSlotBackfiller: BackgroundService {
-    public let id = "atlas.narrativeSlots.backfill"
+    public let id = "kalsmritikosh.narrativeSlots.backfill"
 
     private let database: Database
     private let events: EventsRepository
@@ -60,7 +60,7 @@ public actor NarrativeSlotBackfiller: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("NarrativeSlotBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("NarrativeSlotBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -86,7 +86,7 @@ public actor NarrativeSlotBackfiller: BackgroundService {
         do {
             candidates = try await events.listEventsMissingNarrativeSlots(limit: batchSize)
         } catch {
-            AtlasLog.knowledge.error("NarrativeSlotBackfiller: list failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("NarrativeSlotBackfiller: list failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !candidates.isEmpty else { return 0 }
@@ -169,10 +169,10 @@ public actor NarrativeSlotBackfiller: BackgroundService {
                 try await events.setNarrativeSlots(slots, forEventID: event.id)
                 written += 1
             } catch {
-                AtlasLog.knowledge.error("NarrativeSlotBackfiller: write failed for \(event.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("NarrativeSlotBackfiller: write failed for \(event.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
-        AtlasLog.knowledge.info("NarrativeSlotBackfiller: filled slots for \(written, privacy: .public) of \(candidates.count, privacy: .public) events")
+        KalsmritikoshLog.knowledge.info("NarrativeSlotBackfiller: filled slots for \(written, privacy: .public) of \(candidates.count, privacy: .public) events")
         return written
     }
 }

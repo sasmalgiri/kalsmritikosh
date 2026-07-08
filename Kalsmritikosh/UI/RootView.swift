@@ -171,7 +171,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
 
 public struct RootView: View {
     @Environment(AppState.self) private var appState
-    @AppStorage("atlas.onboarding.shown") private var onboardingShown: Bool = false
+    @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
     @State private var selection: Destination? = .home
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles

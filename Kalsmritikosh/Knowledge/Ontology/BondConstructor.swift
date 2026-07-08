@@ -353,10 +353,10 @@ public actor BondConstructor {
                     await cache.noteBond(bond)
                 }
             }
-            AtlasLog.knowledge.debug("BondConstructor: KO \(context.objectID.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s), \(newlyWritten.count, privacy: .public) new")
+            KalsmritikoshLog.knowledge.debug("BondConstructor: KO \(context.objectID.uuidString.prefix(8), privacy: .public) wrote \(deduped.count, privacy: .public) bond(s), \(newlyWritten.count, privacy: .public) new")
             return deduped.count
         } catch {
-            AtlasLog.knowledge.error("BondConstructor: upsert failed for KO \(context.objectID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("BondConstructor: upsert failed for KO \(context.objectID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             return 0
         }
     }

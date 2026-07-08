@@ -7,7 +7,7 @@
 //  runs without piping markdown to a file by hand.
 //
 //  Reports are written as one JSON file per run under:
-//      Application Support/Atlas/eval/narrative/<iso8601>.json
+//      Application Support/Kalsmritikosh/eval/narrative/<iso8601>.json
 //
 //  The directory is created lazily; failures are non-fatal — the
 //  report still prints to stdout via SmokeTest's existing path. The
@@ -34,7 +34,7 @@ public actor NarrativeEvalReportStore {
             create: true
         )) ?? FileManager.default.temporaryDirectory
         self.directory = base
-            .appendingPathComponent("Atlas", isDirectory: true)
+            .appendingPathComponent("Kalsmritikosh", isDirectory: true)
             .appendingPathComponent("eval", isDirectory: true)
             .appendingPathComponent("narrative", isDirectory: true)
         let enc = JSONEncoder()
@@ -55,7 +55,7 @@ public actor NarrativeEvalReportStore {
         let url = directory.appendingPathComponent("\(stamp).json")
         let data = try encoder.encode(report)
         try data.write(to: url, options: .atomic)
-        AtlasLog.app.info("NarrativeEval: saved report \(url.lastPathComponent, privacy: .public)")
+        KalsmritikoshLog.app.info("NarrativeEval: saved report \(url.lastPathComponent, privacy: .public)")
     }
 
     /// Most-recent-first list, capped so the dashboard's table stays

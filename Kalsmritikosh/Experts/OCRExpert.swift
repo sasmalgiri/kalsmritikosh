@@ -105,11 +105,11 @@ public struct OCRExpert: Expert {
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.ocr")
         guard let provider = try? await capabilities.resolve(spec) else {
-            AtlasLog.brain.info("expert.ocr LLM: no provider resolved; using heuristic fallback")
+            KalsmritikoshLog.brain.info("expert.ocr LLM: no provider resolved; using heuristic fallback")
             return ([], 0)
         }
         guard await provider.isAvailable() else {
-            AtlasLog.brain.info("expert.ocr LLM: provider=\(provider.id, privacy: .public) unavailable; using heuristic fallback")
+            KalsmritikoshLog.brain.info("expert.ocr LLM: provider=\(provider.id, privacy: .public) unavailable; using heuristic fallback")
             return ([], 0)
         }
         // STRUCTURED-OUTPUT PATH (#7).
@@ -117,12 +117,12 @@ public struct OCRExpert: Expert {
             do {
                 let typed = try await fmProvider.respondClaims(
                     prompt: frame.prompt,
-                    systemPrompt: "You are Atlas. Use ONLY the evidence ids the prompt provides; never invent ids. Treat OCR text as potentially noisy."
+                    systemPrompt: "You are Kalsmritikosh. Use ONLY the evidence ids the prompt provides; never invent ids. Treat OCR text as potentially noisy."
                 )
-                AtlasLog.brain.info("expert.ocr LLM: produced \(typed.count) typed claims via @Generable")
+                KalsmritikoshLog.brain.info("expert.ocr LLM: produced \(typed.count) typed claims via @Generable")
                 return (typed, 0)
             } catch {
-                AtlasLog.brain.error("expert.ocr LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
+                KalsmritikoshLog.brain.error("expert.ocr LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
             }
         }
         do {
@@ -131,7 +131,7 @@ public struct OCRExpert: Expert {
                 options: GenerationOptions(maxTokens: 320, temperature: 0.2)
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
-            AtlasLog.brain.info("expert.ocr LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
+            KalsmritikoshLog.brain.info("expert.ocr LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
             let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
                     statement: p.text,
@@ -144,7 +144,7 @@ public struct OCRExpert: Expert {
             }
             return (claims, parsed.dropped)
         } catch {
-            AtlasLog.brain.error("expert.ocr LLM: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.brain.error("expert.ocr LLM: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public)")
             return ([], 0)
         }
     }

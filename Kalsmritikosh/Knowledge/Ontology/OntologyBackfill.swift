@@ -109,7 +109,7 @@ public actor OntologyBackfill {
                             stats.slotWritesRejected += 1
                         }
                     } catch {
-                        AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                         stats.entitiesSkipped += 1
                     }
                 } else {
@@ -157,7 +157,7 @@ public actor OntologyBackfill {
                             stats.slotWritesRejected += 1
                         }
                     } catch {
-                        AtlasLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.knowledge.error("OntologyBackfill: setFactType failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                         stats.eventsSkipped += 1
                     }
                 } else {
@@ -173,7 +173,7 @@ public actor OntologyBackfill {
             }
         }
 
-        AtlasLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public) cycles=\(entityCycles, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public) cycles=\(eventCycles, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
+        KalsmritikoshLog.knowledge.info("OntologyBackfill: entities classified=\(stats.entitiesClassified, privacy: .public) (slots=\(stats.entitySlotsWritten, privacy: .public)) skipped=\(stats.entitiesSkipped, privacy: .public) cycles=\(entityCycles, privacy: .public); events classified=\(stats.eventsClassified, privacy: .public) (slots=\(stats.eventSlotsWritten, privacy: .public)) skipped=\(stats.eventsSkipped, privacy: .public) cycles=\(eventCycles, privacy: .public); slot rejects=\(stats.slotWritesRejected, privacy: .public)")
         return stats
     }
 
@@ -202,7 +202,7 @@ public actor OntologyBackfill {
             verdict = validator.validate(type: factType, slots: slots)
         }
         if case .reject(let reasons) = verdict {
-            AtlasLog.knowledge.debug("OntologyBackfill: rejected entity \(entity.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
+            KalsmritikoshLog.knowledge.debug("OntologyBackfill: rejected entity \(entity.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
             return false
         }
         guard let json = encodeSlots(slots) else { return false }
@@ -210,7 +210,7 @@ public actor OntologyBackfill {
             try await entities.setSlotValues(json, forEntityID: entity.id)
             return true
         } catch {
-            AtlasLog.knowledge.error("OntologyBackfill: setSlotValues failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("OntologyBackfill: setSlotValues failed for entity \(entity.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             return false
         }
     }
@@ -229,7 +229,7 @@ public actor OntologyBackfill {
             verdict = validator.validate(type: factType, slots: slots)
         }
         if case .reject(let reasons) = verdict {
-            AtlasLog.knowledge.debug("OntologyBackfill: rejected event \(event.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
+            KalsmritikoshLog.knowledge.debug("OntologyBackfill: rejected event \(event.id.uuidString.prefix(8), privacy: .public) slots — \(reasons.joined(separator: "; "), privacy: .public)")
             return false
         }
         guard let json = encodeSlots(slots) else { return false }
@@ -237,7 +237,7 @@ public actor OntologyBackfill {
             try await events.setSlotValues(json, forEventID: event.id)
             return true
         } catch {
-            AtlasLog.knowledge.error("OntologyBackfill: setSlotValues failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("OntologyBackfill: setSlotValues failed for event \(event.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             return false
         }
     }

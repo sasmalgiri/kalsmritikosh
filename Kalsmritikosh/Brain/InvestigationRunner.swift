@@ -88,7 +88,7 @@ public actor InvestigationRunner {
                     do {
                         try await investigations.save(finalInvestigation)
                     } catch {
-                        AtlasLog.app.error("InvestigationRunner: persist failed — \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.app.error("InvestigationRunner: persist failed — \(String(describing: error), privacy: .public)")
                     }
                 }
                 continuation.yield(.finished(finalInvestigation))
@@ -128,7 +128,7 @@ public actor InvestigationRunner {
         do {
             provider = try await capabilities.resolve(spec)
         } catch {
-            AtlasLog.app.info("InvestigationRunner.synthesize: no reasoning provider — falling back to concatenation")
+            KalsmritikoshLog.app.info("InvestigationRunner.synthesize: no reasoning provider — falling back to concatenation")
             return Self.deterministicFallback(question: question, pairs: nonEmpty)
         }
         guard await provider.isAvailable() else {
@@ -171,7 +171,7 @@ public actor InvestigationRunner {
                 ? Self.deterministicFallback(question: question, pairs: nonEmpty)
                 : cleaned
         } catch {
-            AtlasLog.app.error("InvestigationRunner.synthesize: generate failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("InvestigationRunner.synthesize: generate failed — \(String(describing: error), privacy: .public)")
             return Self.deterministicFallback(question: question, pairs: nonEmpty)
         }
     }

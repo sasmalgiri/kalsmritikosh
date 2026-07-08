@@ -21,7 +21,7 @@ import Foundation
 import OSLog
 
 public actor QualityTierBackfiller: BackgroundService {
-    public let id = "atlas.qualityTier.backfill"
+    public let id = "kalsmritikosh.qualityTier.backfill"
 
     private let database: Database
     private let intervalSeconds: TimeInterval
@@ -40,7 +40,7 @@ public actor QualityTierBackfiller: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("QualityTierBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("QualityTierBackfiller: starting (interval=\(self.intervalSeconds, privacy: .public)s, batch=\(self.batchSize, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -80,7 +80,7 @@ public actor QualityTierBackfiller: BackgroundService {
                 return (id, value, kind)
             }
         } catch {
-            AtlasLog.knowledge.error("QualityTierBackfiller: query failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("QualityTierBackfiller: query failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !candidates.isEmpty else { return 0 }
@@ -111,7 +111,7 @@ public actor QualityTierBackfiller: BackgroundService {
                     promoted += 1
                     continue
                 } catch {
-                    AtlasLog.knowledge.error("QualityTierBackfiller: promote failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.knowledge.error("QualityTierBackfiller: promote failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                 }
             }
             // T2 → T3 demotion: shape-only rules; anything the classifier
@@ -129,11 +129,11 @@ public actor QualityTierBackfiller: BackgroundService {
                 )
                 demoted += 1
             } catch {
-                AtlasLog.knowledge.error("QualityTierBackfiller: update failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("QualityTierBackfiller: update failed for \(id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
         if promoted > 0 || demoted > 0 {
-            AtlasLog.knowledge.info("QualityTierBackfiller: promoted \(promoted, privacy: .public) T2→T1, demoted \(demoted, privacy: .public) T2→T3 of \(candidates.count, privacy: .public) candidates")
+            KalsmritikoshLog.knowledge.info("QualityTierBackfiller: promoted \(promoted, privacy: .public) T2→T1, demoted \(demoted, privacy: .public) T2→T3 of \(candidates.count, privacy: .public) candidates")
         }
         return promoted + demoted
     }
@@ -172,9 +172,9 @@ public actor QualityTierBackfiller: BackgroundService {
                 }
             }
         } catch {
-            AtlasLog.knowledge.error("QualityTierBackfiller: header scan failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("QualityTierBackfiller: header scan failed — \(String(describing: error), privacy: .public)")
         }
-        AtlasLog.knowledge.info("QualityTierBackfiller: collected \(out.count, privacy: .public) structured-header values for promotion")
+        KalsmritikoshLog.knowledge.info("QualityTierBackfiller: collected \(out.count, privacy: .public) structured-header values for promotion")
         return out
     }
 }

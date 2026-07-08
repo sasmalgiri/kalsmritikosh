@@ -159,7 +159,7 @@ public actor LLMSlotExtractor {
             let response = try await provider.generate(prompt: prompt, options: options)
             return parseJSON(response)
         } catch {
-            AtlasLog.knowledge.error("LLMSlotExtractor: provider call failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("LLMSlotExtractor: provider call failed — \(String(describing: error), privacy: .public)")
             return [:]
         }
     }

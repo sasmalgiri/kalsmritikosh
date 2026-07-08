@@ -10,7 +10,7 @@ Kalsmritikosh is designed to ship via two paths:
 
 1. **Mac App Store** — strict sandbox, no Full Disk Access. Optional
    loaders (iMessage, browser history) work only when the user
-   manually copies the source SQLite file into an Atlas-watched
+   manually copies the source SQLite file into an Kalsmritikosh-watched
    folder.
 2. **Developer ID + notarization** — same binary, same flags,
    distributed outside the App Store. With Full Disk Access granted
@@ -97,7 +97,7 @@ Resources/Fixtures/AppReviewDemo/
   │   ├── invoice-001-2024-02-15.eml
   │   └── delivery-confirmation-2024-03-01.eml
   ├── docs/
-  │   ├── Project_Atlas_Brief.pdf
+  │   ├── Project_Kalsmritikosh_Brief.pdf
   │   └── Contract_v2.pdf
   └── images/
       └── meeting-whiteboard.png
@@ -150,7 +150,7 @@ Plus an eval-gate CI workflow that fails the build when:
    `NSLocalNetworkUsageDescription` string above is what appears.
 2. **Folder pickers**: NSOpenPanel prompts the user per-folder. The
    first ingest after install will trigger one prompt per root.
-3. **Background ingest**: Atlas does NOT use BGTaskScheduler or
+3. **Background ingest**: Kalsmritikosh does NOT use BGTaskScheduler or
    continuous capture. All work runs only while the app is open.
 4. **Crash logs**: enable symbolication uploads in the Organizer
    so App Store reviewers can attach trace data.

@@ -539,7 +539,7 @@ public struct AskView: View {
                 self.inputFocused = true
             }
         } catch {
-            AtlasLog.ui.error("Failed to start conversation: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ui.error("Failed to start conversation: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -649,7 +649,7 @@ public struct AskView: View {
             options: GenerationOptions(
                 maxTokens: 400,
                 temperature: 0.4,
-                systemPrompt: "You are Atlas. Answer concisely from context. Verified, cited evidence will arrive once the brain finishes."
+                systemPrompt: "You are Kalsmritikosh. Answer concisely from context. Verified, cited evidence will arrive once the brain finishes."
             )
         )
         do {
@@ -669,14 +669,14 @@ public struct AskView: View {
                 }
             }
         } catch {
-            AtlasLog.ui.debug("Stream preview ended early: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ui.debug("Stream preview ended early: \(String(describing: error), privacy: .public)")
         }
     }
 
     private func renderAnswer(_ answer: VerifiedAnswer) -> String {
         var lines: [String] = []
         if answer.refused {
-            lines.append("Atlas can't ground an answer to that yet.")
+            lines.append("Kalsmritikosh can't ground an answer to that yet.")
             if let reason = answer.refusalReason { lines.append("Reason: \(reason)") }
         } else {
             lines.append(answer.body)

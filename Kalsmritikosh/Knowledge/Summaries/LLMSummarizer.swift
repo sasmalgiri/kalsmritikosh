@@ -106,14 +106,14 @@ public actor LLMSummarizer: Summarizer {
                     options: GenerationOptions(
                         maxTokens: targetTokens,
                         temperature: 0.25,
-                        systemPrompt: "You write precise, evidence-grounded summaries for the Atlas knowledge OS."
+                        systemPrompt: "You write precise, evidence-grounded summaries for the Kalsmritikosh knowledge OS."
                     )
                 )
                 if !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     return response
                 }
             } catch {
-                AtlasLog.knowledge.error("LLM summarization failed: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("LLM summarization failed: \(String(describing: error), privacy: .public)")
             }
         }
 

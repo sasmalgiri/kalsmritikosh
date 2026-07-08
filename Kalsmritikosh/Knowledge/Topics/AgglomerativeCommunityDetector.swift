@@ -36,7 +36,7 @@ import Foundation
 import OSLog
 
 public actor AgglomerativeCommunityDetector: BackgroundService {
-    public let id = "atlas.community.detect"
+    public let id = "kalsmritikosh.community.detect"
 
     private let database: Database
     private let intervalSeconds: TimeInterval
@@ -50,7 +50,7 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
     /// community.
     private let maxCommunitySize: Int
     private var runTask: Task<Void, Never>?
-    private var lastRunStatus = LastRunStatus(serviceID: "atlas.community.detect")
+    private var lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.community.detect")
     public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
@@ -67,7 +67,7 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("AgglomerativeCommunityDetector: starting (interval=\(self.intervalSeconds, privacy: .public)s, minMergeWeight=\(self.minMergeWeight, privacy: .public), maxCommunitySize=\(self.maxCommunitySize, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("AgglomerativeCommunityDetector: starting (interval=\(self.intervalSeconds, privacy: .public)s, minMergeWeight=\(self.minMergeWeight, privacy: .public), maxCommunitySize=\(self.maxCommunitySize, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             // Boot-warmup window — same rationale as
@@ -134,11 +134,11 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
                 return (a, b, Int(w))
             }
         } catch {
-            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: load edges failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: load edges failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !edges.isEmpty else {
-            AtlasLog.knowledge.info("AgglomerativeCommunityDetector: no edges in graph; skipping")
+            KalsmritikoshLog.knowledge.info("AgglomerativeCommunityDetector: no edges in graph; skipping")
             return 0
         }
 
@@ -207,7 +207,7 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         let ts = started.timeIntervalSince1970
         var insertedRows = 0
         var insertFailures = 0
-        let savepointName = "atlas_communities_write"
+        let savepointName = "kalsmritikosh_communities_write"
         do {
             try await database.exec("SAVEPOINT \(savepointName);")
             try await database.exec("DELETE FROM entity_communities WHERE level = ?;", [.integer(level0)])
@@ -224,7 +224,7 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
                     } catch {
                         insertFailures += 1
                         if insertFailures <= 3 {
-                            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: insert failed for member \(member.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: insert failed for member \(member.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                         }
                     }
                 }
@@ -234,22 +234,22 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
             if insertedRows == 0 {
                 try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
                 try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
-                AtlasLog.knowledge.error("AgglomerativeCommunityDetector: ALL inserts failed (\(insertFailures, privacy: .public) failures); kept previous communities table contents")
+                KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: ALL inserts failed (\(insertFailures, privacy: .public) failures); kept previous communities table contents")
                 return 0
             }
             try await database.exec("RELEASE SAVEPOINT \(savepointName);")
         } catch {
             try? await database.exec("ROLLBACK TO SAVEPOINT \(savepointName);")
             try? await database.exec("RELEASE SAVEPOINT \(savepointName);")
-            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: write block failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: write block failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         if insertFailures > 0 {
-            AtlasLog.knowledge.error("AgglomerativeCommunityDetector: \(insertFailures, privacy: .public) of \(insertedRows + insertFailures, privacy: .public) inserts failed (likely FK violations from cooccurrence edges pointing at deleted entity ids)")
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: \(insertFailures, privacy: .public) of \(insertedRows + insertFailures, privacy: .public) inserts failed (likely FK violations from cooccurrence edges pointing at deleted entity ids)")
         }
 
         let elapsed = Int(Date().timeIntervalSince(started))
-        AtlasLog.knowledge.info("AgglomerativeCommunityDetector: built \(membership.count, privacy: .public) communities from \(edges.count, privacy: .public) edges (merges=\(mergeCount, privacy: .public)) in \(elapsed, privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("AgglomerativeCommunityDetector: built \(membership.count, privacy: .public) communities from \(edges.count, privacy: .public) edges (merges=\(mergeCount, privacy: .public)) in \(elapsed, privacy: .public)s")
         lastRunStatus = LastRunStatus(
             serviceID: lastRunStatus.serviceID,
             startedAt: lastRunStatus.startedAt,

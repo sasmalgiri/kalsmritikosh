@@ -49,7 +49,7 @@ public actor MemoryHashCache {
     public func warm(memory: MemoryRepository, pageSize: Int = 2_000) async {
         map.removeAll(keepingCapacity: true)
         let started = Date()
-        AtlasLog.knowledge.info("MemoryHashCache: warm starting")
+        KalsmritikoshLog.knowledge.info("MemoryHashCache: warm starting")
         var offset = 0
         var total = 0
         while true {
@@ -57,7 +57,7 @@ public actor MemoryHashCache {
             do {
                 page = try await memory.listAll(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("MemoryHashCache: enumerate failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("MemoryHashCache: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
@@ -71,7 +71,7 @@ public actor MemoryHashCache {
         let elapsed = Date().timeIntervalSince(started)
         lastStats = Stats(memoriesLoaded: total, warmSeconds: elapsed)
         warmed = true
-        AtlasLog.knowledge.info("MemoryHashCache: warmed memories=\(total, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("MemoryHashCache: warmed memories=\(total, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
     }
 
     // MARK: - Reads

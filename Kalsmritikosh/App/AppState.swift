@@ -361,7 +361,7 @@ public final class AppState {
             let db = try Database(url: resolvedDBURL)
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
-            AtlasLog.storage.info("Database open at \(db.url.path, privacy: .public)")
+            KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .public)")
 
             // HNSW ANN index — built lazily after boot. Pass it to
             // SQLiteVectorStore so `nearest()` takes the index path
@@ -387,7 +387,7 @@ public final class AppState {
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
-            AtlasLog.routing.info("Hardware: \(hardware.chipName, privacy: .public), tier \(hardware.tier.rawValue, privacy: .public), \(hardware.totalRAMBytes) bytes RAM")
+            KalsmritikoshLog.routing.info("Hardware: \(hardware.chipName, privacy: .public), tier \(hardware.tier.rawValue, privacy: .public), \(hardware.totalRAMBytes) bytes RAM")
             let benchmark = PerformanceBenchmark(hardwareProfile: hardware)
             let capabilities = CapabilityRegistry(
                 hardware: hardware,
@@ -423,7 +423,7 @@ public final class AppState {
             let gguf = GGUFRegistry()
             let ggufEntries = await gguf.load()
             if !ggufEntries.isEmpty {
-                AtlasLog.app.info("GGUF registry: \(ggufEntries.count, privacy: .public) user file(s)")
+                KalsmritikoshLog.app.info("GGUF registry: \(ggufEntries.count, privacy: .public) user file(s)")
                 for entry in ggufEntries {
                     let manifest = ModelManifest(
                         id: entry.id,
@@ -451,7 +451,7 @@ public final class AppState {
             // other choices.
             let mlxModels = MLXDiscovery.list()
             if !mlxModels.isEmpty {
-                AtlasLog.app.info("MLX discovery: \(mlxModels.count, privacy: .public) user checkpoint(s)")
+                KalsmritikoshLog.app.info("MLX discovery: \(mlxModels.count, privacy: .public) user checkpoint(s)")
                 for m in mlxModels {
                     let manifest = ModelManifest(
                         id: m.id,
@@ -501,7 +501,7 @@ public final class AppState {
                 totalRAMBytes: hardware.totalRAMBytes
             )
             if setupSuggestion.action != .nothingNeeded {
-                AtlasLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
+                KalsmritikoshLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
             }
             if detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(
@@ -514,7 +514,7 @@ public final class AppState {
                     tier: .medium
                 ))
             } else {
-                AtlasLog.app.info("Ollama discovery: \(detectedOllama.count, privacy: .public) model(s) installed")
+                KalsmritikoshLog.app.info("Ollama discovery: \(detectedOllama.count, privacy: .public) model(s) installed")
                 for m in detectedOllama {
                     // Pull the actual context window from /api/show
                     // when available; fall back to a family default.
@@ -522,7 +522,7 @@ public final class AppState {
                         ?? OllamaDiscovery.defaultContextWindow(forFamily: m.family)
                     let providerID = "provider.local.network.\(m.name)"
                     let displayName = "Ollama \(m.name)"
-                    AtlasLog.app.info("Registering \(displayName, privacy: .public) — ram=\(m.estimatedRAMBytes, privacy: .public) tier=\(m.tier.rawValue, privacy: .public) ctx=\(ctx, privacy: .public)")
+                    KalsmritikoshLog.app.info("Registering \(displayName, privacy: .public) — ram=\(m.estimatedRAMBytes, privacy: .public) tier=\(m.tier.rawValue, privacy: .public) ctx=\(ctx, privacy: .public)")
                     await capabilities.register(OllamaProvider(
                         id: providerID,
                         baseURL: ollamaBase,
@@ -546,10 +546,10 @@ public final class AppState {
             let cloudRegistry = CloudEndpointRegistry()
             let cloudEntries = await cloudRegistry.load()
             if !cloudEntries.isEmpty {
-                AtlasLog.app.info("Cloud BYO: \(cloudEntries.count, privacy: .public) endpoint(s)")
+                KalsmritikoshLog.app.info("Cloud BYO: \(cloudEntries.count, privacy: .public) endpoint(s)")
                 for endpoint in cloudEntries {
                     guard let key = await cloudRegistry.apiKey(for: endpoint.id) else {
-                        AtlasLog.app.warning("Cloud BYO: missing keychain entry for \(endpoint.id, privacy: .public); skipping")
+                        KalsmritikoshLog.app.warning("Cloud BYO: missing keychain entry for \(endpoint.id, privacy: .public); skipping")
                         continue
                     }
                     await capabilities.register(CloudProvider(endpoint: endpoint, apiKey: key))
@@ -580,7 +580,7 @@ public final class AppState {
                         systemPrompt: nil
                     )
                 )
-                AtlasLog.app.info("Reasoning provider pre-warmed: \(provider.id, privacy: .public)")
+                KalsmritikoshLog.app.info("Reasoning provider pre-warmed: \(provider.id, privacy: .public)")
             }
 
             // ── Knowledge ────────────────────────────────────────────
@@ -792,9 +792,9 @@ public final class AppState {
                 modelRequiredRAMBytes: resolvedManifest.requiredRAM,
                 totalRAMBytes: Int(hardware.totalRAMBytes)
             )
-            AtlasLog.app.info("Chunker target=\(sizing.target, privacy: .public) chars (modelTokens=\(resolvedManifest.tokens, privacy: .public), modelRAM=\(resolvedManifest.requiredRAM, privacy: .public) bytes, deviceRAM=\(hardware.totalRAMBytes, privacy: .public) bytes)")
+            KalsmritikoshLog.app.info("Chunker target=\(sizing.target, privacy: .public) chars (modelTokens=\(resolvedManifest.tokens, privacy: .public), modelRAM=\(resolvedManifest.requiredRAM, privacy: .public) bytes, deviceRAM=\(hardware.totalRAMBytes, privacy: .public) bytes)")
             for w in sizing.warnings {
-                AtlasLog.app.warning("Sizing warning: \(w, privacy: .public)")
+                KalsmritikoshLog.app.warning("Sizing warning: \(w, privacy: .public)")
             }
             let dynamicChunker = Chunker(targetCharacterCount: sizing.target)
 
@@ -814,7 +814,7 @@ public final class AppState {
                 currentReasoning: resolvedReasoningManifest,
                 availableReasoning: allReasoningManifests
             )
-            AtlasLog.app.info("ModelChoiceAdvice severity=\(advice.severity.rawValue, privacy: .public): \(advice.summary, privacy: .public)")
+            KalsmritikoshLog.app.info("ModelChoiceAdvice severity=\(advice.severity.rawValue, privacy: .public): \(advice.summary, privacy: .public)")
 
             // Phase J.13 — created before IngestCoordinator so it can
             // be passed in; LiveMetrics polls it once it starts.
@@ -926,7 +926,7 @@ public final class AppState {
             )
             await updater.start()
             if !distillOnIngest {
-                AtlasLog.app.info("Ingest-time memory distillation OFF (ledger-first default — memory warmed on demand)")
+                KalsmritikoshLog.app.info("Ingest-time memory distillation OFF (ledger-first default — memory warmed on demand)")
             }
 
             // Hand the engine everything its maintenance needs, then
@@ -956,7 +956,7 @@ public final class AppState {
                 }
             )
             await engine.activate(engineContext)
-            AtlasLog.app.info("System engine active: \(engine.mode.rawValue, privacy: .public)")
+            KalsmritikoshLog.app.info("System engine active: \(engine.mode.rawValue, privacy: .public)")
 
             // On-device name self-correction — mode-independent, idle-gated.
             // Folds OCR/typo name variants into the corroborated spelling
@@ -1003,9 +1003,9 @@ public final class AppState {
                 )
                 await contextPrefixBackfiller.start()
                 startedBackfiller = contextPrefixBackfiller
-                AtlasLog.app.info("ContextPrefixBackfiller started (mode: \(firstChunkCardOnly ? "document-card/file" : "full sweep", privacy: .public))")
+                KalsmritikoshLog.app.info("ContextPrefixBackfiller started (mode: \(firstChunkCardOnly ? "document-card/file" : "full sweep", privacy: .public))")
             } else {
-                AtlasLog.app.info("ContextPrefixBackfiller disabled")
+                KalsmritikoshLog.app.info("ContextPrefixBackfiller disabled")
             }
 
             // HISTORY Phase A.8 — periodic re-tier of pre-Phase-A
@@ -1109,7 +1109,7 @@ public final class AppState {
                     return stats
                 }()
                 _ = await (bondWarm, memoryWarm, timelineWarm, trieWarm, hnswWarm)
-                AtlasLog.app.info("All five in-memory caches warmed (bond + memory + timeline + trie + HNSW)")
+                KalsmritikoshLog.app.info("All five in-memory caches warmed (bond + memory + timeline + trie + HNSW)")
             }
 
             let watcher = FolderWatcher()
@@ -1173,7 +1173,7 @@ public final class AppState {
                                         do {
                                             _ = try await ingest.ingest(fileAt: url)
                                         } catch {
-                                            AtlasLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                                         }
                                     }
                                 }
@@ -1311,7 +1311,7 @@ public final class AppState {
             self.brain = brain
             self.ingest = ingest
             self.phase = .ready
-            AtlasLog.app.info("AppState booted successfully")
+            KalsmritikoshLog.app.info("AppState booted successfully")
 
             // Post-boot auto-reingest: if a bookmark exists but the DB
             // has zero file rows under that root (recovered from a wiped
@@ -1333,10 +1333,10 @@ public final class AppState {
                     await self?.autoReingestEmptyRoots()
                 }
             } else {
-                AtlasLog.app.info("AppState: auto-reingest suppressed (eval / smoke boot)")
+                KalsmritikoshLog.app.info("AppState: auto-reingest suppressed (eval / smoke boot)")
             }
         } catch {
-            AtlasLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("AppState boot failed: \(String(describing: error), privacy: .public)")
             self.phase = .failed("\(error)")
         }
     }
@@ -1408,7 +1408,7 @@ public final class AppState {
                 corpusSnapshotID: snapshot?.id
             )
         } catch {
-            AtlasLog.app.error("recordAnswer failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("recordAnswer failed: \(String(describing: error), privacy: .public)")
         }
 
         // Hand the shipped answer to the active system engine. System 2
@@ -1516,9 +1516,9 @@ public final class AppState {
                     )
                     claimed.insert(loser.id)
                     folded += 1
-                    AtlasLog.knowledge.info("Reconcile: '\(loser.value, privacy: .public)' → variant of '\(winner.value, privacy: .public)'")
+                    KalsmritikoshLog.knowledge.info("Reconcile: '\(loser.value, privacy: .public)' → variant of '\(winner.value, privacy: .public)'")
                 } catch {
-                    AtlasLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -1601,7 +1601,7 @@ public final class AppState {
         }
 
         await gapNodes.insertMany(found)
-        AtlasLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent)")
         return found.count
     }
 
@@ -1618,7 +1618,7 @@ public final class AppState {
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()
         self.proactiveContradictionCount = openCount
-        AtlasLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflicting-date pair(s)")
+        KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflicting-date pair(s)")
         return found.count
     }
 
@@ -1702,7 +1702,7 @@ public final class AppState {
         guard let ingest else { return }
         let nouns = Self.extractNouns(from: question)
         guard !nouns.isEmpty else { return }
-        AtlasLog.ingestion.info("Boost ingest for nouns: \(nouns.joined(separator: ", "), privacy: .public)")
+        KalsmritikoshLog.ingestion.info("Boost ingest for nouns: \(nouns.joined(separator: ", "), privacy: .public)")
         var collected: [URL] = []
         for root in bookmarks.roots {
             if collected.count >= Self.maxBoostedFilesPerQuestion { break }
@@ -1713,10 +1713,10 @@ public final class AppState {
             collected.append(contentsOf: matches)
         }
         guard !collected.isEmpty else {
-            AtlasLog.ingestion.info("Boost: no filename matches found")
+            KalsmritikoshLog.ingestion.info("Boost: no filename matches found")
             return
         }
-        AtlasLog.ingestion.info("Boost: queueing \(collected.count, privacy: .public) file(s) for priority ingest")
+        KalsmritikoshLog.ingestion.info("Boost: queueing \(collected.count, privacy: .public) file(s) for priority ingest")
         for matchURL in collected {
             // Detached so the per-file ingest runs on the cooperative
             // pool and the boost path doesn't pile MainActor tasks
@@ -1795,7 +1795,7 @@ public final class AppState {
         "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
         "january", "february", "march", "april", "may", "june",
         "july", "august", "september", "october", "november", "december",
-        "atlas", "archive", "files", "file", "document", "documents",
+        "kalsmritikosh", "archive", "files", "file", "document", "documents",
         "answer", "question", "questions", "data"
     ]
 
@@ -1886,7 +1886,7 @@ public final class AppState {
                 bookmarks.stopAccessing(url)
                 continue
             }
-            AtlasLog.app.info("Auto-reingest: root \(root.displayName, privacy: .public) has 0 files in DB — kicking off bulk ingest")
+            KalsmritikoshLog.app.info("Auto-reingest: root \(root.displayName, privacy: .public) has 0 files in DB — kicking off bulk ingest")
             rootsToIngest.append((root.displayName, url))
         }
 
@@ -1904,7 +1904,7 @@ public final class AppState {
                 }
             }
         }
-        AtlasLog.app.info("Auto-reingest pass complete")
+        KalsmritikoshLog.app.info("Auto-reingest pass complete")
     }
 
     @discardableResult
@@ -1962,7 +1962,7 @@ public final class AppState {
                     _ = try await ingest.ingest(fileAt: next)
                     if let counter { await counter.increment() }
                 } catch {
-                    AtlasLog.ingestion.error("\(label, privacy: .public) failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
         }

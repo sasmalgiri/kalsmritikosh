@@ -115,7 +115,7 @@ public actor InMemoryBondGraph {
         seenBondIDs.removeAll(keepingCapacity: true)
 
         let started = Date()
-        AtlasLog.knowledge.info("InMemoryBondGraph: warm starting")
+        KalsmritikoshLog.knowledge.info("InMemoryBondGraph: warm starting")
 
         // 1. Bonds — paged enumeration.
         var bondOffset = 0
@@ -125,7 +125,7 @@ public actor InMemoryBondGraph {
             do {
                 page = try await bonds.listAll(offset: bondOffset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("InMemoryBondGraph: bond enumerate failed at offset \(bondOffset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("InMemoryBondGraph: bond enumerate failed at offset \(bondOffset, privacy: .public) — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
@@ -165,7 +165,7 @@ public actor InMemoryBondGraph {
             evictions: evictionCount
         )
         warmed = true
-        AtlasLog.knowledge.info("InMemoryBondGraph: warmed bonds=\(totalBonds, privacy: .public) typed=\(totalTyped, privacy: .public) outBuckets=\(self.outgoingMap.count, privacy: .public) inBuckets=\(self.incomingMap.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("InMemoryBondGraph: warmed bonds=\(totalBonds, privacy: .public) typed=\(totalTyped, privacy: .public) outBuckets=\(self.outgoingMap.count, privacy: .public) inBuckets=\(self.incomingMap.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
     }
 
     private func paged(entities: EntitiesRepository, pageSize: Int) async -> [(UUID, String)] {
@@ -285,6 +285,6 @@ public actor InMemoryBondGraph {
             bucketAccess.removeValue(forKey: id)
             evictionCount += 1
         }
-        AtlasLog.knowledge.debug("InMemoryBondGraph: LRU evicted \(evictCount, privacy: .public) cold buckets (total now \(self.outgoingMap.count + self.incomingMap.count, privacy: .public))")
+        KalsmritikoshLog.knowledge.debug("InMemoryBondGraph: LRU evicted \(evictCount, privacy: .public) cold buckets (total now \(self.outgoingMap.count + self.incomingMap.count, privacy: .public))")
     }
 }

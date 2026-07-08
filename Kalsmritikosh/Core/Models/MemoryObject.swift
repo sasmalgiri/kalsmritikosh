@@ -4,7 +4,7 @@
 //
 //  The Knowledge Memory layer. One MemoryObject per subject (project,
 //  organization, person, deliverable, topic). Holds the distilled state
-//  of everything Atlas knows about that subject so the brain can answer
+//  of everything Kalsmritikosh knows about that subject so the brain can answer
 //  questions without re-reading hundreds of source documents.
 //
 //  Persisted as the latest snapshot per subject; mutations append a

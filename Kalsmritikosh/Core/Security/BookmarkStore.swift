@@ -19,7 +19,7 @@ import Observation
 public final class BookmarkStore {
     public static let shared = BookmarkStore()
 
-    private let defaultsKey = "atlas.bookmarks"
+    private let defaultsKey = "kalsmritikosh.bookmarks"
     public private(set) var roots: [Root] = []
 
     public struct Root: Codable, Identifiable, Hashable, Sendable {

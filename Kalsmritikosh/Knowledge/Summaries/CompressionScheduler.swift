@@ -34,7 +34,7 @@ public enum MaintenanceEvent: Sendable, Equatable {
 }
 
 public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundService {
-    public let id = "atlas.compression.idle"
+    public let id = "kalsmritikosh.compression.idle"
 
     private let summarizer: Summarizer
     private let memoryRepo: MemoryRepository
@@ -82,7 +82,7 @@ public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundServic
 
     public func start() async {
         guard watchTask == nil else { return }
-        AtlasLog.knowledge.info("Idle maintenance watching (idleThreshold=\(self.idleThresholdProvider(), privacy: .public)s)")
+        KalsmritikoshLog.knowledge.info("Idle maintenance watching (idleThreshold=\(self.idleThresholdProvider(), privacy: .public)s)")
         watchTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -121,7 +121,7 @@ public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundServic
     private func runIdlePass() async {
         wasInterrupted = false
         report(.started)
-        AtlasLog.knowledge.info("Idle maintenance STARTED (machine idle)")
+        KalsmritikoshLog.knowledge.info("Idle maintenance STARTED (machine idle)")
 
         let summarizer = self.summarizer
         let memoryRepo = self.memoryRepo
@@ -153,11 +153,11 @@ public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundServic
 
         if wasInterrupted {
             report(.paused)
-            AtlasLog.knowledge.info("Idle maintenance PAUSED (user active)")
+            KalsmritikoshLog.knowledge.info("Idle maintenance PAUSED (user active)")
         } else {
             let rows = (try? await memoryRepo.count()) ?? -1
             report(.completed(memoryRows: rows))
-            AtlasLog.knowledge.info("Idle maintenance COMPLETED (memory rows: \(rows, privacy: .public))")
+            KalsmritikoshLog.knowledge.info("Idle maintenance COMPLETED (memory rows: \(rows, privacy: .public))")
         }
     }
 
@@ -194,7 +194,7 @@ public actor NightlyCompressionScheduler: CompressionScheduler, BackgroundServic
             // Interrupted by user activity — clean exit, no error log.
             return
         } catch {
-            AtlasLog.knowledge.error("Idle maintenance failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("Idle maintenance failed: \(String(describing: error), privacy: .public)")
         }
     }
 }

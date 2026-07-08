@@ -40,7 +40,7 @@ public enum Gate1Baseline {
     /// report; caller surfaces it in the UI.
     @MainActor
     public static func generate() async throws -> Result {
-        AtlasLog.app.info("Gate 1 baseline starting")
+        KalsmritikoshLog.app.info("Gate 1 baseline starting")
 
         // 1. Isolated temp dir + fresh AppState pointed at a temp-dir DB.
         //    UPDATE_09 Item 1 — the previous baseline shared the user's
@@ -78,7 +78,7 @@ public enum Gate1Baseline {
                 userInfo: [NSLocalizedDescriptionKey: "AppState failed to boot."]
             )
         }
-        AtlasLog.app.info("Gate 1 baseline DB isolated at \(isolatedDBURL.path, privacy: .public)")
+        KalsmritikoshLog.app.info("Gate 1 baseline DB isolated at \(isolatedDBURL.path, privacy: .public)")
 
         do {
         // Preflight: resolve a reasoning capability against the live
@@ -93,10 +93,10 @@ public enum Gate1Baseline {
             let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "gate1.preflight")
             do {
                 let provider = try await caps.resolve(spec)
-                AtlasLog.app.info("Gate 1 preflight: reasoning provider RESOLVED → \(provider.id, privacy: .public). LLM path will be exercised.")
+                KalsmritikoshLog.app.info("Gate 1 preflight: reasoning provider RESOLVED → \(provider.id, privacy: .public). LLM path will be exercised.")
                 return provider.id
             } catch {
-                AtlasLog.app.info("Gate 1 preflight: NO reasoning provider available. Eval will run on heuristic floor.")
+                KalsmritikoshLog.app.info("Gate 1 preflight: NO reasoning provider available. Eval will run on heuristic floor.")
                 return nil
             }
         }()
@@ -111,7 +111,7 @@ public enum Gate1Baseline {
                 _ = try await ingest.ingest(fileAt: url)
                 ingested += 1
             } catch {
-                AtlasLog.app.error("Gate 1 baseline ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("Gate 1 baseline ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
         let ingestSeconds = Date().timeIntervalSince(ingestStarted)
@@ -189,7 +189,7 @@ public enum Gate1Baseline {
         // Load question count for the result surface.
         let questionCount = (try? runner.loadQuestions().count) ?? 0
 
-        AtlasLog.app.info("Gate 1 baseline complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
+        KalsmritikoshLog.app.info("Gate 1 baseline complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
         let result = Result(
             reportURL: reportURL,
             retrievalProbeURL: retrievalProbeURL,
@@ -224,7 +224,7 @@ public enum Gate1Baseline {
     /// - M1 multihop (the smoke test's canonical question)
     @MainActor
     public static func generateFast() async throws -> Result {
-        AtlasLog.app.info("Gate 1 FAST baseline starting")
+        KalsmritikoshLog.app.info("Gate 1 FAST baseline starting")
 
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Gate1Fast-\(UUID().uuidString)", isDirectory: true)
@@ -263,7 +263,7 @@ public enum Gate1Baseline {
                     _ = try await ingest.ingest(fileAt: url)
                     ingested += 1
                 } catch {
-                    AtlasLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
@@ -312,7 +312,7 @@ public enum Gate1Baseline {
             )
             let querySeconds = Date().timeIntervalSince(queryStarted)
 
-            AtlasLog.app.info("Gate 1 FAST complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
+            KalsmritikoshLog.app.info("Gate 1 FAST complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
             let result = Result(
                 reportURL: reportURL,
                 retrievalProbeURL: nil,
@@ -339,7 +339,7 @@ public enum Gate1Baseline {
     /// rationale — multi-hop retrieval doesn't depend on memory).
     @MainActor
     public static func generateGate3Multihop() async throws -> Result {
-        AtlasLog.app.info("Gate 3 multihop baseline starting")
+        KalsmritikoshLog.app.info("Gate 3 multihop baseline starting")
 
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("Gate3Multihop-\(UUID().uuidString)", isDirectory: true)
@@ -378,7 +378,7 @@ public enum Gate1Baseline {
                     _ = try await ingest.ingest(fileAt: url)
                     ingested += 1
                 } catch {
-                    AtlasLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
@@ -416,7 +416,7 @@ public enum Gate1Baseline {
             )
             let querySeconds = Date().timeIntervalSince(queryStarted)
 
-            AtlasLog.app.info("Gate 3 multihop complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
+            KalsmritikoshLog.app.info("Gate 3 multihop complete → \(reportURL.path, privacy: .public) (ingest \(String(format: "%.1f", ingestSeconds))s, query \(String(format: "%.1f", querySeconds))s)")
             let result = Result(
                 reportURL: reportURL,
                 retrievalProbeURL: nil,
@@ -517,7 +517,7 @@ public enum Gate1Baseline {
                 ))
             }
         } catch {
-            AtlasLog.app.error("Ingest coverage probe SQL failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Ingest coverage probe SQL failed: \(String(describing: error), privacy: .public)")
             return nil
         }
 
@@ -556,10 +556,10 @@ public enum Gate1Baseline {
         let probeURL = outputDir.appendingPathComponent("eval-ingest-coverage.md", isDirectory: false)
         do {
             try md.data(using: .utf8)?.write(to: probeURL, options: .atomic)
-            AtlasLog.app.info("Coverage probe → \(probeURL.path, privacy: .public)")
+            KalsmritikoshLog.app.info("Coverage probe → \(probeURL.path, privacy: .public)")
             return probeURL
         } catch {
-            AtlasLog.app.error("Coverage probe write failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Coverage probe write failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -588,7 +588,7 @@ public enum Gate1Baseline {
         do {
             result = try await retriever.retrieve(for: intent, layers: [])
         } catch {
-            AtlasLog.app.error("Retrieval probe failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Retrieval probe failed: \(String(describing: error), privacy: .public)")
             return nil
         }
         let chunkObjectIDs = Set(result.chunks.map(\.chunk.objectID))
@@ -637,10 +637,10 @@ public enum Gate1Baseline {
         let probeURL = outputDir.appendingPathComponent("eval-l1-retrieval.md", isDirectory: false)
         do {
             try md.data(using: .utf8)?.write(to: probeURL, options: .atomic)
-            AtlasLog.app.info("Retrieval probe → \(probeURL.path, privacy: .public)")
+            KalsmritikoshLog.app.info("Retrieval probe → \(probeURL.path, privacy: .public)")
             return probeURL
         } catch {
-            AtlasLog.app.error("Retrieval probe write failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Retrieval probe write failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
@@ -685,7 +685,7 @@ public enum Gate1Baseline {
             let regular = items.filter {
                 (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
             }
-            AtlasLog.app.info("Gate 1 fixture: ProjectDelta/ subdir present, \(regular.count) regular files")
+            KalsmritikoshLog.app.info("Gate 1 fixture: ProjectDelta/ subdir present, \(regular.count) regular files")
             try Self.assertExpectedFixture(regular)
             return regular
         }
@@ -703,7 +703,7 @@ public enum Gate1Baseline {
                 found.append(url)
             }
         }
-        AtlasLog.app.info("Gate 1 fixture: flat-bundle lookup matched \(found.count) of \(Self.expectedFixtureFilenames.count) expected filenames")
+        KalsmritikoshLog.app.info("Gate 1 fixture: flat-bundle lookup matched \(found.count) of \(Self.expectedFixtureFilenames.count) expected filenames")
         try Self.assertExpectedFixture(found)
         return found
     }
@@ -783,7 +783,7 @@ public enum Gate1Baseline {
     @MainActor
     public static func generateAllDiagnostics() async throws -> AllDiagnosticsResult {
         let started = Date()
-        AtlasLog.app.info("All-diagnostics run starting")
+        KalsmritikoshLog.app.info("All-diagnostics run starting")
 
         var smokeResult: ProjectDeltaSmokeResult?
         var smokeErr: String?
@@ -791,7 +791,7 @@ public enum Gate1Baseline {
             smokeResult = try await runProjectDeltaSmokeTest()
         } catch {
             smokeErr = "\(error)"
-            AtlasLog.app.error("All-diagnostics: smoke threw \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("All-diagnostics: smoke threw \(String(describing: error), privacy: .public)")
         }
 
         var fastResult: Gate1Baseline.Result?
@@ -800,7 +800,7 @@ public enum Gate1Baseline {
             fastResult = try await generateFast()
         } catch {
             fastErr = "\(error)"
-            AtlasLog.app.error("All-diagnostics: fast eval threw \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("All-diagnostics: fast eval threw \(String(describing: error), privacy: .public)")
         }
 
         var gate3Result: Gate1Baseline.Result?
@@ -809,7 +809,7 @@ public enum Gate1Baseline {
             gate3Result = try await generateGate3Multihop()
         } catch {
             gate3Err = "\(error)"
-            AtlasLog.app.error("All-diagnostics: gate3 multihop threw \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("All-diagnostics: gate3 multihop threw \(String(describing: error), privacy: .public)")
         }
 
         let total = Date().timeIntervalSince(started)
@@ -823,7 +823,7 @@ public enum Gate1Baseline {
             totalSeconds: total
         )
 
-        AtlasLog.app.info("All-diagnostics complete → \(summaryURL.path, privacy: .public) (\(String(format: "%.1f", total))s)")
+        KalsmritikoshLog.app.info("All-diagnostics complete → \(summaryURL.path, privacy: .public) (\(String(format: "%.1f", total))s)")
         return AllDiagnosticsResult(
             smoke: smokeResult,
             smokeError: smokeErr,

@@ -111,7 +111,7 @@ public struct EntityQualityGate: Sendable {
         let kept = entities.filter(shouldKeep)
         let dropped = entities.count - kept.count
         if dropped > 0 {
-            AtlasLog.brain.info("EntityQualityGate dropped \(dropped, privacy: .public) of \(entities.count, privacy: .public)")
+            KalsmritikoshLog.brain.info("EntityQualityGate dropped \(dropped, privacy: .public) of \(entities.count, privacy: .public)")
         }
         return kept
     }
@@ -186,7 +186,7 @@ public struct EntityQualityGate: Sendable {
             await database.rollbackTransaction()
             throw error
         }
-        AtlasLog.brain.info("EntityQualityGate purge: removed \(toDelete.count, privacy: .public) entities + \(memoryDeleted, privacy: .public) memory rows")
+        KalsmritikoshLog.brain.info("EntityQualityGate purge: removed \(toDelete.count, privacy: .public) entities + \(memoryDeleted, privacy: .public) memory rows")
         return PurgeReport(
             entitiesDeleted: toDelete.count,
             memoryObjectsDeleted: memoryDeleted,

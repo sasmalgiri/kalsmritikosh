@@ -215,7 +215,7 @@ public struct PDFLoader: Ingestor {
         let image = page.thumbnail(of: size, for: .mediaBox)
 
         let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("atlas-pdfpage-\(UUID().uuidString).png")
+            .appendingPathComponent("kalsmritikosh-pdfpage-\(UUID().uuidString).png")
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let png = rep.representation(using: .png, properties: [:]) else {

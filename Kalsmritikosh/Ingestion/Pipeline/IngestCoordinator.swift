@@ -169,7 +169,7 @@ public actor IngestCoordinator {
         // level — nested ZIPs become metadata-only KOs after the first.
         if type == .zip {
             if let (root, files) = try? ArchiveLoader.expandZIP(at: url) {
-                AtlasLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .public) → \(files.count, privacy: .public) entries")
+                KalsmritikoshLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .public) → \(files.count, privacy: .public) entries")
                 defer { try? FileManager.default.removeItem(at: root) }
                 for entry in files {
                     // Avoid recursive expansion of nested zips — they
@@ -179,7 +179,7 @@ public actor IngestCoordinator {
                     }
                     do { _ = try await self.ingest(fileAt: entry) }
                     catch {
-                        AtlasLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                     }
                 }
             }
@@ -190,7 +190,7 @@ public actor IngestCoordinator {
         do {
             raw = try await loader.ingest(fileAt: url, type: type)
         } catch {
-            AtlasLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
         let cleaned = cleaner.clean(raw)
@@ -207,7 +207,7 @@ public actor IngestCoordinator {
         }()
         if let existing = try? await files.findByURL(url) {
             if let newHash, existing.contentHash == newHash {
-                AtlasLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .public)")
+                KalsmritikoshLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .public)")
                 // T18 — re-ingest with a matching hash confirms custody.
                 try? await custody?.record(CustodyEvent(
                     fileID: existing.id, kind: .hashVerified,
@@ -247,7 +247,7 @@ public actor IngestCoordinator {
             let canonicalStillAtOldURL = FileManager.default.fileExists(atPath: canonical.url.path)
             if !canonicalStillAtOldURL {
                 try? await files.updateURL(id: canonical.id, to: url)
-                AtlasLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .public) (was at \(canonical.url.lastPathComponent, privacy: .public))")
+                KalsmritikoshLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .public) (was at \(canonical.url.lastPathComponent, privacy: .public))")
                 let updated = FileRecord(
                     id: canonical.id,
                     url: url,
@@ -290,7 +290,7 @@ public actor IngestCoordinator {
                 aliasOf: canonical.id
             )
             try? await files.upsert(aliasRecord)
-            AtlasLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .public) → canonical \(canonical.id, privacy: .public)")
+            KalsmritikoshLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .public) → canonical \(canonical.id, privacy: .public)")
             return Result(
                 fileRecord: aliasRecord,
                 object: cleaned,
@@ -321,7 +321,7 @@ public actor IngestCoordinator {
         do {
             try await files.upsert(fileRecord)
         } catch {
-            AtlasLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
         // T18 — first acquisition of this file: open its chain of custody.
@@ -340,7 +340,7 @@ public actor IngestCoordinator {
         do {
             perFileKOs = try await loader.ingestMany(fileAt: url, type: type)
         } catch {
-            AtlasLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
         guard !perFileKOs.isEmpty else {
@@ -403,12 +403,12 @@ public actor IngestCoordinator {
                             totalEvents += attachmentResult.eventCount
                             allInvalidations.append(contentsOf: attachmentResult.invalidations)
                         } catch {
-                            AtlasLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                         }
                     }
                 }
             } catch {
-                AtlasLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
                 // Console echo so dev / smoke runs can see the cause
                 // without subscribing to OSLog; quiet enough not to
                 // spam a healthy ingest.
@@ -436,14 +436,14 @@ public actor IngestCoordinator {
                 }
                 do {
                     try await qaRepo.insertBatch(rows)
-                    AtlasLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .public)")
+                    KalsmritikoshLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .public)")
                 } catch {
-                    AtlasLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
         }
 
-        AtlasLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
+        KalsmritikoshLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
 
         return Result(
             fileRecord: fileRecord,
@@ -505,7 +505,7 @@ public actor IngestCoordinator {
             try await objects.insert(object, fileID: fileID)
             await pipelineMetrics?.bump(.loaded)
         } catch {
-            AtlasLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
 
@@ -598,7 +598,7 @@ public actor IngestCoordinator {
             let maxInlineSynthChunksPerKO = 24
             let chunksToProcess = chunked.prefix(maxInlineSynthChunksPerKO)
             if chunked.count > maxInlineSynthChunksPerKO {
-                AtlasLog.ingestion.info(
+                KalsmritikoshLog.ingestion.info(
                     "inline synth-Q capped: \(chunked.count, privacy: .public) chunks → \(maxInlineSynthChunksPerKO, privacy: .public) for KO \(object.id.uuidString.prefix(8), privacy: .public)"
                 )
             }
@@ -624,7 +624,7 @@ public actor IngestCoordinator {
                 do {
                     try await synthRepo.insertBatch(rows)
                 } catch {
-                    AtlasLog.ingestion.error("Synthetic-questions write failed for \(object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("Synthetic-questions write failed for \(object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
         }
@@ -814,7 +814,7 @@ public actor IngestCoordinator {
             }
             await pipelineMetrics?.bump(.embedded, by: embeddedCount)
             if skippedCount > 0 {
-                AtlasLog.ingestion.error("Ingest \(object.id, privacy: .public): \(skippedCount, privacy: .public) chunk(s) left WITHOUT embeddings (embedder unavailable) — vector search skips them until re-embedded. No zero vectors written.")
+                KalsmritikoshLog.ingestion.error("Ingest \(object.id, privacy: .public): \(skippedCount, privacy: .public) chunk(s) left WITHOUT embeddings (embedder unavailable) — vector search skips them until re-embedded. No zero vectors written.")
             }
         }
 
@@ -983,7 +983,7 @@ public actor IngestCoordinator {
                     source: "email-domain"
                 )
             } catch {
-                AtlasLog.ingestion.error("Domain alias write failed for \(domain, privacy: .public): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.ingestion.error("Domain alias write failed for \(domain, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
     }

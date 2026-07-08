@@ -64,7 +64,7 @@ public actor EntityTrie {
         allTokens.removeAll(keepingCapacity: true)
         loadedNodes = 0
         let started = Date()
-        AtlasLog.knowledge.info("EntityTrie: warm starting")
+        KalsmritikoshLog.knowledge.info("EntityTrie: warm starting")
         var offset = 0
         var total = 0
         while true {
@@ -72,7 +72,7 @@ public actor EntityTrie {
             do {
                 page = try await entities.allValues(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("EntityTrie: enumerate failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("EntityTrie: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
@@ -87,7 +87,7 @@ public actor EntityTrie {
         let elapsed = Date().timeIntervalSince(started)
         lastStats = Stats(entitiesLoaded: total, trieNodes: loadedNodes, warmSeconds: elapsed)
         warmed = true
-        AtlasLog.knowledge.info("EntityTrie: warmed entities=\(total, privacy: .public) tokens=\(self.allTokens.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("EntityTrie: warmed entities=\(total, privacy: .public) tokens=\(self.allTokens.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
     }
 
     // MARK: - Reads

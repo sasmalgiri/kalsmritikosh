@@ -81,7 +81,7 @@ public enum DocumentExporter {
             var opts: NSRegularExpression.Options = []
             if redaction.caseInsensitive { opts.insert(.caseInsensitive) }
             guard let re = try? NSRegularExpression(pattern: pattern, options: opts) else {
-                AtlasLog.ingestion.error("Redaction: invalid regex, skipped: \(pattern, privacy: .public)")
+                KalsmritikoshLog.ingestion.error("Redaction: invalid regex, skipped: \(pattern, privacy: .public)")
                 return text
             }
             let range = NSRange(text.startIndex..<text.endIndex, in: text)

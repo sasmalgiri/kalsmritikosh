@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import OSLog
 import SQLite3
 
 /// Errors surfaced by the SQLite layer. Carries the underlying SQLite
@@ -230,6 +231,15 @@ public actor Database {
 /// Where the app stores its single SQLite file. Lives under
 /// Application Support so it survives sandbox container migrations.
 public enum DatabaseLocations {
+    /// Current container folder name under Application Support.
+    static let containerName = "KalsmritikoshChronicaMemora"
+    /// The pre-rename folder. Kept as ONE explicit reference solely so the
+    /// one-time migration below can move an existing archive into the new
+    /// location — no data is lost by the Atlas→Kalsmritikosh rename. Safe to
+    /// delete this constant + `migrateLegacyContainerIfNeeded()` in a future
+    /// release once all installs have migrated.
+    private static let legacyContainerName = "AtlasChronicaMemora"
+
     public static var defaultDatabaseURL: URL {
         let fm = FileManager.default
         let appSupport = (try? fm.url(
@@ -238,8 +248,30 @@ public enum DatabaseLocations {
             appropriateFor: nil,
             create: true
         )) ?? fm.temporaryDirectory
+        migrateLegacyContainerIfNeeded(under: appSupport)
         return appSupport
-            .appendingPathComponent("AtlasChronicaMemora", isDirectory: true)
+            .appendingPathComponent(containerName, isDirectory: true)
             .appendingPathComponent("knowledge.sqlite", isDirectory: false)
+    }
+
+    /// One-time rename migration: if the new container doesn't exist yet but
+    /// the legacy `AtlasChronicaMemora` folder does, move it across so the
+    /// user's existing ledger (DB, vectors, models, caches) is preserved.
+    /// Idempotent — a no-op once the new folder exists.
+    private static func migrateLegacyContainerIfNeeded(under appSupport: URL) {
+        let fm = FileManager.default
+        let newDir = appSupport.appendingPathComponent(containerName, isDirectory: true)
+        let legacyDir = appSupport.appendingPathComponent(legacyContainerName, isDirectory: true)
+        guard !fm.fileExists(atPath: newDir.path),
+              fm.fileExists(atPath: legacyDir.path) else { return }
+        do {
+            try fm.moveItem(at: legacyDir, to: newDir)
+            KalsmritikoshLog.storage.info("Migrated legacy container \(legacyContainerName, privacy: .public) → \(containerName, privacy: .public)")
+        } catch {
+            // Fall back to a copy so a move failure never blocks boot or loses
+            // data; the app then reads/writes the new dir, legacy stays as backup.
+            try? fm.copyItem(at: legacyDir, to: newDir)
+            KalsmritikoshLog.storage.error("Legacy container move failed, copied instead: \(String(describing: error), privacy: .public)")
+        }
     }
 }

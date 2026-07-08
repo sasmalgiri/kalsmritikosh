@@ -50,7 +50,7 @@ public actor OpenAIWhisperTranscriber: AudioTranscribing {
 
     public func transcribe(audioAt url: URL) async throws -> String {
         let endpoint = baseURL.appendingPathComponent("audio/transcriptions")
-        let boundary = "----AtlasBoundary\(UUID().uuidString)"
+        let boundary = "----KalsmritikoshBoundary\(UUID().uuidString)"
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -74,7 +74,7 @@ public actor OpenAIWhisperTranscriber: AudioTranscribing {
             fileData = try Data(contentsOf: url)
         } catch {
             throw NSError(
-                domain: "atlas.asr.openai-whisper",
+                domain: "kalsmritikosh.asr.openai-whisper",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Read audio file failed: \(error)"]
             )
@@ -101,16 +101,16 @@ public actor OpenAIWhisperTranscriber: AudioTranscribing {
             (data, response) = try await session.data(for: request)
         } catch {
             throw NSError(
-                domain: "atlas.asr.openai-whisper",
+                domain: "kalsmritikosh.asr.openai-whisper",
                 code: 2,
                 userInfo: [NSLocalizedDescriptionKey: "OpenAI transcription HTTP call failed: \(error)"]
             )
         }
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            AtlasLog.knowledge.error("OpenAIWhisperTranscriber: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("OpenAIWhisperTranscriber: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .public)")
             throw NSError(
-                domain: "atlas.asr.openai-whisper",
+                domain: "kalsmritikosh.asr.openai-whisper",
                 code: http.statusCode,
                 userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(bodyStr.prefix(200))"]
             )

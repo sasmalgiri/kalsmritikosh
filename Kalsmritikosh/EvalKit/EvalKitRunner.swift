@@ -205,7 +205,7 @@ public struct EvalKitRunner {
         let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("eval-report.md", isDirectory: false)
         try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
-        AtlasLog.app.info("EvalKit wrote \(reportURL.path, privacy: .public)")
+        KalsmritikoshLog.app.info("EvalKit wrote \(reportURL.path, privacy: .public)")
         return reportURL
     }
 
@@ -284,7 +284,7 @@ public struct EvalKitRunner {
         let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent(reportName, isDirectory: false)
         try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
-        AtlasLog.app.info("EvalKit FAST wrote \(reportURL.path, privacy: .public)")
+        KalsmritikoshLog.app.info("EvalKit FAST wrote \(reportURL.path, privacy: .public)")
         return reportURL
     }
 

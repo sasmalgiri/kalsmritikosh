@@ -20,7 +20,7 @@ import Foundation
 import OSLog
 
 public actor LedgerPromoter: BackgroundService {
-    public let id = "atlas.ledger.promoter"
+    public let id = "kalsmritikosh.ledger.promoter"
 
     /// Rule-based gap scan (no LLM). Returns the count found.
     private let scan: @Sendable () async -> Int
@@ -56,7 +56,7 @@ public actor LedgerPromoter: BackgroundService {
 
     public func start() async {
         guard watchTask == nil else { return }
-        AtlasLog.knowledge.info("LedgerPromoter watching (System 3 proactive gap maintenance)")
+        KalsmritikoshLog.knowledge.info("LedgerPromoter watching (System 3 proactive gap maintenance)")
         watchTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -79,6 +79,6 @@ public actor LedgerPromoter: BackgroundService {
         lastRunAt = Date()
         let found = await scan()
         onScan(found)
-        AtlasLog.knowledge.info("LedgerPromoter proactive pass — \(found, privacy: .public) gaps in the ledger")
+        KalsmritikoshLog.knowledge.info("LedgerPromoter proactive pass — \(found, privacy: .public) gaps in the ledger")
     }
 }

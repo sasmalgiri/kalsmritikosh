@@ -164,7 +164,7 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
         )
         guard let provider = try? await capabilities.resolve(spec),
               await provider.isAvailable() else {
-            AtlasLog.knowledge.info("contextPrefix: no reasoning provider available; chunk left without prefix")
+            KalsmritikoshLog.knowledge.info("contextPrefix: no reasoning provider available; chunk left without prefix")
             return nil
         }
 
@@ -191,7 +191,7 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
                 let cleaned = clean(raw)
                 if !cleaned.isEmpty {
                     if attempt > 1 {
-                        AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) recovered on attempt \(attempt, privacy: .public) with \(attemptTimeout, privacy: .public)ms")
+                        KalsmritikoshLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) recovered on attempt \(attempt, privacy: .public) with \(attemptTimeout, privacy: .public)ms")
                     }
                     await LLMCallCounters.shared.recordCall(purpose: "contextPrefix")
                     // Healthy — clear any accrued failure/cooldown.
@@ -219,7 +219,7 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
             if attempt >= maxAttempts { break }
             attemptTimeout = min(attemptTimeout * 2, maxTimeoutMs)
         }
-        AtlasLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) exhausted \(self.maxAttempts, privacy: .public) attempts (final \(attemptTimeout, privacy: .public)ms); chunk left without prefix")
+        KalsmritikoshLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) exhausted \(self.maxAttempts, privacy: .public) attempts (final \(attemptTimeout, privacy: .public)ms); chunk left without prefix")
         // Sustained timeouts count against the provider's health so the
         // registry cools it down and later chunks skip it instantly
         // instead of each paying the full retry budget again.

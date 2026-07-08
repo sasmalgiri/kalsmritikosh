@@ -134,7 +134,7 @@ public struct HistoryView: View {
                 .foregroundStyle(.tint)
             Text("Reconstruct your history.")
                 .font(.title3.weight(.medium))
-            Text("Ask Atlas to tell you the story of a project, person, or topic. Each chapter is grounded in the source events that produced it.")
+            Text("Ask Kalsmritikosh to tell you the story of a project, person, or topic. Each chapter is grounded in the source events that produced it.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -400,7 +400,7 @@ public struct HistoryView: View {
                     replaceLink(oldID: link.id, with: newLink, inChapterID: chapter.id)
                 }
             } catch {
-                AtlasLog.app.error("HistoryView: link supersede failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("HistoryView: link supersede failed — \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -414,7 +414,7 @@ public struct HistoryView: View {
                     removeLink(id: link.id, fromChapterID: chapter.id)
                 }
             } catch {
-                AtlasLog.app.error("HistoryView: link delete failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("HistoryView: link delete failed — \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -555,7 +555,7 @@ public struct HistoryView: View {
                     counterfactualsByChapter = byChapter
                 }
             } catch {
-                AtlasLog.app.error("HistoryView: counterfactual delete failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("HistoryView: counterfactual delete failed — \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -594,7 +594,7 @@ public struct HistoryView: View {
                     counterfactualDraft = nil
                 }
             } catch {
-                AtlasLog.app.error("HistoryView: counterfactual insert failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("HistoryView: counterfactual insert failed — \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -720,7 +720,7 @@ public struct HistoryView: View {
 
     private var input: some View {
         HStack(spacing: 8) {
-            TextField("Ask Atlas to reconstruct a history…", text: $question)
+            TextField("Ask Kalsmritikosh to reconstruct a history…", text: $question)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { Task { await start() } }
                 .disabled(streaming)
@@ -763,7 +763,7 @@ public struct HistoryView: View {
             }
         }
         if chapters.isEmpty && (finalAnswer?.refused ?? false) {
-            error = finalAnswer?.refusalReason ?? "Atlas couldn't reconstruct that history."
+            error = finalAnswer?.refusalReason ?? "Kalsmritikosh couldn't reconstruct that history."
         }
     }
 }

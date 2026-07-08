@@ -56,13 +56,13 @@ public actor SyntheticQuestionsBackfill {
         var stats = Stats()
         var offset = 0
         let started = Date()
-        AtlasLog.knowledge.info("SyntheticQuestionsBackfill: starting run")
+        KalsmritikoshLog.knowledge.info("SyntheticQuestionsBackfill: starting run")
         while true {
             let page: [KnowledgeObject.ID]
             do {
                 page = try await knowledgeObjects.allIDs(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("SyntheticQuestionsBackfill: enumerate failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("SyntheticQuestionsBackfill: enumerate failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
                 stats.failed += 1
                 break
             }
@@ -104,7 +104,7 @@ public actor SyntheticQuestionsBackfill {
                     try await syntheticQuestions.insertBatch(rows)
                     stats.questionsWritten += rows.count
                 } catch {
-                    AtlasLog.knowledge.error("SyntheticQuestionsBackfill: insert failed for KO \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.knowledge.error("SyntheticQuestionsBackfill: insert failed for KO \(koID.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                     stats.failed += 1
                 }
             }
@@ -112,7 +112,7 @@ public actor SyntheticQuestionsBackfill {
             if page.count < pageSize { break }
         }
         let elapsed = Date().timeIntervalSince(started)
-        AtlasLog.knowledge.info("SyntheticQuestionsBackfill: complete — KOs=\(stats.knowledgeObjects, privacy: .public) skipped=\(stats.skipped, privacy: .public) questionsWritten=\(stats.questionsWritten, privacy: .public) failed=\(stats.failed, privacy: .public) elapsed=\(String(format: "%.1f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("SyntheticQuestionsBackfill: complete — KOs=\(stats.knowledgeObjects, privacy: .public) skipped=\(stats.skipped, privacy: .public) questionsWritten=\(stats.questionsWritten, privacy: .public) failed=\(stats.failed, privacy: .public) elapsed=\(String(format: "%.1f", elapsed), privacy: .public)s")
         return stats
     }
 }

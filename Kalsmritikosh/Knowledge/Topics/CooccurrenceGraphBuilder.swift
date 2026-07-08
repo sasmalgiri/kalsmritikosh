@@ -21,7 +21,7 @@ import Foundation
 import OSLog
 
 public actor CooccurrenceGraphBuilder: BackgroundService {
-    public let id = "atlas.cooccurrence.builder"
+    public let id = "kalsmritikosh.cooccurrence.builder"
 
     private let database: Database
     private let intervalSeconds: TimeInterval
@@ -29,7 +29,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
     /// chance one-shot co-mentions that aren't real topic signal.
     private let minWeight: Int
     private var runTask: Task<Void, Never>?
-    private var lastRunStatus = LastRunStatus(serviceID: "atlas.cooccurrence.builder")
+    private var lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.cooccurrence.builder")
     public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
@@ -44,7 +44,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("CooccurrenceGraphBuilder: starting (interval=\(self.intervalSeconds, privacy: .public)s, minWeight=\(self.minWeight, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("CooccurrenceGraphBuilder: starting (interval=\(self.intervalSeconds, privacy: .public)s, minWeight=\(self.minWeight, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             // Boot-warmup window — on a fresh DB, the first pass at
@@ -97,7 +97,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         do {
             try await database.exec("DELETE FROM entity_cooccurrences;", [])
         } catch {
-            AtlasLog.knowledge.error("CooccurrenceGraphBuilder: truncate failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: truncate failed — \(String(describing: error), privacy: .public)")
             return 0
         }
 
@@ -131,7 +131,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
                 .integer(Int64(minWeight))
             ])
         } catch {
-            AtlasLog.knowledge.error("CooccurrenceGraphBuilder: rebuild failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: rebuild failed — \(String(describing: error), privacy: .public)")
             return 0
         }
 
@@ -143,7 +143,7 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
             count = -1
         }
         let elapsed = Int(Date().timeIntervalSince(started))
-        AtlasLog.knowledge.info("CooccurrenceGraphBuilder: rebuilt \(count, privacy: .public) edges in \(elapsed, privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("CooccurrenceGraphBuilder: rebuilt \(count, privacy: .public) edges in \(elapsed, privacy: .public)s")
         lastRunStatus = LastRunStatus(
             serviceID: lastRunStatus.serviceID,
             startedAt: lastRunStatus.startedAt,

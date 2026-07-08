@@ -87,7 +87,7 @@ public struct Tier1RelationshipExtractor: Sendable {
         // pairwise edges aren't a real document-level signal anyway.
         let distinct = Array(Set(canonicalEntityIDs))
         if distinct.count > skipThreshold {
-            AtlasLog.brain.info("skipped co_occurs: \(distinct.count, privacy: .public) entities in oversized KO \(objectID.uuidString, privacy: .public)")
+            KalsmritikoshLog.brain.info("skipped co_occurs: \(distinct.count, privacy: .public) entities in oversized KO \(objectID.uuidString, privacy: .public)")
         } else {
             let sortedAll = distinct.sorted { $0.uuidString < $1.uuidString }
             for i in 0..<sortedAll.count {
@@ -125,7 +125,7 @@ public struct Tier1RelationshipExtractor: Sendable {
                 // sort, so the pattern is deterministic and
                 // re-ingest-stable. Every other participant gets a
                 // single (anchor → other) edge.
-                AtlasLog.brain.info(
+                KalsmritikoshLog.brain.info(
                     "event_linked cap (\(evDistinct.count, privacy: .public) participants > \(Self.eventLinkedParticipantCap, privacy: .public)) → star pattern for event \(event.id.uuidString, privacy: .public)"
                 )
                 let anchor = evDistinct[0]

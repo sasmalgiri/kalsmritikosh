@@ -111,7 +111,7 @@ public struct AITextCorrector: Sendable {
         var out = text
         for (wrong, right) in map { out = out.replacingOccurrences(of: wrong, with: right) }
         if out != text {
-            AtlasLog.knowledge.info("AITextCorrector[nlp]: fixed \(map.count, privacy: .public) name variant(s)")
+            KalsmritikoshLog.knowledge.info("AITextCorrector[nlp]: fixed \(map.count, privacy: .public) name variant(s)")
         }
         return (out, out != text)
     }
@@ -193,7 +193,7 @@ public struct AITextCorrector: Sendable {
 
         let joined = corrected.joined()
         if joined == text {
-            AtlasLog.knowledge.info("AITextCorrector[apple-ai]: no safe change across \(chunks.count, privacy: .public) chunk(s)")
+            KalsmritikoshLog.knowledge.info("AITextCorrector[apple-ai]: no safe change across \(chunks.count, privacy: .public) chunk(s)")
         }
         return joined
     }

@@ -56,7 +56,7 @@ public nonisolated enum EntityDossier {
 
         // Surface forms — collapses every distinct way the entity
         // showed up across the corpus. Helps the user spot wrong
-        // merges ("Atlas LLC" + "AtlasCorp" both folded into one).
+        // merges ("Kalsmritikosh LLC" + "KalsmritikoshCorp" both folded into one).
         let surfaces = surfaceForms(in: mentions)
         if !surfaces.isEmpty {
             out.append("## Surface forms")

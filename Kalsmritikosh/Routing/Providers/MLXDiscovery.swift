@@ -81,7 +81,7 @@ public enum MLXDiscovery {
                 options: [.skipsHiddenFiles]
             )
         } catch {
-            AtlasLog.routing.debug("MLXDiscovery: list failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.routing.debug("MLXDiscovery: list failed — \(String(describing: error), privacy: .public)")
             return []
         }
         var out: [UserMLXModel] = []

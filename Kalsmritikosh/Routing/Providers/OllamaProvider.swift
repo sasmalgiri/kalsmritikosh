@@ -98,7 +98,7 @@ public actor OllamaProvider: ModelProvider {
             let (_, response) = try await session.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
-            AtlasLog.routing.debug("Ollama availability probe failed: \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.routing.debug("Ollama availability probe failed: \(String(describing: error), privacy: .public)")
             return false
         }
     }
@@ -284,7 +284,7 @@ public actor OllamaProvider: ModelProvider {
             throw ModelProviderError.capabilityMissing(providerID: id, capability: .embedding)
         }
         guard !texts.isEmpty else { return [] }
-        AtlasLog.ingestion.info("OllamaProvider.embedBatch: \(texts.count, privacy: .public) texts")
+        KalsmritikoshLog.ingestion.info("OllamaProvider.embedBatch: \(texts.count, privacy: .public) texts")
         // Newer Ollama exposes /api/embed accepting "input": [String].
         let body: [String: Any] = [
             "model": embedTag,

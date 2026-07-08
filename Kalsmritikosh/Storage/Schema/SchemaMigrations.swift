@@ -19,7 +19,7 @@ public enum SchemaMigrations {
     public static func migrate(_ database: Database) async throws {
         let current = try await database.currentUserVersion()
         for (version, sql) in all where version > current {
-            let savepoint = "atlas_mig_v\(version)"
+            let savepoint = "kalsmritikosh_mig_v\(version)"
             do {
                 try await database.exec("SAVEPOINT \(savepoint);")
                 try await database.exec(sql)

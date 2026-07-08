@@ -266,7 +266,7 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         do {
             response = try await provider.generate(prompt: prompt, options: options)
         } catch {
-            AtlasLog.knowledge.error("LLMNarrativeComposer: generate failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("LLMNarrativeComposer: generate failed — \(String(describing: error), privacy: .public)")
             return NarrativeChapter(
                 title: title,
                 subtitle: subtitle,

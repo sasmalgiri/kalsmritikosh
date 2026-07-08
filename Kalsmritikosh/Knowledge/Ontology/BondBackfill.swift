@@ -61,13 +61,13 @@ public actor BondBackfill {
         var stats = Stats()
         var offset = 0
         let started = Date()
-        AtlasLog.knowledge.info("BondBackfill: starting run")
+        KalsmritikoshLog.knowledge.info("BondBackfill: starting run")
         while true {
             let page: [KnowledgeObject.ID]
             do {
                 page = try await knowledgeObjects.allIDs(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("BondBackfill: enumerate failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("BondBackfill: enumerate failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
                 stats.failed += 1
                 break
             }
@@ -86,7 +86,7 @@ public actor BondBackfill {
             if page.count < pageSize { break }
         }
         let elapsed = Date().timeIntervalSince(started)
-        AtlasLog.knowledge.info("BondBackfill: complete — KOs=\(stats.knowledgeObjects, privacy: .public) bondsWritten=\(stats.bondsWritten, privacy: .public) skipped=\(stats.skipped, privacy: .public) failed=\(stats.failed, privacy: .public) elapsed=\(String(format: "%.1f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("BondBackfill: complete — KOs=\(stats.knowledgeObjects, privacy: .public) bondsWritten=\(stats.bondsWritten, privacy: .public) skipped=\(stats.skipped, privacy: .public) failed=\(stats.failed, privacy: .public) elapsed=\(String(format: "%.1f", elapsed), privacy: .public)s")
         return stats
     }
 

@@ -449,10 +449,10 @@ public struct LiveDashboardView: View {
 
     private static func prettyServiceID(_ id: String) -> String {
         switch id {
-        case "atlas.causal.discover":       return "CausalDiscoverer"
-        case "atlas.cooccurrence.builder":  return "CooccurrenceGraphBuilder"
-        case "atlas.community.detect":      return "AgglomerativeCommunityDetector"
-        case "atlas.community.summarize":   return "CommunitySummarizer"
+        case "kalsmritikosh.causal.discover":       return "CausalDiscoverer"
+        case "kalsmritikosh.cooccurrence.builder":  return "CooccurrenceGraphBuilder"
+        case "kalsmritikosh.community.detect":      return "AgglomerativeCommunityDetector"
+        case "kalsmritikosh.community.summarize":   return "CommunitySummarizer"
         default:                            return id
         }
     }

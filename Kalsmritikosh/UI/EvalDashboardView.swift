@@ -10,7 +10,7 @@
 //  markdown to a file by hand.
 //
 //  This view is intentionally read-only. To trigger an eval run,
-//  set ATLAS_NARRATIVE_EVAL=1 in the scheme environment and run
+//  set KALSMRITIKOSH_NARRATIVE_EVAL=1 in the scheme environment and run
 //  the in-app SmokeTest — each run auto-persists via the existing
 //  NarrativeEvalReportStore hook in SmokeTest.swift.
 //
@@ -82,7 +82,7 @@ public struct EvalDashboardView: View {
                 .foregroundStyle(.tint)
             Text("No eval runs persisted yet.")
                 .font(.title3.weight(.medium))
-            Text("Set ATLAS_NARRATIVE_EVAL=1 in the Run scheme's Environment, then run the in-app SmokeTest. Each run lands in this list.")
+            Text("Set KALSMRITIKOSH_NARRATIVE_EVAL=1 in the Run scheme's Environment, then run the in-app SmokeTest. Each run lands in this list.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

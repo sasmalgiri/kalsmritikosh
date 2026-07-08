@@ -137,7 +137,7 @@ public struct AnswerSynthesizer: Sendable {
                 if let refined = await Self.respond(
                     provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700
                 ), refined.count >= 2 {
-                    AtlasLog.brain.info("AnswerSynthesizer: refined draft after self-critique")
+                    KalsmritikoshLog.brain.info("AnswerSynthesizer: refined draft after self-critique")
                     answer = refined
                 }
             }

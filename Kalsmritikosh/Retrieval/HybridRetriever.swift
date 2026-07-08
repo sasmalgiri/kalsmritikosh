@@ -245,7 +245,7 @@ public actor HybridRetriever: Retriever {
         let filtered = chunks.filter { !privileged.contains($0.chunk.objectID) }
         let withheld = chunks.count - filtered.count
         if withheld > 0 {
-            AtlasLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) chunk(s) from retrieval (§21).")
+            KalsmritikoshLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) chunk(s) from retrieval (§21).")
         }
         return filtered
     }
@@ -702,7 +702,7 @@ public actor HybridRetriever: Retriever {
         // layers — do NOT search with a zero/empty query (which would
         // return noise). .vector is last in priority, so this is a no-op.
         guard !query.isEmpty else {
-            AtlasLog.storage.notice("Vector layer skipped: no query embedding produced; using structured layers only.")
+            KalsmritikoshLog.storage.notice("Vector layer skipped: no query embedding produced; using structured layers only.")
             return []
         }
         let hits = try await vectors.nearest(

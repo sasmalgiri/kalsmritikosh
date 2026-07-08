@@ -12,7 +12,7 @@
 //  and skips SentencePiece's Precompiled NFKC charsmap normalization.
 //  Output tokens may differ from the model's reference tokenizer for
 //  some inputs (multi-byte chars, ambiguous segmentations). For
-//  English short queries — the bulk of Atlas use — the output is
+//  English short queries — the bulk of Kalsmritikosh use — the output is
 //  close enough that the cross-encoder produces useful relative
 //  scores. For multilingual / non-ASCII heavy inputs, accuracy
 //  degrades; that's the known cost of avoiding a SentencePiece
@@ -94,7 +94,7 @@ public final class BGETokenizer: @unchecked Sendable {
         self.vocab = vocab
         self.tokensByFirstChar = buckets
         self.maxLength = maxLength
-        AtlasLog.brain.info("BGETokenizer loaded \(vocab.count, privacy: .public) tokens in \(buckets.count, privacy: .public) buckets (greedy mode)")
+        KalsmritikoshLog.brain.info("BGETokenizer loaded \(vocab.count, privacy: .public) tokens in \(buckets.count, privacy: .public) buckets (greedy mode)")
     }
 
     /// Tokenize a (question, passage) pair into the model's expected

@@ -15,7 +15,7 @@ Locked: 2026-06-23
 
 ## What this is for
 
-Every fact in Atlas's ledger eventually gets a `FactType`. Every link
+Every fact in Kalsmritikosh's ledger eventually gets a `FactType`. Every link
 between facts follows a `BondRule`. With both in place, the brain stops
 answering questions by similarity search and starts answering them by
 **walking the typed graph** — with a citation trail per hop.

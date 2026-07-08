@@ -78,7 +78,7 @@ public actor MistralOCREngine: OCREngine {
     /// concatenate `markdown` content split by paragraph.
     private func recognize(at url: URL) async -> [String] {
         guard let payload = encodePayload(url: url) else {
-            AtlasLog.knowledge.error("MistralOCREngine: failed to encode \(url.lastPathComponent, privacy: .public)")
+            KalsmritikoshLog.knowledge.error("MistralOCREngine: failed to encode \(url.lastPathComponent, privacy: .public)")
             return []
         }
         var request = URLRequest(url: baseURL.appendingPathComponent("ocr"))
@@ -92,12 +92,12 @@ public actor MistralOCREngine: OCREngine {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            AtlasLog.knowledge.error("MistralOCREngine: HTTP call failed for \(url.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("MistralOCREngine: HTTP call failed for \(url.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
             return []
         }
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            AtlasLog.knowledge.error("MistralOCREngine: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("MistralOCREngine: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .public)")
             return []
         }
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

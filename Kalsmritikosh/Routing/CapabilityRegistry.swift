@@ -120,7 +120,7 @@ public actor CapabilityRegistry {
         let over = fails - failuresBeforeCooldown        // 0,1,2,…
         let backoff = min(baseCooldown * pow(2, Double(over)), maxCooldown)
         cooldownUntil[providerID] = Date().addingTimeInterval(backoff)
-        AtlasLog.routing.info("Provider \(providerID, privacy: .public) cooled down for \(Int(backoff), privacy: .public)s after \(fails, privacy: .public) consecutive failures")
+        KalsmritikoshLog.routing.info("Provider \(providerID, privacy: .public) cooled down for \(Int(backoff), privacy: .public)s after \(fails, privacy: .public) consecutive failures")
     }
 
     /// True if the provider is currently on cooldown.

@@ -35,7 +35,7 @@ public actor CapabilityResolvedEmbedder: Embedder {
                 let vector = try await provider.embed(text: text)
                 if !vector.isEmpty { return vector }
             } catch {
-                AtlasLog.routing.debug("Embedding via \(provider.id, privacy: .public) failed; falling back: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.routing.debug("Embedding via \(provider.id, privacy: .public) failed; falling back: \(String(describing: error), privacy: .public)")
             }
         }
         return await fallback.embed(text)
@@ -52,7 +52,7 @@ public actor CapabilityResolvedEmbedder: Embedder {
                     return vectors
                 }
             } catch {
-                AtlasLog.routing.debug("Batch embedding via \(provider.id, privacy: .public) failed; falling back: \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.routing.debug("Batch embedding via \(provider.id, privacy: .public) failed; falling back: \(String(describing: error), privacy: .public)")
             }
         }
         return await fallback.embedBatch(texts)

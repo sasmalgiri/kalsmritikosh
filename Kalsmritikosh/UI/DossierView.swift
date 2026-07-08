@@ -3,7 +3,7 @@
 //  Kalsmritikosh
 //
 //  HISTORY Phase E.3 — per-entity dossier. The user picks an entity
-//  (person, organization, project) from the search field and Atlas
+//  (person, organization, project) from the search field and Kalsmritikosh
 //  reconstructs its full history: a top-line MemoryObject summary
 //  (if distilled) plus the chronological chapter list from the
 //  composer. Differs from the generic History tab in that the
@@ -95,7 +95,7 @@ public struct DossierView: View {
                 .foregroundStyle(.tint)
             Text("Open a dossier.")
                 .font(.title3.weight(.medium))
-            Text("Enter a person, project, organization, or topic. Atlas reconstructs everything it knows about that subject.")
+            Text("Enter a person, project, organization, or topic. Kalsmritikosh reconstructs everything it knows about that subject.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

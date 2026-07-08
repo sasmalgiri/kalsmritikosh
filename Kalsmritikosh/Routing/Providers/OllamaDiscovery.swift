@@ -79,7 +79,7 @@ public enum OllamaDiscovery {
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return [] }
             data = d
         } catch {
-            AtlasLog.routing.debug("Ollama discovery: list failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.routing.debug("Ollama discovery: list failed — \(String(describing: error), privacy: .public)")
             return []
         }
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

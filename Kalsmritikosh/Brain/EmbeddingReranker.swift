@@ -47,12 +47,12 @@ public actor EmbeddingReranker {
     ) async -> [Double] {
         guard !candidates.isEmpty else { return [] }
         guard let model = NLEmbedding.sentenceEmbedding(for: language) else {
-            AtlasLog.brain.info("embedding-reranker: no NLEmbedding for language; identity scoring \(candidates.count, privacy: .public) candidates")
+            KalsmritikoshLog.brain.info("embedding-reranker: no NLEmbedding for language; identity scoring \(candidates.count, privacy: .public) candidates")
             return Array(repeating: 0.5, count: candidates.count)
         }
         batchCache.removeAll(keepingCapacity: true)
         guard let qVec = vector(for: question, using: model) else {
-            AtlasLog.brain.info("embedding-reranker: question embedding nil; identity scoring \(candidates.count, privacy: .public) candidates")
+            KalsmritikoshLog.brain.info("embedding-reranker: question embedding nil; identity scoring \(candidates.count, privacy: .public) candidates")
             return Array(repeating: 0.5, count: candidates.count)
         }
         var scores: [Double] = []
@@ -64,7 +64,7 @@ public actor EmbeddingReranker {
                 scores.append(0.5)
             }
         }
-        AtlasLog.brain.info("embedding-reranker: scored \(scores.count, privacy: .public) candidates (cosine)")
+        KalsmritikoshLog.brain.info("embedding-reranker: scored \(scores.count, privacy: .public) candidates (cosine)")
         return scores
     }
 

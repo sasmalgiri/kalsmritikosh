@@ -122,7 +122,7 @@ public actor HNSWVectorIndex {
         entryPoint = nil
         maxLayer = -1
         let started = Date()
-        AtlasLog.storage.info("HNSW: build starting")
+        KalsmritikoshLog.storage.info("HNSW: build starting")
         var offset = 0
         var total = 0
         while true {
@@ -130,7 +130,7 @@ public actor HNSWVectorIndex {
             do {
                 page = try await store.listAll(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.storage.error("HNSW: page fetch failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.storage.error("HNSW: page fetch failed at offset \(offset, privacy: .public) — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
@@ -145,7 +145,7 @@ public actor HNSWVectorIndex {
         warmed = true
         let stats = BuildStats(vectorsLoaded: total, maxLayer: maxLayer, buildSeconds: elapsed)
         lastStats = stats
-        AtlasLog.storage.info("HNSW: built vectors=\(total, privacy: .public) maxLayer=\(self.maxLayer, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.storage.info("HNSW: built vectors=\(total, privacy: .public) maxLayer=\(self.maxLayer, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
         return stats
     }
 
@@ -206,10 +206,10 @@ public actor HNSWVectorIndex {
         do {
             try data.write(to: url, options: .atomic)
             persistedVectorCount = nodes.count
-            AtlasLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .public) (\(data.count, privacy: .public) bytes)")
+            KalsmritikoshLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .public) (\(data.count, privacy: .public) bytes)")
             return true
         } catch {
-            AtlasLog.storage.error("HNSW: persist failed → \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("HNSW: persist failed → \(String(describing: error), privacy: .public)")
             return false
         }
     }
@@ -224,7 +224,7 @@ public actor HNSWVectorIndex {
         guard FileManager.default.fileExists(atPath: url.path) else { return false }
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
-            AtlasLog.storage.error("HNSW: load read failed → \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("HNSW: load read failed → \(String(describing: error), privacy: .public)")
             return false
         }
         let started = Date()
@@ -239,15 +239,15 @@ public actor HNSWVectorIndex {
               let entryID = readUUID(data, &cursor),
               let maxL = readI32(data, &cursor)
         else {
-            AtlasLog.storage.warning("HNSW: load rejected — header malformed")
+            KalsmritikoshLog.storage.warning("HNSW: load rejected — header malformed")
             return false
         }
         if Int(vectorCount) != expectedCount {
-            AtlasLog.storage.info("HNSW: load rejected — file has \(vectorCount, privacy: .public) vectors, ledger has \(expectedCount, privacy: .public). Rebuilding.")
+            KalsmritikoshLog.storage.info("HNSW: load rejected — file has \(vectorCount, privacy: .public) vectors, ledger has \(expectedCount, privacy: .public). Rebuilding.")
             return false
         }
         guard Int(mLoaded) == M else {
-            AtlasLog.storage.info("HNSW: load rejected — file M=\(mLoaded, privacy: .public), runtime M=\(self.M, privacy: .public)")
+            KalsmritikoshLog.storage.info("HNSW: load rejected — file M=\(mLoaded, privacy: .public), runtime M=\(self.M, privacy: .public)")
             return false
         }
         _ = dim // only used during build; consistency check would compare against the embedder dim if exposed
@@ -266,7 +266,7 @@ public actor HNSWVectorIndex {
                   let layer = readU8(data, &cursor),
                   let blobLen = readU32(data, &cursor)
             else {
-                AtlasLog.storage.warning("HNSW: load truncated at node payload")
+                KalsmritikoshLog.storage.warning("HNSW: load truncated at node payload")
                 nodes.removeAll(keepingCapacity: false)
                 return false
             }
@@ -301,7 +301,7 @@ public actor HNSWVectorIndex {
             maxLayer: maxLayer,
             buildSeconds: elapsed
         )
-        AtlasLog.storage.info("HNSW: loaded \(self.nodes.count, privacy: .public) vectors from disk in \(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.storage.info("HNSW: loaded \(self.nodes.count, privacy: .public) vectors from disk in \(String(format: "%.2f", elapsed), privacy: .public)s")
         return true
     }
 

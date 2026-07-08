@@ -27,7 +27,7 @@ import Foundation
 import OSLog
 
 public actor CommunitySummarizer: BackgroundService {
-    public let id = "atlas.community.summarize"
+    public let id = "kalsmritikosh.community.summarize"
 
     private let database: Database
     private let entities: EntitiesRepository
@@ -35,7 +35,7 @@ public actor CommunitySummarizer: BackgroundService {
     private let intervalSeconds: TimeInterval
     private let topEntityCount: Int
     private var runTask: Task<Void, Never>?
-    private var lastRunStatus = LastRunStatus(serviceID: "atlas.community.summarize")
+    private var lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.community.summarize")
     public func currentStatus() -> LastRunStatus { lastRunStatus }
 
     public init(
@@ -54,7 +54,7 @@ public actor CommunitySummarizer: BackgroundService {
 
     public func start() async {
         guard runTask == nil else { return }
-        AtlasLog.knowledge.info("CommunitySummarizer: starting (interval=\(self.intervalSeconds, privacy: .public)s, topN=\(self.topEntityCount, privacy: .public))")
+        KalsmritikoshLog.knowledge.info("CommunitySummarizer: starting (interval=\(self.intervalSeconds, privacy: .public)s, topN=\(self.topEntityCount, privacy: .public))")
         runTask = Task { [weak self] in
             guard let self else { return }
             // Boot-warmup window — on a fresh DB no communities have
@@ -110,11 +110,11 @@ public actor CommunitySummarizer: BackgroundService {
         do {
             provider = try await capabilities.resolve(spec)
         } catch {
-            AtlasLog.knowledge.info("CommunitySummarizer: no summarization provider; skipping pass")
+            KalsmritikoshLog.knowledge.info("CommunitySummarizer: no summarization provider; skipping pass")
             return 0
         }
         guard await provider.isAvailable() else {
-            AtlasLog.knowledge.info("CommunitySummarizer: provider \(provider.id, privacy: .public) unavailable; skipping pass")
+            KalsmritikoshLog.knowledge.info("CommunitySummarizer: provider \(provider.id, privacy: .public) unavailable; skipping pass")
             return 0
         }
 
@@ -136,11 +136,11 @@ public actor CommunitySummarizer: BackgroundService {
                 return (id, Int(c))
             }
         } catch {
-            AtlasLog.knowledge.error("CommunitySummarizer: list failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("CommunitySummarizer: list failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !communities.isEmpty else {
-            AtlasLog.knowledge.info("CommunitySummarizer: no eligible communities")
+            KalsmritikoshLog.knowledge.info("CommunitySummarizer: no eligible communities")
             return 0
         }
 
@@ -175,7 +175,7 @@ public actor CommunitySummarizer: BackgroundService {
             // 4. LLM call.
             let summary = await summarize(members: members, provider: provider)
             guard let summary, !summary.text.isEmpty else {
-                AtlasLog.knowledge.info("CommunitySummarizer: provider returned empty for community \(community.id.uuidString.prefix(8), privacy: .public); leaving blank")
+                KalsmritikoshLog.knowledge.info("CommunitySummarizer: provider returned empty for community \(community.id.uuidString.prefix(8), privacy: .public); leaving blank")
                 continue
             }
 
@@ -201,10 +201,10 @@ public actor CommunitySummarizer: BackgroundService {
                 ])
                 produced += 1
             } catch {
-                AtlasLog.knowledge.error("CommunitySummarizer: write failed for \(community.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("CommunitySummarizer: write failed for \(community.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
-        AtlasLog.knowledge.info("CommunitySummarizer: produced \(produced, privacy: .public) summaries of \(communities.count, privacy: .public) communities")
+        KalsmritikoshLog.knowledge.info("CommunitySummarizer: produced \(produced, privacy: .public) summaries of \(communities.count, privacy: .public) communities")
         lastRunStatus = LastRunStatus(
             serviceID: lastRunStatus.serviceID,
             startedAt: lastRunStatus.startedAt,

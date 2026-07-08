@@ -76,7 +76,7 @@ public actor ConfidencePropagator {
         } else if let fetched = (try? await events.findByIDs([eventID]))?.first {
             touched = fetched
         } else {
-            AtlasLog.knowledge.info("ConfidencePropagator: event \(eventID.uuidString.prefix(8), privacy: .public) not found; skipping")
+            KalsmritikoshLog.knowledge.info("ConfidencePropagator: event \(eventID.uuidString.prefix(8), privacy: .public) not found; skipping")
             return 0
         }
 
@@ -94,7 +94,7 @@ public actor ConfidencePropagator {
             let incoming = try await links.incoming(to: eventID)
             touchingLinks = outgoing + incoming
         } catch {
-            AtlasLog.knowledge.error("ConfidencePropagator: link fetch failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("ConfidencePropagator: link fetch failed — \(String(describing: error), privacy: .public)")
             return 0
         }
         guard !touchingLinks.isEmpty else { return 0 }
@@ -160,10 +160,10 @@ public actor ConfidencePropagator {
                 try await links.supersede(oldLinkID: link.id, with: updated)
                 supersededCount += 1
             } catch {
-                AtlasLog.knowledge.error("ConfidencePropagator: supersede failed for \(link.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("ConfidencePropagator: supersede failed for \(link.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
             }
         }
-        AtlasLog.knowledge.info("ConfidencePropagator: recomputed \(supersededCount, privacy: .public) link(s) around event \(eventID.uuidString.prefix(8), privacy: .public)")
+        KalsmritikoshLog.knowledge.info("ConfidencePropagator: recomputed \(supersededCount, privacy: .public) link(s) around event \(eventID.uuidString.prefix(8), privacy: .public)")
         return supersededCount
     }
 

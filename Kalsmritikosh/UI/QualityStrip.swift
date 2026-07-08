@@ -16,7 +16,7 @@ public struct QualityStrip: View {
     /// G3 Phase 5 — "Why this answer?" disclosure. Renders the typed
     /// walk-path chain that the bond engine produced for this answer.
     @State private var walkExpanded = false
-    /// Phase J.1 — "How did Atlas answer this?" disclosure. Renders
+    /// Phase J.1 — "How did Kalsmritikosh answer this?" disclosure. Renders
     /// the captured ReasoningTrace: path, retrieval shape, expert
     /// pipeline membership, assumptions, uncertainties.
     @State private var planExpanded = false
@@ -184,7 +184,7 @@ public struct QualityStrip: View {
             Label(
                 planExpanded
                     ? "Hide reasoning plan"
-                    : "How did Atlas answer this?",
+                    : "How did Kalsmritikosh answer this?",
                 systemImage: planExpanded ? "chevron.up" : "chevron.down"
             )
             .font(.caption)

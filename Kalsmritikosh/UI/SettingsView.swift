@@ -182,12 +182,12 @@ public struct SettingsView: View {
 
     /// HISTORY Phase F.4 — narrative-eval history. The
     /// EvalDashboardView reads NarrativeEvalReportStore for past runs
-    /// (persisted by SmokeTest when ATLAS_NARRATIVE_EVAL=1) and
+    /// (persisted by SmokeTest when KALSMRITIKOSH_NARRATIVE_EVAL=1) and
     /// renders each with delta arrows vs the previous run.
     private var narrativeEvalSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Narrative Eval History").font(.title3.bold())
-            Text("Each run of the in-app SmokeTest with `ATLAS_NARRATIVE_EVAL=1` lands here. Coverage / citation density / contradiction recall / confidence RMSE — arrows show movement vs the previous run.")
+            Text("Each run of the in-app SmokeTest with `KALSMRITIKOSH_NARRATIVE_EVAL=1` lands here. Coverage / citation density / contradiction recall / confidence RMSE — arrows show movement vs the previous run.")
                 .font(.caption).foregroundStyle(.secondary)
             EvalDashboardView()
                 .frame(minHeight: 300)
@@ -234,7 +234,7 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
-            Text("Generate the Gate 1 baseline. Boots an isolated copy of Atlas into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
+            Text("Generate the Gate 1 baseline. Boots an isolated copy of Kalsmritikosh into a temp directory, ingests the bundled ProjectDelta fixture, runs the EvalKit harness through the freshly-booted brain, and writes `eval-report.md` to the app container's Documents folder. Your real database is untouched.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -298,7 +298,7 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
-            Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Atlas extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
+            Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Kalsmritikosh extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -496,7 +496,7 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Release Readiness")
                         .font(.title3.bold())
-                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and the minimum-LLM engine + MoE council in one pass, so you never have to try each format by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
+                    Text("One button. Runs every test, eval, and audit Kalsmritikosh knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and the minimum-LLM engine + MoE council in one pass, so you never have to try each format by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -844,7 +844,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.iMessageLoaderEnabled },
                 set: { FeatureFlags.shared.iMessageLoaderEnabled = $0 }
             ))
-            Text("Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Atlas-watched folder first. Takes effect on next app launch.")
+            Text("Reads ~/Library/Messages/chat.db when it appears in a watched folder. Requires Full Disk Access for the original path; in the App Store build, copy chat.db to an Kalsmritikosh-watched folder first. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
@@ -852,7 +852,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.browserHistoryLoaderEnabled },
                 set: { FeatureFlags.shared.browserHistoryLoaderEnabled = $0 }
             ))
-            Text("Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Atlas reads a copy. Takes effect on next app launch.")
+            Text("Reads Safari History.db or Chromium History when copied into a watched folder. Both browsers lock the file while running — Kalsmritikosh reads a copy. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
@@ -1097,7 +1097,7 @@ public struct SettingsView: View {
                     Divider().padding(.vertical, 4)
                     Text("Step 2 — pull \(model.displayName)")
                         .font(.callout.weight(.medium))
-                    Text("After Ollama is running, return to Atlas and Settings will offer a one-tap download.")
+                    Text("After Ollama is running, return to Kalsmritikosh and Settings will offer a one-tap download.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1174,7 +1174,7 @@ public struct SettingsView: View {
                 ollamaPullStatus = progress.status
                 ollamaPullFraction = progress.fractionComplete
                 if progress.isComplete {
-                    ollamaPullStatus = "Downloaded \(modelTag). Relaunch Atlas to start using it."
+                    ollamaPullStatus = "Downloaded \(modelTag). Relaunch Kalsmritikosh to start using it."
                 }
             case .failure(let err):
                 ollamaPullStatus = "Download failed: \(err)"
@@ -1274,7 +1274,7 @@ public struct SettingsView: View {
     private var userModelsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your models").font(.title3.bold())
-            Text("Atlas auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below.")
+            Text("Kalsmritikosh auto-detects models you've already installed (Ollama, MLX). You can also add `.gguf` files or your own cloud endpoint below.")
                 .font(.caption).foregroundStyle(.secondary)
 
             mlxSubsection
@@ -1296,7 +1296,7 @@ public struct SettingsView: View {
                 Spacer()
                 Text("\(mlxModels.count) detected").font(.caption).foregroundStyle(.secondary)
             }
-            Text("Drop an MLX model directory into the folder below; Atlas reads its `config.json` and registers it at the next launch.")
+            Text("Drop an MLX model directory into the folder below; Kalsmritikosh reads its `config.json` and registers it at the next launch.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 8) {
                 Button {
@@ -1344,7 +1344,7 @@ public struct SettingsView: View {
                 Spacer()
                 Text("\(ggufEntries.count) added").font(.caption).foregroundStyle(.secondary)
             }
-            Text("Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Atlas parses its header for context-length + family.")
+            Text("Add any `.gguf` file (Hugging Face, TheBloke, custom builds). Kalsmritikosh parses its header for context-length + family.")
                 .font(.caption).foregroundStyle(.secondary)
             Button {
                 ggufImporterPresented = true
@@ -1399,7 +1399,7 @@ public struct SettingsView: View {
             }
             ggufEntries = await reg.load()
         case .failure(let err):
-            AtlasLog.app.error("GGUF import failed: \(String(describing: err), privacy: .public)")
+            KalsmritikoshLog.app.error("GGUF import failed: \(String(describing: err), privacy: .public)")
         }
     }
 

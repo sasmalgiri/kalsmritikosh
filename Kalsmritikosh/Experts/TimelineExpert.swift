@@ -59,25 +59,25 @@ public struct TimelineExpert: Expert {
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 6_000, purpose: "expert.timeline")
         guard let provider = try? await capabilities.resolve(spec) else {
-            AtlasLog.brain.info("expert.timeline LLM: no provider resolved for spec; using heuristic fallback")
+            KalsmritikoshLog.brain.info("expert.timeline LLM: no provider resolved for spec; using heuristic fallback")
             return ([], 0)
         }
         guard await provider.isAvailable() else {
-            AtlasLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) available=false; using heuristic fallback")
+            KalsmritikoshLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) available=false; using heuristic fallback")
             return ([], 0)
         }
-        AtlasLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) available=true")
+        KalsmritikoshLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) available=true")
         // STRUCTURED-OUTPUT PATH (#7) — typed @Generable claims.
         if let fmProvider = provider as? FoundationModelsProvider {
             do {
                 let typed = try await fmProvider.respondClaims(
                     prompt: frame.prompt,
-                    systemPrompt: "You are Atlas. Use ONLY the evidence ids the prompt provides; never invent ids."
+                    systemPrompt: "You are Kalsmritikosh. Use ONLY the evidence ids the prompt provides; never invent ids."
                 )
-                AtlasLog.brain.info("expert.timeline LLM: produced \(typed.count) typed claims via @Generable")
+                KalsmritikoshLog.brain.info("expert.timeline LLM: produced \(typed.count) typed claims via @Generable")
                 return (typed, 0)
             } catch {
-                AtlasLog.brain.error("expert.timeline LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
+                KalsmritikoshLog.brain.error("expert.timeline LLM: typed path failed (\(String(describing: error), privacy: .public)); falling back to prompt-parse")
             }
         }
         do {
@@ -86,7 +86,7 @@ public struct TimelineExpert: Expert {
                 options: GenerationOptions(maxTokens: 500, temperature: 0.2)
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
-            AtlasLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
+            KalsmritikoshLog.brain.info("expert.timeline LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
             let claims = parsed.claims.map { p in
                 ExpertFindings.Claim(
                     statement: p.text,
@@ -99,7 +99,7 @@ public struct TimelineExpert: Expert {
             }
             return (claims, parsed.dropped)
         } catch {
-            AtlasLog.brain.error("expert.timeline LLM: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.brain.error("expert.timeline LLM: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public)")
             return ([], 0)
         }
     }

@@ -163,7 +163,7 @@ public struct ExpertCouncil: Sendable {
         }
 
         if !perspectives.isEmpty {
-            AtlasLog.brain.info("ExpertCouncil: \(perspectives.count, privacy: .public) super-experts deliberated in parallel [\(selected.map(\.title).joined(separator: ","), privacy: .public)]")
+            KalsmritikoshLog.brain.info("ExpertCouncil: \(perspectives.count, privacy: .public) super-experts deliberated in parallel [\(selected.map(\.title).joined(separator: ","), privacy: .public)]")
         }
         return perspectives
     }

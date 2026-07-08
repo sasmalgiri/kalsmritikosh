@@ -70,7 +70,7 @@ public struct NLEmbedder: Embedder {
         guard let model = NLEmbedding.wordEmbedding(for: language) else {
             // No embedding model on this device. Emit the empty sentinel
             // (NOT zeros) so nothing downstream persists or searches noise.
-            AtlasLog.storage.error("NLEmbedder: no word-embedding model available — returning empty (no embedding produced)")
+            KalsmritikoshLog.storage.error("NLEmbedder: no word-embedding model available — returning empty (no embedding produced)")
             return []
         }
         var accumulator = [Double](repeating: 0, count: model.dimension)

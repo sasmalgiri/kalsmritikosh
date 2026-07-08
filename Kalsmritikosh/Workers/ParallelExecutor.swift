@@ -33,7 +33,7 @@ public actor ParallelExecutor {
            resolved.count > 3 {
             let selected = ExpertRelevanceScorer.select(from: resolved, intent: intent, retrieval: retrieval)
             if selected.count < resolved.count {
-                AtlasLog.brain.info("MoE gating: \(resolved.count, privacy: .public) → \(selected.count, privacy: .public) experts [\(selected.map(\.id).joined(separator: ","), privacy: .public)]")
+                KalsmritikoshLog.brain.info("MoE gating: \(resolved.count, privacy: .public) → \(selected.count, privacy: .public) experts [\(selected.map(\.id).joined(separator: ","), privacy: .public)]")
                 resolved = selected
             }
         }

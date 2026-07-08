@@ -77,7 +77,7 @@ public actor OllamaInstaller {
                 do {
                     (bytesStream, response) = try await session.bytes(for: request)
                 } catch {
-                    AtlasLog.routing.error("OllamaInstaller: connect to \(baseURL.absoluteString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.routing.error("OllamaInstaller: connect to \(baseURL.absoluteString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
                     continuation.yield(.failure(.ollamaUnreachable))
                     continuation.finish()
                     return
@@ -126,7 +126,7 @@ public actor OllamaInstaller {
                     )))
                     continuation.finish()
                 } catch {
-                    AtlasLog.routing.error("OllamaInstaller: stream failed: \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.routing.error("OllamaInstaller: stream failed: \(String(describing: error), privacy: .public)")
                     continuation.yield(.failure(.streamFailed("\(error)")))
                     continuation.finish()
                 }

@@ -1,5 +1,5 @@
 //
-//  AtlasLogger.swift
+//  KalsmritikoshLogger.swift
 //  Kalsmritikosh
 //
 //  Privacy-respecting structured logger over OSLog. Local-only; no
@@ -9,7 +9,7 @@
 import Foundation
 import OSLog
 
-public enum AtlasLog {
+public enum KalsmritikoshLog {
     // G2-SWIFT6 — nonisolated so every module's actor / nonisolated
     // context can log without the "main-actor-isolated static property
     // cannot be referenced" warning. Logger is Sendable; multi-actor
@@ -22,5 +22,5 @@ public enum AtlasLog {
     public nonisolated static let brain = Logger(subsystem: subsystem, category: "brain")
     public nonisolated static let ui = Logger(subsystem: subsystem, category: "ui")
 
-    nonisolated private static let subsystem = Bundle.main.bundleIdentifier ?? "com.atlas.chronica.memora"
+    nonisolated private static let subsystem = Bundle.main.bundleIdentifier ?? "com.kalsmritikosh.chronica.memora"
 }

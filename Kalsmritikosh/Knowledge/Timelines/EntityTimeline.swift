@@ -61,7 +61,7 @@ public actor EntityTimeline {
     public func warm(events: EventsRepository, pageSize: Int = 2_000) async {
         byEntity.removeAll(keepingCapacity: true)
         let started = Date()
-        AtlasLog.knowledge.info("EntityTimeline: warm starting")
+        KalsmritikoshLog.knowledge.info("EntityTimeline: warm starting")
         var offset = 0
         var total = 0
         while true {
@@ -69,7 +69,7 @@ public actor EntityTimeline {
             do {
                 page = try await events.allWithParticipants(offset: offset, pageSize: pageSize)
             } catch {
-                AtlasLog.knowledge.error("EntityTimeline: enumerate failed — \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("EntityTimeline: enumerate failed — \(String(describing: error), privacy: .public)")
                 break
             }
             if page.isEmpty { break }
@@ -90,7 +90,7 @@ public actor EntityTimeline {
         let elapsed = Date().timeIntervalSince(started)
         lastStats = Stats(eventsLoaded: total, entityBuckets: byEntity.count, warmSeconds: elapsed)
         warmed = true
-        AtlasLog.knowledge.info("EntityTimeline: warmed events=\(total, privacy: .public) buckets=\(self.byEntity.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.knowledge.info("EntityTimeline: warmed events=\(total, privacy: .public) buckets=\(self.byEntity.count, privacy: .public) elapsed=\(String(format: "%.2f", elapsed), privacy: .public)s")
     }
 
     // MARK: - Reads

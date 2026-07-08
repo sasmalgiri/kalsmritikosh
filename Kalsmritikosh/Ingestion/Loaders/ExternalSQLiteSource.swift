@@ -53,7 +53,7 @@ public final class ExternalSQLiteSource {
     public init(originalPath: URL) throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory
-            .appendingPathComponent("atlas-extsqlite-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("kalsmritikosh-extsqlite-\(UUID().uuidString)", isDirectory: true)
         do {
             try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
         } catch {

@@ -78,11 +78,11 @@ public struct ReasoningExpert: Expert {
             do {
                 let typed = try await fmProvider.respondClaims(
                     prompt: frame.prompt,
-                    systemPrompt: "You are Atlas. Reason across the evidence; use ONLY the evidence ids the prompt provides; never invent ids."
+                    systemPrompt: "You are Kalsmritikosh. Reason across the evidence; use ONLY the evidence ids the prompt provides; never invent ids."
                 )
                 return (typed, 0)
             } catch {
-                AtlasLog.brain.error("expert.reasoning typed path failed (\(String(describing: error), privacy: .public)); prompt-parse fallback")
+                KalsmritikoshLog.brain.error("expert.reasoning typed path failed (\(String(describing: error), privacy: .public)); prompt-parse fallback")
             }
         }
         do {
@@ -103,7 +103,7 @@ public struct ReasoningExpert: Expert {
             }
             return (claims, parsed.dropped)
         } catch {
-            AtlasLog.brain.error("expert.reasoning LLM call failed → \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.brain.error("expert.reasoning LLM call failed → \(String(describing: error), privacy: .public)")
             return ([], 0)
         }
     }

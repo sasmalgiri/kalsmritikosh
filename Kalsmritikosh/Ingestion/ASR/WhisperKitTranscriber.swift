@@ -62,12 +62,12 @@ public actor WhisperKitTranscriber: AudioTranscribing {
     public func transcribe(audioAt url: URL) async throws -> String {
         #if WHISPERKIT_AVAILABLE
         if whisper == nil {
-            AtlasLog.knowledge.info("WhisperKit: loading model \(self.modelVariant, privacy: .public)")
+            KalsmritikoshLog.knowledge.info("WhisperKit: loading model \(self.modelVariant, privacy: .public)")
             whisper = try await WhisperKit(model: modelVariant)
         }
         guard let whisper else {
             throw NSError(
-                domain: "atlas.asr.whisperkit",
+                domain: "kalsmritikosh.asr.whisperkit",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "WhisperKit failed to load model."]
             )
@@ -78,7 +78,7 @@ public actor WhisperKitTranscriber: AudioTranscribing {
         return results.map(\.text).joined(separator: " ")
         #else
         throw NSError(
-            domain: "atlas.asr.whisperkit",
+            domain: "kalsmritikosh.asr.whisperkit",
             code: 2,
             userInfo: [NSLocalizedDescriptionKey: """
                 WhisperKit is not wired. Add the package via File → Add Packages…

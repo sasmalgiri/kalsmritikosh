@@ -45,7 +45,7 @@ public actor ModelDownloader {
         let url = location(for: manifest)
         if FileManager.default.fileExists(atPath: url.path) { return url }
         throw NSError(
-            domain: "atlas.model.downloader",
+            domain: "kalsmritikosh.model.downloader",
             code: 1,
             userInfo: [NSLocalizedDescriptionKey: "Model \(manifest.modelID) is not downloaded."]
         )
@@ -60,7 +60,7 @@ public actor ModelDownloader {
             create: true
         )) ?? fm.temporaryDirectory
         return base
-            .appendingPathComponent("AtlasChronicaMemora", isDirectory: true)
+            .appendingPathComponent("KalsmritikoshChronicaMemora", isDirectory: true)
             .appendingPathComponent("Models", isDirectory: true)
     }
 }

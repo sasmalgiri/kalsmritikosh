@@ -11,7 +11,7 @@ import Foundation
 import OSLog
 
 public actor IncrementalUpdater: BackgroundService {
-    public let id = "atlas.incremental.updater"
+    public let id = "kalsmritikosh.incremental.updater"
     private let stream: AsyncStream<SubjectInvalidation>
     private let distiller: MemoryDistiller
     private let debounceMs: UInt64
@@ -165,7 +165,7 @@ public actor IncrementalUpdater: BackgroundService {
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        AtlasLog.knowledge.warning("IncrementalUpdater.waitForIdle hit timeout after \(timeoutMilliseconds, privacy: .public)ms; pending=\(self.pending.count, privacy: .public)")
+        KalsmritikoshLog.knowledge.warning("IncrementalUpdater.waitForIdle hit timeout after \(timeoutMilliseconds, privacy: .public)ms; pending=\(self.pending.count, privacy: .public)")
         return timeoutMilliseconds
     }
 
@@ -192,7 +192,7 @@ public actor IncrementalUpdater: BackgroundService {
                     .init(kind: entry.subject.kind, identifier: entry.subject.identifier),
                     triggeredBy: entry.trigger
                 )
-                AtlasLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .public)")
+                KalsmritikoshLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .public)")
                 // G2-misc — answer-matured notification: tell the
                 // user iff they asked about this subject recently.
                 // The notifier handles the gate + UNUserNotification
@@ -202,7 +202,7 @@ public actor IncrementalUpdater: BackgroundService {
                     subjectIdentifier: entry.subject.identifier
                 )
             } catch {
-                AtlasLog.knowledge.error("Memory distillation failed for \(entry.subject.identifier, privacy: .public): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("Memory distillation failed for \(entry.subject.identifier, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
     }

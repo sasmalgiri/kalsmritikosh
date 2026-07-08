@@ -346,7 +346,7 @@ public struct GroundTruthEvalKit: Sendable {
             unmatchedCausalLinks: unmatchedCausal,
             timelineFailures: timelineFailures
         )
-        AtlasLog.app.info("GroundTruthEvalKit: entity F1=\(report.entities.f1, privacy: .public) event F1=\(report.events.f1, privacy: .public) timeline=\(report.timeline.consistency, privacy: .public) causal F1=\(report.causal.f1, privacy: .public)")
+        KalsmritikoshLog.app.info("GroundTruthEvalKit: entity F1=\(report.entities.f1, privacy: .public) event F1=\(report.events.f1, privacy: .public) timeline=\(report.timeline.consistency, privacy: .public) causal F1=\(report.causal.f1, privacy: .public)")
         return report
     }
 

@@ -36,7 +36,7 @@ public actor InvestigationsRepository {
     /// investigation already exists, its rows are replaced (the
     /// cascade on `investigations.id` drops the old step rows).
     public func save(_ investigation: Investigation) async throws {
-        try await database.exec("SAVEPOINT atlas_investigation_save;")
+        try await database.exec("SAVEPOINT kalsmritikosh_investigation_save;")
         do {
             try await database.exec(
                 "DELETE FROM investigations WHERE id = ?;",
@@ -76,10 +76,10 @@ public actor InvestigationsRepository {
                     .real(step.createdAt.timeIntervalSince1970)
                 ])
             }
-            try await database.exec("RELEASE SAVEPOINT atlas_investigation_save;")
+            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_investigation_save;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT atlas_investigation_save;")
-            try? await database.exec("RELEASE SAVEPOINT atlas_investigation_save;")
+            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_investigation_save;")
+            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_investigation_save;")
             throw error
         }
     }

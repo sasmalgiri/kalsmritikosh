@@ -15,8 +15,8 @@
 import Foundation
 
 public enum CalibrationStore {
-    private nonisolated static let kEffSeconds = "atlas.calib.effSecPerLLMCall"
-    private nonisolated static let kSamples    = "atlas.calib.llmSamples"
+    private nonisolated static let kEffSeconds = "kalsmritikosh.calib.effSecPerLLMCall"
+    private nonisolated static let kSamples    = "kalsmritikosh.calib.llmSamples"
 
     /// Minimum observed calls before the measurement is trusted over the
     /// built-in default.

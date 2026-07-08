@@ -207,7 +207,7 @@ public actor MemoryDistiller {
     ) -> String {
         let signal = events.isEmpty
             ? "No events directly mention \(subject.identifier) yet."
-            : "Atlas has \(events.count) events referencing \(subject.identifier)."
+            : "Kalsmritikosh has \(events.count) events referencing \(subject.identifier)."
         let mentions = entityMatches.prefix(6).map(\.value).joined(separator: ", ")
         return mentions.isEmpty
             ? signal

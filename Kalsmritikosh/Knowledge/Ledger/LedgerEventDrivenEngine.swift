@@ -43,7 +43,7 @@ public actor LedgerEventDrivenEngine: SystemEngine {
         }
         await promoter.start()
         self.promoter = promoter
-        AtlasLog.knowledge.info("LedgerEventDrivenEngine active — proactive rule-based gap maintenance; memory warmed on demand")
+        KalsmritikoshLog.knowledge.info("LedgerEventDrivenEngine active — proactive rule-based gap maintenance; memory warmed on demand")
     }
 
     public func deactivate() async {

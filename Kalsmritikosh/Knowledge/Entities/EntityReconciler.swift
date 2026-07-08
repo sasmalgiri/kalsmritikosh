@@ -18,7 +18,7 @@ import Foundation
 import OSLog
 
 public actor EntityReconciler: BackgroundService {
-    public let id = "atlas.entity.reconciler"
+    public let id = "kalsmritikosh.entity.reconciler"
 
     /// Returns the number of variants folded. Injected by AppState.
     private let reconcile: @Sendable () async -> Int
@@ -43,7 +43,7 @@ public actor EntityReconciler: BackgroundService {
 
     public func start() async {
         guard watchTask == nil else { return }
-        AtlasLog.knowledge.info("EntityReconciler watching (idle name self-correction)")
+        KalsmritikoshLog.knowledge.info("EntityReconciler watching (idle name self-correction)")
         watchTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -65,7 +65,7 @@ public actor EntityReconciler: BackgroundService {
         lastRunAt = Date()
         let folded = await reconcile()
         if folded > 0 {
-            AtlasLog.knowledge.info("EntityReconciler folded \(folded, privacy: .public) OCR name variant(s)")
+            KalsmritikoshLog.knowledge.info("EntityReconciler folded \(folded, privacy: .public) OCR name variant(s)")
         }
     }
 }

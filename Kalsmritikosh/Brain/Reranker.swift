@@ -88,11 +88,11 @@ public actor Reranker {
         guard !candidates.isEmpty else { return [] }
         let spec = CapabilitySpec.reranking(purpose: "brain.reranker")
         guard let provider = try? await capabilities.resolve(spec) else {
-            AtlasLog.brain.info("reranker: no provider resolved for spec; identity scoring \(candidates.count, privacy: .public) candidates")
+            KalsmritikoshLog.brain.info("reranker: no provider resolved for spec; identity scoring \(candidates.count, privacy: .public) candidates")
             return Array(repeating: 0.5, count: candidates.count)
         }
         guard await provider.isAvailable() else {
-            AtlasLog.brain.info("reranker: provider=\(provider.id, privacy: .public) available=false; identity scoring \(candidates.count, privacy: .public) candidates")
+            KalsmritikoshLog.brain.info("reranker: provider=\(provider.id, privacy: .public) available=false; identity scoring \(candidates.count, privacy: .public) candidates")
             return Array(repeating: 0.5, count: candidates.count)
         }
         let prompt = buildPrompt(question: question, context: context, candidates: candidates)
@@ -105,13 +105,13 @@ public actor Reranker {
             let response = try await provider.generate(prompt: prompt, options: options)
             let parsed = Self.parse(response, expectedCount: candidates.count)
             if let restated = parsed.intent, !restated.isEmpty {
-                AtlasLog.brain.info("reranker: intent=\"\(restated, privacy: .public)\" scored=\(parsed.scores.count, privacy: .public)")
+                KalsmritikoshLog.brain.info("reranker: intent=\"\(restated, privacy: .public)\" scored=\(parsed.scores.count, privacy: .public)")
             } else {
-                AtlasLog.brain.info("reranker: provider=\(provider.id, privacy: .public) scored \(parsed.scores.count, privacy: .public) candidates (no restated intent)")
+                KalsmritikoshLog.brain.info("reranker: provider=\(provider.id, privacy: .public) scored \(parsed.scores.count, privacy: .public) candidates (no restated intent)")
             }
             return parsed.scores
         } catch {
-            AtlasLog.brain.error("reranker: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public); identity scoring")
+            KalsmritikoshLog.brain.error("reranker: provider=\(provider.id, privacy: .public) call failed → \(String(describing: error), privacy: .public); identity scoring")
             return Array(repeating: 0.5, count: candidates.count)
         }
     }

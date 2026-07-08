@@ -122,7 +122,7 @@ public actor SQLiteVectorStore: VectorStore {
             let totalRows = try await database.query("SELECT COUNT(*) FROM vectors;", [])
             let total = Int(totalRows.first?.int(0) ?? 0)
             if total > Self.bruteForceWarnAt {
-                AtlasLog.storage.warning("ANN required — Gate 3 (vector corpus = \(total, privacy: .public))")
+                KalsmritikoshLog.storage.warning("ANN required — Gate 3 (vector corpus = \(total, privacy: .public))")
             }
             rows = try await database.query("SELECT chunk_id, dim, q, scale FROM vectors;", [])
         }

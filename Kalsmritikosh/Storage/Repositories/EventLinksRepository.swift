@@ -66,17 +66,17 @@ public actor EventLinksRepository {
     /// the new row. Both stay queryable; reads filter on
     /// `superseded_by IS NULL` to see only current.
     public func supersede(oldLinkID: UUID, with newLink: CausalLink) async throws {
-        try await database.exec("SAVEPOINT atlas_link_supersede;")
+        try await database.exec("SAVEPOINT kalsmritikosh_link_supersede;")
         do {
             try await database.exec(
                 "UPDATE event_links SET superseded_by = ? WHERE id = ?;",
                 [.uuid(newLink.id), .uuid(oldLinkID)]
             )
             try await insert(newLink)
-            try await database.exec("RELEASE SAVEPOINT atlas_link_supersede;")
+            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_link_supersede;")
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT atlas_link_supersede;")
-            try? await database.exec("RELEASE SAVEPOINT atlas_link_supersede;")
+            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_link_supersede;")
+            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_link_supersede;")
             throw error
         }
     }

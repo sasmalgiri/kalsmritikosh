@@ -15,8 +15,8 @@ import Foundation
 public final class ModelUserPreferences: @unchecked Sendable {
     public nonisolated static let shared = ModelUserPreferences()
 
-    private let defaultsKey = "atlas.model.preferences"
-    private let queue = DispatchQueue(label: "atlas.preferences", attributes: .concurrent)
+    private let defaultsKey = "kalsmritikosh.model.preferences"
+    private let queue = DispatchQueue(label: "kalsmritikosh.preferences", attributes: .concurrent)
 
     public nonisolated struct Pin: Codable, Sendable, Hashable {
         public let capability: ModelCapability

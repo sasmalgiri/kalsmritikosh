@@ -275,7 +275,7 @@ public struct SourcesView: View {
                 guard let url, url.hasDirectoryPath else { return }
                 Task { @MainActor in
                     do { try appState.bookmarks.register(url: url) }
-                    catch { AtlasLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)") }
+                    catch { KalsmritikoshLog.ui.error("Drop-registered folder failed: \(String(describing: error), privacy: .public)") }
                     await refresh()
                 }
             }

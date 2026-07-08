@@ -83,7 +83,7 @@ public struct ArchiveLoader: Ingestor {
         let reader = try ZIPReader(url: url)
         let entries = try reader.entries()
         let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("atlas-zip-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("kalsmritikosh-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
         var out: [URL] = []

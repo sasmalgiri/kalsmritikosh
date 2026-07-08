@@ -113,7 +113,7 @@ public actor EventVersionsRepository {
         reason: String? = nil,
         at recordedAt: Date = Date()
     ) async throws -> Int {
-        try await database.exec("SAVEPOINT atlas_event_version;")
+        try await database.exec("SAVEPOINT kalsmritikosh_event_version;")
         do {
             // 1. Close any current row's valid_to.
             try await database.exec("""
@@ -149,7 +149,7 @@ public actor EventVersionsRepository {
                 reason.map { .text($0) } ?? .null,
                 .real(recordedAt.timeIntervalSince1970)
             ])
-            try await database.exec("RELEASE SAVEPOINT atlas_event_version;")
+            try await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_version;")
             // Phase J.15 — Vol 25 ¶10 event-versioning regen trigger.
             // Fire-and-forget so the caller doesn't block on
             // downstream link recomputation; failures are logged in
@@ -162,8 +162,8 @@ public actor EventVersionsRepository {
             }
             return nextVersion
         } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT atlas_event_version;")
-            try? await database.exec("RELEASE SAVEPOINT atlas_event_version;")
+            try? await database.exec("ROLLBACK TO SAVEPOINT kalsmritikosh_event_version;")
+            try? await database.exec("RELEASE SAVEPOINT kalsmritikosh_event_version;")
             throw error
         }
     }

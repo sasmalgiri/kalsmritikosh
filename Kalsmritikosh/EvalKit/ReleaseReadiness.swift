@@ -79,7 +79,7 @@ public enum ReleaseReadiness {
     @MainActor
     public static func run(_ state: AppState, mode: Mode = .deep) async -> Report {
         let started = Date()
-        AtlasLog.app.info("ReleaseReadiness run starting (mode=\(mode.rawValue, privacy: .public))")
+        KalsmritikoshLog.app.info("ReleaseReadiness run starting (mode=\(mode.rawValue, privacy: .public))")
         var checks: [Check] = []
 
         // 1. Schema integrity ────────────────────────────────────────
@@ -124,10 +124,10 @@ public enum ReleaseReadiness {
 
         let report = Report(checks: checks, reportURL: reportURL, totalSeconds: totalSeconds)
         if report.releaseReady {
-            AtlasLog.app.info("ReleaseReadiness PASSED in \(String(format: "%.1f", totalSeconds))s")
+            KalsmritikoshLog.app.info("ReleaseReadiness PASSED in \(String(format: "%.1f", totalSeconds))s")
         } else {
             let fails = checks.filter { !$0.passed && $0.blocker }.map(\.name).joined(separator: ", ")
-            AtlasLog.app.error("ReleaseReadiness FAILED in \(String(format: "%.1f", totalSeconds))s — blockers: \(fails, privacy: .public)")
+            KalsmritikoshLog.app.error("ReleaseReadiness FAILED in \(String(format: "%.1f", totalSeconds))s — blockers: \(fails, privacy: .public)")
         }
         return report
     }
@@ -804,7 +804,7 @@ public enum ReleaseReadiness {
         md += "- `eval-report-gate3-multihop.md` — Gate 3 per-question metrics\n"
 
         try md.data(using: .utf8)?.write(to: url, options: .atomic)
-        AtlasLog.app.info("ReleaseReadiness report → \(url.path, privacy: .public)")
+        KalsmritikoshLog.app.info("ReleaseReadiness report → \(url.path, privacy: .public)")
         return url
     }
 }

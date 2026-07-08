@@ -28,7 +28,7 @@ public actor FullLLMEngine: SystemEngine {
     public init() {}
 
     public func activate(_ context: SystemEngineContext) async {
-        AtlasLog.knowledge.info("FullLLMEngine active — eager deep enrichment at ingest (memory distillation + context-prefix backfill); no idle promoter")
+        KalsmritikoshLog.knowledge.info("FullLLMEngine active — eager deep enrichment at ingest (memory distillation + context-prefix backfill); no idle promoter")
     }
 
     public func deactivate() async {}

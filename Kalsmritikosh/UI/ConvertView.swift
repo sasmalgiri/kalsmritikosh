@@ -2,7 +2,7 @@
 //  ConvertView.swift
 //  Kalsmritikosh
 //
-//  Atlas-as-parser. The user drops any supported file in here, picks
+//  Kalsmritikosh-as-parser. The user drops any supported file in here, picks
 //  an output format (Plain text / Markdown / JSON), and gets clean
 //  text back from whichever loader handles that format. Nothing is
 //  written to the knowledge ledger — this is a one-shot conversion
@@ -548,7 +548,7 @@ public struct ConvertView: View {
             }
         }()
         panel.allowedContentTypes = [contentType]
-        panel.nameFieldStringValue = "atlas-convert.\(outputFormat.fileExtension)"
+        panel.nameFieldStringValue = "kalsmritikosh-convert.\(outputFormat.fileExtension)"
         if panel.runModal() == .OK, let url = panel.url {
             let data = outputData ?? output.data(using: .utf8) ?? Data()
             try? data.write(to: url, options: .atomic)

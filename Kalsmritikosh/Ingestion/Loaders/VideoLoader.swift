@@ -58,7 +58,7 @@ public struct VideoLoader: Ingestor {
     #if canImport(AVFoundation)
     private func exportAudio(from asset: AVURLAsset, original: URL) async throws -> URL? {
         let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("atlas-asr-\(UUID().uuidString).m4a")
+            .appendingPathComponent("kalsmritikosh-asr-\(UUID().uuidString).m4a")
         guard let export = AVAssetExportSession(
             asset: asset,
             presetName: AVAssetExportPresetAppleM4A
@@ -69,7 +69,7 @@ public struct VideoLoader: Ingestor {
             try await export.export(to: outputURL, as: .m4a)
             return outputURL
         } catch {
-            AtlasLog.knowledge.error("VideoLoader: audio export failed for \(original.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("VideoLoader: audio export failed for \(original.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
             return nil
         }
     }
