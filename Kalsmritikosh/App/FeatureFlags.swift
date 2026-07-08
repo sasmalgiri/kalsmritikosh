@@ -115,9 +115,12 @@ public enum SystemMode: String, CaseIterable, Identifiable, Sendable {
             // for the hot slice (TierPromoter).
             return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
         case .ledgerEventDriven:
-            // Rules + one document-card call per file; LLM otherwise reserved
-            // for query time.
-            return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: true)
+            // SINGLE MODE — minimum LLM. Ingest runs ZERO generative LLM:
+            // no per-chunk prefix, no memory distillation, and no per-file
+            // document-card call. Rules + embeddings + FTS + ledger only;
+            // the LLM is reserved for query-time interpretation (§ "LLM OFF
+            // at ingestion" in the evidence-ledger spec).
+            return .init(eagerMemoryDistillation: false, contextPrefixBackfill: false, firstChunkCard: false)
         }
     }
 }
@@ -192,25 +195,20 @@ public final class FeatureFlags {
         set { UserDefaults.standard.set(newValue, forKey: Self.kChatExport) }
     }
 
-    /// Master architecture selector (the three systems we're comparing).
-    /// Defaults to `.fullLLM` — the original "most diligent" baseline —
-    /// so evaluation starts from the reference system. Read at boot to
-    /// preset the enrichment pipeline via `SystemMode.policy`.
+    /// SINGLE MODE (2026-07-08): the three-mode selector has been collapsed to
+    /// one — the minimum-LLM, ledger-first pipeline from the evidence-ledger
+    /// spec. Ingest runs zero generative LLM (rules + embeddings + FTS only);
+    /// the LLM is reserved for query-time interpretation. Resolution is PINNED
+    /// to `.ledgerEventDriven` regardless of any stored value, so the app can
+    /// only ever run the minimum-LLM system. The setter is retained but inert.
     public var systemMode: SystemMode {
-        get {
-            guard let raw = UserDefaults.standard.string(forKey: Self.kSystemMode),
-                  let mode = SystemMode(rawValue: raw) else { return .fullLLM }
-            return mode
-        }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kSystemMode) }
+        get { .ledgerEventDriven }
+        set { /* single-mode: selection is fixed to the minimum-LLM system */ }
     }
 
-    /// Thread-safe read of the current system mode for non-main-actor
-    /// contexts. UserDefaults is thread-safe.
+    /// Thread-safe read for non-main-actor contexts — also pinned.
     public nonisolated static func systemModeValue() -> SystemMode {
-        guard let raw = UserDefaults.standard.string(forKey: kSystemMode),
-              let mode = SystemMode(rawValue: raw) else { return .fullLLM }
-        return mode
+        .ledgerEventDriven
     }
 
     /// Mixture-of-Experts gating. When on (default), the expert executor
@@ -286,7 +284,9 @@ public final class FeatureFlags {
     /// fresh install, which triggers the first-run mode chooser before the
     /// engine boots. Set true the first time the user picks a mode.
     public var systemModeChosen: Bool {
-        get { UserDefaults.standard.bool(forKey: Self.kSystemModeChosen) }
+        // Single-mode: there is nothing to choose, so the first-run mode
+        // chooser is always considered satisfied.
+        get { true }
         set { UserDefaults.standard.set(newValue, forKey: Self.kSystemModeChosen) }
     }
 

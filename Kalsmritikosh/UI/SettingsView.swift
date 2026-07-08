@@ -24,7 +24,6 @@ public struct SettingsView: View {
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var contextPrefixBackfill: Bool = FeatureFlags.shared.contextPrefixBackfillEnabled
     @State private var ingestTimeDistill: Bool = FeatureFlags.shared.ingestTimeMemoryDistillation
-    @State private var systemMode: SystemMode = FeatureFlags.shared.systemMode
     @State private var showIngestGuide = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
@@ -890,83 +889,29 @@ public struct SettingsView: View {
     private var systemModeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "square.3.layers.3d")
+                Image(systemName: "bolt")
                     .foregroundStyle(Theme.brand)
-                Text("System mode").font(.title3.bold())
+                Text("Engine").font(.title3.bold())
             }
-            Text("Three architectures, one app. Switch, re-ingest, and compare. The retrieval + experts + ledger that answer your questions are the same in all three — only how much meaning is extracted, and when, changes.")
+            Text("This build runs a single pipeline: the minimum-LLM, ledger-first engine. Ingestion uses zero generative LLM — rules, embeddings and a full-text index only. The model is used only at question time, to explain the evidence it retrieves.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Picker("System", selection: $systemMode) {
-                ForEach(SystemMode.allCases) { mode in
-                    Text(mode.label).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: systemMode) { _, newValue in
-                FeatureFlags.shared.systemMode = newValue
-            }
+            Label("Ledger event-driven · minimum LLM", systemImage: "checkmark.seal.fill")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(Theme.brand)
 
-            Text(systemMode.detail)
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            ingestEstimateComparison
-
-            Label("Changing the mode takes effect on next app launch + re-ingest.", systemImage: "arrow.clockwise.circle")
+            Label("Ingest: LLM off · Embeddings on · Full-text on · Ledger on",
+                  systemImage: "gauge.with.dots.needle.33percent")
                 .font(.caption2).foregroundStyle(.secondary)
+
+            Button("File-type ingest guide") { showIngestGuide = true }
+                .font(.caption)
+                .buttonStyle(.borderless)
         }
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }
 
-    /// Compact "100 MB mixed archive" estimate across the three modes,
-    /// with the active mode highlighted, plus a link to the full guide.
-    private var ingestEstimateComparison: some View {
-        let est = IngestEstimator()
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("Est. ingest · 100 MB mixed archive")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button("File-type guide") { showIngestGuide = true }
-                    .font(.caption)
-                    .buttonStyle(.borderless)
-            }
-            ForEach(SystemMode.allCases) { mode in
-                let e = est.estimateMixed(sizeMB: 100, mode: mode)
-                HStack {
-                    Image(systemName: mode == systemMode ? "largecircle.fill.circle" : "circle")
-                        .foregroundStyle(mode == systemMode ? Theme.brand : .secondary)
-                        .imageScale(.small)
-                    Text(mode.label)
-                        .font(.caption)
-                        .foregroundStyle(mode == systemMode ? .primary : .secondary)
-                    Spacer()
-                    Text("\(IngestEstimator.humanDuration(e.totalSeconds)) / 100 MB")
-                        .font(.caption.monospacedDigit().weight(mode == systemMode ? .bold : .regular))
-                        .foregroundStyle(mode == systemMode ? Theme.brand : .secondary)
-                }
-            }
-            HStack(spacing: 5) {
-                Image(systemName: CalibrationStore.isCalibrated ? "checkmark.seal.fill" : "gauge.with.dots.needle.33percent")
-                    .foregroundStyle(CalibrationStore.isCalibrated ? .green : .secondary)
-                    .imageScale(.small)
-                Text(CalibrationStore.isCalibrated
-                     ? "Calibrated to THIS Mac (\(CalibrationStore.sampleCount) LLM calls measured, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)"
-                     : "Reference-config estimate — NOT your Mac (\(IngestEstimator.referenceMachineDescription)). Calibrates to this Mac after the first LLM-heavy ingest.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Text("Per 100 MB. Approximate. Until calibrated, figures assume a reference machine configuration (not your Mac). Rule work + LLM calls estimated from a typical email-heavy archive. Tap the guide for per-file-type times.")
-                .font(.caption2).foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(10)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
 
     private var ledgerDepthSection: some View {
         VStack(alignment: .leading, spacing: 10) {
