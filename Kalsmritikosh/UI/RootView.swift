@@ -666,8 +666,7 @@ public struct RootView: View {
                     isPresented: $showPalette,
                     onNavigate: { navigate(to: $0) },
                     onAddFolder: addFolderFromPalette,
-                    onIngestAll: { Task { await appState.ingestAllRoots() } },
-                    onChangeMode: { appState.showModeChooser = true }
+                    onIngestAll: { Task { await appState.ingestAllRoots() } }
                 )
                 .padding(.top, 90)
             }
@@ -849,7 +848,6 @@ private struct CommandPaletteView: View {
     let onNavigate: (Destination) -> Void
     let onAddFolder: () -> Void
     let onIngestAll: () -> Void
-    let onChangeMode: () -> Void
 
     @State private var query = ""
     @State private var highlighted = 0
@@ -872,10 +870,6 @@ private struct CommandPaletteView: View {
             id: "act.ingest", title: "Ingest All",
             subtitle: "Re-scan every watched folder now",
             icon: "arrow.triangle.2.circlepath", run: onIngestAll))
-        cmds.append(PaletteCommand(
-            id: "act.mode", title: "Change System Mode…",
-            subtitle: "Full LLM · Hot-Warm-Cold · Ledger",
-            icon: "slider.horizontal.3", run: onChangeMode))
         return cmds
     }
 
