@@ -22,8 +22,6 @@ public struct SettingsView: View {
     @State private var pins: [ModelCapability: String] = [:]
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
-    @State private var contextPrefixBackfill: Bool = FeatureFlags.shared.contextPrefixBackfillEnabled
-    @State private var ingestTimeDistill: Bool = FeatureFlags.shared.ingestTimeMemoryDistillation
     @State private var showIngestGuide = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
@@ -86,7 +84,7 @@ public struct SettingsView: View {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Settings").font(Theme.display(28, .bold))
-                    Text("Choose the system mode, tune answering depth vs. speed, set privacy, manage models, and run diagnostics.")
+                    Text("Tune answering depth vs. speed, set privacy, manage models, and run diagnostics.")
                         .font(.caption).foregroundStyle(.secondary)
                     selfCheckChip
                 }
@@ -109,8 +107,6 @@ public struct SettingsView: View {
                 privacySection
                 Divider()
                 intelligenceSection
-                Divider()
-                ledgerDepthSection
                 Divider()
                 maintenanceSection
                 Divider()
@@ -157,7 +153,7 @@ public struct SettingsView: View {
                         .foregroundStyle(ok ? .green : .red)
                     Text(ok ? "Self-check passed" : "Self-check found issues")
                         .font(.caption.weight(.semibold))
-                    Text("\(passed)/\(r.checks.count) checks · all formats + all 3 modes")
+                    Text("\(passed)/\(r.checks.count) checks · all formats")
                         .font(.caption2.monospaced())
                         .foregroundStyle(.secondary)
                     if releaseReadinessRunning {
@@ -174,7 +170,7 @@ public struct SettingsView: View {
                 .overlay(Capsule().stroke((ok ? Color.green : Color.red).opacity(0.30), lineWidth: 1))
             }
             .buttonStyle(.plain)
-            .help("Re-run the fast self-check (deterministic logic + all Convert formats + all 3 system modes). No LLM, a few seconds.")
+            .help("Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds.")
         } else {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.mini)
@@ -500,7 +496,7 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Release Readiness")
                         .font(.title3.bold())
-                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and all 3 system modes + the MoE council in one pass, so you never have to try each format or mode by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
+                    Text("One button. Runs every test, eval, and audit Atlas knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and the minimum-LLM engine + MoE council in one pass, so you never have to try each format by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -588,7 +584,7 @@ public struct SettingsView: View {
         releaseReadinessRunning = true
         releaseReadinessReport = nil
         releaseReadinessStatus = mode == .fast
-            ? "Fast gate — schema → deterministic logic → convert exporters → system modes/MoE → bundle → capability → live health (no LLM)…"
+            ? "Fast gate — schema → deterministic logic → convert exporters → engine/MoE → bundle → capability → live health (no LLM)…"
             : "Deep eval — everything in Fast PLUS smoke + Fast Eval + Gate 3 (LLM-heavy, may take hours)…"
         defer { releaseReadinessRunning = false }
         let result = await ReleaseReadiness.run(appState, mode: mode)
@@ -913,25 +909,6 @@ public struct SettingsView: View {
     }
 
 
-    private var ledgerDepthSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Ledger depth (LLM budget)").font(.title3.bold())
-            Text("Kalsmritikosh answers from a structured evidence ledger first (events, entities, timeline, citations) and uses the LLM sparingly. These optional passes cost real LLM time — off by default so ingest stays fast. Your archive is fully searchable and answerable without them.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider().padding(.vertical, 2)
-
-            Toggle("Pre-warm memory during ingest", isOn: $ingestTimeDistill)
-                .onChange(of: ingestTimeDistill) { _, newValue in
-                    FeatureFlags.shared.ingestTimeMemoryDistillation = newValue
-                }
-            Text("When OFF (default), the app skips per-subject memory distillation during ingest — the single biggest ingest LLM cost. Memory is instead built on demand for the things you actually ask about. Answers still come from the ledger. Turn ON only if you want richer memory summaries pre-built up front (much slower ingest). Takes effect on next launch.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
     /// Answering intelligence — the on-device MoE reasoning dials + the
     /// fully-private switch. All read/write FeatureFlags / PrivacyGate live;
     /// they take effect on the next question (no relaunch needed).
@@ -1074,16 +1051,6 @@ public struct SettingsView: View {
                     UserDefaults.standard.set(newValue, forKey: "kalsmritikosh.history.showT3InResults")
                 }
             Text("HISTORY Phase A. When off, the retriever filters out entities tagged T3 (mail-server hostnames like `Tyzpr01mb4530`, weekday tokens, base64-ish IDs) from results — they stay on disk, just don't pollute answers. Flip on to see everything every extractor produced.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Divider().padding(.vertical, 4)
-
-            Toggle("Context-prefix backfill (LLM-heavy)", isOn: $contextPrefixBackfill)
-                .onChange(of: contextPrefixBackfill) { _, newValue in
-                    FeatureFlags.shared.contextPrefixBackfillEnabled = newValue
-                }
-            Text("Ledger-AI v28. OFF by default. Your archive is fully keyword (FTS) + entity + event searchable immediately after ingest regardless of this. When on, the background sweep fills in missing LLM semantic prefixes AND re-embeds those chunks' vectors so retrieval quality improves — it's LLM-heavy, so reserve it for when your Mac is idle. Takes effect on next app launch.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

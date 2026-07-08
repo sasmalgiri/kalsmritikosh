@@ -913,10 +913,12 @@ public final class AppState {
             let engine = SystemEngineFactory.make(FeatureFlags.systemModeValue())
             let basePolicy = engine.ingestPolicy
 
-            // Ingest-time memory distillation: eager only if the engine's
-            // policy wants it (Full LLM) or the advanced flag forces it.
-            let distillOverride = await MainActor.run { FeatureFlags.shared.ingestTimeMemoryDistillation }
-            let distillOnIngest = basePolicy.eagerMemoryDistillation || distillOverride
+            // Ingest-time memory distillation is governed solely by the
+            // engine's policy. Single minimum-LLM engine → always OFF; memory
+            // is warmed on demand. (The old user override that could force
+            // ingest-time LLM back on was removed — it defeated the
+            // minimum-LLM guarantee.)
+            let distillOnIngest = basePolicy.eagerMemoryDistillation
             let updater = IncrementalUpdater(
                 stream: ingest.invalidations,
                 distiller: memoryDistiller,
@@ -978,16 +980,11 @@ public final class AppState {
             // vector (prefix + text), so the LLM work actually improves
             // retrieval. Still opt-in because it's LLM-heavy; the archive
             // stays fully FTS + entity + event searchable regardless.
-            // System-mode preset: Full LLM turns the LLM context-prefix
-            // sweep ON (deep); the other modes leave it off. Individual
-            // flag is an advanced override.
-            // Context-prefix work, driven by the engine's ingest policy:
-            //   • Full LLM  → full sweep: an LLM prefix on EVERY chunk (+re-embed).
-            //   • Hot/W/C + Ledger → one document-card call per file (first
-            //     chunk only) — the Stage-2 "document card."
-            // The advanced FeatureFlag forces the full sweep on regardless.
-            let prefixOverride = await MainActor.run { FeatureFlags.shared.contextPrefixBackfillEnabled }
-            let fullPrefixSweep = basePolicy.contextPrefixBackfill || prefixOverride
+            // Context-prefix work is governed solely by the engine's ingest
+            // policy. Single minimum-LLM engine → both are false, so the
+            // backfiller never starts and ingest stays zero-LLM. (The old
+            // user override that could force the LLM sweep on was removed.)
+            let fullPrefixSweep = basePolicy.contextPrefixBackfill
             let firstChunkCardOnly = basePolicy.firstChunkCard && !fullPrefixSweep
             var startedBackfiller: ContextPrefixBackfiller? = nil
             if fullPrefixSweep || firstChunkCardOnly {
