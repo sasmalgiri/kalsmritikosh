@@ -46,7 +46,8 @@ public struct FactStatusClassifier: Sendable {
         events: [Event],
         assertions: [Assertion],
         contradictions: [Contradiction],
-        gaps: [GapNode]
+        gaps: [GapNode],
+        reviews: [UUID: FactReview] = [:]
     ) -> [FactStatusItem] {
         var items: [FactStatusItem] = []
 
@@ -63,7 +64,28 @@ public struct FactStatusClassifier: Sendable {
         items.append(contentsOf: assertions.compactMap { classifyAssertion($0, conflictedEvidence: conflictedEvidence) })
         items.append(contentsOf: gaps.map(classifyGap))
 
-        return items
+        // T17 — a human-review verdict is authoritative: overlay the latest
+        // review per subject on top of the derived classification.
+        guard !reviews.isEmpty else { return items }
+        return items.map { item in
+            guard let review = reviews[item.id] else { return item }
+            return Self.applyReview(item, review)
+        }
+    }
+
+    /// Overlay a review verdict. Accept/correct → proven; reject → unverified
+    /// (kept, shown rejected). Reason names the reviewer action.
+    static func applyReview(_ item: FactStatusItem, _ review: FactReview) -> FactStatusItem {
+        let suffix = review.reason.map { " — \($0)" } ?? "."
+        switch review.action {
+        case .accept:
+            return item.overriding(status: .proven, reason: "Accepted by reviewer (\(review.reviewer))\(suffix)")
+        case .correct:
+            let corrected = review.newValue.map { " New value: \($0)." } ?? ""
+            return item.overriding(status: .proven, reason: "Corrected by reviewer (\(review.reviewer))\(suffix)\(corrected)")
+        case .reject:
+            return item.overriding(status: .unverified, reason: "Rejected by reviewer (\(review.reviewer))\(suffix) Kept for the record.")
+        }
     }
 
     // MARK: Per-kind rules

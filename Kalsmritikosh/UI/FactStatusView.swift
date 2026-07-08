@@ -21,6 +21,7 @@ public struct FactStatusView: View {
     @State private var loading = true
     @State private var tab: Tab = .timeline
     @State private var evidenceFor: FactStatusItem?
+    @State private var reviewing: FactStatusItem?
 
     public init() {}
 
@@ -29,6 +30,7 @@ public struct FactStatusView: View {
         case evidence      = "Evidence"
         case contradictions = "Contradictions"
         case missing       = "Missing Proof"
+        case needsReview   = "Needs Review"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -36,6 +38,7 @@ public struct FactStatusView: View {
             case .evidence:       return "doc.text.magnifyingglass"
             case .contradictions: return "arrow.triangle.branch"
             case .missing:        return "questionmark.square.dashed"
+            case .needsReview:    return "checkmark.seal"
             }
         }
     }
@@ -58,6 +61,10 @@ public struct FactStatusView: View {
         .task { await load() }
         .sheet(item: $evidenceFor) { item in
             EvidenceSheet(item: item)
+                .environment(appState)
+        }
+        .sheet(item: $reviewing) { item in
+            ReviewSheet(item: item) { Task { await load() } }
                 .environment(appState)
         }
     }
@@ -109,6 +116,7 @@ public struct FactStatusView: View {
                     case .evidence:       evidenceTab
                     case .contradictions: contradictionsTab
                     case .missing:        missingTab
+                    case .needsReview:    needsReviewTab
                     }
                 }
                 .padding(14)
@@ -157,6 +165,23 @@ public struct FactStatusView: View {
         return Group {
             if rows.isEmpty {
                 tabEmpty("No gaps detected. Missing originals, sequence holes and dangling references will appear here.")
+            } else {
+                ForEach(rows) { row($0) }
+            }
+        }
+    }
+
+    /// Facts the system flags for a human: contradicted or unverified, minus
+    /// anything a reviewer has already accepted/corrected (which the overlay
+    /// promotes out of this set). Accept/reject/correct writes to the ledger.
+    private var needsReviewTab: some View {
+        let rows = items.filter { $0.status == .contradicted || $0.status == .unverified }
+        return Group {
+            Text("Human review is authoritative and preserved as a new ledger entry — it never overwrites history, and never replaces professional legal/forensic judgment.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .padding(.bottom, 4)
+            if rows.isEmpty {
+                tabEmpty("Nothing awaiting review. Contradicted and unverified facts appear here for accept / reject / correct.")
             } else {
                 ForEach(rows) { row($0) }
             }
@@ -242,6 +267,15 @@ public struct FactStatusView: View {
                 }
                 .buttonStyle(.borderless)
             }
+            // T17 — human review (gaps aren't reviewable facts).
+            if item.sourceKind != .gap {
+                Button {
+                    reviewing = item
+                } label: {
+                    Label("Review", systemImage: "checkmark.seal").font(.caption2)
+                }
+                .buttonStyle(.borderless)
+            }
         }
     }
 
@@ -324,9 +358,16 @@ public struct FactStatusView: View {
             asserts = (try? await repo.recent(limit: 300)) ?? []
         } else { asserts = [] }
 
+        // T17 — latest human-review verdict per subject (overlay input).
+        let reviews: [UUID: FactReview]
+        if let repo = appState.factReviews {
+            reviews = (try? await repo.latestBySubject()) ?? [:]
+        } else { reviews = [:] }
+
         let classified = FactStatusClassifier().classify(
             events: events, assertions: asserts,
-            contradictions: cons, gaps: gaps
+            contradictions: cons, gaps: gaps,
+            reviews: reviews
         )
         items = classified
         loading = false
@@ -395,5 +436,85 @@ private struct EvidenceSheet: View {
             objects = loaded
             loading = false
         }
+    }
+}
+
+// MARK: - Review sheet
+
+/// T17 — records a human accept / reject / correct as a NEW append-only
+/// `fact_reviews` row. Nothing is overwritten; the prior value is captured.
+private struct ReviewSheet: View {
+    let item: FactStatusItem
+    let onDone: () -> Void
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var action: FactReview.Action = .accept
+    @State private var reason: String = ""
+    @State private var corrected: String = ""
+    @State private var saving = false
+
+    private var reasonRequired: Bool { action != .accept }
+    private var canSave: Bool {
+        !saving && (!reasonRequired || !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Fact") {
+                    Text(item.title).font(.callout.weight(.medium))
+                    Text(item.reason).font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Verdict") {
+                    Picker("Action", selection: $action) {
+                        Text("Accept").tag(FactReview.Action.accept)
+                        Text("Reject").tag(FactReview.Action.reject)
+                        Text("Correct").tag(FactReview.Action.correct)
+                    }
+                    .pickerStyle(.segmented)
+                    if action == .correct {
+                        TextField("Corrected value", text: $corrected, axis: .vertical)
+                    }
+                    TextField(reasonRequired ? "Reason (required)" : "Reason (optional)",
+                              text: $reason, axis: .vertical)
+                }
+                Section {
+                    Text("Recorded as a new ledger entry — it never overwrites history, and never replaces professional judgment.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Review fact")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { await save() } }
+                        .disabled(!canSave)
+                }
+            }
+        }
+        .frame(minWidth: 480, minHeight: 400)
+    }
+
+    private func save() async {
+        saving = true
+        let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        let review = FactReview(
+            subjectKind: item.sourceKind,
+            subjectID: item.id,
+            action: action,
+            priorValue: "\(item.status.displayName): \(item.title)",
+            newValue: action == .correct
+                ? corrected.trimmingCharacters(in: .whitespacesAndNewlines)
+                : nil,
+            reason: trimmedReason.isEmpty ? nil : trimmedReason
+        )
+        try? await appState.factReviews?.record(review)
+        saving = false
+        onDone()
+        dismiss()
     }
 }

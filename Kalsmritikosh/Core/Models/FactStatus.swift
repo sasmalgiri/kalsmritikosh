@@ -106,4 +106,16 @@ public nonisolated struct FactStatusItem: Identifiable, Sendable, Hashable {
         self.sourceKind = sourceKind
         self.secondaryText = secondaryText
     }
+
+    /// Return a copy with a new status + reason (keeps id/date/evidence).
+    /// Used to overlay a human-review verdict (T17) on top of the derived
+    /// classification without mutating anything else.
+    public nonisolated func overriding(status: FactStatus, reason: String) -> FactStatusItem {
+        FactStatusItem(
+            id: id, status: status, title: title, reason: reason,
+            date: date, confidence: confidence,
+            evidenceObjectIDs: evidenceObjectIDs, sourceKind: sourceKind,
+            secondaryText: secondaryText
+        )
+    }
 }

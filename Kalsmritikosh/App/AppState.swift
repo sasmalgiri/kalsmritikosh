@@ -128,6 +128,8 @@ public final class AppState {
     public private(set) var gapNodes: GapNodeRepository?
     /// System 3 — persisted conflicts between simultaneously-supported claims.
     public private(set) var contradictions: ContradictionsRepository?
+    /// T17 — append-only human-review ledger over reconstructed facts.
+    public private(set) var factReviews: FactReviewsRepository?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -374,6 +376,7 @@ public final class AppState {
             let enrichmentRepo = EnrichmentStatusRepository(database: db)
             let gapNodesRepo = GapNodeRepository(database: db)
             let contradictionsRepo = ContradictionsRepository(database: db)
+            let factReviewsRepo = FactReviewsRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -1205,6 +1208,7 @@ public final class AppState {
             self.enrichment = enrichmentRepo
             self.gapNodes = gapNodesRepo
             self.contradictions = contradictionsRepo
+            self.factReviews = factReviewsRepo
             self.factBonds = factBondsRepo
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)

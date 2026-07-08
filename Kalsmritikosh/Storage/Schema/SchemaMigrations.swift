@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 32
+    public static let latestVersion = 33
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -69,7 +69,8 @@ public enum SchemaMigrations {
         (29, v29),
         (30, v30),
         (31, v31),
-        (32, v32)
+        (32, v32),
+        (33, v33)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1288,5 +1289,25 @@ public enum SchemaMigrations {
         WHERE confidence < 0.33;
 
     CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+    """
+
+    // T17 — append-only human-review ledger. Every accept/reject/correct is
+    // a new row; prior_value preserves what it superseded. Nothing is ever
+    // UPDATEd/DELETEd (§12.9 / §11 rule 11).
+    private static let v33: String = """
+    CREATE TABLE fact_reviews (
+        id            TEXT PRIMARY KEY NOT NULL,
+        subject_kind  TEXT NOT NULL,          -- event | assertion | contradiction | gap
+        subject_id    TEXT NOT NULL,          -- the reviewed ledger item's id
+        action        TEXT NOT NULL,          -- accept | reject | correct
+        prior_value   TEXT,
+        new_value     TEXT,
+        reviewer      TEXT NOT NULL DEFAULT 'user',
+        reason        TEXT,
+        reviewed_at   REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fact_reviews_subject ON fact_reviews(subject_id);
+    CREATE INDEX IF NOT EXISTS idx_fact_reviews_at ON fact_reviews(reviewed_at);
     """
 }

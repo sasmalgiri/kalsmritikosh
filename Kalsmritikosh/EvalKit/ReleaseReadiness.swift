@@ -136,7 +136,7 @@ public enum ReleaseReadiness {
 
     private static func checkSchemaIntegrity(_ state: AppState) -> Check {
         let t0 = Date()
-        let expected = 32
+        let expected = 33
         let got = SchemaMigrations.latestVersion
         let pass = got == expected
         return Check(
