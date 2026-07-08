@@ -223,7 +223,17 @@ public struct PDFLoader: Ingestor {
         }
         do { try png.write(to: tmp) } catch { return "" }
         defer { try? FileManager.default.removeItem(at: tmp) }
-        return (await ocr.recognizePrinted(at: tmp)).joined(separator: "\n")
+
+        let printed = (await ocr.recognizePrinted(at: tmp)).joined(separator: "\n")
+        // Table pass (ocr-table-pipeline port) for scanned/image-only PDF
+        // pages: append a tab-separated grid when the page is genuinely
+        // tabular. Keeps printed reading-order text as the base. Deterministic.
+        let grid = await ocr.recognizeTable(at: tmp)
+        let columnCount = grid.map(\.count).max() ?? 0
+        guard grid.count >= 2, columnCount >= 2 else { return printed }
+        let tsv = grid.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+        let base = printed.trimmingCharacters(in: .whitespacesAndNewlines)
+        return base.isEmpty ? tsv : "\(base)\n\n[TABLE]\n\(tsv)"
     }
     #endif
 }

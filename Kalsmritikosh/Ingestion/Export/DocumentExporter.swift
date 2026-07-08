@@ -249,6 +249,41 @@ public enum DocumentExporter {
         ])
     }
 
+    /// Grid overload — one worksheet row per input row, one cell per column.
+    /// Used to export an extracted table (TableOCR / header-mapped) to a real
+    /// multi-column .xlsx, matching the original ocr-table-pipeline output.
+    public static func xlsx(grid: [[String]]) -> Data {
+        var rows = ""
+        for (i, r) in grid.enumerated() { rows += row(i + 1, r) }
+        let sheet = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>\(rows)</sheetData></worksheet>
+        """
+        let workbook = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>
+        """
+        let workbookRels = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>
+        """
+        let contentTypes = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>
+        """
+        let rels = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>
+        """
+        return ZipWriter().archive([
+            .init(path: "[Content_Types].xml", data: Data(contentTypes.utf8)),
+            .init(path: "_rels/.rels", data: Data(rels.utf8)),
+            .init(path: "xl/workbook.xml", data: Data(workbook.utf8)),
+            .init(path: "xl/_rels/workbook.xml.rels", data: Data(workbookRels.utf8)),
+            .init(path: "xl/worksheets/sheet1.xml", data: Data(sheet.utf8))
+        ])
+    }
+
     private static func row(_ index: Int, _ cells: [String]) -> String {
         var out = "<row r=\"\(index)\">"
         for (c, value) in cells.enumerated() {
