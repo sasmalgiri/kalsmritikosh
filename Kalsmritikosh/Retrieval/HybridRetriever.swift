@@ -74,6 +74,12 @@ public actor HybridRetriever: Retriever {
     private let bondWalkSeedLimit: Int
     /// G3.17 — how many chunks the bond walks contribute.
     private let bondWalkChunkLimit: Int
+    /// T18 (§21) — optional. When wired, chunks whose parent KnowledgeObject
+    /// is flagged `privileged` are withheld from the final retrieval set —
+    /// a privacy post-filter (like PrivacyGate for providers) that leaves the
+    /// per-layer algorithms and their ordering untouched. nil, or zero
+    /// privileged objects, makes this a strict no-op (eval baseline unchanged).
+    private let objects: KnowledgeObjectRepository?
 
     public init(
         memory: MemoryRepository,
@@ -93,8 +99,10 @@ public actor HybridRetriever: Retriever {
         entityTrie: EntityTrie? = nil,
         entityTimeline: EntityTimeline? = nil,
         bondWalkSeedLimit: Int = 3,
-        bondWalkChunkLimit: Int = 10
+        bondWalkChunkLimit: Int = 10,
+        objects: KnowledgeObjectRepository? = nil
     ) {
+        self.objects = objects
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -212,8 +220,12 @@ public actor HybridRetriever: Retriever {
             hints: intent.entityHints
         )
 
+        // T18 (§21) — withhold chunks from privileged sources before the
+        // result is assembled. No-op unless something is actually privileged.
+        let visibleChunks = await excludingPrivileged(collectedChunks)
+
         return assemble(
-            chunks: collectedChunks,
+            chunks: visibleChunks,
             events: boostedEvents,
             entities: collectedEntities,
             relationships: collectedRelationships,
@@ -222,6 +234,20 @@ public actor HybridRetriever: Retriever {
             shortCircuit: nil,
             walkSteps: walkSteps
         )
+    }
+
+    /// Drop chunks whose parent KnowledgeObject is privileged. Guarded so it
+    /// costs nothing when no objects repo is wired or nothing is privileged.
+    private func excludingPrivileged(_ chunks: [RetrievedChunk]) async -> [RetrievedChunk] {
+        guard let objects else { return chunks }
+        let privileged = (try? await objects.privilegedObjectIDs()) ?? []
+        guard !privileged.isEmpty else { return chunks }
+        let filtered = chunks.filter { !privileged.contains($0.chunk.objectID) }
+        let withheld = chunks.count - filtered.count
+        if withheld > 0 {
+            AtlasLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) chunk(s) from retrieval (§21).")
+        }
+        return filtered
     }
 
     /// Re-orders events by 5W+H slot relevance:

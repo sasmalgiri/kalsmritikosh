@@ -15,6 +15,7 @@ import AppKit
 #endif
 import CoreText
 import CoreGraphics
+import OSLog
 
 public struct ExportRecord: Sendable {
     public let title: String
@@ -27,7 +28,66 @@ public struct ExportRecord: Sendable {
     }
 }
 
+/// T18 (§21) — a redaction rule. A literal string or a regex whose matches
+/// are masked in exported output. The original ledger text is never altered;
+/// redaction produces a COPY for export (preserve-everything directive).
+public struct Redaction: Sendable {
+    public enum Match: Sendable {
+        case literal(String)
+        case regex(String)
+    }
+    public let match: Match
+    public let caseInsensitive: Bool
+    public init(match: Match, caseInsensitive: Bool = true) {
+        self.match = match
+        self.caseInsensitive = caseInsensitive
+    }
+    public static func text(_ s: String, caseInsensitive: Bool = true) -> Redaction {
+        Redaction(match: .literal(s), caseInsensitive: caseInsensitive)
+    }
+    public static func pattern(_ p: String) -> Redaction {
+        Redaction(match: .regex(p), caseInsensitive: true)
+    }
+}
+
 public enum DocumentExporter {
+
+    // MARK: - T18 Redaction (§21)
+
+    /// Replacement token — hides both content AND length.
+    public static let redactionMask = "[REDACTED]"
+
+    /// Return a redacted COPY of `records`: every match of every rule in each
+    /// record's text is replaced with the mask. Empty `redactions` → the same
+    /// records unchanged. Apply this BEFORE any of the format writers below so
+    /// no format ever emits the redacted spans.
+    public static func redact(_ records: [ExportRecord], _ redactions: [Redaction]) -> [ExportRecord] {
+        guard !redactions.isEmpty else { return records }
+        return records.map { rec in
+            var text = rec.text
+            for r in redactions { text = apply(r, to: text) }
+            return ExportRecord(title: rec.title, sourceType: rec.sourceType, text: text)
+        }
+    }
+
+    private static func apply(_ redaction: Redaction, to text: String) -> String {
+        switch redaction.match {
+        case .literal(let needle):
+            guard !needle.isEmpty else { return text }
+            var opts: String.CompareOptions = []
+            if redaction.caseInsensitive { opts.insert(.caseInsensitive) }
+            return text.replacingOccurrences(of: needle, with: redactionMask, options: opts)
+        case .regex(let pattern):
+            var opts: NSRegularExpression.Options = []
+            if redaction.caseInsensitive { opts.insert(.caseInsensitive) }
+            guard let re = try? NSRegularExpression(pattern: pattern, options: opts) else {
+                AtlasLog.ingestion.error("Redaction: invalid regex, skipped: \(pattern, privacy: .public)")
+                return text
+            }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return re.stringByReplacingMatches(in: text, options: [], range: range, withTemplate: redactionMask)
+        }
+    }
 
     // MARK: - RTF (opens editable in Word/Pages)
 

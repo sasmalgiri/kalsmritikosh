@@ -630,7 +630,8 @@ public final class AppState {
                 walkExplainer: WalkExplainer(entities: entities, events: events, cache: bondCache),
                 memoryCache: memoryHashCache,
                 entityTrie: entityTrieCache,
-                entityTimeline: entityTimelineCache
+                entityTimeline: entityTimelineCache,
+                objects: objects   // T18 §21 — enables the privilege post-filter
             )
 
             let expertRegistry = ExpertRegistry()

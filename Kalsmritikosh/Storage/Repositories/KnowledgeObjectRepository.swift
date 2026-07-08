@@ -70,6 +70,14 @@ public actor KnowledgeObjectRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// The set of privileged object ids — used by the retriever to withhold
+    /// their chunks from answers (§21).
+    public func privilegedObjectIDs() async throws -> Set<UUID> {
+        let rows = try await database.query(
+            "SELECT id FROM knowledge_objects WHERE privileged = 1;")
+        return Set(rows.compactMap { $0.uuid(0) })
+    }
+
     public func fetchContent(id: KnowledgeObject.ID) async throws -> String? {
         let rows = try await database.query("""
         SELECT content FROM knowledge_objects WHERE id = ? LIMIT 1;
