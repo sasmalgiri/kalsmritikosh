@@ -45,6 +45,9 @@ public nonisolated enum EntityDossier {
         var out: [String] = []
         out.append("# Dossier: \(entity.value)")
         out.append("")
+        // Legal / accuracy declaration on every exported dossier.
+        out.append(LegalNotice.reportDisclaimer)
+        out.append("")
         out.append("- **Kind:** \(entity.kind.rawValue)")
         if let normalized = entity.normalizedValue, normalized != entity.value {
             out.append("- **Normalized:** `\(normalized)`")

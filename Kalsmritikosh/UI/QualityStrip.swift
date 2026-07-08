@@ -112,6 +112,17 @@ public struct QualityStrip: View {
             if answer.citations.count >= 2 {
                 evidenceRankingDisclosure(answer.citations)
             }
+            // Legal / accuracy declaration — shown on EVERY answer.
+            HStack(alignment: .top, spacing: 5) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                Text(LegalNotice.answerFooter)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
         }
     }
 

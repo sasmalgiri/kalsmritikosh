@@ -50,6 +50,8 @@ public struct InvestigationReportBuilder: Sendable {
         // Header.
         md += "# Investigation report\n\n"
         md += "_Generated \(now.formatted(date: .abbreviated, time: .shortened))._\n\n"
+        // Legal / accuracy declaration on every exported report.
+        md += LegalNotice.reportDisclaimer + "\n\n"
 
         // Section 1 — Executive Summary.
         md += "## Executive summary\n\n"

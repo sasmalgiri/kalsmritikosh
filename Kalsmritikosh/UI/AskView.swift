@@ -213,6 +213,10 @@ public struct AskView: View {
                 Text("Grounded in your archive — every answer cites its evidence")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text(LegalNotice.askEntry)
+                    .font(.caption2)
+                    .foregroundStyle(.orange.opacity(0.9))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             InfoPopoverButton(
                 title: "How answers work",

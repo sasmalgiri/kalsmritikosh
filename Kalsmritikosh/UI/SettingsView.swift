@@ -112,6 +112,8 @@ public struct SettingsView: View {
                 maintenanceSection
                 Divider()
                 optionalIngestSection
+                Divider()
+                legalSection
 
                 // ── Advanced (collapsed by default) ───────────────────────
                 Divider()
@@ -931,6 +933,44 @@ public struct SettingsView: View {
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }
 
+
+    /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
+    /// third-party notices. Always visible (not hidden under Advanced) so the
+    /// declarations are easy to find.
+    private var legalSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.shield")
+                    .foregroundStyle(Theme.brand)
+                Text("Legal & Privacy").font(.title3.bold())
+            }
+            Text(LegalNotice.disclaimerHeadline)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            legalItem("Accuracy — verify every answer", LegalNotice.accuracyStatement, "exclamationmark.triangle")
+            legalItem("Privacy — private by design", LegalNotice.privacyStatement, "lock.shield")
+            legalItem("Terms — provided “as is”", LegalNotice.termsStatement, "doc.text")
+            legalItem("Acknowledgments", LegalNotice.thirdPartyStatement, "shippingbox")
+
+            Text(LegalNotice.counselNote)
+                .font(.caption2.italic())
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+    }
+
+    private func legalItem(_ title: String, _ body: String, _ icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Label(title, systemImage: icon)
+                .font(.callout.weight(.medium))
+            Text(body)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
 
     /// Answering intelligence — the on-device MoE reasoning dials + the
     /// fully-private switch. All read/write FeatureFlags / PrivacyGate live;
