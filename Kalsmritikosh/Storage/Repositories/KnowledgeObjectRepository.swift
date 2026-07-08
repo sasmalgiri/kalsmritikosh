@@ -42,6 +42,34 @@ public actor KnowledgeObjectRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    // MARK: - T18 privilege (§21)
+
+    /// Mark / unmark a KnowledgeObject as privileged. Privileged material is
+    /// withheld from answer/evidence surfaces (enforced at the presentation
+    /// boundary; full retrieval-layer enforcement is a follow-up).
+    public func setPrivileged(_ privileged: Bool, forID id: KnowledgeObject.ID) async throws {
+        try await database.exec(
+            "UPDATE knowledge_objects SET privileged = ? WHERE id = ?;",
+            [.integer(privileged ? 1 : 0), .uuid(id)]
+        )
+    }
+
+    /// Whether a KnowledgeObject is flagged privileged. Missing row → false.
+    public func isPrivileged(_ id: KnowledgeObject.ID) async throws -> Bool {
+        let rows = try await database.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ? LIMIT 1;",
+            [.uuid(id)]
+        )
+        return (rows.first?.int(0) ?? 0) != 0
+    }
+
+    /// Count of privileged objects — a UI signal that material is withheld.
+    public func privilegedCount() async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM knowledge_objects WHERE privileged = 1;")
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     public func fetchContent(id: KnowledgeObject.ID) async throws -> String? {
         let rows = try await database.query("""
         SELECT content FROM knowledge_objects WHERE id = ? LIMIT 1;

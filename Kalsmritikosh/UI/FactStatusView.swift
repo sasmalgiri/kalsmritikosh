@@ -385,6 +385,7 @@ private struct EvidenceSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var objects: [KnowledgeObject] = []
+    @State private var withheldCount = 0
     @State private var loading = true
 
     var body: some View {
@@ -394,7 +395,9 @@ private struct EvidenceSheet: View {
                     ProgressView().controlSize(.small)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if objects.isEmpty {
-                    Text("The evidence for this fact could not be resolved to a stored source.")
+                    Text(withheldCount > 0
+                         ? "\(withheldCount) source\(withheldCount == 1 ? "" : "s") withheld as privileged."
+                         : "The evidence for this fact could not be resolved to a stored source.")
                         .font(.callout).foregroundStyle(.secondary)
                         .multilineTextAlignment(.center).padding(40)
                 } else {
@@ -428,12 +431,17 @@ private struct EvidenceSheet: View {
         .frame(minWidth: 520, minHeight: 420)
         .task {
             var loaded: [KnowledgeObject] = []
+            var withheld = 0
             if let repo = appState.objects {
                 for id in item.evidenceObjectIDs {
+                    // T18 — privileged material is withheld from the evidence
+                    // surface (§21), not shown and then hidden.
+                    if (try? await repo.isPrivileged(id)) == true { withheld += 1; continue }
                     if let ko = try? await repo.load(id: id) { loaded.append(ko) }
                 }
             }
             objects = loaded
+            withheldCount = withheld
             loading = false
         }
     }
