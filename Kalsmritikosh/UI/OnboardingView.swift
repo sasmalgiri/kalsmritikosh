@@ -52,6 +52,22 @@ public struct OnboardingView: View {
             footer
         }
         .frame(minWidth: 640, minHeight: 480)
+        // Always give the user a way out — a close button in the corner and
+        // the standard ⎋ (Escape) shortcut. Onboarding is optional; they can
+        // set everything up later from Sources / Settings.
+        .overlay(alignment: .topTrailing) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .padding(10)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)   // Escape
+            .help("Close — you can add folders later from Sources")
+        }
         .task { await loadProfile() }
         .onChange(of: step) { _, newStep in
             if newStep == .scope {
