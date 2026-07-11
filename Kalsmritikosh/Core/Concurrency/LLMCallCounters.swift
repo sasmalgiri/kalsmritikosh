@@ -38,14 +38,30 @@ public actor LLMCallCounters {
         }
     }
 
+    /// One provider-boundary generation, tagged with the request it belongs
+    /// to (nil = background / non-query work). Lets RealDataProbe count a
+    /// question's calls by request ID instead of a global before/after delta,
+    /// so background generation can't contaminate a per-question count. (§14)
+    public struct CallRecord: Sendable {
+        public let requestID: UUID?
+        public let providerID: String?
+        public let purpose: String
+        public let timestamp: Date
+    }
+
     private var snap = Snapshot()
     // Throughput window for self-calibration: first + last call time.
     private var firstCallAt: Date?
     private var lastCallAt: Date?
+    // Bounded ring of recent calls for request-scoped counting.
+    private var records: [CallRecord] = []
+    private let maxRecords = 2000
 
-    public func recordCall(purpose: String) {
+    public func recordCall(purpose: String, requestID: UUID? = nil, providerID: String? = nil) {
         snap.callsRun += 1
         snap.byPurpose[purpose, default: 0] += 1
+        records.append(CallRecord(requestID: requestID, providerID: providerID, purpose: purpose, timestamp: Date()))
+        if records.count > maxRecords { records.removeFirst(records.count - maxRecords) }
 
         // Measure effective throughput (wall-seconds per call over the
         // active window — folds in provider parallelism) and persist it
@@ -72,5 +88,22 @@ public actor LLMCallCounters {
     public func recordEmbedCacheMiss(_ n: Int = 1) { snap.embedCacheMisses += n }
 
     public func snapshot() -> Snapshot { snap }
-    public func reset() { snap = Snapshot() }
+    public func reset() {
+        snap = Snapshot()
+        records.removeAll()
+        firstCallAt = nil
+        lastCallAt = nil
+    }
+
+    /// Number of generative calls recorded for one request (by root request
+    /// ID). Immune to background calls, which carry `requestID == nil`.
+    public func count(requestID: UUID) -> Int {
+        records.reduce(0) { $0 + ($1.requestID == requestID ? 1 : 0) }
+    }
+
+    /// The declared purposes of a request's calls, in order — feeds the
+    /// reasoning trace / RealDataProbe with actual purposes (§7).
+    public func purposes(requestID: UUID) -> [String] {
+        records.filter { $0.requestID == requestID }.map(\.purpose)
+    }
 }

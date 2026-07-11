@@ -58,6 +58,37 @@ public protocol ModelProvider: Sendable {
 }
 
 extension ModelProvider {
+    /// Budget-enforced generation boundary (§6). Reserves one call from the
+    /// request's shared `LLMCallBudget` BEFORE inference — throwing
+    /// `LLMCallBudgetError.exhausted` when the ceiling is hit — then delegates
+    /// to the provider's raw `generate(prompt:options:)` and records the call's
+    /// terminal status. A failed or cancelled call still consumes the
+    /// reservation (compute/network was attempted; never auto-refunded, §4).
+    /// When `context` is nil (background / not-yet-migrated work) no budget is
+    /// enforced and it behaves exactly like the raw call.
+    public func generate(
+        prompt: String,
+        options: GenerationOptions,
+        purpose: String,
+        context: LLMRequestContext?
+    ) async throws -> String {
+        guard let context else {
+            return try await generate(prompt: prompt, options: options)
+        }
+        let reservation = try await context.budget.reserve(purpose: purpose, providerID: id)
+        do {
+            let result = try await generate(prompt: prompt, options: options)
+            await context.budget.finish(sequence: reservation, status: .completed)
+            return result
+        } catch is CancellationError {
+            await context.budget.finish(sequence: reservation, status: .cancelled)
+            throw CancellationError()
+        } catch {
+            await context.budget.finish(sequence: reservation, status: .failed)
+            throw error
+        }
+    }
+
     /// Default batch impl: loop over `embed(text:)`. Providers should
     /// override when a real batch endpoint is available.
     public func embedBatch(texts: [String]) async throws -> [[Float]] {
