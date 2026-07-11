@@ -94,7 +94,9 @@ public struct AnswerSynthesizer: Sendable {
         experts have already extracted and verified the findings below. Compose a \
         clear, direct answer to the question using ONLY those findings and evidence. \
         Introduce NO fact, name, number, or date not present in them; if they are \
-        thin, say so plainly. Be concise. Output only the answer.
+        thin, say so plainly. After EVERY sentence that states a fact, cite the \
+        supporting evidence number(s) inline like [1] or [2][3]. Be concise. Output \
+        only the answer.
         """
         let draftPrompt = """
         Question: \(question)
@@ -133,7 +135,8 @@ public struct AnswerSynthesizer: Sendable {
             anything unsupported, reconcile any contradictions by presenting \
             BOTH sides rather than silently picking one, and add any important \
             finding the draft omitted. Add no new fact, name, number, or date. \
-            Keep it concise. Output only the revised answer.
+            After EVERY factual sentence, cite the supporting evidence number(s) \
+            inline like [1] or [2][3]. Keep it concise. Output only the revised answer.
             """
             let refinePrompt = """
             Question: \(question)
@@ -158,7 +161,44 @@ public struct AnswerSynthesizer: Sendable {
 
         let final = answer.trimmingCharacters(in: .whitespacesAndNewlines)
         guard final.count >= 2 else { return nil }
+
+        // §17 — sentence-level citation validation. Reject prose whose factual
+        // sentences are largely UNcited rather than ship ungrounded text; the
+        // caller then keeps the verifier's claim-cited deterministic body. We
+        // don't silently strip sentences (that guts a small model's answer) —
+        // we reject the whole synthesis when its grounding is too thin.
+        let coverage = Self.citationCoverage(final, citationCount: citations.count)
+        if coverage.substantiveSentences >= 2, coverage.citedFraction < 0.5 {
+            KalsmritikoshLog.brain.info("AnswerSynthesizer: rejecting synthesis — only \(Int(coverage.citedFraction * 100), privacy: .public)% of factual sentences carried a citation; keeping grounded deterministic body")
+            return nil
+        }
         return final
+    }
+
+    /// Fraction of substantive sentences that carry at least one in-range
+    /// `[n]` citation label. Pure; reuses the composer's sentence splitter.
+    static func citationCoverage(_ prose: String, citationCount: Int) -> (substantiveSentences: Int, citedFraction: Double) {
+        guard citationCount > 0 else { return (0, 1.0) }
+        let sentences = LLMNarrativeComposer.splitSentences(prose)
+        let regex = try? NSRegularExpression(pattern: #"\[(\d+)\]"#)
+        var substantive = 0
+        var cited = 0
+        for s in sentences {
+            // "Substantive" = enough words to be a factual claim, not a header
+            // or a one-word connector.
+            let wordCount = s.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
+            guard wordCount >= 4 else { continue }
+            substantive += 1
+            let ns = s as NSString
+            let matches = regex?.matches(in: s, range: NSRange(location: 0, length: ns.length)) ?? []
+            let hasInRange = matches.contains { m in
+                guard m.numberOfRanges >= 2, let n = Int(ns.substring(with: m.range(at: 1))) else { return false }
+                return n >= 1 && n <= citationCount
+            }
+            if hasInRange { cited += 1 }
+        }
+        let fraction = substantive == 0 ? 1.0 : Double(cited) / Double(substantive)
+        return (substantive, fraction)
     }
 
     // MARK: - Helpers

@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 34
+    public static let latestVersion = 35
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -71,7 +71,8 @@ public enum SchemaMigrations {
         (31, v31),
         (32, v32),
         (33, v33),
-        (34, v34)
+        (34, v34),
+        (35, v35)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1331,5 +1332,34 @@ public enum SchemaMigrations {
 
     ALTER TABLE files ADD COLUMN privileged INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE knowledge_objects ADD COLUMN privileged INTEGER NOT NULL DEFAULT 0;
+    """
+
+    // §16 — derived-objects ledger. Append-only record of every USEFUL
+    // query-time LLM extraction (claim / event / relationship / contradiction
+    // / memory / timeline interpretation) with full provenance, so
+    // minimum-LLM work compounds instead of repeating: a later request with an
+    // unchanged source_hash + extractor_version can REUSE the stored result
+    // rather than paying for the model again. Never overwritten — a correction
+    // inserts a new row and points the old row's superseded_by at it.
+    private static let v35: String = """
+    CREATE TABLE derived_objects (
+        id                TEXT PRIMARY KEY NOT NULL,
+        kind              TEXT NOT NULL,
+        content           TEXT NOT NULL,
+        source_evidence   TEXT,
+        source_hash       TEXT NOT NULL,
+        model_id          TEXT,
+        provider_id       TEXT,
+        prompt_version    TEXT,
+        extractor_version TEXT NOT NULL,
+        confidence        REAL NOT NULL DEFAULT 0,
+        review_status     TEXT NOT NULL DEFAULT 'unreviewed',
+        superseded_by     TEXT,
+        created_at        REAL NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_derived_source_hash ON derived_objects(source_hash);
+    CREATE INDEX IF NOT EXISTS idx_derived_kind ON derived_objects(kind);
+    CREATE INDEX IF NOT EXISTS idx_derived_extractor ON derived_objects(extractor_version);
     """
 }

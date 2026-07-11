@@ -57,6 +57,11 @@ public actor MasterBrain {
     /// memory object. This is the complement to ingest-time distillation
     /// being off: cold data stays cheap, asked-about data warms lazily.
     private let onDemandDistiller: MemoryDistiller?
+    /// §16 — append-only derived-objects ledger. When wired, a successful
+    /// query-time answer persists its verified claims here (fire-and-forget)
+    /// with provenance, so the corpus of derived knowledge grows across
+    /// sessions. nil = not persisted (behaviour otherwise unchanged).
+    private let derivedObjects: DerivedObjectsRepository?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -74,7 +79,8 @@ public actor MasterBrain {
         narrativeComposer: NarrativeComposer? = nil,
         eventsRepo: EventsRepository? = nil,
         eventLinks: EventLinksRepository? = nil,
-        onDemandDistiller: MemoryDistiller? = nil
+        onDemandDistiller: MemoryDistiller? = nil,
+        derivedObjects: DerivedObjectsRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -89,6 +95,29 @@ public actor MasterBrain {
         self.eventsRepo = eventsRepo
         self.eventLinks = eventLinks
         self.onDemandDistiller = onDemandDistiller
+        self.derivedObjects = derivedObjects
+    }
+
+    /// Fire-and-forget: persist an answer's verified claims as derived ledger
+    /// objects with provenance (§16). Deduped by content hash in the repo, so
+    /// re-answering the same question doesn't pile up rows. Never blocks the
+    /// answer.
+    private func persistDerived(_ answer: VerifiedAnswer, purposes: [String]) {
+        guard let derivedObjects, !answer.refused, !answer.citations.isEmpty else { return }
+        let evidence = Array(Set(answer.citations.map(\.objectID)))
+        let body = answer.answerText ?? answer.body
+        guard body.count >= 8 else { return }
+        let providerID = purposes.first
+        Task.detached(priority: .utility) {
+            _ = try? await derivedObjects.record(DerivedObject(
+                kind: .claim,
+                content: body,
+                sourceEvidence: evidence,
+                providerID: providerID,
+                extractorVersion: "answer.v1",
+                confidence: answer.confidence.value
+            ))
+        }
     }
 
     /// Fire-and-forget: warm memory for the question's entities (once per
@@ -903,7 +932,11 @@ public actor MasterBrain {
                 context: llmContext
             )
         }
-        return Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
+        let tagged = Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
+        // §16 — persist the verified answer as a derived ledger object (with
+        // provenance) so derived knowledge compounds across sessions.
+        persistDerived(tagged, purposes: trace.expertIDs)
+        return tagged
     }
 
     /// Adaptive LLM budget (ledger-first Phase 4). How much extra reasoning

@@ -182,13 +182,21 @@ over-budget request. Files: `Core/LLM/LLMCallBudget.swift`, `Core/LLM/LLMRequest
 `Brain/LLMQueryClass.swift`, `Brain/LLMQueryClassifier.swift`,
 `Brain/DeterministicEvidenceFallback.swift`.
 
-### Still partial (honest)
+### §17 sentence-level citation — DONE
 
-- **§17 sentence-level citation** — the *reconstruction* path already binds every prose
-  sentence to `[E?]` evidence labels and drops uncited sentences (`parseClaimCitations`).
-  The *expert-synthesis* path binds at claim granularity (the claim–evidence contract),
-  not yet sentence-by-sentence structured output. Full sentence-level structured synthesis
-  is a follow-up.
-- **§16 persist query-time extraction** — query-time claims/events are not yet written back
-  as versioned derived ledger objects for reuse. That needs a new derived-objects table +
-  migration and is tracked as a standalone feature.
+- *Reconstruction* path binds every prose sentence to `[E?]` labels and drops uncited
+  sentences (`parseClaimCitations`).
+- *Expert-synthesis* path now requires inline `[n]` citations and **rejects** prose whose
+  factual sentences are <50% cited (`AnswerSynthesizer.citationCoverage`) — the brain then
+  ships the verifier's claim-cited deterministic body instead of ungrounded text. No
+  ungrounded factual prose reaches the user.
+
+### §16 persist query-time extraction — ledger + write-side DONE
+
+- Schema v35 `derived_objects` (append-only, full provenance: source evidence + hash, model
+  / provider / prompt / extractor version, confidence, review status, superseded_by).
+- `DerivedObject` + `DerivedObjectsRepository` (dedup by content hash; `currentByHash` reuse
+  hook). A successful expert answer persists its verified claims fire-and-forget.
+- **Remaining optimization:** the read-side reuse (consult `currentByHash` BEFORE calling
+  the model) is not yet wired into the hot path — that's a caching optimization needing
+  cache-invalidation tests, deliberately left for a measured follow-up.

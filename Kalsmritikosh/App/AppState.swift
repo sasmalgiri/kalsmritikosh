@@ -132,6 +132,8 @@ public final class AppState {
     public private(set) var factReviews: FactReviewsRepository?
     /// T18 — append-only chain-of-custody ledger over source files.
     public private(set) var custody: CustodyRepository?
+    /// §16 — append-only derived-objects ledger (query-time extractions).
+    public private(set) var derivedObjects: DerivedObjectsRepository?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -384,6 +386,7 @@ public final class AppState {
             let contradictionsRepo = ContradictionsRepository(database: db)
             let factReviewsRepo = FactReviewsRepository(database: db)
             let custodyRepo = CustodyRepository(database: db)
+            let derivedObjectsRepo = DerivedObjectsRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -737,7 +740,8 @@ public final class AppState {
                 narrativeComposer: narrativeComposer,
                 eventsRepo: events,
                 eventLinks: eventLinksRepo,
-                onDemandDistiller: memoryDistiller
+                onDemandDistiller: memoryDistiller,
+                derivedObjects: derivedObjectsRepo
             )
 
             // ── Ingestion ────────────────────────────────────────────
@@ -1202,6 +1206,7 @@ public final class AppState {
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
+            self.derivedObjects = derivedObjectsRepo
             self.factBonds = factBondsRepo
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)
