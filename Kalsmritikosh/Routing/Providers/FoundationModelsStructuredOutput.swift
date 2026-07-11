@@ -82,6 +82,8 @@ extension FoundationModelsProvider {
     ) async throws -> [ExpertFindings.Claim] {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {
+            // Provider-boundary LLM-call counter (see OllamaProvider.generate).
+            await LLMCallCounters.shared.recordCall(purpose: "generate")
             let instructions = systemPrompt
                 ?? "You are Kalsmritikosh. Reply ONLY with citation-shaped claims; never invent IDs."
             let session = LanguageModelSession(instructions: instructions)

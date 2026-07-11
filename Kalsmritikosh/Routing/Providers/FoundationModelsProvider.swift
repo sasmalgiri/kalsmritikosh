@@ -58,6 +58,8 @@ public struct FoundationModelsProvider: ModelProvider {
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {
+            // Provider-boundary LLM-call counter (see OllamaProvider.generate).
+            await LLMCallCounters.shared.recordCall(purpose: "generate")
             let instructions = options.systemPrompt ?? "You are Kalsmritikosh, a precise knowledge-OS assistant."
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: Prompt(prompt))

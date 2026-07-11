@@ -42,6 +42,9 @@ public struct SettingsView: View {
     @State private var releaseReadinessRunning = false
     @State private var releaseReadinessReport: ReleaseReadiness.Report?
     @State private var releaseReadinessStatus: String?
+    @State private var realDataProbeRunning = false
+    @State private var realDataProbeStatus: String?
+    @State private var realDataProbeURL: URL?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -552,6 +555,29 @@ public struct SettingsView: View {
                 }
                 .disabled(releaseReadinessRunning)
 
+                // Runs against YOUR real archive (read-only), not the fixture —
+                // measures LLM calls + latency + which of your files got cited.
+                Button {
+                    Task { await runRealDataProbe() }
+                } label: {
+                    if realDataProbeRunning {
+                        Label("Probing…", systemImage: "hourglass")
+                    } else {
+                        Label("Probe My Data", systemImage: "person.text.rectangle")
+                    }
+                }
+                .disabled(realDataProbeRunning)
+
+                if let url = realDataProbeURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Reveal probe", systemImage: "doc.text.magnifyingglass")
+                    }
+                }
+
                 if let report = releaseReadinessReport {
                     Button {
                         #if canImport(AppKit)
@@ -596,6 +622,13 @@ public struct SettingsView: View {
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
+            if let status = realDataProbeStatus {
+                Divider().padding(.vertical, 2)
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .background(verdictColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -616,6 +649,27 @@ public struct SettingsView: View {
         releaseReadinessReport = result
         appState.recordSelfCheck(result)
         releaseReadinessStatus = nil
+    }
+
+    /// Runs a handful of questions against the user's LIVE archive (read-only)
+    /// and reports LLM calls + latency + which real files got cited — the
+    /// real-data complement to the fixture-based Fast/Deep evals.
+    private func runRealDataProbe() async {
+        realDataProbeRunning = true
+        realDataProbeURL = nil
+        realDataProbeStatus = "Probing your archive (read-only) — asking questions about your real entities…"
+        defer { realDataProbeRunning = false }
+        let result = await RealDataProbe.run(appState)
+        realDataProbeURL = result.reportURL
+        if result.results.isEmpty {
+            realDataProbeStatus = "No questions could be built — is anything ingested yet?"
+            return
+        }
+        realDataProbeStatus = """
+        ✓ Real-data probe: \(result.questionCount) question(s)
+        avg \(String(format: "%.1f", result.avgCallsPerQuestion)) LLM call(s)/question · avg \(String(format: "%.1f", result.avgLatencySeconds))s/question · \(String(format: "%.1f", result.totalSeconds))s total
+        Report: \(result.reportURL?.lastPathComponent ?? "—")
+        """
     }
 
     private func runFastEval() async {

@@ -112,6 +112,11 @@ public actor OllamaProvider: ModelProvider {
         guard !modelTag.isEmpty else {
             throw ModelProviderError.generationFailed(reason: "No model tag configured for Ollama provider.")
         }
+        // Single source of truth for "an LLM generation ran" — every answer /
+        // ingest / rerank call funnels through a provider boundary, so the Live
+        // dashboard and RealDataProbe can count calls without threading a
+        // counter through every caller.
+        await LLMCallCounters.shared.recordCall(purpose: "generate")
 
         var body: [String: Any] = [
             "model": modelTag,

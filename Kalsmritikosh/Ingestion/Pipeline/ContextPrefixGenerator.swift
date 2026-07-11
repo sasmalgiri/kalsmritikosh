@@ -193,7 +193,8 @@ public actor LLMContextPrefixGenerator: ContextPrefixGenerator {
                     if attempt > 1 {
                         KalsmritikoshLog.knowledge.info("contextPrefix: provider \(provider.id, privacy: .public) recovered on attempt \(attempt, privacy: .public) with \(attemptTimeout, privacy: .public)ms")
                     }
-                    await LLMCallCounters.shared.recordCall(purpose: "contextPrefix")
+                    // (LLM call is counted at the provider boundary now — see
+                    // OllamaProvider.generate — so no manual recordCall here.)
                     // Healthy — clear any accrued failure/cooldown.
                     await capabilities.reportOutcome(providerID: provider.id, success: true)
                     return ContextPrefixResult(
