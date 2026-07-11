@@ -51,8 +51,11 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
     public func compose(
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventSlots: [Event.ID: EventNarrativeSlots]
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext? = nil
     ) async throws -> ReconstructedNarrative {
+        // Rule-based composer makes NO LLM calls, so it ignores the budget.
+        _ = context
         let scope = LLMNarrativeComposer.scope(from: intent)
         let planned = await planner.plan(events: retrieval.events)
         let limited = Array(planned.prefix(maxChapters))

@@ -32,16 +32,20 @@ public struct InvestigationPlanner: Sendable {
     // MainActor (Swift 6 strict-concurrency requirement).
     public nonisolated init() {}
 
-    /// Maximum number of sub-questions the planner will emit. Caps the
-    /// runner's per-investigation cost.
-    public static let maxSteps: Int = 5
+    /// Maximum number of sub-questions the planner will emit. Capped at 2 so
+    /// an investigation stays within its ≤5-call budget: planner (1) + up to
+    /// 2 executed steps (each ≥1) + synthesis (1) (spec §12). Extra proposed
+    /// sub-questions are dropped here rather than executed automatically.
+    public static let maxSteps: Int = 2
 
     /// Decompose `question` into sub-question steps. Returns nil when
     /// no reasoning provider is available; the runner surfaces a
-    /// `.failed` update in that case.
+    /// `.failed` update in that case. `context` carries the investigation's
+    /// shared budget so the planner call reserves from it.
     public func plan(
         question: String,
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        context: LLMRequestContext? = nil
     ) async -> Investigation? {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -73,7 +77,9 @@ public struct InvestigationPlanner: Sendable {
                     topP: 0.95,
                     stopSequences: [],
                     systemPrompt: Self.systemPrompt
-                )
+                ),
+                purpose: "investigation.plan",
+                context: context
             )
         } catch {
             KalsmritikoshLog.app.error("InvestigationPlanner: generate failed — \(String(describing: error), privacy: .public)")

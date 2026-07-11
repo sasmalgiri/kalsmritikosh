@@ -214,10 +214,14 @@ public nonisolated struct NarrativeCoverage: Sendable, Codable, Hashable {
 /// Composers MUST NOT cache between calls — they're stateless given
 /// a UserIntent + retrieval set, mirroring the experts' contract.
 public protocol NarrativeComposer: Sendable {
+    /// `context` carries the request's shared LLM budget so chapter
+    /// generations reserve from the same allowance as the rest of the
+    /// question (nil = unscoped / no budget).
     func compose(
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventSlots: [Event.ID: EventNarrativeSlots]
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext?
     ) async throws -> ReconstructedNarrative
 
     /// HISTORY Phase D.7 true-streaming variant. Yields each
@@ -232,15 +236,35 @@ public protocol NarrativeComposer: Sendable {
     nonisolated func composeStreaming(
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventSlots: [Event.ID: EventNarrativeSlots]
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext?
     ) -> AsyncStream<NarrativeStreamEvent>
 }
 
 public extension NarrativeComposer {
+    /// Convenience: unscoped compose (no shared budget).
+    func compose(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots]
+    ) async throws -> ReconstructedNarrative {
+        try await compose(intent: intent, retrieval: retrieval, eventSlots: eventSlots, context: nil)
+    }
+
+    /// Convenience: unscoped streaming (no shared budget).
     nonisolated func composeStreaming(
         intent: UserIntent,
         retrieval: RetrievalResult,
         eventSlots: [Event.ID: EventNarrativeSlots]
+    ) -> AsyncStream<NarrativeStreamEvent> {
+        composeStreaming(intent: intent, retrieval: retrieval, eventSlots: eventSlots, context: nil)
+    }
+
+    nonisolated func composeStreaming(
+        intent: UserIntent,
+        retrieval: RetrievalResult,
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext?
     ) -> AsyncStream<NarrativeStreamEvent> {
         AsyncStream { continuation in
             Task {
@@ -248,7 +272,8 @@ public extension NarrativeComposer {
                     let narrative = try await compose(
                         intent: intent,
                         retrieval: retrieval,
-                        eventSlots: eventSlots
+                        eventSlots: eventSlots,
+                        context: context
                     )
                     for chapter in narrative.chapters {
                         continuation.yield(.chapter(chapter))

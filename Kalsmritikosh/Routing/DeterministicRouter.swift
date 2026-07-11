@@ -25,14 +25,15 @@ public actor DeterministicRouter: Router {
     public func route(intent: UserIntent) async throws -> RoutingDecision {
         let score = await complexity.score(intent)
         let allExperts = await expertRegistry.experts(for: intent).map(\.id)
-        // Ledger-first minimum-LLM (Phase 4): an ordinary question must cost
-        // ONE expert LLM call, not one per specialist. Parallel multi-expert
-        // fan-out is reserved for genuinely complex questions (complexity ≥ 4);
-        // the brain adds a second specialist only on a detected contradiction
-        // or a failed verification (see MasterBrain's escalation ladder).
-        let experts = Self.minimalExpertSet(from: allExperts, complexity: score.value)
+        // Ledger-first HARD budget (spec §9): the query class sets the expert
+        // ceiling — ordinary/moderate 1, complex/investigation ≤2, and
+        // reconstruction routes to the narrative composer (0 experts), never a
+        // full fan-out. This bounds the expert calls BEFORE synthesis, so a
+        // complex question can't blow its 3-call budget on experts alone.
+        let queryClass = LLMQueryClassifier.classify(question: intent.rawQuestion, intent: intent)
+        let experts = Self.minimalExpertSet(from: allExperts, queryClass: queryClass)
         let layers = retrievalLayers(for: intent.kind)
-        let parallelism = max(1, min(experts.count, max(2, score.value)))
+        let parallelism = max(1, min(max(1, experts.count), max(2, score.value)))
         let spec = answerSpec(for: intent, score: score)
 
         return RoutingDecision(
@@ -41,22 +42,26 @@ public actor DeterministicRouter: Router {
             retrievalLayers: layers,
             parallelism: parallelism,
             complexity: score.value,
-            rationale: "complexity=\(score.value) [\(score.contributors.joined(separator: ","))]"
+            rationale: "class=\(queryClass.rawValue) budget=\(queryClass.callLimit) experts=\(experts.count) complexity=\(score.value) [\(score.contributors.joined(separator: ","))]"
         )
     }
 
-    /// Trim the expert panel to a single generalist specialist for ordinary
-    /// (low-complexity) questions; keep the full panel only when the question
-    /// is genuinely complex (complexity ≥ 4). Prefers the cross-evidence
-    /// ReasoningExpert so the single call still reasons across every retrieved
-    /// layer and emits grounded, citable claims. The one intentional lever
-    /// behind the "one LLM call for ordinary questions" budget.
-    static func minimalExpertSet(from ids: [String], complexity: Int) -> [String] {
-        guard complexity < 4 else { return ids }
+    /// Cap the expert panel to the query class's `expertLimit` (spec §9),
+    /// preferring the cross-evidence ReasoningExpert so the first call reasons
+    /// across every retrieved layer, then filling with the intent's domain
+    /// experts up to the ceiling. Reconstruction returns [] — that path is the
+    /// narrative composer, not the expert fan-out.
+    static func minimalExpertSet(from ids: [String], queryClass: LLMQueryClass) -> [String] {
+        let limit = queryClass.expertLimit
+        guard limit > 0, !ids.isEmpty else { return [] }
+        var ordered: [String] = []
         if let generalist = ids.first(where: { $0 == "expert.reasoning" }) {
-            return [generalist]
+            ordered.append(generalist)
         }
-        return ids.isEmpty ? [] : [ids[0]]
+        for id in ids where id != "expert.reasoning" && ordered.count < limit {
+            ordered.append(id)
+        }
+        return Array(ordered.prefix(limit))
     }
 
     private func retrievalLayers(for kind: UserIntent.Kind) -> [RetrievalLayer] {

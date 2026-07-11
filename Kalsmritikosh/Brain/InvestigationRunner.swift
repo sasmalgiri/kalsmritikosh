@@ -52,9 +52,20 @@ public actor InvestigationRunner {
     public nonisolated func investigate(question: String) -> AsyncStream<InvestigationUpdate> {
         AsyncStream { continuation in
             Task { [planner, brain, capabilities, investigations] in
+                // ONE hard budget for the whole investigation (spec §12): the
+                // planner call, every nested brain.answer step, and the final
+                // synthesis all reserve from this shared ≤5-call allowance.
+                // Nested answers get it via child(), so they never mint a
+                // fresh five-call budget of their own.
+                let llmContext = LLMRequestContext(
+                    budget: LLMCallBudget(limit: LLMQueryClass.investigation.callLimit),
+                    queryClass: .investigation
+                )
+
                 guard let initialPlan = await planner.plan(
                     question: question,
-                    capabilities: capabilities
+                    capabilities: capabilities,
+                    context: llmContext
                 ) else {
                     continuation.yield(.failed(reason: "No reasoning provider available, or the planner could not decompose the question."))
                     continuation.finish()
@@ -64,8 +75,14 @@ public actor InvestigationRunner {
 
                 var completedSteps: [InvestigationStep] = []
                 for step in initialPlan.steps {
+                    // Reserve one call for the final synthesis; stop stepping
+                    // when the shared budget can't cover a step + synthesis.
+                    guard await llmContext.budget.canSpend(2) else {
+                        KalsmritikoshLog.app.info("InvestigationRunner: budget reserved for synthesis — deferring remaining steps")
+                        break
+                    }
                     continuation.yield(.stepStarted(stepID: step.id))
-                    let answer = await brain.answer(question: step.question)
+                    let answer = await brain.answer(question: step.question, context: llmContext)
                     var withAnswer = step
                     withAnswer.answer = answer
                     completedSteps.append(withAnswer)
@@ -76,7 +93,8 @@ public actor InvestigationRunner {
                 let synthesis = await Self.synthesize(
                     question: question,
                     steps: completedSteps,
-                    capabilities: capabilities
+                    capabilities: capabilities,
+                    context: llmContext
                 )
                 var finalInvestigation = initialPlan
                 finalInvestigation.steps = completedSteps
@@ -108,7 +126,8 @@ public actor InvestigationRunner {
     nonisolated static func synthesize(
         question: String,
         steps: [InvestigationStep],
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        context: LLMRequestContext? = nil
     ) async -> String {
         let nonEmpty = steps.compactMap { step -> (String, String)? in
             guard let answer = step.answer else { return nil }
@@ -164,7 +183,9 @@ public actor InvestigationRunner {
                     topP: 0.95,
                     stopSequences: [],
                     systemPrompt: "You are a careful research analyst. Cite only the evidence in the transcript. Refuse to invent."
-                )
+                ),
+                purpose: "investigation.synthesis",
+                context: context
             )
             let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             return cleaned.isEmpty

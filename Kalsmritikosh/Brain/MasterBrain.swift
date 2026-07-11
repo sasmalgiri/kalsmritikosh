@@ -125,7 +125,7 @@ public actor MasterBrain {
     /// Today's stream therefore yields exactly one `.verified` event;
     /// shipping the API surface now keeps future phase additions from
     /// breaking callers.
-    public func answerStream(question: String) -> AsyncStream<AnswerUpdate> {
+    public func answerStream(question: String, context: LLMRequestContext? = nil) -> AsyncStream<AnswerUpdate> {
         AsyncStream { continuation in
             Task { [weak self] in
                 guard let self else { continuation.finish(); return }
@@ -148,14 +148,15 @@ public actor MasterBrain {
                 // callers (EvalKit, the chat-shaped path).
                 if let reconstructed = await self.tryReconstructHistoryStreaming(
                     question: question,
-                    yield: { continuation.yield($0) }
+                    yield: { continuation.yield($0) },
+                    externalContext: context
                 ) {
                     continuation.yield(.verified(reconstructed))
                     continuation.finish()
                     return
                 }
 
-                let final = await self.computeVerified(question: question)
+                let final = await self.computeVerified(question: question, externalContext: context)
                 continuation.yield(.verified(final))
                 continuation.finish()
             }
@@ -168,7 +169,8 @@ public actor MasterBrain {
     /// legacy expert pipeline.
     private func tryReconstructHistoryStreaming(
         question: String,
-        yield: @Sendable (AnswerUpdate) -> Void
+        yield: @Sendable (AnswerUpdate) -> Void,
+        externalContext: LLMRequestContext? = nil
     ) async -> VerifiedAnswer? {
         guard let narrativeComposer,
               let eventsRepo,
@@ -192,6 +194,15 @@ public actor MasterBrain {
             intentKind: intent.kind.rawValue,
             entityHints: intent.entityHints
         )
+
+        // One shared budget for the whole reconstruction: chapters + any
+        // chunk-RAG fallback all reserve from it (spec §11), so a 3-chapter
+        // history followed by a fallback can never exceed the class ceiling.
+        // A nested call (e.g. an investigation step) passes its parent budget
+        // in via externalContext so it does NOT get a fresh allowance (§12).
+        let queryClass = LLMQueryClassifier.classify(question: question, intent: intent)
+        let llmContext = externalContext?.child(purpose: "reconstruct")
+            ?? LLMRequestContext(budget: LLMCallBudget(limit: queryClass.callLimit), queryClass: queryClass)
 
         let decision = (try? await router.route(intent: intent)) ?? RoutingDecision(
             answerSpec: CapabilitySpec.reasoning(contextTokens: 6_000, purpose: "history.narrative"),
@@ -221,7 +232,8 @@ public actor MasterBrain {
         let stream = narrativeComposer.composeStreaming(
             intent: intent,
             retrieval: retrieval,
-            eventSlots: slotBundles
+            eventSlots: slotBundles,
+            context: llmContext
         )
         for await event in stream {
             switch event {
@@ -238,7 +250,8 @@ public actor MasterBrain {
             // before refusing. Gives the user the "normal AI" answer
             // shape even when structured reconstruction can't fire.
             if let rag = await chunkBasedFallback(
-                question: question, intent: intent, retrieval: retrieval
+                question: question, intent: intent, retrieval: retrieval,
+                context: llmContext
             ) {
                 return rag
             }
@@ -258,7 +271,8 @@ public actor MasterBrain {
         let hasUsefulChapters = narrative.chapters.contains { !$0.prose.isEmpty }
         if !hasUsefulChapters {
             if let rag = await chunkBasedFallback(
-                question: question, intent: intent, retrieval: retrieval
+                question: question, intent: intent, retrieval: retrieval,
+                context: llmContext
             ) {
                 return rag
             }
@@ -603,8 +617,8 @@ public actor MasterBrain {
     /// `.verified` from `answerStream` so both code paths share one
     /// pipeline. EvalKit and existing UI buttons keep working
     /// unchanged.
-    public func answer(question: String) async -> VerifiedAnswer {
-        for await update in answerStream(question: question) {
+    public func answer(question: String, context: LLMRequestContext? = nil) async -> VerifiedAnswer {
+        for await update in answerStream(question: question, context: context) {
             if case .verified(let answer) = update {
                 return answer
             }
@@ -622,7 +636,7 @@ public actor MasterBrain {
     /// G2-PROGRESSIVE — the previous body of `answer(question:)`, now
     /// shared between the stream wrapper and any future per-phase
     /// emitter. Returns the terminal `VerifiedAnswer`.
-    private func computeVerified(question: String) async -> VerifiedAnswer {
+    private func computeVerified(question: String, externalContext: LLMRequestContext? = nil) async -> VerifiedAnswer {
         guard
             let intentDetector,
             let router,
@@ -676,9 +690,12 @@ public actor MasterBrain {
         // council, chunk-RAG fallback — reserves from. This is what turns the
         // adaptive policy into an enforced ceiling: once the budget is spent,
         // further calls throw and the pipeline degrades deterministically.
+        // A nested call (investigation step) shares the parent budget via
+        // externalContext.child(); a top-level call gets a fresh budget sized
+        // to its own class (§12).
         let queryClass = LLMQueryClassifier.classify(question: question, intent: intent)
-        let llmBudget = LLMCallBudget(limit: queryClass.callLimit)
-        let llmContext = LLMRequestContext(budget: llmBudget, queryClass: queryClass)
+        let llmContext = externalContext?.child(purpose: "answer")
+            ?? LLMRequestContext(budget: LLMCallBudget(limit: queryClass.callLimit), queryClass: queryClass)
 
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
@@ -821,7 +838,7 @@ public actor MasterBrain {
         // sparse coverage, a high-risk intent, or an explicit deep-analysis
         // request. Volume signals — many docs, long answer, many entities,
         // general wording — deliberately do NOT escalate.
-        let escalation = Self.escalationLevel(for: verified, intent: intent, question: question)
+        let escalation = Self.escalationLevel(for: verified, intent: intent, question: question, queryClass: queryClass)
         var synthesizedBody: String? = nil
         if escalation != .none,
            FeatureFlags.llmAnswerSynthesisValue(),
@@ -858,7 +875,8 @@ public actor MasterBrain {
     nonisolated static func escalationLevel(
         for a: VerifiedAnswer,
         intent: UserIntent,
-        question: String
+        question: String,
+        queryClass: LLMQueryClass
     ) -> Escalation {
         // Exceptional: the user explicitly asked to go deep.
         let q = question.lowercased()
@@ -872,13 +890,16 @@ public actor MasterBrain {
         if !a.contradictions.isEmpty { return .complex }
         if intent.kind == .riskDetection { return .complex }
         // Moderate: the first answer shows a weakness a single refine can fix.
+        // §8.4 — corroboration signals (thin sourcing, sparse coverage) apply
+        // ONLY to classes that require corroboration; ONE authoritative source
+        // is sufficient for an exact lookup and must NOT force a refine call.
         let distinctSources = a.report?.distinctSourceObjectIDs
             ?? Set(a.citations.map(\.objectID)).count
         let lowConfidence = a.confidence.value < 0.6
         let unsupported = (a.report?.droppedUnverifiable ?? 0) > 0
-        let thinSourcing = distinctSources < 2
-        let sparseCoverage = (a.report?.coverage ?? 1.0) < 0.5
-        if lowConfidence || unsupported || thinSourcing || sparseCoverage {
+        let corroborationGap = queryClass.requiresCorroboration
+            && (distinctSources < 2 || (a.report?.coverage ?? 1.0) < 0.5)
+        if lowConfidence || unsupported || corroborationGap {
             return .moderate
         }
         return .none

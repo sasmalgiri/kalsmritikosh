@@ -68,7 +68,8 @@ public actor LLMNarrativeComposer: NarrativeComposer {
     public nonisolated func composeStreaming(
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventSlots: [Event.ID: EventNarrativeSlots]
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext? = nil
     ) -> AsyncStream<NarrativeStreamEvent> {
         AsyncStream { continuation in
             Task {
@@ -76,6 +77,7 @@ public actor LLMNarrativeComposer: NarrativeComposer {
                     intent: intent,
                     retrieval: retrieval,
                     eventSlots: eventSlots,
+                    context: context,
                     yield: { continuation.yield($0) }
                 )
                 continuation.yield(.completed(result))
@@ -91,18 +93,23 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         intent: UserIntent,
         retrieval: RetrievalResult,
         eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext?,
         yield: @Sendable (NarrativeStreamEvent) -> Void
     ) async -> ReconstructedNarrative {
         let scope = Self.scope(from: intent)
         var downgrades: [String] = []
 
         let plannedChapters = await planner.plan(events: retrieval.events)
-        // Ledger-first minimum-LLM (Phase 4): each chapter costs exactly one
-        // LLM compose call, so the chapter count IS the reconstruction's call
-        // budget. Ordinary reconstruction is capped at 3; an explicitly
-        // requested deep analysis may use up to 5. Contradiction detection and
-        // synthesis downstream are deterministic (no extra LLM call).
-        let effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        // Each chapter costs one LLM call. The chapter count is bounded by BOTH
+        // the class cap (3 / 5) AND the request's SHARED budget — reserving one
+        // call for a possible chunk-RAG fallback so the whole reconstruction,
+        // chapters + fallback, stays within one allowance (spec §11).
+        var effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        if let context {
+            let snap = await context.budget.snapshot()
+            let reservedForFallback = 1
+            effectiveMax = max(0, min(effectiveMax, snap.remaining - reservedForFallback))
+        }
         let limited = Array(plannedChapters.prefix(effectiveMax))
         if plannedChapters.count > effectiveMax {
             downgrades.append("Capped at \(effectiveMax) of \(plannedChapters.count) chapters (minimum-LLM budget — ask for a 'deep analysis' for the full timeline)")
@@ -124,12 +131,14 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         }
 
         var chapters: [NarrativeChapter] = []
-        for planned in limited {
+        for (idx, planned) in limited.enumerated() {
             let composed = await composeChapter(
                 planned: planned,
                 eventSlots: eventSlots,
                 provider: provider,
-                scope: scope
+                scope: scope,
+                chapterIndex: idx + 1,
+                context: context
             )
             let verified = verifier.verify(chapter: composed, events: planned.events)
             chapters.append(verified)
@@ -156,20 +165,22 @@ public actor LLMNarrativeComposer: NarrativeComposer {
     public func compose(
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventSlots: [Event.ID: EventNarrativeSlots]
+        eventSlots: [Event.ID: EventNarrativeSlots],
+        context: LLMRequestContext? = nil
     ) async throws -> ReconstructedNarrative {
 
         let scope = Self.scope(from: intent)
         var downgrades: [String] = []
 
-        // Plan chapters from the retrieved events.
+        // Plan chapters from the retrieved events. Chapter count is bounded by
+        // the class cap AND, when present, the shared request budget minus one
+        // reserved fallback call (spec §11).
         let plannedChapters = await planner.plan(events: retrieval.events)
-        // Ledger-first minimum-LLM (Phase 4): each chapter costs exactly one
-        // LLM compose call, so the chapter count IS the reconstruction's call
-        // budget. Ordinary reconstruction is capped at 3; an explicitly
-        // requested deep analysis may use up to 5. Contradiction detection and
-        // synthesis downstream are deterministic (no extra LLM call).
-        let effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        var effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        if let context {
+            let snap = await context.budget.snapshot()
+            effectiveMax = max(0, min(effectiveMax, snap.remaining - 1))
+        }
         let limited = Array(plannedChapters.prefix(effectiveMax))
         if plannedChapters.count > effectiveMax {
             downgrades.append("Capped at \(effectiveMax) of \(plannedChapters.count) chapters (minimum-LLM budget — ask for a 'deep analysis' for the full timeline)")
@@ -195,12 +206,14 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         // contradictions immediately so each chapter ships in a
         // self-contained verified state (matters for D.7 streaming).
         var chapters: [NarrativeChapter] = []
-        for planned in limited {
+        for (idx, planned) in limited.enumerated() {
             let composed = await composeChapter(
                 planned: planned,
                 eventSlots: eventSlots,
                 provider: provider,
-                scope: scope
+                scope: scope,
+                chapterIndex: idx + 1,
+                context: context
             )
             let verified = verifier.verify(chapter: composed, events: planned.events)
             chapters.append(verified)
@@ -242,7 +255,9 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         planned: ChronologicalPlanner.PlannedChapter,
         eventSlots: [Event.ID: EventNarrativeSlots],
         provider: (any ModelProvider)?,
-        scope: NarrativeScope
+        scope: NarrativeScope,
+        chapterIndex: Int,
+        context: LLMRequestContext?
     ) async -> NarrativeChapter {
         let title = Self.chapterTitle(planned: planned)
         let subtitle = planned.topicTitle
@@ -289,7 +304,10 @@ public actor LLMNarrativeComposer: NarrativeComposer {
 
         let response: String
         do {
-            response = try await provider.generate(prompt: prompt, options: options)
+            response = try await provider.generate(
+                prompt: prompt, options: options,
+                purpose: "history.chapter.\(chapterIndex)", context: context
+            )
         } catch {
             KalsmritikoshLog.knowledge.error("LLMNarrativeComposer: generate failed — \(String(describing: error), privacy: .public)")
             return NarrativeChapter(
