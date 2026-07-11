@@ -72,10 +72,19 @@ extension ModelProvider {
         purpose: String,
         context: LLMRequestContext?
     ) async throws -> String {
+        // This scoped boundary is now the SINGLE counting + budgeting point for
+        // query-time generation. Order matters: reserve() FIRST so a
+        // budget-rejected call never counts (no compute happened); then record
+        // (attributed to the request, so RealDataProbe can count by requestID
+        // and background calls stay separate); then run.
         guard let context else {
+            await LLMCallCounters.shared.recordCall(purpose: purpose, requestID: nil, providerID: id)
             return try await generate(prompt: prompt, options: options)
         }
         let reservation = try await context.budget.reserve(purpose: purpose, providerID: id)
+        await LLMCallCounters.shared.recordCall(
+            purpose: purpose, requestID: context.rootRequestID, providerID: id
+        )
         do {
             let result = try await generate(prompt: prompt, options: options)
             await context.budget.finish(sequence: reservation, status: .completed)

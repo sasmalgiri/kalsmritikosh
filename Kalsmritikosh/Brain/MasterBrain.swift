@@ -617,6 +617,42 @@ public actor MasterBrain {
     /// `.verified` from `answerStream` so both code paths share one
     /// pipeline. EvalKit and existing UI buttons keep working
     /// unchanged.
+    /// Request-scoped diagnostics for one question: the answer plus the actual
+    /// LLM calls attributed to THIS request (immune to background calls), the
+    /// class ceiling, and the ordered purposes (§14). Used by RealDataProbe.
+    public struct AnswerDiagnostics: Sendable {
+        public let answer: VerifiedAnswer
+        public let requestID: UUID
+        public let llmCalls: Int
+        public let callLimit: Int
+        public let queryClass: String
+        public let purposes: [String]
+    }
+
+    public func answerWithDiagnostics(question: String) async -> AnswerDiagnostics {
+        // Classify to size a natural budget; the answer path shares it via
+        // child(), so calls record THIS request's root ID and the ceiling is
+        // the question's real class limit.
+        let intent = (try? await intentDetector?.detect(question: question))
+            ?? UserIntent(kind: .unknown, scope: .global, rawQuestion: question)
+        let queryClass = LLMQueryClassifier.classify(question: question, intent: intent)
+        let context = LLMRequestContext(
+            budget: LLMCallBudget(limit: queryClass.callLimit),
+            queryClass: queryClass
+        )
+        let answer = await self.answer(question: question, context: context)
+        let calls = await LLMCallCounters.shared.count(requestID: context.rootRequestID)
+        let purposes = await LLMCallCounters.shared.purposes(requestID: context.rootRequestID)
+        return AnswerDiagnostics(
+            answer: answer,
+            requestID: context.rootRequestID,
+            llmCalls: calls,
+            callLimit: queryClass.callLimit,
+            queryClass: queryClass.rawValue,
+            purposes: purposes
+        )
+    }
+
     public func answer(question: String, context: LLMRequestContext? = nil) async -> VerifiedAnswer {
         for await update in answerStream(question: question, context: context) {
             if case .verified(let answer) = update {
@@ -803,6 +839,15 @@ public actor MasterBrain {
                 context: llmContext
             ), !rag.refused {
                 return rag
+            }
+            // Budget spent / no provider and still ungrounded — render a
+            // deterministic evidence readout instead of a bare refusal (§13),
+            // but only when there IS something citable to show.
+            if let det = await DeterministicEvidenceFallback.build(
+                question: question, intent: intent,
+                retrieval: retrievalForVerifier, eventLinks: eventLinks
+            ), !det.citations.isEmpty {
+                return det
             }
         }
         // Tag the expert-pipeline answer with `.experts` so the UI

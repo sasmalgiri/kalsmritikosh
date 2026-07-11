@@ -108,8 +108,7 @@ public actor CloudProvider: ModelProvider {
         guard await isAvailable() else {
             throw ModelProviderError.unavailable(providerID: id)
         }
-        // Provider-boundary LLM-call counter (see OllamaProvider.generate).
-        await LLMCallCounters.shared.recordCall(purpose: "generate")
+        // Counting happens at the scoped generate boundary (see ModelProvider).
         // OpenAI-compatible /chat/completions payload.
         var messages: [[String: Any]] = []
         if let system = options.systemPrompt, !system.isEmpty {

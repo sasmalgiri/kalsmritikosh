@@ -32,12 +32,18 @@ public enum RealDataProbe {
         public let question: String
         public let latencySeconds: Double
         public let llmCalls: Int
+        public let callLimit: Int
+        public let queryClass: String
+        public let purposes: [String]
         public let citationCount: Int
         public let citedFiles: [String]
         public let confidence: Double
         public let answerState: String
         public let path: String
         public let refused: Bool
+        /// True when the request spent MORE calls than its class ceiling —
+        /// a hard-budget violation that must never happen.
+        public var overBudget: Bool { llmCalls > callLimit }
     }
 
     public struct Result: Sendable {
@@ -70,12 +76,14 @@ public enum RealDataProbe {
             // session entities (mirrors the eval harness contract).
             await brain.resetSession()
 
-            let before = await LLMCallCounters.shared.snapshot().callsRun
+            // Request-scoped diagnostics: calls attributed to THIS question's
+            // request ID (immune to background generation), plus its class
+            // ceiling and the actual purposes spent (§14).
             let t0 = Date()
-            let answer = await brain.answer(question: q)
+            let diag = await brain.answerWithDiagnostics(question: q)
             let elapsed = Date().timeIntervalSince(t0)
-            let after = await LLMCallCounters.shared.snapshot().callsRun
-            let calls = max(0, after - before)
+            let answer = diag.answer
+            let calls = diag.llmCalls
             totalCalls += calls
 
             // Resolve each citation's KnowledgeObject back to the real source
@@ -95,6 +103,9 @@ public enum RealDataProbe {
                 question: q,
                 latencySeconds: elapsed,
                 llmCalls: calls,
+                callLimit: diag.callLimit,
+                queryClass: diag.queryClass,
+                purposes: diag.purposes,
                 citationCount: answer.citations.count,
                 citedFiles: files,
                 confidence: answer.confidence.value,
@@ -190,14 +201,24 @@ public enum RealDataProbe {
 
         ## Per-question
 
-        | # | LLM calls | Latency | Cites | Conf | State | Path | Question |
-        |---:|---:|---:|---:|---:|---|---|---|
+        | # | Class | Calls/Limit | Latency | Cites | Conf | State | Question |
+        |---:|---|---:|---:|---:|---:|---|---|
 
         """
         for (i, r) in results.enumerated() {
             let confPct = String(format: "%.2f", r.confidence)
             let q = r.question.replacingOccurrences(of: "|", with: "\\|")
-            md += "| \(i + 1) | \(r.llmCalls) | \(String(format: "%.1f", r.latencySeconds))s | \(r.citationCount) | \(confPct) | \(r.answerState) | \(r.path) | \(q) |\n"
+            let budget = "\(r.llmCalls)/\(r.callLimit)\(r.overBudget ? " ⚠️OVER" : "")"
+            md += "| \(i + 1) | \(r.queryClass) | \(budget) | \(String(format: "%.1f", r.latencySeconds))s | \(r.citationCount) | \(confPct) | \(r.answerState) | \(q) |\n"
+        }
+
+        let violations = results.filter(\.overBudget).count
+        md += "\n**Hard-budget check:** \(violations == 0 ? "✅ every question stayed within its class ceiling" : "⚠️ \(violations) question(s) EXCEEDED their ceiling — investigate")\n"
+
+        md += "\n## LLM purposes per question\n\n"
+        for (i, r) in results.enumerated() {
+            let p = r.purposes.isEmpty ? "_(0 calls)_" : r.purposes.joined(separator: ", ")
+            md += "- **Q\(i + 1)** (\(r.queryClass)) — \(p)\n"
         }
 
         md += "\n## Cited files (grounding points in your archive)\n\n"

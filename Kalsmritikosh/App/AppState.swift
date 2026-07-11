@@ -556,31 +556,17 @@ public final class AppState {
                 }
             }
 
-            // G2-3 pre-warm — kick a tiny detached prompt at the
-            // resolved reasoning provider so its model is paged in
-            // (and, for Ollama, the daemon has already done its
-            // first-token warmup) BEFORE the ingest pipeline asks
-            // for per-chunk context_prefix generations. Without this
-            // the first ~5 chunks each pay the cold-load tax and
-            // time out on a per-chunk budget, leaving rows with NULL
-            // prefix even though the provider would have answered
-            // sub-second once warm. Detached so boot is not delayed.
+            // Minimum-LLM (spec §15): the boot-time reasoning pre-warm
+            // generation is REMOVED. It existed to page the model in before
+            // ingest-time context_prefix generations — which the pinned
+            // .ledgerEventDriven engine no longer runs. Under minimum-LLM the
+            // app must make ZERO generative calls at startup; the first
+            // generation happens only when the user asks a question. We still
+            // resolve the provider (metadata only, no generation) so the
+            // capability registry is warm.
             Task.detached(priority: .utility) { [capabilities] in
-                let spec = CapabilitySpec.reasoning(
-                    contextTokens: 256,
-                    purpose: "appstate.boot.prewarm"
-                )
-                guard let provider = try? await capabilities.resolve(spec),
-                      await provider.isAvailable() else { return }
-                _ = try? await provider.generate(
-                    prompt: "Reply with the single word: ready",
-                    options: GenerationOptions(
-                        maxTokens: 4,
-                        temperature: 0.0,
-                        systemPrompt: nil
-                    )
-                )
-                KalsmritikoshLog.app.info("Reasoning provider pre-warmed: \(provider.id, privacy: .public)")
+                let spec = CapabilitySpec.reasoning(contextTokens: 256, purpose: "appstate.boot.resolve")
+                _ = try? await capabilities.resolve(spec)
             }
 
             // ── Knowledge ────────────────────────────────────────────
