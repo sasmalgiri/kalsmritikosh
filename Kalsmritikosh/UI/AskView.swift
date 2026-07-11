@@ -593,18 +593,12 @@ public struct AskView: View {
             // boosted files are already in the canonical store.
             Task { await appState.boostIngestForQuestion(q) }
 
-            // 3) Streaming preview + the full brain answer run in parallel.
-            //    The stream gives the user typed feedback immediately; the
-            //    brain's verified answer lands when ready and replaces
-            //    the body with cited evidence. The stream runs in its own
-            //    Task so the verified answer can land the moment it's
-            //    ready — and we cancel the stream then so a late delta
-            //    can't overwrite the verified body with `verified + delta`.
-            async let verified = appState.brain.answer(question: q)
-            let streamTask = Task { await streamPreview(question: q, into: placeholderID) }
-            let answer = await verified
-            streamTask.cancel()
-            _ = await streamTask.value
+            // 3) The full brain answer is the ONLY LLM path (spec P1.3).
+            //    The previous ungrounded streaming preview — which fed the raw
+            //    user question straight to the model, unbudgeted and uncited —
+            //    is removed. Ask consumes only the budgeted, evidence-grounded
+            //    brain answer, so nothing ungrounded ever reaches the user.
+            let answer = await appState.brain.answer(question: q)
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)
@@ -633,47 +627,6 @@ public struct AskView: View {
                 let head = String(q.prefix(60))
                 try? await repo.updateTitle(head, for: convID)
             }
-        }
-    }
-
-    /// Pipes the resolved provider's stream into the placeholder bubble.
-    /// If no provider fulfils the spec, leave the bubble empty for the
-    /// brain's verified answer to fill.
-    private func streamPreview(question: String, into turnID: UUID) async {
-        guard let registry = appState.capabilities else { return }
-        let spec = CapabilitySpec.reasoning(
-            contextTokens: 2_000,
-            purpose: "ask.streaming-preview"
-        )
-        guard let provider = try? await registry.resolve(spec),
-              await provider.isAvailable() else { return }
-
-        let stream = provider.generateStream(
-            prompt: question,
-            options: GenerationOptions(
-                maxTokens: 400,
-                temperature: 0.4,
-                systemPrompt: "You are Kalsmritikosh. Answer concisely from context. Verified, cited evidence will arrive once the brain finishes."
-            )
-        )
-        do {
-            for try await delta in stream {
-                await MainActor.run {
-                    guard let idx = self.turns.firstIndex(where: { $0.id == turnID }) else { return }
-                    let existing = self.turns[idx]
-                    let updated = ConversationTurn(
-                        id: existing.id,
-                        conversationID: existing.conversationID,
-                        ordinal: existing.ordinal,
-                        role: existing.role,
-                        body: existing.body + delta,
-                        createdAt: existing.createdAt
-                    )
-                    self.turns[idx] = updated
-                }
-            }
-        } catch {
-            KalsmritikoshLog.ui.debug("Stream preview ended early: \(String(describing: error), privacy: .public)")
         }
     }
 
