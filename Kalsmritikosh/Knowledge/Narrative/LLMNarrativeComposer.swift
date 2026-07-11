@@ -97,9 +97,15 @@ public actor LLMNarrativeComposer: NarrativeComposer {
         var downgrades: [String] = []
 
         let plannedChapters = await planner.plan(events: retrieval.events)
-        let limited = Array(plannedChapters.prefix(maxChapters))
-        if plannedChapters.count > maxChapters {
-            downgrades.append("Capped at \(maxChapters) of \(plannedChapters.count) chapters")
+        // Ledger-first minimum-LLM (Phase 4): each chapter costs exactly one
+        // LLM compose call, so the chapter count IS the reconstruction's call
+        // budget. Ordinary reconstruction is capped at 3; an explicitly
+        // requested deep analysis may use up to 5. Contradiction detection and
+        // synthesis downstream are deterministic (no extra LLM call).
+        let effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        let limited = Array(plannedChapters.prefix(effectiveMax))
+        if plannedChapters.count > effectiveMax {
+            downgrades.append("Capped at \(effectiveMax) of \(plannedChapters.count) chapters (minimum-LLM budget — ask for a 'deep analysis' for the full timeline)")
         }
 
         let spec = CapabilitySpec.reasoning(
@@ -158,9 +164,15 @@ public actor LLMNarrativeComposer: NarrativeComposer {
 
         // Plan chapters from the retrieved events.
         let plannedChapters = await planner.plan(events: retrieval.events)
-        let limited = Array(plannedChapters.prefix(maxChapters))
-        if plannedChapters.count > maxChapters {
-            downgrades.append("Capped at \(maxChapters) of \(plannedChapters.count) chapters")
+        // Ledger-first minimum-LLM (Phase 4): each chapter costs exactly one
+        // LLM compose call, so the chapter count IS the reconstruction's call
+        // budget. Ordinary reconstruction is capped at 3; an explicitly
+        // requested deep analysis may use up to 5. Contradiction detection and
+        // synthesis downstream are deterministic (no extra LLM call).
+        let effectiveMax = Self.chapterBudget(for: intent, hardMax: maxChapters)
+        let limited = Array(plannedChapters.prefix(effectiveMax))
+        if plannedChapters.count > effectiveMax {
+            downgrades.append("Capped at \(effectiveMax) of \(plannedChapters.count) chapters (minimum-LLM budget — ask for a 'deep analysis' for the full timeline)")
         }
 
         // Resolve the .reasoning provider once.
@@ -209,6 +221,19 @@ public actor LLMNarrativeComposer: NarrativeComposer {
             citations: citations,
             downgrades: downgrades
         )
+    }
+
+    /// Per-question chapter cap = the reconstruction's LLM-call budget (one
+    /// compose call per chapter). Ordinary reconstruction gets 3; an
+    /// explicitly-requested deep analysis gets 5. Never exceeds `hardMax`.
+    /// Volume (event count, entity count, long wording) does NOT raise it —
+    /// only an explicit request for depth does.
+    nonisolated static func chapterBudget(for intent: UserIntent, hardMax: Int) -> Int {
+        let q = intent.rawQuestion.lowercased()
+        let explicitDeep = q.contains("deep analysis") || q.contains("in depth")
+            || q.contains("in-depth") || q.contains("thorough")
+            || q.contains("investigate") || q.contains("deep dive")
+        return min(hardMax, explicitDeep ? 5 : 3)
     }
 
     // MARK: - Chapter composition
