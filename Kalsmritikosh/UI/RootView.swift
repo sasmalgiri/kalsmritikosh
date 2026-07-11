@@ -195,8 +195,10 @@ public struct RootView: View {
 
     public var body: some View {
         phaseContent
-            // Attached at the top level so the first-run chooser shows even
-            // while the app is still in `.starting` (boot waits for it).
+            // P0.5 — v1 is single-mode (.ledgerEventDriven pinned), so there is
+            // NO user-visible mode chooser in release. The chooser is retained
+            // only for internal/debug builds; release never wires the sheet.
+            #if DEBUG
             .sheet(isPresented: Binding(
                 get: { appState.showModeChooser },
                 set: { appState.showModeChooser = $0 }
@@ -204,6 +206,7 @@ public struct RootView: View {
                 ModeChooserView(mustChoose: !FeatureFlags.shared.systemModeChosen)
                     .environment(appState)
             }
+            #endif
     }
 
     @ViewBuilder

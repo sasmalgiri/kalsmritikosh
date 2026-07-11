@@ -99,6 +99,7 @@ public enum ReleaseReadiness {
         // 3. Bundle integrity ────────────────────────────────────────
         checks.append(checkProjectDeltaFixturePresent())
         checks.append(checkPrivacyManifestPresent())
+        checks.append(checkReleaseProfile())
 
         // 4. Capability resolve ──────────────────────────────────────
         checks.append(await checkReasoningCapabilityResolves(state))
@@ -134,9 +135,28 @@ public enum ReleaseReadiness {
 
     // MARK: - Category 1: Schema
 
+    /// P0.3/P0.4 — the live config must match the locked v1 release profile:
+    /// ledger engine, zero-LLM ingest policy (no distillation / prefix /
+    /// first-chunk card). A drifted build fails the gate instead of shipping.
+    private static func checkReleaseProfile() -> Check {
+        let t0 = Date()
+        let violations = ReleaseCapabilityProfile.violations()
+        let pass = violations.isEmpty
+        return Check(
+            id: "release.capabilityProfile",
+            name: "Release capability profile",
+            passed: pass,
+            detail: pass
+                ? "live config matches locked v1 profile (ledger engine, zero-LLM ingest)"
+                : "DRIFT: \(violations.joined(separator: "; "))",
+            blocker: true,
+            secondsTaken: Date().timeIntervalSince(t0)
+        )
+    }
+
     private static func checkSchemaIntegrity(_ state: AppState) -> Check {
         let t0 = Date()
-        let expected = 34
+        let expected = 35
         let got = SchemaMigrations.latestVersion
         let pass = got == expected
         return Check(
