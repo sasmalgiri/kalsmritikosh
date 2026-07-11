@@ -24,7 +24,13 @@ public actor DeterministicRouter: Router {
 
     public func route(intent: UserIntent) async throws -> RoutingDecision {
         let score = await complexity.score(intent)
-        let experts = await expertRegistry.experts(for: intent).map(\.id)
+        let allExperts = await expertRegistry.experts(for: intent).map(\.id)
+        // Ledger-first minimum-LLM (Phase 4): an ordinary question must cost
+        // ONE expert LLM call, not one per specialist. Parallel multi-expert
+        // fan-out is reserved for genuinely complex questions (complexity ≥ 4);
+        // the brain adds a second specialist only on a detected contradiction
+        // or a failed verification (see MasterBrain's escalation ladder).
+        let experts = Self.minimalExpertSet(from: allExperts, complexity: score.value)
         let layers = retrievalLayers(for: intent.kind)
         let parallelism = max(1, min(experts.count, max(2, score.value)))
         let spec = answerSpec(for: intent, score: score)
@@ -37,6 +43,20 @@ public actor DeterministicRouter: Router {
             complexity: score.value,
             rationale: "complexity=\(score.value) [\(score.contributors.joined(separator: ","))]"
         )
+    }
+
+    /// Trim the expert panel to a single generalist specialist for ordinary
+    /// (low-complexity) questions; keep the full panel only when the question
+    /// is genuinely complex (complexity ≥ 4). Prefers the cross-evidence
+    /// ReasoningExpert so the single call still reasons across every retrieved
+    /// layer and emits grounded, citable claims. The one intentional lever
+    /// behind the "one LLM call for ordinary questions" budget.
+    static func minimalExpertSet(from ids: [String], complexity: Int) -> [String] {
+        guard complexity < 4 else { return ids }
+        if let generalist = ids.first(where: { $0 == "expert.reasoning" }) {
+            return [generalist]
+        }
+        return ids.isEmpty ? [] : [ids[0]]
     }
 
     private func retrievalLayers(for kind: UserIntent.Kind) -> [RetrievalLayer] {

@@ -8,18 +8,20 @@
 //  composes the FINAL answer FROM those verified findings — experts supply
 //  the facts, the model presents them.
 //
-//  MoE depth (toward rivaling a much larger cloud model on grounded Q&A):
-//  the answer is produced in up to three on-device passes, each its own
-//  session, each budgeted to Apple's fixed 4,096-token window:
+//  Adaptive depth (ledger-first minimum-LLM, Phase 4). MasterBrain's
+//  escalation ladder decides how much LLM the answer is worth; this type
+//  spends exactly that and no more, each pass its own session budgeted to
+//  Apple's fixed 4,096-token window:
 //
-//     1. DRAFT   — compose the answer from findings + evidence.
-//     2. CRITIQUE — a fact-checker pass lists claims not supported by the
-//                   findings, contradictions, or important omissions
-//                   (or replies "OK").
-//     3. REFINE  — rewrite the draft to fix the critique, still grounded.
+//     .refine        — DRAFT only (1 call). Moderate questions.
+//     .deep          — DRAFT + one evidence-checked REFINE (2 calls) that
+//                      drops unsupported claims and reconciles contradictions.
+//                      Complex / contradictory / high-risk questions.
+//     .investigation — adds the parallel super-expert council before the
+//                      draft. Explicitly-requested deep analysis only.
 //
-//  This self-verification is where small models otherwise lose to big ones
-//  (faithfulness), recovered here at ~2-3× calls. Contract-safe: facts +
+//  An ordinary question never reaches this type at all — the brain ships the
+//  verifier's grounded body without a synthesis call. Contract-safe: facts +
 //  CITATIONS remain the verifier's output; the model only presents/checks.
 //  Any failure or offline (no generative provider) returns the best text so
 //  far — or nil so the caller keeps the deterministic body.
@@ -31,11 +33,27 @@ import OSLog
 public struct AnswerSynthesizer: Sendable {
     public init() {}
 
+    /// Adaptive synthesis depth — how much LLM the answer is worth. Set by
+    /// MasterBrain's escalation ladder so an ordinary question never pays for
+    /// depth it doesn't need (ledger-first minimum-LLM, Phase 4).
+    public enum Depth: Sendable {
+        /// Moderate: one draft pass. 1 LLM call.
+        case refine
+        /// Complex (contradiction / high-risk): draft + one evidence-checked
+        /// refine pass. 2 LLM calls.
+        case deep
+        /// Exceptional (explicitly-requested deep analysis): adds the parallel
+        /// super-expert council before the draft. Bounded so the whole answer
+        /// still respects the hard 5-call ceiling.
+        case investigation
+    }
+
     public func synthesize(
         question: String,
         verifiedBody: String,
         citations: [VerifiedAnswer.Citation],
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        depth: Depth = .refine
     ) async -> String? {
         let findings = verifiedBody.trimmingCharacters(in: .whitespacesAndNewlines)
         guard findings.count >= 2 else { return nil }
@@ -54,13 +72,13 @@ public struct AnswerSynthesizer: Sendable {
         // findings/evidence. (Mixtral-style: gate → parallel experts →
         // combine — combination happens in the draft/refine below.)
         var councilBlock = ""
-        if FeatureFlags.moeCouncilValue() {
+        if depth == .investigation, FeatureFlags.moeCouncilValue() {
             let perspectives = await ExpertCouncil().deliberate(
                 question: question,
                 findings: boundedFindings,
                 evidence: evidence,
                 capabilities: capabilities,
-                k: 3
+                k: 2
             )
             if !perspectives.isEmpty {
                 councilBlock = "\n\nSpecialist perspectives (advisory — still ground every statement in the findings/evidence above):\n"
@@ -90,16 +108,22 @@ public struct AnswerSynthesizer: Sendable {
         ) else { return nil }
         var answer = draftRaw
 
-        // ── Stages 2 & 3: self-critique → refine (optional) ──
-        if FeatureFlags.llmSelfCritiqueValue() {
-            let criticSystem = """
-            You are a strict fact-checker. Compare the DRAFT answer against the \
-            verified findings and evidence. List ONLY concrete problems as short \
-            bullets: statements not supported by the findings, contradictions, or \
-            important findings the draft omitted. If the draft is fully supported \
-            and complete, reply with exactly: OK
+        // ── Evidence-checked refine — deep / investigation only ──
+        // ONE pass that both flags unsupported/contradictory statements and
+        // rewrites. Collapsing the old critique+refine into a single call
+        // keeps a complex answer at draft+refine (2 synthesis calls) so the
+        // whole question stays within the hard LLM-call ceiling. Moderate
+        // (.refine) answers ship the draft as-is — no extra call.
+        if depth == .deep || depth == .investigation {
+            let refineSystem = """
+            You are a strict evidence editor. Rewrite the DRAFT so every \
+            statement is supported by the findings/evidence: drop or correct \
+            anything unsupported, reconcile any contradictions by presenting \
+            BOTH sides rather than silently picking one, and add any important \
+            finding the draft omitted. Add no new fact, name, number, or date. \
+            Keep it concise. Output only the revised answer.
             """
-            let criticPrompt = """
+            let refinePrompt = """
             Question: \(question)
 
             Verified findings:
@@ -111,35 +135,11 @@ public struct AnswerSynthesizer: Sendable {
             DRAFT answer:
             \(answer)
             """
-            if let critique = await Self.respond(
-                provider: provider, prompt: criticPrompt, system: criticSystem, maxTokens: 300
-            ), Self.critiqueHasIssues(critique) {
-                let refineSystem = """
-                Revise the DRAFT to fix the listed issues. Use ONLY the findings and \
-                evidence; add no new fact, name, number, or date; drop anything \
-                unsupported; keep it concise. Output only the revised answer.
-                """
-                let refinePrompt = """
-                Question: \(question)
-
-                Verified findings:
-                \(boundedFindings)
-
-                Evidence:
-                \(evidence)
-
-                DRAFT answer:
-                \(answer)
-
-                Issues to fix:
-                \(critique)
-                """
-                if let refined = await Self.respond(
-                    provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700
-                ), refined.count >= 2 {
-                    KalsmritikoshLog.brain.info("AnswerSynthesizer: refined draft after self-critique")
-                    answer = refined
-                }
+            if let refined = await Self.respond(
+                provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700
+            ), refined.count >= 2 {
+                KalsmritikoshLog.brain.info("AnswerSynthesizer: applied evidence-checked refine (depth=\(String(describing: depth), privacy: .public))")
+                answer = refined
             }
         }
 
@@ -174,15 +174,5 @@ public struct AnswerSynthesizer: Sendable {
         }
         let trimmed = out.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "(none)" : trimmed
-    }
-
-    /// The critic replies "OK" when the draft is clean; anything else that
-    /// isn't a trivial no-op is treated as issues to refine against.
-    private static func critiqueHasIssues(_ critique: String) -> Bool {
-        let t = critique.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return false }
-        if t == "ok" || t.hasPrefix("ok\n") || t.hasPrefix("ok.") || t.hasPrefix("ok ") { return false }
-        if t.contains("no issues") || t.contains("no problems") || t.contains("fully supported") || t.contains("no changes") { return false }
-        return true
     }
 }

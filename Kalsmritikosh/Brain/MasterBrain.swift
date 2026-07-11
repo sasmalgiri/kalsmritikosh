@@ -792,22 +792,74 @@ public actor MasterBrain {
             uncertainties: verified.contradictions.map(\.description)
         )
 
-        // Apple AI is the brain: when a generative model resolves (i.e. NOT
-        // the fully-private no-LLM mode), let it compose the final answer
-        // prose from the experts' verified findings — the experts are the
-        // helpers that supply grounded facts + citations, the model only
-        // presents them. Offline / no model → keep the deterministic body.
+        // Adaptive minimum-LLM budget (ledger-first Phase 4). An ORDINARY
+        // question ships the verifier's grounded body with NO synthesis call
+        // (1 LLM total — just the single routed expert). We escalate to a
+        // synthesis pass ONLY when the evidence itself demands it: low
+        // confidence, contradictions, unsupported claims, thin sourcing,
+        // sparse coverage, a high-risk intent, or an explicit deep-analysis
+        // request. Volume signals — many docs, long answer, many entities,
+        // general wording — deliberately do NOT escalate.
+        let escalation = Self.escalationLevel(for: verified, intent: intent, question: question)
         var synthesizedBody: String? = nil
-        if FeatureFlags.llmAnswerSynthesisValue(),
+        if escalation != .none,
+           FeatureFlags.llmAnswerSynthesisValue(),
            !verified.refused, !verified.citations.isEmpty {
+            let depth: AnswerSynthesizer.Depth
+            switch escalation {
+            case .none, .moderate: depth = .refine
+            case .complex:         depth = .deep
+            case .investigation:   depth = .investigation
+            }
             synthesizedBody = await AnswerSynthesizer().synthesize(
                 question: question,
                 verifiedBody: verified.body,
                 citations: verified.citations,
-                capabilities: capabilities
+                capabilities: capabilities,
+                depth: depth
             )
         }
         return Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
+    }
+
+    /// Adaptive LLM budget (ledger-first Phase 4). How much extra reasoning
+    /// the answer has *earned*, decided purely from the answer's evidence
+    /// shape and the intent's risk — never from volume (document count,
+    /// answer length, entity count, or general phrasing).
+    ///
+    ///   .none          → ship the verifier body as-is (no synthesis call).
+    ///   .moderate      → one draft pass                (→ `.refine`).
+    ///   .complex       → draft + evidence-checked refine (→ `.deep`).
+    ///   .investigation → council + draft + refine       (explicit only).
+    enum Escalation { case none, moderate, complex, investigation }
+
+    nonisolated static func escalationLevel(
+        for a: VerifiedAnswer,
+        intent: UserIntent,
+        question: String
+    ) -> Escalation {
+        // Exceptional: the user explicitly asked to go deep.
+        let q = question.lowercased()
+        if q.contains("deep analysis") || q.contains("in depth") || q.contains("in-depth")
+            || q.contains("thorough") || q.contains("investigate") || q.contains("deep dive") {
+            return .investigation
+        }
+        // Complex: sources contradict each other, or the question is a
+        // high-risk / investigative classification. The deep refine pass
+        // reconciles both sides instead of silently averaging them away.
+        if !a.contradictions.isEmpty { return .complex }
+        if intent.kind == .riskDetection { return .complex }
+        // Moderate: the first answer shows a weakness a single refine can fix.
+        let distinctSources = a.report?.distinctSourceObjectIDs
+            ?? Set(a.citations.map(\.objectID)).count
+        let lowConfidence = a.confidence.value < 0.6
+        let unsupported = (a.report?.droppedUnverifiable ?? 0) > 0
+        let thinSourcing = distinctSources < 2
+        let sparseCoverage = (a.report?.coverage ?? 1.0) < 0.5
+        if lowConfidence || unsupported || thinSourcing || sparseCoverage {
+            return .moderate
+        }
+        return .none
     }
 
     /// Pull free-text assumptions / downgrades from the verifier's
