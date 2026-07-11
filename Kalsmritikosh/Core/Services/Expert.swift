@@ -75,16 +75,23 @@ public struct ExpertContext: Sendable {
     /// retrieval round-trip. nil = caller hasn't pre-fetched, fall
     /// back to a direct retriever call.
     public let sharedRetrieval: RetrievalResult?
+    /// The shared request-scoped LLM budget/context for THIS question. An
+    /// expert MUST pass it into `provider.generate(...purpose:context:)` so its
+    /// call reserves from the one allowance every operation in the request
+    /// shares. nil = unscoped (background / legacy) — no budget enforced.
+    public let llmContext: LLMRequestContext?
 
     public nonisolated init(
         retriever: Retriever,
         capabilities: CapabilityRegistry,
         sharedRetrieval: RetrievalResult? = nil,
+        llmContext: LLMRequestContext? = nil,
         now: Date = .init()
     ) {
         self.retriever = retriever
         self.capabilities = capabilities
         self.sharedRetrieval = sharedRetrieval
+        self.llmContext = llmContext
         self.now = now
     }
 

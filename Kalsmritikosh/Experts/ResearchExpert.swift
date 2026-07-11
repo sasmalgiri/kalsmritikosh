@@ -25,7 +25,7 @@ public struct ResearchExpert: Expert {
         )
 
         let frame = PromptTemplates.researchAnalysis(intent: intent, retrieval: result)
-        let llm = await runLLM(frame: frame, capabilities: context.capabilities)
+        let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(
                 expertID: id,
@@ -61,7 +61,8 @@ public struct ResearchExpert: Expert {
 
     private func runLLM(
         frame: PromptFrame,
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        context: LLMRequestContext?
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.research")
         // UPDATE_13 Item 0 — log whether an LLM actually executes for
@@ -94,7 +95,9 @@ public struct ResearchExpert: Expert {
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
-                options: GenerationOptions(maxTokens: 300, temperature: 0.2)
+                options: GenerationOptions(maxTokens: 300, temperature: 0.2),
+                purpose: "expert.research",
+                context: context
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
             KalsmritikoshLog.brain.info("expert.research LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")

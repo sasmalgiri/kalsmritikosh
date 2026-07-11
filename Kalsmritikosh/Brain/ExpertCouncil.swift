@@ -128,7 +128,8 @@ public struct ExpertCouncil: Sendable {
         findings: String,
         evidence: String,
         capabilities: CapabilityRegistry,
-        k: Int = 3
+        k: Int = 3,
+        context: LLMRequestContext? = nil
     ) async -> [Perspective] {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "moe.council")
         guard let provider = try? await capabilities.resolve(spec),
@@ -149,7 +150,10 @@ public struct ExpertCouncil: Sendable {
             for (i, expert) in selected.enumerated() {
                 group.addTask {
                     let opts = GenerationOptions(maxTokens: 220, temperature: 0.2, systemPrompt: expert.instruction)
-                    guard let raw = try? await provider.generate(prompt: sharedPrompt, options: opts) else {
+                    guard let raw = try? await provider.generate(
+                        prompt: sharedPrompt, options: opts,
+                        purpose: "answer.council.\(expert.id)", context: context
+                    ) else {
                         return (i, nil)
                     }
                     let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)

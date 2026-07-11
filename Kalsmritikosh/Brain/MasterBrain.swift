@@ -401,9 +401,14 @@ public actor MasterBrain {
     private func chunkBasedFallback(
         question: String,
         intent: UserIntent,
-        retrieval: RetrievalResult
+        retrieval: RetrievalResult,
+        context: LLMRequestContext? = nil
     ) async -> VerifiedAnswer? {
         guard let capabilities else { return nil }
+        // Budget-aware: the fallback shares the request's allowance. If the
+        // budget is already spent, do not attempt another call — the caller
+        // handles the deterministic degradation.
+        if let context, await !context.budget.canSpend() { return nil }
         let spec = CapabilitySpec.reasoning(
             contextTokens: 8_000,
             purpose: "history.chunk.fallback"
@@ -447,7 +452,10 @@ public actor MasterBrain {
 
         let response: String
         do {
-            response = try await provider.generate(prompt: prompt, options: options)
+            response = try await provider.generate(
+                prompt: prompt, options: options,
+                purpose: "history.chunkFallback", context: context
+            )
         } catch {
             return nil
         }
@@ -662,6 +670,16 @@ public actor MasterBrain {
         // being off — cold entities stay cheap; asked-about ones enrich.
         warmMemoryOnDemand(for: intent.entityHints)
 
+        // Ledger-first HARD budget (Minimum-LLM Completion spec §8.1). Classify
+        // the request deterministically and load ONE shared, request-scoped
+        // call budget that every downstream generation — experts, synthesis,
+        // council, chunk-RAG fallback — reserves from. This is what turns the
+        // adaptive policy into an enforced ceiling: once the budget is spent,
+        // further calls throw and the pipeline degrades deterministically.
+        let queryClass = LLMQueryClassifier.classify(question: question, intent: intent)
+        let llmBudget = LLMCallBudget(limit: queryClass.callLimit)
+        let llmContext = LLMRequestContext(budget: llmBudget, queryClass: queryClass)
+
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
         // is intentionally narrow so "new project" / "new supplier" don't
@@ -720,7 +738,8 @@ public actor MasterBrain {
         let context = ExpertContext(
             retriever: retriever,
             capabilities: capabilities,
-            sharedRetrieval: sharedRetrieval
+            sharedRetrieval: sharedRetrieval,
+            llmContext: llmContext
         )
         let findings = await executor.execute(
             intent: intent,
@@ -741,7 +760,8 @@ public actor MasterBrain {
             // Verifier itself crashed — chunk RAG fallback so we
             // still hand the user *something* instead of a refusal.
             if let rag = await chunkBasedFallback(
-                question: question, intent: intent, retrieval: retrievalForVerifier
+                question: question, intent: intent, retrieval: retrievalForVerifier,
+                context: llmContext
             ) {
                 return rag
             }
@@ -762,7 +782,8 @@ public actor MasterBrain {
         // sources — confident answers with citations pass through.
         if verified.refused || verified.citations.isEmpty {
             if let rag = await chunkBasedFallback(
-                question: question, intent: intent, retrieval: retrievalForVerifier
+                question: question, intent: intent, retrieval: retrievalForVerifier,
+                context: llmContext
             ), !rag.refused {
                 return rag
             }
@@ -816,7 +837,8 @@ public actor MasterBrain {
                 verifiedBody: verified.body,
                 citations: verified.citations,
                 capabilities: capabilities,
-                depth: depth
+                depth: depth,
+                context: llmContext
             )
         }
         return Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)

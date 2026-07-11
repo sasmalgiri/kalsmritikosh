@@ -53,7 +53,8 @@ public struct AnswerSynthesizer: Sendable {
         verifiedBody: String,
         citations: [VerifiedAnswer.Citation],
         capabilities: CapabilityRegistry,
-        depth: Depth = .refine
+        depth: Depth = .refine,
+        context: LLMRequestContext? = nil
     ) async -> String? {
         let findings = verifiedBody.trimmingCharacters(in: .whitespacesAndNewlines)
         guard findings.count >= 2 else { return nil }
@@ -78,7 +79,8 @@ public struct AnswerSynthesizer: Sendable {
                 findings: boundedFindings,
                 evidence: evidence,
                 capabilities: capabilities,
-                k: 2
+                k: 2,
+                context: context
             )
             if !perspectives.isEmpty {
                 councilBlock = "\n\nSpecialist perspectives (advisory — still ground every statement in the findings/evidence above):\n"
@@ -103,8 +105,12 @@ public struct AnswerSynthesizer: Sendable {
         Supporting evidence snippets:
         \(evidence)\(councilBlock)
         """
+        // Budget gate before every stage (§10): if the shared allowance is
+        // already spent, ship the best answer so far rather than overspend.
+        if let context, await !context.budget.canSpend() { return nil }
         guard let draftRaw = await Self.respond(
-            provider: provider, prompt: draftPrompt, system: draftSystem, maxTokens: 700
+            provider: provider, prompt: draftPrompt, system: draftSystem, maxTokens: 700,
+            purpose: "answer.draft", context: context
         ) else { return nil }
         var answer = draftRaw
 
@@ -114,7 +120,13 @@ public struct AnswerSynthesizer: Sendable {
         // keeps a complex answer at draft+refine (2 synthesis calls) so the
         // whole question stays within the hard LLM-call ceiling. Moderate
         // (.refine) answers ship the draft as-is — no extra call.
-        if depth == .deep || depth == .investigation {
+        let refineAllowed: Bool
+        if let context {
+            refineAllowed = await context.budget.canSpend()
+        } else {
+            refineAllowed = true
+        }
+        if (depth == .deep || depth == .investigation), refineAllowed {
             let refineSystem = """
             You are a strict evidence editor. Rewrite the DRAFT so every \
             statement is supported by the findings/evidence: drop or correct \
@@ -136,7 +148,8 @@ public struct AnswerSynthesizer: Sendable {
             \(answer)
             """
             if let refined = await Self.respond(
-                provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700
+                provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700,
+                purpose: "answer.refine", context: context
             ), refined.count >= 2 {
                 KalsmritikoshLog.brain.info("AnswerSynthesizer: applied evidence-checked refine (depth=\(String(describing: depth), privacy: .public))")
                 answer = refined
@@ -154,11 +167,15 @@ public struct AnswerSynthesizer: Sendable {
         provider: any ModelProvider,
         prompt: String,
         system: String,
-        maxTokens: Int
+        maxTokens: Int,
+        purpose: String,
+        context: LLMRequestContext?
     ) async -> String? {
         guard let raw = try? await provider.generate(
             prompt: prompt,
-            options: GenerationOptions(maxTokens: maxTokens, temperature: 0.2, systemPrompt: system)
+            options: GenerationOptions(maxTokens: maxTokens, temperature: 0.2, systemPrompt: system),
+            purpose: purpose,
+            context: context
         ) else { return nil }
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : text

@@ -19,7 +19,7 @@ public struct ProjectExpert: Expert {
         )
 
         let frame = PromptTemplates.projectAnalysis(intent: intent, retrieval: result)
-        let llm = await runLLM(frame: frame, capabilities: context.capabilities)
+        let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(
                 expertID: id,
@@ -66,7 +66,8 @@ public struct ProjectExpert: Expert {
 
     private func runLLM(
         frame: PromptFrame,
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        context: LLMRequestContext?
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 6_000, purpose: "expert.project")
         guard let provider = try? await capabilities.resolve(spec) else {
@@ -100,7 +101,9 @@ public struct ProjectExpert: Expert {
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
-                options: GenerationOptions(maxTokens: 500, temperature: 0.2)
+                options: GenerationOptions(maxTokens: 500, temperature: 0.2),
+                purpose: "expert.project",
+                context: context
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
             KalsmritikoshLog.brain.info("expert.project LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")

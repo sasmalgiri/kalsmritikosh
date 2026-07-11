@@ -22,7 +22,7 @@ public struct LegalExpert: Expert {
         }
 
         let frame = PromptTemplates.legalAnalysis(intent: intent, retrieval: result)
-        let llm = await runLLM(frame: frame, capabilities: context.capabilities)
+        let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(
                 expertID: id,
@@ -57,7 +57,8 @@ public struct LegalExpert: Expert {
 
     private func runLLM(
         frame: PromptFrame,
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        context: LLMRequestContext?
     ) async -> (claims: [ExpertFindings.Claim], dropped: Int) {
         let spec = CapabilitySpec.reasoning(contextTokens: 4_000, purpose: "expert.legal")
         guard let provider = try? await capabilities.resolve(spec) else {
@@ -85,7 +86,9 @@ public struct LegalExpert: Expert {
         do {
             let response = try await provider.generate(
                 prompt: frame.prompt,
-                options: GenerationOptions(maxTokens: 300, temperature: 0.2)
+                options: GenerationOptions(maxTokens: 300, temperature: 0.2),
+                purpose: "expert.legal",
+                context: context
             )
             let parsed = ExpertResponseParser.parseClaims(from: response, evidenceMap: frame.evidenceMap)
             KalsmritikoshLog.brain.info("expert.legal LLM: provider=\(provider.id, privacy: .public) produced \(parsed.claims.count) claims, dropped \(parsed.dropped)")
