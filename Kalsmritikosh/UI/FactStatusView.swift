@@ -142,7 +142,9 @@ public struct FactStatusView: View {
 
     private var evidenceTab: some View {
         Group {
-            ForEach([FactStatus.proven, .inferred, .unverified], id: \.self) { status in
+            // A5.5 — .humanConfirmed sits between structurally-proven and
+            // inferred: a reviewer vouched for it, but it isn't auto-proven.
+            ForEach([FactStatus.proven, .humanConfirmed, .inferred, .unverified], id: \.self) { status in
                 let rows = items.filter { $0.status == status }
                 if !rows.isEmpty {
                     sectionHeader(status)
