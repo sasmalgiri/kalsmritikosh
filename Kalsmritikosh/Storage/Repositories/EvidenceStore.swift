@@ -174,6 +174,32 @@ public actor EvidenceStore {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// A5.7 — document profiles whose extraction was not clean: partial,
+    /// corrupt, encrypted, unsupported, or failed. Used by the gap scanner to
+    /// surface unreadable regions where evidence may be missing from the ledger.
+    public struct ExtractionIssue: Sendable, Hashable {
+        public let sourceVersionID: UUID
+        public let filename: String
+        public let status: String
+        public let warningCount: Int
+    }
+
+    public func documentsWithExtractionIssues(limit: Int = 200) async throws -> [ExtractionIssue] {
+        let rows = try await database.query("""
+        SELECT source_version_id, filename, extraction_status, warning_count
+        FROM document_profiles
+        WHERE extraction_status IN ('partial', 'corrupt', 'encrypted', 'unsupported', 'failed')
+        ORDER BY created_at DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let vid = row.uuid(0), let filename = row.string(1), let status = row.string(2) else { return nil }
+            return ExtractionIssue(
+                sourceVersionID: vid, filename: filename, status: status,
+                warningCount: Int(row.int(3) ?? 0)
+            )
+        }
+    }
+
     // MARK: - Internals
 
     private nonisolated func decodeBlock(_ row: SQLRow) -> EvidenceBlock? {

@@ -168,6 +168,44 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Unreadable regions (A5.7)
+
+    private static func readableReason(status: String) -> String {
+        switch status {
+        case "partial":     return "only part of the document could be parsed"
+        case "corrupt":     return "the file appears corrupt"
+        case "encrypted":   return "the file is encrypted and couldn't be decoded"
+        case "unsupported": return "the format isn't fully supported yet"
+        case "failed":      return "parsing failed"
+        default:            return "the document couldn't be fully read"
+        }
+    }
+
+    /// A5.7 — flag sources whose extraction wasn't clean (partial / corrupt /
+    /// encrypted / unsupported / failed), so the unreadable region is recorded
+    /// as possibly-missing evidence rather than silently dropped. Reflects a
+    /// parsing limit, not wrongdoing.
+    ///
+    /// - Parameter regions: per-source (filename, extraction status, warning count).
+    public func detectUnreadableRegions(
+        regions: [(filename: String, status: String, warningCount: Int)],
+        limit: Int = 100
+    ) -> [GapNode] {
+        var gaps: [GapNode] = []
+        for region in regions {
+            let why = Self.readableReason(status: region.status)
+            let warnClause = region.warningCount > 0 ? " (\(region.warningCount) parser warning(s))" : ""
+            gaps.append(GapNode(
+                kind: .unreadableRegion,
+                description: "Part of \"\(region.filename)\" could not be read",
+                reason: "\(why)\(warnClause) — evidence in the unreadable region may be missing from the ledger. This reflects a parsing limit, not wrongdoing; the source is still tracked and can be re-parsed.",
+                confidence: 0.3
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Thread parents
 
     /// Detect replies/forwards whose original message wasn't ingested.

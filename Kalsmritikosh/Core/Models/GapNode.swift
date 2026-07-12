@@ -33,6 +33,10 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// attachment was ingested with it. Absence ≠ wrongdoing: the file may
     /// simply not have been included in the export.
     case referencedAttachment
+    /// A5.7 — a source was only partially readable (parse partial / corrupt /
+    /// encrypted / unsupported), so evidence in the unreadable region may be
+    /// absent from the ledger. Reflects a parsing limit, not wrongdoing.
+    case unreadableRegion
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -42,6 +46,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .danglingReference:    return "Dangling Reference"
         case .cadenceBreak:         return "Cadence Break"
         case .referencedAttachment: return "Missing Attachment"
+        case .unreadableRegion:     return "Unreadable Region"
         }
     }
 
@@ -53,6 +58,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .danglingReference:    return "link.badge.plus"
         case .cadenceBreak:         return "calendar.badge.exclamationmark"
         case .referencedAttachment: return "paperclip.badge.ellipsis"
+        case .unreadableRegion:     return "doc.badge.ellipsis"
         }
     }
 }

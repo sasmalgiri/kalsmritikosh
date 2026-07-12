@@ -1633,8 +1633,17 @@ public final class AppState {
             found += detector.detectMissingAttachments(emails: emailRows)
         }
 
+        // Rule 5 (A5.7) — unreadable regions from the structural layer: sources
+        // whose parse was partial / corrupt / encrypted / unsupported / failed.
+        if let evidenceStore {
+            let issues = (try? await evidenceStore.documentsWithExtractionIssues(limit: 200)) ?? []
+            found += detector.detectUnreadableRegions(
+                regions: issues.map { (filename: $0.filename, status: $0.status, warningCount: $0.warningCount) }
+            )
+        }
+
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region)")
         return found.count
     }
 
