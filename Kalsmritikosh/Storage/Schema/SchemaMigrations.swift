@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 35
+    public static let latestVersion = 36
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -72,7 +72,8 @@ public enum SchemaMigrations {
         (32, v32),
         (33, v33),
         (34, v34),
-        (35, v35)
+        (35, v35),
+        (36, v36)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1361,5 +1362,12 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_derived_source_hash ON derived_objects(source_hash);
     CREATE INDEX IF NOT EXISTS idx_derived_kind ON derived_objects(kind);
     CREATE INDEX IF NOT EXISTS idx_derived_extractor ON derived_objects(extractor_version);
+    """
+
+    // P5.5 — contradiction taxonomy. Adds a `kind` column so a conflict is
+    // classified (date/amount/identity/payment/…) rather than untyped. Additive
+    // with a default so existing rows remain valid.
+    private static let v36: String = """
+    ALTER TABLE contradictions ADD COLUMN kind TEXT NOT NULL DEFAULT 'other';
     """
 }

@@ -21,10 +21,11 @@ public actor ContradictionsRepository {
     public func insert(_ c: Contradiction) async {
         try? await database.exec("""
         INSERT OR IGNORE INTO contradictions
-            (id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            (id, kind, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(c.id),
+            .text(c.kind.rawValue),
             .text(c.description),
             .text(c.claimA),
             .text(c.claimB),
@@ -43,7 +44,7 @@ public actor ContradictionsRepository {
     /// Open (unresolved) conflicts, most severe first.
     public func open(limit: Int = 500) async -> [Contradiction] {
         let rows = (try? await database.query("""
-        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at
+        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind
         FROM contradictions WHERE status = 'open'
         ORDER BY
             CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
@@ -55,7 +56,7 @@ public actor ContradictionsRepository {
 
     public func all(limit: Int = 500) async -> [Contradiction] {
         let rows = (try? await database.query("""
-        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at
+        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind
         FROM contradictions
         ORDER BY detected_at DESC LIMIT ?;
         """, [.integer(Int64(limit))])) ?? []
@@ -94,8 +95,10 @@ public actor ContradictionsRepository {
             let status = Contradiction.Status(rawValue: statusRaw),
             let detectedAtRaw = row.double(8)
         else { return nil }
+        let kind = row.string(9).flatMap(Contradiction.Kind.init(rawValue:)) ?? .other
         return Contradiction(
             id: id,
+            kind: kind,
             description: description,
             claimA: claimA,
             claimB: claimB,

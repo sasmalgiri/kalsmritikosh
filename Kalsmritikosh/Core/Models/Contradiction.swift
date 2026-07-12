@@ -45,7 +45,50 @@ public struct Contradiction: Identifiable, Sendable, Hashable, Codable {
         case dismissed
     }
 
+    /// P5.5 — the KIND of disagreement, so the UI and evidence-ranking can
+    /// treat a payment conflict differently from a date conflict. Detection
+    /// for the non-date kinds lands incrementally; the vocabulary + persistence
+    /// exist now so detectors can tag as they come online.
+    public enum Kind: String, Sendable, CaseIterable, Codable {
+        case date
+        case amount
+        case identity
+        case location
+        case status
+        case eventOccurrence
+        case sequence
+        case documentVersion
+        case testimony
+        case sentReceived
+        case payment
+        case signature
+        case causation
+        case other
+
+        public var displayName: String {
+            switch self {
+            case .date: return "Date"
+            case .amount: return "Amount"
+            case .identity: return "Identity"
+            case .location: return "Location"
+            case .status: return "Status"
+            case .eventOccurrence: return "Event occurrence"
+            case .sequence: return "Sequence"
+            case .documentVersion: return "Document version"
+            case .testimony: return "Testimony"
+            case .sentReceived: return "Sent/received"
+            case .payment: return "Payment"
+            case .signature: return "Signature"
+            case .causation: return "Causation"
+            case .other: return "Other"
+            }
+        }
+    }
+
     public let id: ID
+    /// The kind of disagreement (P5.5). Defaults to `.other` for rows/payloads
+    /// written before the taxonomy existed.
+    public let kind: Kind
     /// One-line human summary ("Conflicting dates for \"Kickoff call\"").
     public let description: String
     /// The two mutually-incompatible claims, verbatim.
@@ -60,6 +103,7 @@ public struct Contradiction: Identifiable, Sendable, Hashable, Codable {
 
     public nonisolated init(
         id: ID = UUID(),
+        kind: Kind = .other,
         description: String,
         claimA: String,
         claimB: String,
@@ -70,6 +114,7 @@ public struct Contradiction: Identifiable, Sendable, Hashable, Codable {
         detectedAt: Date = Date()
     ) {
         self.id = id
+        self.kind = kind
         self.description = description
         self.claimA = claimA
         self.claimB = claimB
@@ -78,5 +123,23 @@ public struct Contradiction: Identifiable, Sendable, Hashable, Codable {
         self.severity = severity
         self.status = status
         self.detectedAt = detectedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, kind, description, claimA, claimB, evidenceA, evidenceB, severity, status, detectedAt
+    }
+
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(ID.self, forKey: .id)
+        self.kind = try c.decodeIfPresent(Kind.self, forKey: .kind) ?? .other
+        self.description = try c.decode(String.self, forKey: .description)
+        self.claimA = try c.decode(String.self, forKey: .claimA)
+        self.claimB = try c.decode(String.self, forKey: .claimB)
+        self.evidenceA = try c.decodeIfPresent(KnowledgeObject.ID.self, forKey: .evidenceA)
+        self.evidenceB = try c.decodeIfPresent(KnowledgeObject.ID.self, forKey: .evidenceB)
+        self.severity = try c.decode(Severity.self, forKey: .severity)
+        self.status = try c.decode(Status.self, forKey: .status)
+        self.detectedAt = try c.decode(Date.self, forKey: .detectedAt)
     }
 }

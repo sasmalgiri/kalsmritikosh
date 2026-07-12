@@ -66,6 +66,7 @@ public nonisolated struct ContradictionDetector: Sendable {
 
             let gapDays = gap / 86_400
             out.append(Contradiction(
+                kind: .date,
                 description: "Conflicting dates for \"\(latest.title)\"",
                 claimA: "\(earliest.title) \(earliest.datePrecision.renderPhrase(date: earliest.date))",
                 claimB: "\(latest.title) \(latest.datePrecision.renderPhrase(date: latest.date))",
