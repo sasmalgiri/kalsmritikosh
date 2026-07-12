@@ -241,38 +241,58 @@ public actor IngestCoordinator {
         from doc: ParsedDocument, sourceVersionID: UUID,
         extractorVersion: String, into assertions: AssertionsRepository
     ) async {
+        let statementExtractor = StatementExtractor()
         for block in doc.blocks {
-            let predicate: String
             switch block.kind {
             case .emailHeader:
                 guard let field = block.locator.emailHeaderField, !field.isEmpty else { continue }
-                predicate = "email_\(field)"
+                await insertObserved(block, predicate: "email_\(field)", sourceVersionID: sourceVersionID,
+                                     extractorVersion: extractorVersion, into: assertions)
             case .documentTitle:
-                predicate = "document_title"
+                await insertObserved(block, predicate: "document_title", sourceVersionID: sourceVersionID,
+                                     extractorVersion: extractorVersion, into: assertions)
+            case .paragraph, .emailBody, .slideBody, .quote:
+                // A5 extraction — attributed statements become SOURCE-asserted
+                // assertions (who claimed what), never directly-observed.
+                for s in statementExtractor.statements(in: block.rawText) {
+                    let assertion = Assertion(
+                        subjectKind: .claim,
+                        subjectID: sourceVersionID,
+                        predicate: "statement_\(s.verb)",
+                        object: .literal("\(s.speaker): \(s.claim)"),
+                        confidence: block.extractionConfidence * 0.8,
+                        evidenceBlockIDs: [block.id],
+                        directQuote: "\(s.speaker) \(s.verb) \(s.claim)",
+                        assertingSourceID: sourceVersionID,
+                        provenance: .sourceAsserted,
+                        extractorVersion: extractorVersion,
+                        agent: "system.statements"
+                    )
+                    do { try await assertions.insert(assertion) }
+                    catch { KalsmritikoshLog.ingestion.error("Assertion insert failed: \(String(describing: error), privacy: .public)") }
+                }
             default:
                 continue
             }
-            let value = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
-            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let assertion = Assertion(
-                subjectKind: .claim,
-                subjectID: sourceVersionID,
-                predicate: predicate,
-                object: .literal(value),
-                confidence: block.extractionConfidence,
-                evidenceBlockIDs: [block.id],
-                directQuote: block.rawText,
-                assertingSourceID: sourceVersionID,
-                provenance: .directlyObserved,
-                extractorVersion: extractorVersion,
-                agent: "system.structural"
-            )
-            do {
-                try await assertions.insert(assertion)
-            } catch {
-                KalsmritikoshLog.ingestion.error("Assertion insert failed: \(String(describing: error), privacy: .public)")
-            }
         }
+    }
+
+    /// Insert a directly-observed assertion for a header/title block (A5.1).
+    private func insertObserved(
+        _ block: EvidenceBlock, predicate: String, sourceVersionID: UUID,
+        extractorVersion: String, into assertions: AssertionsRepository
+    ) async {
+        let value = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
+        guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let assertion = Assertion(
+            subjectKind: .claim, subjectID: sourceVersionID, predicate: predicate,
+            object: .literal(value), confidence: block.extractionConfidence,
+            evidenceBlockIDs: [block.id], directQuote: block.rawText,
+            assertingSourceID: sourceVersionID, provenance: .directlyObserved,
+            extractorVersion: extractorVersion, agent: "system.structural"
+        )
+        do { try await assertions.insert(assertion) }
+        catch { KalsmritikoshLog.ingestion.error("Assertion insert failed: \(String(describing: error), privacy: .public)") }
     }
 
     private func ingestCore(fileAt url: URL) async throws -> Result {
