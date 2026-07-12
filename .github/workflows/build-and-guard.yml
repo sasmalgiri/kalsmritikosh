@@ -109,9 +109,14 @@ jobs:
       - name: No try! / fatalError outside UI
         run: |
           set +e
+          # Exclude UI and comment-only lines (docstrings that mention "try!"
+          # for explanation, e.g. "keeps the codebase free of `try!`", are not
+          # actual uses). A real try!/fatalError( in code doesn't start with a
+          # comment marker and is still caught.
           MATCHES=$(grep -rnE "try!|fatalError\(" Kalsmritikosh/ \
             --include="*.swift" \
-            2>/dev/null | grep -vE "^Kalsmritikosh/UI/" || true)
+            2>/dev/null | grep -vE "^Kalsmritikosh/UI/" \
+            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
           if [ -n "$MATCHES" ]; then
             echo "::error::try! or fatalError() found in non-UI code"
             echo "$MATCHES"
