@@ -28,7 +28,8 @@ public struct StructuralParserRegistry: Sendable {
         RTFStructuralParser(),
         ODTStructuralParser(),
         ODSStructuralParser(),
-        EmailStructuralParser()
+        EmailStructuralParser(),
+        MBOXStructuralParser()
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

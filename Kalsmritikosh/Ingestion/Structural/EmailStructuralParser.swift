@@ -35,49 +35,11 @@ public struct EmailStructuralParser: StructuralParser {
         let documentID = UUID()
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let raw = String(decoding: data, as: UTF8.self)
-        let (headers, rawBody) = Self.splitHeadersAndBody(raw)
 
-        let sourceURL = URL(fileURLWithPath: filename)
-        let (textBody, attachmentURLs) = EmailLoader.applyMultipartIfNeeded(
-            headers: headers, body: rawBody, for: sourceURL
+        var (blocks, warnings, _) = Self.messageBlocks(
+            raw: raw, documentID: documentID, sourceVersionID: sourceVersionID,
+            filename: filename, ordinalStart: 0, messageIndex: nil
         )
-        let (cleanedBody, quotedBytes) = EmailLoader.stripQuotedRegions(textBody)
-        let messageID = headers["message-id"]
-
-        var blocks: [EvidenceBlock] = []
-        var warnings: [ParserWarning] = []
-        var ordinal = 0
-
-        func add(_ kind: EvidenceBlockKind, _ text: String, _ locator: SourceLocator, _ attrs: [String: AnyCodable] = [:]) {
-            blocks.append(EvidenceBlock(
-                documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
-                kind: kind, rawText: text, locator: locator, extractionMethod: .native, attributes: attrs
-            ))
-            ordinal += 1
-        }
-
-        // One header block per key field, in a stable order.
-        for key in Self.headerBlockKeys {
-            guard let value = headers[key], !value.isEmpty else { continue }
-            add(.emailHeader, EmailLoader.decodeRFC2047(value),
-                SourceLocator(messageID: messageID, emailHeaderField: key))
-        }
-
-        // Body.
-        let body = cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty {
-            add(.emailBody, body, SourceLocator(messageID: messageID),
-                ["quotedBytesRemoved": AnyCodable(.int(Int64(quotedBytes)))])
-        }
-
-        // Attachments — one block each, with parent-provenance handled at
-        // ingest (recursive ingest of the staged file).
-        for url in attachmentURLs {
-            add(.attachment, url.lastPathComponent,
-                SourceLocator(messageID: messageID, attachmentID: url.lastPathComponent),
-                ["path": AnyCodable(.string(url.path))])
-        }
-
         if blocks.isEmpty {
             warnings.append(ParserWarning(severity: .warning, code: "eml.empty",
                                           message: "No headers or body extracted."))
@@ -88,6 +50,56 @@ public struct EmailStructuralParser: StructuralParser {
             filename: filename, detectedType: .eml, mimeType: "message/rfc822",
             contentHash: hash, blocks: blocks, warnings: warnings, extractionStatus: status
         )
+    }
+
+    /// Build the evidence blocks for ONE RFC-822 message. Shared by the .eml
+    /// parser and the MBOX parser (which calls it once per contained message),
+    /// so header/body/attachment handling has a single source of truth.
+    /// `messageIndex` (when non-nil) is stamped on each block's attributes so
+    /// messages inside a multi-message container stay distinguishable.
+    static func messageBlocks(
+        raw: String, documentID: UUID, sourceVersionID: UUID?, filename: String,
+        ordinalStart: Int, messageIndex: Int?
+    ) -> (blocks: [EvidenceBlock], warnings: [ParserWarning], nextOrdinal: Int) {
+        let (headers, rawBody) = splitHeadersAndBody(raw)
+        let sourceURL = URL(fileURLWithPath: filename)
+        let (textBody, attachmentURLs) = EmailLoader.applyMultipartIfNeeded(
+            headers: headers, body: rawBody, for: sourceURL
+        )
+        let (cleanedBody, quotedBytes) = EmailLoader.stripQuotedRegions(textBody)
+        let messageID = headers["message-id"]
+
+        var blocks: [EvidenceBlock] = []
+        var ordinal = ordinalStart
+        let indexAttr: [String: AnyCodable] = messageIndex.map {
+            ["messageIndex": AnyCodable(.int(Int64($0)))]
+        } ?? [:]
+
+        func add(_ kind: EvidenceBlockKind, _ text: String, _ locator: SourceLocator, _ attrs: [String: AnyCodable] = [:]) {
+            blocks.append(EvidenceBlock(
+                documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
+                kind: kind, rawText: text, locator: locator, extractionMethod: .native,
+                attributes: attrs.merging(indexAttr) { a, _ in a }
+            ))
+            ordinal += 1
+        }
+
+        for key in headerBlockKeys {
+            guard let value = headers[key], !value.isEmpty else { continue }
+            add(.emailHeader, EmailLoader.decodeRFC2047(value),
+                SourceLocator(messageID: messageID, emailHeaderField: key))
+        }
+        let body = cleanedBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !body.isEmpty {
+            add(.emailBody, body, SourceLocator(messageID: messageID),
+                ["quotedBytesRemoved": AnyCodable(.int(Int64(quotedBytes)))])
+        }
+        for url in attachmentURLs {
+            add(.attachment, url.lastPathComponent,
+                SourceLocator(messageID: messageID, attachmentID: url.lastPathComponent),
+                ["path": AnyCodable(.string(url.path))])
+        }
+        return (blocks, [], ordinal)
     }
 
     // MARK: - RFC-822 header/body split (pure)

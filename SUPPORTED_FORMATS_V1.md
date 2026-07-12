@@ -26,7 +26,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | RTF | `.rtf` | Structural | `RTFStructuralParser` | paragraph blocks; character-range locator | NSAttributedString decode; heading-from-font-runs is a later refinement |
 | ODT | `.odt` | Structural | `ODTStructuralParser` | sectionHeading / paragraph in reading order; sectionPath locator | OpenDocument content.xml; outline-level headings |
 | ODS | `.ods` | Structural | `ODSStructuralParser` | sheet + row (cells as JSON); sheet/row locator | OpenDocument content.xml; honors column/row repeat; deterministic table queries |
-| MBOX | `.mbox` | Legacy (per-message KOs) | `EmailLoader` | per-message flattened | structural MBOX = follow-up |
+| MBOX | `.mbox` | Structural | `MBOXStructuralParser` | per-message header/body/attachment blocks; message-id + messageIndex locator | splits on `From ` separators; reuses the EML per-message extractor |
 | EMLX (Apple Mail) | `.appleMail` | Legacy | `EmailLoader` | flattened | |
 | Images | `.png/.jpg/.heic/.tiff/.webp` | Structural | `ImageStructuralParser` | image container + paragraph-per-line + table/tableRow; line/row locator; OCR confidence | Vision OCR; word bboxes are a later refinement |
 | ZIP | `.zip` | Structural relations pending | `ArchiveLoader` | members re-ingested | security guards done (zip-bomb/slip); A3.12 member provenance |
