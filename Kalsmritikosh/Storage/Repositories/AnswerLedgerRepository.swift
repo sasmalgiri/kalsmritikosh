@@ -109,11 +109,19 @@ public actor AnswerLedgerRepository {
             // EvidenceBlock ids (A5.3) so the row completes the replay chain
             // answer → claim → event → block → locator → source version.
             var blockIDsJSON: String?
+            var resolvedBlockIDs: [String] = []
             if let eventID = citation.eventID {
-                let ids = await blockIDs(forEvent: eventID)
-                if !ids.isEmpty, let data = try? JSONEncoder().encode(ids) {
-                    blockIDsJSON = String(data: data, encoding: .utf8)
-                }
+                resolvedBlockIDs = await blockIDs(forEvent: eventID)
+            }
+            // A5.10 bridge — for a non-event (object/chunk) citation, resolve the
+            // snippet to the block(s) it came from WITHIN the cited object's own
+            // source, so every citation — not just event ones — completes the
+            // answer → block → locator chain.
+            if resolvedBlockIDs.isEmpty, !citation.snippet.isEmpty {
+                resolvedBlockIDs = await blockIDs(forObject: citation.objectID, snippet: citation.snippet)
+            }
+            if !resolvedBlockIDs.isEmpty, let data = try? JSONEncoder().encode(resolvedBlockIDs) {
+                blockIDsJSON = String(data: data, encoding: .utf8)
             }
             try await database.exec("""
             INSERT OR IGNORE INTO claim_evidence
@@ -144,6 +152,34 @@ public actor AnswerLedgerRepository {
               let attrs = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
               case .array(let arr)? = attrs["sourceBlockIDs"]?.value else { return [] }
         return arr.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
+    }
+
+    /// A5.10 block→KO bridge — the structural block(s) a snippet came from,
+    /// scoped to the cited object's OWN source. Hops object → file → current
+    /// source version → FTS-ranked blocks matching the snippet. Empty when the
+    /// object has no structural version or nothing matches. Best-effort.
+    private func blockIDs(forObject objectID: UUID, snippet: String) async -> [String] {
+        // object → logical source (file_id).
+        let fileRows = (try? await database.query(
+            "SELECT file_id FROM knowledge_objects WHERE id = ? LIMIT 1;", [.uuid(objectID)]
+        )) ?? []
+        guard let fileID = fileRows.first?.uuid(0) else { return [] }
+        // logical source → current source version.
+        let versionRows = (try? await database.query("""
+        SELECT id FROM source_versions WHERE logical_source_id = ? AND is_current = 1
+        ORDER BY created_at DESC LIMIT 1;
+        """, [.uuid(fileID)])) ?? []
+        guard let versionID = versionRows.first?.uuid(0) else { return [] }
+        // snippet → best-matching blocks WITHIN that version (FTS, bm25-ranked).
+        let match = EvidenceStore.ftsQuery(snippet)
+        guard !match.isEmpty else { return [] }
+        let blockRows = (try? await database.query("""
+        SELECT eb.id FROM evidence_blocks eb
+        JOIN evidence_blocks_fts ON evidence_blocks_fts.rowid = eb.rowid
+        WHERE eb.source_version_id = ? AND evidence_blocks_fts MATCH ?
+        ORDER BY rank LIMIT 3;
+        """, [.uuid(versionID), .text(match)])) ?? []
+        return blockRows.compactMap { $0.uuid(0)?.uuidString }
     }
 
     public func recent(limit: Int = 100) async throws -> [StoredAnswer] {
