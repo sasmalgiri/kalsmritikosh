@@ -75,30 +75,66 @@ public struct ArchiveLoader: Ingestor {
 
     // MARK: - Static expansion helper
 
-    /// Expands a ZIP archive into a per-archive temp directory and
-    /// returns the URLs of each regular-file entry, ready for the
-    /// IngestCoordinator to re-ingest. Skips directories and entries
-    /// with absolute / traversal-style paths.
+    // P4.11 — ZIP expansion security limits. Defends against zip bombs,
+    // entry floods, and path-traversal / zip-slip.
+    /// Max entries expanded from one archive (entry-flood guard).
+    public nonisolated static let maxEntries = 20_000
+    /// Max total uncompressed bytes across all entries (zip-bomb guard).
+    public nonisolated static let maxTotalExpandedBytes: Int = 4 * 1024 * 1024 * 1024   // 4 GB
+    /// Max uncompressed bytes for any single entry.
+    public nonisolated static let maxEntryBytes: Int = 1024 * 1024 * 1024               // 1 GB
+
+    public enum ArchiveSecurityError: Error, Sendable {
+        case tooManyEntries(Int)
+        case expandedTooLarge(Int)
+        case entryTooLarge(name: String, size: Int)
+    }
+
+    /// Expands a ZIP archive into a per-archive temp directory and returns the
+    /// URLs of each regular-file entry, ready for the IngestCoordinator to
+    /// re-ingest. Enforces P4.11 security limits: entry count, total + per-entry
+    /// expanded size (zip bomb), and canonical containment (zip-slip / symlink
+    /// traversal). Malformed or escaping entries are skipped, not fatal — but a
+    /// zip bomb aborts the whole expansion.
     public nonisolated static func expandZIP(at url: URL) throws -> (root: URL, files: [URL]) {
         let reader = try ZIPReader(url: url)
         let entries = try reader.entries()
+        guard entries.count <= maxEntries else {
+            throw ArchiveSecurityError.tooManyEntries(entries.count)
+        }
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-zip-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // Canonical root path with a trailing slash so prefix checks can't be
+        // fooled by a sibling dir sharing the prefix (e.g. root vs root-evil).
+        let rootPath = root.standardizedFileURL.path + "/"
 
         var out: [URL] = []
+        var totalBytes = 0
         for entry in entries {
-            // Directory marker — name ends with "/" and has zero size.
+            // Directory marker — name ends with "/".
             if entry.name.hasSuffix("/") { continue }
-            // Defensively reject absolute paths and traversal.
+            // Reject absolute paths and traversal outright.
             if entry.name.hasPrefix("/") || entry.name.contains("..") { continue }
+            // Per-entry size guard BEFORE inflating.
+            if entry.uncompressedSize > maxEntryBytes {
+                throw ArchiveSecurityError.entryTooLarge(name: entry.name, size: entry.uncompressedSize)
+            }
 
             let destination = root.appendingPathComponent(entry.name)
+            // Canonical containment (zip-slip): the resolved path MUST stay
+            // inside root. Catches ../ that survived and symlink-style escapes.
+            guard destination.standardizedFileURL.path.hasPrefix(rootPath) else { continue }
+
+            let data = try reader.extract(entry: entry)
+            totalBytes += data.count
+            if totalBytes > maxTotalExpandedBytes {
+                throw ArchiveSecurityError.expandedTooLarge(totalBytes)
+            }
             try FileManager.default.createDirectory(
                 at: destination.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let data = try reader.extract(entry: entry)
             try data.write(to: destination)
             out.append(destination)
         }
