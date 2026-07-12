@@ -463,9 +463,31 @@ private struct ReviewSheet: View {
     @State private var corrected: String = ""
     @State private var saving = false
 
-    private var reasonRequired: Bool { action != .accept }
+    /// A5.8 — the review actions offered for THIS fact. All facts can be
+    /// accepted / rejected / corrected / precision-changed / marked
+    /// authoritative; a contradiction can additionally be resolved.
+    private var availableActions: [FactReview.Action] {
+        var actions: [FactReview.Action] = [.accept, .reject, .correct, .precisionChange, .markAuthority]
+        if item.sourceKind == .contradiction { actions.append(.resolveContradiction) }
+        return actions
+    }
+    /// Actions that take a corrected/new value.
+    private var takesNewValue: Bool { action == .correct || action == .precisionChange }
+    private var reasonRequired: Bool { action != .accept && action != .markAuthority }
     private var canSave: Bool {
         !saving && (!reasonRequired || !reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private func label(for action: FactReview.Action) -> String {
+        switch action {
+        case .accept:               return "Accept"
+        case .reject:               return "Reject"
+        case .correct:              return "Correct"
+        case .precisionChange:      return "Change precision"
+        case .markAuthority:        return "Mark authoritative"
+        case .resolveContradiction: return "Resolve contradiction"
+        default:                    return action.rawValue.capitalized
+        }
     }
 
     var body: some View {
@@ -477,13 +499,13 @@ private struct ReviewSheet: View {
                 }
                 Section("Verdict") {
                     Picker("Action", selection: $action) {
-                        Text("Accept").tag(FactReview.Action.accept)
-                        Text("Reject").tag(FactReview.Action.reject)
-                        Text("Correct").tag(FactReview.Action.correct)
+                        ForEach(availableActions, id: \.self) { a in
+                            Text(label(for: a)).tag(a)
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    if action == .correct {
-                        TextField("Corrected value", text: $corrected, axis: .vertical)
+                    if takesNewValue {
+                        TextField(action == .precisionChange ? "New date / precision" : "Corrected value",
+                                  text: $corrected, axis: .vertical)
                     }
                     TextField(reasonRequired ? "Reason (required)" : "Reason (optional)",
                               text: $reason, axis: .vertical)
@@ -516,7 +538,7 @@ private struct ReviewSheet: View {
             subjectID: item.id,
             action: action,
             priorValue: "\(item.status.displayName): \(item.title)",
-            newValue: action == .correct
+            newValue: takesNewValue
                 ? corrected.trimmingCharacters(in: .whitespacesAndNewlines)
                 : nil,
             reason: trimmedReason.isEmpty ? nil : trimmedReason
