@@ -71,6 +71,9 @@ public actor IngestCoordinator {
     /// (the claim–evidence ledger between EvidenceBlocks and typed rows). nil =
     /// assertion ledger not populated from ingest (no regression).
     private let assertions: AssertionsRepository?
+    /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
+    /// recorded (behaviour otherwise unchanged).
+    private let ingestAttempts: IngestAttemptsRepository?
     /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
     /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
     /// the per-KO loop and persists summarised pairs for retrieval.
@@ -130,11 +133,13 @@ public actor IngestCoordinator {
         custody: CustodyRepository? = nil,
         evidenceStore: EvidenceStore? = nil,
         structuralRegistry: StructuralParserRegistry? = nil,
-        assertions: AssertionsRepository? = nil
+        assertions: AssertionsRepository? = nil,
+        ingestAttempts: IngestAttemptsRepository? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
+        self.ingestAttempts = ingestAttempts
         self.custody = custody
         self.loaders = loaders
         self.cleaner = cleaner
@@ -175,10 +180,24 @@ public actor IngestCoordinator {
     }
 
     public func ingest(fileAt url: URL) async throws -> Result {
-        // A2 / A5.3 — the structural layer is now parsed ONCE inside ingestCore
+        // A2 / A5.3 — the structural layer is parsed ONCE inside ingestCore
         // (past the skip/alias/move early returns), so the same ParsedDocument
         // feeds event extraction AND is persisted with consistent block IDs.
-        try await ingestCore(fileAt: url)
+        // A2 §7.3/§7.7 — record the outcome durably so failures/skips are
+        // visible and re-tryable (best-effort; never affects the ingest).
+        do {
+            let result = try await ingestCore(fileAt: url)
+            await ingestAttempts?.record(
+                url: url,
+                status: result.chunkCount > 0 ? .queryable : .unchanged,
+                contentHash: result.fileRecord.contentHash
+            )
+            return result
+        } catch {
+            await ingestAttempts?.record(url: url, status: .failed, stage: "ingest",
+                                         detail: String(describing: error).prefix(500).description)
+            throw error
+        }
     }
 
     /// The result of parsing a file's structural document once, before both

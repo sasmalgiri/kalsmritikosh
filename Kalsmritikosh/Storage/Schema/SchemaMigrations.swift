@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 41
+    public static let latestVersion = 42
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -78,7 +78,8 @@ public enum SchemaMigrations {
         (38, v38),
         (39, v39),
         (40, v40),
-        (41, v41)
+        (41, v41),
+        (42, v42)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1537,5 +1538,23 @@ public enum SchemaMigrations {
     END;
 
     INSERT INTO evidence_blocks_fts(evidence_blocks_fts) VALUES('rebuild');
+    """
+
+    // A2 §7.3/§7.7 — durable per-file ingest outcome, so a failed or skipped
+    // ingest is visible (Sources UI) and re-tryable rather than silently lost.
+    // Append-only log keyed by URL + content hash; the latest row per URL is the
+    // current state. Additive; no existing table/behaviour changes.
+    private static let v42: String = """
+    CREATE TABLE ingest_file_attempts (
+        id            TEXT PRIMARY KEY NOT NULL,
+        url           TEXT NOT NULL,
+        content_hash  TEXT,
+        status        TEXT NOT NULL,
+        stage         TEXT,
+        detail        TEXT,
+        attempted_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingest_attempts_url ON ingest_file_attempts(url, attempted_at);
+    CREATE INDEX IF NOT EXISTS idx_ingest_attempts_status ON ingest_file_attempts(status);
     """
 }
