@@ -306,13 +306,18 @@ public final class FeatureFlags {
         set { UserDefaults.standard.set(newValue, forKey: Self.kContextPrefixBackfill) }
     }
 
-    /// Idle-maintenance mode. Default `.notify` — runs while idle and
-    /// keeps the user informed. Users can switch to Ask / Automatic /
-    /// Off in Settings.
+    /// Idle-maintenance mode. Default `.off` — under the minimum-LLM
+    /// contract the ledger is warmed on demand, so no background sweep
+    /// runs unless the user opts in. The generative sweeps (community
+    /// summaries, memory distillation) are separately gated off in the
+    /// v1 release profile; this default also stops the deterministic
+    /// gap/contradiction recalc + nightly compression from contending
+    /// for the DB actor while idle. Users can switch to Notify / Ask /
+    /// Automatic in Settings.
     public var maintenanceMode: MaintenanceMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: Self.kMaintenanceMode),
-                  let mode = MaintenanceMode(rawValue: raw) else { return .notify }
+                  let mode = MaintenanceMode(rawValue: raw) else { return .off }
             return mode
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kMaintenanceMode) }
