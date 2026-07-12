@@ -168,6 +168,78 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Payment proof (A5.7)
+
+    /// A5.7 — flag issued invoices that have no matching payment (same amount +
+    /// currency) anywhere in the archive. The payment may live outside the
+    /// archive; absence is NOT proof of non-payment. Low confidence, reasoned.
+    ///
+    /// - Parameters:
+    ///   - issued: (amount, currency, objectID) for each invoice-issued event.
+    ///   - paid: (amount, currency) for each invoice-paid event.
+    public func detectMissingPaymentProof(
+        issued: [(amount: Double, currency: String, objectID: UUID)],
+        paid: [(amount: Double, currency: String)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        // A payment "covers" an issue when amount matches (within a cent) and
+        // currency matches. One paid record can satisfy at most one invoice.
+        var remaining = paid
+        var gaps: [GapNode] = []
+        for invoice in issued {
+            if let idx = remaining.firstIndex(where: {
+                $0.currency == invoice.currency && abs($0.amount - invoice.amount) < 0.01
+            }) {
+                remaining.remove(at: idx)   // consumed by this invoice
+                continue
+            }
+            let amount = Self.renderMoney(invoice.amount, invoice.currency)
+            gaps.append(GapNode(
+                kind: .paymentProof,
+                description: "No payment record found for the \(amount) invoice",
+                reason: "an invoice for \(amount) was issued but no payment of that amount is in the archive — it matters because the payment (or its absence) is often the point in dispute. The payment may simply live outside this archive; this is not proof of non-payment.",
+                confidence: 0.3,
+                evidenceObjectID: invoice.objectID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
+    private static func renderMoney(_ value: Double, _ currency: String) -> String {
+        let n = value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.2f", value)
+        return currency.isEmpty ? n : "\(currency) \(n)"
+    }
+
+    // MARK: Custody breaks (A5.7)
+
+    /// A5.7 — flag files whose bytes changed since first ingest (a custody hash
+    /// mismatch), so an earlier version's evidence may no longer be recoverable.
+    /// Neutral framing — a change can be an ordinary edit, not tampering.
+    ///
+    /// - Parameter mismatches: (detail, fileID) for each hash-mismatch custody
+    ///   event; `detail` is the recorded human description (e.g. "content at
+    ///   X.pdf changed since last ingest").
+    public func detectCustodyBreaks(
+        mismatches: [(detail: String?, fileID: UUID)],
+        limit: Int = 100
+    ) -> [GapNode] {
+        var seen = Set<UUID>()
+        var gaps: [GapNode] = []
+        for m in mismatches where seen.insert(m.fileID).inserted {
+            let what = (m.detail?.isEmpty == false) ? m.detail! : "a file's contents changed since it was first ingested"
+            gaps.append(GapNode(
+                kind: .custodyBreak,
+                description: what,
+                reason: "the file's contents differ from when it was first seen (custody hash mismatch) — an earlier version's evidence may no longer be recoverable. A change can be an ordinary edit, not tampering; both versions' extracted facts are preserved.",
+                confidence: 0.4,
+                evidenceObjectID: m.fileID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Unreadable regions (A5.7)
 
     private static func readableReason(status: String) -> String {

@@ -1643,8 +1643,30 @@ public final class AppState {
             )
         }
 
+        // Rule 6 (A5.7) — invoices issued with no matching payment (same amount).
+        if let events {
+            let recent = (try? await events.recent(limit: 2_000)) ?? []
+            let issued = recent.filter { $0.kind == .invoiceIssued }.compactMap { e -> (amount: Double, currency: String, objectID: UUID)? in
+                guard let m = ContradictionDetector.amount(of: e) else { return nil }
+                return (m.value, m.currency, e.sourceObjectID)
+            }
+            let paid = recent.filter { $0.kind == .invoicePaid }.compactMap { e -> (amount: Double, currency: String)? in
+                guard let m = ContradictionDetector.amount(of: e) else { return nil }
+                return (m.value, m.currency)
+            }
+            found += detector.detectMissingPaymentProof(issued: issued, paid: paid)
+        }
+
+        // Rule 7 (A5.7) — custody breaks: files whose bytes changed since first ingest.
+        if let custody {
+            let mismatches = (try? await custody.recentMismatches(limit: 200)) ?? []
+            found += detector.detectCustodyBreaks(
+                mismatches: mismatches.map { (detail: $0.detail, fileID: $0.fileID) }
+            )
+        }
+
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break)")
         return found.count
     }
 

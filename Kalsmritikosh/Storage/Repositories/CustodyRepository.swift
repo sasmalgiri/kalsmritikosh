@@ -54,6 +54,17 @@ public actor CustodyRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// A5.7 — the recorded hash-mismatch custody events (a file's bytes changed
+    /// since first ingest), newest first, for the custody-break gap detector.
+    public func recentMismatches(limit: Int = 200) async throws -> [CustodyEvent] {
+        let rows = try await database.query("""
+        SELECT id, file_id, kind, actor, at, detail, hash
+        FROM custody_events WHERE kind = 'hash_mismatch'
+        ORDER BY at DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     // MARK: - Internals
 
     private func decode(_ row: SQLRow) -> CustodyEvent? {

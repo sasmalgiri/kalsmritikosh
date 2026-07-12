@@ -37,6 +37,13 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// encrypted / unsupported), so evidence in the unreadable region may be
     /// absent from the ledger. Reflects a parsing limit, not wrongdoing.
     case unreadableRegion
+    /// A5.7 — an invoice was issued but no payment for the same amount was
+    /// found in the archive. The payment may simply live outside this archive;
+    /// absence is not proof of non-payment.
+    case paymentProof
+    /// A5.7 — a file's bytes changed since it was first ingested (custody hash
+    /// mismatch), so an earlier version's evidence may no longer be recoverable.
+    case custodyBreak
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -47,6 +54,8 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .cadenceBreak:         return "Cadence Break"
         case .referencedAttachment: return "Missing Attachment"
         case .unreadableRegion:     return "Unreadable Region"
+        case .paymentProof:         return "No Payment Record"
+        case .custodyBreak:         return "Custody Break"
         }
     }
 
@@ -59,6 +68,8 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .cadenceBreak:         return "calendar.badge.exclamationmark"
         case .referencedAttachment: return "paperclip.badge.ellipsis"
         case .unreadableRegion:     return "doc.badge.ellipsis"
+        case .paymentProof:         return "creditcard.trianglebadge.exclamationmark"
+        case .custodyBreak:         return "checkmark.shield.fill"
         }
     }
 }
