@@ -23,7 +23,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | XLSX | `.xlsx` | Structural | `XLSXStructuralParser` | sheet + row (cells as JSON) per worksheet; sheet/row locator | OOXML shared-strings; deterministic table queries |
 | PPTX | `.pptx` | Structural | `PPTXStructuralParser` | slideTitle / slideBody / slideNotes; slide + shape locator | title-placeholder aware; DrawingML runs; speaker notes |
 | EPUB | `.epub` | Structural | `EPUBStructuralParser` | documentTitle / sectionHeading / paragraph / listItem / quote in reading order; sectionPath + chapter member locator | OPF spine order; XHTML reading-order walk |
-| RTF | `.rtf` | Legacy | native | flattened | |
+| RTF | `.rtf` | Structural | `RTFStructuralParser` | paragraph blocks; character-range locator | NSAttributedString decode; heading-from-font-runs is a later refinement |
 | ODT | `.odt` | Legacy | `DocxLoader` | flattened | |
 | ODS | `.ods` | Legacy | `SpreadsheetLoader` | flattened | prove before advertising |
 | MBOX | `.mbox` | Legacy (per-message KOs) | `EmailLoader` | per-message flattened | structural MBOX = follow-up |
