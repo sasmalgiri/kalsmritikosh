@@ -328,6 +328,9 @@ public actor IngestCoordinator {
         // the file is tracked; then we walk the entries through the
         // standard pipeline. Cycle/depth defense: only one expansion
         // level — nested ZIPs become metadata-only KOs after the first.
+        // A2 §7.6 — child file ids from a ZIP expansion, recorded as
+        // archive→member relations once this archive's own file row exists.
+        var expandedMemberIDs: [UUID] = []
         if type == .zip {
             if let (root, files) = try? ArchiveLoader.expandZIP(at: url) {
                 KalsmritikoshLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .public) → \(files.count, privacy: .public) entries")
@@ -338,8 +341,10 @@ public actor IngestCoordinator {
                     if SourceType.detect(from: entry) == .zip {
                         continue
                     }
-                    do { _ = try await self.ingest(fileAt: entry) }
-                    catch {
+                    do {
+                        let member = try await self.ingest(fileAt: entry)
+                        expandedMemberIDs.append(member.fileRecord.id)
+                    } catch {
                         KalsmritikoshLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                     }
                 }
@@ -484,6 +489,10 @@ public actor IngestCoordinator {
         } catch {
             KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
+        }
+        // A2 §7.6 — now the archive's file row exists, link its members.
+        for memberID in expandedMemberIDs {
+            await sourceRelations?.record(parent: fileRecord.id, child: memberID, relation: .archiveMember)
         }
         // T18 — first acquisition of this file: open its chain of custody.
         try? await custody?.record(CustodyEvent(
