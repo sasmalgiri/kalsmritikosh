@@ -74,6 +74,9 @@ public actor IngestCoordinator {
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
+    /// A2 §7.6 — parent→child source provenance (email→attachment, …). nil =
+    /// relations not recorded.
+    private let sourceRelations: SourceRelationsRepository?
     /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
     /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
     /// the per-KO loop and persists summarised pairs for retrieval.
@@ -134,12 +137,14 @@ public actor IngestCoordinator {
         evidenceStore: EvidenceStore? = nil,
         structuralRegistry: StructuralParserRegistry? = nil,
         assertions: AssertionsRepository? = nil,
-        ingestAttempts: IngestAttemptsRepository? = nil
+        ingestAttempts: IngestAttemptsRepository? = nil,
+        sourceRelations: SourceRelationsRepository? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
         self.ingestAttempts = ingestAttempts
+        self.sourceRelations = sourceRelations
         self.custody = custody
         self.loaders = loaders
         self.cleaner = cleaner
@@ -565,6 +570,12 @@ public actor IngestCoordinator {
                     for attachmentURL in ordered {
                         do {
                             let attachmentResult = try await ingest(fileAt: attachmentURL)
+                            // A2 §7.6 — record email → attachment provenance, even
+                            // when dedup folds the attachment into a canonical copy.
+                            await sourceRelations?.record(
+                                parent: fileRecord.id, child: attachmentResult.fileRecord.id,
+                                relation: .attachment
+                            )
                             totalChunks += attachmentResult.chunkCount
                             totalEntities += attachmentResult.entityCount
                             totalEvents += attachmentResult.eventCount

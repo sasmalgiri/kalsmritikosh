@@ -312,6 +312,8 @@ public final class AppState {
     public private(set) var assertions: AssertionsRepository?
     /// A2 §7.7 — durable per-file ingest outcomes (Sources failure surface).
     public private(set) var ingestAttempts: IngestAttemptsRepository?
+    /// A2 §7.6 — parent→child source provenance (email→attachment, …).
+    public private(set) var sourceRelations: SourceRelationsRepository?
     /// Phase J.13 — live observability. Per-stage ingest counters
     /// the pipeline bumps as files move through it; the Live tab
     /// reads these for the workflow strip.
@@ -399,6 +401,8 @@ public final class AppState {
             let assertionsRepo = AssertionsRepository(database: db)
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
+            // A2 §7.6 — parent→child source provenance recorder.
+            let sourceRelationsRepo = SourceRelationsRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -901,7 +905,8 @@ public final class AppState {
                 evidenceStore: evidenceStoreRepo,
                 structuralRegistry: .standard(ocr: VisionOCR()),
                 assertions: assertionsRepo,
-                ingestAttempts: ingestAttemptsRepo
+                ingestAttempts: ingestAttemptsRepo,
+                sourceRelations: sourceRelationsRepo
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -1291,6 +1296,7 @@ public final class AppState {
             )
             self.assertions = assertionsRepo
             self.ingestAttempts = ingestAttemptsRepo
+            self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
             // actor was created earlier (above the IngestCoordinator)
             // so the ingest path could be wired with it; here we just

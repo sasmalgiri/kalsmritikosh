@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 42
+    public static let latestVersion = 43
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -79,7 +79,8 @@ public enum SchemaMigrations {
         (39, v39),
         (40, v40),
         (41, v41),
-        (42, v42)
+        (42, v42),
+        (43, v43)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1556,5 +1557,22 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_ingest_attempts_url ON ingest_file_attempts(url, attempted_at);
     CREATE INDEX IF NOT EXISTS idx_ingest_attempts_status ON ingest_file_attempts(status);
+    """
+
+    // A2 §7.6 — parent→child source provenance (email→attachment, archive→
+    // member, …) persisted as explicit relations, so an attachment folded into
+    // one canonical copy by dedup still records WHICH parents referenced it.
+    // Additive; deduped by (parent, child, relation).
+    private static let v43: String = """
+    CREATE TABLE source_relations (
+        id             TEXT PRIMARY KEY NOT NULL,
+        parent_file_id TEXT NOT NULL,
+        child_file_id  TEXT NOT NULL,
+        relation       TEXT NOT NULL,
+        created_at     REAL NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_source_relations_unique
+        ON source_relations(parent_file_id, child_file_id, relation);
+    CREATE INDEX IF NOT EXISTS idx_source_relations_child ON source_relations(child_file_id);
     """
 }
