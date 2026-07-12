@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 37
+    public static let latestVersion = 38
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -74,7 +74,8 @@ public enum SchemaMigrations {
         (34, v34),
         (35, v35),
         (36, v36),
-        (37, v37)
+        (37, v37),
+        (38, v38)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1472,5 +1473,22 @@ public enum SchemaMigrations {
         error             TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_parser_runs_version ON parser_runs(source_version_id);
+    """
+
+    // A5.2 — Assertion provenance columns. The Assertion substrate becomes the
+    // claim–evidence layer between structural EvidenceBlocks and typed
+    // Event/Relationship rows: each assertion records the exact evidence blocks
+    // that support it, the verbatim direct quote, the source that asserted it,
+    // whether it was source-asserted vs deterministically-derived vs inferred,
+    // and the extractor version that produced it. Additive with defaults so
+    // existing rows remain valid; the legacy evidence_object_ids_json (KO-level)
+    // stays for backward compatibility.
+    private static let v38: String = """
+    ALTER TABLE assertions ADD COLUMN evidence_block_ids_json TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE assertions ADD COLUMN direct_quote TEXT;
+    ALTER TABLE assertions ADD COLUMN asserting_source_id TEXT;
+    ALTER TABLE assertions ADD COLUMN provenance TEXT NOT NULL DEFAULT 'source_asserted';
+    ALTER TABLE assertions ADD COLUMN extractor_version TEXT NOT NULL DEFAULT 'v1';
+    CREATE INDEX IF NOT EXISTS idx_assertions_source ON assertions(asserting_source_id);
     """
 }

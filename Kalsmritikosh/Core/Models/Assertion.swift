@@ -42,6 +42,18 @@ public nonisolated struct Assertion: Sendable, Identifiable, Hashable {
         }
     }
 
+    /// A5.2 — how this assertion came to be, the coarse epistemic origin that
+    /// A5.5's full vocabulary refines. `sourceAsserted`: a source document
+    /// states it. `directlyObserved`: the block IS the fact (e.g. a header
+    /// field). `deterministicallyDerived`: computed by rule from evidence with
+    /// no model. `inferred`: a model proposed it (lower trust).
+    public enum Provenance: String, Codable, Sendable, Hashable {
+        case sourceAsserted = "source_asserted"
+        case directlyObserved = "directly_observed"
+        case deterministicallyDerived = "deterministically_derived"
+        case inferred = "inferred"
+    }
+
     public let id: ID
     public let subjectKind: SubjectKind
     public let subjectID: UUID
@@ -49,6 +61,17 @@ public nonisolated struct Assertion: Sendable, Identifiable, Hashable {
     public let object: Object
     public let confidence: Double
     public let evidenceObjectIDs: [KnowledgeObject.ID]
+    /// A5.2 — the specific structural evidence blocks that support this claim.
+    public let evidenceBlockIDs: [EvidenceBlock.ID]
+    /// A5.2 — the verbatim span from the source that carries the claim.
+    public let directQuote: String?
+    /// A5.2 — the source (version) that asserted it, distinct from `agent`
+    /// (which is the extractor/actor that recorded the assertion).
+    public let assertingSourceID: UUID?
+    /// A5.2 — asserted-vs-derived origin.
+    public let provenance: Provenance
+    /// A5.2 — the extractor version that produced this assertion.
+    public let extractorVersion: String
     public let agent: String       // "user", "system.llm", "system.ontology", …
     public let reason: String?
     public let recordedAt: Date
@@ -62,6 +85,11 @@ public nonisolated struct Assertion: Sendable, Identifiable, Hashable {
         object: Object,
         confidence: Double = 0.5,
         evidenceObjectIDs: [KnowledgeObject.ID] = [],
+        evidenceBlockIDs: [EvidenceBlock.ID] = [],
+        directQuote: String? = nil,
+        assertingSourceID: UUID? = nil,
+        provenance: Provenance = .sourceAsserted,
+        extractorVersion: String = "v1",
         agent: String = "user",
         reason: String? = nil,
         recordedAt: Date = Date(),
@@ -74,6 +102,11 @@ public nonisolated struct Assertion: Sendable, Identifiable, Hashable {
         self.object = object
         self.confidence = max(0.0, min(1.0, confidence))
         self.evidenceObjectIDs = evidenceObjectIDs
+        self.evidenceBlockIDs = evidenceBlockIDs
+        self.directQuote = directQuote
+        self.assertingSourceID = assertingSourceID
+        self.provenance = provenance
+        self.extractorVersion = extractorVersion
         self.agent = agent
         self.reason = reason
         self.recordedAt = recordedAt

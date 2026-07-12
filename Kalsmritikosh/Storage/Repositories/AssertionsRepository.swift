@@ -24,6 +24,8 @@ public actor AssertionsRepository {
     public func insert(_ assertion: Assertion) async throws {
         let evidenceData = try encoder.encode(assertion.evidenceObjectIDs)
         let evidenceJSON = String(data: evidenceData, encoding: .utf8) ?? "[]"
+        let blockData = try encoder.encode(assertion.evidenceBlockIDs)
+        let blockJSON = String(data: blockData, encoding: .utf8) ?? "[]"
         let (objectValue, objectEntityID, objectEventID): (String?, UUID?, UUID?) = {
             switch assertion.object {
             case .entity(let id):   return (nil, id, nil)
@@ -36,8 +38,10 @@ public actor AssertionsRepository {
             (id, subject_kind, subject_id, predicate,
              object_kind, object_value, object_entity_id, object_event_id,
              confidence, evidence_object_ids_json, agent, reason,
-             recorded_at, retracted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             recorded_at, retracted_at,
+             evidence_block_ids_json, direct_quote, asserting_source_id,
+             provenance, extractor_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(assertion.id),
             .text(assertion.subjectKind.rawValue),
@@ -52,7 +56,12 @@ public actor AssertionsRepository {
             .text(assertion.agent),
             assertion.reason.map { .text($0) } ?? .null,
             .real(assertion.recordedAt.timeIntervalSince1970),
-            assertion.retractedAt.map { .real($0.timeIntervalSince1970) } ?? .null
+            assertion.retractedAt.map { .real($0.timeIntervalSince1970) } ?? .null,
+            .text(blockJSON),
+            assertion.directQuote.map { .text($0) } ?? .null,
+            assertion.assertingSourceID.map { .uuid($0) } ?? .null,
+            .text(assertion.provenance.rawValue),
+            .text(assertion.extractorVersion)
         ])
     }
 
@@ -79,7 +88,9 @@ public actor AssertionsRepository {
         SELECT id, subject_kind, subject_id, predicate,
                object_kind, object_value, object_entity_id, object_event_id,
                confidence, evidence_object_ids_json, agent, reason,
-               recorded_at, retracted_at
+               recorded_at, retracted_at,
+               evidence_block_ids_json, direct_quote, asserting_source_id,
+               provenance, extractor_version
         FROM assertions
         WHERE subject_kind = ? AND subject_id = ? AND retracted_at IS NULL
         ORDER BY recorded_at DESC
@@ -97,7 +108,9 @@ public actor AssertionsRepository {
         SELECT id, subject_kind, subject_id, predicate,
                object_kind, object_value, object_entity_id, object_event_id,
                confidence, evidence_object_ids_json, agent, reason,
-               recorded_at, retracted_at
+               recorded_at, retracted_at,
+               evidence_block_ids_json, direct_quote, asserting_source_id,
+               provenance, extractor_version
         FROM assertions
         WHERE retracted_at IS NULL
         ORDER BY recorded_at DESC
@@ -147,6 +160,13 @@ public actor AssertionsRepository {
             return (try? decoder.decode([KnowledgeObject.ID].self, from: data)) ?? []
         }()
         let retracted = row.double(13).map { Date(timeIntervalSince1970: $0) }
+        // A5.2 columns (nullable / defaulted; older rows decode to defaults).
+        let blockJSON = row.string(14) ?? "[]"
+        let blocks: [EvidenceBlock.ID] = {
+            guard let data = blockJSON.data(using: .utf8) else { return [] }
+            return (try? decoder.decode([EvidenceBlock.ID].self, from: data)) ?? []
+        }()
+        let provenance = row.string(17).flatMap(Assertion.Provenance.init(rawValue:)) ?? .sourceAsserted
         return Assertion(
             id: id,
             subjectKind: subjectKind,
@@ -155,6 +175,11 @@ public actor AssertionsRepository {
             object: object,
             confidence: conf,
             evidenceObjectIDs: evidence,
+            evidenceBlockIDs: blocks,
+            directQuote: row.string(15),
+            assertingSourceID: row.uuid(16),
+            provenance: provenance,
+            extractorVersion: row.string(18) ?? "v1",
             agent: agent,
             reason: row.string(11),
             recordedAt: Date(timeIntervalSince1970: recordedAtRaw),
