@@ -175,45 +175,55 @@ public actor IngestCoordinator {
     }
 
     public func ingest(fileAt url: URL) async throws -> Result {
-        let result = try await ingestCore(fileAt: url)
-        // A2 — additively populate the structural evidence layer for REAL
-        // ingests only. chunkCount > 0 means the file was actually parsed
-        // (skip / alias / move return 0), so we don't re-persist blocks for
-        // unchanged or deduped files. Best-effort: never fails the ingest.
-        if result.chunkCount > 0, let evidenceStore, let structuralRegistry {
-            await persistStructural(url: url, fileID: result.fileRecord.id,
-                                    store: evidenceStore, registry: structuralRegistry)
-        }
-        return result
+        // A2 / A5.3 — the structural layer is now parsed ONCE inside ingestCore
+        // (past the skip/alias/move early returns), so the same ParsedDocument
+        // feeds event extraction AND is persisted with consistent block IDs.
+        try await ingestCore(fileAt: url)
     }
 
-    /// Run the format's structural parser and persist its typed EvidenceBlocks
-    /// as a new source version. Additive to the legacy KO path; no-op when no
-    /// structural parser handles the type.
-    private func persistStructural(
-        url: URL, fileID: UUID,
-        store: EvidenceStore, registry: StructuralParserRegistry
-    ) async {
-        let type = SourceType.detect(from: url)
-        guard let parser = registry.parser(for: type) else { return }
-        guard let data = try? Data(contentsOf: url) else { return }
+    /// The result of parsing a file's structural document once, before both
+    /// extraction (which links events to blocks) and persistence.
+    private struct StructuralParse: Sendable {
+        let doc: ParsedDocument
+        let parserName: String
+        let parserVersion: String
+        let sizeBytes: Int64
+        let startedAt: Date
+    }
+
+    /// Parse the format's structural document a single time. Returns nil when no
+    /// parser handles the type or the bytes can't be read. No persistence — that
+    /// is `persistStructuralDoc`, so the SAME doc can also feed extraction.
+    private func parseStructuralOnce(url: URL, type: SourceType, fileID: UUID) async -> StructuralParse? {
+        guard let structuralRegistry, evidenceStore != nil,
+              let parser = structuralRegistry.parser(for: type),
+              let data = try? Data(contentsOf: url) else { return nil }
         let started = Date()
-        let versionID = UUID()
         guard let doc = try? await parser.parse(
             data: data, filename: url.lastPathComponent, type: type,
-            logicalSourceID: fileID, sourceVersionID: versionID
-        ) else { return }
+            logicalSourceID: fileID, sourceVersionID: UUID()
+        ) else { return nil }
+        return StructuralParse(
+            doc: doc, parserName: parser.parserName, parserVersion: parser.parserVersion,
+            sizeBytes: Int64(data.count), startedAt: started
+        )
+    }
+
+    /// Persist an already-parsed structural document (typed EvidenceBlocks +
+    /// source version + document profile) and derive directly-observed
+    /// assertions from it. Best-effort: never fails the ingest.
+    private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore) async {
         do {
             try await store.persist(
-                doc, parser: parser.parserName, parserVersion: parser.parserVersion,
-                sizeBytes: Int64(data.count), originalURL: url.absoluteString,
-                makeCurrent: true, startedAt: started
+                parse.doc, parser: parse.parserName, parserVersion: parse.parserVersion,
+                sizeBytes: parse.sizeBytes, originalURL: url.absoluteString,
+                makeCurrent: true, startedAt: parse.startedAt
             )
-            KalsmritikoshLog.ingestion.info("Structural: \(doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .public)")
+            KalsmritikoshLog.ingestion.info("Structural: \(parse.doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .public)")
             // A5.1 — derive directly-observed assertions from the typed blocks.
             if let assertions {
-                await deriveAssertions(from: doc, sourceVersionID: versionID,
-                                       extractorVersion: parser.parserVersion, into: assertions)
+                await deriveAssertions(from: parse.doc, sourceVersionID: parse.doc.sourceVersionID,
+                                       extractorVersion: parse.parserVersion, into: assertions)
             }
         } catch {
             KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
@@ -462,6 +472,16 @@ public actor IngestCoordinator {
             )
         }
 
+        // A5.3 / A2 parse-once — parse the structural document a SINGLE time
+        // here (past all the skip/alias/move early returns, so only real
+        // ingests reach it). The same ParsedDocument feeds event extraction
+        // (so events link to specific source blocks) AND is persisted below, so
+        // event.sourceBlockIDs resolve to real persisted blocks. Blocks are fed
+        // to the extractor for single-KO files only, so mbox messages don't
+        // cross-link; multi-KO files still get their blocks persisted.
+        let structural = await parseStructuralOnce(url: url, type: type, fileID: fileRecord.id)
+        let blocksForExtraction = perFileKOs.count == 1 ? (structural?.doc.blocks ?? []) : []
+
         var totalChunks = 0
         var totalEntities = 0
         var totalEvents = 0
@@ -473,7 +493,8 @@ public actor IngestCoordinator {
                 let processed = try await processKnowledgeObject(
                     rawKO,
                     fileID: fileRecord.id,
-                    documentClass: docClass
+                    documentClass: docClass,
+                    blocks: blocksForExtraction
                 )
                 totalChunks += processed.chunkCount
                 totalEntities += processed.entityCount
@@ -552,6 +573,14 @@ public actor IngestCoordinator {
 
         KalsmritikoshLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
 
+        // A5.3 / A2 — persist the already-parsed structural document (blocks +
+        // source version + document profile) and derive directly-observed
+        // assertions from it. Same doc that fed event extraction, so the block
+        // IDs referenced by events resolve here. Gated on a real ingest.
+        if let structural, let evidenceStore, totalChunks > 0 {
+            await persistStructuralDoc(structural, url: url, store: evidenceStore)
+        }
+
         return Result(
             fileRecord: fileRecord,
             object: lastObject,
@@ -578,7 +607,8 @@ public actor IngestCoordinator {
     private func processKnowledgeObject(
         _ rawObject: KnowledgeObject,
         fileID: UUID,
-        documentClass docClass: DocumentClass
+        documentClass docClass: DocumentClass,
+        blocks: [EvidenceBlock] = []
     ) async throws -> ProcessedKO {
         var meta = rawObject.metadata
         meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
@@ -793,7 +823,8 @@ public actor IngestCoordinator {
             let rawEvents = (try? await eventExtractor.extractEvents(
                 from: object,
                 chunks: chunked,
-                entities: extractedEntities
+                entities: extractedEntities,
+                blocks: blocks
             )) ?? []
             let remapped = rawEvents.map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)

@@ -110,6 +110,19 @@ public nonisolated struct Event: Codable, Identifiable, Hashable, Sendable {
         self.status = try c.decodeIfPresent(EventStatus.self, forKey: .status) ?? .inferred
     }
 
+    /// A5.3 — return a copy with extra attributes merged in (new keys win).
+    /// Used to attach event-specific source-block provenance after extraction
+    /// without threading it through every construction site.
+    public nonisolated func addingAttributes(_ extra: [String: AnyCodable]) -> Event {
+        Event(
+            id: id, kind: kind, date: date, endDate: endDate, title: title, summary: summary,
+            entityIDs: entityIDs, sourceObjectID: sourceObjectID, sourceRange: sourceRange,
+            confidence: confidence, dateConfidence: dateConfidence,
+            attributes: attributes.merging(extra) { _, new in new },
+            qualityTier: qualityTier, datePrecision: datePrecision, status: status
+        )
+    }
+
     /// The 10 event kinds from Phase 6 of the roadmap, plus an
     /// `other` escape hatch for events the extractor isn't sure about.
     public enum Kind: String, Codable, CaseIterable, Sendable {

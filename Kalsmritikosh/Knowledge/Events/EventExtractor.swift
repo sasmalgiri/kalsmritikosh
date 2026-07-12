@@ -15,7 +15,8 @@ public struct RuleEventExtractor: EventExtractor {
     public func extractEvents(
         from object: KnowledgeObject,
         chunks: [Chunk],
-        entities: [Entity]
+        entities: [Entity],
+        blocks: [EvidenceBlock]
     ) async throws -> [Event] {
         let content = object.content.lowercased()
 
@@ -250,7 +251,29 @@ public struct RuleEventExtractor: EventExtractor {
             if commitmentEvents >= commitmentCap { break }
         }
 
-        return events
+        // A5.3 — link each event to the specific structural block(s) that
+        // evidence it, so events carry event-specific source provenance rather
+        // than the whole document. We match a block when its normalized text
+        // contains the event's marker/summary phrase (the exact substring the
+        // rule fired on). No blocks wired → events are returned unchanged.
+        return Self.attachSourceBlocks(to: events, blocks: blocks)
+    }
+
+    /// Attach `sourceBlockIDs` (up to 5) to each event by matching its summary
+    /// marker against block normalized text. Pure; returns events unchanged when
+    /// no blocks are supplied or no match is found. `static` so it's testable.
+    static func attachSourceBlocks(to events: [Event], blocks: [EvidenceBlock]) -> [Event] {
+        guard !blocks.isEmpty else { return events }
+        let normalized = blocks.map { (id: $0.id, text: $0.normalizedText.lowercased()) }
+        return events.map { event in
+            guard let marker = event.summary?.lowercased(),
+                  marker.count >= 4 else { return event }
+            let matches = normalized.filter { $0.text.contains(marker) }.prefix(5).map(\.id)
+            guard !matches.isEmpty else { return event }
+            return event.addingAttributes([
+                "sourceBlockIDs": AnyCodable(.array(matches.map { .string($0.uuidString) }))
+            ])
+        }
     }
 
     // MARK: - A5.3 amount extraction
