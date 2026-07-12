@@ -22,6 +22,9 @@ public struct FactStatusView: View {
     @State private var tab: Tab = .timeline
     @State private var evidenceFor: FactStatusItem?
     @State private var reviewing: FactStatusItem?
+    /// A5.8 — latest human-review verdict per fact id, so a row can show its
+    /// verdict and offer to undo it (append-only reversal).
+    @State private var reviews: [UUID: FactReview] = [:]
 
     public init() {}
 
@@ -276,6 +279,17 @@ public struct FactStatusView: View {
                 }
                 .buttonStyle(.borderless)
             }
+            // A5.8 — if this fact carries a human review, let the user undo it
+            // (append-only reversal — the review history is preserved).
+            if let review = reviews[item.id] {
+                Button(role: .destructive) {
+                    Task { await undoReview(item) }
+                } label: {
+                    Label("Undo \(review.action.rawValue)", systemImage: "arrow.uturn.backward")
+                        .font(.caption2)
+                }
+                .buttonStyle(.borderless)
+            }
         }
     }
 
@@ -360,18 +374,30 @@ public struct FactStatusView: View {
         } else { asserts = [] }
 
         // T17 — latest human-review verdict per subject (overlay input).
-        let reviews: [UUID: FactReview]
+        let latestReviews: [UUID: FactReview]
         if let repo = appState.factReviews {
-            reviews = (try? await repo.latestBySubject()) ?? [:]
-        } else { reviews = [:] }
+            latestReviews = (try? await repo.latestBySubject()) ?? [:]
+        } else { latestReviews = [:] }
 
         let classified = FactStatusClassifier().classify(
             events: events, assertions: asserts,
             contradictions: cons, gaps: gaps,
-            reviews: reviews
+            reviews: latestReviews
         )
         items = classified
+        reviews = latestReviews
         loading = false
+    }
+
+    /// A5.8 — append a reversal of a fact's latest review (never deletes), then
+    /// reload so the overlay reverts to the pre-review classification.
+    private func undoReview(_ item: FactStatusItem) async {
+        guard let review = reviews[item.id], let repo = appState.factReviews else { return }
+        try? await repo.reverse(
+            review.id, subjectKind: item.sourceKind, subjectID: item.id,
+            reason: "Undo of \(review.action.rawValue)"
+        )
+        await load()
     }
 }
 
