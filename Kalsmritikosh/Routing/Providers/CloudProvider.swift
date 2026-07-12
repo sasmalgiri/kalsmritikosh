@@ -21,7 +21,7 @@
 import Foundation
 import OSLog
 
-public actor CloudProvider: ModelProvider {
+public actor CloudProvider: @preconcurrency ModelProvider {
     public nonisolated let id: String
     public nonisolated let capabilities: Set<ModelCapability> = [
         .textGeneration, .structuredOutput, .longContext,

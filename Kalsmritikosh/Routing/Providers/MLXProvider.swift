@@ -12,7 +12,7 @@
 
 import Foundation
 
-public actor MLXProvider: ModelProvider {
+public actor MLXProvider: @preconcurrency ModelProvider {
     public let id: String
     public nonisolated let capabilities: Set<ModelCapability>
     public nonisolated let manifest: ModelManifest

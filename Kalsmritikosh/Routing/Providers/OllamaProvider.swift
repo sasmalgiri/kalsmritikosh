@@ -22,7 +22,7 @@ import OSLog
 // task, or splits the protocol into a nonisolated `Sendable`-prop
 // half and an explicitly-isolated async half. Behavior is correct
 // today.
-public actor OllamaProvider: ModelProvider {
+public actor OllamaProvider: @preconcurrency ModelProvider {
     // G2-SWIFT6 — explicit nonisolated to match the protocol's
     // nonisolated requirements (the registry reads these declaratively
     // before the actor is "live"). All three are immutable `let` set
