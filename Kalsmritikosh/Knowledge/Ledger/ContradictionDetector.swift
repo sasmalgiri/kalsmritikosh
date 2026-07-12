@@ -149,6 +149,66 @@ public nonisolated struct ContradictionDetector: Sendable {
         return out
     }
 
+    /// A5.6 — CAUSAL CONFLICT. Two independent sources assert incompatible
+    /// cause-and-effect between the same pair of events: opposite directions
+    /// (A caused B vs B caused A) or the same direction with contradictory
+    /// relations (A caused B vs A prevented B). Cross-source only — one source
+    /// isn't in conflict with itself. Output capped.
+    ///
+    /// - Parameters:
+    ///   - links: causal links from the ledger.
+    ///   - title: event title lookup for readable claims.
+    public func detectCausalConflicts(
+        _ links: [CausalLink],
+        title: [Event.ID: String],
+        limit: Int = 50
+    ) -> [Contradiction] {
+        // Group by the unordered event pair.
+        func pairKey(_ a: UUID, _ b: UUID) -> String {
+            let s = [a.uuidString, b.uuidString].sorted()
+            return "\(s[0])|\(s[1])"
+        }
+        let positive: Set<CausalRelation> = [.caused, .contributedTo, .enabled]
+        var groups: [String: [CausalLink]] = [:]
+        for l in links where l.supersededBy == nil {
+            groups[pairKey(l.sourceEventID, l.targetEventID), default: []].append(l)
+        }
+
+        var out: [Contradiction] = []
+        for (_, group) in groups where group.count >= 2 {
+            outer: for i in group.indices {
+                for j in (i + 1)..<group.count {
+                    let a = group[i], b = group[j]
+                    // Different sources only.
+                    let evA = Set(a.evidenceObjectIDs), evB = Set(b.evidenceObjectIDs)
+                    guard evA.isDisjoint(with: evB) else { continue }
+
+                    let oppositeDirection = a.sourceEventID == b.targetEventID
+                        && a.targetEventID == b.sourceEventID
+                        && positive.contains(a.relation) && positive.contains(b.relation)
+                    let sameDirContradictoryRelation = a.sourceEventID == b.sourceEventID
+                        && a.targetEventID == b.targetEventID
+                        && ((a.relation == .prevented) != (b.relation == .prevented))
+                    guard oppositeDirection || sameDirContradictoryRelation else { continue }
+
+                    func name(_ id: Event.ID) -> String { title[id] ?? "an event" }
+                    out.append(Contradiction(
+                        kind: .causation,
+                        description: "Conflicting cause-and-effect between \"\(name(a.sourceEventID))\" and \"\(name(a.targetEventID))\"",
+                        claimA: "\(name(a.sourceEventID)) \(a.relation.renderVerb) \(name(a.targetEventID))",
+                        claimB: "\(name(b.sourceEventID)) \(b.relation.renderVerb) \(name(b.targetEventID))",
+                        evidenceA: a.evidenceObjectIDs.first,
+                        evidenceB: b.evidenceObjectIDs.first,
+                        severity: min(a.confidence, b.confidence) >= 0.7 ? .high : .medium
+                    ))
+                    if out.count >= limit { return out }
+                    break outer
+                }
+            }
+        }
+        return out
+    }
+
     // MARK: Helpers
 
     /// Pull the parsed amount + currency an event carries (A5.3), if any.

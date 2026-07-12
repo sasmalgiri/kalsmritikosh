@@ -1711,8 +1711,16 @@ public final class AppState {
         let recent = (try? await events.recent(limit: 2_000)) ?? []
         let detector = ContradictionDetector()
         // A5.6 — date + amount detectors over the same event set.
-        let found = detector.detectEventDateConflicts(recent)
+        var found = detector.detectEventDateConflicts(recent)
             + detector.detectEventAmountConflicts(recent)
+        // A5.6 — causal conflicts over the causal-link graph, when wired.
+        if let eventLinks {
+            let links = (try? await eventLinks.links(in: recent.map(\.id))) ?? []
+            if !links.isEmpty {
+                let titles = Dictionary(recent.map { ($0.id, $0.title) }, uniquingKeysWith: { a, _ in a })
+                found += detector.detectCausalConflicts(links, title: titles)
+            }
+        }
         await contradictions.clear()
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()
