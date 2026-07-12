@@ -61,6 +61,18 @@ public struct RuleEventExtractor: EventExtractor {
         }
 
         let entityIDs = entities.map(\.id)
+        // A5.6 (location) — the document's primary place entity, in priority
+        // order. Attached to location-bearing events (meetings / deliveries /
+        // signings) so two sources placing the "same" event differently can be
+        // detected as a location contradiction. NER already produces these — no
+        // new extraction.
+        let primaryLocation: Entity? = {
+            let priority: [Entity.Kind] = [.address, .city, .location, .country]
+            for kind in priority {
+                if let hit = entities.first(where: { $0.kind == kind }) { return hit }
+            }
+            return nil
+        }()
         var events: [Event] = []
 
         if object.sourceType.category == .email {
@@ -115,6 +127,13 @@ public struct RuleEventExtractor: EventExtractor {
                     attributes["amount"] = AnyCodable(.double(money.value))
                     attributes["currency"] = AnyCodable(.string(money.currency))
                     attributes["amountRaw"] = AnyCodable(.string(money.raw))
+                }
+                // A5.6 (location) — attach the document's place to events that
+                // plausibly happen somewhere; the value fuels the location
+                // contradiction detector.
+                let locationBearing: Set<Event.Kind> = [.meetingHeld, .deliveryCompleted, .deliveryDelayed, .contractSigned]
+                if locationBearing.contains(kind), let loc = primaryLocation {
+                    attributes["location"] = AnyCodable(.string(loc.normalizedValue ?? loc.value))
                 }
                 events.append(.init(
                     kind: kind,

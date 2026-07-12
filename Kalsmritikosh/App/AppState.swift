@@ -1713,6 +1713,7 @@ public final class AppState {
         // A5.6 — date + amount detectors over the same event set.
         var found = detector.detectEventDateConflicts(recent)
             + detector.detectEventAmountConflicts(recent)
+            + detector.detectEventLocationConflicts(recent)
         // A5.6 — causal conflicts over the causal-link graph, when wired.
         if let eventLinks {
             let links = (try? await eventLinks.links(in: recent.map(\.id))) ?? []

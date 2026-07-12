@@ -149,6 +149,51 @@ public nonisolated struct ContradictionDetector: Sendable {
         return out
     }
 
+    /// A5.6 — SAME-EVENT LOCATION CONFLICT. Two independent sources place what
+    /// looks like the same event (same kind + normalized title) in materially
+    /// different locations. Location lives in `event.attributes["location"]`
+    /// (A5.6 location, from NER place entities). Two distinct sources required;
+    /// output capped.
+    public func detectEventLocationConflicts(
+        _ events: [Event],
+        limit: Int = 50
+    ) -> [Contradiction] {
+        let withLocation = events.compactMap { e -> (Event, String)? in
+            guard case .string(let loc)? = e.attributes["location"]?.value else { return nil }
+            let norm = loc.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            return norm.count >= 2 ? (e, norm) : nil
+        }
+        var groups: [String: [(Event, String)]] = [:]
+        for item in withLocation {
+            let key = Self.normalizedTitle(item.0.title)
+            guard key.count >= 4 else { continue }
+            groups["\(item.0.kind.rawValue)|\(key)", default: []].append(item)
+        }
+
+        var out: [Contradiction] = []
+        for (_, group) in groups where group.count >= 2 {
+            // Any two members with DIFFERENT normalized locations + sources.
+            outer: for i in group.indices {
+                for j in (i + 1)..<group.count {
+                    let a = group[i], b = group[j]
+                    guard a.1 != b.1, a.0.sourceObjectID != b.0.sourceObjectID else { continue }
+                    out.append(Contradiction(
+                        kind: .location,
+                        description: "Conflicting locations for \"\(a.0.title)\"",
+                        claimA: "\(a.0.title): \(a.1)",
+                        claimB: "\(b.0.title): \(b.1)",
+                        evidenceA: a.0.sourceObjectID,
+                        evidenceB: b.0.sourceObjectID,
+                        severity: .medium
+                    ))
+                    if out.count >= limit { return out }
+                    break outer
+                }
+            }
+        }
+        return out
+    }
+
     /// A5.6 — CAUSAL CONFLICT. Two independent sources assert incompatible
     /// cause-and-effect between the same pair of events: opposite directions
     /// (A caused B vs B caused A) or the same direction with contradictory
