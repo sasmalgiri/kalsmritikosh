@@ -174,6 +174,38 @@ public actor EvidenceStore {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// A6.1 — full-text search over the structural evidence layer (schema v41).
+    /// Returns matching EvidenceBlocks (with their exact locators) ranked by
+    /// bm25, so retrieval can surface typed, precisely-located evidence rather
+    /// than only flattened chunks. The query is sanitized into quoted tokens so
+    /// user punctuation can't produce an FTS5 syntax error.
+    public func searchBlocks(_ query: String, limit: Int = 50) async throws -> [EvidenceBlock] {
+        let match = Self.ftsQuery(query)
+        guard !match.isEmpty else { return [] }
+        let rows = try await database.query("""
+        SELECT eb.id, eb.document_id, eb.source_version_id, eb.parent_block_id, eb.ordinal, eb.kind,
+               eb.raw_text, eb.normalized_text, eb.locator, eb.extraction_method, eb.extraction_confidence,
+               eb.language, eb.attributes
+        FROM evidence_blocks eb
+        JOIN evidence_blocks_fts ON evidence_blocks_fts.rowid = eb.rowid
+        WHERE evidence_blocks_fts MATCH ?
+        ORDER BY rank
+        LIMIT ?;
+        """, [.text(match), .integer(Int64(limit))])
+        return rows.compactMap(decodeBlock)
+    }
+
+    /// Turn free text into a safe FTS5 MATCH expression: alphanumeric tokens,
+    /// each quoted (so operators / punctuation are treated literally), ANDed.
+    nonisolated static func ftsQuery(_ query: String) -> String {
+        let tokens = query.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { $0.count >= 2 }
+        guard !tokens.isEmpty else { return "" }
+        return tokens.map { "\"\($0)\"" }.joined(separator: " ")
+    }
+
     /// A5.7 — document profiles whose extraction was not clean: partial,
     /// corrupt, encrypted, unsupported, or failed. Used by the gap scanner to
     /// surface unreadable regions where evidence may be missing from the ledger.

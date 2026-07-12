@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 40
+    public static let latestVersion = 41
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -77,7 +77,8 @@ public enum SchemaMigrations {
         (37, v37),
         (38, v38),
         (39, v39),
-        (40, v40)
+        (40, v40),
+        (41, v41)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1509,5 +1510,32 @@ public enum SchemaMigrations {
     // Additive, nullable — older rows leave it NULL.
     private static let v40: String = """
     ALTER TABLE claim_evidence ADD COLUMN block_ids TEXT;
+    """
+
+    // A6.1 — full-text index over the structural evidence layer, so retrieval
+    // can find typed EvidenceBlocks (with exact locators) directly rather than
+    // only flattened chunks. External-content FTS5 over evidence_blocks
+    // .normalized_text, kept in sync by triggers, rebuilt from existing rows.
+    // Additive: no existing table/behaviour changes.
+    private static let v41: String = """
+    CREATE VIRTUAL TABLE IF NOT EXISTS evidence_blocks_fts USING fts5(
+        normalized_text,
+        content='evidence_blocks',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS evidence_blocks_fts_ai AFTER INSERT ON evidence_blocks BEGIN
+        INSERT INTO evidence_blocks_fts(rowid, normalized_text) VALUES (new.rowid, new.normalized_text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS evidence_blocks_fts_ad AFTER DELETE ON evidence_blocks BEGIN
+        INSERT INTO evidence_blocks_fts(evidence_blocks_fts, rowid, normalized_text) VALUES('delete', old.rowid, old.normalized_text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS evidence_blocks_fts_au AFTER UPDATE ON evidence_blocks BEGIN
+        INSERT INTO evidence_blocks_fts(evidence_blocks_fts, rowid, normalized_text) VALUES('delete', old.rowid, old.normalized_text);
+        INSERT INTO evidence_blocks_fts(rowid, normalized_text) VALUES (new.rowid, new.normalized_text);
+    END;
+
+    INSERT INTO evidence_blocks_fts(evidence_blocks_fts) VALUES('rebuild');
     """
 }
