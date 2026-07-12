@@ -1679,6 +1679,13 @@ public final class AppState {
                 return (m.value, m.currency)
             }
             found += detector.detectMissingPaymentProof(issued: issued, paid: paid)
+
+            // Rule 10 (A5.7) — cadence breaks: a skipped period in a regular
+            // series (recurring event titles arriving weekly/monthly).
+            let series = recent.map {
+                (seriesKey: GapDetector.normalizeSeriesKey($0.title), date: $0.date, objectID: $0.sourceObjectID)
+            }
+            found += detector.detectCadenceBreaks(items: series)
         }
 
         // Rule 7 (A5.7) — custody breaks: files whose bytes changed since first ingest.
@@ -1690,7 +1697,7 @@ public final class AppState {
         }
 
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response + final-version)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response + final-version + cadence-break)")
         return found.count
     }
 

@@ -168,6 +168,77 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Cadence windows (A5.7)
+
+    /// A5.7 — flag a skipped period in a regular series. Items sharing a series
+    /// key (e.g. a recurring subject like "Weekly status") that arrive on a
+    /// recognizable cadence (weekly / fortnightly / monthly) but have a gap
+    /// roughly twice the usual interval imply a missing occurrence. Neutral:
+    /// the item may have been sent outside the archive.
+    ///
+    /// - Parameter items: (seriesKey, date, objectID) for candidate series members.
+    public func detectCadenceBreaks(
+        items: [(seriesKey: String, date: Date, objectID: UUID)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        var groups: [String: [(date: Date, objectID: UUID)]] = [:]
+        for i in items {
+            let key = i.seriesKey.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+            guard key.count >= 4 else { continue }
+            groups[key, default: []].append((i.date, i.objectID))
+        }
+
+        let day = 86_400.0
+        var gaps: [GapNode] = []
+        for (key, members) in groups {
+            guard members.count >= 3 else { continue }
+            let sorted = members.sorted { $0.date < $1.date }
+            let deltas = zip(sorted.dropFirst(), sorted).map { $0.0.date.timeIntervalSince($0.1.date) }
+            guard let median = Self.median(deltas), median >= 5 * day, median <= 40 * day else { continue }
+            // A recognizable cadence band (weekly 5-9d, fortnightly 12-16d,
+            // monthly 26-33d); other medians are treated as irregular.
+            let d = median / day
+            let cadence: String? = (5...9).contains(d) ? "weekly"
+                : (12...16).contains(d) ? "fortnightly"
+                : (26...33).contains(d) ? "monthly" : nil
+            guard let cadence else { continue }
+
+            for pair in zip(sorted, sorted.dropFirst()) {
+                let gap = pair.1.date.timeIntervalSince(pair.0.date)
+                guard gap > median * 1.8 else { continue }
+                gaps.append(GapNode(
+                    kind: .cadenceBreak,
+                    description: "A \(cadence) \"\(key)\" appears to be missing",
+                    reason: "\"\(key)\" arrived on a \(cadence) cadence, but there is a \(Int((gap/day).rounded()))-day gap where one occurrence would be expected — it matters because a break in an established routine can be significant. The item may have been sent outside this archive.",
+                    confidence: 0.35,
+                    evidenceObjectID: pair.0.objectID
+                ))
+                if gaps.count >= limit { return gaps }
+            }
+        }
+        return gaps
+    }
+
+    /// Normalize a title/subject into a stable recurring-series key: lowercase,
+    /// drop digits (dates/counters vary per occurrence), strip punctuation,
+    /// collapse whitespace. So "Weekly Report #12" and "Weekly Report #13"
+    /// share the key "weekly report".
+    static func normalizeSeriesKey(_ title: String) -> String {
+        let lowered = title.lowercased()
+        let kept = lowered.map { ch -> Character in
+            (ch.isLetter || ch.isWhitespace) ? ch : " "
+        }
+        return String(kept).split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    static func median(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let s = values.sorted()
+        let mid = s.count / 2
+        return s.count % 2 == 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid]
+    }
+
     // MARK: Final version (A5.7)
 
     private static let finalMarkers = ["final", "signed", "executed", "approved", "v-final", "vfinal"]
