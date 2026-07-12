@@ -24,8 +24,8 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | PPTX | `.pptx` | Structural | `PPTXStructuralParser` | slideTitle / slideBody / slideNotes; slide + shape locator | title-placeholder aware; DrawingML runs; speaker notes |
 | EPUB | `.epub` | Structural | `EPUBStructuralParser` | documentTitle / sectionHeading / paragraph / listItem / quote in reading order; sectionPath + chapter member locator | OPF spine order; XHTML reading-order walk |
 | RTF | `.rtf` | Structural | `RTFStructuralParser` | paragraph blocks; character-range locator | NSAttributedString decode; heading-from-font-runs is a later refinement |
-| ODT | `.odt` | Legacy | `DocxLoader` | flattened | |
-| ODS | `.ods` | Legacy | `SpreadsheetLoader` | flattened | prove before advertising |
+| ODT | `.odt` | Structural | `ODTStructuralParser` | sectionHeading / paragraph in reading order; sectionPath locator | OpenDocument content.xml; outline-level headings |
+| ODS | `.ods` | Structural | `ODSStructuralParser` | sheet + row (cells as JSON); sheet/row locator | OpenDocument content.xml; honors column/row repeat; deterministic table queries |
 | MBOX | `.mbox` | Legacy (per-message KOs) | `EmailLoader` | per-message flattened | structural MBOX = follow-up |
 | EMLX (Apple Mail) | `.appleMail` | Legacy | `EmailLoader` | flattened | |
 | Images | `.png/.jpg/.heic/.tiff/.webp` | Structural | `ImageStructuralParser` | image container + paragraph-per-line + table/tableRow; line/row locator; OCR confidence | Vision OCR; word bboxes are a later refinement |

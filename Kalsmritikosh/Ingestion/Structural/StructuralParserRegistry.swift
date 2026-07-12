@@ -26,6 +26,8 @@ public struct StructuralParserRegistry: Sendable {
         PPTXStructuralParser(),
         EPUBStructuralParser(),
         RTFStructuralParser(),
+        ODTStructuralParser(),
+        ODSStructuralParser(),
         EmailStructuralParser()
     ]
 
