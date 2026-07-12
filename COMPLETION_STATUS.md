@@ -1,5 +1,10 @@
 # Kalsmritikosh — Completion Status
 
+> **Authoritative plan: `PROJECT_COMPLETION_INSTRUCTIONS.md`** (dependency-ordered
+> per-task tracker). This file remains the coarse phase-state summary.
+> Corrections: `ModelDownloader.swift` is a STUB (not absent); synthetic-question
+> removal is OUTSTANDING; the test target is a CODE+Xcode task (not owner-only).
+
 Honest per-task status against `Kalsmritikosh_Definitive_Full_Project_Instructions.md`.
 States: NOT_STARTED · IMPLEMENTED (builds) · UNIT_VERIFIED · INTEGRATION_VERIFIED ·
 REAL_DATA_VERIFIED · RELEASE_VERIFIED · DEFERRED · BLOCKED(reason).

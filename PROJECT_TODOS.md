@@ -1,5 +1,8 @@
 # Kalsmritikosh — Full Project TODOs (v1 completion)
 
+> **SUPERSEDED for planning by `PROJECT_COMPLETION_INSTRUCTIONS.md`** (authoritative,
+> dependency-ordered, verified against main). This file is retained for history.
+
 Actionable checklist for the whole remaining v1 program, derived from
 `Kalsmritikosh_Definitive_Full_Project_Instructions.md`. Checked = done & pushed on
 `main`. Each open item notes its blocker: **[OWNER]** decision, **[ENV]** account/hardware,

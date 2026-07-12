@@ -1,5 +1,8 @@
 # Kalsmritikosh — Remaining Work & Handoff
 
+> **SUPERSEDED for planning by `PROJECT_COMPLETION_INSTRUCTIONS.md`** (authoritative
+> tracker with per-task IDs, status, and blockers). Retained for history.
+
 Companion to `COMPLETION_STATUS.md`. This file answers three questions for every
 outstanding item: **what remains**, **why it isn't done**, and **who/what unblocks it**
 (owner decision, environment/account, another coding agent, or a research agent).
