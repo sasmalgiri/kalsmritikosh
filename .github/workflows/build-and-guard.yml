@@ -86,13 +86,19 @@ jobs:
           # Retrieval / Ingestion. Routing/Providers + ModelManifest +
           # AppState + SettingsView are the ONLY allowed namers.
           set +e
+          # The violation is model names in CODE, not in explanatory comments
+          # (docstrings referencing ChatGPT/Mistral/qwen for context are fine).
+          # Drop comment-only lines: after the `file:line:` prefix, optional
+          # whitespace then a comment marker (// /// * /*). A real code leak
+          # (e.g. `let m = "qwen"`) does not start with a comment marker and is
+          # still caught.
           MATCHES=$(grep -rniE "qwen|gemma|deepseek|llama|mistral|nomic|gpt" \
             Kalsmritikosh/Experts/ \
             Kalsmritikosh/Brain/ \
             Kalsmritikosh/Knowledge/ \
             Kalsmritikosh/Retrieval/ \
             Kalsmritikosh/Ingestion/ \
-            2>/dev/null | grep -vEi "//.*(ollama|llama3|model name|reference)" || true)
+            2>/dev/null | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
           if [ -n "$MATCHES" ]; then
             echo "::error::Grep guard failed — model names leaked into capability-discipline layers"
             echo "$MATCHES"
