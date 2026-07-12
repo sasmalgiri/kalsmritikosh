@@ -48,10 +48,12 @@ public struct RuleIntentDetector: IntentDetector {
         // both land on the composer fast-path. Without this branch
         // the verb-based heuristic below picks them up sometimes but
         // not consistently.
+        // P1.5 — "tell me about" REMOVED: "tell me about invoice 14" is an
+        // exact lookup, not a reconstruction. Explicit reconstruction triggers
+        // must be unambiguous history/narrative asks.
         if q.contains("reconstruct") || q.contains("show history") || q.contains("history of")
             || q.contains("what happened") || q.contains("story of")
-            || q.contains("tell me the story") || q.contains("tell me about")
-            || q.contains("narrate") {
+            || q.contains("tell me the story") || q.contains("narrate") {
             if q.contains("project") { return .reconstructProject }
             if q.contains("relationship") || q.contains("with ") { return .reconstructRelationship }
             return .reconstructTimeline
@@ -68,11 +70,18 @@ public struct RuleIntentDetector: IntentDetector {
         // walk budget to seeds=2 / hops=1 / chunks=5 — far too narrow
         // for these inherently multi-hop framings. Added: trace,
         // connect, caused, chain, through, from, slip(s|ped), causes.
+        // P1.5 — STRONG reconstruction signals only. The weak generic verbs
+        // "how" / "when" / "explain" were removed: "When was the email sent?",
+        // "How much was paid?", "Explain clause 7" are exact lookups (1 call),
+        // NOT reconstructions (3 calls). Genuine temporal reconstruction is
+        // still caught by explicit temporal phrasing (evolve / over time /
+        // timeline / chronology) and the multi-hop causal chain verbs.
         let reconstructionVerbs = [
-            "why", "how", "when", "explain",
-            "delayed", "slipped", "slip", "blocked", "happened",
-            "trace", "connect", "chain", "through",
-            "caused", "causes",
+            "timeline", "chronology", "chronological",
+            "evolve", "evolution", "over time", "before and after",
+            "sequence", "trace", "connect", "chain", "through",
+            "caused", "causes", "led to",
+            "why", "delayed", "slipped", "slip", "blocked",
         ]
         let isReconstructionShaped = reconstructionVerbs.contains { q.contains($0) }
         if isReconstructionShaped {
