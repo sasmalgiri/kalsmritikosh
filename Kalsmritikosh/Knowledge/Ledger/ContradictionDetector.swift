@@ -183,18 +183,24 @@ public nonisolated struct ContradictionDetector: Sendable {
                     let evA = Set(a.evidenceObjectIDs), evB = Set(b.evidenceObjectIDs)
                     guard evA.isDisjoint(with: evB) else { continue }
 
-                    let oppositeDirection = a.sourceEventID == b.targetEventID
+                    let reversed = a.sourceEventID == b.targetEventID
                         && a.targetEventID == b.sourceEventID
+                    let oppositeCausation = reversed
                         && positive.contains(a.relation) && positive.contains(b.relation)
+                    // A5.6 sequence — opposite temporal ordering (A followed B
+                    // vs B followed A) is a sequence conflict, not causal.
+                    let oppositeSequence = reversed
+                        && a.relation == .followed && b.relation == .followed
                     let sameDirContradictoryRelation = a.sourceEventID == b.sourceEventID
                         && a.targetEventID == b.targetEventID
                         && ((a.relation == .prevented) != (b.relation == .prevented))
-                    guard oppositeDirection || sameDirContradictoryRelation else { continue }
+                    guard oppositeCausation || oppositeSequence || sameDirContradictoryRelation else { continue }
 
                     func name(_ id: Event.ID) -> String { title[id] ?? "an event" }
+                    let kind: Contradiction.Kind = oppositeSequence ? .sequence : .causation
                     out.append(Contradiction(
-                        kind: .causation,
-                        description: "Conflicting cause-and-effect between \"\(name(a.sourceEventID))\" and \"\(name(a.targetEventID))\"",
+                        kind: kind,
+                        description: (oppositeSequence ? "Conflicting order between " : "Conflicting cause-and-effect between ") + "\"\(name(a.sourceEventID))\" and \"\(name(a.targetEventID))\"",
                         claimA: "\(name(a.sourceEventID)) \(a.relation.renderVerb) \(name(a.targetEventID))",
                         claimB: "\(name(b.sourceEventID)) \(b.relation.renderVerb) \(name(b.targetEventID))",
                         evidenceA: a.evidenceObjectIDs.first,

@@ -45,4 +45,12 @@ struct CausalContradictionTests {
         // Same direction, both positive causation → agreement, not conflict.
         #expect(ContradictionDetector().detectCausalConflicts(links, title: [:]).isEmpty)
     }
+
+    @Test func oppositeFollowedIsASequenceConflict() {
+        let a = UUID(), b = UUID()
+        let links = [link(a, b, .followed, src: UUID()), link(b, a, .followed, src: UUID())]
+        let found = ContradictionDetector().detectCausalConflicts(links, title: [a: "A", b: "B"])
+        #expect(found.count == 1)
+        #expect(found.first?.kind == .sequence)
+    }
 }
