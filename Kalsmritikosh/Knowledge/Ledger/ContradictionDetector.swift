@@ -194,6 +194,45 @@ public nonisolated struct ContradictionDetector: Sendable {
         return out
     }
 
+    /// A5.6 — SIGNATURE CONFLICT. Two independent sources name a DIFFERENT
+    /// signatory for what is likely the same signing. Unlike amount/location
+    /// (grouped by generic title), signings are matched by a SHARED party entity
+    /// so two unrelated contracts aren't conflated. Signatory lives in
+    /// `event.attributes["signatory"]` (A5.6 signature). Distinct sources
+    /// required; output capped.
+    public func detectEventSignatureConflicts(
+        _ events: [Event],
+        limit: Int = 50
+    ) -> [Contradiction] {
+        let signed = events.compactMap { e -> (Event, String)? in
+            guard e.kind == .contractSigned,
+                  case .string(let who)? = e.attributes["signatory"]?.value,
+                  who.count >= 2 else { return nil }
+            return (e, who)
+        }
+        var out: [Contradiction] = []
+        outer: for i in signed.indices {
+            for j in (i + 1)..<signed.count {
+                let a = signed[i], b = signed[j]
+                guard a.1 != b.1, a.0.sourceObjectID != b.0.sourceObjectID else { continue }
+                // Same signing ⇒ the two events must share a party entity.
+                guard !Set(a.0.entityIDs).isDisjoint(with: Set(b.0.entityIDs)) else { continue }
+                out.append(Contradiction(
+                    kind: .signature,
+                    description: "Conflicting signatory for a signed agreement",
+                    claimA: "signed by \(a.1)",
+                    claimB: "signed by \(b.1)",
+                    evidenceA: a.0.sourceObjectID,
+                    evidenceB: b.0.sourceObjectID,
+                    severity: .high
+                ))
+                if out.count >= limit { return out }
+                break outer
+            }
+        }
+        return out
+    }
+
     /// A5.6 — CAUSAL CONFLICT. Two independent sources assert incompatible
     /// cause-and-effect between the same pair of events: opposite directions
     /// (A caused B vs B caused A) or the same direction with contradictory

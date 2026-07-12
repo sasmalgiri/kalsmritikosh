@@ -135,6 +135,11 @@ public struct RuleEventExtractor: EventExtractor {
                 if locationBearing.contains(kind), let loc = primaryLocation {
                     attributes["location"] = AnyCodable(.string(loc.normalizedValue ?? loc.value))
                 }
+                // A5.6 (signature) — capture who signed, for the signature
+                // contradiction detector (same contract, different signatory).
+                if kind == .contractSigned, let who = Self.extractSignatory(from: object.content) {
+                    attributes["signatory"] = AnyCodable(.string(who))
+                }
                 events.append(.init(
                     kind: kind,
                     date: primaryDate,
@@ -353,6 +358,25 @@ public struct RuleEventExtractor: EventExtractor {
         }
         guard let best else { return nil }
         return (best.value, best.currency, best.raw)
+    }
+
+    // MARK: - A5.6 signatory extraction
+
+    // "signed by <Name>", "executed by <Name>", "/s/ <Name>". Captures 1-4
+    // capitalized words (a personal name) after the marker.
+    private static let signatoryRegex = try? NSRegularExpression(
+        pattern: #"(?:signed\s+by|executed\s+by|/s/)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})"#,
+        options: [.caseInsensitive]
+    )
+
+    /// The first named signatory in the text (normalized, lowercased), or nil.
+    static func extractSignatory(from text: String) -> String? {
+        guard let rx = signatoryRegex else { return nil }
+        let ns = text as NSString
+        guard let m = rx.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)),
+              m.numberOfRanges > 1 else { return nil }
+        let name = ns.substring(with: m.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.count >= 2 ? name.lowercased() : nil
     }
 
     // MARK: - G2-COMMITMENTS-REFRESH helpers

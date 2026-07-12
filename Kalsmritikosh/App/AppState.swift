@@ -1714,6 +1714,7 @@ public final class AppState {
         var found = detector.detectEventDateConflicts(recent)
             + detector.detectEventAmountConflicts(recent)
             + detector.detectEventLocationConflicts(recent)
+            + detector.detectEventSignatureConflicts(recent)
         // A5.6 — causal conflicts over the causal-link graph, when wired.
         if let eventLinks {
             let links = (try? await eventLinks.links(in: recent.map(\.id))) ?? []
