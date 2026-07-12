@@ -161,6 +161,59 @@ public actor AnswerLedgerRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// One evidence link supporting a stored claim — the A5.10 replay leaf
+    /// (object / event / blocks + role).
+    public struct StoredClaimEvidence: Sendable, Hashable {
+        public let objectID: UUID?
+        public let eventID: UUID?
+        public let blockIDs: [String]
+        public let role: String
+    }
+
+    /// One stored claim with its evidence links.
+    public struct StoredClaim: Sendable, Hashable, Identifiable {
+        public let id: UUID
+        public let text: String
+        public let supportStatus: String
+        public let confidence: Double
+        public let evidence: [StoredClaimEvidence]
+    }
+
+    /// The claims (with evidence) for a stored answer, in order — the audit
+    /// drill-down behind "Why this answer?": answer → claim → evidence → blocks.
+    public func claims(forAnswer answerID: UUID) async throws -> [StoredClaim] {
+        let claimRows = try await database.query("""
+        SELECT id, claim_text, support_status, confidence
+        FROM answer_claims WHERE answer_id = ? ORDER BY ordinal ASC;
+        """, [.uuid(answerID)])
+
+        var out: [StoredClaim] = []
+        for row in claimRows {
+            guard let claimID = row.uuid(0), let text = row.string(1) else { continue }
+            let evidenceRows = try await database.query("""
+            SELECT object_id, event_id, evidence_role, block_ids
+            FROM claim_evidence WHERE claim_id = ?;
+            """, [.uuid(claimID)])
+            let evidence: [StoredClaimEvidence] = evidenceRows.map { er in
+                let blocks: [String] = {
+                    guard let json = er.string(3), let data = json.data(using: .utf8) else { return [] }
+                    return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+                }()
+                return StoredClaimEvidence(
+                    objectID: er.uuid(0), eventID: er.uuid(1),
+                    blockIDs: blocks, role: er.string(2) ?? "supports"
+                )
+            }
+            out.append(StoredClaim(
+                id: claimID, text: text,
+                supportStatus: row.string(2) ?? "unknown",
+                confidence: row.double(3) ?? 0,
+                evidence: evidence
+            ))
+        }
+        return out
+    }
+
     // MARK: - Internals
 
     private func decodeRow(_ row: SQLRow) -> StoredAnswer? {

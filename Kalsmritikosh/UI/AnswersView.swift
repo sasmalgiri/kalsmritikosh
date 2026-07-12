@@ -27,7 +27,9 @@ public struct AnswersView: View {
                     emptyState
                 } else {
                     ForEach(answers) { answer in
-                        AnswerCard(answer: answer)
+                        AnswerCard(answer: answer, loadClaims: { id in
+                            (try? await appState.answerLedger?.claims(forAnswer: id)) ?? []
+                        })
                     }
                 }
             }
@@ -75,7 +77,10 @@ public struct AnswersView: View {
 /// with the answer body available on expansion.
 private struct AnswerCard: View {
     let answer: StoredAnswer
+    let loadClaims: (UUID) async -> [AnswerLedgerRepository.StoredClaim]
     @State private var expanded = false
+    @State private var claims: [AnswerLedgerRepository.StoredClaim] = []
+    @State private var loadedEvidence = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -102,9 +107,11 @@ private struct AnswerCard: View {
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                evidenceSection
             }
-            Button(expanded ? "Hide answer" : "Show answer") {
+            Button(expanded ? "Hide answer" : "Show answer & evidence") {
                 withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                if expanded { Task { await loadEvidence() } }
             }
             .font(.caption.weight(.medium))
             .buttonStyle(.plain)
@@ -113,6 +120,47 @@ private struct AnswerCard: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// A5.10 — the audit chain behind the answer: each claim and the evidence
+    /// (sources, events, and structural block ids) that supports it.
+    @ViewBuilder private var evidenceSection: some View {
+        if loadedEvidence {
+            if claims.allSatisfy({ $0.evidence.isEmpty }) {
+                Text("No structured evidence recorded for this answer.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Divider().padding(.vertical, 2)
+                Text("Evidence")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(claims) { claim in
+                    let totalBlocks = claim.evidence.reduce(0) { $0 + $1.blockIDs.count }
+                    let sources = claim.evidence.filter { $0.objectID != nil }.count
+                    let events = claim.evidence.filter { $0.eventID != nil }.count
+                    HStack(spacing: 10) {
+                        Image(systemName: "link").font(.caption2).foregroundStyle(.tint)
+                        Text(evidenceSummary(sources: sources, events: events, blocks: totalBlocks))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } else {
+            ProgressView().controlSize(.small)
+        }
+    }
+
+    private func evidenceSummary(sources: Int, events: Int, blocks: Int) -> String {
+        var parts: [String] = []
+        if sources > 0 { parts.append("\(sources) source\(sources == 1 ? "" : "s")") }
+        if events > 0 { parts.append("\(events) event\(events == 1 ? "" : "s")") }
+        if blocks > 0 { parts.append("\(blocks) evidence block\(blocks == 1 ? "" : "s")") }
+        return parts.isEmpty ? "no linked evidence" : parts.joined(separator: " · ")
+    }
+
+    private func loadEvidence() async {
+        guard !loadedEvidence else { return }
+        claims = await loadClaims(answer.id)
+        loadedEvidence = true
     }
 
     private var stateBadge: some View {
@@ -163,19 +211,19 @@ private struct AnswerCard: View {
                 answerState: .supported,
                 body: "The Project Delta contract was signed on 14 March 2025 by Alice Martin (Acme Corp) and Bob Chen (Delta Ltd), per the executed signature page in contract-final.pdf.",
                 confidence: 0.86, source: "reasoning"
-            ))
+            ), loadClaims: { _ in [] })
             AnswerCard(answer: StoredAnswer(
                 question: "Was the June invoice paid?",
                 answerState: .partiallySupported,
                 body: "An invoice for USD 12,000 was issued on 2 June; no matching payment confirmation was found in the archive.",
                 confidence: 0.42, source: "financial"
-            ))
+            ), loadClaims: { _ in [] })
             AnswerCard(answer: StoredAnswer(
                 question: "Who approved the budget increase?",
                 answerState: .notFound,
                 body: "No document in the archive records an approval for the budget increase.",
                 confidence: 0.1, source: nil
-            ))
+            ), loadClaims: { _ in [] })
         }
         .padding()
     }
