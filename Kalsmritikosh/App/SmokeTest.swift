@@ -1266,7 +1266,41 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     } else {
         KalsmritikoshLog.app.error("ProjectDelta smoke test FAILED — \(result.assertionsFailed.joined(separator: "; "), privacy: .public)")
     }
+    // Write a durable report so the run is retrievable after the OSLog .info
+    // lines scroll away (log show doesn't persist .info). Best-effort.
+    writeSmokeReport(result)
     return result
+}
+
+/// Persist a human-readable smoke report to ~/Documents/EvalBaselines/ so a run
+/// can be inspected after the fact (OSLog .info isn't persisted to disk).
+@MainActor
+private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
+    var md = "# ProjectDelta SmokeTest — \(result.ok ? "PASSED ✅" : "FAILED ❌")\n\n"
+    md += "- ingested: \(result.ingested)\n"
+    md += "- entities: \(result.entityCount)  ·  events: \(result.eventCount)  ·  memory: \(result.memoryObjectCount)\n"
+    md += "- checks passed: \(result.assertionsPassed.count)  ·  failed: \(result.assertionsFailed.count)\n\n"
+    if !result.assertionsFailed.isEmpty {
+        md += "## Failures\n\n" + result.assertionsFailed.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
+    }
+    md += "## Passed\n\n" + result.assertionsPassed.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
+    md += "## Answer\n\n- state: \(result.answer.answerState.rawValue)\n"
+    md += "- confidence: \(result.answer.confidence.value)\n"
+    md += "- citations: \(result.answer.citations.count)\n\n"
+    md += "```\n\(result.answer.body.prefix(2000))\n```\n"
+
+    let base = (try? FileManager.default.url(
+        for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+    )) ?? FileManager.default.temporaryDirectory
+    let dir = base.appendingPathComponent("EvalBaselines", isDirectory: true)
+    let url = dir.appendingPathComponent("smoke-report.md", isDirectory: false)
+    do {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(md.utf8).write(to: url, options: .atomic)
+        KalsmritikoshLog.app.info("Smoke report written to \(url.path, privacy: .public)")
+    } catch {
+        KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .public)")
+    }
 }
 
 // MARK: - Helpers
