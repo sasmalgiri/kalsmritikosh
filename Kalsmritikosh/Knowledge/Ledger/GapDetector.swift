@@ -168,6 +168,47 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Expected responses (A5.7)
+
+    /// Explicit request-for-reply phrases. Kept specific to avoid flagging every
+    /// message that merely contains a question mark.
+    private static let responseRequestPhrases: [String] = [
+        "please confirm", "please advise", "please respond", "please reply",
+        "let me know", "await your", "awaiting your", "look forward to your reply",
+        "look forward to hearing", "can you confirm", "could you confirm",
+        "kindly confirm", "kindly revert", "please review and", "your confirmation",
+        "waiting for your", "get back to me", "need your approval", "need your sign-off"
+    ]
+
+    /// A5.7 — flag messages that explicitly request a reply/confirmation but
+    /// have no reply to them in the archive. The reply may exist elsewhere;
+    /// absence is not proof it was ignored. Low confidence, reasoned.
+    ///
+    /// - Parameter messages: per-message (objectID, subject, body, hasReply)
+    ///   where `hasReply` is true iff some other message replies to this one.
+    public func detectExpectedResponses(
+        messages: [(objectID: UUID, subject: String, body: String, hasReply: Bool)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        var gaps: [GapNode] = []
+        for m in messages {
+            guard !m.hasReply else { continue }
+            let lower = m.body.lowercased()
+            guard let phrase = Self.responseRequestPhrases.first(where: { lower.contains($0) }) else { continue }
+            let subject = m.subject.trimmingCharacters(in: .whitespacesAndNewlines)
+            gaps.append(GapNode(
+                kind: .expectedResponse,
+                description: subject.isEmpty ? "A message requested a reply that isn't in the archive"
+                                             : "No reply found to \"\(subject)\"",
+                reason: "the message asks for a response (\"\(phrase)\") but no reply to it is in the archive — it matters because whether (and how) the recipient responded can be the crux of a matter. The reply may live outside this archive; absence is not proof it was ignored.",
+                confidence: 0.3,
+                evidenceObjectID: m.objectID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Payment proof (A5.7)
 
     /// A5.7 — flag issued invoices that have no matching payment (same amount +

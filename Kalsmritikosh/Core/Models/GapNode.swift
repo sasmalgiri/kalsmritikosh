@@ -44,6 +44,10 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// A5.7 — a file's bytes changed since it was first ingested (custody hash
     /// mismatch), so an earlier version's evidence may no longer be recoverable.
     case custodyBreak
+    /// A5.7 — a message explicitly requested a reply/confirmation but no reply
+    /// to it is in the archive. The reply may exist elsewhere; absence is not
+    /// proof it was ignored.
+    case expectedResponse
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -56,6 +60,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .unreadableRegion:     return "Unreadable Region"
         case .paymentProof:         return "No Payment Record"
         case .custodyBreak:         return "Custody Break"
+        case .expectedResponse:     return "Awaiting Reply"
         }
     }
 
@@ -70,6 +75,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .unreadableRegion:     return "doc.badge.ellipsis"
         case .paymentProof:         return "creditcard.trianglebadge.exclamationmark"
         case .custodyBreak:         return "checkmark.shield.fill"
+        case .expectedResponse:     return "bubble.left.and.exclamationmark.bubble.right"
         }
     }
 }

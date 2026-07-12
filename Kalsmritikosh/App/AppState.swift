@@ -1632,6 +1632,24 @@ public final class AppState {
                 .filter(\.isEmail)
                 .map { (objectID: $0.id, body: $0.content, hasAttachment: $0.hasAttachment) }
             found += detector.detectMissingAttachments(emails: emailRows)
+
+            // Rule 8 (A5.7) — messages that request a reply with none in the
+            // archive. A root message has a reply iff some Re:-prefixed message
+            // shares its normalized subject.
+            let repliedSubjects = Set(
+                sample.compactMap { row -> String? in
+                    guard let s = row.subject, !s.isEmpty, Self.isReplySubject(s) else { return nil }
+                    let n = Self.normalizeSubject(s)
+                    return n.isEmpty ? nil : n
+                }
+            )
+            let awaiting: [(objectID: UUID, subject: String, body: String, hasReply: Bool)] =
+                sample.compactMap { row in
+                    guard row.isEmail, let s = row.subject, !s.isEmpty, !Self.isReplySubject(s) else { return nil }
+                    let hasReply = repliedSubjects.contains(Self.normalizeSubject(s))
+                    return (objectID: row.id, subject: s, body: row.content, hasReply: hasReply)
+                }
+            found += detector.detectExpectedResponses(messages: awaiting)
         }
 
         // Rule 5 (A5.7) — unreadable regions from the structural layer: sources
@@ -1666,7 +1684,7 @@ public final class AppState {
         }
 
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response)")
         return found.count
     }
 
