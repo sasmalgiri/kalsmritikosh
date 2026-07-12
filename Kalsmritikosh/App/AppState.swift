@@ -763,7 +763,8 @@ public final class AppState {
                 onDemandDistiller: memoryDistiller,
                 derivedObjects: derivedObjectsRepo,
                 answerLedger: answerLedgerRepo,
-                evidenceStore: evidenceStoreRepo
+                evidenceStore: evidenceStoreRepo,
+                objects: objects
             )
 
             // ── Ingestion ────────────────────────────────────────────

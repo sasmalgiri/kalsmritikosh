@@ -71,6 +71,11 @@ public actor MasterBrain {
     /// over a spreadsheet source is answered deterministically from the
     /// persisted cells before the LLM/expert path. nil = fast-path disabled.
     private let evidenceStore: EvidenceStore?
+    /// A6.7 — used only to gate the deterministic table fast-path: it reads
+    /// evidence blocks directly and can't yet verify per-source privilege
+    /// (block→KO id bridge pending), so the fast-path is disabled whenever ANY
+    /// material is privileged, falling through to the privilege-filtered path.
+    private let objects: KnowledgeObjectRepository?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -91,7 +96,8 @@ public actor MasterBrain {
         onDemandDistiller: MemoryDistiller? = nil,
         derivedObjects: DerivedObjectsRepository? = nil,
         answerLedger: AnswerLedgerRepository? = nil,
-        evidenceStore: EvidenceStore? = nil
+        evidenceStore: EvidenceStore? = nil,
+        objects: KnowledgeObjectRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -109,6 +115,7 @@ public actor MasterBrain {
         self.derivedObjects = derivedObjects
         self.answerLedger = answerLedger
         self.evidenceStore = evidenceStore
+        self.objects = objects
     }
 
     /// Fire-and-forget: persist an answer's verified claims as derived ledger
@@ -138,6 +145,11 @@ public actor MasterBrain {
     /// question resolves to a numeric aggregate over a spreadsheet source.
     private func tableFastPath(question: String, intent: UserIntent) async -> VerifiedAnswer? {
         guard let evidenceStore else { return nil }
+        // A6.7 — the fast-path reads blocks directly and can't yet check
+        // per-source privilege (block→KO bridge pending). If ANY material is
+        // privileged, skip it and fall through to the privilege-filtered path
+        // so a privileged spreadsheet's values can never leak here.
+        if let objects, (try? await objects.privilegedCount()) ?? 0 > 0 { return nil }
         let engine = TableQueryEngine()
         // Find a spreadsheet source relevant to the question via block FTS.
         guard let hits = try? await evidenceStore.searchBlocks(question, limit: 20),
