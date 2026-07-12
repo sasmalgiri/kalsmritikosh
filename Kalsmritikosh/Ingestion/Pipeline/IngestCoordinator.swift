@@ -61,6 +61,12 @@ public actor IngestCoordinator {
     private let syntheticQuestions: SyntheticQuestionsRepository?
     private let syntheticQuestionGenerator: any SyntheticQuestionGenerator
     private let synthQueue: SyntheticQuestionQueue?
+    /// A2 — when both are wired, a real ingest ALSO persists the canonical
+    /// structural evidence layer (typed EvidenceBlocks + source version +
+    /// document profile) additively, alongside the legacy KnowledgeObject path.
+    /// nil = structural layer not populated (no regression to the KO path).
+    private let evidenceStore: EvidenceStore?
+    private let structuralRegistry: StructuralParserRegistry?
     /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
     /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
     /// the per-KO loop and persists summarised pairs for retrieval.
@@ -117,8 +123,12 @@ public actor IngestCoordinator {
         bondConstructor: BondConstructor? = nil,
         contextPrefixGenerator: (any ContextPrefixGenerator)? = nil,
         pipelineMetrics: PipelineMetrics? = nil,
-        custody: CustodyRepository? = nil
+        custody: CustodyRepository? = nil,
+        evidenceStore: EvidenceStore? = nil,
+        structuralRegistry: StructuralParserRegistry? = nil
     ) {
+        self.evidenceStore = evidenceStore
+        self.structuralRegistry = structuralRegistry
         self.custody = custody
         self.loaders = loaders
         self.cleaner = cleaner
@@ -159,6 +169,47 @@ public actor IngestCoordinator {
     }
 
     public func ingest(fileAt url: URL) async throws -> Result {
+        let result = try await ingestCore(fileAt: url)
+        // A2 — additively populate the structural evidence layer for REAL
+        // ingests only. chunkCount > 0 means the file was actually parsed
+        // (skip / alias / move return 0), so we don't re-persist blocks for
+        // unchanged or deduped files. Best-effort: never fails the ingest.
+        if result.chunkCount > 0, let evidenceStore, let structuralRegistry {
+            await persistStructural(url: url, fileID: result.fileRecord.id,
+                                    store: evidenceStore, registry: structuralRegistry)
+        }
+        return result
+    }
+
+    /// Run the format's structural parser and persist its typed EvidenceBlocks
+    /// as a new source version. Additive to the legacy KO path; no-op when no
+    /// structural parser handles the type.
+    private func persistStructural(
+        url: URL, fileID: UUID,
+        store: EvidenceStore, registry: StructuralParserRegistry
+    ) async {
+        let type = SourceType.detect(from: url)
+        guard let parser = registry.parser(for: type) else { return }
+        guard let data = try? Data(contentsOf: url) else { return }
+        let started = Date()
+        let versionID = UUID()
+        guard let doc = try? parser.parse(
+            data: data, filename: url.lastPathComponent, type: type,
+            logicalSourceID: fileID, sourceVersionID: versionID
+        ) else { return }
+        do {
+            try await store.persist(
+                doc, parser: parser.parserName, parserVersion: parser.parserVersion,
+                sizeBytes: Int64(data.count), originalURL: url.absoluteString,
+                makeCurrent: true, startedAt: started
+            )
+            KalsmritikoshLog.ingestion.info("Structural: \(doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .public)")
+        } catch {
+            KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func ingestCore(fileAt url: URL) async throws -> Result {
         await pipelineMetrics?.bump(.discovered)
         let type = SourceType.detect(from: url)
 

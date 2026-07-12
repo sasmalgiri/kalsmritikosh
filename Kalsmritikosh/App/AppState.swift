@@ -134,6 +134,8 @@ public final class AppState {
     public private(set) var custody: CustodyRepository?
     /// §16 — append-only derived-objects ledger (query-time extractions).
     public private(set) var derivedObjects: DerivedObjectsRepository?
+    /// A2 — canonical structural evidence store (typed blocks + versions).
+    public private(set) var evidenceStore: EvidenceStore?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -387,6 +389,9 @@ public final class AppState {
             let factReviewsRepo = FactReviewsRepository(database: db)
             let custodyRepo = CustodyRepository(database: db)
             let derivedObjectsRepo = DerivedObjectsRepository(database: db)
+            // A2 — structural evidence store + parser registry (canonical typed
+            // blocks, populated additively during ingest).
+            let evidenceStoreRepo = EvidenceStore(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -882,7 +887,9 @@ public final class AppState {
                 // re-enriched later, never with heuristic noise.
                 contextPrefixGenerator: nil,
                 pipelineMetrics: pipelineMetricsActor,
-                custody: custodyRepo
+                custody: custodyRepo,
+                evidenceStore: evidenceStoreRepo,
+                structuralRegistry: .standard
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -1230,6 +1237,7 @@ public final class AppState {
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
             self.derivedObjects = derivedObjectsRepo
+            self.evidenceStore = evidenceStoreRepo
             self.factBonds = factBondsRepo
             self.eventLinks = eventLinksRepo
             let investigationsRepo = InvestigationsRepository(database: db)
