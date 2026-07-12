@@ -20,7 +20,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | CSV | `.csv` | Structural | `CSVStructuralParser` | sheet + row (cells as JSON); sheet/row locator | RFC-4180; deterministic table queries |
 | EML | `.eml` | Structural | `EmailStructuralParser` | header-per-field / body / attachment; message-id + header-field locator | quote-strip + multipart reused |
 | PDF | `.pdf` | Legacy → structural pending | `PDFLoader` | flattened text (+ scanned-PDF OCR) | A3.5: page blocks + OCR confidence + bboxes |
-| XLSX | `.xlsx` | Legacy → structural pending | `SpreadsheetLoader` | flattened | A3.6: structured cells like CSV |
+| XLSX | `.xlsx` | Structural | `XLSXStructuralParser` | sheet + row (cells as JSON) per worksheet; sheet/row locator | OOXML shared-strings; deterministic table queries |
 | PPTX | `.pptx` | Legacy → structural pending | `PresentationLoader` | flattened | A3.10: slide/shape/notes |
 | EPUB | `.epub` | Legacy → structural pending | `EpubLoader` | flattened | A3.11 |
 | RTF | `.rtf` | Legacy | native | flattened | |

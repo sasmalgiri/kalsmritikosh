@@ -23,6 +23,7 @@ public struct StructuralParserRegistry: Sendable {
         PlainTextStructuralParser(),
         DocxStructuralParser(),
         CSVStructuralParser(),
+        XLSXStructuralParser(),
         EmailStructuralParser()
     ])
 
