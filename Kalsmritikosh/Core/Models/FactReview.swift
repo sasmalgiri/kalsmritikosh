@@ -14,10 +14,31 @@ import Foundation
 public nonisolated struct FactReview: Identifiable, Sendable, Hashable, Codable {
     public typealias ID = UUID
 
+    /// A5.8 — the full reversible human-review vocabulary. Every action is an
+    /// append-only row; a `.reverse` row (carrying `reversalOf`) undoes a prior
+    /// review without deleting it, so the history — including the undo — stays
+    /// intact. Older rows only ever used accept/reject/correct; those decode
+    /// unchanged.
     public enum Action: String, Codable, Sendable, CaseIterable, Hashable {
         case accept
         case reject
         case correct
+        /// Merge two entities/events judged to be the same (newValue = target id).
+        case merge
+        /// Split a conflated entity/event back apart.
+        case split
+        /// Change a date/precision without rejecting the fact.
+        case precisionChange
+        /// Mark a contradiction resolved (which side, in reason/newValue).
+        case resolveContradiction
+        /// Dismiss a gap as not-actually-missing.
+        case dismissGap
+        /// Reopen a previously-dismissed gap.
+        case reopenGap
+        /// Mark a source as authoritative for a claim.
+        case markAuthority
+        /// Undo a prior review (see `reversalOf`). Append-only reversibility.
+        case reverse
     }
 
     public let id: ID
@@ -35,6 +56,9 @@ public nonisolated struct FactReview: Identifiable, Sendable, Hashable, Codable 
     public let reviewer: String
     /// Required for reject/correct; optional for accept.
     public let reason: String?
+    /// A5.8 — for a `.reverse` action, the id of the review row being undone.
+    /// nil for all non-reversal actions.
+    public let reversalOf: UUID?
     public let reviewedAt: Date
 
     public nonisolated init(
@@ -46,6 +70,7 @@ public nonisolated struct FactReview: Identifiable, Sendable, Hashable, Codable 
         newValue: String? = nil,
         reviewer: String = "user",
         reason: String? = nil,
+        reversalOf: UUID? = nil,
         reviewedAt: Date = Date()
     ) {
         self.id = id
@@ -56,6 +81,7 @@ public nonisolated struct FactReview: Identifiable, Sendable, Hashable, Codable 
         self.newValue = newValue
         self.reviewer = reviewer
         self.reason = reason
+        self.reversalOf = reversalOf
         self.reviewedAt = reviewedAt
     }
 }

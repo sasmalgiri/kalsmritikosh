@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 38
+    public static let latestVersion = 39
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -75,7 +75,8 @@ public enum SchemaMigrations {
         (35, v35),
         (36, v36),
         (37, v37),
-        (38, v38)
+        (38, v38),
+        (39, v39)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1490,5 +1491,13 @@ public enum SchemaMigrations {
     ALTER TABLE assertions ADD COLUMN provenance TEXT NOT NULL DEFAULT 'source_asserted';
     ALTER TABLE assertions ADD COLUMN extractor_version TEXT NOT NULL DEFAULT 'v1';
     CREATE INDEX IF NOT EXISTS idx_assertions_source ON assertions(asserting_source_id);
+    """
+
+    // A5.8 — reversible human review. A `.reverse` review row records the id of
+    // the review it undoes; the undone row is preserved (append-only). Additive,
+    // nullable — older rows and non-reversal actions leave it NULL.
+    private static let v39: String = """
+    ALTER TABLE fact_reviews ADD COLUMN reversal_of TEXT;
+    CREATE INDEX IF NOT EXISTS idx_fact_reviews_reversal ON fact_reviews(reversal_of);
     """
 }

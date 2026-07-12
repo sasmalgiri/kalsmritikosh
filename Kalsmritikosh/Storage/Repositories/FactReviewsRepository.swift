@@ -22,8 +22,8 @@ public actor FactReviewsRepository {
     public func record(_ review: FactReview) async throws -> UUID {
         try await database.exec("""
         INSERT INTO fact_reviews
-            (id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            (id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(review.id),
             .text(review.subjectKind.rawValue),
@@ -33,23 +33,53 @@ public actor FactReviewsRepository {
             review.newValue.map { .text($0) } ?? .null,
             .text(review.reviewer),
             review.reason.map { .text($0) } ?? .null,
-            .real(review.reviewedAt.timeIntervalSince1970)
+            .real(review.reviewedAt.timeIntervalSince1970),
+            review.reversalOf.map { .uuid($0) } ?? .null
         ])
         return review.id
+    }
+
+    /// A5.8 — undo a prior review by appending a `.reverse` row that points at
+    /// it. Nothing is deleted; the reversed review and its undo both remain in
+    /// the history, and `latestBySubject` stops counting the reversed verdict.
+    @discardableResult
+    public func reverse(
+        _ reviewID: UUID,
+        subjectKind: FactSourceKind,
+        subjectID: UUID,
+        reviewer: String = "user",
+        reason: String? = nil
+    ) async throws -> UUID {
+        try await record(FactReview(
+            subjectKind: subjectKind,
+            subjectID: subjectID,
+            action: .reverse,
+            reviewer: reviewer,
+            reason: reason,
+            reversalOf: reviewID
+        ))
     }
 
     /// Latest verdict per subject id (max reviewed_at). Used as the overlay
     /// input to FactStatusClassifier.
     public func latestBySubject() async throws -> [UUID: FactReview] {
         let rows = try await database.query("""
-        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at
+        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of
         FROM fact_reviews
         ORDER BY reviewed_at ASC;
         """)
-        // Ascending order + last-write-wins in the dictionary => latest kept.
+        return Self.effectiveVerdicts(rows.compactMap(decode))
+    }
+
+    /// A5.8 — the effective verdict per subject from an append-only review log.
+    /// A `.reverse` row undoes the review it targets; the effective verdict is
+    /// the latest review that is neither a reversal itself nor the target of
+    /// one. Pure (testable without a database). `reviews` MUST be time-ascending.
+    nonisolated static func effectiveVerdicts(_ reviews: [FactReview]) -> [UUID: FactReview] {
+        let reversed = Set(reviews.compactMap { $0.action == .reverse ? $0.reversalOf : nil })
         var out: [UUID: FactReview] = [:]
-        for row in rows {
-            guard let r = decode(row) else { continue }
+        for r in reviews {   // ascending => last active write wins
+            guard r.action != .reverse, !reversed.contains(r.id) else { continue }
             out[r.subjectID] = r
         }
         return out
@@ -58,7 +88,7 @@ public actor FactReviewsRepository {
     /// Full append-only history for one subject, newest first.
     public func history(forSubject id: UUID) async throws -> [FactReview] {
         let rows = try await database.query("""
-        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at
+        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of
         FROM fact_reviews WHERE subject_id = ? ORDER BY reviewed_at DESC;
         """, [.uuid(id)])
         return rows.compactMap(decode)
@@ -91,6 +121,7 @@ public actor FactReviewsRepository {
             newValue: row.string(5),
             reviewer: reviewer,
             reason: row.string(7),
+            reversalOf: row.uuid(9),
             reviewedAt: Date(timeIntervalSince1970: at)
         )
     }

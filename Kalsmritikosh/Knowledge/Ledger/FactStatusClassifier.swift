@@ -77,14 +77,36 @@ public struct FactStatusClassifier: Sendable {
     /// (kept, shown rejected). Reason names the reviewer action.
     static func applyReview(_ item: FactStatusItem, _ review: FactReview) -> FactStatusItem {
         let suffix = review.reason.map { " — \($0)" } ?? "."
+        let who = review.reviewer
         switch review.action {
         case .accept:
-            return item.overriding(status: .proven, reason: "Accepted by reviewer (\(review.reviewer))\(suffix)")
+            return item.overriding(status: .proven, reason: "Accepted by reviewer (\(who))\(suffix)")
         case .correct:
             let corrected = review.newValue.map { " New value: \($0)." } ?? ""
-            return item.overriding(status: .proven, reason: "Corrected by reviewer (\(review.reviewer))\(suffix)\(corrected)")
+            return item.overriding(status: .proven, reason: "Corrected by reviewer (\(who))\(suffix)\(corrected)")
+        // A5.8 — corrective/affirming actions leave the fact human-confirmed.
+        // "Human-confirmed" is NOT the same as "proven true" (spec A5.5); the
+        // status carries the reviewer attribution so the UI can say so.
+        case .merge:
+            return item.overriding(status: .proven, reason: "Merged by reviewer (\(who))\(suffix)")
+        case .split:
+            return item.overriding(status: .proven, reason: "Split by reviewer (\(who))\(suffix)")
+        case .precisionChange:
+            let nv = review.newValue.map { " New value: \($0)." } ?? ""
+            return item.overriding(status: .proven, reason: "Precision changed by reviewer (\(who))\(suffix)\(nv)")
+        case .resolveContradiction:
+            return item.overriding(status: .proven, reason: "Contradiction resolved by reviewer (\(who))\(suffix)")
+        case .markAuthority:
+            return item.overriding(status: .proven, reason: "Marked authoritative by reviewer (\(who))\(suffix)")
         case .reject:
-            return item.overriding(status: .unverified, reason: "Rejected by reviewer (\(review.reviewer))\(suffix) Kept for the record.")
+            return item.overriding(status: .unverified, reason: "Rejected by reviewer (\(who))\(suffix) Kept for the record.")
+        case .dismissGap:
+            return item.overriding(status: .unverified, reason: "Gap dismissed by reviewer (\(who))\(suffix) Kept for the record.")
+        // reopenGap / reverse restore the pre-review state: no overlay applied.
+        // (latestBySubject already drops reversed verdicts, so a `.reverse` only
+        // reaches here defensively.)
+        case .reopenGap, .reverse:
+            return item
         }
     }
 
