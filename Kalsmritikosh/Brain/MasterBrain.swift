@@ -67,6 +67,10 @@ public actor MasterBrain {
     /// (fire-and-forget), so "Why this answer?" and audits can reconstruct it.
     /// nil = not persisted (behaviour otherwise unchanged).
     private let answerLedger: AnswerLedgerRepository?
+    /// A6.4 — structural evidence store. When wired, a table-aggregate question
+    /// over a spreadsheet source is answered deterministically from the
+    /// persisted cells before the LLM/expert path. nil = fast-path disabled.
+    private let evidenceStore: EvidenceStore?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -86,7 +90,8 @@ public actor MasterBrain {
         eventLinks: EventLinksRepository? = nil,
         onDemandDistiller: MemoryDistiller? = nil,
         derivedObjects: DerivedObjectsRepository? = nil,
-        answerLedger: AnswerLedgerRepository? = nil
+        answerLedger: AnswerLedgerRepository? = nil,
+        evidenceStore: EvidenceStore? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -103,6 +108,7 @@ public actor MasterBrain {
         self.onDemandDistiller = onDemandDistiller
         self.derivedObjects = derivedObjects
         self.answerLedger = answerLedger
+        self.evidenceStore = evidenceStore
     }
 
     /// Fire-and-forget: persist an answer's verified claims as derived ledger
@@ -125,6 +131,59 @@ public actor MasterBrain {
                 confidence: answer.confidence.value
             ))
         }
+    }
+
+    /// A6.4 — answer a table-aggregate question EXACTLY from persisted
+    /// spreadsheet cells, with no LLM. Returns nil (→ normal path) unless the
+    /// question resolves to a numeric aggregate over a spreadsheet source.
+    private func tableFastPath(question: String, intent: UserIntent) async -> VerifiedAnswer? {
+        guard let evidenceStore else { return nil }
+        let engine = TableQueryEngine()
+        // Find a spreadsheet source relevant to the question via block FTS.
+        guard let hits = try? await evidenceStore.searchBlocks(question, limit: 20),
+              let sheetHit = hits.first(where: { $0.kind == .spreadsheetSheet || $0.kind == .spreadsheetRow }),
+              let versionID = sheetHit.sourceVersionID,
+              let blocks = try? await evidenceStore.blocks(forVersion: versionID), !blocks.isEmpty
+        else { return nil }
+
+        let headers = TableQueryEngine.headers(blocks)
+        guard let (aggregate, column) = engine.parseQuestion(question, headers: headers),
+              let result = engine.evaluate(aggregate, column: column, blocks: blocks)
+        else { return nil }
+
+        let sheetName = blocks.first(where: { $0.kind == .spreadsheetSheet })?.locator.sheet ?? "the table"
+        let value = result.value == result.value.rounded()
+            ? String(format: "%.0f", result.value)
+            : String(format: "%.2f", result.value)
+        let colPhrase = result.column.map { " of \"\($0)\"" } ?? ""
+        var md = "**\(value)**\n\n"
+        md += "Computed deterministically as the \(result.aggregate.rawValue)\(colPhrase) across \(result.rowsConsidered) row\(result.rowsConsidered == 1 ? "" : "s") of \"\(sheetName)\" — read directly from the persisted spreadsheet cells (no model)."
+
+        // Citation anchors to the sheet's source document/version.
+        let citation = VerifiedAnswer.Citation(
+            objectID: sheetHit.documentID,
+            snippet: blocks.first(where: { $0.kind == .spreadsheetSheet })?.rawText ?? sheetName
+        )
+        let trace = ReasoningTrace(
+            pathTaken: "deterministic.table",
+            intent: intent.kind.rawValue,
+            queryCategory: QueryCategoryClassifier().classify(question: question, intent: intent).rawValue,
+            retrievalLayers: [],
+            shortCircuitedAt: nil,
+            expertIDs: [],
+            llmPurposes: [],
+            retrievalCounts: ReasoningTrace.RetrievalCounts(
+                events: 0, entities: 0, chunks: 0, relationships: 0, summaries: 0, walkSteps: 0
+            ),
+            assumptions: ["Computed from persisted spreadsheet cells (A6.4) — no LLM."],
+            uncertainties: []
+        )
+        return VerifiedAnswer(
+            body: md, answerText: md, intentKind: intent.kind.rawValue,
+            citations: [citation], confidence: Confidence(0.9),
+            contradictions: [], refused: false, refusalReason: nil, report: nil,
+            walkSteps: [], source: .historical, reasoningTrace: trace
+        )
     }
 
     /// A5.9 — fire-and-forget: persist the shipped answer as a first-class
@@ -750,6 +809,14 @@ public actor MasterBrain {
                 refused: true,
                 refusalReason: "Intent detection failed: \(error)"
             )
+        }
+
+        // A6.4 — deterministic table fast-path. A table-aggregate question over
+        // a spreadsheet source is answered EXACTLY from the persisted cells,
+        // before any LLM/expert work. Returns nil (falls through to the normal
+        // path) unless it produces a confident numeric result.
+        if let table = await tableFastPath(question: question, intent: intent) {
+            return table
         }
 
         // G2-1.5 — record this turn before anything else runs. The
