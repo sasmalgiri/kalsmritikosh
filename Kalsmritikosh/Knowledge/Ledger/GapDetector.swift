@@ -168,6 +168,60 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Final version (A5.7)
+
+    private static let finalMarkers = ["final", "signed", "executed", "approved", "v-final", "vfinal"]
+    private static let stopWords: Set<String> = [
+        "draft", "final", "signed", "executed", "approved", "copy", "version", "the", "and", "for", "with", "rev"
+    ]
+
+    /// Significant tokens in a filename (lowercased words ≥4 chars, minus the
+    /// draft/final markers themselves), used to pair a draft with its final.
+    static func significantTokens(_ filename: String) -> Set<String> {
+        let base = (filename as NSString).deletingPathExtension.lowercased()
+        let words = base.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        return Set(words.filter { $0.count >= 4 && !stopWords.contains($0) })
+    }
+
+    /// A5.7 — flag documents that are marked a "draft" when no "final" (or
+    /// signed/executed) counterpart sharing a significant name token is in the
+    /// archive. The final may live elsewhere; absence is not proof none exists.
+    ///
+    /// - Parameter documents: (objectID, filename) for each ingested document.
+    public func detectMissingFinalVersion(
+        documents: [(objectID: UUID, filename: String)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        // Collect the token sets of every "final"-ish document.
+        let finals: [Set<String>] = documents
+            .filter { doc in Self.finalMarkers.contains { doc.filename.lowercased().contains($0) } }
+            .map { Self.significantTokens($0.filename) }
+
+        var gaps: [GapNode] = []
+        var seenDraftKeys = Set<String>()
+        for doc in documents {
+            let lower = doc.filename.lowercased()
+            guard lower.contains("draft") else { continue }
+            let tokens = Self.significantTokens(doc.filename)
+            guard !tokens.isEmpty else { continue }
+            // A final counterpart exists if some final doc shares a token.
+            let hasFinal = finals.contains { !$0.isDisjoint(with: tokens) }
+            if hasFinal { continue }
+            // Dedupe drafts that share the same token signature.
+            let key = tokens.sorted().joined(separator: "|")
+            guard seenDraftKeys.insert(key).inserted else { continue }
+            gaps.append(GapNode(
+                kind: .finalVersion,
+                description: "Only a draft of \"\(doc.filename)\" is present",
+                reason: "this document is marked a draft and no final/signed version sharing its name is in the archive — it matters because the operative version is usually the final one. The final may live elsewhere; absence is not proof none exists.",
+                confidence: 0.3,
+                evidenceObjectID: doc.objectID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Expected responses (A5.7)
 
     /// Explicit request-for-reply phrases. Kept specific to avoid flagging every

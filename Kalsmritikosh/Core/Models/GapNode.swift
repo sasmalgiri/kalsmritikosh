@@ -48,6 +48,9 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// to it is in the archive. The reply may exist elsewhere; absence is not
     /// proof it was ignored.
     case expectedResponse
+    /// A5.7 — only a draft of a document is present; no final / signed version
+    /// sharing its name is in the archive. The final may live elsewhere.
+    case finalVersion
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -61,6 +64,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .paymentProof:         return "No Payment Record"
         case .custodyBreak:         return "Custody Break"
         case .expectedResponse:     return "Awaiting Reply"
+        case .finalVersion:         return "Draft Only"
         }
     }
 
@@ -76,6 +80,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .paymentProof:         return "creditcard.trianglebadge.exclamationmark"
         case .custodyBreak:         return "checkmark.shield.fill"
         case .expectedResponse:     return "bubble.left.and.exclamationmark.bubble.right"
+        case .finalVersion:         return "doc.badge.clock"
         }
     }
 }

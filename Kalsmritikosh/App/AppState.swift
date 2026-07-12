@@ -1650,6 +1650,12 @@ public final class AppState {
                     return (objectID: row.id, subject: s, body: row.content, hasReply: hasReply)
                 }
             found += detector.detectExpectedResponses(messages: awaiting)
+
+            // Rule 9 (A5.7) — documents present only as a draft (no final).
+            let documents = sample
+                .filter { !$0.isEmail }
+                .map { (objectID: $0.id, filename: $0.filename) }
+            found += detector.detectMissingFinalVersion(documents: documents)
         }
 
         // Rule 5 (A5.7) — unreadable regions from the structural layer: sources
@@ -1684,7 +1690,7 @@ public final class AppState {
         }
 
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response + final-version)")
         return found.count
     }
 
@@ -1713,9 +1719,9 @@ public final class AppState {
     private func loadObjectSample(
         objects: KnowledgeObjectRepository,
         limit: Int
-    ) async -> [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool)] {
+    ) async -> [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool, filename: String)] {
         let ids = (try? await objects.allIDs(offset: 0, pageSize: limit)) ?? []
-        var out: [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool)] = []
+        var out: [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool, filename: String)] = []
         out.reserveCapacity(ids.count)
         for id in ids {
             guard let obj = (try? await objects.load(id: id)) ?? nil else { continue }
@@ -1729,7 +1735,8 @@ public final class AppState {
                 hasAttachment = !trimmed.isEmpty && trimmed != "[]"
             }
             out.append((id: obj.id, content: obj.content, subject: subject,
-                        isEmail: obj.sourceType.category == .email, hasAttachment: hasAttachment))
+                        isEmail: obj.sourceType.category == .email, hasAttachment: hasAttachment,
+                        filename: obj.sourceFile.lastPathComponent))
         }
         return out
     }
