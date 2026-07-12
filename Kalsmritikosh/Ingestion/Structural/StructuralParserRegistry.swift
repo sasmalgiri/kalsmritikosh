@@ -32,13 +32,14 @@ public struct StructuralParserRegistry: Sendable {
     /// `standard(ocr:)` to additionally get OCR-backed formats (PDF, images).
     public static let standard = StructuralParserRegistry(parsers: selfContainedParsers)
 
-    /// The full registry including formats that require an OCR engine (PDF —
-    /// native page text with a per-page OCR fallback for scanned pages). The app
-    /// wires this with its real `VisionOCR`; tests that don't need OCR use
-    /// `.standard`.
+    /// The full registry including formats that require an OCR engine: PDF
+    /// (native page text with a per-page OCR fallback for scanned pages) and
+    /// images (Vision OCR → text + table blocks). The app wires this with its
+    /// real `VisionOCR`; tests that don't need OCR use `.standard`.
     public static func standard(ocr: any OCREngine) -> StructuralParserRegistry {
         StructuralParserRegistry(parsers: selfContainedParsers + [
-            PDFStructuralParser(ocr: ocr)
+            PDFStructuralParser(ocr: ocr),
+            ImageStructuralParser(ocr: ocr)
         ])
     }
 

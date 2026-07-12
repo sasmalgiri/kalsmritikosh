@@ -28,7 +28,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | ODS | `.ods` | Legacy | `SpreadsheetLoader` | flattened | prove before advertising |
 | MBOX | `.mbox` | Legacy (per-message KOs) | `EmailLoader` | per-message flattened | structural MBOX = follow-up |
 | EMLX (Apple Mail) | `.appleMail` | Legacy | `EmailLoader` | flattened | |
-| Images | `.png/.jpg/.heic/.tiff/.webp` | Legacy (OCR) | `ImageLoader`+`VisionOCR`+`TableOCR` | OCR text | A3.9: block/line boxes + confidence |
+| Images | `.png/.jpg/.heic/.tiff/.webp` | Structural | `ImageStructuralParser` | image container + paragraph-per-line + table/tableRow; line/row locator; OCR confidence | Vision OCR; word bboxes are a later refinement |
 | ZIP | `.zip` | Structural relations pending | `ArchiveLoader` | members re-ingested | security guards done (zip-bomb/slip); A3.12 member provenance |
 | Audio | `.mp3/.wav/.m4a/.aac` | **Deferred/experimental** | `AudioLoader`+ASR | transcript (no timecodes yet) | advertise only after timecoded evidence (A3.13) |
 | Video | `.mp4/.mov` | **Deferred/experimental** | `AudioLoader` | audio transcript only | NOT "video understanding" |
