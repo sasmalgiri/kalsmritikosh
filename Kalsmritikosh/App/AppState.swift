@@ -412,7 +412,21 @@ public final class AppState {
                 hardware: hardware,
                 benchmark: benchmark
             )
+            // P1.3 — release/internal provider split. The v1 CONSUMER release
+            // registers only on-device providers (Apple FoundationModels + the
+            // bundled llama.cpp reasoning + local embedding/reranker). Cloud,
+            // Ollama, MLX and user-BYO providers are INTERNAL-only: their code
+            // stays compiled (so this file builds identically), but they are not
+            // registered in release, so PrivacyGate/ReleaseReadiness can prove no
+            // cloud/off-device path can resolve. DEBUG builds keep everything.
+            #if DEBUG
+            let internalProvidersEnabled = true
+            #else
+            let internalProvidersEnabled = false
+            #endif
+
             await capabilities.register(FoundationModelsProvider())
+            if internalProvidersEnabled {
             await capabilities.register(
                 MLXProvider(
                     id: "provider.local.mlx.reasoning",
@@ -434,6 +448,7 @@ public final class AppState {
                     downloader: ModelDownloader()
                 )
             )
+            } // internalProvidersEnabled (MLX reasoning)
             await capabilities.register(LlamaCppProvider())
 
             // G2-3 — register user-supplied .gguf files persisted
@@ -486,11 +501,13 @@ public final class AppState {
                         requiresDownload: false,
                         tier: m.tier
                     )
-                    await capabilities.register(MLXProvider(
-                        id: m.id,
-                        manifest: manifest,
-                        downloader: ModelDownloader()
-                    ))
+                    if internalProvidersEnabled {
+                        await capabilities.register(MLXProvider(
+                            id: m.id,
+                            manifest: manifest,
+                            downloader: ModelDownloader()
+                        ))
+                    }
                 }
             }
             // Ollama is opt-in but on by default — when `ollama serve` is
@@ -522,7 +539,7 @@ public final class AppState {
             if setupSuggestion.action != .nothingNeeded {
                 KalsmritikoshLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
             }
-            if detectedOllama.isEmpty {
+            if internalProvidersEnabled, detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(
                     id: "provider.local.network",
                     baseURL: ollamaBase,
@@ -532,7 +549,7 @@ public final class AppState {
                     displayName: "Local Ollama (llama3:latest)",
                     tier: .medium
                 ))
-            } else {
+            } else if internalProvidersEnabled {
                 KalsmritikoshLog.app.info("Ollama discovery: \(detectedOllama.count, privacy: .public) model(s) installed")
                 for m in detectedOllama {
                     // Pull the actual context window from /api/show
@@ -555,7 +572,9 @@ public final class AppState {
                     ))
                 }
             }
-            await capabilities.register(CloudProvider())
+            if internalProvidersEnabled {
+                await capabilities.register(CloudProvider())
+            }
 
             // G2-3 — load user-supplied cloud endpoints. Each one
             // already carries a Keychain-resident API key from when
@@ -564,7 +583,7 @@ public final class AppState {
             // them and the resolver can route to a specific one.
             let cloudRegistry = CloudEndpointRegistry()
             let cloudEntries = await cloudRegistry.load()
-            if !cloudEntries.isEmpty {
+            if internalProvidersEnabled, !cloudEntries.isEmpty {
                 KalsmritikoshLog.app.info("Cloud BYO: \(cloudEntries.count, privacy: .public) endpoint(s)")
                 for endpoint in cloudEntries {
                     guard let key = await cloudRegistry.apiKey(for: endpoint.id) else {
