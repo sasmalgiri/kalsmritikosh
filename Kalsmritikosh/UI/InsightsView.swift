@@ -272,6 +272,14 @@ public struct InsightsView: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 8) {
+                // A5.6 — show the conflict type (date / amount / …) when typed.
+                if c.kind != .other {
+                    Text(c.kind.displayName)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.brandAlt.opacity(0.14), in: .capsule)
+                        .foregroundStyle(Theme.brandAlt)
+                }
                 severityPill(c.severity)
                 Button("Dismiss") { setStatus(c, .dismissed) }
                     .buttonStyle(.borderless)
