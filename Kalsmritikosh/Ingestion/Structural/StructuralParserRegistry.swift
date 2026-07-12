@@ -24,6 +24,7 @@ public struct StructuralParserRegistry: Sendable {
         DocxStructuralParser(),
         CSVStructuralParser(),
         XLSXStructuralParser(),
+        PPTXStructuralParser(),
         EmailStructuralParser()
     ])
 

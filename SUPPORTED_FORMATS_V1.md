@@ -21,7 +21,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | EML | `.eml` | Structural | `EmailStructuralParser` | header-per-field / body / attachment; message-id + header-field locator | quote-strip + multipart reused |
 | PDF | `.pdf` | Legacy → structural pending | `PDFLoader` | flattened text (+ scanned-PDF OCR) | A3.5: page blocks + OCR confidence + bboxes |
 | XLSX | `.xlsx` | Structural | `XLSXStructuralParser` | sheet + row (cells as JSON) per worksheet; sheet/row locator | OOXML shared-strings; deterministic table queries |
-| PPTX | `.pptx` | Legacy → structural pending | `PresentationLoader` | flattened | A3.10: slide/shape/notes |
+| PPTX | `.pptx` | Structural | `PPTXStructuralParser` | slideTitle / slideBody / slideNotes; slide + shape locator | title-placeholder aware; DrawingML runs; speaker notes |
 | EPUB | `.epub` | Legacy → structural pending | `EpubLoader` | flattened | A3.11 |
 | RTF | `.rtf` | Legacy | native | flattened | |
 | ODT | `.odt` | Legacy | `DocxLoader` | flattened | |
