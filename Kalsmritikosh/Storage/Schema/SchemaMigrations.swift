@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 36
+    public static let latestVersion = 37
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -73,7 +73,8 @@ public enum SchemaMigrations {
         (33, v33),
         (34, v34),
         (35, v35),
-        (36, v36)
+        (36, v36),
+        (37, v37)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1369,5 +1370,107 @@ public enum SchemaMigrations {
     // with a default so existing rows remain valid.
     private static let v36: String = """
     ALTER TABLE contradictions ADD COLUMN kind TEXT NOT NULL DEFAULT 'other';
+    """
+
+    // A1 (§6.3 / P3.0g) — canonical structural evidence layer. Additive: a file
+    // becomes a source_version whose ParsedDocument is stored as ordered, typed
+    // evidence_blocks with exact locators, plus a deterministic document_profile
+    // and a parser_run record. Legacy knowledge_objects/chunks remain; these
+    // tables become the authority as subsystems migrate. Nothing is dropped.
+    private static let v37: String = """
+    CREATE TABLE source_documents (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        logical_source_id  TEXT NOT NULL,
+        filename           TEXT NOT NULL,
+        detected_type      TEXT NOT NULL,
+        mime_type          TEXT,
+        content_hash       TEXT NOT NULL,
+        extraction_status  TEXT NOT NULL,
+        metadata           TEXT,
+        created_at         REAL NOT NULL
+    );
+
+    CREATE TABLE source_versions (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        logical_source_id  TEXT NOT NULL,
+        document_id        TEXT,
+        content_hash       TEXT NOT NULL,
+        supersedes         TEXT,
+        valid_from         REAL NOT NULL,
+        valid_to           REAL,
+        is_current         INTEGER NOT NULL DEFAULT 1,
+        original_url       TEXT,
+        created_at         REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_versions_logical ON source_versions(logical_source_id);
+    CREATE INDEX IF NOT EXISTS idx_source_versions_current ON source_versions(logical_source_id, is_current);
+
+    CREATE TABLE evidence_blocks (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        document_id           TEXT NOT NULL,
+        source_version_id     TEXT,
+        parent_block_id       TEXT,
+        ordinal               INTEGER NOT NULL,
+        kind                  TEXT NOT NULL,
+        raw_text              TEXT NOT NULL,
+        normalized_text       TEXT NOT NULL,
+        locator               TEXT,
+        extraction_method     TEXT NOT NULL,
+        extraction_confidence REAL NOT NULL,
+        language              TEXT,
+        attributes            TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_blocks_version ON evidence_blocks(source_version_id);
+    CREATE INDEX IF NOT EXISTS idx_blocks_document ON evidence_blocks(document_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_blocks_kind ON evidence_blocks(kind);
+    CREATE INDEX IF NOT EXISTS idx_blocks_parent ON evidence_blocks(parent_block_id);
+
+    CREATE TABLE evidence_block_edges (
+        id            TEXT PRIMARY KEY NOT NULL,
+        from_block_id TEXT NOT NULL,
+        to_block_id   TEXT NOT NULL,
+        relation      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_block_edges_from ON evidence_block_edges(from_block_id);
+
+    CREATE TABLE document_profiles (
+        source_version_id      TEXT PRIMARY KEY NOT NULL,
+        filename               TEXT NOT NULL,
+        detected_type          TEXT NOT NULL,
+        mime_type              TEXT,
+        content_hash           TEXT NOT NULL,
+        size_bytes             INTEGER NOT NULL DEFAULT 0,
+        parser                 TEXT NOT NULL,
+        parser_version         TEXT NOT NULL,
+        language               TEXT,
+        section_outline        TEXT,
+        first_meaningful_block TEXT,
+        block_count            INTEGER NOT NULL,
+        page_count             INTEGER,
+        sheet_count            INTEGER,
+        slide_count            INTEGER,
+        message_count          INTEGER,
+        attachment_count       INTEGER,
+        child_count            INTEGER,
+        extraction_status      TEXT NOT NULL,
+        warning_count          INTEGER NOT NULL DEFAULT 0,
+        extraction_confidence  REAL NOT NULL DEFAULT 1.0,
+        is_queryable           INTEGER NOT NULL DEFAULT 1,
+        created_at             REAL NOT NULL
+    );
+
+    CREATE TABLE parser_runs (
+        id                TEXT PRIMARY KEY NOT NULL,
+        source_version_id TEXT,
+        parser            TEXT NOT NULL,
+        parser_version    TEXT NOT NULL,
+        started_at        REAL NOT NULL,
+        ended_at          REAL,
+        status            TEXT NOT NULL,
+        block_count       INTEGER,
+        warning_count     INTEGER,
+        error             TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_parser_runs_version ON parser_runs(source_version_id);
     """
 }
