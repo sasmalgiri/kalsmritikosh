@@ -25,12 +25,13 @@ jobs:
 
       - name: Build (Debug)
         env:
-          # Reduce build noise; pretty-print errors only.
           NSUnbufferedIO: YES
         run: |
+          # pipefail so xcodebuild's real exit status propagates through tee —
+          # no `grep || true` masking the failure (A0.5 / spec §5.3).
           set -o pipefail
           xcodebuild \
-            -project Kalsmritikosh/Kalsmritikosh.xcodeproj \
+            -project Kalsmritikosh.xcodeproj \
             -scheme Kalsmritikosh \
             -configuration Debug \
             -destination 'platform=macOS' \
@@ -39,11 +40,29 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee build.log | grep -E "(error|warning):" || true
-          # Fail loudly if xcodebuild emitted any error.
-          if grep -qE "^.+: error:" build.log; then
-            echo "::error::xcodebuild reported errors"
-            exit 1
+            build 2>&1 | tee build.log
+
+      - name: Unit tests
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          set -o pipefail
+          # Run tests only once a test action is wired into the scheme (A0.6 is
+          # an Xcode/pbxproj step). Until then, report clearly instead of a
+          # false green — do NOT claim tests passed when none ran.
+          if xcodebuild -project Kalsmritikosh.xcodeproj -scheme Kalsmritikosh -showBuildSettings -json 2>/dev/null >/dev/null \
+             && xcodebuild -project Kalsmritikosh.xcodeproj -list 2>/dev/null | grep -q "KalsmritikoshTests"; then
+            xcodebuild \
+              -project Kalsmritikosh.xcodeproj \
+              -scheme Kalsmritikosh \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath build/derived \
+              -skipMacroValidation \
+              CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
+              test 2>&1 | tee test.log
+          else
+            echo "::warning::No KalsmritikoshTests target wired yet — tests NOT run (A0.6, Xcode step). This check is not a test pass."
           fi
 
       - name: Capability-discipline grep guard
@@ -79,10 +98,13 @@ jobs:
           fi
           echo "No try! / fatalError() in non-UI code."
 
-      - name: Upload build log on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
-          path: build.log
+          name: build-logs
+          path: |
+            build.log
+            test.log
           retention-days: 7
+          if-no-files-found: ignore
