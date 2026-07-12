@@ -21,6 +21,7 @@ The point of this file is to stop scope creep and re-debating decided things. If
 | Decision | Pick | Implication |
 |---|---|---|
 | **Reasoning model strategy** | Bundled on-device, **tiered by detected RAM** | `LlamaCppProvider` (currently stub) must be unstubbed. **Default bundled**: 3B (Llama 3.2 3B Q4_0, ~2 GB on disk, runs in 4-5 GB RAM) — ships with every install, works on the 8 GB hardware floor. **Optional in-app download**: 7-8B for users whose `HardwareProbe.totalRAMBytes` ≥ 16 GB — surfaced as "download better model" in Settings, free, no upsell. Capability registry picks the larger model automatically when present. No "install Ollama" friction for end users at any tier. Model names continue to live ONLY in `App/AppState.swift` per the architecture invariant. |
+| **Embedding model** | Bundled BGE-small-en-v1.5 (MIT), 384-dim Core ML (~130 MB) | Decided 13 Jul 2026. Replaces the NLEmbedding word-average fallback whose ceiling is below the locked precision goals. Reuses the existing BGE tokenizer + reranker infra. Dimension is FIXED corpus-wide (stored vectors must stay comparable) — it does NOT vary by device. A re-embedding migration re-vectorizes on model change; NLEmbedding stays only as a degraded last resort. |
 | **Answer UX** | G2-PROGRESSIVE — instant → stream → deep → verified | Spec in `GATE2_ROADMAP.md`. Visible trust contract: every phase shows its state tag in the bubble (`🕒 Quick read · verifying…` → `✎ Synthesizing…` → `🔍 Reading sources…` → Quality Strip locked). |
 | **Engine state at Gate 1 lock** | Partial G2-0 rollback (`7b23986`) | Shared retrieval kept (~15× wall-clock win on temporal/multihop). WorkerPool reverted 8→4. Multihop recall regressed to 0.54 vs Gate 1 lock 0.67 — accepted because the wall-clock win unblocks all subsequent G2 work; recall expected to recover with G2-1 reranker. |
 | **Toggle for users** | Fast/Accurate switch in Settings (deferred) | Lets users choose retrieval mode at query time. Spec to be drafted as a small Gate 2 item if precision/recall trade remains visible after G2-1. |
@@ -34,7 +35,7 @@ These derive from "Set C" but are restated here as binary checks:
 - [ ] Aggregation keyword-hit ≥ 0.8 (currently 0.50, gap closed by reranker + contextual retrieval + stronger bundled model)
 - [ ] Multi-hop retrieval recall ≥ 0.6 (currently 0.54 in partial G2-0, must recover to 0.67+)
 - [ ] Eval corpus expanded from 16 → 60 questions; numbers above re-verified at N=60
-- [ ] 1 TB real-archive stress test passes (ingestion completes, query latency holds, memory bounded) — requires G2-INGEST (two-pass + per-folder OCR opt-in)
+- [ ] 100 GB real-archive stress test passes (ingestion completes, query latency holds, memory bounded). **Revised 13 Jul 2026 from 1 TB → 100 GB:** the in-memory HNSW cannot credibly serve 1 TB on the 8 GB floor, and a disk-backed/sharded ANN is out of scope for v1. The marketed/tested corpus limit is 100 GB (matches the owner self-test). 1 TB + disk-backed ANN is deferred to v1.x. Do NOT market 1 TB.
 - [ ] PrivacyInfo.xcprivacy manifest present
 - [ ] Privacy Policy URL hosted, linked
 - [ ] Terms of Use / EULA hosted, linked
@@ -78,4 +79,6 @@ These derive from "Set C" but are restated here as binary checks:
 
 ---
 
-Last updated: 18 Jun 2026 — alongside Gate 1 baseline lock (`4bcf4e5`) + G2-0 partial rollback (`7b23986`) + G2-PROGRESSIVE spec (`e9486e9`).
+Last updated: 13 Jul 2026 — locked embedding model (BGE-small-en-v1.5), revised scale gate 1 TB → 100 GB, confirmed Llama-3.2-3B bundled default + Llama-3.1-8B optional (device-adaptive). See PROJECT_COMPLETION_INSTRUCTIONS.md for the phased task plan (#19–#45).
+
+Prior: 18 Jun 2026 — Gate 1 baseline lock (`4bcf4e5`) + G2-0 partial rollback (`7b23986`) + G2-PROGRESSIVE spec (`e9486e9`).
