@@ -83,7 +83,99 @@ public nonisolated struct ContradictionDetector: Sendable {
         return out
     }
 
+    /// A5.6 — SAME-EVENT AMOUNT CONFLICT. When two independent sources describe
+    /// what looks like the same financial event (same kind + normalized title)
+    /// but state materially different monetary amounts in the SAME currency,
+    /// that's an amount contradiction. Amounts live in `event.attributes`
+    /// (A5.3): `amount` (Double) + `currency` (ISO code). Cross-currency pairs
+    /// are NOT flagged — differing units aren't a disagreement. Two distinct
+    /// sources required; output capped.
+    ///
+    /// - Parameters:
+    ///   - events: candidate events (already fetched from the ledger).
+    ///   - relativeTolerance: fraction of the larger amount two values may
+    ///     differ by before it counts as a conflict (absorbs rounding). Default
+    ///     0.005 (0.5%).
+    ///   - limit: max contradictions returned.
+    public func detectEventAmountConflicts(
+        _ events: [Event],
+        relativeTolerance: Double = 0.005,
+        limit: Int = 50
+    ) -> [Contradiction] {
+        // Only events that actually carry a parsed amount can conflict.
+        let withAmount = events.compactMap { e -> (Event, Double, String)? in
+            guard let money = Self.amount(of: e) else { return nil }
+            return (e, money.value, money.currency)
+        }
+
+        // Group by (kind + normalized title) — proxy for "same financial event".
+        var groups: [String: [(Event, Double, String)]] = [:]
+        for item in withAmount {
+            let key = Self.normalizedTitle(item.0.title)
+            guard key.count >= 4 else { continue }
+            groups["\(item.0.kind.rawValue)|\(key)", default: []].append(item)
+        }
+
+        var out: [Contradiction] = []
+        for (_, group) in groups {
+            guard group.count >= 2 else { continue }
+            // Compare the smallest vs largest amount within the SAME currency.
+            let byCurrency = Dictionary(grouping: group, by: { $0.2 })
+            for (currency, sameCurrency) in byCurrency {
+                guard sameCurrency.count >= 2 else { continue }
+                let sorted = sameCurrency.sorted { $0.1 < $1.1 }
+                guard let low = sorted.first, let high = sorted.last else { continue }
+                guard low.0.sourceObjectID != high.0.sourceObjectID else { continue }
+                let diff = high.1 - low.1
+                let tolerance = max(high.1, low.1) * relativeTolerance
+                guard diff > tolerance else { continue }
+
+                out.append(Contradiction(
+                    kind: .amount,
+                    description: "Conflicting amounts for \"\(high.0.title)\"",
+                    claimA: "\(low.0.title): \(Self.renderAmount(low.1, currency))",
+                    claimB: "\(high.0.title): \(Self.renderAmount(high.1, currency))",
+                    evidenceA: low.0.sourceObjectID,
+                    evidenceB: high.0.sourceObjectID,
+                    severity: Self.amountSeverity(
+                        low: low.1, high: high.1,
+                        confidenceA: low.0.confidence, confidenceB: high.0.confidence
+                    )
+                ))
+                if out.count >= limit { break }
+            }
+            if out.count >= limit { break }
+        }
+        return out
+    }
+
     // MARK: Helpers
+
+    /// Pull the parsed amount + currency an event carries (A5.3), if any.
+    static func amount(of event: Event) -> (value: Double, currency: String)? {
+        guard case .double(let value)? = event.attributes["amount"]?.value else { return nil }
+        let currency: String
+        if case .string(let c)? = event.attributes["currency"]?.value { currency = c } else { currency = "" }
+        return (value, currency)
+    }
+
+    private static func renderAmount(_ value: Double, _ currency: String) -> String {
+        let n = value == value.rounded() ? String(format: "%.0f", value) : String(format: "%.2f", value)
+        return currency.isEmpty ? n : "\(currency) \(n)"
+    }
+
+    /// A larger relative gap between two confidently-stated amounts is more
+    /// severe than a tiny gap between shaky ones.
+    private static func amountSeverity(
+        low: Double, high: Double,
+        confidenceA: Confidence, confidenceB: Confidence
+    ) -> Contradiction.Severity {
+        let ratio = high > 0 ? (high - low) / high : 0
+        let bothConfident = confidenceA == .high && confidenceB == .high
+        if ratio > 0.25 && bothConfident { return .high }
+        if ratio > 0.05 { return .medium }
+        return .low
+    }
 
     /// A bigger disagreement between two confidently-dated sources is more
     /// severe than a few days' slip between shaky ones.

@@ -1639,12 +1639,15 @@ public final class AppState {
     public func scanForContradictions() async -> Int {
         guard let events, let contradictions else { return 0 }
         let recent = (try? await events.recent(limit: 2_000)) ?? []
-        let found = ContradictionDetector().detectEventDateConflicts(recent)
+        let detector = ContradictionDetector()
+        // A5.6 — date + amount detectors over the same event set.
+        let found = detector.detectEventDateConflicts(recent)
+            + detector.detectEventAmountConflicts(recent)
         await contradictions.clear()
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()
         self.proactiveContradictionCount = openCount
-        KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflicting-date pair(s)")
+        KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflict(s) (date + amount)")
         return found.count
     }
 
