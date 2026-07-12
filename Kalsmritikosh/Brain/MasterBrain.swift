@@ -400,7 +400,25 @@ public actor MasterBrain {
 
         // Fold the narrative into a VerifiedAnswer the legacy
         // callers (EvalKit, old UI) can consume unchanged.
-        let body = Self.foldNarrativeToBody(narrative)
+        var body = Self.foldNarrativeToBody(narrative)
+
+        // A7.1 / A7.3 — append the deterministic reconstruction outline
+        // (coverage + alternative accounts) beneath the prose. Kinded
+        // contradictions come from running the A5.6 detectors over the story's
+        // events (no repo needed), so the alternatives carry decisive-missing-
+        // evidence hints. Pure/no-LLM; additive text.
+        do {
+            let cd = ContradictionDetector()
+            let kinded = cd.detectEventDateConflicts(retrieval.events)
+                + cd.detectEventAmountConflicts(retrieval.events)
+                + cd.detectEventLocationConflicts(retrieval.events)
+                + cd.detectEventSignatureConflicts(retrieval.events)
+            let scope = intent.entityHints.first ?? "the archive"
+            let outline = ReconstructionOutlineBuilder().build(scope: scope, events: retrieval.events)
+            let alternatives = AlternativeHistoryBuilder().build(contradictions: kinded)
+            let addendum = ReconstructionOutlineRenderer().addendum(outline: outline, alternatives: alternatives)
+            if !addendum.isEmpty { body += "\n" + addendum }
+        }
         // Phase J.2 — global Contradiction Finder. Runs over the
         // retrieval set + the causal links touching it so date
         // conflicts that cross chapter boundaries, causal cycles,
