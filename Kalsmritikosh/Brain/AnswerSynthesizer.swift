@@ -13,12 +13,13 @@
 //  spends exactly that and no more, each pass its own session budgeted to
 //  Apple's fixed 4,096-token window:
 //
-//     .refine        — DRAFT only (1 call). Moderate questions.
-//     .deep          — DRAFT + one evidence-checked REFINE (2 calls) that
-//                      drops unsupported claims and reconciles contradictions.
-//                      Complex / contradictory / high-risk questions.
-//     .investigation — adds the parallel super-expert council before the
-//                      draft. Explicitly-requested deep analysis only.
+//     .groundedDraft               — DRAFT only (1 call). Moderate questions.
+//     .draftAndEvidenceCheck       — DRAFT + one evidence-checked REFINE
+//                                    (2 calls) that drops unsupported claims
+//                                    and reconciles contradictions. Complex /
+//                                    contradictory / high-risk questions.
+//     .councilDraftAndEvidenceCheck — adds the parallel super-expert council
+//                                    before the draft. Explicit deep only.
 //
 //  An ordinary question never reaches this type at all — the brain ships the
 //  verifier's grounded body without a synthesis call. Contract-safe: facts +
@@ -37,15 +38,15 @@ public struct AnswerSynthesizer: Sendable {
     /// MasterBrain's escalation ladder so an ordinary question never pays for
     /// depth it doesn't need (ledger-first minimum-LLM, Phase 4).
     public enum Depth: Sendable {
-        /// Moderate: one draft pass. 1 LLM call.
-        case refine
+        /// Moderate: one grounded draft pass. 1 LLM call.
+        case groundedDraft
         /// Complex (contradiction / high-risk): draft + one evidence-checked
         /// refine pass. 2 LLM calls.
-        case deep
+        case draftAndEvidenceCheck
         /// Exceptional (explicitly-requested deep analysis): adds the parallel
         /// super-expert council before the draft. Bounded so the whole answer
         /// still respects the hard 5-call ceiling.
-        case investigation
+        case councilDraftAndEvidenceCheck
     }
 
     public func synthesize(
@@ -53,7 +54,7 @@ public struct AnswerSynthesizer: Sendable {
         verifiedBody: String,
         citations: [VerifiedAnswer.Citation],
         capabilities: CapabilityRegistry,
-        depth: Depth = .refine,
+        depth: Depth = .groundedDraft,
         context: LLMRequestContext? = nil
     ) async -> String? {
         let findings = verifiedBody.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -73,7 +74,7 @@ public struct AnswerSynthesizer: Sendable {
         // findings/evidence. (Mixtral-style: gate → parallel experts →
         // combine — combination happens in the draft/refine below.)
         var councilBlock = ""
-        if depth == .investigation, FeatureFlags.moeCouncilValue() {
+        if depth == .councilDraftAndEvidenceCheck, FeatureFlags.moeCouncilValue() {
             let perspectives = await ExpertCouncil().deliberate(
                 question: question,
                 findings: boundedFindings,
@@ -130,7 +131,7 @@ public struct AnswerSynthesizer: Sendable {
         } else {
             refineAllowed = true
         }
-        if (depth == .deep || depth == .investigation), refineAllowed {
+        if (depth == .draftAndEvidenceCheck || depth == .councilDraftAndEvidenceCheck), refineAllowed {
             let refineSystem = """
             You are a strict evidence editor. Rewrite the DRAFT so every \
             statement is supported by the findings/evidence: drop or correct \

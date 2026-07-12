@@ -919,9 +919,9 @@ public actor MasterBrain {
            !verified.refused, !verified.citations.isEmpty {
             let depth: AnswerSynthesizer.Depth
             switch escalation {
-            case .none, .moderate: depth = .refine
-            case .complex:         depth = .deep
-            case .investigation:   depth = .investigation
+            case .none, .moderate: depth = .groundedDraft
+            case .complex:         depth = .draftAndEvidenceCheck
+            case .investigation:   depth = .councilDraftAndEvidenceCheck
             }
             synthesizedBody = await AnswerSynthesizer().synthesize(
                 question: question,
