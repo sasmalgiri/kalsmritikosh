@@ -67,6 +67,10 @@ public actor IngestCoordinator {
     /// nil = structural layer not populated (no regression to the KO path).
     private let evidenceStore: EvidenceStore?
     private let structuralRegistry: StructuralParserRegistry?
+    /// A5.1 — when wired, structural blocks yield directly-observed Assertions
+    /// (the claim–evidence ledger between EvidenceBlocks and typed rows). nil =
+    /// assertion ledger not populated from ingest (no regression).
+    private let assertions: AssertionsRepository?
     /// G2-QA-PAIRS — optional. When wired AND the loader produced ≥2
     /// KOs per file (e.g. an mbox), the QA-pair extractor runs after
     /// the per-KO loop and persists summarised pairs for retrieval.
@@ -125,10 +129,12 @@ public actor IngestCoordinator {
         pipelineMetrics: PipelineMetrics? = nil,
         custody: CustodyRepository? = nil,
         evidenceStore: EvidenceStore? = nil,
-        structuralRegistry: StructuralParserRegistry? = nil
+        structuralRegistry: StructuralParserRegistry? = nil,
+        assertions: AssertionsRepository? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
+        self.assertions = assertions
         self.custody = custody
         self.loaders = loaders
         self.cleaner = cleaner
@@ -204,8 +210,58 @@ public actor IngestCoordinator {
                 makeCurrent: true, startedAt: started
             )
             KalsmritikoshLog.ingestion.info("Structural: \(doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .public)")
+            // A5.1 — derive directly-observed assertions from the typed blocks.
+            if let assertions {
+                await deriveAssertions(from: doc, sourceVersionID: versionID,
+                                       extractorVersion: parser.parserVersion, into: assertions)
+            }
         } catch {
             KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// A5.1 — turn high-signal typed EvidenceBlocks into directly-observed
+    /// Assertions, each carrying the exact block it came from, its verbatim
+    /// quote, and the source version that asserted it. Email header fields and
+    /// document titles are facts the block IS (not inferences), so they land as
+    /// `.directlyObserved`. This populates the claim–evidence ledger from
+    /// structure; richer subject/predicate/object derivation is A5.3. Best-
+    /// effort: a failure here never fails the ingest.
+    private func deriveAssertions(
+        from doc: ParsedDocument, sourceVersionID: UUID,
+        extractorVersion: String, into assertions: AssertionsRepository
+    ) async {
+        for block in doc.blocks {
+            let predicate: String
+            switch block.kind {
+            case .emailHeader:
+                guard let field = block.locator.emailHeaderField, !field.isEmpty else { continue }
+                predicate = "email_\(field)"
+            case .documentTitle:
+                predicate = "document_title"
+            default:
+                continue
+            }
+            let value = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let assertion = Assertion(
+                subjectKind: .claim,
+                subjectID: sourceVersionID,
+                predicate: predicate,
+                object: .literal(value),
+                confidence: block.extractionConfidence,
+                evidenceBlockIDs: [block.id],
+                directQuote: block.rawText,
+                assertingSourceID: sourceVersionID,
+                provenance: .directlyObserved,
+                extractorVersion: extractorVersion,
+                agent: "system.structural"
+            )
+            do {
+                try await assertions.insert(assertion)
+            } catch {
+                KalsmritikoshLog.ingestion.error("Assertion insert failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 

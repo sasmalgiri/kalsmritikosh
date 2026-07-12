@@ -392,6 +392,9 @@ public final class AppState {
             // A2 — structural evidence store + parser registry (canonical typed
             // blocks, populated additively during ingest).
             let evidenceStoreRepo = EvidenceStore(database: db)
+            // A5.1 — assertion ledger, constructed here so the ingest path can
+            // derive directly-observed assertions from structural blocks.
+            let assertionsRepo = AssertionsRepository(database: db)
 
             // ── Routing (CapabilityRegistry) ─────────────────────────
             let hardware = HardwareProbe.probe()
@@ -889,7 +892,8 @@ public final class AppState {
                 pipelineMetrics: pipelineMetricsActor,
                 custody: custodyRepo,
                 evidenceStore: evidenceStoreRepo,
-                structuralRegistry: .standard(ocr: VisionOCR())
+                structuralRegistry: .standard(ocr: VisionOCR()),
+                assertions: assertionsRepo
             )
 
             // ── Concurrency + Live wiring ────────────────────────────
@@ -1277,7 +1281,7 @@ public final class AppState {
                 events: events,
                 versions: eventVersionsRepo
             )
-            self.assertions = AssertionsRepository(database: db)
+            self.assertions = assertionsRepo
             // Phase J.13 — live observability. The pipeline-metrics
             // actor was created earlier (above the IngestCoordinator)
             // so the ingest path could be wired with it; here we just
