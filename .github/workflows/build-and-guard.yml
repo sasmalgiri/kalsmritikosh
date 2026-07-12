@@ -17,10 +17,17 @@ jobs:
         with:
           lfs: false
 
-      - name: Select Xcode (latest stable on macos-15 runner)
+      - name: Select Xcode (newest available on the runner)
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          # The default Xcode's SDK (15.5.99) is older than the project's local
+          # toolchain (15.6 SDK), which surfaces toolchain-only errors (stricter
+          # concurrency, Charts result-builder availability). Pick the NEWEST
+          # Xcode the runner has so CI matches the build that's green locally.
+          echo "Available Xcodes:"; ls -d /Applications/Xcode*.app 2>/dev/null
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
           xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
           swift --version
 
       - name: Build (Debug)
