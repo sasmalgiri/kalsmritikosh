@@ -22,7 +22,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | PDF | `.pdf` | Structural | `PDFStructuralParser` | paragraph blocks; page + paragraphIndex locator; OCR pages flagged (method + confidence) | native text + per-page OCR fallback (mojibake-aware); word bboxes are a later refinement |
 | XLSX | `.xlsx` | Structural | `XLSXStructuralParser` | sheet + row (cells as JSON) per worksheet; sheet/row locator | OOXML shared-strings; deterministic table queries |
 | PPTX | `.pptx` | Structural | `PPTXStructuralParser` | slideTitle / slideBody / slideNotes; slide + shape locator | title-placeholder aware; DrawingML runs; speaker notes |
-| EPUB | `.epub` | Legacy → structural pending | `EpubLoader` | flattened | A3.11 |
+| EPUB | `.epub` | Structural | `EPUBStructuralParser` | documentTitle / sectionHeading / paragraph / listItem / quote in reading order; sectionPath + chapter member locator | OPF spine order; XHTML reading-order walk |
 | RTF | `.rtf` | Legacy | native | flattened | |
 | ODT | `.odt` | Legacy | `DocxLoader` | flattened | |
 | ODS | `.ods` | Legacy | `SpreadsheetLoader` | flattened | prove before advertising |
