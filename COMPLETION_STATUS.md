@@ -46,8 +46,11 @@ _Build: green. Not runtime-verified end-to-end._
 Parse-once, ingest_runs, per-file transaction, file versioning, universal locator,
 parent-child provenance, unsupported/failed states, resume. None implemented.
 
-## P4 — Parser support matrix — NOT_STARTED
-No SUPPORTED_FORMATS_V1.md; loaders unchanged; P4.11 ZIP-bomb defenses pending.
+## P4 — Parser support matrix
+| Task | State |
+|---|---|
+| P4.11 ZIP security | IMPLEMENTED (zip-bomb / entry-flood / zip-slip guards in expandZIP) |
+| P4.1–P4.10 (format matrix, PDF/DOCX/XLSX/PPTX/email/image/AV locators) | NOT_STARTED |
 
 ## P5 — Ledger semantics
 | Task | State |
@@ -56,16 +59,19 @@ No SUPPORTED_FORMATS_V1.md; loaders unchanged; P4.11 ZIP-bomb defenses pending.
 | P5.2 assertions first-class | NOT_STARTED |
 | P5.3 event extraction fixes | NOT_STARTED |
 | P5.4 canonical entities | PARTIAL (dedup exists; language detect/merge-split review not) |
-| P5.5 contradiction taxonomy | NOT_STARTED (date-only) |
+| P5.5 contradiction taxonomy | PARTIAL (Kind enum + v36 persistence; only date detector tags kind — other detectors pending) |
 | P5.6 missing-evidence taxonomy | PARTIAL (gap rules exist; not full taxonomy) |
 | P5.7 human review | PARTIAL (fact_reviews append-only exists) |
 | P5.8 answer ledger (atomic claims) | PARTIAL (derived_objects v35 stores whole-answer claim, not per-sentence) |
 | P5.9 custody | PARTIAL (custody_events exists) |
 
-## P6 — Retrieval — mostly NOT_STARTED
-Direct-evidence-first fusion, entity-pollution fix, independent ANN discovery,
-sentence-embedding upgrade — not done. Privilege filtering PARTIAL. Reranker ladder
-default already deterministic (done). CommunitySummarizer daily-default disable pending.
+## P6 — Retrieval
+| Task | State |
+|---|---|
+| P6.4 privilege filtering | IMPLEMENTED (chunks + events + entities + relations) |
+| P6.5 disable daily CommunitySummarizer | IMPLEMENTED (gated off in release profile) |
+| P6.7 deterministic reranker default | DONE (ladder = Core ML cross-encoder) |
+| P6.1 direct-evidence-first / P6.2 entity pollution / P6.3 ANN discovery / P6.6 sentence embeddings / P6.8 table path / P6.9 corroboration | NOT_STARTED |
 
 ## P7 — Reconstruction
 | Task | State |
@@ -104,7 +110,8 @@ Apple Developer account and hardware.
 ---
 
 ### Honest summary
-- **Done & solid:** P1 (hard minimum-LLM), P0.3–P0.5, P7.4/P7.5, P11.3.
+- **Done & solid:** P1 (hard minimum-LLM incl. P1.3/P1.6), P0.3–P0.5, P4.11, P5.5(partial),
+  P6.4/P6.5/P6.7, P7.4/P7.5, P11.3.
 - **Biggest blocker:** P2.2 bundled `LlamaCppProvider` — until done, the app needs Ollama,
   breaking the locked v1 promise. Requires an owner model/licence decision first (P2.1).
 - **Large greenfield:** P3, P4, P6, P8 are subsystems, not tweaks — realistically weeks each.
