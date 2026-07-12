@@ -30,6 +30,12 @@ jobs:
           # pipefail so xcodebuild's real exit status propagates through tee —
           # no `grep || true` masking the failure (A0.5 / spec §5.3).
           set -o pipefail
+          # MACOSX_DEPLOYMENT_TARGET override: the pbxproj targets 15.6 but the
+          # runner's SDK maxes at 15.5.99, which breaks the availability checker
+          # (Charts result builders, etc.). Override to 15.0 for the CI build
+          # only — no pbxproj edit; the proper fix is C0 (correct the pbxproj
+          # deployment target with Xcode closed). The app needs macOS 15 for
+          # FoundationModels; newer APIs are behind #available guards.
           xcodebuild \
             -project Kalsmritikosh.xcodeproj \
             -scheme Kalsmritikosh \
@@ -37,6 +43,7 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath build/derived \
             -skipMacroValidation \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
@@ -59,6 +66,7 @@ jobs:
               -destination 'platform=macOS' \
               -derivedDataPath build/derived \
               -skipMacroValidation \
+              MACOSX_DEPLOYMENT_TARGET=15.0 \
               CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
               test 2>&1 | tee test.log
           else
