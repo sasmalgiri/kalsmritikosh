@@ -62,6 +62,11 @@ public actor MasterBrain {
     /// with provenance, so the corpus of derived knowledge grows across
     /// sessions. nil = not persisted (behaviour otherwise unchanged).
     private let derivedObjects: DerivedObjectsRepository?
+    /// A5.9 — atomic per-claim answer ledger. When wired, every shipped answer
+    /// is persisted as a first-class answer + claim + claim→evidence contract
+    /// (fire-and-forget), so "Why this answer?" and audits can reconstruct it.
+    /// nil = not persisted (behaviour otherwise unchanged).
+    private let answerLedger: AnswerLedgerRepository?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -80,7 +85,8 @@ public actor MasterBrain {
         eventsRepo: EventsRepository? = nil,
         eventLinks: EventLinksRepository? = nil,
         onDemandDistiller: MemoryDistiller? = nil,
-        derivedObjects: DerivedObjectsRepository? = nil
+        derivedObjects: DerivedObjectsRepository? = nil,
+        answerLedger: AnswerLedgerRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -96,6 +102,7 @@ public actor MasterBrain {
         self.eventLinks = eventLinks
         self.onDemandDistiller = onDemandDistiller
         self.derivedObjects = derivedObjects
+        self.answerLedger = answerLedger
     }
 
     /// Fire-and-forget: persist an answer's verified claims as derived ledger
@@ -117,6 +124,19 @@ public actor MasterBrain {
                 extractorVersion: "answer.v1",
                 confidence: answer.confidence.value
             ))
+        }
+    }
+
+    /// A5.9 — fire-and-forget: persist the shipped answer as a first-class
+    /// answer + claim + claim→evidence contract, so the answer can later be
+    /// replayed to its supporting files/chunks/events. Never blocks the answer;
+    /// skips refusals and empty-citation answers (nothing to audit).
+    private func persistAnswerLedger(question: String, answer: VerifiedAnswer) {
+        guard let answerLedger, !answer.refused, !answer.citations.isEmpty else { return }
+        Task.detached(priority: .utility) {
+            _ = try? await answerLedger.persist(
+                question: question, answer: answer, corpusSnapshotID: nil
+            )
         }
     }
 
@@ -936,6 +956,9 @@ public actor MasterBrain {
         // §16 — persist the verified answer as a derived ledger object (with
         // provenance) so derived knowledge compounds across sessions.
         persistDerived(tagged, purposes: trace.expertIDs)
+        // A5.9 — also persist it to the atomic answer ledger (answer + claim +
+        // claim→evidence) so the answer is auditable/replayable.
+        persistAnswerLedger(question: question, answer: tagged)
         return tagged
     }
 

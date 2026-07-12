@@ -761,7 +761,8 @@ public final class AppState {
                 eventsRepo: events,
                 eventLinks: eventLinksRepo,
                 onDemandDistiller: memoryDistiller,
-                derivedObjects: derivedObjectsRepo
+                derivedObjects: derivedObjectsRepo,
+                answerLedger: answerLedgerRepo
             )
 
             // ── Ingestion ────────────────────────────────────────────
