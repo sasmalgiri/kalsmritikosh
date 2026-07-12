@@ -35,7 +35,7 @@ These derive from "Set C" but are restated here as binary checks:
 - [ ] Aggregation keyword-hit ≥ 0.8 (currently 0.50, gap closed by reranker + contextual retrieval + stronger bundled model)
 - [ ] Multi-hop retrieval recall ≥ 0.6 (currently 0.54 in partial G2-0, must recover to 0.67+)
 - [ ] Eval corpus expanded from 16 → 60 questions; numbers above re-verified at N=60
-- [ ] 100 GB real-archive stress test passes (ingestion completes, query latency holds, memory bounded). **Revised 13 Jul 2026 from 1 TB → 100 GB:** the in-memory HNSW cannot credibly serve 1 TB on the 8 GB floor, and a disk-backed/sharded ANN is out of scope for v1. The marketed/tested corpus limit is 100 GB (matches the owner self-test). 1 TB + disk-backed ANN is deferred to v1.x. Do NOT market 1 TB.
+- [ ] Adaptive-scale stress test passes. **Revised 13 Jul 2026 (dual-mode, dynamic):** the app supports BOTH scales via an automatic index-strategy selector — in-memory HNSW for corpora that fit the device RAM budget, and a disk-backed/sharded ANN (mmap segments, bounded working set, lazy shard load, folder/time segmentation) for corpora that don't. The selector chooses by (estimated vector footprint) vs (HardwareProbe RAM × safety fraction), with a manual override in Settings, and migrates the index when the corpus crosses the threshold. **Marketing rule:** ship saying "tested to 100 GB" (the owner self-test) until a real 1 TB stress run passes on owner hardware; only then may copy say "up to 1 TB." The disk-backed ANN is the largest single engineering item and REQUIRES owner-hardware validation before the 1 TB claim.
 - [ ] PrivacyInfo.xcprivacy manifest present
 - [ ] Privacy Policy URL hosted, linked
 - [ ] Terms of Use / EULA hosted, linked
@@ -79,6 +79,6 @@ These derive from "Set C" but are restated here as binary checks:
 
 ---
 
-Last updated: 13 Jul 2026 — locked embedding model (BGE-small-en-v1.5), revised scale gate 1 TB → 100 GB, confirmed Llama-3.2-3B bundled default + Llama-3.1-8B optional (device-adaptive). See PROJECT_COMPLETION_INSTRUCTIONS.md for the phased task plan (#19–#45).
+Last updated: 13 Jul 2026 — locked embedding model (BGE-small-en-v1.5), adopted DUAL-MODE dynamic scale (in-memory HNSW ↔ disk-backed/sharded ANN, auto-selected by corpus size × device RAM; 100 GB marketed until 1 TB proven on owner hardware), confirmed Llama-3.2-3B bundled default + Llama-3.1-8B optional (device-adaptive). See PROJECT_COMPLETION_INSTRUCTIONS.md for the phased task plan (#19–#46).
 
 Prior: 18 Jun 2026 — Gate 1 baseline lock (`4bcf4e5`) + G2-0 partial rollback (`7b23986`) + G2-PROGRESSIVE spec (`e9486e9`).
