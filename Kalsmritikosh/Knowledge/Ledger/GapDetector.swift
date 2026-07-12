@@ -125,6 +125,49 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Referenced attachments (A5.7)
+
+    /// Affirmative "there is an attachment" phrases. Deliberately excludes bare
+    /// "attachment" (too many false hits like "email attachment policy").
+    private static let attachmentPhrases: [String] = [
+        "see attached", "please find attached", "find attached", "attached please find",
+        "i have attached", "i've attached", "we have attached", "we've attached",
+        "attached is", "attached are", "attached you will find", "attached herewith",
+        "as attached", "the attached", "enclosed please find", "please find enclosed",
+        "please see the attached", "attaching"
+    ]
+
+    /// A5.7 — flag messages that reference an attachment in their body but were
+    /// ingested with no attachment. Absence ≠ wrongdoing: the export may simply
+    /// have omitted the file. Low confidence, individually reasoned. Skips
+    /// messages whose text explicitly negates the attachment ("no attachment").
+    ///
+    /// - Parameter emails: per-message (objectID, body text, whether an
+    ///   attachment was ingested with it).
+    public func detectMissingAttachments(
+        emails: [(objectID: UUID, body: String, hasAttachment: Bool)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        var gaps: [GapNode] = []
+        for email in emails {
+            guard !email.hasAttachment else { continue }
+            let lower = email.body.lowercased()
+            // Explicit negation guard — "no attachment", "not attached".
+            if lower.contains("no attachment") || lower.contains("not attached")
+                || lower.contains("without attachment") { continue }
+            guard let phrase = Self.attachmentPhrases.first(where: { lower.contains($0) }) else { continue }
+            gaps.append(GapNode(
+                kind: .referencedAttachment,
+                description: "A message references an attachment that isn't in the archive",
+                reason: "the body says \"\(phrase)\" but no attachment was ingested with this message — it matters because the referenced file may hold the actual evidence (an invoice, contract, or signed page). Absence here is not proof of wrongdoing; the export may have omitted it.",
+                confidence: 0.3,
+                evidenceObjectID: email.objectID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Thread parents
 
     /// Detect replies/forwards whose original message wasn't ingested.

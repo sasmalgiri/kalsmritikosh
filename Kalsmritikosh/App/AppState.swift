@@ -1624,10 +1624,17 @@ public final class AppState {
                     return (objectID: row.id, subject: s, hasParent: hasParent)
                 }
             found += detector.detectThreadParent(replySubjects: replySubjects)
+
+            // Rule 4 (A5.7) — messages that reference an attachment that
+            // wasn't ingested with them.
+            let emailRows = sample
+                .filter(\.isEmail)
+                .map { (objectID: $0.id, body: $0.content, hasAttachment: $0.hasAttachment) }
+            found += detector.detectMissingAttachments(emails: emailRows)
         }
 
         await gapNodes.insertMany(found)
-        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent)")
+        KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment)")
         return found.count
     }
 
@@ -1656,15 +1663,23 @@ public final class AppState {
     private func loadObjectSample(
         objects: KnowledgeObjectRepository,
         limit: Int
-    ) async -> [(id: UUID, content: String, subject: String?)] {
+    ) async -> [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool)] {
         let ids = (try? await objects.allIDs(offset: 0, pageSize: limit)) ?? []
-        var out: [(id: UUID, content: String, subject: String?)] = []
+        var out: [(id: UUID, content: String, subject: String?, isEmail: Bool, hasAttachment: Bool)] = []
         out.reserveCapacity(ids.count)
         for id in ids {
             guard let obj = (try? await objects.load(id: id)) ?? nil else { continue }
             var subject: String?
             if case .string(let s)? = obj.metadata["subject"]?.value { subject = s }
-            out.append((id: obj.id, content: obj.content, subject: subject))
+            // A5.7 — attachment presence: EmailLoader stores ingested attachment
+            // URLs as a JSON array under this key; a non-"[]" value means ≥1.
+            var hasAttachment = false
+            if case .string(let json)? = obj.metadata[EmailLoader.attachmentURLsMetaKey]?.value {
+                let trimmed = json.trimmingCharacters(in: .whitespacesAndNewlines)
+                hasAttachment = !trimmed.isEmpty && trimmed != "[]"
+            }
+            out.append((id: obj.id, content: obj.content, subject: subject,
+                        isEmail: obj.sourceType.category == .email, hasAttachment: hasAttachment))
         }
         return out
     }

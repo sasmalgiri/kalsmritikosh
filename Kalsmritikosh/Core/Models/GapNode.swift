@@ -29,24 +29,30 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     case danglingReference
     /// A break in an established periodic cadence (monthly report, etc.).
     case cadenceBreak
+    /// A5.7 — a message references an attachment ("see attached") but no
+    /// attachment was ingested with it. Absence ≠ wrongdoing: the file may
+    /// simply not have been included in the export.
+    case referencedAttachment
 
     /// Short label shown in the UI.
     public var displayName: String {
         switch self {
-        case .threadParent:      return "Missing Original"
-        case .sequenceHole:      return "Sequence Gap"
-        case .danglingReference: return "Dangling Reference"
-        case .cadenceBreak:      return "Cadence Break"
+        case .threadParent:         return "Missing Original"
+        case .sequenceHole:         return "Sequence Gap"
+        case .danglingReference:    return "Dangling Reference"
+        case .cadenceBreak:         return "Cadence Break"
+        case .referencedAttachment: return "Missing Attachment"
         }
     }
 
     /// SF Symbol name for the gap row.
     public var systemImage: String {
         switch self {
-        case .threadParent:      return "arrowshape.turn.up.left"
-        case .sequenceHole:      return "number.square"
-        case .danglingReference: return "link.badge.plus"
-        case .cadenceBreak:      return "calendar.badge.exclamationmark"
+        case .threadParent:         return "arrowshape.turn.up.left"
+        case .sequenceHole:         return "number.square"
+        case .danglingReference:    return "link.badge.plus"
+        case .cadenceBreak:         return "calendar.badge.exclamationmark"
+        case .referencedAttachment: return "paperclip.badge.ellipsis"
         }
     }
 }
