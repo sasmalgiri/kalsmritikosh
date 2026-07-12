@@ -180,7 +180,29 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
         for link in links.prefix(4) {
             guard let si = idxByID[link.sourceEventID],
                   let ti = idxByID[link.targetEventID] else { continue }
-            phrases.append("[E\(si)] \(link.relation.renderVerb) [E\(ti)]")
+            // A7.2 — hedge the causal verb by the link's evidentiary state so
+            // adjacency isn't rendered as established causation. Source-stated /
+            // human-confirmed links read assertively; rule/model candidates are
+            // marked tentative ("may have …").
+            let verb = link.relation.renderVerb
+            let phrase: String
+            // Temporal-only relations (.followed) are never hedged — they state
+            // sequence, not causation. Only causal relations hedge by state.
+            if !link.relation.isCausal {
+                phrase = "[E\(si)] \(verb) [E\(ti)]"
+            } else {
+                switch link.state {
+                case .sourceStated, .humanConfirmed:
+                    phrase = "[E\(si)] \(verb) [E\(ti)]"
+                case .ruleSupported:
+                    phrase = "[E\(si)] may have \(verb) [E\(ti)]"
+                case .modelProposed:
+                    phrase = "[E\(si)] possibly \(verb) [E\(ti)] (unverified)"
+                case .rejected:
+                    continue
+                }
+            }
+            phrases.append(phrase)
             citedObjectIDs.append(contentsOf: link.evidenceObjectIDs)
             citedEventIDs.append(link.sourceEventID)
             citedEventIDs.append(link.targetEventID)

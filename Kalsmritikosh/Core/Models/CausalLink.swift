@@ -199,4 +199,33 @@ public nonisolated struct CausalLink: Codable, Sendable, Hashable, Identifiable 
         self.createdAt = createdAt
         self.supersededBy = supersededBy
     }
+
+    /// A7.2 — the evidentiary state of a causal claim, per the reconstruction
+    /// honesty contract. "Adjacency ≠ causation": a heuristic (rule-supported)
+    /// link is a candidate, not a fact; only a source stating the causation or
+    /// a human confirming it carries real authority. Derived from `source` +
+    /// supersession, so no separate column is needed.
+    public enum State: String, Sendable, Hashable, Codable {
+        /// A source document states the causation ("X because Y").
+        case sourceStated = "SOURCE_STATED"
+        /// A deterministic rule / heuristic proposed it (candidate only).
+        case ruleSupported = "RULE_SUPPORTED"
+        /// A model proposed it (lowest trust).
+        case modelProposed = "MODEL_PROPOSED"
+        /// A human reviewer confirmed it.
+        case humanConfirmed = "HUMAN_CONFIRMED"
+        /// Superseded / withdrawn (kept for history, not asserted).
+        case rejected = "REJECTED"
+    }
+
+    /// A7.2 — the causal-link state, mapped from its source + supersession.
+    public var state: State {
+        if supersededBy != nil { return .rejected }
+        switch source {
+        case .lexicalTrigger:       return .sourceStated
+        case .user:                 return .humanConfirmed
+        case .llm:                  return .modelProposed
+        case .heuristic, .ontology: return .ruleSupported
+        }
+    }
 }
