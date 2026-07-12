@@ -22,8 +22,8 @@ struct EmailParserTests {
     Let's meet on Thursday.
     """
 
-    @Test func headerAndBodyBlocks() throws {
-        let doc = try EmailStructuralParser().parse(
+    @Test func headerAndBodyBlocks() async throws {
+        let doc = try await EmailStructuralParser().parse(
             data: Data(sample.utf8), filename: "m.eml", type: .eml,
             logicalSourceID: UUID(), sourceVersionID: UUID()
         )

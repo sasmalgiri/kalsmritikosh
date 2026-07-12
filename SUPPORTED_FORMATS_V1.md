@@ -19,7 +19,7 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | DOCX | `.docx` | Structural | `DocxStructuralParser` | title/heading/list/paragraph/table/tableRow; section path; header/footer boilerplate | native OOXML |
 | CSV | `.csv` | Structural | `CSVStructuralParser` | sheet + row (cells as JSON); sheet/row locator | RFC-4180; deterministic table queries |
 | EML | `.eml` | Structural | `EmailStructuralParser` | header-per-field / body / attachment; message-id + header-field locator | quote-strip + multipart reused |
-| PDF | `.pdf` | Legacy → structural pending | `PDFLoader` | flattened text (+ scanned-PDF OCR) | A3.5: page blocks + OCR confidence + bboxes |
+| PDF | `.pdf` | Structural | `PDFStructuralParser` | paragraph blocks; page + paragraphIndex locator; OCR pages flagged (method + confidence) | native text + per-page OCR fallback (mojibake-aware); word bboxes are a later refinement |
 | XLSX | `.xlsx` | Structural | `XLSXStructuralParser` | sheet + row (cells as JSON) per worksheet; sheet/row locator | OOXML shared-strings; deterministic table queries |
 | PPTX | `.pptx` | Structural | `PPTXStructuralParser` | slideTitle / slideBody / slideNotes; slide + shape locator | title-placeholder aware; DrawingML runs; speaker notes |
 | EPUB | `.epub` | Legacy → structural pending | `EpubLoader` | flattened | A3.11 |

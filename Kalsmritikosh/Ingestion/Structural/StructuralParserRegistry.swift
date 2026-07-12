@@ -17,16 +17,30 @@ public struct StructuralParserRegistry: Sendable {
         self.parsers = parsers
     }
 
-    /// The default v1 registry — every format that currently has a real
-    /// structural parser. Formats not listed here fall back to the legacy path.
-    public static let standard = StructuralParserRegistry(parsers: [
+    /// Format parsers that need no injected dependency (pure, deterministic).
+    private static let selfContainedParsers: [StructuralParser] = [
         PlainTextStructuralParser(),
         DocxStructuralParser(),
         CSVStructuralParser(),
         XLSXStructuralParser(),
         PPTXStructuralParser(),
         EmailStructuralParser()
-    ])
+    ]
+
+    /// The default v1 registry — every format with a dependency-free structural
+    /// parser. Formats not listed here fall back to the legacy path. Use
+    /// `standard(ocr:)` to additionally get OCR-backed formats (PDF, images).
+    public static let standard = StructuralParserRegistry(parsers: selfContainedParsers)
+
+    /// The full registry including formats that require an OCR engine (PDF —
+    /// native page text with a per-page OCR fallback for scanned pages). The app
+    /// wires this with its real `VisionOCR`; tests that don't need OCR use
+    /// `.standard`.
+    public static func standard(ocr: any OCREngine) -> StructuralParserRegistry {
+        StructuralParserRegistry(parsers: selfContainedParsers + [
+            PDFStructuralParser(ocr: ocr)
+        ])
+    }
 
     /// The parser for a source type, or nil (→ legacy KnowledgeObject path).
     public nonisolated func parser(for type: SourceType) -> StructuralParser? {

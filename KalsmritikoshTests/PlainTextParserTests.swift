@@ -12,14 +12,14 @@ import Foundation
 
 struct PlainTextParserTests {
 
-    private func parseMarkdown(_ md: String) throws -> ParsedDocument {
-        try PlainTextStructuralParser().parse(
+    private func parseMarkdown(_ md: String) async throws -> ParsedDocument {
+        try await PlainTextStructuralParser().parse(
             data: Data(md.utf8), filename: "doc.md", type: .markdown,
             logicalSourceID: UUID(), sourceVersionID: UUID()
         )
     }
 
-    @Test func markdownBlockKindsAndOrder() throws {
+    @Test func markdownBlockKindsAndOrder() async throws {
         let md = """
         # Project Delta
 
@@ -36,7 +36,7 @@ struct PlainTextParserTests {
         code here
         ```
         """
-        let doc = try parseMarkdown(md)
+        let doc = try await parseMarkdown(md)
         let kinds = doc.blocks.map(\.kind)
         #expect(kinds.first == .documentTitle)
         #expect(kinds.contains(.sectionHeading))
@@ -48,8 +48,8 @@ struct PlainTextParserTests {
         #expect(doc.blocks.map(\.ordinal) == Array(0..<doc.blocks.count))
     }
 
-    @Test func sectionPathTracksHeadings() throws {
-        let doc = try parseMarkdown("# Title\n\n## Scope\n\nBody text here.")
+    @Test func sectionPathTracksHeadings() async throws {
+        let doc = try await parseMarkdown("# Title\n\n## Scope\n\nBody text here.")
         let body = doc.blocks.first { $0.kind == .paragraph }
         #expect(body?.locator.sectionPath?.contains("Scope") == true)
     }
@@ -63,8 +63,8 @@ struct PlainTextParserTests {
         #expect(!PlainTextStructuralParser.isListItem("not a list"))
     }
 
-    @Test func emptyInputIsEmptyStatus() throws {
-        let doc = try parseMarkdown("   \n  \n")
+    @Test func emptyInputIsEmptyStatus() async throws {
+        let doc = try await parseMarkdown("   \n  \n")
         #expect(doc.extractionStatus == .empty)
         #expect(doc.blocks.isEmpty)
     }

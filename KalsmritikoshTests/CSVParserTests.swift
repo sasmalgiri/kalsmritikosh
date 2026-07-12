@@ -20,9 +20,9 @@ struct CSVParserTests {
         #expect(rows[2] == ["He said \"hi\"", "ok"])
     }
 
-    @Test func structuredBlocksCarryCells() throws {
+    @Test func structuredBlocksCarryCells() async throws {
         let csv = "id,amount\n1,100\n2,250"
-        let doc = try CSVStructuralParser().parse(
+        let doc = try await CSVStructuralParser().parse(
             data: Data(csv.utf8), filename: "invoices.csv", type: .csv,
             logicalSourceID: UUID(), sourceVersionID: UUID()
         )
@@ -40,8 +40,8 @@ struct CSVParserTests {
         }
     }
 
-    @Test func emptyCSVIsEmptyStatus() throws {
-        let doc = try CSVStructuralParser().parse(
+    @Test func emptyCSVIsEmptyStatus() async throws {
+        let doc = try await CSVStructuralParser().parse(
             data: Data("\n\n".utf8), filename: "x.csv", type: .csv,
             logicalSourceID: UUID(), sourceVersionID: UUID()
         )

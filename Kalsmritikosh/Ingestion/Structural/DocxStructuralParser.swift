@@ -25,7 +25,7 @@ public struct DocxStructuralParser: StructuralParser {
         type: SourceType,
         logicalSourceID: UUID,
         sourceVersionID: UUID
-    ) throws -> ParsedDocument {
+    ) async throws -> ParsedDocument {
         let documentID = UUID()
         let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
 

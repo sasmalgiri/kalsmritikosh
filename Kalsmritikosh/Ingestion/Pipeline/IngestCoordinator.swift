@@ -193,7 +193,7 @@ public actor IngestCoordinator {
         guard let data = try? Data(contentsOf: url) else { return }
         let started = Date()
         let versionID = UUID()
-        guard let doc = try? parser.parse(
+        guard let doc = try? await parser.parse(
             data: data, filename: url.lastPathComponent, type: type,
             logicalSourceID: fileID, sourceVersionID: versionID
         ) else { return }

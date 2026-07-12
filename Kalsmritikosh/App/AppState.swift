@@ -889,7 +889,7 @@ public final class AppState {
                 pipelineMetrics: pipelineMetricsActor,
                 custody: custodyRepo,
                 evidenceStore: evidenceStoreRepo,
-                structuralRegistry: .standard
+                structuralRegistry: .standard(ocr: VisionOCR())
             )
 
             // ── Concurrency + Live wiring ────────────────────────────

@@ -25,5 +25,5 @@ public protocol StructuralParser: Sendable {
         type: SourceType,
         logicalSourceID: UUID,
         sourceVersionID: UUID
-    ) throws -> ParsedDocument
+    ) async throws -> ParsedDocument
 }
