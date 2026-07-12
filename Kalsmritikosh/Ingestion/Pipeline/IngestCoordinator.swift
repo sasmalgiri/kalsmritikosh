@@ -787,7 +787,7 @@ public actor IngestCoordinator {
                     annotate(entity, source: .structuredHeader)
                 })
             }
-            let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked)) ?? []
+            let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)) ?? []
             raw.append(contentsOf: nerExtracted.map { entity in
                 annotate(entity, source: .ner)
             })

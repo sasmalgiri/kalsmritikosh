@@ -16,13 +16,32 @@ public struct NLEntityExtractor: EntityExtractor {
 
     public func extractEntities(
         from object: KnowledgeObject,
-        chunks: [Chunk]
+        chunks: [Chunk],
+        blocks: [EvidenceBlock]
     ) async throws -> [Entity] {
         var entities: [Entity] = []
         entities.append(contentsOf: extractNLTagger(object))
         entities.append(contentsOf: extractDetectors(object))
         entities.append(contentsOf: extractRegex(object))
-        return entities
+        return Self.attachSourceBlocks(to: entities, blocks: blocks)
+    }
+
+    /// A5.4 — attach `sourceBlockIDs` (up to 5) to each entity by matching its
+    /// mention text against block normalized text, so a mention's provenance is
+    /// the specific block it occurs in. Pure; returns entities unchanged when no
+    /// blocks are supplied or no match is found. `static` so it's testable.
+    static func attachSourceBlocks(to entities: [Entity], blocks: [EvidenceBlock]) -> [Entity] {
+        guard !blocks.isEmpty else { return entities }
+        let normalized = blocks.map { (id: $0.id, text: $0.normalizedText.lowercased()) }
+        return entities.map { entity in
+            let mention = (entity.normalizedValue ?? entity.value).lowercased()
+            guard mention.count >= 3 else { return entity }
+            let matches = normalized.filter { $0.text.contains(mention) }.prefix(5).map(\.id)
+            guard !matches.isEmpty else { return entity }
+            return entity.addingAttributes([
+                "sourceBlockIDs": AnyCodable(.array(matches.map { .string($0.uuidString) }))
+            ])
+        }
     }
 
     // MARK: - NLTagger

@@ -48,6 +48,17 @@ public struct Entity: Codable, Identifiable, Hashable, Sendable {
         self.qualityTier = qualityTier
     }
 
+    /// A5.4 — return a copy with extra attributes merged in (new keys win).
+    /// Used to attach mention source-block provenance after extraction without
+    /// threading it through every construction site.
+    public nonisolated func addingAttributes(_ extra: [String: AnyCodable]) -> Entity {
+        Entity(
+            id: id, kind: kind, value: value, normalizedValue: normalizedValue,
+            sourceObjectID: sourceObjectID, sourceRange: sourceRange, confidence: confidence,
+            attributes: attributes.merging(extra) { _, new in new }, qualityTier: qualityTier
+        )
+    }
+
     public enum Kind: String, Codable, CaseIterable, Sendable {
         // People
         case person

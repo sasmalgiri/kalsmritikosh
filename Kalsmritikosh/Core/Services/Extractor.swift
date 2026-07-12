@@ -10,10 +10,25 @@
 import Foundation
 
 public protocol EntityExtractor: Sendable {
+    /// A5.4 — `blocks` are the source's structural EvidenceBlocks (empty when
+    /// the structural layer isn't wired). When present, each extracted entity is
+    /// linked to the block(s) where its mention occurs, preserving mention
+    /// provenance instead of only the whole-document source id.
+    func extractEntities(
+        from object: KnowledgeObject,
+        chunks: [Chunk],
+        blocks: [EvidenceBlock]
+    ) async throws -> [Entity]
+}
+
+public extension EntityExtractor {
+    /// Backward-compatible overload for call sites with no structural blocks.
     func extractEntities(
         from object: KnowledgeObject,
         chunks: [Chunk]
-    ) async throws -> [Entity]
+    ) async throws -> [Entity] {
+        try await extractEntities(from: object, chunks: chunks, blocks: [])
+    }
 }
 
 public protocol EventExtractor: Sendable {
