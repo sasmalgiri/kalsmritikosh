@@ -22,6 +22,12 @@ public nonisolated enum FactStatus: String, Codable, Sendable, CaseIterable, Has
     /// Directly visible in reliable structured evidence (e.g. an email
     /// header timestamp, a From/To field). The strongest category.
     case proven
+    /// A5.5 — a human reviewer accepted / corrected / affirmed this fact.
+    /// Deliberately DISTINCT from `.proven`: a person vouching for a fact is
+    /// not the same as the fact being structurally proven from evidence. The
+    /// honesty contract requires the UI to show "Confirmed by you", never
+    /// promote it to "Proven".
+    case humanConfirmed
     /// Reconstructed from evidence rather than directly asserted — a derived
     /// or likely event. Real, but the app owns the inference.
     case inferred
@@ -36,22 +42,24 @@ public nonisolated enum FactStatus: String, Codable, Sendable, CaseIterable, Has
     /// Short label shown on the status chip and the tab counts.
     public var displayName: String {
         switch self {
-        case .proven:       return "Proven"
-        case .inferred:     return "Inferred"
-        case .contradicted: return "Contradicted"
-        case .missing:      return "Missing"
-        case .unverified:   return "Unverified"
+        case .proven:        return "Proven"
+        case .humanConfirmed: return "Confirmed by you"
+        case .inferred:      return "Inferred"
+        case .contradicted:  return "Contradicted"
+        case .missing:       return "Missing"
+        case .unverified:    return "Unverified"
         }
     }
 
     /// SF Symbol for the status chip.
     public var systemImage: String {
         switch self {
-        case .proven:       return "checkmark.seal.fill"
-        case .inferred:     return "wand.and.stars"
-        case .contradicted: return "exclamationmark.triangle.fill"
-        case .missing:      return "questionmark.square.dashed"
-        case .unverified:   return "circle.dotted"
+        case .proven:        return "checkmark.seal.fill"
+        case .humanConfirmed: return "person.crop.circle.badge.checkmark"
+        case .inferred:      return "wand.and.stars"
+        case .contradicted:  return "exclamationmark.triangle.fill"
+        case .missing:       return "questionmark.square.dashed"
+        case .unverified:    return "circle.dotted"
         }
     }
 }

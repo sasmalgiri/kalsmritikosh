@@ -78,26 +78,26 @@ public struct FactStatusClassifier: Sendable {
     static func applyReview(_ item: FactStatusItem, _ review: FactReview) -> FactStatusItem {
         let suffix = review.reason.map { " — \($0)" } ?? "."
         let who = review.reviewer
+        // A5.5 — reviewer affirmations become `.humanConfirmed`, NOT `.proven`.
+        // A person vouching for a fact is not the same as the fact being
+        // structurally proven; the honesty contract keeps them distinct.
         switch review.action {
         case .accept:
-            return item.overriding(status: .proven, reason: "Accepted by reviewer (\(who))\(suffix)")
+            return item.overriding(status: .humanConfirmed, reason: "Accepted by reviewer (\(who))\(suffix)")
         case .correct:
             let corrected = review.newValue.map { " New value: \($0)." } ?? ""
-            return item.overriding(status: .proven, reason: "Corrected by reviewer (\(who))\(suffix)\(corrected)")
-        // A5.8 — corrective/affirming actions leave the fact human-confirmed.
-        // "Human-confirmed" is NOT the same as "proven true" (spec A5.5); the
-        // status carries the reviewer attribution so the UI can say so.
+            return item.overriding(status: .humanConfirmed, reason: "Corrected by reviewer (\(who))\(suffix)\(corrected)")
         case .merge:
-            return item.overriding(status: .proven, reason: "Merged by reviewer (\(who))\(suffix)")
+            return item.overriding(status: .humanConfirmed, reason: "Merged by reviewer (\(who))\(suffix)")
         case .split:
-            return item.overriding(status: .proven, reason: "Split by reviewer (\(who))\(suffix)")
+            return item.overriding(status: .humanConfirmed, reason: "Split by reviewer (\(who))\(suffix)")
         case .precisionChange:
             let nv = review.newValue.map { " New value: \($0)." } ?? ""
-            return item.overriding(status: .proven, reason: "Precision changed by reviewer (\(who))\(suffix)\(nv)")
+            return item.overriding(status: .humanConfirmed, reason: "Precision changed by reviewer (\(who))\(suffix)\(nv)")
         case .resolveContradiction:
-            return item.overriding(status: .proven, reason: "Contradiction resolved by reviewer (\(who))\(suffix)")
+            return item.overriding(status: .humanConfirmed, reason: "Contradiction resolved by reviewer (\(who))\(suffix)")
         case .markAuthority:
-            return item.overriding(status: .proven, reason: "Marked authoritative by reviewer (\(who))\(suffix)")
+            return item.overriding(status: .humanConfirmed, reason: "Marked authoritative by reviewer (\(who))\(suffix)")
         case .reject:
             return item.overriding(status: .unverified, reason: "Rejected by reviewer (\(who))\(suffix) Kept for the record.")
         case .dismissGap:

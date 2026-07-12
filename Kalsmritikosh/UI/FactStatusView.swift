@@ -328,11 +328,12 @@ public struct FactStatusView: View {
     /// Foundation-only.
     private func color(for status: FactStatus) -> Color {
         switch status {
-        case .proven:       return .green
-        case .inferred:     return Theme.brandAlt
-        case .contradicted: return .red
-        case .missing:      return .orange
-        case .unverified:   return .secondary
+        case .proven:        return .green
+        case .humanConfirmed: return .mint   // affirmed by a person, distinct from structurally proven
+        case .inferred:      return Theme.brandAlt
+        case .contradicted:  return .red
+        case .missing:       return .orange
+        case .unverified:    return .secondary
         }
     }
 
