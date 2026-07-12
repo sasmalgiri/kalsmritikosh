@@ -220,15 +220,35 @@ public actor HybridRetriever: Retriever {
             hints: intent.entityHints
         )
 
-        // T18 (§21) — withhold chunks from privileged sources before the
-        // result is assembled. No-op unless something is actually privileged.
-        let visibleChunks = await excludingPrivileged(collectedChunks)
+        // T18/P6.4 (§21) — withhold EVERYTHING sourced from a privileged
+        // KnowledgeObject before the result is assembled: chunks, events,
+        // entities, and relationships all carry `sourceObjectID`, so all four
+        // layers are filtered (was: chunks only). No-op unless something is
+        // actually privileged.
+        let privileged = await privilegedObjectIDSet()
+        let visibleChunks = privileged.isEmpty ? collectedChunks
+            : collectedChunks.filter { !privileged.contains($0.chunk.objectID) }
+        let visibleEvents = privileged.isEmpty ? boostedEvents
+            : boostedEvents.filter { !privileged.contains($0.sourceObjectID) }
+        let visibleEntities = privileged.isEmpty ? collectedEntities
+            : collectedEntities.filter { !privileged.contains($0.sourceObjectID) }
+        let visibleRelationships = privileged.isEmpty ? collectedRelationships
+            : collectedRelationships.filter { !privileged.contains($0.sourceObjectID) }
+        if !privileged.isEmpty {
+            let withheld = (collectedChunks.count - visibleChunks.count)
+                + (boostedEvents.count - visibleEvents.count)
+                + (collectedEntities.count - visibleEntities.count)
+                + (collectedRelationships.count - visibleRelationships.count)
+            if withheld > 0 {
+                KalsmritikoshLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) item(s) across chunks/events/entities/relations (§21).")
+            }
+        }
 
         return assemble(
             chunks: visibleChunks,
-            events: boostedEvents,
-            entities: collectedEntities,
-            relationships: collectedRelationships,
+            events: visibleEvents,
+            entities: visibleEntities,
+            relationships: visibleRelationships,
             summaries: collectedSummaries,
             layers: usedLayers,
             shortCircuit: nil,
@@ -236,18 +256,12 @@ public actor HybridRetriever: Retriever {
         )
     }
 
-    /// Drop chunks whose parent KnowledgeObject is privileged. Guarded so it
-    /// costs nothing when no objects repo is wired or nothing is privileged.
-    private func excludingPrivileged(_ chunks: [RetrievedChunk]) async -> [RetrievedChunk] {
-        guard let objects else { return chunks }
-        let privileged = (try? await objects.privilegedObjectIDs()) ?? []
-        guard !privileged.isEmpty else { return chunks }
-        let filtered = chunks.filter { !privileged.contains($0.chunk.objectID) }
-        let withheld = chunks.count - filtered.count
-        if withheld > 0 {
-            KalsmritikoshLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) chunk(s) from retrieval (§21).")
-        }
-        return filtered
+    /// The set of privileged KnowledgeObject IDs. Guarded so it costs nothing
+    /// when no objects repo is wired or nothing is privileged.
+    private func privilegedObjectIDSet() async -> Set<KnowledgeObject.ID> {
+        guard let objects else { return [] }
+        let ids = (try? await objects.privilegedObjectIDs()) ?? []
+        return Set(ids)
     }
 
     /// Re-orders events by 5W+H slot relevance:
