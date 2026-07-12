@@ -66,11 +66,17 @@ public enum LegalNotice {
     """
 
     public static let thirdPartyStatement = """
-    Built with Apple frameworks (Vision, Speech, Natural Language, Core ML). Semantic \
-    search uses an on-device BGE embedding/reranker model. Optional local generation uses \
-    Ollama, and optional cloud generation uses the provider you configure. Respective \
-    licences and terms apply.
+    Built with Apple frameworks (Vision, Speech, Natural Language, Core ML). On-device \
+    reasoning is Built with Llama (Meta Llama 3.2 / 3.1, under the Llama Community \
+    Licence). Semantic search uses on-device BGE embedding + reranker models (MIT). All \
+    processing is on-device; respective model licences and third-party notices apply and \
+    ship with the app.
     """
+
+    /// Required attribution for the bundled reasoning model (Meta Llama Community
+    /// Licence). Surfaced in Settings → Legal & Privacy and About. See
+    /// MODEL_ATTRIBUTIONS.md for the full obligation set.
+    public static let modelAttribution = "Built with Llama"
 
     /// Shown once in Settings so the operator knows this is template copy.
     public static let counselNote = """
