@@ -102,6 +102,19 @@ public struct RuleEventExtractor: EventExtractor {
 
         for (kind, markers) in rules {
             for marker in markers where content.contains(marker) {
+                // A5.3 — event-specific attributes. Financial events carry the
+                // monetary amount + currency parsed from the source text so the
+                // ledger stores a comparable quantity (this is the data the
+                // A5.6 amount-contradiction detector needs; without it there is
+                // nothing to compare). The verbatim match is kept as amountRaw
+                // for provenance.
+                var attributes: [String: AnyCodable] = [:]
+                if kind == .invoiceIssued || kind == .invoicePaid,
+                   let money = Self.extractAmount(from: object.content) {
+                    attributes["amount"] = AnyCodable(.double(money.value))
+                    attributes["currency"] = AnyCodable(.string(money.currency))
+                    attributes["amountRaw"] = AnyCodable(.string(money.raw))
+                }
                 events.append(.init(
                     kind: kind,
                     date: primaryDate,
@@ -111,6 +124,7 @@ public struct RuleEventExtractor: EventExtractor {
                     sourceObjectID: object.id,
                     confidence: .medium,
                     dateConfidence: dateConfidence,
+                    attributes: attributes,
                     qualityTier: .t2, // Body-text rule match — Phase A.5
                     datePrecision: .day // Body-text dates: day precision; the marker phrase rarely carries time
                 ))
@@ -237,6 +251,66 @@ public struct RuleEventExtractor: EventExtractor {
         }
 
         return events
+    }
+
+    // MARK: - A5.3 amount extraction
+
+    private static let symbolToCode: [String: String] = [
+        "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "₹": "INR"
+    ]
+    private static let currencyCodes = ["USD", "EUR", "GBP", "JPY", "INR", "CAD", "AUD", "CHF", "CNY"]
+
+    // Symbol-prefixed ($1,200.50), code-prefixed (USD 1,200), code-suffixed
+    // (1,200 USD). Amount group allows thousands separators + optional cents.
+    private static let amountSymbolRegex = try? NSRegularExpression(
+        pattern: #"([$€£¥₹])\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)"#
+    )
+    private static let amountCodePrefixRegex = try? NSRegularExpression(
+        pattern: #"\b(USD|EUR|GBP|JPY|INR|CAD|AUD|CHF|CNY)\s?([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)"#,
+        options: [.caseInsensitive]
+    )
+    private static let amountCodeSuffixRegex = try? NSRegularExpression(
+        pattern: #"\b([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\s?(USD|EUR|GBP|JPY|INR|CAD|AUD|CHF|CNY)\b"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Parse the first monetary amount in the text. Returns the numeric value
+    /// (thousands separators removed), the ISO currency code, and the verbatim
+    /// matched string. Deterministic; nil when no amount is present.
+    static func extractAmount(from text: String) -> (value: Double, currency: String, raw: String)? {
+        let ns = text as NSString
+        let range = NSRange(location: 0, length: ns.length)
+
+        func numeric(_ s: String) -> Double? {
+            Double(s.replacingOccurrences(of: ",", with: ""))
+        }
+
+        // Take whichever form matches earliest in the text so the "first
+        // amount" is stable regardless of notation.
+        var best: (loc: Int, value: Double, currency: String, raw: String)?
+        func consider(_ loc: Int, _ value: Double, _ currency: String, _ raw: String) {
+            if best == nil || loc < best!.loc {
+                best = (loc, value, currency, raw)
+            }
+        }
+
+        if let rx = amountSymbolRegex, let m = rx.firstMatch(in: text, range: range),
+           let value = numeric(ns.substring(with: m.range(at: 2))) {
+            let sym = ns.substring(with: m.range(at: 1))
+            consider(m.range.location, value, symbolToCode[sym] ?? "USD", ns.substring(with: m.range))
+        }
+        if let rx = amountCodePrefixRegex, let m = rx.firstMatch(in: text, range: range),
+           let value = numeric(ns.substring(with: m.range(at: 2))) {
+            let code = ns.substring(with: m.range(at: 1)).uppercased()
+            consider(m.range.location, value, code, ns.substring(with: m.range))
+        }
+        if let rx = amountCodeSuffixRegex, let m = rx.firstMatch(in: text, range: range),
+           let value = numeric(ns.substring(with: m.range(at: 1))) {
+            let code = ns.substring(with: m.range(at: 2)).uppercased()
+            consider(m.range.location, value, code, ns.substring(with: m.range))
+        }
+        guard let best else { return nil }
+        return (best.value, best.currency, best.raw)
     }
 
     // MARK: - G2-COMMITMENTS-REFRESH helpers
