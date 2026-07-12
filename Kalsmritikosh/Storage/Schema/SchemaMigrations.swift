@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 39
+    public static let latestVersion = 40
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -76,7 +76,8 @@ public enum SchemaMigrations {
         (36, v36),
         (37, v37),
         (38, v38),
-        (39, v39)
+        (39, v39),
+        (40, v40)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1499,5 +1500,14 @@ public enum SchemaMigrations {
     private static let v39: String = """
     ALTER TABLE fact_reviews ADD COLUMN reversal_of TEXT;
     CREATE INDEX IF NOT EXISTS idx_fact_reviews_reversal ON fact_reviews(reversal_of);
+    """
+
+    // A5.9 / A5.10 — answer→block replay. A claim_evidence row for an event
+    // citation records the event's supporting EvidenceBlock ids (JSON array, so
+    // multiple blocks fit one row without changing the composite PK), extending
+    // the audit chain answer → claim → event → block → locator → source version.
+    // Additive, nullable — older rows leave it NULL.
+    private static let v40: String = """
+    ALTER TABLE claim_evidence ADD COLUMN block_ids TEXT;
     """
 }

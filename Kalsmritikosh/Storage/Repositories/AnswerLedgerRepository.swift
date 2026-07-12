@@ -105,21 +105,45 @@ public actor AnswerLedgerRepository {
         ])
 
         for citation in answer.citations {
+            // A5.9 / A5.10 — for event citations, resolve the event's supporting
+            // EvidenceBlock ids (A5.3) so the row completes the replay chain
+            // answer → claim → event → block → locator → source version.
+            var blockIDsJSON: String?
+            if let eventID = citation.eventID {
+                let ids = await blockIDs(forEvent: eventID)
+                if !ids.isEmpty, let data = try? JSONEncoder().encode(ids) {
+                    blockIDsJSON = String(data: data, encoding: .utf8)
+                }
+            }
             try await database.exec("""
             INSERT OR IGNORE INTO claim_evidence
-                (claim_id, object_id, chunk_id, event_id, entity_id, evidence_role)
-            VALUES (?, ?, ?, ?, ?, ?);
+                (claim_id, object_id, chunk_id, event_id, entity_id, evidence_role, block_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(claimID),
                 .uuid(citation.objectID),
                 citation.chunkID.map { .uuid($0) } ?? .null,
                 citation.eventID.map { .uuid($0) } ?? .null,
                 .null,
-                .text("supports")
+                .text("supports"),
+                blockIDsJSON.map { .text($0) } ?? .null
             ])
         }
 
         return answerID
+    }
+
+    /// A5.3-linked block ids an event cites, read from `events.attributes_json`
+    /// (`sourceBlockIDs`). Empty when the event predates the structural layer or
+    /// no block matched. Transparent JSON (AnyCodable is a single-value codec).
+    private func blockIDs(forEvent eventID: UUID) async -> [String] {
+        let rows = (try? await database.query(
+            "SELECT attributes_json FROM events WHERE id = ? LIMIT 1;", [.uuid(eventID)]
+        )) ?? []
+        guard let json = rows.first?.string(0), let data = json.data(using: .utf8),
+              let attrs = try? JSONDecoder().decode([String: AnyCodable].self, from: data),
+              case .array(let arr)? = attrs["sourceBlockIDs"]?.value else { return [] }
+        return arr.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
     }
 
     public func recent(limit: Int = 100) async throws -> [StoredAnswer] {
