@@ -1049,7 +1049,14 @@ public final class AppState {
                 entities: entities,
                 capabilities: capabilities
             )
-            await communitySummarizer.start()
+            // P6.5 — do NOT run the daily unbounded community summarizer by
+            // default: it is silent background LLM maintenance, which the v1
+            // release profile forbids (silentLLMBackgroundMaintenanceEnabled =
+            // false). Community summaries should be generated lazily when the
+            // user opens a topic. Kept wired for internal builds only.
+            if ReleaseCapabilityProfile.v1.silentLLMBackgroundMaintenanceEnabled {
+                await communitySummarizer.start()
+            }
 
             // G3.8 — one-shot ontology backfill. Walks every entity /
             // event row whose `fact_type` is NULL (post-v11 migration)
