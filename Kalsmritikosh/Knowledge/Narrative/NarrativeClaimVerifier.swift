@@ -62,6 +62,15 @@ public nonisolated struct NarrativeClaimVerifier: Sendable {
                 // Ungrounded — drop.
                 continue
             }
+            // A7.4 — precision-not-exaggerated. A sentence may not state a clock
+            // time unless a cited event is actually minute/instant precision;
+            // otherwise it's the "false 08:00 AM for a month-precision event"
+            // anti-pattern. Drop rather than ship an invented time.
+            let citedEvents = events.filter { validIDs.contains($0.id) }
+            let finestPrecision = citedEvents.map(\.datePrecision.rawValue).max() ?? 0
+            if finestPrecision < DatePrecision.minute.rawValue, Self.statesClockTime(sentence) {
+                continue
+            }
             keptSentences.append(sentence)
             let avgConf = average(events.filter { validIDs.contains($0.id) }
                 .map { $0.dateConfidence * $0.qualityTier.defaultWeight })
@@ -142,5 +151,19 @@ public nonisolated struct NarrativeClaimVerifier: Sendable {
     private func average(_ values: [Double]) -> Double {
         guard !values.isEmpty else { return 0.5 }
         return values.reduce(0, +) / Double(values.count)
+    }
+
+    // A7.4 — clock-time detector: "9:00", "09:12", "9 a.m.", "3 PM", "o'clock".
+    private static let clockTimeRegex = try? NSRegularExpression(
+        pattern: #"\b\d{1,2}:\d{2}\b|\b\d{1,2}\s?(?:a\.?m\.?|p\.?m\.?)\b|\bo'?clock\b"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Whether a sentence states a time of day (a precision claim finer than a
+    /// calendar day). Pure/testable.
+    static func statesClockTime(_ sentence: String) -> Bool {
+        guard let rx = clockTimeRegex else { return false }
+        let ns = sentence as NSString
+        return rx.firstMatch(in: sentence, range: NSRange(location: 0, length: ns.length)) != nil
     }
 }
