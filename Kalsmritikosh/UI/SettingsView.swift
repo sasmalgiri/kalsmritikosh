@@ -388,6 +388,9 @@ public struct SettingsView: View {
                     .textSelection(.enabled)
             }
 
+            // A4 — synthetic questions are internal/debug-only; the rebuild
+            // control is not shown in consumer release.
+            #if DEBUG
             Divider().padding(.vertical, 4)
 
             Text("Rebuild synthetic questions — runs the heuristic generator over chunks of KOs ingested BEFORE the G2 wiring landed. Populates synthetic_questions + its FTS index so the question-shaped retrieval layer can match. No LLM calls; runs in seconds. Idempotent — KOs that already have questions are skipped.")
@@ -410,6 +413,7 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+            #endif
 
             Divider().padding(.vertical, 4)
 

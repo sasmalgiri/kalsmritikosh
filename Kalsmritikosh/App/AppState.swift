@@ -594,6 +594,17 @@ public final class AppState {
             // ingest (writes) and retrieval (reads). One Database actor
             // → one source of truth for both surfaces.
             let syntheticQuestionsRepo = SyntheticQuestionsRepository(database: db)
+            // A4 — synthetic questions are OUT of the v1 consumer-release
+            // ingest + retrieval path (no generative-adjacent projection during
+            // normal ingest). Retained for INTERNAL/DEBUG builds only. This one
+            // lever nils the repo everywhere it's wired (ingest generation,
+            // retrieval FTS union), so release performs zero synthetic-question
+            // work and the row count never grows on normal ingest.
+            #if DEBUG
+            let releaseSyntheticQuestions: SyntheticQuestionsRepository? = syntheticQuestionsRepo
+            #else
+            let releaseSyntheticQuestions: SyntheticQuestionsRepository? = nil
+            #endif
             let qaPairsRepo = QAPairsRepository(database: db)
             // G3.10 — typed-bonds repo. Ingest writes per-KO bonds;
             // future schema-aware retrieval (Phase 4) and the
@@ -608,6 +619,7 @@ public final class AppState {
             let memoryHashCache = MemoryHashCache()
             let entityTimelineCache = EntityTimeline()
             let entityTrieCache = EntityTrie()
+            // A4 — retrieval does not query synthetic-question projections in release.
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -617,7 +629,7 @@ public final class AppState {
                 graph: graph,
                 vectors: vectors,
                 embedder: embedder,
-                syntheticQuestions: syntheticQuestionsRepo,
+                syntheticQuestions: releaseSyntheticQuestions,
                 qaPairs: qaPairsRepo,
                 bondWalker: BondWalker(repository: factBondsRepo, cache: bondCache),
                 walkExplainer: WalkExplainer(entities: entities, events: events, cache: bondCache),
@@ -757,10 +769,14 @@ public final class AppState {
             // archive complete in minutes instead of hours. The queue
             // drains in its own detached Task; the ingest path enqueues
             // and moves on.
-            let synthQueue = SyntheticQuestionQueue(
-                generator: HeuristicSyntheticQuestionGenerator(),
-                repository: syntheticQuestionsRepo
-            )
+            // A4 — nil in release (releaseSyntheticQuestions is nil), so the
+            // ingest path never enqueues or generates synthetic questions.
+            let synthQueue: SyntheticQuestionQueue? = releaseSyntheticQuestions.map {
+                SyntheticQuestionQueue(
+                    generator: HeuristicSyntheticQuestionGenerator(),
+                    repository: $0
+                )
+            }
 
             // G2-3 — derive chunk size from the resolved reasoning
             // provider's manifest (contextWindow + minRAMBytes) AND
@@ -827,8 +843,8 @@ public final class AppState {
                 events: events,
                 relationships: relationships,
                 vectors: vectors,
-                syntheticQuestions: syntheticQuestionsRepo,
-                syntheticQuestionGenerator: HeuristicSyntheticQuestionGenerator(),
+                syntheticQuestions: releaseSyntheticQuestions,
+                syntheticQuestionGenerator: releaseSyntheticQuestions == nil ? nil : HeuristicSyntheticQuestionGenerator(),
                 synthQueue: synthQueue,
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
