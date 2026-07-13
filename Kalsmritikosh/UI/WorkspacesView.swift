@@ -137,6 +137,7 @@ public struct WorkspacesView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     detailHeader(ws)
                     membershipStrip
+                    templateSection(ws)
                     tagsSection(ws)
                     savedViewsSection(ws)
                     Spacer(minLength: 8)
@@ -206,6 +207,45 @@ public struct WorkspacesView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
+        .cardSurface(cornerRadius: 12)
+    }
+
+    private func templateSection(_ ws: Workspace) -> some View {
+        let exports = PersonaTemplateCatalog.exportKinds(for: ws.template)
+        let suggestedViews = PersonaTemplateCatalog.defaultViewTitles(for: ws.template)
+        return VStack(alignment: .leading, spacing: 10) {
+            Label("\(ws.template.displayName) template", systemImage: ws.template.symbolName)
+                .font(.headline)
+            // Disclaimer is load-bearing safety text — always shown, verbatim.
+            Text(PersonaTemplateCatalog.disclaimer(for: ws.template))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Color.orange.opacity(0.25)))
+            if !exports.isEmpty {
+                Text("Work products this template offers (produced by the export engine):")
+                    .font(.caption2).foregroundStyle(.secondary)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 6, alignment: .leading)], alignment: .leading, spacing: 6) {
+                    ForEach(exports, id: \.self) { kind in
+                        Text(kind).font(.caption2)
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .background(.tint.opacity(0.10), in: .capsule).foregroundStyle(.tint)
+                    }
+                }
+            }
+            if !suggestedViews.isEmpty {
+                Button {
+                    Task { await seedSuggestedViews(ws, titles: suggestedViews) }
+                } label: {
+                    Label("Add \(suggestedViews.count) suggested views", systemImage: "plus.rectangle.on.folder")
+                }
+                .controlSize(.small)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
         .cardSurface(cornerRadius: 12)
     }
 
@@ -392,6 +432,16 @@ public struct WorkspacesView: View {
     private func deleteView(_ view: SavedView) async {
         guard let repo = appState.review else { return }
         try? await repo.deleteView(view.id)
+        await reloadDetail()
+    }
+
+    /// Seed the template's suggested views, skipping ones already present.
+    private func seedSuggestedViews(_ ws: Workspace, titles: [String]) async {
+        guard let repo = appState.review else { return }
+        let existing = Set(savedViews.map(\.title))
+        for title in titles where !existing.contains(title) {
+            try? await repo.saveView(SavedView(workspaceID: ws.id, title: title))
+        }
         await reloadDetail()
     }
 }
