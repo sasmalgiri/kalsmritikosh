@@ -88,7 +88,7 @@ public struct KillerFeaturesView: View {
                 }
             }
         }
-        .navigationTitle("Killer Features")
+        .navigationTitle("Highlights")   // P8.6 — no internal "Killer" naming in the UI
     }
 
     @ViewBuilder

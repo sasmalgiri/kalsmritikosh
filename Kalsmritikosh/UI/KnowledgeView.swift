@@ -17,7 +17,13 @@ public struct KnowledgeView: View {
     enum KnowledgeTab: String, CaseIterable, Identifiable, Hashable {
         case people, companies, projects, killer
         var id: String { rawValue }
-        var label: String { rawValue.capitalized }
+        // P8.6 — no internal "Killer" naming in user-facing UI.
+        var label: String {
+            switch self {
+            case .killer: return "Highlights"
+            default:      return rawValue.capitalized
+            }
+        }
         var icon: String {
             switch self {
             case .people: return "person.2"
