@@ -25,6 +25,7 @@ import AppKit
 public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case home
     case ask, search
+    case workspaces
     case timeline, history, findings, notebook, dossier, explore
     case insights
     case knowledge, assertions, answers, library, saved
@@ -38,6 +39,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .home:         return "Home"
         case .ask:          return "Ask"
         case .search:       return "Search"
+        case .workspaces:   return "Workspaces"
         case .timeline:     return "Timeline"
         case .history:      return "History"
         case .findings:     return "Findings"
@@ -64,6 +66,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .home:         return "house"
         case .ask:          return "bubble.left.and.text.bubble.right"
         case .search:       return "magnifyingglass"
+        case .workspaces:   return "folder.badge.gearshape"
         case .timeline:     return "calendar.day.timeline.left"
         case .history:      return "book.closed"
         case .findings:     return "checkmark.seal"
@@ -106,6 +109,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .home:         return "Start here — pick the lens that fits your work"
         case .ask:          return "Ask in plain language; answers cite their evidence"
         case .search:       return "Instant full-text search across every chunk"
+        case .workspaces:   return "Organize a matter, case, or project — a filtered view over your evidence"
         case .timeline:     return "Chronological view of all dated events"
         case .history:      return "Narrative reconstruction of what happened"
         case .findings:     return "Every fact by status — proven, inferred, contradicted, missing"
@@ -139,7 +143,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search]
-            case .reconstruct: return [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
+            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
             case .knowledge:   return [.knowledge, .assertions, .answers, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
@@ -721,6 +725,7 @@ public struct RootView: View {
         case .home:         HomeView(onNavigate: { navigate(to: $0) })
         case .ask:          AskView()
         case .search:       SearchView()
+        case .workspaces:   WorkspacesView()
         case .timeline:     TimelineView()
         case .history:      HistoryView()
         case .findings:     FactStatusView()

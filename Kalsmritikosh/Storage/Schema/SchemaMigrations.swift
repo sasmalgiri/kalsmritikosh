@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 44
+    public static let latestVersion = 45
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -81,7 +81,8 @@ public enum SchemaMigrations {
         (41, v41),
         (42, v42),
         (43, v43),
-        (44, v44)
+        (44, v44),
+        (45, v45)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1614,5 +1615,119 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_ko_history_object ON knowledge_objects_history(object_id);
     CREATE INDEX IF NOT EXISTS idx_ko_history_file ON knowledge_objects_history(file_id);
+    """
+
+    // MARK: - v45 — Persona features Epic 1: the shared evidence-work engine
+    //
+    // (Research-grounded persona program, F1 + F2.) ONE engine, many
+    // work-product templates — NOT five persona apps. This migration adds:
+    //
+    //   workspaces          — a bounded matter / investigation / research
+    //       question / personal issue. A workspace is a FILTERED VIEW over the
+    //       single ledger; membership rows point at existing files/entities and
+    //       NEVER duplicate evidence. Removing a membership row never deletes
+    //       evidence; deleting a file cascades only the membership pointer.
+    //   workspace_sources   — file membership (a source may belong to many
+    //       workspaces).
+    //   workspace_entities  — entity membership.
+    //
+    //   review_tags         — tag definitions (workspace-scoped or global).
+    //   review_decisions    — APPEND-ONLY review ledger. Every tag application,
+    //       review-state change, and note is a new row carrying prior→new values
+    //       and the reviewer; nothing is ever UPDATEd/DELETEd, so history is
+    //       complete and a decision is reversed by appending a reversing row
+    //       (mirrors fact_reviews v33/v39). Polymorphic target_kind covers
+    //       source / evidenceBlock / assertion / event / entity / relationship /
+    //       contradiction / gap / answerClaim.
+    //   saved_views         — named, reopenable filter sets over a workspace.
+    //   saved_view_filters  — key/value filter pairs for a saved view.
+    //
+    // Persona templates (F6) change only default fields, tags, layout, and
+    // terminology — never these tables' semantics. Additive; no existing table
+    // is touched.
+    private static let v45: String = """
+    CREATE TABLE workspaces (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        title              TEXT NOT NULL,
+        template_type      TEXT NOT NULL DEFAULT 'general',
+        description        TEXT,
+        status             TEXT NOT NULL DEFAULT 'active',
+        default_date_start REAL,
+        default_date_end   REAL,
+        default_scope_json TEXT NOT NULL DEFAULT '{}',
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL,
+        archived_at        REAL
+    );
+    CREATE INDEX idx_workspaces_status ON workspaces(status);
+
+    CREATE TABLE workspace_sources (
+        workspace_id  TEXT NOT NULL,
+        file_id       TEXT NOT NULL,
+        added_at      REAL NOT NULL,
+        PRIMARY KEY (workspace_id, file_id),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_workspace_sources_file ON workspace_sources(file_id);
+
+    CREATE TABLE workspace_entities (
+        workspace_id  TEXT NOT NULL,
+        entity_id     TEXT NOT NULL,
+        added_at      REAL NOT NULL,
+        PRIMARY KEY (workspace_id, entity_id),
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_workspace_entities_entity ON workspace_entities(entity_id);
+
+    CREATE TABLE review_tags (
+        id            TEXT PRIMARY KEY NOT NULL,
+        workspace_id  TEXT,
+        name          TEXT NOT NULL,
+        color         TEXT,
+        kind          TEXT NOT NULL DEFAULT 'user',
+        created_at    REAL NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_review_tags_workspace ON review_tags(workspace_id);
+
+    CREATE TABLE review_decisions (
+        id            TEXT PRIMARY KEY NOT NULL,
+        workspace_id  TEXT,
+        target_kind   TEXT NOT NULL,
+        target_id     TEXT NOT NULL,
+        dimension     TEXT NOT NULL DEFAULT 'reviewState',
+        decision      TEXT,
+        tag_id        TEXT,
+        note          TEXT,
+        prior_value   TEXT,
+        reviewer      TEXT NOT NULL DEFAULT 'user',
+        reversal_of   TEXT,
+        created_at    REAL NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_review_decisions_target ON review_decisions(target_kind, target_id, created_at);
+    CREATE INDEX idx_review_decisions_workspace ON review_decisions(workspace_id);
+    CREATE INDEX idx_review_decisions_tag ON review_decisions(tag_id);
+
+    CREATE TABLE saved_views (
+        id            TEXT PRIMARY KEY NOT NULL,
+        workspace_id  TEXT,
+        title         TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        updated_at    REAL NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_saved_views_workspace ON saved_views(workspace_id);
+
+    CREATE TABLE saved_view_filters (
+        id            TEXT PRIMARY KEY NOT NULL,
+        view_id       TEXT NOT NULL,
+        filter_key    TEXT NOT NULL,
+        filter_value  TEXT NOT NULL,
+        FOREIGN KEY (view_id) REFERENCES saved_views(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_saved_view_filters_view ON saved_view_filters(view_id);
     """
 }

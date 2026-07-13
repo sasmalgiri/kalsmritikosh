@@ -314,6 +314,12 @@ public final class AppState {
     public private(set) var ingestAttempts: IngestAttemptsRepository?
     /// A2 §7.6 — parent→child source provenance (email→attachment, …).
     public private(set) var sourceRelations: SourceRelationsRepository?
+    /// Persona features Epic 1 (F1) — bounded workspaces (filtered views over
+    /// the one ledger) + their source/entity membership.
+    public private(set) var workspaces: WorkspaceRepository?
+    /// Persona features Epic 1 (F2) — shared review model: tags, the
+    /// append-only review-decision ledger, and saved views.
+    public private(set) var review: ReviewRepository?
     /// Phase J.13 — live observability. Per-stage ingest counters
     /// the pipeline bumps as files move through it; the Live tab
     /// reads these for the workflow strip.
@@ -1292,6 +1298,8 @@ public final class AppState {
                 links: eventLinksRepo
             )
             self.savedQueries = SavedQueriesRepository(database: db)
+            self.workspaces = WorkspaceRepository(database: db)
+            self.review = ReviewRepository(database: db)
             let confidencePropagatorActor = ConfidencePropagator(
                 links: eventLinksRepo,
                 events: events,
