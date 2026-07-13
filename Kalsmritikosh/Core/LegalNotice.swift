@@ -50,10 +50,12 @@ public enum LegalNotice {
 
     public static let privacyStatement = """
     Private by design. Your documents, the extracted ledger, and your questions stay on \
-    this device — they are not sent to any server and there is no analytics or telemetry. \
-    A cloud AI provider is used only if you explicitly enable it in Privacy settings; \
-    otherwise all processing is on-device (Apple’s on-device model, or a local Ollama you \
-    run yourself). You can delete everything by removing the app’s data folder.
+    this device — they are not sent to any server, and there is no analytics or telemetry. \
+    All AI runs on-device using the bundled model (and Apple’s on-device model where \
+    available); there is no cloud processing and nothing to install. The only time the \
+    app uses the network is an optional, one-time download of a larger model if you choose \
+    it — your documents are never part of that. You can delete everything by removing the \
+    app’s data folder.
     """
 
     public static let termsStatement = """
