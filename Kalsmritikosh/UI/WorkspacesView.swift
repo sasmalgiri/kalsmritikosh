@@ -12,6 +12,9 @@
 //
 
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 public struct WorkspacesView: View {
     @Environment(AppState.self) private var appState
@@ -32,6 +35,12 @@ public struct WorkspacesView: View {
     @State private var savedViews: [SavedView] = []
     @State private var newTagName = ""
     @State private var newViewTitle = ""
+
+    // Report composer (F4).
+    @State private var reportTemplate: WorkProductTemplate = .generalSummary
+    @State private var reportFormat: ExportFormat = .markdown
+    @State private var composing = false
+    @State private var reportStatus: String?
 
     public init() {}
 
@@ -140,6 +149,7 @@ public struct WorkspacesView: View {
                     templateSection(ws)
                     tagsSection(ws)
                     savedViewsSection(ws)
+                    reportsSection(ws)
                     Spacer(minLength: 8)
                 }
                 .padding(18)
@@ -310,6 +320,43 @@ public struct WorkspacesView: View {
         .cardSurface(cornerRadius: 12)
     }
 
+    private func reportsSection(_ ws: Workspace) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Reports", systemImage: "doc.richtext").font(.headline)
+            Text("Compose a source-cited work product deterministically from the ledger — dated events, contradictions, and gaps. No AI is used; every dated line cites its source, and conflicts and gaps are shown, not hidden.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Picker("Report", selection: $reportTemplate) {
+                    ForEach(WorkProductTemplate.allCases, id: \.self) { t in
+                        Text(t.displayName).tag(t)
+                    }
+                }
+                .frame(maxWidth: 260)
+                Picker("Format", selection: $reportFormat) {
+                    ForEach(ExportFormat.allCases, id: \.self) { f in
+                        Text(f.displayName).tag(f)
+                    }
+                }
+                .frame(maxWidth: 130)
+                Button {
+                    Task { await composeAndExport(ws) }
+                } label: {
+                    if composing { ProgressView().controlSize(.small) }
+                    else { Label("Compose & Export…", systemImage: "square.and.arrow.up") }
+                }
+                .disabled(composing)
+            }
+            if let status = reportStatus {
+                Text(status).font(.caption2).foregroundStyle(.secondary)
+            }
+            Text("Scope note: this v1 composer draws on the whole archive; per-workspace source scoping lands with the retrieval-authority rewrite.")
+                .font(.caption2).foregroundStyle(.tertiary).italic()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardSurface(cornerRadius: 12)
+    }
+
     // MARK: - New workspace sheet
 
     private var newWorkspaceSheet: some View {
@@ -433,6 +480,72 @@ public struct WorkspacesView: View {
         guard let repo = appState.review else { return }
         try? await repo.deleteView(view.id)
         await reloadDetail()
+    }
+
+    /// F4 — deterministically compose a work product from the ledger and write
+    /// it to disk in the chosen format (with its citation list + manifest).
+    private func composeAndExport(_ ws: Workspace) async {
+        await MainActor.run { composing = true; reportStatus = nil }
+        defer { Task { @MainActor in composing = false } }
+
+        let eventRows = (try? await appState.events?.recent(limit: 500)) ?? []
+        let filenames = (try? await appState.events?.sourceFilenames(forEventIDs: eventRows.map(\.id))) ?? [:]
+        let inputs = eventRows.map { WorkProductComposer.EventInput(event: $0, filename: filenames[$0.id]) }
+        let contradictions = await appState.contradictions?.all() ?? []
+        let gaps = await appState.gapNodes?.all(includeDismissed: false) ?? []
+
+        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+        let citationLabels = Set(inputs.compactMap { $0.filename })
+        let manifest = ExportManifest(
+            exportedAt: Date(),
+            appVersion: appVersion,
+            schemaVersion: SchemaMigrations.latestVersion,
+            workspaceTitle: ws.title,
+            workspaceTemplate: ws.template.displayName,
+            selectedFindingCount: inputs.count,
+            citationMap: citationLabels.sorted().map { CitationMapEntry(label: $0, resolved: true) },
+            reviewStatusSummary: "\(contradictions.count) contradictions, \(gaps.count) gaps in scope",
+            knownLimitations: [
+                "Deterministic composition — no generative model was used.",
+                "Whole-archive scope; per-workspace source scoping lands with retrieval authority (P5.1).",
+                PersonaTemplateCatalog.disclaimer(for: ws.template)
+            ]
+        )
+        let wp = WorkProductComposer.compose(
+            template: reportTemplate,
+            title: "\(ws.title) — \(reportTemplate.displayName)",
+            scopeNote: "Work product for the \"\(ws.title)\" workspace (\(ws.template.displayName)).",
+            events: inputs,
+            contradictions: contradictions,
+            gaps: gaps,
+            disclaimer: PersonaTemplateCatalog.disclaimer(for: ws.template)
+        )
+        let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
+            : (ws.template == .legalMatter ? .legalExhibit : .footnote)
+        let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: manifest)
+        let text = WorkProductExporter.render(doc, as: reportFormat)
+
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(sanitized(ws.title))-\(reportTemplate.rawValue).\(reportFormat.fileExtension)"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else {
+            await MainActor.run { reportStatus = "Export cancelled." }
+            return
+        }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            await MainActor.run { reportStatus = "Exported \(inputs.count) events + \(contradictions.count) conflicts to \(url.lastPathComponent)." }
+        } catch {
+            await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+        }
+        #else
+        await MainActor.run { reportStatus = "Export is available on macOS." }
+        #endif
+    }
+
+    private func sanitized(_ s: String) -> String {
+        String(s.map { $0.isLetter || $0.isNumber ? $0 : "-" }).prefix(40).description
     }
 
     /// Seed the template's suggested views, skipping ones already present.
