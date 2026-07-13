@@ -60,7 +60,21 @@ public struct RuleEventExtractor: EventExtractor {
             dateConfidence = 0.30
         }
 
-        let entityIDs = entities.map(\.id)
+        // PERF.3 — do NOT attach every document entity to every event. Attaching
+        // the whole set inflated the relationship graph (O(n²) co-occurrence) and
+        // produced false links + noisy dossiers. Scope events to the meaningful
+        // ACTORS — people / organizations / parties / correspondents — capped and
+        // highest-confidence first. Dates, amounts, misc tokens and boilerplate
+        // no longer become event participants. (Location is carried separately in
+        // attributes["location"].)
+        let actorKinds: Set<Entity.Kind> = [.person, .organization, .vendor, .client, .emailAddress, .project]
+        let entityIDs = Array(
+            entities
+                .filter { actorKinds.contains($0.kind) }
+                .sorted { $0.confidence.value > $1.confidence.value }
+                .prefix(12)
+                .map(\.id)
+        )
         // A5.6 (location) — the document's primary place entity, in priority
         // order. Attached to location-bearing events (meetings / deliveries /
         // signings) so two sources placing the "same" event differently can be
