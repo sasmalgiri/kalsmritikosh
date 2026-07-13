@@ -487,16 +487,23 @@ public actor HybridRetriever: Retriever {
             }
         }
 
-        // Pull a handful of high-signal entities — emails, orgs, people —
-        // so the brain has named subjects to surface even when intent
-        // hints don't directly match. Hydrate each through find(byID:)
-        // so the sourceObjectID is real (no synthetic UUID leak).
-        let topUpKinds: [Entity.Kind] = [.emailAddress, .organization, .person, .vendor, .client, .project]
-        for kind in topUpKinds {
-            let rows = try await entities.list(kind: kind, limit: 8)
-            for row in rows where seen.insert(row.id).inserted {
-                if let real = try await entities.find(byID: row.id) {
-                    results.append(real)
+        // P5.1 / §11.3 — remove generic entity pollution. The global top-up
+        // below floods the candidate set with up to ~48 globally-common
+        // entities regardless of the question, which drowns targeted queries.
+        // Now that the topic-relevant FTS block above surfaces query-specific
+        // entities unconditionally, the global fallback only fires when the
+        // query is genuinely sparse (< 3 topic/hint entities found) or is an
+        // explicitly broad/global browse. Targeted queries that matched keep a
+        // clean, on-topic candidate set.
+        let isBroadQuery = intent.scope == .global
+        if results.count < 3 || isBroadQuery {
+            let topUpKinds: [Entity.Kind] = [.emailAddress, .organization, .person, .vendor, .client, .project]
+            for kind in topUpKinds {
+                let rows = try await entities.list(kind: kind, limit: 8)
+                for row in rows where seen.insert(row.id).inserted {
+                    if let real = try await entities.find(byID: row.id) {
+                        results.append(real)
+                    }
                 }
             }
         }
