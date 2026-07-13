@@ -102,9 +102,13 @@ public struct SettingsView: View {
                 systemModeSection
                 Divider()
 
+                // P2.6/P8.7 — Ollama is internal-only in v1 (no user setup path
+                // in the consumer release); the prompt is DEBUG-only.
+                #if DEBUG
                 if let setup = appState.ollamaSetupSuggestion {
                     ollamaSetupSection(setup)
                 }
+                #endif
                 if let advice = appState.modelChoiceAdvice,
                    advice.severity != .ok {
                     modelChoiceBanner(advice)
@@ -126,15 +130,20 @@ public struct SettingsView: View {
                         Divider()
                         modelPickerSection
                         Divider()
+                        diagnosticsSection
+                        // P2.6/P8.7 — provider list, BYO models, per-tier pinning
+                        // and the evaluation runner are developer/internal tools,
+                        // not consumer settings. DEBUG/internal builds only.
+                        #if DEBUG
+                        Divider()
                         providersSection
                         Divider()
                         userModelsSection
                         Divider()
                         pinningSection
                         Divider()
-                        diagnosticsSection
-                        Divider()
                         narrativeEvalSection
+                        #endif
                     }
                     .padding(.top, 12)
                 } label: {
