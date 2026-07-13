@@ -932,6 +932,14 @@ public struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
+            Toggle("OCR images during ingest", isOn: Binding(
+                get: { FeatureFlags.shared.ocrDuringIngest },
+                set: { FeatureFlags.shared.ocrDuringIngest = $0 }
+            ))
+            Text("Reads text out of images and scanned pages. This is the **slowest part of ingest** — Apple Vision processes one image at a time, so archives with many images (e.g. email attachments) take much longer. Turn OFF for much faster ingest when you don't need to search text inside images. Applies to newly-ingested files.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
             Toggle("iMessage (chat.db)", isOn: Binding(
                 get: { FeatureFlags.shared.iMessageLoaderEnabled },
                 set: { FeatureFlags.shared.iMessageLoaderEnabled = $0 }

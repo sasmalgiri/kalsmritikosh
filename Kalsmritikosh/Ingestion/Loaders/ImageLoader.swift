@@ -39,7 +39,9 @@ public struct ImageLoader: Ingestor {
         }
         #endif
 
-        let recognized = await ocr.recognizePrinted(at: url)
+        // OCR is the dominant ingest cost (Vision serializes on the NE); skip
+        // when the user has turned OCR-during-ingest off (FeatureFlags).
+        let recognized = FeatureFlags.ocrDuringIngestValue() ? await ocr.recognizePrinted(at: url) : []
         var content = recognized.joined(separator: "\n")
         let confidence: Confidence = recognized.isEmpty ? .low : .high
         meta["ocrLineCount"] = AnyCodable(.int(Int64(recognized.count)))
@@ -49,7 +51,7 @@ public struct ImageLoader: Ingestor {
         // a tab-separated grid only when the page is genuinely tabular (≥2 rows
         // × ≥2 columns) so ordinary scans aren't polluted. Deterministic /
         // non-generative (Apple Vision), so it's fine under the minimum-LLM rule.
-        let grid = await ocr.recognizeTable(at: url)
+        let grid = FeatureFlags.ocrDuringIngestValue() ? await ocr.recognizeTable(at: url) : []
         let columnCount = grid.map(\.count).max() ?? 0
         if grid.count >= 2 && columnCount >= 2 {
             let tsv = grid.map { $0.joined(separator: "\t") }.joined(separator: "\n")

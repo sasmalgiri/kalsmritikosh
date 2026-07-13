@@ -306,6 +306,22 @@ public final class FeatureFlags {
         set { UserDefaults.standard.set(newValue, forKey: Self.kContextPrefixBackfill) }
     }
 
+    /// OCR images during ingest. Default ON. Apple Vision OCR runs on the
+    /// Neural Engine and SERIALIZES, so it's the dominant ingest cost when an
+    /// archive has many images (e.g. email attachments). Turning it OFF gives
+    /// much faster ingest when image text isn't needed. (Spec calls for
+    /// per-folder OCR opt-in; this is the global switch users can toggle.)
+    public var ocrDuringIngest: Bool {
+        get { (UserDefaults.standard.object(forKey: Self.kOCRDuringIngest) as? Bool) ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kOCRDuringIngest) }
+    }
+
+    /// Thread-safe read for the OCR gate from non-main-actor parser contexts.
+    /// UserDefaults is thread-safe, so no actor hop is needed.
+    public nonisolated static func ocrDuringIngestValue() -> Bool {
+        (UserDefaults.standard.object(forKey: kOCRDuringIngest) as? Bool) ?? true
+    }
+
     /// Idle-maintenance mode. Default `.off` — under the minimum-LLM
     /// contract the ledger is warmed on demand, so no background sweep
     /// runs unless the user opts in. The generative sweeps (community
@@ -366,4 +382,5 @@ public final class FeatureFlags {
     private static let kBrowserHistory   = "kalsmritikosh.feature.browserHistory.enabled"
     private static let kChatExport       = "kalsmritikosh.feature.chatExport.enabled"
     private static let kContextPrefixBackfill = "kalsmritikosh.feature.contextPrefixBackfill.enabled"
+    private static let kOCRDuringIngest  = "kalsmritikosh.feature.ocrDuringIngest.enabled"
 }

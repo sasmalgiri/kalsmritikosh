@@ -73,7 +73,12 @@ public struct ImageStructuralParser: StructuralParser {
         ordinal += 1
 
         // Printed OCR → one paragraph block per line (reading order preserved).
-        let lines = (await ocr.recognizePrinted(at: tmp)).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        // OCR is the dominant ingest cost (Vision serializes on the Neural
+        // Engine); skip it when the user has turned OCR-during-ingest off.
+        let ocrEnabled = FeatureFlags.ocrDuringIngestValue()
+        let lines = ocrEnabled
+            ? (await ocr.recognizePrinted(at: tmp)).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            : []
         for (i, line) in lines.enumerated() {
             blocks.append(EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID, parentBlockID: imageBlock.id,
@@ -84,7 +89,7 @@ public struct ImageStructuralParser: StructuralParser {
         }
 
         // Table pass — only when genuinely tabular (≥2 rows × ≥2 columns).
-        let grid = await ocr.recognizeTable(at: tmp)
+        let grid = ocrEnabled ? await ocr.recognizeTable(at: tmp) : []
         let columnCount = grid.map(\.count).max() ?? 0
         if grid.count >= 2, columnCount >= 2 {
             let tableBlock = EvidenceBlock(
