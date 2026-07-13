@@ -284,28 +284,11 @@ public struct AskView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 460)
             }
-            suggestionGrid
+            // SHIP_DECISIONS / P8.3 — Ask opens BLANK: no suggestion grid, no
+            // leading the witness. The user discovers their own questions; the
+            // input box below is the only affordance.
         }
         .padding(.top, 24)
-    }
-
-    private var suggestionGrid: some View {
-        let suggestions: [(icon: String, tint: Color, text: String)] = [
-            ("shippingbox.fill",         .orange, "What happened with Supplier ABC?"),
-            ("map.fill",                 .blue,   "Reconstruct Project Delta."),
-            ("clock.arrow.circlepath",   .green,  "What changed this week?"),
-            ("exclamationmark.shield.fill", .red, "What risks exist?")
-        ]
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            ForEach(suggestions, id: \.text) { s in
-                SuggestionCard(icon: s.icon, tint: s.tint, text: s.text) {
-                    question = s.text
-                    submit()
-                }
-            }
-        }
-        .frame(maxWidth: 560)
-        .padding(.top, 10)
     }
 
     private var input: some View {
@@ -656,53 +639,6 @@ public struct AskView: View {
 /// Polished starter-prompt card: colored icon chip, material surface,
 /// hover lift + accent ring. Extracted so each card owns its hover
 /// state (a ForEach can't hold per-row @State cleanly).
-private struct SuggestionCard: View {
-    let icon: String
-    let tint: Color
-    let text: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        LinearGradient(
-                            colors: [tint, tint.opacity(0.72)],
-                            startPoint: .top, endPoint: .bottom
-                        ),
-                        in: RoundedRectangle(cornerRadius: 9)
-                    )
-                Text(text)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "arrow.up.right")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(tint)
-                    .opacity(hovering ? 1 : 0)
-            }
-            .padding(14)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(hovering ? tint.opacity(0.5) : Color.secondary.opacity(0.12), lineWidth: 1)
-            )
-            .shadow(color: hovering ? tint.opacity(0.22) : .clear, radius: 9, y: 3)
-            .scaleEffect(hovering ? 1.015 : 1.0)
-        }
-        .buttonStyle(.plain)
-        .onHover { h in
-            withAnimation(.easeOut(duration: 0.15)) { hovering = h }
-        }
-    }
-}
-
 // MARK: - Conversation history sheet
 
 /// Browses past Ask conversations (persisted in SQLite). Tapping a row
