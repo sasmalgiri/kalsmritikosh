@@ -33,24 +33,6 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
 
     public var id: String { rawValue }
 
-    /// P7/P8 — surfaces hidden from the v1 CONSUMER release. Convert is deferred
-    /// (P8.9), Live is internal diagnostics, Completeness folds into Sources.
-    /// Fully available in DEBUG/internal builds. Hiding here removes them from
-    /// the sidebar, the header icon bar, and the ⌘K palette in one place.
-    /// P8.1 — the lean consumer navigation shown in the sidebar + header icon
-    /// bar: ingest → ask → the two differentiators (History, Findings) → Settings.
-    /// Every OTHER screen stays fully reachable via the ⌘K command palette, so
-    /// nothing is lost — this only declutters the always-visible nav.
-    static let primaryNav: [Destination] = [.sources, .ask, .history, .findings, .settings]
-
-    static var releaseHidden: Set<Destination> {
-        #if DEBUG
-        return []
-        #else
-        return [.convert, .live, .completeness]
-        #endif
-    }
-
     var title: String {
         switch self {
         case .home:         return "Home"
@@ -146,40 +128,31 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     }
 
     enum Group: String, CaseIterable, Identifiable {
-        case sources     = "Sources"
-        case converse    = "Ask & Search"
+        case converse   = "Ask & Search"
         case reconstruct = "Reconstruct"
-        case explore     = "Explore"
-        case advanced    = "Advanced"
+        case knowledge   = "Knowledge"
+        case workspace   = "Workspace"
         case system      = "System"
 
         var id: String { rawValue }
 
         var items: [Destination] {
-            // P8.1 — cleaner consumer shape: Sources up top, then the core work
-            // (Ask/Search, Reconstruct, Explore); power-user surfaces fold into
-            // Advanced (still reachable). Dev/deferred entries are dropped by
-            // `releaseHidden` in the release build.
-            let raw: [Destination]
             switch self {
-            case .sources:     raw = [.home, .sources]
-            case .converse:    raw = [.ask, .search]
-            case .reconstruct: raw = [.history, .timeline, .findings, .insights]
-            case .explore:     raw = [.explore, .knowledge, .dossier]
-            case .advanced:    raw = [.assertions, .answers, .library, .notebook, .saved, .completeness, .convert, .live]
-            case .system:      raw = [.guide, .settings]
+            case .converse:    return [.home, .ask, .search]
+            case .reconstruct: return [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
+            case .knowledge:   return [.knowledge, .assertions, .answers, .library, .saved]
+            case .workspace:   return [.sources, .convert, .completeness, .live]
+            case .system:      return [.guide, .settings]
             }
-            return raw.filter { !Destination.releaseHidden.contains($0) }
         }
 
         /// Short uppercase caption shown under each header group.
         var shortTitle: String {
             switch self {
-            case .sources:     return "SOURCES"
             case .converse:    return "ASK"
             case .reconstruct: return "REBUILD"
-            case .explore:     return "EXPLORE"
-            case .advanced:    return "MORE"
+            case .knowledge:   return "KNOW"
+            case .workspace:   return "WORK"
             case .system:      return "SYSTEM"
             }
         }
@@ -187,12 +160,11 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         /// One-line explanation of what the group is for (header tooltip).
         var blurb: String {
             switch self {
-            case .sources:     return "Add folders and see what's been ingested"
             case .converse:    return "Ask questions and search your archive"
-            case .reconstruct: return "Rebuild timelines, histories and findings"
-            case .explore:     return "Browse entities, dossiers and the knowledge base"
-            case .advanced:    return "Assertions, answers, library and working notes"
-            case .system:      return "Settings and help"
+            case .reconstruct: return "Rebuild timelines, histories and dossiers"
+            case .knowledge:   return "Browse the structured knowledge base"
+            case .workspace:   return "Add sources, convert files, watch activity"
+            case .system:      return "Settings and diagnostics"
             }
         }
     }
@@ -204,7 +176,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .ask
+    @State private var selection: Destination? = .home
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -331,36 +303,29 @@ public struct RootView: View {
             VStack(alignment: .leading, spacing: 3) {
                 brandHeader
                     .padding(.bottom, 4)
-                // P0.5 — no user-visible mode chooser in the v1 release (single
-                // pinned engine). The mode badge (which opens the chooser) is
-                // DEBUG/internal-only.
-                #if DEBUG
                 modeBadge
                     .padding(.bottom, 6)
-                #endif
                 paletteButton
                     .padding(.bottom, 6)
                 onboardingTip
-                // Lean primary nav (Core 5). Everything else is reachable via ⌘K.
-                ForEach(Destination.primaryNav) { dest in
-                    SidebarRow(
-                        dest: dest,
-                        isSelected: selection == dest,
-                        namespace: sidebarNS
-                    ) {
-                        navigate(to: dest)
+                ForEach(Destination.Group.allCases) { group in
+                    Text(group.rawValue.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .tracking(0.5)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .padding(.bottom, 2)
+                    ForEach(group.items) { dest in
+                        SidebarRow(
+                            dest: dest,
+                            isSelected: selection == dest,
+                            namespace: sidebarNS
+                        ) {
+                            navigate(to: dest)
+                        }
                     }
                 }
-                Button {
-                    showPalette = true
-                } label: {
-                    Label("More…  (⌘K)", systemImage: "ellipsis.circle")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                }
-                .buttonStyle(.plain)
             }
             .padding(8)
             .animation(Theme.springFast, value: selection)
@@ -555,8 +520,11 @@ public struct RootView: View {
         VStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(Destination.primaryNav) { dest in
-                        headerIcon(dest)
+                    ForEach(Destination.Group.allCases) { group in
+                        headerGroup(group)
+                        if group != .system {
+                            Divider().frame(height: 30)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -893,9 +861,7 @@ private struct CommandPaletteView: View {
     @FocusState private var fieldFocused: Bool
 
     private var commands: [PaletteCommand] {
-        var cmds: [PaletteCommand] = Destination.allCases
-            .filter { !Destination.releaseHidden.contains($0) }
-            .map { dest in
+        var cmds: [PaletteCommand] = Destination.allCases.map { dest in
             PaletteCommand(
                 id: "go.\(dest.rawValue)",
                 title: dest.title,
