@@ -34,6 +34,19 @@ public enum SchemaMigrations {
                 )
             }
         }
+        // Belt-and-suspenders: after a fully-successful migration pass, stamp
+        // the final version ONCE in plain autocommit context (outside any
+        // SAVEPOINT). In some runtime/WAL configurations a `PRAGMA
+        // user_version` issued inside a SAVEPOINT was observed NOT to persist
+        // even though the migration DDL committed — leaving the counter stale
+        // (e.g. stuck at an early version) while the schema was fully applied.
+        // A stale counter would make a LATER boot re-run already-applied
+        // migrations. This reconciles the on-disk counter with reality; it is a
+        // no-op when the per-migration stamps already stuck, and only advances
+        // (never downgrades a newer DB opened by an older build).
+        if try await database.currentUserVersion() < Self.latestVersion {
+            try await database.setUserVersion(Self.latestVersion)
+        }
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
