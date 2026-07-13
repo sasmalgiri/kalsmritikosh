@@ -18,6 +18,18 @@ public enum SchemaMigrations {
     /// the schema at the previous version instead of half-applied.
     public static func migrate(_ database: Database) async throws {
         let current = try await database.currentUserVersion()
+        // Self-heal a stale counter. Observed in the field: some databases carry
+        // a fully-applied latest schema while `user_version` is stuck at an early
+        // value (root cause not reproducible in isolation — migrate() persists
+        // correctly on a fresh DB). Blindly re-running the pending migrations
+        // would fail, because most use bare `CREATE TABLE` (no IF NOT EXISTS) and
+        // would raise "table already exists", bricking boot. So: if the counter
+        // looks stale BUT the newest migration's table already exists, the schema
+        // is genuinely complete — just reconcile the counter and return.
+        if current < latestVersion, try await isSchemaFullyApplied(database) {
+            try await database.setUserVersion(latestVersion)
+            return
+        }
         for (version, sql) in all where version > current {
             let savepoint = "kalsmritikosh_mig_v\(version)"
             do {
@@ -47,6 +59,19 @@ public enum SchemaMigrations {
         if try await database.currentUserVersion() < Self.latestVersion {
             try await database.setUserVersion(Self.latestVersion)
         }
+    }
+
+    /// True when the newest migration's table already exists — i.e. the schema
+    /// is fully applied even if `user_version` disagrees. The sentinel is the
+    /// table created by the LATEST migration; because migrations are ordered
+    /// and append-only, its presence implies every earlier object exists too.
+    /// UPDATE THIS SENTINEL when a new migration adds a table.
+    private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?;",
+            [.text("transcript_segments")]   // created by v47 (latestVersion)
+        )
+        return (rows.first?.int(0) ?? 0) > 0
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
