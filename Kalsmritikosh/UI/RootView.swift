@@ -181,6 +181,11 @@ public struct RootView: View {
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
     @State private var showMaintenance: Bool = true
+    /// Interface mode. Simple hides the power-user surfaces (Notebook, Explore)
+    /// from the sidebar; Advanced shows every screen. Persisted; default Simple.
+    @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
+    /// Screens hidden in Simple mode (still reachable via ⌘K).
+    private let simpleHidden: Set<Destination> = [.notebook, .explore]
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// Text in the always-visible header search box.
@@ -307,22 +312,35 @@ public struct RootView: View {
                     .padding(.bottom, 6)
                 paletteButton
                     .padding(.bottom, 6)
+                // Simple / Advanced interface toggle. Simple hides power-user
+                // screens (Notebook, Explore); everything stays reachable via ⌘K.
+                Picker("Interface", selection: $simpleMode) {
+                    Text("Simple").tag(true)
+                    Text("Advanced").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
                 onboardingTip
                 ForEach(Destination.Group.allCases) { group in
-                    Text(group.rawValue.uppercased())
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .tracking(0.5)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .padding(.bottom, 2)
-                    ForEach(group.items) { dest in
-                        SidebarRow(
-                            dest: dest,
-                            isSelected: selection == dest,
-                            namespace: sidebarNS
-                        ) {
-                            navigate(to: dest)
+                    let visible = group.items.filter { !(simpleMode && simpleHidden.contains($0)) }
+                    if !visible.isEmpty {
+                        Text(group.rawValue.uppercased())
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .tracking(0.5)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 12)
+                            .padding(.bottom, 2)
+                        ForEach(visible) { dest in
+                            SidebarRow(
+                                dest: dest,
+                                isSelected: selection == dest,
+                                namespace: sidebarNS
+                            ) {
+                                navigate(to: dest)
+                            }
                         }
                     }
                 }
@@ -545,7 +563,7 @@ public struct RootView: View {
     private func headerGroup(_ group: Destination.Group) -> some View {
         VStack(spacing: 3) {
             HStack(spacing: 4) {
-                ForEach(group.items) { dest in
+                ForEach(group.items.filter { !(simpleMode && simpleHidden.contains($0)) }) { dest in
                     headerIcon(dest)
                 }
             }
