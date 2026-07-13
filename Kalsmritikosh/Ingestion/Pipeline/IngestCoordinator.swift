@@ -197,6 +197,7 @@ public actor IngestCoordinator {
                 status: result.chunkCount > 0 ? .queryable : .unchanged,
                 contentHash: result.fileRecord.contentHash
             )
+            await writeCostProfileFile()   // PERF.0 — durable stage-cost profile
             return result
         } catch {
             await ingestAttempts?.record(url: url, status: .failed, stage: "ingest",
@@ -218,6 +219,22 @@ public actor IngestCoordinator {
     /// Parse the format's structural document a single time. Returns nil when no
     /// parser handles the type or the bytes can't be read. No persistence — that
     /// is `persistStructuralDoc`, so the SAME doc can also feed extraction.
+    /// PERF.0 — write the running per-stage cost profile to a file we can read
+    /// after a run (unified-log .info isn't retrievable). Overwrites each time
+    /// with the latest cumulative snapshot. Best-effort; never affects ingest.
+    private func writeCostProfileFile() async {
+        guard let pipelineMetrics else { return }
+        let profile = await pipelineMetrics.costProfile()
+        guard let dir = try? FileManager.default.url(
+            for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true
+        ) else { return }
+        let reportDir = dir.appendingPathComponent("EvalBaselines", isDirectory: true)
+        try? FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let url = reportDir.appendingPathComponent("ingest-cost.txt")
+        try? "cumulative stage cost (highest first):\n\(profile)\n".data(using: .utf8)?
+            .write(to: url, options: .atomic)
+    }
+
     private func parseStructuralOnce(url: URL, type: SourceType, fileID: UUID) async -> StructuralParse? {
         guard let structuralRegistry, evidenceStore != nil,
               let parser = structuralRegistry.parser(for: type),
@@ -227,6 +244,9 @@ public actor IngestCoordinator {
             data: data, filename: url.lastPathComponent, type: type,
             logicalSourceID: fileID, sourceVersionID: UUID()
         ) else { return nil }
+        // PERF.0 — structural parse includes image OCR; time it so we can see
+        // whether OCR/parse is the real cost centre (measure, don't guess).
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
         return StructuralParse(
             doc: doc, parserName: parser.parserName, parserVersion: parser.parserVersion,
             sizeBytes: Int64(data.count), startedAt: started
@@ -1003,7 +1023,9 @@ public actor IngestCoordinator {
                 }
                 return chunk.text
             }
+            let embStart = Date()   // PERF.0 — time embedding generation
             let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+            await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
             var embeddedCount = 0
             var skippedCount = 0
             for (i, chunk) in chunked.enumerated() where i < vectorsList.count {

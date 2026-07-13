@@ -290,6 +290,7 @@ public struct LiveDashboardView: View {
     private static func stageColor(for stage: PipelineMetrics.Stage) -> Color {
         switch stage {
         case .discovered:    return .blue
+        case .parse:         return .cyan
         case .loaded:        return .teal
         case .chunked:       return .green
         case .embedded:      return .mint
