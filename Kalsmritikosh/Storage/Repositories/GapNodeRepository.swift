@@ -63,6 +63,12 @@ public actor GapNodeRepository {
         try? await database.exec("UPDATE gap_nodes SET dismissed = 1 WHERE id = ?;", [.uuid(id)])
     }
 
+    /// F5 — reopen a previously dismissed gap (append-only review decisions in
+    /// the review ledger record WHY; this just flips the display flag back).
+    public func reopen(_ id: UUID) async {
+        try? await database.exec("UPDATE gap_nodes SET dismissed = 0 WHERE id = ?;", [.uuid(id)])
+    }
+
     /// Clear all gaps (a re-scan replaces them). Gaps are derived, so
     /// this is safe.
     public func clear() async {
