@@ -23,7 +23,14 @@ public struct Tier1RelationshipExtractor: Sendable {
     /// SMTP, Message-ID, weekdays, server names) — ranking by frequency
     /// kept exactly the noise and discarded the real, low-frequency
     /// people and companies. See UPDATE_04_REVISED.
-    public nonisolated static let coOccurrenceSkipThreshold = 200
+    // PERF.3 — sparse, evidence-backed graph (owner decision). Broad pairwise
+    // co-occurrence is a weak signal that dominated the graph (~118k edges on a
+    // real archive). Fire it only for GENUINELY small documents where it's cheap
+    // and meaningful (≤8 distinct entities → ≤28 edges); larger docs skip it and
+    // rely on events + entity_mentions instead. Full aggregate/derive-at-query
+    // co-occurrence is the deeper follow-up (PERF.3), but this immediately caps
+    // the blow-up. (Was 200, chosen for per-message mbox co-occurrence.)
+    public nonisolated static let coOccurrenceSkipThreshold = 8
 
     /// Per-event participant cap for `event_linked` pairwise edge
     /// generation. Above this, the extractor falls back to a
