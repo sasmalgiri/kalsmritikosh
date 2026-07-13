@@ -42,6 +42,9 @@ public struct WorkspacesView: View {
     @State private var composing = false
     @State private var reportStatus: String?
 
+    // Research screening (F9) — sheet for researchReview workspaces.
+    @State private var showingScreening = false
+
     public init() {}
 
     public var body: some View {
@@ -55,6 +58,29 @@ public struct WorkspacesView: View {
         .background(AuroraBackdrop(intensity: 0.5))
         .task { await reloadWorkspaces() }
         .sheet(isPresented: $showingNew) { newWorkspaceSheet }
+        .sheet(isPresented: $showingScreening) {
+            if let ws = workspaces.first(where: { $0.id == selectedID }) {
+                ScreeningView(workspace: ws) { showingScreening = false }
+                    .environment(appState)
+            }
+        }
+    }
+
+    private func screeningSection(_ ws: Workspace) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Research screening", systemImage: "list.bullet.clipboard").font(.headline)
+            Text("A transparent screening log with PRISMA-compatible flow counts. Single-user v1 — not independent dual-review compliance, meta-analysis, or a final risk-of-bias judgment. No AI makes the final inclusion decision.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button {
+                showingScreening = true
+            } label: {
+                Label("Open screening log", systemImage: "arrow.up.forward.square")
+            }
+            .controlSize(.small)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardSurface(cornerRadius: 12)
     }
 
     // MARK: - List column
@@ -149,6 +175,7 @@ public struct WorkspacesView: View {
                     templateSection(ws)
                     tagsSection(ws)
                     savedViewsSection(ws)
+                    if ws.template == .researchReview { screeningSection(ws) }
                     reportsSection(ws)
                     Spacer(minLength: 8)
                 }

@@ -320,6 +320,8 @@ public final class AppState {
     /// Persona features Epic 1 (F2) — shared review model: tags, the
     /// append-only review-decision ledger, and saved views.
     public private(set) var review: ReviewRepository?
+    /// Persona features (F9) — research screening log + PRISMA-compatible counts.
+    public private(set) var screening: ScreeningRepository?
     /// Phase J.13 — live observability. Per-stage ingest counters
     /// the pipeline bumps as files move through it; the Live tab
     /// reads these for the workflow strip.
@@ -1300,6 +1302,7 @@ public final class AppState {
             self.savedQueries = SavedQueriesRepository(database: db)
             self.workspaces = WorkspaceRepository(database: db)
             self.review = ReviewRepository(database: db)
+            self.screening = ScreeningRepository(database: db)
             let confidencePropagatorActor = ConfidencePropagator(
                 links: eventLinksRepo,
                 events: events,

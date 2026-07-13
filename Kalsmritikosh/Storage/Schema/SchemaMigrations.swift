@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 45
+    public static let latestVersion = 46
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -82,7 +82,8 @@ public enum SchemaMigrations {
         (42, v42),
         (43, v43),
         (44, v44),
-        (45, v45)
+        (45, v45),
+        (46, v46)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1729,5 +1730,47 @@ public enum SchemaMigrations {
         FOREIGN KEY (view_id) REFERENCES saved_views(id) ON DELETE CASCADE
     );
     CREATE INDEX idx_saved_view_filters_view ON saved_view_filters(view_id);
+    """
+
+    // MARK: - v46 — Persona features F9: research screening workflow
+    //
+    // A transparent, single-user screening log with PRISMA-COMPATIBLE flow
+    // counts (§14). It does NOT claim independent dual-review compliance,
+    // meta-analysis, or a final risk-of-bias judgment. `screening_protocols`
+    // holds one structured inclusion protocol per workspace (JSON — PICO is
+    // optional; not every review uses it). `screening_records` is one row per
+    // candidate document with its current stage + decision + exclusion reason;
+    // every exclusion must carry a reason (enforced in the repo/UI). Decisions
+    // are reversible; the append-only WHY lives in the shared review ledger. No
+    // LLM ever makes the final inclusion decision — suggestions stay separate
+    // from reviewer decisions. Additive; no existing table touched.
+    private static let v46: String = """
+    CREATE TABLE screening_protocols (
+        workspace_id   TEXT PRIMARY KEY NOT NULL,
+        protocol_json  TEXT NOT NULL DEFAULT '{}',
+        updated_at     REAL NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE screening_records (
+        id               TEXT PRIMARY KEY NOT NULL,
+        workspace_id     TEXT NOT NULL,
+        source_id        TEXT,
+        title            TEXT NOT NULL,
+        authors          TEXT,
+        year             INTEGER,
+        stage            TEXT NOT NULL DEFAULT 'identified',
+        decision         TEXT NOT NULL DEFAULT 'unresolved',
+        exclusion_reason TEXT,
+        reviewer         TEXT NOT NULL DEFAULT 'user',
+        disagreement     INTEGER NOT NULL DEFAULT 0,
+        notes            TEXT,
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_screening_records_ws ON screening_records(workspace_id);
+    CREATE INDEX idx_screening_records_stage ON screening_records(workspace_id, stage);
+    CREATE INDEX idx_screening_records_decision ON screening_records(workspace_id, decision);
     """
 }
