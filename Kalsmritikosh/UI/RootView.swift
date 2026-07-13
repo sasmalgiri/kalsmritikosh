@@ -37,6 +37,12 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     /// (P8.9), Live is internal diagnostics, Completeness folds into Sources.
     /// Fully available in DEBUG/internal builds. Hiding here removes them from
     /// the sidebar, the header icon bar, and the ⌘K palette in one place.
+    /// P8.1 — the lean consumer navigation shown in the sidebar + header icon
+    /// bar: ingest → ask → the two differentiators (History, Findings) → Settings.
+    /// Every OTHER screen stays fully reachable via the ⌘K command palette, so
+    /// nothing is lost — this only declutters the always-visible nav.
+    static let primaryNav: [Destination] = [.sources, .ask, .history, .findings, .settings]
+
     static var releaseHidden: Set<Destination> {
         #if DEBUG
         return []
@@ -198,7 +204,7 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .home
+    @State private var selection: Destination? = .ask
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
@@ -335,24 +341,26 @@ public struct RootView: View {
                 paletteButton
                     .padding(.bottom, 6)
                 onboardingTip
-                ForEach(Destination.Group.allCases) { group in
-                    Text(group.rawValue.uppercased())
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .tracking(0.5)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 12)
-                        .padding(.bottom, 2)
-                    ForEach(group.items) { dest in
-                        SidebarRow(
-                            dest: dest,
-                            isSelected: selection == dest,
-                            namespace: sidebarNS
-                        ) {
-                            navigate(to: dest)
-                        }
+                // Lean primary nav (Core 5). Everything else is reachable via ⌘K.
+                ForEach(Destination.primaryNav) { dest in
+                    SidebarRow(
+                        dest: dest,
+                        isSelected: selection == dest,
+                        namespace: sidebarNS
+                    ) {
+                        navigate(to: dest)
                     }
                 }
+                Button {
+                    showPalette = true
+                } label: {
+                    Label("More…  (⌘K)", systemImage: "ellipsis.circle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
             }
             .padding(8)
             .animation(Theme.springFast, value: selection)
@@ -547,11 +555,8 @@ public struct RootView: View {
         VStack(spacing: 8) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 12) {
-                    ForEach(Destination.Group.allCases) { group in
-                        headerGroup(group)
-                        if group != .system {
-                            Divider().frame(height: 30)
-                        }
+                    ForEach(Destination.primaryNav) { dest in
+                        headerIcon(dest)
                     }
                 }
                 .padding(.horizontal, 16)
