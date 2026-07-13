@@ -33,6 +33,18 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
 
     public var id: String { rawValue }
 
+    /// P7/P8 — surfaces hidden from the v1 CONSUMER release. Convert is deferred
+    /// (P8.9), Live is internal diagnostics, Completeness folds into Sources.
+    /// Fully available in DEBUG/internal builds. Hiding here removes them from
+    /// the sidebar, the header icon bar, and the ⌘K palette in one place.
+    static var releaseHidden: Set<Destination> {
+        #if DEBUG
+        return []
+        #else
+        return [.convert, .live, .completeness]
+        #endif
+    }
+
     var title: String {
         switch self {
         case .home:         return "Home"
@@ -137,13 +149,15 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var id: String { rawValue }
 
         var items: [Destination] {
+            let raw: [Destination]
             switch self {
-            case .converse:    return [.home, .ask, .search]
-            case .reconstruct: return [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
-            case .knowledge:   return [.knowledge, .assertions, .answers, .library, .saved]
-            case .workspace:   return [.sources, .convert, .completeness, .live]
-            case .system:      return [.guide, .settings]
+            case .converse:    raw = [.home, .ask, .search]
+            case .reconstruct: raw = [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
+            case .knowledge:   raw = [.knowledge, .assertions, .answers, .library, .saved]
+            case .workspace:   raw = [.sources, .convert, .completeness, .live]
+            case .system:      raw = [.guide, .settings]
             }
+            return raw.filter { !Destination.releaseHidden.contains($0) }
         }
 
         /// Short uppercase caption shown under each header group.
@@ -303,8 +317,13 @@ public struct RootView: View {
             VStack(alignment: .leading, spacing: 3) {
                 brandHeader
                     .padding(.bottom, 4)
+                // P0.5 — no user-visible mode chooser in the v1 release (single
+                // pinned engine). The mode badge (which opens the chooser) is
+                // DEBUG/internal-only.
+                #if DEBUG
                 modeBadge
                     .padding(.bottom, 6)
+                #endif
                 paletteButton
                     .padding(.bottom, 6)
                 onboardingTip
@@ -861,7 +880,9 @@ private struct CommandPaletteView: View {
     @FocusState private var fieldFocused: Bool
 
     private var commands: [PaletteCommand] {
-        var cmds: [PaletteCommand] = Destination.allCases.map { dest in
+        var cmds: [PaletteCommand] = Destination.allCases
+            .filter { !Destination.releaseHidden.contains($0) }
+            .map { dest in
             PaletteCommand(
                 id: "go.\(dest.rawValue)",
                 title: dest.title,
