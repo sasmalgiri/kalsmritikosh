@@ -118,12 +118,14 @@ public struct OnboardingView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 6) {
-                seeRow("Documents", "PDF, DOCX/DOC, TXT, MD, RTF, ODT, EPUB", "doc.text")
-                seeRow("Spreadsheets", "XLSX/XLS, CSV, ODS", "tablecells")
-                seeRow("Presentations", "PPTX/PPT", "rectangle.on.rectangle")
-                seeRow("Email", "MBOX, EML, EMLX (Apple Mail), MSG, PST/OST, NSF (Lotus)", "envelope")
+                // P8.8 — advertise ONLY the formats in SUPPORTED_FORMATS_V1.
+                // Locked exclusions (DOC/XLS/PPT, MSG/PST/OST/NSF) are NOT claimed.
+                seeRow("Documents", "PDF, DOCX, TXT, Markdown, RTF, ODT, EPUB", "doc.text")
+                seeRow("Spreadsheets", "XLSX, CSV, ODS", "tablecells")
+                seeRow("Presentations", "PPTX", "rectangle.on.rectangle")
+                seeRow("Email", "MBOX, EML, EMLX (Apple Mail)", "envelope")
                 seeRow("Images", "PNG, JPG, HEIC, TIFF, WebP (with OCR)", "photo")
-                seeRow("Audio & Video", "MP3, WAV, M4A, MP4, MOV (transcribed)", "waveform")
+                seeRow("Audio (experimental)", "MP3, WAV, M4A — transcribed; video uses the audio track only", "waveform")
                 seeRow("Archives", "ZIP — expanded then ingested", "archivebox")
             }
             Divider().padding(.vertical, 6)
@@ -137,7 +139,7 @@ public struct OnboardingView: View {
                 scopeCount("Events", scopeCounts.events)
                 scopeCount("Memory", scopeCounts.memoryObjects)
             }
-            Text("Open the Completeness tab anytime to see per-file ingest health, or the Knowledge tab to browse what's been extracted.")
+            Text("Open the Sources tab anytime to see per-file ingest health, or the Explore tab to browse what's been extracted.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
