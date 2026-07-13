@@ -222,6 +222,56 @@ public actor FilesRepository {
         )
     }
 
+    /// PI.1 — preserve a file version BEFORE it is superseded (its bytes changed
+    /// and the active rows are about to be refreshed). Copies the old file
+    /// record into `file_versions` and every one of its KnowledgeObjects'
+    /// content into `knowledge_objects_history`, so no extracted data is ever
+    /// silently lost when a document changes. Idempotent-safe: a fresh
+    /// `version_id`/`history_id` per call. Throws on DB failure so the caller
+    /// can decide NOT to delete if preservation failed.
+    public func archiveVersionBeforeSupersede(
+        _ old: FileRecord,
+        supersededBy newFileID: UUID?,
+        at when: Date = .init()
+    ) async throws {
+        // 1. Snapshot the old KO content first (references the still-present rows).
+        try await database.exec("""
+        INSERT INTO knowledge_objects_history
+          (history_id, object_id, file_id, source_type, content, metadata_json, confidence, superseded_at)
+        SELECT lower(hex(randomblob(16))), id, file_id, source_type, content, metadata_json, confidence, ?
+        FROM knowledge_objects WHERE file_id = ?;
+        """, [.date(when), .uuid(old.id)])
+
+        // 2. Snapshot the file record itself.
+        try await database.exec("""
+        INSERT INTO file_versions
+          (version_id, file_id, url, source_type, size_bytes, modified_at, ingested_at,
+           content_hash, superseded_at, superseded_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, [
+            .uuid(UUID()),
+            .uuid(old.id),
+            .text(old.url.absoluteString),
+            .text(old.sourceType.rawValue),
+            .integer(old.sizeBytes),
+            .date(old.modifiedAt),
+            .optionalDate(old.ingestedAt),
+            .optionalText(old.contentHash),
+            .date(when),
+            newFileID.map { SQLValue.uuid($0) } ?? .null,
+            .date(when)
+        ])
+    }
+
+    /// PI.1 — how many archived prior versions exist for a URL (History UI + tests).
+    public func versionCount(forURL url: URL) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM file_versions WHERE url = ?;",
+            [.text(url.absoluteString)]
+        )
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     private func decode(_ row: SQLRow) -> FileRecord? {
         guard
             let id = row.uuid(0),

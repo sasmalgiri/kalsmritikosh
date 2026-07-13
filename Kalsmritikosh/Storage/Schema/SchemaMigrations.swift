@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 43
+    public static let latestVersion = 44
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -80,7 +80,8 @@ public enum SchemaMigrations {
         (40, v40),
         (41, v41),
         (42, v42),
-        (43, v43)
+        (43, v43),
+        (44, v44)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1574,5 +1575,44 @@ public enum SchemaMigrations {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_source_relations_unique
         ON source_relations(parent_file_id, child_file_id, relation);
     CREATE INDEX IF NOT EXISTS idx_source_relations_child ON source_relations(child_file_id);
+    """
+
+    // PI.1 — version-instead-of-delete. When a known file's bytes change, the
+    // pipeline USED to cascade-delete the old file row (destroying its
+    // extracted KO content). That violated "never delete extracted data". These
+    // additive history tables let ingest ARCHIVE the prior version's file record
+    // + KO content BEFORE the active rows are refreshed, so no extraction is
+    // ever silently lost and the change is auditable. Active tables still hold
+    // only the current version (retrieval unchanged — zero regression); surfacing
+    // old versions in retrieval is deferred to the version-aware fusion (P5.1).
+    private static let v44: String = """
+    CREATE TABLE IF NOT EXISTS file_versions (
+        version_id     TEXT PRIMARY KEY NOT NULL,
+        file_id        TEXT NOT NULL,
+        url            TEXT NOT NULL,
+        source_type    TEXT NOT NULL,
+        size_bytes     INTEGER NOT NULL DEFAULT 0,
+        modified_at    REAL,
+        ingested_at    REAL,
+        content_hash   TEXT,
+        superseded_at  REAL NOT NULL,
+        superseded_by  TEXT,
+        created_at     REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_file_versions_file ON file_versions(file_id);
+    CREATE INDEX IF NOT EXISTS idx_file_versions_hash ON file_versions(content_hash);
+
+    CREATE TABLE IF NOT EXISTS knowledge_objects_history (
+        history_id     TEXT PRIMARY KEY NOT NULL,
+        object_id      TEXT NOT NULL,
+        file_id        TEXT NOT NULL,
+        source_type    TEXT NOT NULL,
+        content        TEXT NOT NULL,
+        metadata_json  TEXT NOT NULL DEFAULT '{}',
+        confidence     REAL NOT NULL DEFAULT 1.0,
+        superseded_at  REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ko_history_object ON knowledge_objects_history(object_id);
+    CREATE INDEX IF NOT EXISTS idx_ko_history_file ON knowledge_objects_history(file_id);
     """
 }

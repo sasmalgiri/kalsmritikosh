@@ -394,9 +394,17 @@ public actor IngestCoordinator {
                 fileID: existing.id, kind: .hashMismatch,
                 detail: "content at \(url.lastPathComponent) changed since last ingest",
                 hash: newHash))
-            // Content changed (or hash absent): wipe the prior record so we
-            // don't accumulate duplicate rows in the dependent tables.
-            try? await files.deleteByID(existing.id)
+            // PI.1 — content changed: PRESERVE the prior version before the
+            // active rows are refreshed (never silently delete extracted data).
+            // Archive the old file record + its KO content into the history
+            // tables, THEN refresh the active rows. If preservation fails we do
+            // NOT delete — better a rare duplicate row than lost extraction.
+            do {
+                try await files.archiveVersionBeforeSupersede(existing, supersededBy: nil)
+                try await files.deleteByID(existing.id)
+            } catch {
+                KalsmritikoshLog.ingestion.error("Version preserve/supersede failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public) — keeping prior rows, not deleting")
+            }
         }
 
         // T8 — Move detection. If findByURL missed but a canonical with
