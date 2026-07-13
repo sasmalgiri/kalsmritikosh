@@ -140,21 +140,27 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     }
 
     enum Group: String, CaseIterable, Identifiable {
-        case converse   = "Ask & Search"
+        case sources     = "Sources"
+        case converse    = "Ask & Search"
         case reconstruct = "Reconstruct"
-        case knowledge   = "Knowledge"
-        case workspace   = "Workspace"
+        case explore     = "Explore"
+        case advanced    = "Advanced"
         case system      = "System"
 
         var id: String { rawValue }
 
         var items: [Destination] {
+            // P8.1 — cleaner consumer shape: Sources up top, then the core work
+            // (Ask/Search, Reconstruct, Explore); power-user surfaces fold into
+            // Advanced (still reachable). Dev/deferred entries are dropped by
+            // `releaseHidden` in the release build.
             let raw: [Destination]
             switch self {
-            case .converse:    raw = [.home, .ask, .search]
-            case .reconstruct: raw = [.timeline, .history, .findings, .notebook, .dossier, .explore, .insights]
-            case .knowledge:   raw = [.knowledge, .assertions, .answers, .library, .saved]
-            case .workspace:   raw = [.sources, .convert, .completeness, .live]
+            case .sources:     raw = [.home, .sources]
+            case .converse:    raw = [.ask, .search]
+            case .reconstruct: raw = [.history, .timeline, .findings, .insights]
+            case .explore:     raw = [.explore, .knowledge, .dossier]
+            case .advanced:    raw = [.assertions, .answers, .library, .notebook, .saved, .completeness, .convert, .live]
             case .system:      raw = [.guide, .settings]
             }
             return raw.filter { !Destination.releaseHidden.contains($0) }
@@ -163,10 +169,11 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         /// Short uppercase caption shown under each header group.
         var shortTitle: String {
             switch self {
+            case .sources:     return "SOURCES"
             case .converse:    return "ASK"
             case .reconstruct: return "REBUILD"
-            case .knowledge:   return "KNOW"
-            case .workspace:   return "WORK"
+            case .explore:     return "EXPLORE"
+            case .advanced:    return "MORE"
             case .system:      return "SYSTEM"
             }
         }
@@ -174,11 +181,12 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         /// One-line explanation of what the group is for (header tooltip).
         var blurb: String {
             switch self {
+            case .sources:     return "Add folders and see what's been ingested"
             case .converse:    return "Ask questions and search your archive"
-            case .reconstruct: return "Rebuild timelines, histories and dossiers"
-            case .knowledge:   return "Browse the structured knowledge base"
-            case .workspace:   return "Add sources, convert files, watch activity"
-            case .system:      return "Settings and diagnostics"
+            case .reconstruct: return "Rebuild timelines, histories and findings"
+            case .explore:     return "Browse entities, dossiers and the knowledge base"
+            case .advanced:    return "Assertions, answers, library and working notes"
+            case .system:      return "Settings and help"
             }
         }
     }
