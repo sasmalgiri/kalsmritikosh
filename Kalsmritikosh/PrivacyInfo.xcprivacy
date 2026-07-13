@@ -26,31 +26,18 @@
     <array/>
 
     <!--
-      Personal-data categories the app collects from the user.
-      Per Apple's "data collection" definition, collecting means
-      sending the data off-device. Since Kalsmritikosh runs on-device
-      and only contacts user-configured local or cloud LLM endpoints
-      for text generation (when the user enables them), we declare:
-        – User Content — only sent off-device when the user has
-          configured a cloud LLM endpoint AND issues a query.
-          Linked to the user's identity if the cloud endpoint
-          requires authentication.
+      Personal-data categories the app collects (= sends off-device).
+      The v1 CONSUMER RELEASE registers ONLY on-device providers (no
+      cloud, no Ollama — enforced in AppState/ReleaseCapabilityProfile),
+      so NO user content, files, questions, or answers ever leave the
+      Mac. The only network egress is an optional, user-initiated model
+      download (model bytes only — no user data). Therefore the release
+      binary collects NOTHING and this array is empty, matching
+      PRIVACY_DATA_FLOW.md and the App Store nutrition label
+      ("Data Not Collected").
     -->
     <key>NSPrivacyCollectedDataTypes</key>
-    <array>
-        <dict>
-            <key>NSPrivacyCollectedDataType</key>
-            <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
-            <key>NSPrivacyCollectedDataTypeLinked</key>
-            <true/>
-            <key>NSPrivacyCollectedDataTypeTracking</key>
-            <false/>
-            <key>NSPrivacyCollectedDataTypePurposes</key>
-            <array>
-                <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-            </array>
-        </dict>
-    </array>
+    <array/>
 
     <!--
       Required-reason API declarations (per
