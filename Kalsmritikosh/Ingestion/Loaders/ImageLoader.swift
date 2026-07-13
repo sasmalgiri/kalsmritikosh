@@ -27,21 +27,29 @@ public struct ImageLoader: Ingestor {
             "loader": AnyCodable(.string("ocr:\(ocr.engineID)"))
         ]
 
+        var pxW = 0, pxH = 0
         #if canImport(ImageIO)
         if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
            let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [String: Any] {
             if let width = props[kCGImagePropertyPixelWidth as String] as? Int {
+                pxW = width
                 meta["pixelWidth"] = AnyCodable(.int(Int64(width)))
             }
             if let height = props[kCGImagePropertyPixelHeight as String] as? Int {
+                pxH = height
                 meta["pixelHeight"] = AnyCodable(.int(Int64(height)))
             }
         }
         #endif
 
+        // PERF.4 — OCR triage: skip tiny tracking-pixel/icon/spacer images (no
+        // readable evidence; they flood email archives). Known dims below the
+        // threshold → skip OCR; unknown dims fail open to OCR.
+        let tooSmallForOCR = pxW > 0 && pxH > 0 && (min(pxW, pxH) < 64 || pxW * pxH < 64 * 64)
         // OCR is the dominant ingest cost (Vision serializes on the NE); skip
-        // when the user has turned OCR-during-ingest off (FeatureFlags).
-        let recognized = FeatureFlags.ocrDuringIngestValue() ? await ocr.recognizePrinted(at: url) : []
+        // when OCR-during-ingest is off, or for tiny images.
+        let ocrEnabled = FeatureFlags.ocrDuringIngestValue() && !tooSmallForOCR
+        let recognized = ocrEnabled ? await ocr.recognizePrinted(at: url) : []
         var content = recognized.joined(separator: "\n")
         let confidence: Confidence = recognized.isEmpty ? .low : .high
         meta["ocrLineCount"] = AnyCodable(.int(Int64(recognized.count)))
@@ -51,7 +59,7 @@ public struct ImageLoader: Ingestor {
         // a tab-separated grid only when the page is genuinely tabular (≥2 rows
         // × ≥2 columns) so ordinary scans aren't polluted. Deterministic /
         // non-generative (Apple Vision), so it's fine under the minimum-LLM rule.
-        let grid = FeatureFlags.ocrDuringIngestValue() ? await ocr.recognizeTable(at: url) : []
+        let grid = ocrEnabled ? await ocr.recognizeTable(at: url) : []
         let columnCount = grid.map(\.count).max() ?? 0
         if grid.count >= 2 && columnCount >= 2 {
             let tsv = grid.map { $0.joined(separator: "\t") }.joined(separator: "\n")

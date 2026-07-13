@@ -194,7 +194,9 @@ public actor IngestCoordinator {
     private func ensureEmbeddingDrain() {
         guard !embeddingDrainStarted else { return }
         embeddingDrainStarted = true
-        embeddingDrainTask = Task { [weak self] in await self?.embeddingDrainLoop() }
+        // P9.1 — run at background QoS so active interactive queries get CPU
+        // priority over the embedding backfill (plus the per-batch yield below).
+        embeddingDrainTask = Task(priority: .background) { [weak self] in await self?.embeddingDrainLoop() }
     }
 
     /// PERF.1 — continuously embed chunks that still lack a vector, in batches,
