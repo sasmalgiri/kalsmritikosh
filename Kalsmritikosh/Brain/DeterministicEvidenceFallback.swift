@@ -25,7 +25,10 @@ public enum DeterministicEvidenceFallback {
         eventLinks: EventLinksRepository? = nil
     ) async -> VerifiedAnswer? {
         // Prefer dated events (the structured layer); fall back to top chunks.
-        let events = Array(retrieval.events.prefix(12))
+        // P7.5 — the no-LLM reconstruction must read as a CHRONOLOGICAL timeline,
+        // so sort the event cards by date ascending before rendering (retrieval
+        // order is relevance-ranked, not temporal).
+        let events = Array(retrieval.events.prefix(12)).sorted { $0.date < $1.date }
         let chunks = Array(retrieval.chunks.prefix(8))
         guard !events.isEmpty || !chunks.isEmpty else { return nil }
 
@@ -37,7 +40,7 @@ public enum DeterministicEvidenceFallback {
         dateFormatter.dateFormat = "d MMM yyyy"
         for event in events {
             let when = dateFormatter.string(from: event.date)
-            supportLines.append("- \(event.title) — \(when)")
+            supportLines.append("- **\(when)** — \(event.title)")
             if seen.insert(event.sourceObjectID).inserted {
                 citations.append(VerifiedAnswer.Citation(
                     objectID: event.sourceObjectID,
@@ -68,7 +71,8 @@ public enum DeterministicEvidenceFallback {
             events: events, eventLinks: eventLinks
         )
 
-        var md = "## What the archive supports\n\n"
+        // Timeline framing when we have dated events; otherwise a plain support list.
+        var md = events.isEmpty ? "## What the archive supports\n\n" : "## Timeline (from your evidence)\n\n"
         md += supportLines.isEmpty ? "- (no directly citable items)\n" : supportLines.joined(separator: "\n") + "\n"
 
         if !contradictions.isEmpty {
