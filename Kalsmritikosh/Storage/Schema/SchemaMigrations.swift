@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 46
+    public static let latestVersion = 47
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -83,7 +83,8 @@ public enum SchemaMigrations {
         (43, v43),
         (44, v44),
         (45, v45),
-        (46, v46)
+        (46, v46),
+        (47, v47)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1772,5 +1773,52 @@ public enum SchemaMigrations {
     CREATE INDEX idx_screening_records_ws ON screening_records(workspace_id);
     CREATE INDEX idx_screening_records_stage ON screening_records(workspace_id, stage);
     CREATE INDEX idx_screening_records_decision ON screening_records(workspace_id, decision);
+    """
+
+    // MARK: - v47 — Persona features F8: timestamped transcript segments
+    //
+    // Timecoded transcript lines for audio/video sources (§13). Produced ON
+    // DEMAND from the transcript UI (not during ingest), so the ingest path is
+    // untouched. Each segment carries a real start/end (jump-to-time), the ASR
+    // confidence, and a user-assignable speaker — speaker diarization is NOT
+    // done on-device, so speakers default to unassigned and are renamed/merged
+    // by the user (uncertain speakers stay visible, §13). `marked_quote` flags
+    // a segment the user wants to export with its timecode. Additive.
+    private static let v47: String = """
+    CREATE TABLE transcript_segments (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        source_file_id      TEXT NOT NULL,
+        source_url          TEXT NOT NULL,
+        ordinal             INTEGER NOT NULL,
+        start_time          REAL NOT NULL,
+        end_time            REAL NOT NULL,
+        speaker             TEXT,
+        speaker_confidence  REAL,
+        text                TEXT NOT NULL,
+        asr_confidence      REAL NOT NULL DEFAULT 0,
+        review_state        TEXT NOT NULL DEFAULT 'unreviewed',
+        marked_quote        INTEGER NOT NULL DEFAULT 0,
+        engine              TEXT NOT NULL DEFAULT '',
+        created_at          REAL NOT NULL
+    );
+    CREATE INDEX idx_transcript_segments_source ON transcript_segments(source_file_id, ordinal);
+    CREATE INDEX idx_transcript_segments_quote ON transcript_segments(marked_quote);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS transcript_segments_fts USING fts5(
+        text,
+        content='transcript_segments',
+        content_rowid='rowid',
+        tokenize='porter unicode61'
+    );
+    CREATE TRIGGER IF NOT EXISTS transcript_segments_fts_ai AFTER INSERT ON transcript_segments BEGIN
+        INSERT INTO transcript_segments_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS transcript_segments_fts_ad AFTER DELETE ON transcript_segments BEGIN
+        INSERT INTO transcript_segments_fts(transcript_segments_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+    END;
+    CREATE TRIGGER IF NOT EXISTS transcript_segments_fts_au AFTER UPDATE ON transcript_segments BEGIN
+        INSERT INTO transcript_segments_fts(transcript_segments_fts, rowid, text) VALUES('delete', old.rowid, old.text);
+        INSERT INTO transcript_segments_fts(rowid, text) VALUES (new.rowid, new.text);
+    END;
     """
 }

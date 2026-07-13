@@ -322,6 +322,8 @@ public final class AppState {
     public private(set) var review: ReviewRepository?
     /// Persona features (F9) — research screening log + PRISMA-compatible counts.
     public private(set) var screening: ScreeningRepository?
+    /// Persona features (F8) — timecoded transcript segments (on-demand).
+    public private(set) var transcripts: TranscriptRepository?
     /// Phase J.13 — live observability. Per-stage ingest counters
     /// the pipeline bumps as files move through it; the Live tab
     /// reads these for the workflow strip.
@@ -1303,6 +1305,7 @@ public final class AppState {
             self.workspaces = WorkspaceRepository(database: db)
             self.review = ReviewRepository(database: db)
             self.screening = ScreeningRepository(database: db)
+            self.transcripts = TranscriptRepository(database: db)
             let confidencePropagatorActor = ConfidencePropagator(
                 links: eventLinksRepo,
                 events: events,
