@@ -53,17 +53,27 @@ public struct ImageStructuralParser: StructuralParser {
 
         // Image container block with pixel dimensions when available.
         var imageAttrs: [String: AnyCodable] = ["mime": AnyCodable(.string(Self.mime(type)))]
+        var pxW = 0, pxH = 0
         #if canImport(ImageIO)
         if let src = CGImageSourceCreateWithURL(tmp as CFURL, nil),
            let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [String: Any] {
             if let w = props[kCGImagePropertyPixelWidth as String] as? Int {
+                pxW = w
                 imageAttrs["pixelWidth"] = AnyCodable(.int(Int64(w)))
             }
             if let h = props[kCGImagePropertyPixelHeight as String] as? Int {
+                pxH = h
                 imageAttrs["pixelHeight"] = AnyCodable(.int(Int64(h)))
             }
         }
         #endif
+        // PERF.4 — OCR triage: skip tiny images (tracking pixels, spacers, UI
+        // icons, social badges). A 1×1 pixel or a 16×16 icon holds no readable
+        // evidence; email archives are full of them. When dimensions are known
+        // and below the threshold, we still ingest the image as a source block
+        // but skip the (expensive, serialized) OCR passes. Unknown dimensions →
+        // don't skip (fail open to OCR).
+        let tooSmallForOCR = pxW > 0 && pxH > 0 && (min(pxW, pxH) < 64 || pxW * pxH < 64 * 64)
         let imageBlock = EvidenceBlock(
             documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
             kind: .image, rawText: filename,
@@ -75,7 +85,7 @@ public struct ImageStructuralParser: StructuralParser {
         // Printed OCR → one paragraph block per line (reading order preserved).
         // OCR is the dominant ingest cost (Vision serializes on the Neural
         // Engine); skip it when the user has turned OCR-during-ingest off.
-        let ocrEnabled = FeatureFlags.ocrDuringIngestValue()
+        let ocrEnabled = FeatureFlags.ocrDuringIngestValue() && !tooSmallForOCR
         let lines = ocrEnabled
             ? (await ocr.recognizePrinted(at: tmp)).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             : []
