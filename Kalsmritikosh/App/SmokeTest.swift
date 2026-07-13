@@ -68,7 +68,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     var ingested = 0
     for url in fixtureURLs {
         do {
-            _ = try await ingest.ingest(fileAt: url)
+            _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
             ingested += 1
         } catch {
             KalsmritikoshLog.app.error("Smoke ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")

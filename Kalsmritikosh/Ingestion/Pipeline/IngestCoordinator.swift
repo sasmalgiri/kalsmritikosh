@@ -180,8 +180,81 @@ public actor IngestCoordinator {
         self.invalidationContinuation = continuation
     }
 
+    // PERF.1 — background embedding backfill. Started lazily on first ingest
+    // (avoids actor-init self-capture), cancelled on shutdown.
+    private var embeddingDrainStarted = false
+    private var embeddingDrainTask: Task<Void, Never>?
+
     public func shutdown() {
+        embeddingDrainTask?.cancel()
         invalidationContinuation.finish()
+    }
+
+    /// Kick the resumable background embedding drain once. Idempotent.
+    private func ensureEmbeddingDrain() {
+        guard !embeddingDrainStarted else { return }
+        embeddingDrainStarted = true
+        embeddingDrainTask = Task { [weak self] in await self?.embeddingDrainLoop() }
+    }
+
+    /// PERF.1 — continuously embed chunks that still lack a vector, in batches,
+    /// at low priority. Resumable by construction (the pending set is queried
+    /// each pass), so it survives restarts and never loses vectors. Yields
+    /// between batches so active user queries take priority.
+    private func embeddingDrainLoop() async {
+        guard let embedder, let vectors else { return }   // no embedder → nothing to do
+        while !Task.isCancelled {
+            let batch = (try? await chunks.findChunksMissingVector(limit: 128)) ?? []
+            if batch.isEmpty {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)   // idle, then re-check
+                continue
+            }
+            let texts: [String] = batch.map { c in
+                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
+                return c.text
+            }
+            let embStart = Date()
+            let vectorsList = await embedder.embedAll(texts, batchSize: 64)
+            await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
+            var embedded = 0
+            for (i, c) in batch.enumerated() where i < vectorsList.count {
+                if vectorsList[i].isEmpty { continue }   // never persist a zero vector
+                try? await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
+                embedded += 1
+            }
+            await pipelineMetrics?.bump(.embedded, by: embedded)
+            if embedded == 0 {
+                // Embedder produced nothing (unavailable) — back off so we don't
+                // hot-loop on the same unembeddable batch; retry later.
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            } else {
+                try? await Task.sleep(nanoseconds: 200_000_000)   // let queries win
+            }
+        }
+    }
+
+    /// PERF.1 — synchronously embed all currently-pending chunks (no sleeps,
+    /// stops when nothing progresses). Eval + smoke harnesses call this right
+    /// after ingesting a fixture so vector search is ready before they measure;
+    /// production relies on the background drain instead. Safe to call anytime.
+    public func drainEmbeddingsNow() async {
+        guard let embedder, let vectors else { return }
+        while !Task.isCancelled {
+            let batch = (try? await chunks.findChunksMissingVector(limit: 256)) ?? []
+            if batch.isEmpty { break }
+            let texts: [String] = batch.map { c in
+                if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }
+                return c.text
+            }
+            let vecs = await embedder.embedAll(texts, batchSize: 64)
+            var progressed = false
+            for (i, c) in batch.enumerated() where i < vecs.count {
+                if vecs[i].isEmpty { continue }
+                try? await vectors.upsert(chunkID: c.id, embedding: vecs[i])
+                progressed = true
+            }
+            if !progressed { break }   // embedder can't produce vectors → stop
+        }
     }
 
     public func ingest(fileAt url: URL) async throws -> Result {
@@ -190,6 +263,7 @@ public actor IngestCoordinator {
         // feeds event extraction AND is persisted with consistent block IDs.
         // A2 §7.3/§7.7 — record the outcome durably so failures/skips are
         // visible and re-tryable (best-effort; never affects the ingest).
+        ensureEmbeddingDrain()   // PERF.1 — vectors deepen in the background
         do {
             let result = try await ingestCore(fileAt: url)
             await ingestAttempts?.record(
@@ -996,54 +1070,14 @@ public actor IngestCoordinator {
             _ = await bondConstructor.construct(context)
         }
 
-        if let embedder, let vectors {
-            // G2-3 contextual retrieval — Anthropic-style chunk-context
-            // prefix. We prepend a short doc-level blurb (filename +
-            // first line + email subject when present) to each chunk
-            // BEFORE embedding. The stored `chunk.text` is unchanged —
-            // FTS rows, citation snippets, range maps, and the chunker
-            // contract all keep their existing shape. Only the vector
-            // changes, and that re-anchors small chunks against the
-            // larger semantically-similar neighbors they previously
-            // lost to (e.g. contract.md vs invoice-432.eml on
-            // "delivery date" similarity, per UPDATE_09 Item 1).
-            let docContext = Self.documentContext(for: object)
-            // G2-3 — per-chunk context wins over the per-document
-            // heuristic when present. Per-chunk prefixes contain
-            // section-specific context the heuristic can't ("This
-            // section lists Project Delta's amendment terms"), which
-            // is what widens the vector-similarity gap between an
-            // on-target chunk and its off-topic neighbors.
-            let texts: [String] = chunked.map { chunk in
-                if let prefix = chunk.contextPrefix, !prefix.isEmpty {
-                    return "\(prefix)\n---\n\(chunk.text)"
-                }
-                if !docContext.isEmpty {
-                    return "\(docContext)\n---\n\(chunk.text)"
-                }
-                return chunk.text
-            }
-            let embStart = Date()   // PERF.0 — time embedding generation
-            let vectorsList = await embedder.embedAll(texts, batchSize: 64)
-            await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
-            var embeddedCount = 0
-            var skippedCount = 0
-            for (i, chunk) in chunked.enumerated() where i < vectorsList.count {
-                // Empty = "no embedding produced" (T15). NEVER persist a
-                // zero/empty vector — skip and leave the chunk without a
-                // vector so it re-embeds later, rather than poisoning search.
-                if vectorsList[i].isEmpty {
-                    skippedCount += 1
-                    continue
-                }
-                try? await vectors.upsert(chunkID: chunk.id, embedding: vectorsList[i])
-                embeddedCount += 1
-            }
-            await pipelineMetrics?.bump(.embedded, by: embeddedCount)
-            if skippedCount > 0 {
-                KalsmritikoshLog.ingestion.error("Ingest \(object.id, privacy: .public): \(skippedCount, privacy: .public) chunk(s) left WITHOUT embeddings (embedder unavailable) — vector search skips them until re-embedded. No zero vectors written.")
-            }
-        }
+        // PERF.1 — embeddings are NO LONGER generated on the blocking ingest
+        // path. The chunks were persisted above, so FTS + structured retrieval
+        // are queryable immediately; the vectors deepen in the background
+        // (enrichment-ladder Tier 2). `embeddingDrainLoop()` finds chunks that
+        // still lack a vector and embeds them in batches. This can't lose
+        // vectors — a chunk with no vector is always re-found on the next drain,
+        // even after a restart — and it lets a large ingest become searchable
+        // without waiting on thousands of embeddings.
 
         let invalidationSubjects = subjects(forEntities: extractedEntities)
         if !invalidationSubjects.isEmpty {

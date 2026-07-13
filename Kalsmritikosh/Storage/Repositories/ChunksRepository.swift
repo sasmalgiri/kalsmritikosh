@@ -51,6 +51,33 @@ public actor ChunksRepository {
         return rows.compactMap(decode)
     }
 
+    /// PERF.1 — chunks that have no vector yet (the embedding-pending set).
+    /// A LEFT JOIN against `vectors` makes this the resumable work queue for the
+    /// background embedding backfill: it survives restarts (a chunk with no
+    /// vector is always re-found), so deferred embeddings can never be
+    /// permanently lost — only delayed.
+    public func findChunksMissingVector(limit: Int = 128) async throws -> [Chunk] {
+        let rows = try await database.query("""
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source
+        FROM chunks c
+        LEFT JOIN vectors v ON v.chunk_id = c.id
+        WHERE v.chunk_id IS NULL
+        ORDER BY c.created_at DESC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
+    /// PERF.1 — count of chunks awaiting embedding (Settings / diagnostics).
+    public func countChunksMissingVector() async throws -> Int {
+        let rows = try await database.query("""
+        SELECT COUNT(*) FROM chunks c
+        LEFT JOIN vectors v ON v.chunk_id = c.id
+        WHERE v.chunk_id IS NULL;
+        """, [])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     /// G2-3 backfill counter — fast count for the Settings panel to
     /// surface "N chunks awaiting context backfill".
     public func countChunksMissingContextPrefix() async throws -> Int {
