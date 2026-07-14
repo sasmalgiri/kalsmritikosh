@@ -190,6 +190,15 @@ public actor IngestCoordinator {
         invalidationContinuation.finish()
     }
 
+    /// PERF.1 — start the resumable background embedding drain WITHOUT needing a
+    /// new ingest. Called once at boot so chunks left unembedded by a PRIOR
+    /// session (the app was quit before the drain finished) are completed on the
+    /// next launch. Without this, the drain only ever started from `ingest()`,
+    /// so a launch with no new files left the pending set stranded forever.
+    public func startBackgroundEmbeddingDrain() {
+        ensureEmbeddingDrain()
+    }
+
     /// Kick the resumable background embedding drain once. Idempotent.
     private func ensureEmbeddingDrain() {
         guard !embeddingDrainStarted else { return }

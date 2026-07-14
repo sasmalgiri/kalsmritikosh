@@ -938,6 +938,14 @@ public final class AppState {
                 sourceRelations: sourceRelationsRepo
             )
 
+            // PERF.1 — resume the resumable background embedding drain as soon
+            // as the coordinator exists (embedder + vectors are set at init),
+            // NOT at the end of boot. On a populated DB the tail of boot does
+            // heavy work (HNSW rebuild, inventory); deferring the drain to then
+            // left prior-session pending embeddings stranded until a new ingest.
+            // Starting here guarantees they finish on any launch.
+            await ingest.startBackgroundEmbeddingDrain()
+
             // ── Concurrency + Live wiring ────────────────────────────
             let backgroundScheduler = BackgroundTaskScheduler()
             let compression = NightlyCompressionScheduler(
