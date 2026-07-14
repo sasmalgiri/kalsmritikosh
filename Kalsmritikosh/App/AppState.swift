@@ -627,6 +627,14 @@ public final class AppState {
                 persistent: EmbeddingCacheRepository(database: db),
                 modelID: "embedder-\(resolvedEmbedder.dimension)"
             )
+            // PERF — pre-warm the embedder in the background at boot. The first
+            // embed of a session pays a large ONE-TIME model-load cost (Apple's
+            // NLEmbedding word-embedding asset load measured ~1–3 min cold on
+            // some machines; warm calls are ~1–5 ms). Kicking a throwaway embed
+            // here, off the main actor at utility QoS, means that cold-start
+            // overlaps with launch/idle instead of blocking the first user query
+            // or making the background vector drain look stuck.
+            Task(priority: .utility) { _ = await embedder.embed("kalsmritikosh embedder warm-up") }
             let timelineEngine = TimelineEngine(events: events)
             let summarizer = LLMSummarizer(
                 objects: objects,
