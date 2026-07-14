@@ -214,10 +214,21 @@ public actor IngestCoordinator {
     /// between batches so active user queries take priority.
     private func embeddingDrainLoop() async {
         guard let embedder, let vectors else { return }   // no embedder → nothing to do
+        // Chunks the embedder returned EMPTY for this session (e.g. binary /
+        // mojibake / non-text content that NLEmbedding's word model has no
+        // vocabulary for, or zero-length chunks). They can never be vectorized
+        // by the current embedder, so re-embedding them every pass just
+        // hot-loops forever. Skip them for the rest of the session; a fresh
+        // launch (or a better embedder) retries from scratch — nothing is lost,
+        // and these chunks stay fully searchable via FTS + structure.
+        var unembeddable = Set<Chunk.ID>()
         while !Task.isCancelled {
-            let batch = (try? await chunks.findChunksMissingVector(limit: 128)) ?? []
+            let fetched = (try? await chunks.findChunksMissingVector(limit: 256)) ?? []
+            let batch = fetched.filter { !unembeddable.contains($0.id) }
             if batch.isEmpty {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)   // idle, then re-check
+                // Fully drained, or everything still missing is known-unembeddable.
+                // Idle; a later ingest adds new rows this pass will pick up.
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
                 continue
             }
             let texts: [String] = batch.map { c in
@@ -229,18 +240,15 @@ public actor IngestCoordinator {
             await pipelineMetrics?.record(.embedded, seconds: Date().timeIntervalSince(embStart))
             var embedded = 0
             for (i, c) in batch.enumerated() where i < vectorsList.count {
-                if vectorsList[i].isEmpty { continue }   // never persist a zero vector
+                if vectorsList[i].isEmpty {
+                    unembeddable.insert(c.id)   // don't retry this one this session
+                    continue                     // never persist a zero vector
+                }
                 try? await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
                 embedded += 1
             }
             await pipelineMetrics?.bump(.embedded, by: embedded)
-            if embedded == 0 {
-                // Embedder produced nothing (unavailable) — back off so we don't
-                // hot-loop on the same unembeddable batch; retry later.
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-            } else {
-                try? await Task.sleep(nanoseconds: 200_000_000)   // let queries win
-            }
+            try? await Task.sleep(nanoseconds: embedded == 0 ? 2_000_000_000 : 200_000_000)
         }
     }
 
