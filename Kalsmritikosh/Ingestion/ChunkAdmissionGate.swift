@@ -66,12 +66,19 @@ public enum ChunkAdmissionGate {
             CharacterSet.whitespacesAndNewlines.contains(s) ? acc : acc + 1
         }
         if meaningful < minMeaningfulChars {
-            // Short-but-meaningful exceptions: keep it if it contains a digit
-            // AND a letter (e.g. "Invoice #42", "Q3 2024") — small but real.
-            if hasLetter(trimmed) && hasDigit(trimmed) { /* keep evaluating */ }
-            else if isPageNumber(trimmed) { return .skipPageNumber }
-            else if isNavigation(trimmed) { return .skipNavigation }
-            else { return .skipTooShort }
+            // PROTECTED short content — short text is often the most decisive
+            // evidence ("Paid", "Denied", "Approved", "₹8,500", "12/06/2026",
+            // "Clause 7", "Yes", "No", "Not signed"). Keep any short chunk that
+            // carries a status/decision word, negation, amount, date, identifier,
+            // or letter+digit token; only fall through to skip when it is truly
+            // non-substantive (page number, nav token, or a bare fragment).
+            // Shape checks FIRST so "Page 3 of 10" is treated as a page marker
+            // even though it contains a letter+digit (which would otherwise
+            // trip the protected-signal rule below).
+            if isPageNumber(trimmed) { return .skipPageNumber }
+            if isNavigation(trimmed) { return .skipNavigation }
+            if hasProtectedShortSignal(trimmed) { return .admit }
+            return .skipTooShort
         }
 
         // Longer chunks: only skip the unambiguous non-content shapes.
@@ -109,5 +116,31 @@ public enum ChunkAdmissionGate {
     }
     private static func hasDigit(_ s: String) -> Bool {
         s.unicodeScalars.contains { ("0"..."9").contains(Character($0)) }
+    }
+
+    /// Status / decision / negation words whose mere presence makes a short
+    /// chunk decisive evidence. Matched as whole tokens (case-insensitive).
+    private static let statusWords: Set<String> = [
+        "paid", "unpaid", "due", "overdue", "denied", "approved", "rejected",
+        "accepted", "declined", "granted", "refused", "signed", "unsigned",
+        "void", "cancelled", "canceled", "confirmed", "pending", "closed",
+        "open", "yes", "no", "not", "none", "na", "n/a", "agreed", "complete",
+        "completed", "incomplete", "failed", "passed", "success", "settled",
+        "outstanding", "waived", "expired", "active", "inactive", "terminated"
+    ]
+
+    /// True when a short chunk carries a protected signal — an amount, date,
+    /// identifier, letter+digit token, or a status/decision/negation word — so
+    /// it must NOT be dropped from the vector index just for being short.
+    private static func hasProtectedShortSignal(_ trimmed: String) -> Bool {
+        // Amount (currency symbol anywhere).
+        if trimmed.unicodeScalars.contains(where: { "$€£₹¥₩¢".unicodeScalars.contains($0) }) { return true }
+        // Date-ish: two number groups joined by / . or - (12/06/2026, 6-1-25).
+        if trimmed.range(of: #"\d{1,4}[/.\-]\d{1,2}"#, options: .regularExpression) != nil { return true }
+        // Identifier / labelled number (letter AND digit): "Clause 7", "#42", "Q3".
+        if hasLetter(trimmed) && hasDigit(trimmed) { return true }
+        // Status / decision / negation word as a whole token.
+        let tokens = trimmed.lowercased().split { !$0.isLetter && $0 != "/" }.map(String.init)
+        return tokens.contains { statusWords.contains($0) }
     }
 }
