@@ -25,6 +25,7 @@ public enum ChunkAdmission: Equatable, Sendable {
     case skipTooShort
     case skipPageNumber
     case skipNavigation
+    case skipEmailHeader
 
     public var admitted: Bool { self == .admit }
     /// Stored/logged reason string (nil when admitted).
@@ -35,6 +36,7 @@ public enum ChunkAdmission: Equatable, Sendable {
         case .skipTooShort:    return "too_short"
         case .skipPageNumber:  return "page_number"
         case .skipNavigation:  return "navigation"
+        case .skipEmailHeader: return "email_header"
         }
     }
 }
@@ -56,9 +58,21 @@ public enum ChunkAdmissionGate {
         "click here", "return to top", "back to top"
     ]
 
+    /// Email header field prefixes. A chunk that is a single short line
+    /// beginning with one of these is pure metadata (From/To/Subject/Date/…) —
+    /// already captured as structured fields/entities by the email loader, so
+    /// embedding it as a standalone semantic vector adds nothing and floods the
+    /// index (an mbox repeats "From: x" once per message). Guarded by
+    /// single-line + <80 chars so a "Date: <date> <body…>" chunk (where body
+    /// merged onto the header line) is NEVER treated as a header.
+    private static let emailHeaderPrefixes = [
+        "from:", "to:", "cc:", "bcc:", "subject:", "date:", "sent:", "reply-to:"
+    ]
+
     public static func evaluate(_ text: String) -> ChunkAdmission {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return .skipBlank }
+        if isEmailHeaderLine(trimmed) { return .skipEmailHeader }
 
         // Count non-whitespace characters (a chunk of only spaces/newlines,
         // or a couple of stray glyphs, has no embeddable signal).
@@ -109,6 +123,17 @@ public enum ChunkAdmissionGate {
     private static func isNavigation(_ s: String) -> Bool {
         let key = s.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         return navigationTokens.contains(key)
+    }
+
+    /// A single short line that is only an email header field. Mirrors the
+    /// SQL-validated rule: no internal newline, <80 chars, begins with a known
+    /// header prefix. The length + single-line guard guarantees a header line
+    /// that absorbed body text (long) is kept, not skipped (0 body false
+    /// positives verified on the real corpus).
+    private static func isEmailHeaderLine(_ trimmed: String) -> Bool {
+        guard trimmed.count < 80, !trimmed.contains("\n") else { return false }
+        let lower = trimmed.lowercased()
+        return emailHeaderPrefixes.contains { lower.hasPrefix($0) }
     }
 
     private static func hasLetter(_ s: String) -> Bool {
