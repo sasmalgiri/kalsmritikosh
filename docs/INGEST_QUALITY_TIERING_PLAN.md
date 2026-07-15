@@ -105,3 +105,31 @@ Show the tradeoff explicitly: estimated time / "Higher quality ≈ N× slower", 
 - **FAST tier does zero generative work** (matches foundation-gate §5 "no hidden generative backfill").
 - **Escalation is transparent** — the UI shows the tier, the reason it escalated, and the time cost.
 - Deterministic, reproducible: same input + same tier → same admitted set + same vectors.
+
+---
+
+## 7. REVIEW UPDATE — accepted corrections (supersede §2–§6 where in conflict)
+
+A design review (2026-07-15) accepted the direction (~75–80%) with required corrections. These are now binding:
+
+1. **Vector admission ≠ FTS admission.** Aggressive filtering applies to the SEMANTIC VECTOR index only. FTS must keep exact discovery of disclaimers/signatures/short answers (down-ranked, not removed). *Status: the shipped Stage 1 `admit_embedding` is vector-only — FTS is untouched.* Future richer metadata (`admit_vector`, `admit_fts`, `fts_priority`, `boilerplate_class`) lands with the Stage 2 FTS treatment, not before.
+2. **No bare `<12 char` cutoff.** Protect short decisive evidence: status/decision/negation words, amounts, dates, identifiers, letter+digit tokens are always admitted; only truly non-substantive short fragments are skipped. *Status: implemented + verified (`Paid`/`No`/`Not signed`/`₹8,500` → admit; page-number/nav still skipped).*
+3. **Do NOT wire `BoilerplateRegistry` unchanged.** It scans fixed 200-byte overlapping windows, promotes on ≥3 KO occurrences, can match partial fragments, rewrites KO content with tokens (compaction-oriented), and has an FNV-1a/djb2 truncated hash despite SHA-256 comments. Before it can classify admission it must: detect at structural block boundaries, use a real stable content hash, require exact normalized-block repetition, record the full original block, classify template type, preserve every occurrence + locator, and be validated on labeled examples. Until then it stays a compaction component only.
+4. **Duplicate occurrences stay individually traceable.** Reuse ONE vector by normalized-content hash, but preserve every chunk/evidence-block row, source version, parent, date, and locator. Never collapse occurrences into one source.
+5. **No Llama context-prefixes in automatic THOROUGH.** Conflicts with the locked minimum-LLM / no-hidden-generative-backfill / deterministic-ingest rules. THOROUGH uses DETERMINISTIC structural prefixes (filename, document title, section path, email subject, sender/date, table name+headers, sheet, slide title, speaker+timestamp, attachment parent). Any LLM enrichment is a SEPARATE, explicit, never-auto, never-evidence action.
+6. **"Processing run", not "re-ingest".** A stronger OCR/embedding pass keeps the SAME source version and adds: a new processing run, new OCR derivative version, new embedding-model version, new quality report. A new source version is created ONLY when the source bytes change.
+7. **Auto-escalation is recommend-first.** Default: fast pass records a quality reason → UI shows "Enhanced processing recommended" → user starts it. An optional setting may allow automatic *deterministic* enhancement while idle (accurate OCR, orientation/table retry, quality embedding, parser retry) — **never** automatic generative work.
+8. **BGE-small is a CANDIDATE, not locked.** Subject to licence, Core ML conversion, 8 GB-Mac performance, retrieval eval, and App Store packaging. Correction: subword tokenization helps OOV *spelling*, but `bge-small-en-v1.5` is **English** (per its model card) — not automatically multilingual; a multilingual need requires a multilingual model.
+9. **Model-aware vector storage is a hard pre-req for Stage 3.** Today `vectors` is one-row-per-chunk and `findChunksMissingVector` checks for ANY vector, so an Apple vector blocks a quality re-embed. Required: a `chunk_embeddings` table keyed by `(chunk_id, model_id, model_version, preprocessing_version)` with per-model "missing" queries. Bumping the cache `modelID` is NOT sufficient.
+10. **Independent policies, not one coupled enum.** User sees Fast / Higher quality; internally a `ProcessingProfile { ocrQuality, embeddingPolicy, tableExtraction, orientationRetry, generativeEnrichment }` so choosing better embeddings never triggers unnecessary OCR/LLM work. `generativeEnrichment` is `disabled` in BOTH profiles.
+11. **Richer quality signals** (calibrated per source type): recognized-token coverage, OOV ratio, detected-language-vs-model, OCR confidence distribution, gibberish/non-letter ratio, duplicate-text ratio, parser-warning severity, table-structure confidence, citation-locator completeness. (`empty-embedding ratio` alone is insufficient.)
+12. **Measurable acceptance, not "≈0%":** protected-evidence false-exclusions = 0; overall vector-skip false-positive rate < agreed threshold; recall regression on gold questions = 0 or within tolerance; exact-search accessibility = 100%; citation resolution = 100%. Protected classes: amounts, dates, identifiers, names, status statements, signatures, negations, short table cells, email headers, clause headings.
+
+### Corrected staging (supersedes §5)
+1. **Stage 1 — vector admission metadata only** (`admit_vector`/`vector_skip_reason`; conservative rules; FTS intact). Measure vector-count/time reduction + recall + false exclusions. *(DONE + verified this session.)*
+2. **Stage 2 — FTS ranking treatment** (low-priority field / separate boilerplate index / retrieval-time down-rank / canonical-text + occurrence mapping). Exact search must still find everything.
+3. **Stage 3 — Processing profiles** (Fast / Higher quality → independent OCR/embedding/extraction policies; no generative work in either).
+4. **Stage 4 — Multi-model embedding storage** (`chunk_embeddings`, per-model indexes, migrate without deleting current vectors).
+5. **Stage 5 — Quality sentence embedder** (evaluate candidates on retrieval, 8 GB RAM, batch speed, Core ML, size, licence, thermal — don't hardcode BGE until it passes).
+6. **Stage 6 — Query-time progressive quality** (structured + FTS + Apple → candidate union → quality-embed bounded candidates → cache → rerank → verified answer; don't reprocess whole sources for one question).
+7. **Stage 7 — Quality reports + escalation** (`source_quality_reports`, `processing_runs`, `enhancement_jobs`; default = recommend; optional idle deterministic-only auto-enhance).
