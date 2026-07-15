@@ -15,8 +15,8 @@ public actor ChunksRepository {
     public func insertBatch(_ chunks: [Chunk]) async throws {
         for chunk in chunks {
             try await database.exec("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -27,7 +27,8 @@ public actor ChunksRepository {
                 chunk.pageNumber.map { .integer(Int64($0)) } ?? .null,
                 .date(chunk.createdAt),
                 chunk.contextPrefix.map { .text($0) } ?? .null,
-                chunk.contextPrefixSource.map { .text($0) } ?? .null
+                chunk.contextPrefixSource.map { .text($0) } ?? .null,
+                .integer(chunk.admitEmbedding ? 1 : 0)
             ])
         }
     }
@@ -62,6 +63,7 @@ public actor ChunksRepository {
         FROM chunks c
         LEFT JOIN vectors v ON v.chunk_id = c.id
         WHERE v.chunk_id IS NULL
+          AND c.admit_embedding = 1
         ORDER BY c.created_at DESC
         LIMIT ?;
         """, [.integer(Int64(limit))])
@@ -73,7 +75,8 @@ public actor ChunksRepository {
         let rows = try await database.query("""
         SELECT COUNT(*) FROM chunks c
         LEFT JOIN vectors v ON v.chunk_id = c.id
-        WHERE v.chunk_id IS NULL;
+        WHERE v.chunk_id IS NULL
+          AND c.admit_embedding = 1;
         """, [])
         return Int(rows.first?.int(0) ?? 0)
     }

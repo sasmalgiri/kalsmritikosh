@@ -827,6 +827,12 @@ public actor IngestCoordinator {
         }
 
         var chunked = chunker.chunk(objectID: object.id, content: object.content)
+        // Stage 1 ingest quality gate ("do not embed everything") — mark
+        // non-substantive chunks (blank, tiny fragment, bare page number, lone
+        // nav token) as NOT admitted to the vector index. They are still stored
+        // and stay FTS-/citation-searchable; only embedding skips them. Verified
+        // on the real corpus at <0.5% incidence on genuine content.
+        chunked = chunked.map { $0.withAdmitEmbedding(ChunkAdmissionGate.evaluate($0.text).admitted) }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
         // same prefix. Skipped when chunks.count < 2 (single-chunk

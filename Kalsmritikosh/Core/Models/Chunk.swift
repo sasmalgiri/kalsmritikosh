@@ -36,6 +36,13 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// `ContextPrefixResult.sourceHeuristicFallback`, or nil when no
     /// prefix was generated.
     public let contextPrefixSource: String?
+    /// Stage 1 ingestion quality gate — whether this chunk is admitted to the
+    /// semantic vector index (see ChunkAdmissionGate). `false` for blanks,
+    /// tiny fragments, bare page numbers, and lone navigation tokens: those are
+    /// still STORED and FTS-/citation-searchable, just not embedded. Defaults
+    /// true so pre-gate rows and every other code path treat chunks as
+    /// embeddable unless explicitly gated.
+    public let admitEmbedding: Bool
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -49,7 +56,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         pageNumber: Int? = nil,
         createdAt: Date = .init(),
         contextPrefix: String? = nil,
-        contextPrefixSource: String? = nil
+        contextPrefixSource: String? = nil,
+        admitEmbedding: Bool = true
     ) {
         self.id = id
         self.objectID = objectID
@@ -60,11 +68,12 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.contextPrefix = contextPrefix
         self.contextPrefixSource = contextPrefixSource
+        self.admitEmbedding = admitEmbedding
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
     /// + `contextPrefixSource` are replaced. Used by IngestCoordinator
-    /// after the per-chunk context generator runs.
+    /// after the per-chunk context generator runs. Preserves `admitEmbedding`.
     public nonisolated func withContextPrefix(_ prefix: String?, source: String?) -> Chunk {
         Chunk(
             id: id,
@@ -75,14 +84,31 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             pageNumber: pageNumber,
             createdAt: createdAt,
             contextPrefix: prefix,
-            contextPrefixSource: source
+            contextPrefixSource: source,
+            admitEmbedding: admitEmbedding
+        )
+    }
+
+    /// Returns a copy with the embedding-admission flag set (Stage 1 gate).
+    public nonisolated func withAdmitEmbedding(_ admit: Bool) -> Chunk {
+        Chunk(
+            id: id,
+            objectID: objectID,
+            ordinal: ordinal,
+            text: text,
+            characterRange: characterRange,
+            pageNumber: pageNumber,
+            createdAt: createdAt,
+            contextPrefix: contextPrefix,
+            contextPrefixSource: contextPrefixSource,
+            admitEmbedding: admit
         )
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
-        case pageNumber, createdAt, contextPrefix, contextPrefixSource
+        case pageNumber, createdAt, contextPrefix, contextPrefixSource, admitEmbedding
     }
 
     public init(from decoder: Decoder) throws {
@@ -98,6 +124,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.createdAt = try c.decode(Date.self, forKey: .createdAt)
         self.contextPrefix = try c.decodeIfPresent(String.self, forKey: .contextPrefix)
         self.contextPrefixSource = try c.decodeIfPresent(String.self, forKey: .contextPrefixSource)
+        self.admitEmbedding = try c.decodeIfPresent(Bool.self, forKey: .admitEmbedding) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -112,5 +139,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encode(createdAt, forKey: .createdAt)
         try c.encodeIfPresent(contextPrefix, forKey: .contextPrefix)
         try c.encodeIfPresent(contextPrefixSource, forKey: .contextPrefixSource)
+        try c.encode(admitEmbedding, forKey: .admitEmbedding)
     }
 }

@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 47
+    public static let latestVersion = 48
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -61,17 +61,16 @@ public enum SchemaMigrations {
         }
     }
 
-    /// True when the newest migration's table already exists — i.e. the schema
-    /// is fully applied even if `user_version` disagrees. The sentinel is the
-    /// table created by the LATEST migration; because migrations are ordered
-    /// and append-only, its presence implies every earlier object exists too.
-    /// UPDATE THIS SENTINEL when a new migration adds a table.
+    /// True when the LATEST migration's marker already exists — i.e. the schema
+    /// is fully applied even if `user_version` disagrees. Because migrations are
+    /// ordered and append-only, the newest marker's presence implies every
+    /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
+    /// is added, to the newest object it creates (a table or, as here, a column).
+    /// v48 adds `chunks.admit_embedding` — check that column.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?;",
-            [.text("transcript_segments")]   // created by v47 (latestVersion)
-        )
-        return (rows.first?.int(0) ?? 0) > 0
+        let rows = try await database.query("PRAGMA table_info(chunks);", [])
+        // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
+        return rows.contains { $0.string(1) == "admit_embedding" }
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
@@ -122,7 +121,8 @@ public enum SchemaMigrations {
         (44, v44),
         (45, v45),
         (46, v46),
-        (47, v47)
+        (47, v47),
+        (48, v48)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1858,5 +1858,19 @@ public enum SchemaMigrations {
         INSERT INTO transcript_segments_fts(transcript_segments_fts, rowid, text) VALUES('delete', old.rowid, old.text);
         INSERT INTO transcript_segments_fts(rowid, text) VALUES (new.rowid, new.text);
     END;
+    """
+
+    // MARK: - v48 — Stage 1 ingest quality gate: chunk embedding-admission flag
+    //
+    // "Do not embed everything." Chunks that are blank, tiny fragments, bare
+    // page numbers, or lone navigation tokens carry no semantic signal. This
+    // flag lets ingest mark such chunks as NOT admitted to the vector index
+    // (ChunkAdmissionGate decides). Non-admitted chunks are still STORED and
+    // remain FTS-/citation-searchable — nothing is deleted; they are only
+    // excluded from embedding. Existing rows default to 1 (admitted), so the
+    // vector layer is unchanged for anything ingested before this gate.
+    private static let v48: String = """
+    ALTER TABLE chunks ADD COLUMN admit_embedding INTEGER NOT NULL DEFAULT 1;
+    CREATE INDEX IF NOT EXISTS idx_chunks_admit_embedding ON chunks(admit_embedding);
     """
 }
