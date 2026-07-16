@@ -192,7 +192,6 @@ public struct RootView: View {
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
-    @State private var showMaintenance: Bool = true
     /// Interface mode. Simple hides the power-user surfaces (Notebook, Explore)
     /// from the sidebar; Advanced shows every screen. Persisted; default Simple.
     @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
@@ -372,12 +371,15 @@ public struct RootView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
                 maintenanceAskPrompt
-                maintenancePill
-                ingestPill
+                // Persistent live-activity window pinned to the sidebar corner
+                // (always visible — replaces the old auto-hiding pills). Tap to
+                // open the full Live dashboard.
+                LiveActivityPanel(onOpen: { navigate(to: .live) })
             }
             .animation(Theme.springSoft, value: appState.maintenanceAskPending)
             .animation(Theme.springSoft, value: appState.maintenanceActive)
-            .animation(Theme.springSoft, value: showMaintenance)
+            .animation(Theme.springSoft, value: appState.ingestActiveCount)
+            .animation(Theme.springSoft, value: appState.isDistillingMemory)
         }
     }
 
@@ -417,46 +419,6 @@ public struct RootView: View {
             )
             .padding(.horizontal, 10)
             .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    /// Idle-maintenance status pill. Appears when a pass starts (machine
-    /// idle) and briefly after it completes / pauses so the user always
-    /// knows the app worked while they were away — and stopped when they
-    /// returned. Auto-hides a few seconds after the last transition.
-    @ViewBuilder
-    private var maintenancePill: some View {
-        if let status = appState.maintenanceStatus, showMaintenance {
-            let active = appState.maintenanceActive
-            HStack(spacing: 8) {
-                Image(systemName: active ? "moon.zzz.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(active ? Theme.brand : .green)
-                    .imageScale(.small)
-                    .symbolEffect(.pulse, isActive: active)
-                Text(status)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke((active ? Theme.brand : Color.green).opacity(0.3), lineWidth: 1)
-            )
-            .padding(.horizontal, 10)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .task(id: appState.maintenanceLastEventAt) {
-                // Keep completed/paused pills visible briefly, then hide.
-                showMaintenance = true
-                if !appState.maintenanceActive {
-                    try? await Task.sleep(nanoseconds: 6_000_000_000)
-                    withAnimation(Theme.springSoft) { showMaintenance = false }
-                }
-            }
         }
     }
 
@@ -757,43 +719,6 @@ public struct RootView: View {
         }
     }
 
-    // MARK: Ingest status pill
-
-    /// Compact status chip pinned to the bottom of the sidebar. Shows a
-    /// live spinner during ingest, a green check when idle. Uses a
-    /// standard material capsule (content-layer element — not Liquid
-    /// Glass, per HIG guidance).
-    @ViewBuilder
-    private var ingestPill: some View {
-        let active = appState.ingestActiveCount > 0
-        if active || appState.ingestLastFile != nil {
-            HStack(spacing: 8) {
-                if active {
-                    ProgressView().controlSize(.mini)
-                    Text("Ingesting \(appState.ingestActiveCount)…")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.primary)
-                } else {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .imageScale(.small)
-                    Text("Ingestion idle")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.regularMaterial, in: Capsule())
-            .overlay(
-                Capsule().stroke(active ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.18), lineWidth: 1)
-            )
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
-            .animation(.easeInOut(duration: 0.25), value: active)
-        }
-    }
 }
 
 // MARK: - Sidebar row
