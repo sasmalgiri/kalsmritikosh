@@ -22,6 +22,9 @@ public struct GuideView: View {
                 header
                 screensSection
                 glossarySection
+                ForEach(GuideContent.termGroups, id: \.title) { group in
+                    glossaryCard(title: group.title, icon: group.symbol, items: group.items)
+                }
             }
             .padding(20)
         }
@@ -71,9 +74,20 @@ public struct GuideView: View {
     }
 
     private var glossarySection: some View {
+        glossaryCard(title: "How facts are graded", icon: "checkmark.seal",
+                     items: GuideContent.glossary)
+    }
+
+    /// One titled card of term → plain-meaning rows. Shared by the evidence-
+    /// status glossary and every plain-language term group.
+    private func glossaryCard(
+        title: String,
+        icon: String,
+        items: [(term: String, definition: String)]
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("How facts are graded", "checkmark.seal")
-            ForEach(GuideContent.glossary, id: \.term) { item in
+            sectionTitle(title, icon)
+            ForEach(items, id: \.term) { item in
                 HStack(alignment: .top, spacing: 12) {
                     Text(item.term)
                         .font(.caption.weight(.bold))

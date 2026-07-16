@@ -166,4 +166,44 @@ enum GuideContent {
         ("Citation", "The exact source (file, page, row) a statement came from. Open it to verify."),
         ("Missing Proof", "Evidence that would be needed to establish a claim but is absent from your sources.")
     ]
+
+    /// Plain-language glossary of the OPTIONS and JARGON beyond the evidence
+    /// statuses above — the buttons a user presses and the words the app uses.
+    /// Each group renders under its own heading in the Guide. Kept in step with
+    /// docs/GLOSSARY.md; edit both together.
+    static let termGroups: [(title: String, symbol: String, items: [(term: String, definition: String)])] = [
+        ("Buttons & options", "slider.horizontal.3", [
+            ("Ingest", "Reading and filing your documents into searchable, dated, cited facts. Runs automatically when you add files — you don't press anything."),
+            ("Distill memory", "Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it."),
+            ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default."),
+            ("Allow cloud providers", "Off by default. Leave it off to keep every file, question, and answer entirely on your Mac."),
+            ("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."),
+            ("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses.")
+        ]),
+        ("What the app stores", "tray.full", [
+            ("Ledger", "The app's structured memory — the one database where every fact, date, person, and source lives. The intelligence is here, not in the AI model."),
+            ("Knowledge Object", "One document (or email) after the app has read and normalized it."),
+            ("Chunk", "A small slice of a document, so search and the AI can handle it a piece at a time."),
+            ("Entity", "A real-world thing the app recognizes: a person, company, place, phone number, or amount. Spellings and aliases are merged into one."),
+            ("Event", "A dated thing that happened (\"invoice sent on 4 May\"), placed on your Timeline."),
+            ("Relationship", "A link between two entities (\"Person A works at Company B\"), shown in the connection graph."),
+            ("Distilled memory", "A one-paragraph \"where things stand now\" for a person or company, rolled up from all their mentions and updated over time. Also called the subject's state."),
+            ("Assertion", "A single claim in subject–verb–object form (\"Contract → signed by → Party X\"), each carrying the evidence that backs it."),
+            ("Provenance", "The paper trail — exactly where in which file each fact came from. It's what makes every answer verifiable.")
+        ]),
+        ("Finding answers", "magnifyingglass", [
+            ("Keyword search", "Finds exact words, names, and numbers. Use it when you know the exact term."),
+            ("Semantic search", "Finds passages that mean the same thing even in different words. Use it when you remember the idea, not the wording."),
+            ("Reconstruct", "Rebuilds the story of what happened, in order, from your dated events — with every claim traceable to its source."),
+            ("Evidence gate", "Before showing an answer the app decides: show it, soften it, refuse, or flag a conflict — based on how good the evidence is. It won't overclaim.")
+        ]),
+        ("Speed vs. depth", "gauge.with.dots.needle.67percent", [
+            ("Ledger mode", "Fastest: rule-based reading and indexing with almost no AI at import. The default — you can search right away."),
+            ("Hot / Warm / Cold", "Reads everything lightly, then spends extra AI effort only on the important (\"hot\") part."),
+            ("Full LLM", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
+            ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
+            ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
+            ("Transcription", "Turns audio and video into text. Slower; done on-device automatically for recordings.")
+        ])
+    ]
 }
