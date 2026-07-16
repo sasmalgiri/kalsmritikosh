@@ -469,6 +469,12 @@ public final class AppState {
             #endif
 
             await capabilities.register(FoundationModelsProvider())
+            // P6.2 — bundled on-device sentence embedder. Resolves over the
+            // Apple NLEmbedding fallback ONLY when its Core ML model is bundled
+            // (Resources/BGESmallEmbedder/); otherwise isAvailable() is false and
+            // embedding behaviour is unchanged. See docs/EMBEDDER_SWAP.md.
+            let coreMLEmbedder = CoreMLEmbedderProvider()
+            await capabilities.register(coreMLEmbedder)
             if internalProvidersEnabled {
             await capabilities.register(
                 MLXProvider(
@@ -985,6 +991,28 @@ public final class AppState {
             // heavy work (HNSW rebuild, inventory); deferring the drain to then
             // left prior-session pending embeddings stranded until a new ingest.
             // Starting here guarantees they finish on any launch.
+            //
+            // P6.2 — embedder-swap reconciliation. Runs ONLY when the bundled
+            // Core ML embedder is present; a no-op otherwise (today's path). When
+            // present, any stored vectors at a different dimension (e.g. the old
+            // 300-dim Apple embeddings) are stale: delete them so the drain
+            // re-embeds every chunk at the new dimension, and drop the HNSW cache
+            // so it rebuilds. Vectors are DERIVED (re-derivable) — this is not the
+            // protected extracted data; chunks/FTS/entities are untouched.
+            if await coreMLEmbedder.isAvailable() {
+                let target = Int64(coreMLEmbedder.dimension)
+                let stale = (try? await db.query(
+                    "SELECT COUNT(*) FROM vectors WHERE dim != ?;", [.integer(target)]
+                ))?.first?.int(0) ?? 0
+                if stale > 0 {
+                    try? await db.exec("DELETE FROM vectors WHERE dim != ?;", [.integer(target)])
+                    let cacheURL = resolvedDBURL
+                        .deletingLastPathComponent()
+                        .appendingPathComponent("hnsw-index.bin")
+                    try? FileManager.default.removeItem(at: cacheURL)
+                    KalsmritikoshLog.app.info("Embedder swap: cleared \(stale, privacy: .public) stale-dimension vector(s); re-embedding at dim \(target, privacy: .public)")
+                }
+            }
             await ingest.startBackgroundEmbeddingDrain()
 
             // ── Concurrency + Live wiring ────────────────────────────

@@ -60,9 +60,9 @@ public final class BGETokenizer: @unchecked Sendable {
     /// Returns nil when the JSON isn't bundled — the caller (the
     /// cross-encoder tier) treats this as "tokenizer not ready" and
     /// passes through without scoring.
-    public init?(resourceName: String = "tokenizer", maxLength: Int = 512) {
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "json")
-                ?? Bundle.main.url(forResource: resourceName, withExtension: "json", subdirectory: "BGEReranker"),
+    public init?(resourceName: String = "tokenizer", subdirectory: String = "BGEReranker", maxLength: Int = 512) {
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "json", subdirectory: subdirectory)
+                ?? Bundle.main.url(forResource: resourceName, withExtension: "json"),
               let data = try? Data(contentsOf: url)
         else {
             return nil
@@ -121,6 +121,19 @@ public final class BGETokenizer: @unchecked Sendable {
             ids.append(contentsOf: Array(repeating: Self.padID, count: padCount))
         }
         let mask = attention + Array(repeating: 0, count: max(0, maxLength - attention.count))
+        return Output(inputIDs: ids, attentionMask: mask)
+    }
+
+    /// Tokenize a SINGLE sequence for a sentence embedder: <s> tokens </s>,
+    /// padded/truncated to maxLength, with a matching attention mask. Used by
+    /// CoreMLEmbedderProvider. (The reranker path uses `encode(question:passage:)`.)
+    public func encode(text: String) -> Output {
+        var ids: [Int32] = [Self.clsID] + tokenize(text) + [Self.sepID]
+        if ids.count > maxLength { ids = Array(ids.prefix(maxLength)) }
+        let attention = Array(repeating: Int32(1), count: ids.count)
+        let padCount = max(0, maxLength - ids.count)
+        ids.append(contentsOf: Array(repeating: Self.padID, count: padCount))
+        let mask = attention + Array(repeating: Int32(0), count: padCount)
         return Output(inputIDs: ids, attentionMask: mask)
     }
 
