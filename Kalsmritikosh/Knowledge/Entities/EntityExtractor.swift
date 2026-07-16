@@ -112,6 +112,11 @@ public struct NLEntityExtractor: EntityExtractor {
                     confidence: .high
                 )
             case .phoneNumber:
+                // NSDataDetector over-matches digit-hyphen strings as phone
+                // numbers — date ranges ("2015-05 2017-11"), page/number ranges
+                // ("2739-2742", "8874–8877"). Suppress the phoneNumber ENTITY
+                // for those (the raw text still lives in the chunk/FTS).
+                guard Self.isPlausiblePhone(value) else { return nil }
                 return Entity(
                     kind: .phoneNumber,
                     value: value,
@@ -130,6 +135,29 @@ public struct NLEntityExtractor: EntityExtractor {
                 return nil
             }
         }
+    }
+
+    /// NSDataDetector is liberal about what counts as a phone number on
+    /// digit-heavy corpora: it tags date ranges ("2015-05 2017-11"), citation
+    /// spans ("2739-2742"), and page ranges ("8874–8877") as phones. Accept a
+    /// value as a real phone only when it has 7–15 digits AND is neither a
+    /// year-month token nor a bare small-integer range. Conservative on purpose
+    /// — genuine phones (`+91-40-27160512`, `(022) 6662 0808`, `1800 22 6655`)
+    /// pass; the rejected value still lives in the chunk/FTS text.
+    static func isPlausiblePhone(_ raw: String) -> Bool {
+        // Year-month token anywhere ("2015-05") ⇒ a date range, not a phone.
+        if raw.range(of: #"\b(19|20)\d{2}-\d{2}\b"#, options: .regularExpression) != nil {
+            return false
+        }
+        let digitCount = raw.reduce(0) { $0 + ($1.isNumber ? 1 : 0) }
+        guard (7...15).contains(digitCount) else { return false }
+        // Bare small-integer range ("2739-2742", "8874–8877"): two 3–5 digit
+        // groups joined by a dash, no country code / grouping / parens. That is
+        // a citation or page range, not a phone.
+        if raw.range(of: #"^\s*\d{3,5}\s*[-–—]\s*\d{3,5}\s*$"#, options: .regularExpression) != nil {
+            return false
+        }
+        return true
     }
 
     // MARK: - Regex
