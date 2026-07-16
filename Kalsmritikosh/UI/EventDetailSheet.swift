@@ -27,6 +27,8 @@ public struct EventDetailSheet: View {
     @Environment(AppState.self) private var appState
     let event: Event
     let onClose: () -> Void
+    /// Called after a reject/restore so the presenting list can refresh.
+    let onReviewChanged: () -> Void
 
     @State private var sourceObject: KnowledgeObject?
     @State private var sourceURL: URL?
@@ -36,10 +38,18 @@ public struct EventDetailSheet: View {
     @State private var assertions: [Assertion] = []
     @State private var versionCount: Int = 0
     @State private var loading: Bool = true
+    /// v50 human-in-loop: whether this event is currently soft-excluded.
+    @State private var isExcluded: Bool = false
+    @State private var reviewBusy: Bool = false
 
-    public init(event: Event, onClose: @escaping () -> Void) {
+    public init(
+        event: Event,
+        onClose: @escaping () -> Void,
+        onReviewChanged: @escaping () -> Void = {}
+    ) {
         self.event = event
         self.onClose = onClose
+        self.onReviewChanged = onReviewChanged
     }
 
     public var body: some View {
@@ -81,14 +91,50 @@ public struct EventDetailSheet: View {
             Text("Event detail")
                 .font(.headline)
             Spacer()
+            if isExcluded {
+                Label("Excluded", systemImage: "eye.slash")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
             if versionCount >= 2 {
                 Label("\(versionCount) versions", systemImage: "clock.arrow.circlepath")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.orange)
             }
+            // Human-in-loop reject / restore (reversible, audit-logged).
+            if isExcluded {
+                Button { Task { await setExcluded(false) } } label: {
+                    Label("Restore", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(reviewBusy)
+            } else {
+                Button(role: .destructive) { Task { await setExcluded(true) } } label: {
+                    Label("Reject", systemImage: "eye.slash")
+                }
+                .disabled(reviewBusy)
+            }
             Button("Close", action: onClose)
                 .keyboardShortcut(.cancelAction)
         }
+    }
+
+    /// Soft-exclude or restore this event. Never deletes the row — flips the
+    /// separate review_status marker and records an append-only FactReview so
+    /// the action shows in the Audit trail and can be undone.
+    private func setExcluded(_ excluded: Bool) async {
+        guard let events = appState.events else { return }
+        reviewBusy = true
+        defer { reviewBusy = false }
+        try? await events.setReviewStatus(event.id, excluded ? "rejected" : nil)
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .event, subjectID: event.id,
+            action: excluded ? .reject : .accept,
+            priorValue: event.title, reviewer: "user",
+            reason: excluded ? "Excluded from the timeline" : "Restored"
+        ))
+        isExcluded = excluded
+        onReviewChanged()
+        onClose()
     }
 
     // MARK: - Panels
@@ -331,6 +377,8 @@ public struct EventDetailSheet: View {
             outgoingPromise, incomingPromise, assertionsPromise, versionsPromise
         )
 
+        let excluded = (try? await appState.events?.reviewStatus(forID: event.id)) == "rejected"
+
         await MainActor.run {
             self.sourceObject = obj
             self.sourceURL = url
@@ -339,6 +387,7 @@ public struct EventDetailSheet: View {
             self.incoming = inn
             self.assertions = asserts
             self.versionCount = versions.count
+            self.isExcluded = excluded
             self.loading = false
         }
     }

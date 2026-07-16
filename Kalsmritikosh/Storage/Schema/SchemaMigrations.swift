@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 49
+    public static let latestVersion = 50
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -66,9 +66,9 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v49 adds `entities.review_status` — check that column.
+    /// v50 adds `events.review_status` — check that column.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(entities);", [])
+        let rows = try await database.query("PRAGMA table_info(events);", [])
         // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
         return rows.contains { $0.string(1) == "review_status" }
     }
@@ -123,7 +123,8 @@ public enum SchemaMigrations {
         (46, v46),
         (47, v47),
         (48, v48),
-        (49, v49)
+        (49, v49),
+        (50, v50)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1888,5 +1889,18 @@ public enum SchemaMigrations {
     private static let v49: String = """
     ALTER TABLE entities ADD COLUMN review_status TEXT NULL;
     CREATE INDEX IF NOT EXISTS idx_entities_review_status ON entities(review_status);
+    """
+
+    // MARK: - v50 — human-in-loop event review status (soft-exclude, reversible)
+    //
+    // Extends the v49 entity mechanism to events: a user can Reject (exclude) or
+    // Restore a single event from its detail sheet. `review_status = 'rejected'`
+    // hides the event from the timeline, retrieval, and answers; NULL restores
+    // it. The row and its trust `status` column are untouched (preserve-
+    // everything). The action is recorded append-only in fact_reviews
+    // (subject_kind = 'event'), so it shows in the Audit trail and is reversible.
+    private static let v50: String = """
+    ALTER TABLE events ADD COLUMN review_status TEXT NULL;
+    CREATE INDEX IF NOT EXISTS idx_events_review_status ON events(review_status);
     """
 }

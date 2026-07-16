@@ -29,6 +29,9 @@ public struct TimelineView: View {
     @State private var versionSheetEvent: Event?
     /// Phase J.22 — when set, opens the full Event detail sheet.
     @State private var detailSheetEvent: Event?
+    /// v50 human-in-loop: events the user soft-excluded, and whether to show them.
+    @State private var excludedEvents: [Event] = []
+    @State private var showExcluded = false
 
     public enum ZoomLevel: String, CaseIterable, Identifiable {
         case day, month, year, decade
@@ -62,6 +65,26 @@ public struct TimelineView: View {
                             }
                         }
                     }
+                    if showExcluded && !excludedEvents.isEmpty {
+                        Section("Excluded — hidden from the timeline & answers, kept for the record") {
+                            ForEach(excludedEvents) { event in
+                                HStack {
+                                    Text(Self.formatDate(event))
+                                        .font(.caption.monospaced())
+                                        .foregroundStyle(.tertiary)
+                                        .frame(width: 130, alignment: .leading)
+                                    Text(event.title).font(.body).foregroundStyle(.secondary)
+                                    Spacer()
+                                    Image(systemName: "arrow.uturn.backward")
+                                        .foregroundStyle(Theme.brand)
+                                }
+                                .opacity(0.7)
+                                .contentShape(Rectangle())
+                                .onTapGesture { detailSheetEvent = event }
+                                .help("Open to restore this event")
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
                 .scrollContentBackground(.hidden)
@@ -75,7 +98,8 @@ public struct TimelineView: View {
                 .environment(appState)
         }
         .sheet(item: $detailSheetEvent) { ev in
-            EventDetailSheet(event: ev) { detailSheetEvent = nil }
+            EventDetailSheet(event: ev, onClose: { detailSheetEvent = nil },
+                             onReviewChanged: { Task { await refresh() } })
                 .environment(appState)
         }
     }
@@ -116,6 +140,13 @@ public struct TimelineView: View {
                 Text("\(events.count) event\(events.count == 1 ? "" : "s")")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if !excludedEvents.isEmpty {
+                    Toggle(isOn: $showExcluded) {
+                        Label("Excluded (\(excludedEvents.count))", systemImage: "eye.slash")
+                    }
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+                }
             }
         }
         .padding()
@@ -274,8 +305,10 @@ public struct TimelineView: View {
         loading = true
         let view = currentView()
         let results = (try? await engine.reconstruct(view)) ?? []
+        let hidden = (try? await appState.events?.listRejected(limit: 500)) ?? []
         await MainActor.run {
             self.events = results
+            self.excludedEvents = hidden
             self.loading = false
         }
     }

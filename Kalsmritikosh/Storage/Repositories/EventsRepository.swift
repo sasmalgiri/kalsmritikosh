@@ -61,7 +61,7 @@ public actor EventsRepository {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
-        WHERE date BETWEEN ? AND ?
+        WHERE date BETWEEN ? AND ? AND review_status IS NULL
         ORDER BY date ASC
         LIMIT ?;
         """, [.date(start), .date(end), .integer(Int64(limit))])
@@ -72,9 +72,12 @@ public actor EventsRepository {
         guard !ids.isEmpty else { return [] }
         var results: [Event] = []
         for id in ids {
+            // Rejected events are excluded here too, so an event a user
+            // soft-excluded stops surfacing in retrieval / answers that hydrate
+            // events by id. Restore/detail read the row directly (reviewStatus).
             let rows = try await database.query("""
             SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
-            FROM events WHERE id = ? LIMIT 1;
+            FROM events WHERE id = ? AND review_status IS NULL LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let event = decode(row) {
                 results.append(event)
@@ -87,6 +90,42 @@ public actor EventsRepository {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
         FROM events
+        WHERE review_status IS NULL
+        ORDER BY date DESC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
+    // MARK: - Human-in-loop review status (v50)
+
+    /// Soft-exclude ("reject") or restore an event. `status` is "rejected" to
+    /// exclude, nil to restore. The row and its trust `status` column are never
+    /// touched — only the separate `review_status` marker — so a rejected event
+    /// drops out of the timeline / retrieval / answers but is fully restorable.
+    public func setReviewStatus(_ id: Event.ID, _ status: String?) async throws {
+        try await database.exec(
+            "UPDATE events SET review_status = ? WHERE id = ?;",
+            [status.map { .text($0) } ?? .null, .uuid(id)]
+        )
+    }
+
+    /// The current review_status for one event (nil = normal, "rejected" =
+    /// excluded). Unfiltered direct read so the detail sheet can show Reject vs
+    /// Restore even for an already-excluded event.
+    public func reviewStatus(forID id: Event.ID) async throws -> String? {
+        let rows = try await database.query(
+            "SELECT review_status FROM events WHERE id = ? LIMIT 1;", [.uuid(id)])
+        return rows.first?.string(0)
+    }
+
+    /// Events a user has rejected, newest first — powers the "Show excluded"
+    /// section in the Timeline (with Restore).
+    public func listRejected(limit: Int = 200) async throws -> [Event] {
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
+        FROM events
+        WHERE review_status = 'rejected'
         ORDER BY date DESC
         LIMIT ?;
         """, [.integer(Int64(limit))])
