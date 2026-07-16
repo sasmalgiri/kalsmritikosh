@@ -209,6 +209,33 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
     }
 
+    // P6.1 — ground-truth metric proof. Pure ledger reads (no LLM), so it runs
+    // on every smoke pass: compares the ingested ProjectDelta ledger to the
+    // labeled answers (Resources/Eval/ground-truth-projectdelta.json) and reports
+    // entity / event / timeline / causal precision-recall-F1. The numbers are the
+    // reproducible proof; a regression shows up as a dropped F1.
+    if let gtURL = Bundle.main.url(forResource: "ground-truth-projectdelta", withExtension: "json", subdirectory: "Eval")
+        ?? Bundle.main.url(forResource: "ground-truth-projectdelta", withExtension: "json"),
+       let gtEntities = state.entities, let gtEvents = state.events {
+        do {
+            let gt = try await GroundTruthEvalKit().run(
+                fixtureURL: gtURL,
+                entities: gtEntities,
+                events: gtEvents,
+                links: state.eventLinks
+            )
+            KalsmritikoshLog.app.info("P6.1 ground-truth eval:\n\(gt.renderMarkdown(), privacy: .public)")
+            print(gt.renderMarkdown())
+            passed.append(String(
+                format: "P6.1 ground-truth: entity F1=%.2f · event F1=%.2f · timeline=%.2f · causal F1=%.2f",
+                gt.entities.f1, gt.events.f1, gt.timeline.consistency, gt.causal.f1))
+        } catch {
+            failed.append("P6.1 ground-truth eval failed: \(error)")
+        }
+    } else {
+        passed.append("P6.1 ground-truth: fixture not bundled (add Resources/Eval/ground-truth-projectdelta.json to Copy Resources)")
+    }
+
     // T1 — calibrated confidence aggregation (replaces noisy-OR).
     let t1A = Confidence.aggregate(
         Array(repeating: Confidence(0.5), count: 94),

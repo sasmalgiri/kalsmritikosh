@@ -1,0 +1,28 @@
+{
+  "title": "Project Delta — ground truth (Q1–Q2 2024)",
+  "entities": [
+    { "value": "Supplier ABC", "kind": "organization" },
+    { "value": "Northwind Industries", "kind": "organization" },
+    { "value": "John Carter", "kind": "person" },
+    { "value": "Maria Lopez", "kind": "person" }
+  ],
+  "events": [
+    { "title": "Contract signed",            "kind": "contractSigned",   "primaryEntity": null, "date": "2024-01-12" },
+    { "title": "Invoice 401 issued",         "kind": "invoiceIssued",    "primaryEntity": null, "date": "2024-01-22" },
+    { "title": "Invoice 401 paid",           "kind": "invoicePaid",      "primaryEntity": null, "date": "2024-02-19" },
+    { "title": "First lot delivery delayed", "kind": "deliveryDelayed",  "primaryEntity": null, "date": "2024-04-08" },
+    { "title": "Amendment 7 signed",         "kind": "contractModified", "primaryEntity": null, "date": "2024-05-02" },
+    { "title": "Invoice 432 issued",         "kind": "invoiceIssued",    "primaryEntity": null, "date": "2024-05-30" }
+  ],
+  "timelineOrder": [
+    ["Contract signed", "Invoice 401 issued"],
+    ["Invoice 401 issued", "Invoice 401 paid"],
+    ["Invoice 401 paid", "First lot delivery delayed"],
+    ["First lot delivery delayed", "Amendment 7 signed"],
+    ["Amendment 7 signed", "Invoice 432 issued"]
+  ],
+  "causalLinks": [
+    { "source": "First lot delivery delayed", "target": "Amendment 7 signed",  "relation": "CAUSED" },
+    { "source": "Contract signed",            "target": "Invoice 401 issued", "relation": "ENABLED" }
+  ]
+}
