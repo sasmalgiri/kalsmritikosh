@@ -134,7 +134,7 @@ public actor ChunksRepository {
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
-        FROM chunks WHERE object_id = ? ORDER BY ordinal ASC LIMIT 1;
+        FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return rows.first.flatMap(decode)
     }
@@ -143,9 +143,11 @@ public actor ChunksRepository {
         guard !ids.isEmpty else { return [] }
         var chunks: [Chunk] = []
         for id in ids {
+            // Rejected chunks are excluded here too, so a passage a user
+            // soft-excluded stops surfacing via vector-hit / synth hydration.
             let rows = try await database.query("""
             SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
-            FROM chunks WHERE id = ? LIMIT 1;
+            FROM chunks WHERE id = ? AND review_status IS NULL LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let chunk = decode(row) {
                 chunks.append(chunk)
@@ -160,11 +162,24 @@ public actor ChunksRepository {
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at
         FROM chunks c
         JOIN chunks_fts ON chunks_fts.rowid = c.rowid
-        WHERE chunks_fts.text MATCH ?
+        WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
         ORDER BY rank
         LIMIT ?;
         """, [.text(query), .integer(Int64(limit))])
         return rows.compactMap(decode)
+    }
+
+    // MARK: - Human-in-loop review status (v51)
+
+    /// Soft-exclude ("reject") or restore a chunk. "rejected" excludes it from
+    /// FTS, vector-hit hydration, and first-chunk lookups; nil restores it. The
+    /// row and text are never deleted. Distinct from `admit_embedding` (the
+    /// ingest-time noise gate) — this is an explicit human decision.
+    public func setReviewStatus(_ id: Chunk.ID, _ status: String?) async throws {
+        try await database.exec(
+            "UPDATE chunks SET review_status = ? WHERE id = ?;",
+            [status.map { .text($0) } ?? .null, .uuid(id)]
+        )
     }
 
     private func decode(_ row: SQLRow) -> Chunk? {

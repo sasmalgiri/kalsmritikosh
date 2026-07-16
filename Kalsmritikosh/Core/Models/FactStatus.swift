@@ -74,6 +74,9 @@ public nonisolated enum FactSourceKind: String, Codable, Sendable, Hashable {
     /// A canonical entity (person / organization / …). Used by the human-in-loop
     /// reject/restore control in the Knowledge browser (A5.8 review vocabulary).
     case entity
+    /// A single chunk (passage). Used by the human-in-loop reject/restore
+    /// control on search results.
+    case chunk
 }
 
 /// A single row in the Fact Status Matrix: one reconstructed fact plus the

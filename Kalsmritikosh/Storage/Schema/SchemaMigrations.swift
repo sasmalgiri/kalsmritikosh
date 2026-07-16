@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 50
+    public static let latestVersion = 51
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -66,9 +66,9 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v50 adds `events.review_status` — check that column.
+    /// v51 adds `chunks.review_status` — check that column.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(events);", [])
+        let rows = try await database.query("PRAGMA table_info(chunks);", [])
         // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
         return rows.contains { $0.string(1) == "review_status" }
     }
@@ -124,7 +124,8 @@ public enum SchemaMigrations {
         (47, v47),
         (48, v48),
         (49, v49),
-        (50, v50)
+        (50, v50),
+        (51, v51)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1902,5 +1903,19 @@ public enum SchemaMigrations {
     private static let v50: String = """
     ALTER TABLE events ADD COLUMN review_status TEXT NULL;
     CREATE INDEX IF NOT EXISTS idx_events_review_status ON events(review_status);
+    """
+
+    // MARK: - v51 — human-in-loop chunk review status (soft-exclude, reversible)
+    //
+    // Finest-grain reject: a user can exclude a single passage (chunk) from the
+    // search index and answers, reversibly, from a search result. `review_status
+    // = 'rejected'` drops the chunk from FTS, vector-hit hydration, and
+    // first-chunk lookups; NULL restores it. Distinct from `admit_embedding`
+    // (which is the ingest-time "don't embed noise" gate): this is an explicit
+    // human decision, recorded append-only in fact_reviews (subject_kind =
+    // 'chunk'). The chunk text and row are never deleted.
+    private static let v51: String = """
+    ALTER TABLE chunks ADD COLUMN review_status TEXT NULL;
+    CREATE INDEX IF NOT EXISTS idx_chunks_review_status ON chunks(review_status);
     """
 }

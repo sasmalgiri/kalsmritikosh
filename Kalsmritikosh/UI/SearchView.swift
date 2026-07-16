@@ -13,6 +13,8 @@ public struct SearchView: View {
     @State private var query: String = ""
     @State private var hits: [Chunk] = []
     @State private var searching = false
+    /// Chunks the user soft-excluded this session (greyed with a Restore).
+    @State private var excludedIDs: Set<Chunk.ID> = []
 
     public init() {}
 
@@ -80,11 +82,14 @@ public struct SearchView: View {
     }
 
     private func resultCard(_ chunk: Chunk) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let excluded = excludedIDs.contains(chunk.id)
+        return VStack(alignment: .leading, spacing: 8) {
             Text(chunk.text)
                 .font(.callout)
                 .lineLimit(4)
                 .textSelection(.enabled)
+                .strikethrough(excluded)
+                .foregroundStyle(excluded ? .secondary : .primary)
             HStack(spacing: 6) {
                 Image(systemName: "doc.text")
                     .imageScale(.small)
@@ -92,11 +97,45 @@ public struct SearchView: View {
                 Text("KO \(chunk.objectID.uuidString.prefix(8)) · chunk #\(chunk.ordinal)")
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                // Human-in-loop: exclude this passage from search + answers.
+                if excluded {
+                    Label("Excluded", systemImage: "eye.slash")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                    Button("Restore") { Task { await setExcluded(chunk, false) } }
+                        .font(.caption2).buttonStyle(.borderless).controlSize(.small)
+                } else {
+                    Button {
+                        Task { await setExcluded(chunk, true) }
+                    } label: {
+                        Label("Reject", systemImage: "eye.slash")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.borderless).controlSize(.small)
+                    .help("Exclude this passage from search and answers (reversible, recorded in the Audit trail)")
+                }
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .opacity(excluded ? 0.6 : 1)
         .cardSurface(cornerRadius: Theme.Radius.md)
+    }
+
+    /// Soft-exclude or restore a chunk. Never deletes the passage — flips
+    /// review_status and records an append-only FactReview for the Audit trail.
+    private func setExcluded(_ chunk: Chunk, _ excluded: Bool) async {
+        guard let chunks = appState.chunks else { return }
+        try? await chunks.setReviewStatus(chunk.id, excluded ? "rejected" : nil)
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .chunk, subjectID: chunk.id,
+            action: excluded ? .reject : .accept,
+            priorValue: String(chunk.text.prefix(120)), reviewer: "user",
+            reason: excluded ? "Excluded passage from search" : "Restored passage"
+        ))
+        await MainActor.run {
+            if excluded { excludedIDs.insert(chunk.id) } else { excludedIDs.remove(chunk.id) }
+        }
     }
 
     private func runSearch() {
