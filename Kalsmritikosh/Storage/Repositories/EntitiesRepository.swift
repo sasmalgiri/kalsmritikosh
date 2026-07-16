@@ -170,7 +170,7 @@ public actor EntitiesRepository {
         let bindings: [SQLValue] = capped.map { .uuid($0) }
         let rows = try await database.query("""
         SELECT id, kind, value, normalized, source_object_id, confidence, attributes_json
-        FROM entities WHERE id IN (\(placeholders));
+        FROM entities WHERE id IN (\(placeholders)) AND review_status IS NULL;
         """, bindings)
         return rows.compactMap(decodeFullEntity)
     }
@@ -252,6 +252,7 @@ public actor EntitiesRepository {
         JOIN entity_mentions m ON m.entity_id = e.id
         WHERE m.source_object_id IN (\(placeholders))
           AND e.kind IN ('person','organization','vendor','client')
+          AND e.review_status IS NULL
         GROUP BY e.id
         ORDER BY hits DESC
         LIMIT ?;
@@ -420,9 +421,10 @@ public actor EntitiesRepository {
         SELECT DISTINCT e.id, e.kind, e.value, e.normalized, e.source_object_id, e.confidence
         FROM entities e
         LEFT JOIN entity_aliases a ON a.entity_id = e.id
-        WHERE e.value LIKE ?
+        WHERE (e.value LIKE ?
            OR e.normalized LIKE ?
-           OR a.alias_normalized LIKE ?
+           OR a.alias_normalized LIKE ?)
+           AND e.review_status IS NULL
         ORDER BY e.confidence DESC
         LIMIT ?;
         """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
