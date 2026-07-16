@@ -30,7 +30,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case review
     case transcripts
     case insights
-    case knowledge, assertions, answers, library, saved
+    case knowledge, assertions, answers, audit, library, saved
     case sources, convert, completeness, live
     case guide, settings
 
@@ -54,6 +54,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .knowledge:    return "Knowledge"
         case .assertions:   return "Assertions"
         case .answers:      return "Answers"
+        case .audit:        return "Audit"
         case .library:      return "Library"
         case .saved:        return "Saved"
         case .sources:      return "Sources"
@@ -83,6 +84,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .knowledge:    return "books.vertical"
         case .assertions:   return "scroll"
         case .answers:      return "text.bubble"
+        case .audit:        return "shield.lefthalf.filled"
         case .library:      return "books.vertical.fill"
         case .saved:        return "bookmark"
         case .sources:      return "folder"
@@ -128,6 +130,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .knowledge:    return "Canonical entities, events and distilled memory"
         case .assertions:   return "Extracted claims with their supporting evidence"
         case .answers:      return "Past answers with their evidence — replayable and auditable"
+        case .audit:        return "Chain-of-custody and every human decision — the append-only record"
         case .library:      return "Every document you've ingested"
         case .saved:        return "Your bookmarked questions"
         case .sources:      return "Folders being watched and ingested"
@@ -152,7 +155,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             switch self {
             case .converse:    return [.home, .ask, .search]
             case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .transcripts, .notebook, .dossier, .explore, .insights]
-            case .knowledge:   return [.knowledge, .assertions, .answers, .library, .saved]
+            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
             }
@@ -708,6 +711,7 @@ public struct RootView: View {
         case .knowledge:    KnowledgeView()
         case .assertions:   AssertionsView()
         case .answers:      AnswersView()
+        case .audit:        AuditView()
         case .library:      LibraryView()
         case .saved:        SavedQueriesView()
         case .sources:      SourcesView()

@@ -85,6 +85,16 @@ public actor FactReviewsRepository {
         return out
     }
 
+    /// Global review feed across ALL subjects, newest first — the human-
+    /// decision half of the unified Audit view.
+    public func recent(limit: Int = 300) async throws -> [FactReview] {
+        let rows = try await database.query("""
+        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of
+        FROM fact_reviews ORDER BY reviewed_at DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     /// Full append-only history for one subject, newest first.
     public func history(forSubject id: UUID) async throws -> [FactReview] {
         let rows = try await database.query("""

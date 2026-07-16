@@ -33,6 +33,16 @@ public actor CustodyRepository {
         return event.id
     }
 
+    /// Global custody feed across ALL files, newest first — the chain-of-
+    /// custody half of the unified Audit view.
+    public func recent(limit: Int = 300) async throws -> [CustodyEvent] {
+        let rows = try await database.query("""
+        SELECT id, file_id, kind, actor, at, detail, hash
+        FROM custody_events ORDER BY at DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     /// Full custody history for one file, newest first.
     public func history(forFile id: UUID) async throws -> [CustodyEvent] {
         let rows = try await database.query("""
