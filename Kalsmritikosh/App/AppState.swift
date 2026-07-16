@@ -55,6 +55,11 @@ public final class AppState {
     public private(set) var maintenanceAskPending: Bool = false
     private var maintenanceAskContinuation: CheckedContinuation<Bool, Never>?
 
+    /// True while a memory-distillation pass is running (on-demand button or
+    /// the idle background pass). Guards against overlapping runs and lets the
+    /// UI disable the "Distill memory now" button while it's working.
+    public private(set) var isDistillingMemory: Bool = false
+
     /// Applied on the main actor whenever the idle scheduler transitions.
     /// Silent in Automatic mode — we still track `maintenanceActive` for
     /// internal logic but never surface a banner.
@@ -102,6 +107,32 @@ public final class AppState {
         maintenanceAskContinuation?.resume(returning: run)
         maintenanceAskContinuation = nil
         maintenanceAskPending = false
+    }
+
+    /// Shared memory-distillation core used by BOTH the on-demand "Distill
+    /// memory now" button and the idle background pass. The ledger-first engine
+    /// does no distillation at ingest (minimum-LLM promise), so this is the one
+    /// place `memory_objects` gets built for the top subjects in the ledger.
+    /// Safe to call repeatedly — a run already in progress is a no-op. Surfaces
+    /// progress on the maintenance banner so the user sees it working. Returns
+    /// the number of subjects distilled.
+    @discardableResult
+    public func distillMemory(maxPerKind: Int = 200) async -> Int {
+        guard let distiller = memoryDistiller, !isDistillingMemory else { return 0 }
+        isDistillingMemory = true
+        let bannerWasActive = maintenanceActive
+        maintenanceActive = true
+        maintenanceStatus = "Distilling memory…"
+        maintenanceLastEventAt = Date()
+
+        let produced = await distiller.distillTopSubjects(maxPerKind: maxPerKind)
+
+        isDistillingMemory = false
+        maintenanceActive = bannerWasActive
+        maintenanceStatus = "Memory distilled · \(produced.count) subject(s) refreshed"
+        maintenanceLastEventAt = Date()
+        KalsmritikoshLog.app.info("Memory distillation complete: \(produced.count, privacy: .public) subject(s)")
+        return produced.count
     }
 
     // Storage
@@ -185,6 +216,8 @@ public final class AppState {
     public private(set) var contextPrefixBackfiller: ContextPrefixBackfiller?
     /// On-device idle name self-correction (mode-independent).
     public private(set) var entityReconciler: EntityReconciler?
+    /// Idle background memory distillation (gated by the maintenance choice).
+    public private(set) var backgroundMemoryDistiller: BackgroundMemoryDistiller?
     public private(set) var proactiveGapCount: Int = 0
     public private(set) var ledgerLastMaintainedAt: Date?
     /// G3.22 — exposed so smoke / eval rigs can assert against the
@@ -1041,6 +1074,22 @@ public final class AppState {
             )
             await entityReconciler.start()
 
+            // Background memory distillation — the idle half of the distill
+            // pair (the on-demand button in Settings is the manual half). Gated
+            // behind the maintenance choice: distillation can spend an LLM call,
+            // so it only runs when the user has opted into background
+            // maintenance (Ask / Notify / Automatic). With maintenance Off it is
+            // a no-op, preserving the minimum-LLM default — memory is then only
+            // warmed on demand (button or at query time).
+            let backgroundDistiller = BackgroundMemoryDistiller(
+                distill: { [weak self] in
+                    guard let self else { return 0 }
+                    guard await self.maintenanceGate() else { return 0 }
+                    return await self.distillMemory()
+                }
+            )
+            await backgroundDistiller.start()
+
             // G2-3 — periodic backfill that re-runs the LLM context-
             // prefix generator on chunks whose row landed with NULL
             // because the LLM timed out during ingest. Per the
@@ -1398,6 +1447,7 @@ public final class AppState {
             self.systemEngine = engine
             self.contextPrefixBackfiller = startedBackfiller
             self.entityReconciler = entityReconciler
+            self.backgroundMemoryDistiller = backgroundDistiller
             self.brain = brain
             self.ingest = ingest
             self.phase = .ready

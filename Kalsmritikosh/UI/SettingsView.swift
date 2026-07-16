@@ -972,6 +972,8 @@ public struct SettingsView: View {
     /// how long the machine must be idle first.
     @State private var maintenanceMode: MaintenanceMode = FeatureFlags.shared.maintenanceMode
     @State private var maintenanceIdleMinutes: Int = FeatureFlags.shared.maintenanceIdleMinutes
+    /// Status line for the on-demand "Distill memory now" button.
+    @State private var distillStatus: String?
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1159,6 +1161,35 @@ public struct SettingsView: View {
                 Text("Takes effect immediately — no relaunch needed.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
+
+            Divider().padding(.vertical, 2)
+
+            // On-demand distillation — the manual half of the distill pair
+            // (the background pass above is the idle half). Always available,
+            // independent of the maintenance mode: builds distilled memories
+            // for the top subjects right now. The ledger-first engine does no
+            // distillation at ingest, so this is how a user warms memory
+            // without waiting for idle time or asking a question first.
+            HStack {
+                Button {
+                    Task {
+                        distillStatus = "Distilling memory…"
+                        let count = await appState.distillMemory()
+                        distillStatus = "Distilled \(count) subject(s)."
+                    }
+                } label: {
+                    Label("Distill memory now", systemImage: "brain.head.profile")
+                }
+                .disabled(appState.isDistillingMemory)
+                if let distillStatus {
+                    Text(distillStatus)
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            Text("Builds distilled memories for the top people and organizations in your ledger right now. Runs on demand; also happens automatically during idle maintenance when enabled above.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

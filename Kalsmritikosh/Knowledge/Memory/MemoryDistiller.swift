@@ -157,6 +157,37 @@ public actor MemoryDistiller {
         return out
     }
 
+    /// Distill the highest-signal subjects in the ledger — the canonical
+    /// person and organization entities with the most mentions, each mapped to
+    /// its matching SubjectKind. This is where memory is actually BUILT: the
+    /// ledger-first engine does ZERO distillation at ingest, so without this
+    /// pass `memory_objects` stays empty until a question happens to be asked
+    /// about a subject. Invoked by the on-demand "Distill memory now" action
+    /// and by the idle background pass. Bounded by `maxPerKind` so a huge
+    /// corpus doesn't distill tens of thousands of one-off names; entities with
+    /// no mentions and low-signal identifiers are skipped (the latter by
+    /// `distill` itself). Errors on an individual subject are swallowed so one
+    /// bad row can't abort the whole pass. Returns the MemoryObjects written or
+    /// refreshed.
+    public func distillTopSubjects(maxPerKind: Int = 200) async -> [MemoryObject] {
+        let mapping: [(Entity.Kind, MemoryObject.SubjectKind)] = [
+            (.person, .person),
+            (.organization, .organization)
+        ]
+        var out: [MemoryObject] = []
+        for (entityKind, subjectKind) in mapping {
+            let rows = (try? await entities.canonicalsWithMentionCounts(
+                kind: entityKind, limit: maxPerKind
+            )) ?? []
+            for row in rows where row.mentionCount > 0 {
+                if let memory = try? await distill(.init(kind: subjectKind, identifier: row.value)) {
+                    out.append(memory)
+                }
+            }
+        }
+        return out
+    }
+
     // MARK: - Narrative synthesis
 
     private func synthesizeNarrative(
