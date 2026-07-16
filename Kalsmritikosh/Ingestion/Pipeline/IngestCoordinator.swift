@@ -1136,7 +1136,19 @@ public actor IngestCoordinator {
             sourceObjectID: event.sourceObjectID,
             sourceRange: event.sourceRange,
             confidence: event.confidence,
-            attributes: event.attributes
+            // BUG FIX: previously this remap dropped dateConfidence / qualityTier
+            // / datePrecision / status, so every event fell back to the Event
+            // defaults (0.5 / .t2 / .inferred). That collapsed the whole
+            // evidentiary-status spread — an email-header event that the
+            // extractor correctly marked 0.95 / T1 / observed was silently
+            // reset, and EventStatus.derive then classified ALL events as
+            // "derived" (Findings tabs went flat). Carry the trust signals
+            // through the canonicalization.
+            dateConfidence: event.dateConfidence,
+            attributes: event.attributes,
+            qualityTier: event.qualityTier,
+            datePrecision: event.datePrecision,
+            status: event.status
         )
     }
 
