@@ -79,41 +79,159 @@ private struct KnowledgeListView: View {
     @Environment(AppState.self) private var appState
     let kind: Entity.Kind
     @State private var rows: [EntitySummaryRow] = []
+    @State private var excluded: [EntitySummaryRow] = []
     @State private var exportingForID: Entity.ID?
+    @State private var showExcluded = false
+    /// The entity currently being renamed (drives the correction alert).
+    @State private var correcting: EntitySummaryRow?
+    @State private var correctionText = ""
 
     var body: some View {
         VStack {
-            if rows.isEmpty {
+            if rows.isEmpty && excluded.isEmpty {
                 Text("Nothing here yet. Ingest sources to populate this list.")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(rows) { row in
-                    HStack {
-                        EntityChip(row.value, kind: kind)
-                        Spacer()
-                        ConfidenceBadge(row.confidence)
-                    }
-                    .contextMenu {
-                        Button {
-                            Task { await exportDossier(for: row) }
-                        } label: {
-                            Label("Export dossier…", systemImage: "square.and.arrow.up")
+                List {
+                    Section {
+                        ForEach(rows) { row in
+                            entityRow(row)
                         }
-                        .disabled(exportingForID != nil)
+                    }
+                    if showExcluded && !excluded.isEmpty {
+                        Section("Excluded — hidden from answers, kept for the record") {
+                            ForEach(excluded) { row in
+                                excludedRow(row)
+                            }
+                        }
                     }
                 }
                 .listStyle(.inset)
             }
         }
         .navigationTitle(kind.rawValue.capitalized)
+        .toolbar {
+            if !excluded.isEmpty {
+                ToolbarItem {
+                    Toggle(isOn: $showExcluded) {
+                        Label("Excluded (\(excluded.count))", systemImage: "eye.slash")
+                    }
+                    .toggleStyle(.button)
+                }
+            }
+        }
+        .alert("Correct spelling", isPresented: Binding(
+            get: { correcting != nil },
+            set: { if !$0 { correcting = nil } }
+        )) {
+            TextField("Corrected name", text: $correctionText)
+            Button("Cancel", role: .cancel) { correcting = nil }
+            Button("Save") {
+                if let row = correcting { Task { await applyCorrection(row, to: correctionText) } }
+            }
+        } message: {
+            Text("Adds the corrected spelling so future lookups resolve to this entity. The original is kept; the change is recorded in the Audit trail.")
+        }
         .task { await refresh() }
+    }
+
+    /// One active entity row + its human-in-loop context menu.
+    private func entityRow(_ row: EntitySummaryRow) -> some View {
+        HStack {
+            EntityChip(row.value, kind: kind)
+            Spacer()
+            ConfidenceBadge(row.confidence)
+        }
+        .contextMenu {
+            Button {
+                Task { await exportDossier(for: row) }
+            } label: {
+                Label("Export dossier…", systemImage: "square.and.arrow.up")
+            }
+            .disabled(exportingForID != nil)
+            Divider()
+            Button {
+                correctionText = row.value
+                correcting = row
+            } label: {
+                Label("Correct spelling…", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                Task { await reject(row) }
+            } label: {
+                Label("Reject (exclude)", systemImage: "eye.slash")
+            }
+        }
+    }
+
+    /// One excluded entity row, greyed, with a one-tap Restore.
+    private func excludedRow(_ row: EntitySummaryRow) -> some View {
+        HStack {
+            EntityChip(row.value, kind: kind)
+                .opacity(0.5)
+            Spacer()
+            Button {
+                Task { await restore(row) }
+            } label: {
+                Label("Restore", systemImage: "arrow.uturn.backward")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+        }
     }
 
     private func refresh() async {
         guard let entities = appState.entities else { return }
-        let results = (try? await entities.list(kind: kind, limit: 500)) ?? []
-        await MainActor.run { self.rows = results }
+        let active = (try? await entities.list(kind: kind, limit: 500)) ?? []
+        let hidden = (try? await entities.listExcluded(kind: kind, limit: 500)) ?? []
+        await MainActor.run {
+            self.rows = active
+            self.excluded = hidden
+        }
+    }
+
+    // MARK: - Human-in-loop actions (reversible, audit-logged)
+
+    /// Soft-exclude an entity: it stops appearing in the browser, answers, and
+    /// dossiers, but is NOT deleted (preserve-everything). Recorded in
+    /// fact_reviews so it shows in the Audit trail and can be restored.
+    private func reject(_ row: EntitySummaryRow) async {
+        guard let entities = appState.entities else { return }
+        try? await entities.setReviewStatus(row.id, "rejected")
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .entity, subjectID: row.id, action: .reject,
+            priorValue: row.value, reviewer: "user",
+            reason: "Excluded from the Knowledge browser"
+        ))
+        await refresh()
+    }
+
+    private func restore(_ row: EntitySummaryRow) async {
+        guard let entities = appState.entities else { return }
+        try? await entities.setReviewStatus(row.id, nil)
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .entity, subjectID: row.id, action: .accept,
+            priorValue: row.value, reviewer: "user", reason: "Restored"
+        ))
+        await refresh()
+    }
+
+    /// Non-destructive rename: keep the original canonical value, add the
+    /// corrected spelling as an alias so lookups resolve, and record the
+    /// correction in the Audit trail.
+    private func applyCorrection(_ row: EntitySummaryRow, to newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        correcting = nil
+        guard !trimmed.isEmpty, trimmed != row.value,
+              let entities = appState.entities else { return }
+        try? await entities.addAlias(entityID: row.id, aliasNormalized: trimmed, source: "user-correction")
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .entity, subjectID: row.id, action: .correct,
+            priorValue: row.value, newValue: trimmed, reviewer: "user",
+            reason: "Corrected spelling"
+        ))
+        await refresh()
     }
 
     /// Build the markdown dossier and run a save panel so the user

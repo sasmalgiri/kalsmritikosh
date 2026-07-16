@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 48
+    public static let latestVersion = 49
 
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
@@ -66,11 +66,11 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v48 adds `chunks.admit_embedding` — check that column.
+    /// v49 adds `entities.review_status` — check that column.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(chunks);", [])
+        let rows = try await database.query("PRAGMA table_info(entities);", [])
         // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
-        return rows.contains { $0.string(1) == "admit_embedding" }
+        return rows.contains { $0.string(1) == "review_status" }
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
@@ -122,7 +122,8 @@ public enum SchemaMigrations {
         (45, v45),
         (46, v46),
         (47, v47),
-        (48, v48)
+        (48, v48),
+        (49, v49)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1872,5 +1873,20 @@ public enum SchemaMigrations {
     private static let v48: String = """
     ALTER TABLE chunks ADD COLUMN admit_embedding INTEGER NOT NULL DEFAULT 1;
     CREATE INDEX IF NOT EXISTS idx_chunks_admit_embedding ON chunks(admit_embedding);
+    """
+
+    // MARK: - v49 — human-in-loop entity review status (soft-exclude, reversible)
+    //
+    // Lets a user REJECT (exclude) or RESTORE a canonical entity from the
+    // Knowledge browser. Honoring the preserve-everything directive, a rejected
+    // entity is NOT deleted: `review_status = 'rejected'` marks it so the entity
+    // read surface (list / search / mention-ranked candidates) hides it by
+    // default, and setting it back to NULL restores it. The action itself is
+    // recorded append-only in fact_reviews (subject_kind = 'entity'), so it
+    // shows in the Audit trail and can be undone. NULL = normal (the default for
+    // every existing row), so nothing changes for data ingested before this.
+    private static let v49: String = """
+    ALTER TABLE entities ADD COLUMN review_status TEXT NULL;
+    CREATE INDEX IF NOT EXISTS idx_entities_review_status ON entities(review_status);
     """
 }

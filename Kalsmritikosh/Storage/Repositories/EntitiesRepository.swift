@@ -338,9 +338,12 @@ public actor EntitiesRepository {
     }
 
     public func list(kind: Entity.Kind, limit: Int = 200) async throws -> [EntitySummaryRow] {
+        // Human-in-loop: entities a user rejected (review_status = 'rejected')
+        // are soft-excluded from the browse surface. They are NOT deleted — see
+        // listExcluded / setReviewStatus.
         let rows = try await database.query("""
         SELECT id, value, normalized, confidence
-        FROM entities WHERE kind = ?
+        FROM entities WHERE kind = ? AND review_status IS NULL
         ORDER BY value COLLATE NOCASE
         LIMIT ?;
         """, [.text(kind.rawValue), .integer(Int64(limit))])
@@ -368,7 +371,7 @@ public actor EntitiesRepository {
         SELECT e.id, e.value, e.normalized, e.confidence, e.quality_tier, COUNT(m.id) AS mentions
         FROM entities e
         LEFT JOIN entity_mentions m ON m.entity_id = e.id
-        WHERE e.kind = ?
+        WHERE e.kind = ? AND e.review_status IS NULL
         GROUP BY e.id
         ORDER BY mentions DESC
         LIMIT ?;
@@ -429,13 +432,16 @@ public actor EntitiesRepository {
     public func search(value query: String, limit: Int = 50) async throws -> [EntitySummaryRow] {
         let pattern = "%\(query)%"
         let aliasPattern = "%\(query.lowercased())%"
+        // Rejected entities are excluded from search too, so a soft-excluded
+        // entity stops surfacing in answers/dossiers, not just the browse list.
         let rows = try await database.query("""
         SELECT DISTINCT e.id, e.value, e.normalized, e.confidence
         FROM entities e
         LEFT JOIN entity_aliases a ON a.entity_id = e.id
-        WHERE e.value LIKE ?
+        WHERE (e.value LIKE ?
            OR e.normalized LIKE ?
-           OR a.alias_normalized LIKE ?
+           OR a.alias_normalized LIKE ?)
+           AND e.review_status IS NULL
         ORDER BY e.confidence DESC
         LIMIT ?;
         """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
@@ -451,6 +457,39 @@ public actor EntitiesRepository {
                 value: value,
                 normalizedValue: row.string(2),
                 confidence: Confidence(conf)
+            )
+        }
+    }
+
+    // MARK: - Human-in-loop review status (v49)
+
+    /// Soft-exclude ("reject") or restore a canonical entity. `status` is
+    /// "rejected" to exclude, or nil to restore. The row itself is never
+    /// deleted — the preserve-everything directive — only marked so the browse
+    /// / search / candidate-ranking surfaces hide it. The reversible audit
+    /// record lives in fact_reviews (written by the caller).
+    public func setReviewStatus(_ id: Entity.ID, _ status: String?) async throws {
+        try await database.exec(
+            "UPDATE entities SET review_status = ? WHERE id = ?;",
+            [status.map { .text($0) } ?? .null, .uuid(id)]
+        )
+    }
+
+    /// The canonical entities of a kind a user has rejected — powers the
+    /// "Show excluded" section in the Knowledge browser (with Restore).
+    public func listExcluded(kind: Entity.Kind, limit: Int = 200) async throws -> [EntitySummaryRow] {
+        let rows = try await database.query("""
+        SELECT id, value, normalized, confidence
+        FROM entities WHERE kind = ? AND review_status = 'rejected'
+        ORDER BY value COLLATE NOCASE
+        LIMIT ?;
+        """, [.text(kind.rawValue), .integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let value = row.string(1),
+                  let conf = row.double(3) else { return nil }
+            return EntitySummaryRow(
+                id: id, value: value,
+                normalizedValue: row.string(2), confidence: Confidence(conf)
             )
         }
     }
