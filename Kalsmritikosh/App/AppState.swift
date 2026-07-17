@@ -1907,6 +1907,33 @@ public final class AppState {
         return SuggestedQuestionBuilder().build(persona: persona, inputs: inputs, limit: limit)
     }
 
+    /// Cross-document matrix: for a query, the best-matching verbatim passage from
+    /// EACH source document, with citation metadata. Deterministic (FTS + in-memory
+    /// grouping), no LLM — the "what does every document say about X?" review a
+    /// lawyer/journalist needs, with nothing summarized-away.
+    public func crossDocumentMatrix(query: String, maxSources: Int = 40) async -> [CrossDocMatrixRow] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2, let chunks, let objects else { return [] }
+        let hits = (try? await chunks.searchFTS(trimmed, limit: 400)) ?? []
+        let best = CrossDocumentMatrix.pickBestPerSource(hits, maxSources: maxSources)
+        var rows: [CrossDocMatrixRow] = []
+        for chunk in best {
+            let ko = try? await objects.load(id: chunk.objectID)
+            let url = ko?.sourceFile
+            let filename = url?.lastPathComponent ?? "Source \(chunk.objectID.uuidString.prefix(8))"
+            rows.append(CrossDocMatrixRow(
+                objectID: chunk.objectID,
+                filename: filename,
+                url: url,
+                date: ko?.createdAt,
+                passage: CrossDocumentMatrix.snippet(chunk.text, query: trimmed),
+                ordinal: chunk.ordinal,
+                pageNumber: chunk.pageNumber
+            ))
+        }
+        return rows
+    }
+
     /// Load a bounded sample of objects with their body + email subject
     /// (from metadata) for the rule-based gap detectors. No LLM.
     private func loadObjectSample(
