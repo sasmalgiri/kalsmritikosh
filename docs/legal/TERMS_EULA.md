@@ -1,14 +1,15 @@
 # Terms of Use / End-User Licence Agreement — Kalsmritikosh
 
-_Last updated: 2026-07-13 (DRAFT — owner to review with counsel, set entity name and
-governing-law jurisdiction, and host at a public URL.)_
+_Last updated: 2026-07-17. Entity + contact filled from the app's identifiers;
+confirm the exact legal name and governing-law jurisdiction with counsel, and host
+at a public URL. Good-faith template, not legal advice._
 
 This EULA supplements, and where permitted supersedes, Apple's standard Licensed
 Application End User License Agreement (LAEULA). By installing or using Kalsmritikosh
 ("the App") you agree to these terms.
 
 ## 1. Licence
-[LEGAL ENTITY] grants you a personal, non-exclusive, non-transferable licence to use
+Eco Sanskriti Innovation grants you a personal, non-exclusive, non-transferable licence to use
 the App on Apple-branded devices you own or control, per the Mac App Store terms and
 the one-time Personal purchase.
 
@@ -40,7 +41,7 @@ THE APP IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, TO THE MAXIMUM EXTENT
 PERMITTED BY LAW.
 
 ## 6. Limitation of liability
-TO THE MAXIMUM EXTENT PERMITTED BY LAW, [LEGAL ENTITY] IS NOT LIABLE FOR ANY
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, Eco Sanskriti Innovation IS NOT LIABLE FOR ANY
 INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, OR ANY LOSS ARISING FROM RELIANCE ON
 THE APP'S OUTPUT.
 
@@ -49,7 +50,8 @@ The licence ends if you breach these terms; on termination, stop using and delet
 App.
 
 ## 8. Governing law
-[JURISDICTION — owner to set].
+India. *(Owner: confirm the governing-law jurisdiction with counsel before
+publishing — set it to where Eco Sanskriti Innovation is legally established.)*
 
 ## 9. Contact
 sasmalgiri@gmail.com

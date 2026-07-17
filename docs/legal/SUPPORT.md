@@ -13,11 +13,13 @@ citations you can open. Everything runs on your Mac; nothing is uploaded.
 
 ## Requirements
 - macOS 15.6 or later
-- 8 GB RAM minimum (16 GB+ enables a larger optional model, downloaded on request)
+- Apple Intelligence enabled — the app uses Apple's on-device model to write answers.
+  You can still ingest, browse, search, and view evidence without it; only the
+  AI-written answers require it.
 
 ## Common questions
-- **Does my data leave my Mac?** No. See the Privacy Policy. The only optional network
-  use is downloading the larger optional model.
+- **Does my data leave my Mac?** No — the app runs fully on-device. Nothing is
+  uploaded; there is no account and no tracking. See the Privacy Policy.
 - **Why is an answer "unsupported" or refused?** The app answers only from your
   documents; if the evidence isn't there, it says so rather than guessing.
 - **Can I correct a fact?** Yes — reviews are recorded without deleting the original

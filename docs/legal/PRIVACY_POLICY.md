@@ -1,9 +1,10 @@
 # Privacy Policy — Kalsmritikosh
 
-_Last updated: 2026-07-13 (DRAFT — owner to review, set the legal entity name and
-effective date, and host at a public URL for the App Store listing.)_
+_Last updated: 2026-07-17. Publisher + contact filled from the app's identifiers;
+confirm the exact legal name and host this at a public URL for the App Store
+listing. This is a good-faith template, not legal advice — review with counsel._
 
-**Publisher:** [LEGAL ENTITY / DEVELOPER NAME]
+**Publisher:** Eco Sanskriti Innovation
 **Contact:** sasmalgiri@gmail.com
 
 ## The short version
@@ -27,15 +28,10 @@ analytics, or telemetry.
 
 ## Network use
 
-The app is designed to work offline. Network access is used **only** for:
-
-1. **Optional model download** — if you choose to download the larger optional model
-   on a capable Mac, the app downloads model weights from [MODEL HOST URL]. No
-   document content is transmitted; only the model file is fetched.
-2. **Opening a source** in another app, or links you click, use the system normally.
-
-No document text, questions, answers, filenames, or usage data are transmitted for
-any purpose. There is no analytics or crash-telemetry SDK.
+The app is designed to work fully offline. **No document text, questions,
+answers, filenames, or usage data are transmitted for any purpose**, and there is
+no analytics or crash-telemetry SDK. The only network activity is ordinary system
+behaviour when you open a cited source file or a link in another app.
 
 ## Data you export
 
