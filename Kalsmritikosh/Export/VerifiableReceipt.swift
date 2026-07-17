@@ -120,6 +120,34 @@ public enum VerifiableReceipt {
         """
     }
 
+    // MARK: - Parse (for the verifier)
+
+    /// Reconstruct a sealed receipt from its canonical JSON. Returns nil when the
+    /// bytes aren't a v1 receipt. Pair with `verify` to check a receipt produced
+    /// on another machine — the whole point of an offline-checkable bundle.
+    public static func parse(_ data: Data) -> SealedReceipt? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              obj["format"] as? String == "kalsmritikosh.receipt.v1",
+              let title = obj["title"] as? String,
+              let arr = obj["entries"] as? [[String: Any]] else { return nil }
+        let iso = ISO8601DateFormatter()
+        var entries: [SealedReceiptEntry] = []
+        for e in arr {
+            guard let index = e["index"] as? Int,
+                  let claim = e["claim"] as? String,
+                  let source = e["source"] as? String,
+                  let passage = e["passage"] as? String,
+                  let passageHash = e["passageHash"] as? String,
+                  let chainHash = e["chainHash"] as? String else { return nil }
+            let date = (e["date"] as? String).flatMap { iso.date(from: $0) }
+            entries.append(SealedReceiptEntry(
+                index: index, claim: claim, source: source, date: date,
+                passage: passage, passageHash: passageHash, chainHash: chainHash
+            ))
+        }
+        return SealedReceipt(title: title, entries: entries)
+    }
+
     // MARK: - Helpers
 
     static func sha256(_ s: String) -> String {
