@@ -34,7 +34,17 @@ public struct AudioLoader: Ingestor {
         var content = ""
         var confidence = Confidence.low
         do {
-            content = try await transcriber.transcribe(audioAt: url)
+            // Prefer timecoded segments so a cited answer can point at the exact
+            // moment ("at 12:34"). Engines without segment support return [] and
+            // we fall back to the flat transcript — a single pass either way.
+            let segments = try await transcriber.transcribeSegments(audioAt: url)
+            if segments.isEmpty {
+                content = try await transcriber.transcribe(audioAt: url)
+            } else {
+                content = segments.timecodedTranscript()
+                meta["transcriptTimecoded"] = AnyCodable(.bool(true))
+                meta["segmentCount"] = AnyCodable(.int(Int64(segments.count)))
+            }
             confidence = content.isEmpty ? .low : .high
         } catch {
             meta["asrError"] = AnyCodable(.string("\(error)"))

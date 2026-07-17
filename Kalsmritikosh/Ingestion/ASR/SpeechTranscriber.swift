@@ -39,6 +39,30 @@ public struct ASRSegment: Sendable, Hashable {
     }
 }
 
+public extension ASRSegment {
+    /// Format a second offset as `[mm:ss]`, or `[h:mm:ss]` past one hour, so the
+    /// marker reads naturally at the head of a transcript line.
+    static func timecode(_ seconds: Double) -> String {
+        let total = Int(seconds.rounded(.down))
+        let h = total / 3600, m = (total % 3600) / 60, s = total % 60
+        return h > 0
+            ? String(format: "[%d:%02d:%02d]", h, m, s)
+            : String(format: "[%02d:%02d]", m, s)
+    }
+}
+
+public extension Array where Element == ASRSegment {
+    /// Render timecoded segments into a transcript where every line is prefixed
+    /// with its start marker. Because the marker lives *in the text*, it rides
+    /// through chunking, FTS, vectors, and cited answers unchanged — so an answer
+    /// drawn from a recording can point at "in recording.m4a at 12:34" without
+    /// any schema or retrieval change. Returns "" for an empty transcript.
+    func timecodedTranscript() -> String {
+        map { "\(ASRSegment.timecode($0.start)) \($0.text)" }
+            .joined(separator: "\n")
+    }
+}
+
 public protocol AudioTranscribing: Sendable {
     /// Identifier surfaced in logs and KO metadata so the user can
     /// tell which engine transcribed a given file.

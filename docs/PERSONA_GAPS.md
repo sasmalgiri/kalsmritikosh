@@ -14,7 +14,7 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
 | Cited answers, export, timeline, entity graph, dossiers | ✅ | — |
 | Ingest: PDF/Office/email/images/**audio/video**/chat/browser | ✅ | (legacy .doc/.xls/.ppt lossy; .key/.rar/.7z stubs — low priority) |
 | **Contradiction detection** | ⚠️ date-only | statement + entity/amount conflicts (big value for Lawyer/Investigator/Journalist) |
-| **Audio/video citations** | ⚠️ transcribed but **no timecodes** | write ASR segment timings into `transcript_segments` so answers can cite "at 12:34" — directly serves call recordings / interviews |
+| **Audio/video citations** | ✅ **timecoded at ingest** | Audio/VideoLoader now embed `[mm:ss]` markers per ASR line, so cited answers point at the moment ("at 12:34"). Live end-to-end ASR verification is owner-run (needs a real recording + Speech permission). |
 | **Entity dedup / merge-split** | ⚠️ OCR-variant folding only | real "same person, two spellings" merge (Investigator/Researcher) |
 | **Missing-evidence gaps** | ⚠️ taxonomy exists, rules partial | finish gap rules (Lawyer/Investigator) |
 
@@ -49,9 +49,10 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
 
 ## Recommended build order (one persona job at a time)
 
-1. **Audio/video timecodes** → Investigator + Journalist. Wire SFSpeech segment
-   timings into `transcript_segments`; answers cite "in recording.m4a at 12:34".
-   Self-contained, high value, verifiable. **← start here.**
+1. ~~**Audio/video timecodes** → Investigator + Journalist.~~ ✅ **DONE** —
+   Audio/VideoLoader embed `[mm:ss]` markers per ASR line at ingest, so cited
+   answers point at the moment. (Live ASR check is owner-run: real recording +
+   Speech permission.)
 2. **Statement + amount contradiction detection** → Lawyer + Journalist +
    Investigator. Extend the verifier beyond dates.
 3. **Entity merge/split review** → Investigator + Researcher.

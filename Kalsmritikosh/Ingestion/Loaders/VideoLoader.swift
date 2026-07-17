@@ -38,7 +38,17 @@ public struct VideoLoader: Ingestor {
         if let audioURL = try? await exportAudio(from: asset, original: url) {
             defer { try? FileManager.default.removeItem(at: audioURL) }
             do {
-                content = try await transcriber.transcribe(audioAt: audioURL)
+                // Prefer timecoded segments so a cited answer can point at the
+                // exact moment in the recording; fall back to the flat transcript
+                // when the engine can't produce timings.
+                let segments = try await transcriber.transcribeSegments(audioAt: audioURL)
+                if segments.isEmpty {
+                    content = try await transcriber.transcribe(audioAt: audioURL)
+                } else {
+                    content = segments.timecodedTranscript()
+                    meta["transcriptTimecoded"] = AnyCodable(.bool(true))
+                    meta["segmentCount"] = AnyCodable(.int(Int64(segments.count)))
+                }
                 confidence = content.isEmpty ? .low : .high
             } catch {
                 meta["asrError"] = AnyCodable(.string("\(error)"))
