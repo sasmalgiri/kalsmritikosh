@@ -549,70 +549,59 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Release Readiness")
                         .font(.title3.bold())
-                    Text("One button. Runs every test, eval, and audit Kalsmritikosh knows how to run, then reports a single verdict — **PASS means safe for public distribution without TestFlight**. **Fast Gate** (seconds, no LLM) already checks all 5 Convert formats — including re-parsing the DOCX/XLSX to confirm valid Office archives — and the minimum-LLM engine + MoE council in one pass, so you never have to try each format by hand. **Deep Eval** adds the LLM end-to-end evals (~12–15 min).")
+                    Text("One button checks whether the app is ready to share. It runs the built-in tests and audits, then shows a single verdict — **green means ready**. Takes a couple of minutes; no internet.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack(spacing: 12) {
-                Button {
-                    Task { await runReleaseReadiness(mode: .fast) }
-                } label: {
-                    if releaseReadinessRunning {
-                        Label("Running…", systemImage: "hourglass")
-                    } else {
-                        Label("Fast Gate (2–5 min)", systemImage: "bolt.fill")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(verdictColor)
-                .disabled(releaseReadinessRunning)
 
-                Button {
+            // THE single action. Runs the fast gate (no LLM, ~2–5 min) — the
+            // right default for "is it ready". The slower/real-data variants are
+            // small secondary links below so they don't compete for the click.
+            Button {
+                Task { await runReleaseReadiness(mode: .fast) }
+            } label: {
+                if releaseReadinessRunning {
+                    Label("Checking…", systemImage: "hourglass")
+                } else {
+                    Label("Check if ready to ship", systemImage: "checkmark.seal.fill")
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(verdictColor)
+            .disabled(releaseReadinessRunning || realDataProbeRunning)
+
+            // Secondary, de-emphasized options.
+            HStack(spacing: 16) {
+                Button("Full deep check (slow)") {
                     Task { await runReleaseReadiness(mode: .deep) }
-                } label: {
-                    if releaseReadinessRunning {
-                        Label("Running…", systemImage: "hourglass")
-                    } else {
-                        Label("Deep Eval (overnight)", systemImage: "moon.stars.fill")
-                    }
                 }
                 .disabled(releaseReadinessRunning)
-
-                // Runs against YOUR real archive (read-only), not the fixture —
-                // measures LLM calls + latency + which of your files got cited.
-                Button {
+                Button("Test on my real files") {
                     Task { await runRealDataProbe() }
-                } label: {
-                    if realDataProbeRunning {
-                        Label("Probing…", systemImage: "hourglass")
-                    } else {
-                        Label("Probe My Data", systemImage: "person.text.rectangle")
-                    }
                 }
                 .disabled(realDataProbeRunning)
-
+                if realDataProbeRunning { ProgressView().controlSize(.mini) }
                 if let url = realDataProbeURL {
-                    Button {
+                    Button("Reveal probe") {
                         #if canImport(AppKit)
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                         #endif
-                    } label: {
-                        Label("Reveal probe", systemImage: "doc.text.magnifyingglass")
                     }
                 }
-
                 if let report = releaseReadinessReport {
-                    Button {
+                    Button("Reveal report") {
                         #if canImport(AppKit)
                         NSWorkspace.shared.activateFileViewerSelecting([report.reportURL])
                         #endif
-                    } label: {
-                        Label("Reveal report", systemImage: "doc.text")
                     }
                 }
+                Spacer(minLength: 0)
             }
+            .font(.caption)
+            .buttonStyle(.borderless)
             if let report = displayed {
                 HStack(spacing: 6) {
                     Image(systemName: report.releaseReady ? "checkmark.circle.fill" : "xmark.octagon.fill")
