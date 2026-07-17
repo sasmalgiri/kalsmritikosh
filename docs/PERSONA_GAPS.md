@@ -15,7 +15,7 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
 | Ingest: PDF/Office/email/images/**audio/video**/chat/browser | ✅ | (legacy .doc/.xls/.ppt lossy; .key/.rar/.7z stubs — low priority) |
 | **Contradiction detection** | ✅ date + amount + location + signature + causal + **statement/testimony** | he-said/she-said + self-contradiction now detected from attributed statements (deterministic, cross- and within-source). |
 | **Audio/video citations** | ✅ **timecoded at ingest** | Audio/VideoLoader now embed `[mm:ss]` markers per ASR line, so cited answers point at the moment ("at 12:34"). Live end-to-end ASR verification is owner-run (needs a real recording + Speech permission). |
-| **Entity dedup / merge-split** | ⚠️ OCR-variant folding only | real "same person, two spellings" merge (Investigator/Researcher) |
+| **Entity dedup / merge-split** | ✅ user merge/split (v52) | reversible soft-merge (`merged_into`) — mentions fold into the winner, old spelling resolves via alias, audit-logged; OCR folding still runs at ingest. |
 | **Missing-evidence gaps** | ⚠️ taxonomy exists, rules partial | finish gap rules (Lawyer/Investigator) |
 
 ## 1. Lawyer
@@ -57,7 +57,9 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
    Investigator.~~ ✅ **DONE** — amount was already covered at the event level;
    added `detectStatementConflicts` (testimony/he-said-she-said + self-
    contradiction) over attributed statements, wired into the scan.
-3. **Entity merge/split review** → Investigator + Researcher.
+3. ~~**Entity merge/split review** → Investigator + Researcher.~~ ✅ **DONE** —
+   v52 soft, reversible `merged_into`; merge/unmerge in the Knowledge browser,
+   mentions fold into the winner, audit-logged. Verified end-to-end on a temp DB.
 4. **Missing-evidence gap rules** → Lawyer + Investigator.
 5. **Redaction UI (F7)** → Lawyer. *Gated on a blind-run PII test first (safety).* 
 6. Later/large: disk-backed ANN for 100GB (P9.3); richer causal graph.

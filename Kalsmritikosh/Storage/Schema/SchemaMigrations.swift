@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 51
+    public static let latestVersion = 52
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,11 +76,11 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v51 adds `chunks.review_status` — check that column.
+    /// v52 adds `entities.merged_into` — check that column (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(chunks);", [])
+        let rows = try await database.query("PRAGMA table_info(entities);", [])
         // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
-        return rows.contains { $0.string(1) == "review_status" }
+        return rows.contains { $0.string(1) == "merged_into" }
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
@@ -135,7 +135,8 @@ public enum SchemaMigrations {
         (48, v48),
         (49, v49),
         (50, v50),
-        (51, v51)
+        (51, v51),
+        (52, v52)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1927,5 +1928,23 @@ public enum SchemaMigrations {
     private static let v51: String = """
     ALTER TABLE chunks ADD COLUMN review_status TEXT NULL;
     CREATE INDEX IF NOT EXISTS idx_chunks_review_status ON chunks(review_status);
+    """
+
+    // MARK: - v52 — human-in-loop entity merge (soft, reversible)
+    //
+    // Lets a user (or a deterministic suggester) unify two canonical entities
+    // that are the same real-world thing ("J. Smith" → "John Smith"). Honoring
+    // the preserve-everything directive, the loser row is NOT deleted or
+    // FK-repointed: `merged_into = <winner id>` marks it, so canonical listings
+    // hide it and the winner's mention view folds in the loser's mentions. NULL
+    // = not merged (the default for every existing row). Setting it back to NULL
+    // is a full unmerge (split). The action is recorded append-only in
+    // fact_reviews (subject_kind = 'entity', action 'merge'/'reverse'), so it
+    // shows in the Audit trail and is reversible. Self-reference is rejected in
+    // the repository; a small resolve chain (with a depth cap) yields the final
+    // canonical so a merged-into-a-merged case still resolves.
+    private static let v52: String = """
+    ALTER TABLE entities ADD COLUMN merged_into TEXT NULL REFERENCES entities(id);
+    CREATE INDEX IF NOT EXISTS idx_entities_merged_into ON entities(merged_into);
     """
 }

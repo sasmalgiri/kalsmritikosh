@@ -85,6 +85,11 @@ private struct KnowledgeListView: View {
     /// The entity currently being renamed (drives the correction alert).
     @State private var correcting: EntitySummaryRow?
     @State private var correctionText = ""
+    /// v52 merge: the loser awaiting a merge-target choice (drives the picker),
+    /// plus the merged-away entities and their reveal toggle.
+    @State private var merging: EntitySummaryRow?
+    @State private var merged: [EntitySummaryRow] = []
+    @State private var showMerged = false
 
     var body: some View {
         VStack {
@@ -106,6 +111,13 @@ private struct KnowledgeListView: View {
                             }
                         }
                     }
+                    if showMerged && !merged.isEmpty {
+                        Section("Merged — folded into another entity, kept for the record") {
+                            ForEach(merged) { row in
+                                mergedRow(row)
+                            }
+                        }
+                    }
                 }
                 .listStyle(.inset)
             }
@@ -119,6 +131,23 @@ private struct KnowledgeListView: View {
                     }
                     .toggleStyle(.button)
                 }
+            }
+            if !merged.isEmpty {
+                ToolbarItem {
+                    Toggle(isOn: $showMerged) {
+                        Label("Merged (\(merged.count))", systemImage: "arrow.triangle.merge")
+                    }
+                    .toggleStyle(.button)
+                }
+            }
+        }
+        .sheet(item: $merging) { loser in
+            MergeTargetPicker(
+                loser: loser,
+                kind: kind,
+                candidates: rows.filter { $0.id != loser.id }
+            ) { winner in
+                Task { await mergeInto(loser, winner: winner) }
             }
         }
         .alert("Correct spelling", isPresented: Binding(
@@ -157,11 +186,33 @@ private struct KnowledgeListView: View {
             } label: {
                 Label("Correct spelling…", systemImage: "pencil")
             }
+            Button {
+                merging = row
+            } label: {
+                Label("Merge into…", systemImage: "arrow.triangle.merge")
+            }
+            .disabled(rows.count < 2)
             Button(role: .destructive) {
                 Task { await reject(row) }
             } label: {
                 Label("Reject (exclude)", systemImage: "eye.slash")
             }
+        }
+    }
+
+    /// One merged (loser) entity row, greyed, with a one-tap Unmerge (split).
+    private func mergedRow(_ row: EntitySummaryRow) -> some View {
+        HStack {
+            EntityChip(row.value, kind: kind)
+                .opacity(0.5)
+            Spacer()
+            Button {
+                Task { await unmerge(row) }
+            } label: {
+                Label("Unmerge", systemImage: "arrow.uturn.backward")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
         }
     }
 
@@ -185,9 +236,11 @@ private struct KnowledgeListView: View {
         guard let entities = appState.entities else { return }
         let active = (try? await entities.list(kind: kind, limit: 500)) ?? []
         let hidden = (try? await entities.listExcluded(kind: kind, limit: 500)) ?? []
+        let folded = (try? await entities.listMerged(kind: kind, limit: 500)) ?? []
         await MainActor.run {
             self.rows = active
             self.excluded = hidden
+            self.merged = folded
         }
     }
 
@@ -230,6 +283,37 @@ private struct KnowledgeListView: View {
             subjectKind: .entity, subjectID: row.id, action: .correct,
             priorValue: row.value, newValue: trimmed, reviewer: "user",
             reason: "Corrected spelling"
+        ))
+        await refresh()
+    }
+
+    /// Soft-merge `loser` into `winner`: the loser folds under the winner
+    /// (mentions combine, old spelling resolves via alias), reversibly. Recorded
+    /// in fact_reviews (.merge) for the Audit trail.
+    private func mergeInto(_ loser: EntitySummaryRow, winner: EntitySummaryRow) async {
+        merging = nil
+        guard loser.id != winner.id, let entities = appState.entities else { return }
+        do {
+            try await entities.merge(loserID: loser.id, winnerID: winner.id)
+            try? await appState.factReviews?.record(FactReview(
+                subjectKind: .entity, subjectID: loser.id, action: .merge,
+                priorValue: loser.value, newValue: winner.value, reviewer: "user",
+                reason: "Merged \"\(loser.value)\" into \"\(winner.value)\""
+            ))
+        } catch {
+            // Rejected merges (cycle / cross-kind) are a no-op; nothing to undo.
+            print("Merge skipped: \(error)")
+        }
+        await refresh()
+    }
+
+    /// Reverse a merge — the loser reappears as its own entity. Recorded (.split).
+    private func unmerge(_ row: EntitySummaryRow) async {
+        guard let entities = appState.entities else { return }
+        try? await entities.unmerge(loserID: row.id)
+        try? await appState.factReviews?.record(FactReview(
+            subjectKind: .entity, subjectID: row.id, action: .split,
+            priorValue: row.value, reviewer: "user", reason: "Unmerged"
         ))
         await refresh()
     }
@@ -279,5 +363,54 @@ private struct KnowledgeListView: View {
             print("Dossier export failed: \(error)")
         }
         #endif
+    }
+}
+
+/// Sheet that picks the WINNER a loser entity should merge into. Shows the
+/// same-kind canonicals, searchable; picking one folds the loser into it.
+private struct MergeTargetPicker: View {
+    let loser: EntitySummaryRow
+    let kind: Entity.Kind
+    let candidates: [EntitySummaryRow]
+    let onPick: (EntitySummaryRow) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var filtered: [EntitySummaryRow] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return candidates }
+        return candidates.filter { $0.value.lowercased().contains(q) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Merge \u{201C}\(loser.value)\u{201D} into…")
+                .font(.headline)
+            Text("Pick the entity these are the same as. \u{201C}\(loser.value)\u{201D} will fold into it — mentions combine and the old spelling still resolves. Reversible; recorded in the Audit trail.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Search \(kind.rawValue)s…", text: $query)
+                .textFieldStyle(.roundedBorder)
+            List(filtered) { row in
+                Button {
+                    onPick(row)
+                    dismiss()
+                } label: {
+                    HStack {
+                        EntityChip(row.value, kind: kind)
+                        Spacer()
+                        ConfidenceBadge(row.confidence)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .frame(minHeight: 240)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+            }
+        }
+        .padding()
+        .frame(minWidth: 420, minHeight: 380)
     }
 }

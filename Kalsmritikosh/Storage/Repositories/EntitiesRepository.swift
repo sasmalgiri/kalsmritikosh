@@ -310,15 +310,18 @@ public actor EntitiesRepository {
     /// for a canonical entity. Joins entity_mentions → knowledge_objects
     /// → files. Used by the dossier export.
     public func mentions(forEntityID id: Entity.ID, limit: Int = 500) async throws -> [EntityMentionRow] {
+        // Fold in mentions of any entity merged INTO this one (v52), so the
+        // winner's dossier shows the combined evidence across both spellings.
         let rows = try await database.query("""
         SELECT m.source_object_id, m.surface, m.confidence, f.url, k.source_type, k.created_at
         FROM entity_mentions m
         JOIN knowledge_objects k ON k.id = m.source_object_id
         JOIN files f ON f.id = k.file_id
-        WHERE m.entity_id = ?
+        WHERE (m.entity_id = ?
+            OR m.entity_id IN (SELECT id FROM entities WHERE merged_into = ?))
         ORDER BY k.created_at DESC
         LIMIT ?;
-        """, [.uuid(id), .integer(Int64(limit))])
+        """, [.uuid(id), .uuid(id), .integer(Int64(limit))])
         return rows.compactMap { row in
             guard
                 let koID = row.uuid(0),
@@ -342,9 +345,11 @@ public actor EntitiesRepository {
         // Human-in-loop: entities a user rejected (review_status = 'rejected')
         // are soft-excluded from the browse surface. They are NOT deleted — see
         // listExcluded / setReviewStatus.
+        // merged_into IS NULL also hides losers folded into another canonical
+        // (v52 soft merge) — they resolve under the winner, not as themselves.
         let rows = try await database.query("""
         SELECT id, value, normalized, confidence
-        FROM entities WHERE kind = ? AND review_status IS NULL
+        FROM entities WHERE kind = ? AND review_status IS NULL AND merged_into IS NULL
         ORDER BY value COLLATE NOCASE
         LIMIT ?;
         """, [.text(kind.rawValue), .integer(Int64(limit))])
@@ -372,7 +377,7 @@ public actor EntitiesRepository {
         SELECT e.id, e.value, e.normalized, e.confidence, e.quality_tier, COUNT(m.id) AS mentions
         FROM entities e
         LEFT JOIN entity_mentions m ON m.entity_id = e.id
-        WHERE e.kind = ? AND e.review_status IS NULL
+        WHERE e.kind = ? AND e.review_status IS NULL AND e.merged_into IS NULL
         GROUP BY e.id
         ORDER BY mentions DESC
         LIMIT ?;
@@ -424,7 +429,7 @@ public actor EntitiesRepository {
         WHERE (e.value LIKE ?
            OR e.normalized LIKE ?
            OR a.alias_normalized LIKE ?)
-           AND e.review_status IS NULL
+           AND e.review_status IS NULL AND e.merged_into IS NULL
         ORDER BY e.confidence DESC
         LIMIT ?;
         """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
@@ -443,7 +448,7 @@ public actor EntitiesRepository {
         WHERE (e.value LIKE ?
            OR e.normalized LIKE ?
            OR a.alias_normalized LIKE ?)
-           AND e.review_status IS NULL
+           AND e.review_status IS NULL AND e.merged_into IS NULL
         ORDER BY e.confidence DESC
         LIMIT ?;
         """, [.text(pattern), .text(pattern), .text(aliasPattern), .integer(Int64(limit))])
@@ -493,6 +498,122 @@ public actor EntitiesRepository {
                 id: id, value: value,
                 normalizedValue: row.string(2), confidence: Confidence(conf)
             )
+        }
+    }
+
+    // MARK: - Human-in-loop entity merge (v52, soft + reversible)
+
+    public enum MergeError: Error, Sendable {
+        case sameEntity            // can't merge an entity into itself
+        case differentKind         // a person and an organization aren't the same thing
+        case cycle                 // the winner already resolves (transitively) to the loser
+        case notFound              // one side doesn't exist
+    }
+
+    /// Soft-merge `loserID` into `winnerID`: the loser is marked `merged_into =
+    /// winner` (never deleted or FK-repointed), its name(s) are registered as
+    /// aliases of the winner so old-spelling lookups resolve, and the winner's
+    /// mention view folds in the loser's mentions. Fully reversible via `unmerge`.
+    /// The audit record (fact_reviews, action `.merge`) is written by the caller.
+    /// Rejects self-merge, cross-kind merge, and any merge that would form a cycle.
+    public func merge(loserID: Entity.ID, winnerID: Entity.ID) async throws {
+        guard loserID != winnerID else { throw MergeError.sameEntity }
+
+        let rows = try await database.query("""
+        SELECT id, kind, normalized, value FROM entities WHERE id IN (?, ?);
+        """, [.uuid(loserID), .uuid(winnerID)])
+        var kinds: [Entity.ID: String] = [:]
+        var loserNorm = "", loserValue = ""
+        for row in rows {
+            guard let rid = row.uuid(0) else { continue }
+            kinds[rid] = row.string(1)
+            if rid == loserID { loserNorm = row.string(2) ?? ""; loserValue = row.string(3) ?? "" }
+        }
+        guard let lk = kinds[loserID], let wk = kinds[winnerID] else { throw MergeError.notFound }
+        guard lk == wk else { throw MergeError.differentKind }
+        // Cycle guard: the winner must not already resolve back to the loser.
+        let winnerCanonical = try await resolveCanonical(winnerID)
+        guard winnerCanonical != loserID else { throw MergeError.cycle }
+
+        try await database.exec(
+            "UPDATE entities SET merged_into = ? WHERE id = ?;",
+            [.uuid(winnerID), .uuid(loserID)]
+        )
+        // Old spellings resolve to the winner via alias rows.
+        if !loserNorm.isEmpty { try await addAlias(entityID: winnerID, aliasNormalized: loserNorm, source: "merge") }
+        let vnorm = loserValue.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if !vnorm.isEmpty, vnorm != loserNorm {
+            try await addAlias(entityID: winnerID, aliasNormalized: vnorm, source: "merge")
+        }
+        // Carry the loser's existing aliases up to the winner.
+        try await database.exec("""
+        INSERT OR IGNORE INTO entity_aliases (entity_id, alias_normalized, source)
+        SELECT ?, alias_normalized, 'merge' FROM entity_aliases WHERE entity_id = ?;
+        """, [.uuid(winnerID), .uuid(loserID)])
+    }
+
+    /// Reverse a merge (split): clear the loser's `merged_into` pointer and drop
+    /// the alias rows that the merge added for its name. The loser reappears as
+    /// its own canonical. The audit record (`.reverse`) is written by the caller.
+    public func unmerge(loserID: Entity.ID) async throws {
+        // Find the current winner so we can remove the merge-sourced alias.
+        let rows = try await database.query(
+            "SELECT merged_into, normalized, value FROM entities WHERE id = ? LIMIT 1;",
+            [.uuid(loserID)]
+        )
+        guard let row = rows.first, let winnerID = row.uuid(0) else { return }  // not merged → no-op
+        let loserNorm = row.string(1) ?? ""
+        let loserVal = (row.string(2) ?? "").lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        try await database.exec("UPDATE entities SET merged_into = NULL WHERE id = ?;", [.uuid(loserID)])
+        for name in Set([loserNorm, loserVal]) where !name.isEmpty {
+            try await database.exec(
+                "DELETE FROM entity_aliases WHERE entity_id = ? AND alias_normalized = ? AND source = 'merge';",
+                [.uuid(winnerID), .text(name)]
+            )
+        }
+    }
+
+    /// Follow the `merged_into` chain to the ultimate canonical id (depth-capped
+    /// so a corrupt cycle can't loop forever). Returns the input id when unmerged.
+    public func resolveCanonical(_ id: Entity.ID) async throws -> Entity.ID {
+        var current = id
+        for _ in 0..<8 {
+            let rows = try await database.query(
+                "SELECT merged_into FROM entities WHERE id = ? LIMIT 1;", [.uuid(current)]
+            )
+            guard let next = rows.first?.uuid(0) else { return current }
+            current = next
+        }
+        return current
+    }
+
+    /// The entities merged into `winnerID` — powers the winner's "merged names"
+    /// affordance (with Unmerge).
+    public func mergedInto(_ winnerID: Entity.ID, limit: Int = 200) async throws -> [EntitySummaryRow] {
+        let rows = try await database.query("""
+        SELECT id, value, normalized, confidence
+        FROM entities WHERE merged_into = ?
+        ORDER BY value COLLATE NOCASE
+        LIMIT ?;
+        """, [.uuid(winnerID), .integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let value = row.string(1), let conf = row.double(3) else { return nil }
+            return EntitySummaryRow(id: id, value: value, normalizedValue: row.string(2), confidence: Confidence(conf))
+        }
+    }
+
+    /// All merged (loser) entities of a kind — powers a "Show merged" toggle in
+    /// the Knowledge browser, symmetric to listExcluded.
+    public func listMerged(kind: Entity.Kind, limit: Int = 200) async throws -> [EntitySummaryRow] {
+        let rows = try await database.query("""
+        SELECT id, value, normalized, confidence
+        FROM entities WHERE kind = ? AND merged_into IS NOT NULL
+        ORDER BY value COLLATE NOCASE
+        LIMIT ?;
+        """, [.text(kind.rawValue), .integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard let id = row.uuid(0), let value = row.string(1), let conf = row.double(3) else { return nil }
+            return EntitySummaryRow(id: id, value: value, normalizedValue: row.string(2), confidence: Confidence(conf))
         }
     }
 
