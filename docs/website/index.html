@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kalsmritikosh — the private AI that answers with receipts</title>
+<meta name="description" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Every answer links to the exact source. Nothing is uploaded. Nothing is used for training." />
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#12151d; --panel2:#171b26; --ink:#eef1f7; --muted:#9aa4b8;
+    --line:rgba(255,255,255,.09); --brand1:#6d7cff; --brand2:#22c1a6; --warn:#ff6b6b;
+    --radius:16px; --maxw:1080px;
+    --grad:linear-gradient(120deg,#6d7cff,#22c1a6);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 22px}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .btn{display:inline-block;padding:13px 22px;border-radius:12px;font-weight:600;border:1px solid var(--line)}
+  .btn.primary{background:var(--grad);color:#08131a;border:none}
+  .btn.ghost{background:rgba(255,255,255,.04)}
+  .muted{color:var(--muted)}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+    padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--muted)}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);
+    background:rgba(11,13,18,.7);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px}
+  .logo .mark{width:26px;height:26px;border-radius:8px;background:var(--grad)}
+  nav .links{display:flex;gap:22px;align-items:center}
+  nav .links a{font-size:14px;color:var(--muted)}
+  nav .links a:hover{color:var(--ink)}
+  @media(max-width:720px){nav .links a:not(.btn){display:none}}
+
+  /* hero */
+  header.hero{padding:86px 0 60px;text-align:center;position:relative;overflow:hidden}
+  header.hero::before{content:"";position:absolute;inset:-40% 0 auto 0;height:600px;
+    background:radial-gradient(60% 60% at 50% 0%,rgba(109,124,255,.22),transparent 70%);pointer-events:none}
+  h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:18px 0 10px;letter-spacing:-.02em;font-weight:800}
+  .sub{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:660px;margin:0 auto 26px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .req{margin-top:14px;font-size:13px}
+
+  section{padding:64px 0;border-top:1px solid var(--line)}
+  h2{font-size:clamp(26px,4vw,38px);letter-spacing:-.02em;margin:0 0 10px;font-weight:800}
+  .lead{color:var(--muted);max-width:640px;margin:0 0 34px;font-size:18px}
+  .center{text-align:center;margin-left:auto;margin-right:auto}
+
+  .grid{display:grid;gap:18px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g3,.g2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .card h3{margin:6px 0 6px;font-size:19px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  .ic{width:40px;height:40px;border-radius:10px;background:rgba(109,124,255,.14);
+    display:grid;place-items:center;font-size:20px;margin-bottom:6px}
+
+  /* problem cards */
+  .prob{border-left:3px solid var(--warn)}
+  .prob .who{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--warn);font-weight:700}
+
+  /* answer demo */
+  .demo{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:20px;text-align:left}
+  .demo .q{font-weight:600}
+  .demo .a{margin:12px 0;padding:14px;background:rgba(255,255,255,.03);border-radius:12px;border:1px solid var(--line)}
+  .cite{display:inline-block;font-size:12px;color:var(--brand2);border:1px solid rgba(34,193,166,.4);
+    border-radius:6px;padding:1px 7px;margin:0 2px;font-weight:600}
+  .badge{font-size:12px;font-weight:700;color:#08131a;background:var(--brand2);border-radius:6px;padding:2px 8px}
+
+  /* comparison */
+  table{width:100%;border-collapse:collapse;font-size:15px;overflow:hidden;border-radius:var(--radius)}
+  th,td{padding:13px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--panel);font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  td.k{color:var(--muted)}
+  .yes{color:var(--brand2);font-weight:700}
+  .no{color:var(--warn);font-weight:700}
+  .col-us{background:rgba(109,124,255,.06)}
+
+  .faq details{border:1px solid var(--line);border-radius:12px;padding:4px 16px;margin-bottom:10px;background:var(--panel)}
+  .faq summary{cursor:pointer;font-weight:600;padding:12px 0;list-style:none}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq p{color:var(--muted);margin:0 0 14px}
+
+  footer{border-top:1px solid var(--line);padding:36px 0;color:var(--muted);font-size:14px}
+  footer .row{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px}
+  footer a{color:var(--muted)}footer a:hover{color:var(--ink)}
+  .disc{margin-top:20px;font-size:12.5px;color:#6b7488;max-width:760px}
+</style>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo"><span class="mark"></span> Kalsmritikosh</div>
+  <div class="links">
+    <a href="#how">How it works</a>
+    <a href="#why">Why it's different</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#compare">Compare</a>
+    <a class="btn primary" href="#get">Get the app</a>
+  </div>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <span class="pill">🔒 100% on-device · nothing uploaded · no training on your data</span>
+  <h1>The private AI that answers<br><span class="grad">with receipts.</span></h1>
+  <p class="sub">Kalsmritikosh turns your own documents and emails into a cited evidence ledger.
+    Every answer links to the exact source — file, page, and line. It runs entirely on your Mac.
+    Nothing is uploaded, ever.</p>
+  <div class="cta">
+    <a class="btn primary" href="#get">Download for Mac</a>
+    <a class="btn ghost" href="#how">See how it works</a>
+  </div>
+  <div class="req muted">Requires macOS 15.6+. AI-written answers use Apple's on-device model (Apple Intelligence).</div>
+
+  <div class="demo wrap" style="margin-top:40px;max-width:720px">
+    <div class="q">“When was the first lot due, and was that date changed?”</div>
+    <div class="a">
+      The first lot of 8 units was originally due <b>2024-04-15</b> <span class="cite">contract.md · p.1</span>,
+      then rescheduled to <b>2024-05-28</b> by Amendment 7 <span class="cite">amendment-7.md · p.1</span>.
+      <div style="margin-top:10px">
+        <span class="badge">Proven by direct evidence</span>
+        <span class="cite">2 sources</span>
+      </div>
+    </div>
+    <div class="muted" style="font-size:13px">Every claim carries the exact evidence that supports it. If your documents don't say it, the answer says so — it won't guess.</div>
+  </div>
+</div></header>
+
+<!-- PROBLEM -->
+<section id="problem"><div class="wrap">
+  <h2>Today's AI has two problems with <span class="grad">your</span> documents.</h2>
+  <p class="lead">People love these tools in a demo and distrust them at work. Here's why.</p>
+  <div class="grid g2">
+    <div class="card prob">
+      <div class="who">It makes things up</div>
+      <h3>“Grounded” assistants still hallucinate</h3>
+      <p>Users report document AIs inventing contract clauses that aren't there, attributing claims to a vague “Source 3” with no page you can cite, and never flagging when two sources disagree. Convincing — and sometimes confidently wrong.</p>
+    </div>
+    <div class="card prob">
+      <div class="who">It takes your data</div>
+      <h3>Your private files go to the cloud</h3>
+      <p>On popular chatbots, uploaded files can be used to train the model by default, are retained for weeks, can be caught by legal holds, and have leaked in past breaches. Confidential work doesn't belong on someone else's servers.</p>
+    </div>
+  </div>
+</div></section>
+
+<!-- WHY DIFFERENT -->
+<section id="why"><div class="wrap">
+  <h2>Kalsmritikosh is an <span class="grad">evidence ledger</span>, not a chatbot.</h2>
+  <p class="lead">The intelligence lives in a structured database of your evidence — not in a model guessing from a chat window. That one difference changes everything.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">📎</div><h3>Answers carry their sources</h3><p>Every claim is tied to the exact file, page, and byte range it came from. Click any citation to see the original — no hunting through a 40-page PDF.</p></div>
+    <div class="card"><div class="ic">🚫</div><h3>It won't guess</h3><p>An evidence gate decides: answer, water down, refuse, or show a conflict. If your documents don't support it, it tells you — instead of inventing a plausible clause.</p></div>
+    <div class="card"><div class="ic">⚖️</div><h3>Conflicts are surfaced, not averaged</h3><p>When two documents disagree, you see both sides with their sources — the exact thing other tools quietly paper over.</p></div>
+    <div class="card"><div class="ic">🕘</div><h3>A real timeline</h3><p>Dated facts across your whole archive are reconstructed into one chronology — with honest markers for what's proven vs. inferred.</p></div>
+    <div class="card"><div class="ic">📤</div><h3>Export with citations intact</h3><p>Turn findings into a work product — a chronology, a brief, a report — with the citations baked in. No walled garden.</p></div>
+    <div class="card"><div class="ic">🔐</div><h3>Private by design</h3><p>Runs 100% on your Mac using Apple's on-device model. No account, no uploads, no analytics. Erase everything in one click.</p></div>
+  </div>
+</div></section>
+
+<!-- HOW -->
+<section id="how"><div class="wrap">
+  <h2>Three steps. All on your Mac.</h2>
+  <div class="grid g3">
+    <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans, audio. It reads everything in place; nothing leaves your device.</p></div>
+    <div class="card"><div class="ic">2</div><h3>It builds the ledger</h3><p>Formats fall away. Everything becomes cited facts, dated events, people, and relationships in one structured, searchable store.</p></div>
+    <div class="card"><div class="ic">3</div><h3>Ask, and verify</h3><p>Ask in plain language. Get an answer with its evidence, a confidence read, and any conflicts — every line traceable to a source.</p></div>
+  </div>
+</div></section>
+
+<!-- PERSONAS -->
+<section id="who"><div class="wrap">
+  <h2>Built for people who <span class="grad">can't afford to be wrong.</span></h2>
+  <p class="lead">Pick your focus on first launch — the app tailors your workspace to the jobs you do.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">⚖️</div><h3>Lawyers</h3><p>Build a defensible case chronology; every event linked to its source, every contradiction preserved.</p></div>
+    <div class="card"><div class="ic">🔍</div><h3>Investigators</h3><p>Who knew what, and when — connections, corroboration, and the gaps in the record.</p></div>
+    <div class="card"><div class="ic">📰</div><h3>Journalists</h3><p>Verify claims across a document dump — what's supported, what conflicts, what's missing.</p></div>
+    <div class="card"><div class="ic">🏺</div><h3>Researchers</h3><p>Reconstruct periods from archives with honest uncertainty, not false precision.</p></div>
+    <div class="card"><div class="ic">🧠</div><h3>Everyone</h3><p>Your private, searchable memory — ask anything about your own documents.</p></div>
+  </div>
+</div></section>
+
+<!-- PRIVACY -->
+<section id="privacy"><div class="wrap">
+  <h2 class="center">Your documents never leave your Mac.</h2>
+  <p class="lead center">No servers. No accounts. No analytics or telemetry. No training on your data — because we never receive it.</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">🖥️</div><h3>On-device AI</h3><p>Reading, search, and answers all run locally with Apple's frameworks and on-device model.</p></div>
+    <div class="card"><div class="ic">🙈</div><h3>Nothing collected</h3><p>App Store privacy label: “Data Not Collected.” There's nothing for us to lose or leak.</p></div>
+    <div class="card"><div class="ic">🗑️</div><h3>Delete anytime</h3><p>One click erases the entire ledger. Your original files are never touched.</p></div>
+  </div>
+</div></section>
+
+<!-- COMPARE -->
+<section id="compare"><div class="wrap">
+  <h2>How it compares</h2>
+  <p class="lead">Honest, not hype.</p>
+  <table>
+    <thead><tr>
+      <th>What matters</th><th class="col-us">Kalsmritikosh</th><th>Cloud chatbots</th><th>Cloud “notebook” AIs</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="k">Runs fully on your device</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+      <tr><td class="k">Your files used for training</td><td class="col-us yes">Never</td><td class="no">By default on personal plans</td><td class="k">Varies</td></tr>
+      <tr><td class="k">Citation precision</td><td class="col-us yes">File · page · line</td><td class="no">Often none</td><td class="k">Vague (“Source 3”)</td></tr>
+      <tr><td class="k">Refuses when evidence is missing</td><td class="col-us yes">Yes</td><td class="no">Rarely</td><td class="no">Rarely</td></tr>
+      <tr><td class="k">Surfaces contradictions</td><td class="col-us yes">Yes, both sides</td><td class="no">No</td><td class="no">No</td></tr>
+      <tr><td class="k">Timeline reconstruction</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+      <tr><td class="k">Export with citations</td><td class="col-us yes">Yes</td><td class="k">Copy-paste</td><td class="no">Limited</td></tr>
+      <tr><td class="k">Works offline</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+    </tbody>
+  </table>
+  <p class="muted" style="font-size:13px;margin-top:12px">Comparison reflects publicly reported behaviour of popular cloud AI tools at time of writing; competitors' features change over time.</p>
+</div></section>
+
+<!-- FAQ -->
+<section class="faq"><div class="wrap">
+  <h2>Questions</h2>
+  <details><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
+  <details><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
+  <details><summary>What can I feed it?</summary><p>PDF, Word, Excel/CSV, PowerPoint, EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP. Scans and images are read with on-device OCR; audio and video are transcribed on-device.</p></details>
+  <details><summary>What do I need to run it?</summary><p>A Mac on macOS 15.6 or later. AI-written answers use Apple's on-device model (Apple Intelligence); you can still ingest, search, and view evidence without it.</p></details>
+  <details><summary>How do I delete my data?</summary><p>Settings → Your data → “Delete all my data.” It erases the whole ledger instantly; your original files on disk are untouched.</p></details>
+</div></section>
+
+<!-- GET -->
+<section id="get"><div class="wrap center">
+  <h2>Answers you can actually trust.</h2>
+  <p class="lead center">Private. Cited. On your Mac.</p>
+  <div class="cta"><a class="btn primary" href="#">Download for Mac</a></div>
+  <div class="req muted">Requires macOS 15.6+ · Apple Intelligence for AI answers</div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="row">
+    <div class="logo"><span class="mark"></span> Kalsmritikosh</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <a href="../legal/PRIVACY_POLICY.md">Privacy</a>
+      <a href="../legal/TERMS_EULA.md">Terms</a>
+      <a href="../legal/SUPPORT.md">Support</a>
+    </div>
+  </div>
+  <p class="disc">Kalsmritikosh reconstructs the most evidence-supported version of events from the documents you provide. It is an aid, not an authority — its output can be incomplete or wrong, and some items are inferred rather than directly proven. Always verify against the cited sources. Not legal, financial, medical, or other professional advice. Built with Apple frameworks and on-device open models. © Eco Sanskriti Innovation.</p>
+</div></footer>
+
+</body>
+</html>
