@@ -52,3 +52,9 @@ Vendor/**/build/
 # next build. Keep the directory itself ignored so accidental commits
 # of the binaries don't poison history.
 Kalsmritikosh/Resources/BGEReranker/
+
+# P6.2 — BGE-small embedder Core ML model + vocab. Same rationale as the
+# reranker above: the weight blob is large and generated, not committed. Each
+# developer runs `scripts/build-bge-embedder.sh` once; output lands here and
+# Xcode's PBXFileSystemSynchronizedRootGroup bundles it at the next build.
+Kalsmritikosh/Resources/BGESmallEmbedder/

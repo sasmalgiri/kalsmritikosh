@@ -17,6 +17,16 @@ It is **inert until you supply the model asset** — with no model bundled,
   dropped, so the background drain re-embeds every chunk at 384-dim and the index
   rebuilds. Vectors are derived data — chunks/FTS/entities are untouched.
 
+## Quickest path (one command)
+
+```bash
+scripts/build-bge-embedder.sh
+```
+Creates a venv, downloads BGE-small-en-v1.5, converts it to Core ML, and drops
+`BGESmallEmbedder.mlpackage` + `vocab.txt` into `Kalsmritikosh/Resources/BGESmallEmbedder/`
+(gitignored — regenerated per machine, like the reranker). Then rebuild in Xcode
+and relaunch. The manual steps below are the same thing, spelled out.
+
 ## What you must supply
 
 Two files in `Kalsmritikosh/Resources/BGESmallEmbedder/`, added to the app
