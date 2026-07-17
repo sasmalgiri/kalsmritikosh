@@ -4,14 +4,20 @@ Kalsmritikosh runs entirely on-device. It bundles / can download the following
 machine-learning models. This file is the source of truth for the in-app
 "About → Model licences" screen and the App Store attribution text.
 
-## Reasoning models (Meta Llama)
+## Reasoning (writing answers)
 
-**Built with Llama.**
+**v1 default:** Apple's on-device `FoundationModels` (see the Apple section below) —
+no third-party reasoning model ships in the base v1 app.
 
-- **Default (bundled):** Llama 3.2 3B Instruct — quantized to GGUF (Q4_K_M).
-- **Optional (user download, 16 GB+ devices):** Llama 3.1 8B Instruct — GGUF.
+## Optional reasoning models (Meta Llama)
 
-Llama 3.x models are licensed under the **Llama 3.2 / Llama 3.1 Community License
+**Built with Llama.** These are NOT in the base v1 bundle; they apply only if a
+future version offers them as an optional user download:
+
+- Llama 3.2 3B Instruct — quantized to GGUF (Q4_K_M).
+- Llama 3.1 8B Instruct — GGUF (16 GB+ devices).
+
+When offered, Llama 3.x models are licensed under the **Llama 3.2 / Llama 3.1 Community License
 Agreement** (© Meta Platforms, Inc.). Obligations Kalsmritikosh complies with:
 
 1. **Attribution:** the app displays "Built with Llama" in About / onboarding,

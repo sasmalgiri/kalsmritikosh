@@ -28,10 +28,12 @@ distinguishes direct evidence from assertion and inference and shows citations, 
 - you must **independently verify** any material fact before relying on it.
 
 ## 4. Third-party models
-The App includes third-party ML models under their own licences (see
-MODEL_ATTRIBUTIONS.md / THIRD_PARTY_NOTICES.md), including Meta Llama ("Built with
-Llama") and MIT-licensed BGE models. Your use of the App's AI features is also subject
-to those licences and Meta's Acceptable Use Policy.
+The App's on-device AI uses Apple's system on-device language model (where the OS
+provides it) for writing answers, and MIT-licensed **BGE** embedding + reranker
+models (© BAAI) for on-device search. Their licences and third-party notices ship
+with the App (see MODEL_ATTRIBUTIONS.md / THIRD_PARTY_NOTICES.md). If a future
+version offers an optional downloadable model, that model's own licence and
+acceptable-use terms will also apply to your use of it.
 
 ## 5. No warranty
 THE APP IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, TO THE MAXIMUM EXTENT
