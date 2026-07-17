@@ -101,31 +101,22 @@ public struct SettingsView: View {
                     selfCheckChip
                 }
 
-                // ── Everyday settings ─────────────────────────────────────
-                systemModeSection
-                Divider()
-
-                // P2.6/P8.7 — Ollama is internal-only in v1 (no user setup path
-                // in the consumer release); the prompt is DEBUG-only.
-                #if DEBUG
-                if let setup = appState.ollamaSetupSuggestion {
-                    ollamaSetupSection(setup)
-                }
-                #endif
-                if let advice = appState.modelChoiceAdvice,
-                   advice.severity != .ok {
+                // ── Everyday settings — each category collapsed behind its
+                //    header so Settings opens minimal. Click a header to expand.
+                if let advice = appState.modelChoiceAdvice, advice.severity != .ok {
                     modelChoiceBanner(advice)
                 }
-
-                privacySection
-                Divider()
-                maintenanceSection
-                Divider()
-                optionalIngestSection
-                Divider()
-                dataSection
-                Divider()
-                legalSection
+                #if DEBUG
+                if let setup = appState.ollamaSetupSuggestion {
+                    settingsGroup("Local model setup", "cpu") { ollamaSetupSection(setup) }
+                }
+                #endif
+                settingsGroup("Answering & modes", "slider.horizontal.3") { systemModeSection }
+                settingsGroup("Privacy", "hand.raised") { privacySection }
+                settingsGroup("Background maintenance", "moon.zzz") { maintenanceSection }
+                settingsGroup("Ingest options", "tray.and.arrow.down") { optionalIngestSection }
+                settingsGroup("Your data", "trash") { dataSection }
+                settingsGroup("Legal & privacy", "checkmark.shield") { legalSection }
 
                 // ── Advanced (collapsed by default) ───────────────────────
                 Divider()
@@ -980,6 +971,9 @@ public struct SettingsView: View {
     /// "Delete all my data" confirmation + status.
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
+    /// Which everyday Settings categories are expanded. Empty = all collapsed,
+    /// so Settings shows a minimal list of category headers by default.
+    @State private var openSettingsGroups: Set<String> = []
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1016,6 +1010,23 @@ public struct SettingsView: View {
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }
 
+
+    /// Collapsible wrapper so each Settings category is hidden behind a click —
+    /// Settings opens as a short list of headers, expand only what you need.
+    @ViewBuilder
+    private func settingsGroup<Content: View>(_ title: String, _ icon: String, @ViewBuilder _ content: @escaping () -> Content) -> some View {
+        DisclosureGroup(isExpanded: Binding(
+            get: { openSettingsGroups.contains(title) },
+            set: { open in
+                if open { openSettingsGroups.insert(title) } else { openSettingsGroups.remove(title) }
+            }
+        )) {
+            content().padding(.top, 6).padding(.leading, 2)
+        } label: {
+            Label(title, systemImage: icon).font(.headline)
+        }
+        .padding(.vertical, 3)
+    }
 
     /// Your data — the global "erase everything" control. Always visible so it's
     /// easy to find (the app previously only had a per-folder forget in Sources).
