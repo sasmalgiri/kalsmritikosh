@@ -452,6 +452,7 @@ public struct AskView: View {
         Task {
             let ids = Set(answer.citations.map(\.objectID))
             let names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            let hashes = (try? await appState.objects?.sourceHashes(for: ids)) ?? [:]
             var drafts: [ReceiptDraft] = [
                 ReceiptDraft(
                     claim: question.isEmpty ? "Answer" : "Answer to: \(question)",
@@ -460,7 +461,8 @@ public struct AskView: View {
                 )
             ]
             for (i, c) in answer.citations.enumerated() {
-                let fn = names[c.objectID] ?? "source \(c.objectID.uuidString.prefix(8))"
+                var fn = names[c.objectID] ?? "source \(c.objectID.uuidString.prefix(8))"
+                if let h = hashes[c.objectID] { fn += " [sha256:\(h)]" }
                 drafts.append(ReceiptDraft(claim: "Supporting evidence \(i + 1)", source: fn, passage: c.snippet))
             }
             let sealed = VerifiableReceipt.seal(

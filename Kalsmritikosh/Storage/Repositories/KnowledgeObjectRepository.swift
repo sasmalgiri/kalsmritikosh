@@ -155,6 +155,30 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// Map each object id to its source file's custody content hash
+    /// (files.content_hash). Used by verifiable receipts to pin a claim to the
+    /// immutable source-file hash, not just the quoted passage — the difference
+    /// between a nice citation and a court-grade one. IDs with no hash are omitted.
+    public func sourceHashes(
+        for ids: Set<KnowledgeObject.ID>
+    ) async throws -> [KnowledgeObject.ID: String] {
+        guard !ids.isEmpty else { return [:] }
+        let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ", ")
+        let bindings: [SQLValue] = ids.map { .uuid($0) }
+        let rows = try await database.query("""
+        SELECT k.id, f.content_hash
+        FROM knowledge_objects k
+        JOIN files f ON f.id = k.file_id
+        WHERE k.id IN (\(placeholders));
+        """, bindings)
+        var out: [KnowledgeObject.ID: String] = [:]
+        for row in rows {
+            guard let id = row.uuid(0), let hash = row.string(1), !hash.isEmpty else { continue }
+            out[id] = hash
+        }
+        return out
+    }
+
     /// G3 BondBackfill — enumerate all KO ids in the ledger, paged so
     /// a million-KO archive doesn't blow up memory. Caller iterates
     /// (offset += pageSize) until the returned array is shorter than

@@ -172,24 +172,30 @@ public struct CrossDocumentMatrixView: View {
     /// its verbatim passage + SHA-256, linked in a hash chain anyone can re-check.
     private func exportReceipt() {
         #if canImport(AppKit)
-        let drafts = rows.map { r in
-            ReceiptDraft(
-                claim: "\"\(query)\" appears in \(r.filename)",
-                source: r.pageNumber.map { "\(r.filename) (p.\($0))" } ?? r.filename,
-                date: r.date,
-                passage: r.passage
-            )
+        let capturedRows = rows
+        let q = query
+        Task {
+            // Bind each entry to the source file's custody hash (court-grade).
+            let ids = Set(capturedRows.map(\.objectID))
+            let hashes = (try? await appState.objects?.sourceHashes(for: ids)) ?? [:]
+            let drafts = capturedRows.map { r -> ReceiptDraft in
+                var source = r.pageNumber.map { "\(r.filename) (p.\($0))" } ?? r.filename
+                if let h = hashes[r.objectID] { source += " [sha256:\(h)]" }
+                return ReceiptDraft(claim: "\"\(q)\" appears in \(r.filename)", source: source, date: r.date, passage: r.passage)
+            }
+            let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(q)", drafts: drafts)
+            let json = VerifiableReceipt.json(sealed)
+            await MainActor.run {
+                let panel = NSSavePanel()
+                if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
+                let safe = q.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
+                panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "results" : safe).json"
+                panel.canCreateDirectories = true
+                guard panel.runModal() == .OK, let url = panel.url else { return }
+                do { try json.write(to: url, atomically: true, encoding: .utf8) }
+                catch { print("Receipt export failed: \(error)") }
+            }
         }
-        let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(query)", drafts: drafts)
-        let json = VerifiableReceipt.json(sealed)
-        let panel = NSSavePanel()
-        if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
-        let safe = query.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
-        panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "results" : safe).json"
-        panel.canCreateDirectories = true
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try json.write(to: url, atomically: true, encoding: .utf8) }
-        catch { print("Receipt export failed: \(error)") }
         #endif
     }
 }
