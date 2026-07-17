@@ -10,6 +10,7 @@
 
 import SwiftUI
 import OSLog
+import UniformTypeIdentifiers
 
 #if canImport(AppKit)
 import AppKit
@@ -427,9 +428,63 @@ public struct AskView: View {
                     }
                 }
                 .frame(maxWidth: 620, alignment: .leading)
+                .contextMenu {
+                    if verifiedAnswers[turn.id] != nil {
+                        Button {
+                            exportAnswerReceipt(for: turn)
+                        } label: {
+                            Label("Export verifiable receipt…", systemImage: "checkmark.seal")
+                        }
+                    }
+                }
                 Spacer(minLength: 60)
             }
         }
+    }
+
+    /// Export a tamper-evident receipt for this answer: the answer text plus each
+    /// supporting citation's verbatim snippet + source, chained so any later edit
+    /// breaks the seal. Re-checkable offline in Verify Receipt.
+    private func exportAnswerReceipt(for turn: ConversationTurn) {
+        guard let answer = verifiedAnswers[turn.id] else { return }
+        let idx = turns.firstIndex(where: { $0.id == turn.id })
+        let question = (idx.flatMap { $0 > 0 ? turns[$0 - 1].body : nil }) ?? ""
+        Task {
+            let ids = Set(answer.citations.map(\.objectID))
+            let names = (try? await appState.objects?.sourceFilenames(for: ids)) ?? [:]
+            var drafts: [ReceiptDraft] = [
+                ReceiptDraft(
+                    claim: question.isEmpty ? "Answer" : "Answer to: \(question)",
+                    source: "Kalsmritikosh (on-device, evidence-gated)",
+                    passage: answer.answerText ?? answer.body
+                )
+            ]
+            for (i, c) in answer.citations.enumerated() {
+                let fn = names[c.objectID] ?? "source \(c.objectID.uuidString.prefix(8))"
+                drafts.append(ReceiptDraft(claim: "Supporting evidence \(i + 1)", source: fn, passage: c.snippet))
+            }
+            let sealed = VerifiableReceipt.seal(
+                title: question.isEmpty ? "Answer receipt" : "Answer: \(question)", drafts: drafts
+            )
+            let json = VerifiableReceipt.json(sealed)
+            await MainActor.run { saveReceipt(json, suggestedName: question) }
+        }
+    }
+
+    @MainActor
+    private func saveReceipt(_ json: String, suggestedName: String) {
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
+        let safe = String(suggestedName.prefix(40))
+            .replacingOccurrences(of: "/", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "answer" : safe).json"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try json.write(to: url, atomically: true, encoding: .utf8) }
+        catch { KalsmritikoshLog.ui.error("Answer receipt export failed: \(String(describing: error), privacy: .public)") }
+        #endif
     }
 
     /// HISTORY follow-on — render an assistant body as markdown when
