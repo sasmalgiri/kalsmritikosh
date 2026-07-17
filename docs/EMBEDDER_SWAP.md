@@ -23,7 +23,8 @@ Two files in `Kalsmritikosh/Resources/BGESmallEmbedder/`, added to the app
 target's **Copy Bundle Resources** phase (do this with Xcode — it's a pbxproj edit):
 
 1. `BGESmallEmbedder.mlpackage` (or a compiled `BGESmallEmbedder.mlmodelc`)
-2. `tokenizer.json` (the model's tokenizer)
+2. `vocab.txt` (the model's BERT WordPiece vocabulary — one token per line, id =
+   line index; the standard file `save_pretrained` emits alongside the model)
 
 ### Conversion (run once, Python venv with coremltools ≥ 8, transformers, torch)
 
@@ -34,7 +35,7 @@ import torch, coremltools as ct
 
 SRC = snapshot_download("BAAI/bge-small-en-v1.5")
 tok = AutoTokenizer.from_pretrained(SRC)
-tok.save_pretrained("out")          # -> out/tokenizer.json
+tok.save_pretrained("out")          # -> out/vocab.txt (bundle this one)
 
 mdl = AutoModel.from_pretrained(SRC, torchscript=True).eval()
 
@@ -68,13 +69,13 @@ The wrapper makes the model emit a pooled `[1, 384]` vector; the Swift side then
 just L2-normalizes again (idempotent). If you export the raw `[1, seq, 384]`
 output instead, the Swift provider mean-pools it — both work.
 
-### Tokenizer caveat
-`BGETokenizer` is a greedy pure-Swift tokenizer. `bge-small-en-v1.5` uses a BERT
-WordPiece vocab; the greedy loader reads any `tokenizer.json` `model.vocab`, but
-segmentation may differ from the reference for some inputs. For English evidence
-(the bulk of use) it is close enough that relative similarity holds. For full
-fidelity, swap in `huggingface/swift-transformers` once third-party deps are
-unblocked (one-file change in `CoreMLEmbedderProvider`).
+### Tokenizer
+The embedder uses `BERTWordPieceTokenizer` (a dependency-free, uncased BERT
+WordPiece tokenizer that reads `vocab.txt`) — the correct family for
+`bge-small-en-v1.5`. It's unit-tested against the reference (`unaffable → un
+##aff ##able`, punctuation splitting, lowercasing, accent stripping). Just make
+sure the `vocab.txt` you bundle is the one that shipped with the model you
+converted (the `save_pretrained` step above writes it to `out/vocab.txt`).
 
 ## Verify after bundling
 1. Launch; check the log for `Embedder swap: cleared N stale-dimension vectors; re-embedding at dim 384`.

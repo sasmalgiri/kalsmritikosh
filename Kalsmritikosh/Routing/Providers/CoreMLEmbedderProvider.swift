@@ -73,7 +73,7 @@ public struct CoreMLEmbedderProvider: ModelProvider {
     // MARK: - Availability
 
     public func isAvailable() async -> Bool {
-        locateModelURL() != nil && BGETokenizer(resourceName: "tokenizer", subdirectory: subdirectory) != nil
+        locateModelURL() != nil && BERTWordPieceTokenizer(subdirectory: subdirectory) != nil
     }
 
     // MARK: - Generation (not supported)
@@ -86,9 +86,8 @@ public struct CoreMLEmbedderProvider: ModelProvider {
 
     public func embed(text: String) async throws -> [Float] {
         guard let modelURL = locateModelURL(),
-              let tokenizer = BGETokenizer(resourceName: "tokenizer",
-                                           subdirectory: subdirectory,
-                                           maxLength: maxSequenceLength) else {
+              let tokenizer = BERTWordPieceTokenizer(subdirectory: subdirectory,
+                                                     maxLength: maxSequenceLength) else {
             return []   // not bundled → let the caller fall back to NLEmbedder
         }
         let model: MLModel
