@@ -84,6 +84,9 @@ public struct SettingsView: View {
     /// the app auto-selects the best model for the device. Those sections live
     /// under a collapsed "Advanced" disclosure, off by default.
     @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
+    /// Collapses the many individual diagnostic tools so only the single
+    /// "release readiness" check is prominent. Off by default.
+    @AppStorage("kalsmritikosh.settings.showMoreDiagnostics") private var showMoreDiagnostics = false
 
     public init() {}
 
@@ -235,10 +238,14 @@ public struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Diagnostics").font(.title3.bold())
 
+            // THE one check to run before shipping — a single verdict banner
+            // with a Fast (seconds) and Deep (full) button. Everything else is
+            // tucked into the collapsed "More tools" group below so there is no
+            // wall of buttons to choose between.
             releaseReadinessBanner
 
-            Divider().padding(.vertical, 4)
-
+            DisclosureGroup(isExpanded: $showMoreDiagnostics) {
+              VStack(alignment: .leading, spacing: 8) {
             Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -511,6 +518,11 @@ public struct SettingsView: View {
                     }
                 }
                 .padding(.leading, 8)
+            }
+              }
+            } label: {
+                Label("More diagnostic tools (advanced)", systemImage: "wrench.and.screwdriver")
+                    .font(.callout.weight(.medium))
             }
         }
     }
