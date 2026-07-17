@@ -40,8 +40,17 @@ public struct CrossDocumentMatrixView: View {
         .toolbar {
             if !rows.isEmpty {
                 ToolbarItem {
-                    Button {
-                        exportMarkdown()
+                    Menu {
+                        Button {
+                            exportMarkdown()
+                        } label: {
+                            Label("Markdown table", systemImage: "tablecells")
+                        }
+                        Button {
+                            exportReceipt()
+                        } label: {
+                            Label("Verifiable receipt (.json)", systemImage: "checkmark.seal")
+                        }
                     } label: {
                         Label("Export", systemImage: "square.and.arrow.up")
                     }
@@ -156,6 +165,31 @@ public struct CrossDocumentMatrixView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try md.write(to: url, atomically: true, encoding: .utf8) }
         catch { print("Matrix export failed: \(error)") }
+        #endif
+    }
+
+    /// Export a tamper-evident receipt: each source row becomes a claim pinned to
+    /// its verbatim passage + SHA-256, linked in a hash chain anyone can re-check.
+    private func exportReceipt() {
+        #if canImport(AppKit)
+        let drafts = rows.map { r in
+            ReceiptDraft(
+                claim: "\"\(query)\" appears in \(r.filename)",
+                source: r.pageNumber.map { "\(r.filename) (p.\($0))" } ?? r.filename,
+                date: r.date,
+                passage: r.passage
+            )
+        }
+        let sealed = VerifiableReceipt.seal(title: "Cross-document matrix: \(query)", drafts: drafts)
+        let json = VerifiableReceipt.json(sealed)
+        let panel = NSSavePanel()
+        if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
+        let safe = query.replacingOccurrences(of: "/", with: "-").trimmingCharacters(in: .whitespaces)
+        panel.nameFieldStringValue = "receipt-\(safe.isEmpty ? "results" : safe).json"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try json.write(to: url, atomically: true, encoding: .utf8) }
+        catch { print("Receipt export failed: \(error)") }
         #endif
     }
 }
