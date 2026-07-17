@@ -1260,6 +1260,15 @@ public final class AppState {
                         .deletingLastPathComponent()
                         .appendingPathComponent("hnsw-index.bin")
                     let liveCount = (try? await vectors.count()) ?? 0
+                    // P9.3 — adaptive scale gate: only hold the in-memory HNSW when
+                    // the corpus fits the device's RAM budget. Above the cap, skip
+                    // the build; SQLiteVectorStore's memory-bounded path serves
+                    // queries (correct, slower) instead of OOMing on a huge corpus.
+                    let cap = HNSWVectorIndex.recommendedMaxInMemoryVectors
+                    if liveCount > cap {
+                        KalsmritikoshLog.app.info("HNSW skipped: \(liveCount, privacy: .public) vectors exceed the in-memory cap (\(cap, privacy: .public)); using the memory-bounded disk path.")
+                        return HNSWVectorIndex.BuildStats(vectorsLoaded: 0, maxLayer: 0, buildSeconds: 0)
+                    }
                     if liveCount > 0,
                        await hnsw.load(from: cacheURL, expectedCount: liveCount) {
                         return await hnsw.stats()

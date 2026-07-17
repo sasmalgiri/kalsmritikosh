@@ -48,6 +48,26 @@ import OSLog
 
 public actor HNSWVectorIndex {
 
+    // MARK: - Adaptive scale gate (P9.3)
+
+    /// The largest vector count we'll hold in the in-memory graph, sized to the
+    /// device's RAM. Above this, callers SKIP the HNSW build and let the
+    /// memory-bounded SQLite path serve queries (correct, slower) instead of
+    /// risking an out-of-memory crash on a very large corpus. Budgets ~40% of
+    /// RAM at ~3 KB per vector (int8 bytes + adjacency + dictionary overhead),
+    /// clamped to a sane floor/ceiling. Pure for testability.
+    public nonisolated static func maxInMemoryVectors(physicalMemoryBytes: UInt64) -> Int {
+        let budget = Double(physicalMemoryBytes) * 0.40
+        let perVectorBytes = 3_072.0
+        let cap = Int((budget / perVectorBytes).rounded(.down))
+        return min(max(cap, 250_000), 20_000_000)
+    }
+
+    /// The cap for this device.
+    public nonisolated static var recommendedMaxInMemoryVectors: Int {
+        maxInMemoryVectors(physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
+    }
+
     // MARK: - Hyperparameters
 
     /// Max neighbours per node per layer. 16 is the canonical default;
