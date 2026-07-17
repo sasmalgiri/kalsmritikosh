@@ -1864,11 +1864,18 @@ public final class AppState {
                 found += detector.detectCausalConflicts(links, title: titles)
             }
         }
+        // A5.6 — testimony / statement conflicts over attributed statements.
+        if let assertions {
+            let asserts = (try? await assertions.recent(limit: 4_000)) ?? []
+            if !asserts.isEmpty {
+                found += detector.detectStatementConflicts(asserts)
+            }
+        }
         await contradictions.clear()
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()
         self.proactiveContradictionCount = openCount
-        KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflict(s) (date + amount)")
+        KalsmritikoshLog.knowledge.info("Contradiction scan found \(found.count, privacy: .public) conflict(s) (date + amount + location + signature + causal + statement)")
         return found.count
     }
 

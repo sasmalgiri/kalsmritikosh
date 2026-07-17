@@ -12,7 +12,7 @@ import AVFoundation
 #endif
 
 public struct AudioLoader: Ingestor {
-    public let supportedTypes: Set<SourceType> = [.mp3, .wav, .m4a, .aac]
+    public let supportedTypes: Set<SourceType> = [.mp3, .wav, .m4a, .aac, .aiff, .caf, .flac, .threegp]
     public let primaryLane: ResourceLane = .neuralEngine // SFSpeechRecognizer
     private let transcriber: any AudioTranscribing
 

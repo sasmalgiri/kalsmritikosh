@@ -25,8 +25,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Images
     case png, jpg, heic, tiff, webp
 
-    // Audio
-    case mp3, wav, m4a, aac
+    // Audio — mp3/wav/m4a/aac plus mobile/voice-note containers that
+    // AVFoundation decodes natively (aiff, caf, flac, AAC-in-3GP).
+    case mp3, wav, m4a, aac, aiff, caf, flac, threegp
 
     // Video
     case mp4, mov
@@ -105,6 +106,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "wav": return .wav
         case "m4a": return .m4a
         case "aac": return .aac
+        case "aiff", "aif", "aifc": return .aiff
+        case "caf": return .caf
+        case "flac": return .flac
+        case "3gp", "3gpp": return .threegp
         case "mp4": return .mp4
         case "mov": return .mov
         case "zip": return .zip
@@ -121,7 +126,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
         case .png, .jpg, .heic, .tiff, .webp: return .image
-        case .mp3, .wav, .m4a, .aac: return .audio
+        case .mp3, .wav, .m4a, .aac, .aiff, .caf, .flac, .threegp: return .audio
         case .mp4, .mov: return .video
         case .zip, .rar, .sevenZip: return .archive
         case .imessage, .chatExport: return .chat

@@ -299,7 +299,151 @@ public nonisolated struct ContradictionDetector: Sendable {
         return out
     }
 
+    /// A5.6 — TESTIMONY / STATEMENT CONFLICT. Attributed statements
+    /// (StatementExtractor, stored as `statement_<verb>` assertions whose literal
+    /// object is "Speaker: claim") disagree when the SAME underlying claim is
+    /// carried with OPPOSITE polarity — "X confirmed the payment cleared" vs
+    /// "X denied the payment cleared", or "the shipment left Monday" vs "the
+    /// shipment did NOT leave Monday". Polarity = a negating attribution verb
+    /// (denied) XOR an in-claim negation (not / never / n't / no). Two claims are
+    /// "the same" only when their content words overlap strongly (deterministic
+    /// and conservative — no model, no loose-topic false pairing).
+    ///
+    /// Unlike the event rules (cross-source only), a within-source pair IS
+    /// meaningful here as long as the SPEAKERS differ: a single interview or call
+    /// transcript where one person affirms and another denies the same thing is
+    /// exactly the he-said / she-said conflict an investigator wants surfaced.
+    /// Output capped.
+    public func detectStatementConflicts(
+        _ assertions: [Assertion],
+        limit: Int = 50
+    ) -> [Contradiction] {
+        struct Stmt {
+            let speaker: String
+            let claim: String
+            let content: Set<String>
+            let negative: Bool
+            let source: UUID?
+            let evidence: KnowledgeObject.ID?
+        }
+
+        var stmts: [Stmt] = []
+        for a in assertions where a.predicate.hasPrefix("statement_") {
+            guard case .literal(let lit) = a.object,
+                  let colon = lit.firstIndex(of: ":") else { continue }
+            let verb = String(a.predicate.dropFirst("statement_".count))
+            let speaker = String(lit[..<colon]).trimmingCharacters(in: .whitespaces)
+            let claim = String(lit[lit.index(after: colon)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard claim.count >= 8 else { continue }
+            let content = Self.contentWords(claim)
+            guard content.count >= 3 else { continue }
+            // Net polarity: a negating verb flips an otherwise-affirmed claim, and
+            // an in-claim negation flips it too — both together cancel out.
+            let negative = Self.negatingVerbs.contains(verb) != Self.hasNegation(claim)
+            stmts.append(Stmt(
+                speaker: speaker,
+                claim: claim,
+                content: content,
+                negative: negative,
+                source: a.assertingSourceID ?? a.evidenceObjectIDs.first,
+                evidence: a.evidenceObjectIDs.first
+            ))
+        }
+
+        var out: [Contradiction] = []
+        for i in stmts.indices {
+            for j in (i + 1)..<stmts.count {
+                let a = stmts[i], b = stmts[j]
+                // Opposite polarity about the same underlying claim.
+                guard a.negative != b.negative else { continue }
+                guard Self.stronglyOverlap(a.content, b.content) else { continue }
+                // Within one source, only DIFFERENT speakers count (else it's the
+                // extractor double-emitting, not two people disagreeing).
+                let sameSpeaker = Self.normalizedTitle(a.speaker) == Self.normalizedTitle(b.speaker)
+                if a.source == b.source && sameSpeaker { continue }
+
+                let affirm = a.negative ? b : a
+                let deny = a.negative ? a : b
+                out.append(Contradiction(
+                    kind: .testimony,
+                    description: "Conflicting statements about \"\(Self.topicPhrase(affirm.claim))\"",
+                    claimA: "\(affirm.speaker): \(affirm.claim)",
+                    claimB: "\(deny.speaker): \(deny.claim)",
+                    evidenceA: affirm.evidence,
+                    evidenceB: deny.evidence,
+                    // Someone contradicting themselves across sources is the
+                    // strongest flag; two different people disagreeing is medium.
+                    severity: sameSpeaker ? .high : .medium
+                ))
+                if out.count >= limit { return out }
+            }
+        }
+        return out
+    }
+
     // MARK: Helpers
+
+    /// Attribution verbs whose meaning negates the claim they introduce. The
+    /// StatementExtractor's verb set is otherwise affirming (said/confirmed/…).
+    static let negatingVerbs: Set<String> = ["denied"]
+
+    /// Words that flip a claim's polarity in place.
+    private static let negationTokens: Set<String> = [
+        "not", "never", "no", "none", "cannot", "cant", "didnt", "doesnt",
+        "wasnt", "werent", "isnt", "arent", "wont", "wouldnt", "hasnt",
+        "havent", "hadnt", "shouldnt", "couldnt", "without", "nor", "neither"
+    ]
+
+    /// Very common words carrying no topic signal — dropped before comparing two
+    /// claims. Negation tokens are dropped too, so "paid" and "not paid" share the
+    /// same content set (that's what makes them a *conflict*, not two topics).
+    private static let stopwords: Set<String> = [
+        "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "for",
+        "with", "by", "from", "as", "is", "are", "was", "were", "be", "been",
+        "being", "that", "this", "these", "those", "it", "its", "he", "she",
+        "they", "them", "his", "her", "their", "we", "our", "you", "your", "i",
+        "him", "had", "has", "have", "did", "do", "does", "will", "would", "can",
+        "could", "should", "may", "might", "there", "then", "than", "so", "if",
+        "about", "into", "over", "after", "before", "when", "which", "who", "whom"
+    ]
+
+    /// Lowercased content tokens of a claim: letters/digits only, stopwords and
+    /// negation tokens removed, short tokens dropped.
+    static func contentWords(_ text: String) -> Set<String> {
+        let lowered = text.lowercased()
+        let tokens = lowered.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        var out: Set<String> = []
+        for t in tokens where t.count >= 3 {
+            if stopwords.contains(t) || negationTokens.contains(t) { continue }
+            out.insert(t)
+        }
+        return out
+    }
+
+    /// True when a claim contains an explicit negation ("not paid", "never met",
+    /// "didn't sign"). Contractions are matched after stripping the apostrophe.
+    static func hasNegation(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        let tokens = lowered.split { !$0.isLetter }.map(String.init)
+        return tokens.contains { negationTokens.contains($0) }
+    }
+
+    /// Two claims describe the same thing when their content words overlap
+    /// strongly: Jaccard ≥ 0.5 and at least 3 shared words. Conservative on
+    /// purpose — a loose one-word overlap must not pair unrelated statements.
+    static func stronglyOverlap(_ a: Set<String>, _ b: Set<String>) -> Bool {
+        let inter = a.intersection(b).count
+        guard inter >= 3 else { return false }
+        let union = a.union(b).count
+        return union > 0 && Double(inter) / Double(union) >= 0.5
+    }
+
+    /// A short readable topic for the contradiction title (first few words).
+    private static func topicPhrase(_ claim: String) -> String {
+        let words = claim.split(whereSeparator: { $0.isWhitespace }).prefix(8)
+        let phrase = words.joined(separator: " ")
+        return phrase.count < claim.count ? phrase + "…" : phrase
+    }
 
     /// Pull the parsed amount + currency an event carries (A5.3), if any.
     static func amount(of event: Event) -> (value: Double, currency: String)? {

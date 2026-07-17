@@ -13,7 +13,7 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
 |---|---|---|
 | Cited answers, export, timeline, entity graph, dossiers | ✅ | — |
 | Ingest: PDF/Office/email/images/**audio/video**/chat/browser | ✅ | (legacy .doc/.xls/.ppt lossy; .key/.rar/.7z stubs — low priority) |
-| **Contradiction detection** | ⚠️ date-only | statement + entity/amount conflicts (big value for Lawyer/Investigator/Journalist) |
+| **Contradiction detection** | ✅ date + amount + location + signature + causal + **statement/testimony** | he-said/she-said + self-contradiction now detected from attributed statements (deterministic, cross- and within-source). |
 | **Audio/video citations** | ✅ **timecoded at ingest** | Audio/VideoLoader now embed `[mm:ss]` markers per ASR line, so cited answers point at the moment ("at 12:34"). Live end-to-end ASR verification is owner-run (needs a real recording + Speech permission). |
 | **Entity dedup / merge-split** | ⚠️ OCR-variant folding only | real "same person, two spellings" merge (Investigator/Researcher) |
 | **Missing-evidence gaps** | ⚠️ taxonomy exists, rules partial | finish gap rules (Lawyer/Investigator) |
@@ -53,8 +53,10 @@ Status legend: ✅ works · ⚠️ partial · ❌ missing.
    Audio/VideoLoader embed `[mm:ss]` markers per ASR line at ingest, so cited
    answers point at the moment. (Live ASR check is owner-run: real recording +
    Speech permission.)
-2. **Statement + amount contradiction detection** → Lawyer + Journalist +
-   Investigator. Extend the verifier beyond dates.
+2. ~~**Statement + amount contradiction detection** → Lawyer + Journalist +
+   Investigator.~~ ✅ **DONE** — amount was already covered at the event level;
+   added `detectStatementConflicts` (testimony/he-said-she-said + self-
+   contradiction) over attributed statements, wired into the scan.
 3. **Entity merge/split review** → Investigator + Researcher.
 4. **Missing-evidence gap rules** → Lawyer + Investigator.
 5. **Redaction UI (F7)** → Lawyer. *Gated on a blind-run PII test first (safety).* 
