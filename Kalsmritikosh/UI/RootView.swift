@@ -204,6 +204,14 @@ public struct RootView: View {
     @State private var showPalette: Bool = false
     /// Text in the always-visible header search box.
     @State private var headerSearch: String = ""
+    /// Chosen persona (GuidePersona.id). Empty = not yet picked → first-run
+    /// picker. Drives the "For you" sidebar section (persona's own screens).
+    @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
+    /// First-run / "change focus" persona picker sheet.
+    @State private var showPersonaPicker = false
+    /// Which sidebar groups are expanded. Empty = all collapsed (so the sidebar
+    /// isn't a wall of buttons); the user clicks a group header to open it.
+    @State private var expandedGroups: Set<Destination.Group> = []
     @Namespace private var sidebarNS
 
     /// Single navigation entry point. Records the outgoing screen for the
@@ -309,10 +317,20 @@ public struct RootView: View {
             OnboardingView()
                 .environment(appState)
         }
+        .sheet(isPresented: $showPersonaPicker) {
+            PersonaPickerView(current: personaID) { picked in
+                personaID = picked
+                showPersonaPicker = false
+            }
+        }
         .task {
             if !onboardingShown && appState.bookmarks.roots.isEmpty {
                 presentingOnboarding = true
                 onboardingShown = true
+            }
+            // First-run focus pick: if no persona chosen yet, prompt once.
+            if personaID.isEmpty && !presentingOnboarding {
+                showPersonaPicker = true
             }
         }
     }
@@ -337,25 +355,11 @@ public struct RootView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
                 onboardingTip
+                personaSection
                 ForEach(Destination.Group.allCases) { group in
                     let visible = group.items.filter { !(simpleMode && simpleHidden.contains($0)) }
                     if !visible.isEmpty {
-                        Text(group.rawValue.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .tracking(0.5)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 12)
-                            .padding(.bottom, 2)
-                        ForEach(visible) { dest in
-                            SidebarRow(
-                                dest: dest,
-                                isSelected: selection == dest,
-                                namespace: sidebarNS
-                            ) {
-                                navigate(to: dest)
-                            }
-                        }
+                        collapsibleGroup(group, visible: visible)
                     }
                 }
             }
@@ -383,6 +387,96 @@ public struct RootView: View {
             .animation(Theme.springSoft, value: appState.maintenanceActive)
             .animation(Theme.springSoft, value: appState.ingestActiveCount)
             .animation(Theme.springSoft, value: appState.isDistillingMemory)
+        }
+    }
+
+    /// The persona the user picked (nil until they choose one).
+    private var currentPersona: GuidePersona? {
+        GuideContent.personas.first { $0.id == personaID }
+    }
+
+    /// "For you" — the chosen persona's own screens up top, so a user isn't
+    /// faced with every screen. If no persona is chosen yet, shows a single
+    /// "Choose your focus" button that opens the picker.
+    @ViewBuilder
+    private var personaSection: some View {
+        if let p = currentPersona {
+            HStack {
+                Text("FOR YOU · \(p.title.uppercased())")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .tracking(0.5)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Button("Change") { showPersonaPicker = true }
+                    .font(.caption2)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.brand)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 2)
+            ForEach(p.keyScreens, id: \.label) { screen in
+                SidebarRow(dest: screen.dest, isSelected: selection == screen.dest, namespace: sidebarNS) {
+                    navigate(to: screen.dest)
+                }
+            }
+            // Ask is the universal entry point — always offer it in For You.
+            if !p.keyScreens.contains(where: { $0.dest == .ask }) {
+                SidebarRow(dest: .ask, isSelected: selection == .ask, namespace: sidebarNS) {
+                    navigate(to: .ask)
+                }
+            }
+        } else {
+            Button {
+                showPersonaPicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").imageScale(.small).foregroundStyle(Theme.brand)
+                    Text("Choose your focus").font(.caption.weight(.semibold))
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .background(Theme.brand.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+        }
+    }
+
+    /// A collapsible sidebar group. Header click toggles it; collapsed by
+    /// default so the sidebar isn't a wall of buttons. The chevron shows state.
+    @ViewBuilder
+    private func collapsibleGroup(_ group: Destination.Group, visible: [Destination]) -> some View {
+        let expanded = expandedGroups.contains(group)
+        Button {
+            withAnimation(Theme.springFast) {
+                if expanded { expandedGroups.remove(group) } else { expandedGroups.insert(group) }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(group.rawValue.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .tracking(0.5)
+                Spacer(minLength: 0)
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        if expanded {
+            ForEach(visible) { dest in
+                SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                    navigate(to: dest)
+                }
+            }
         }
     }
 
@@ -960,4 +1054,65 @@ private func paletteFuzzyMatch(_ needle: String, _ haystack: String) -> Bool {
         if !found { return false }
     }
     return true
+}
+
+// MARK: - Persona picker (first-run "choose your focus")
+
+/// First-run / change-focus sheet. Picking a persona tailors the sidebar's
+/// "For you" section to that role's key screens (reuses GuideContent.personas —
+/// one shared engine, per-persona lens; not five separate apps).
+private struct PersonaPickerView: View {
+    let current: String
+    let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("What do you want to do?")
+                    .font(Theme.display(22, .bold))
+                    .foregroundStyle(Theme.brandGradient())
+                Text("Pick the focus that fits your work. It tailors the sidebar to the screens you'll use most — you can change it any time, and everything else stays one click away.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ScrollView {
+                VStack(spacing: 10) {
+                    ForEach(GuideContent.personas) { p in
+                        Button {
+                            onPick(p.id)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text(p.emoji).font(.system(size: 26))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(p.title).font(.headline)
+                                    Text(p.tagline).font(.caption).foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                Spacer(minLength: 0)
+                                if p.id == current {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.brand)
+                                }
+                            }
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(p.id == current ? Theme.brand.opacity(0.4) : Color.primary.opacity(0.08), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Skip for now") { dismiss() }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(24)
+        .frame(width: 520, height: 560)
+    }
 }
