@@ -13,6 +13,16 @@ public enum SchemaMigrations {
 
     public static let latestVersion = 51
 
+    /// True when the registered migration list is internally consistent: a
+    /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
+    /// This is the real integrity invariant — it verifies the migrations match
+    /// the declared latest WITHOUT a hardcoded "expected version" constant that
+    /// has to be bumped by hand on every schema change (that constant is what
+    /// caused the ReleaseReadiness "schema desynced" false alarm).
+    public static var migrationListIsConsistent: Bool {
+        all.map(\.0) == Array(1...latestVersion)
+    }
+
     /// Apply every migration newer than the current `user_version`. Each
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
     /// the schema at the previous version instead of half-applied.

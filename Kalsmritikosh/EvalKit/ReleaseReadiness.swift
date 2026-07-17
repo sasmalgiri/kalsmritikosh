@@ -156,16 +156,17 @@ public enum ReleaseReadiness {
 
     private static func checkSchemaIntegrity(_ state: AppState) -> Check {
         let t0 = Date()
-        let expected = 44
-        let got = SchemaMigrations.latestVersion
-        let pass = got == expected
+        let latest = SchemaMigrations.latestVersion
+        // Self-maintaining check: the migration list must be a complete,
+        // gap-free 1…latest sequence. No hardcoded "expected version" to bump.
+        let pass = SchemaMigrations.migrationListIsConsistent
         return Check(
             id: "schema.latestVersion",
             name: "Schema version",
             passed: pass,
             detail: pass
-                ? "SchemaMigrations.latestVersion = \(got)"
-                : "expected \(expected), got \(got) — migration list desynced with this code",
+                ? "schema head v\(latest); migrations are a complete 1…\(latest) sequence"
+                : "migration list is not a gap-free 1…\(latest) sequence — a migration is missing or misnumbered",
             blocker: true,
             secondsTaken: Date().timeIntervalSince(t0)
         )
