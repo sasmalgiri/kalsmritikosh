@@ -1882,6 +1882,31 @@ public final class AppState {
         return found.count
     }
 
+    /// Data-grounded "questions from your archive" (NotebookLM-style suggestions,
+    /// done the evidence-ledger way). Derived from what's ACTUALLY in the ledger —
+    /// top people/organizations/projects, recent events, open contradictions, and
+    /// missing-evidence gaps — persona-weighted. Deterministic; no LLM, so it
+    /// works even without a reasoning model. Empty until there's data to ground it.
+    public func suggestedQuestions(for persona: String, limit: Int = 8) async -> [SuggestedQuestion] {
+        var inputs = SuggestedQuestionBuilder.Inputs()
+        if let entities {
+            inputs.people = ((try? await entities.canonicalsWithMentionCounts(kind: .person, limit: 5)) ?? []).map(\.value)
+            inputs.organizations = ((try? await entities.canonicalsWithMentionCounts(kind: .organization, limit: 4)) ?? []).map(\.value)
+            inputs.projects = ((try? await entities.canonicalsWithMentionCounts(kind: .project, limit: 4)) ?? []).map(\.value)
+        }
+        if let events {
+            inputs.events = ((try? await events.recent(limit: 6)) ?? []).map(\.title)
+        }
+        if let contradictions {
+            inputs.contradictions = (await contradictions.open(limit: 5)).map(\.description)
+        }
+        if let gapNodes {
+            inputs.gaps = (await gapNodes.all(includeDismissed: false, limit: 5)).map(\.description)
+        }
+        guard !inputs.isEmpty else { return [] }
+        return SuggestedQuestionBuilder().build(persona: persona, inputs: inputs, limit: limit)
+    }
+
     /// Load a bounded sample of objects with their body + email subject
     /// (from metadata) for the rule-based gap detectors. No LLM.
     private func loadObjectSample(

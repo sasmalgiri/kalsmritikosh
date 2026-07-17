@@ -23,6 +23,8 @@ public struct HomeView: View {
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
     /// Filters the persona's work cards.
     @State private var workSearch: String = ""
+    /// Data-grounded suggestions derived from the user's own ledger.
+    @State private var suggestions: [SuggestedQuestion] = []
 
     public var body: some View {
         ScrollView {
@@ -41,6 +43,10 @@ public struct HomeView: View {
             }
             .padding(20)
         }
+        .task(id: personaID) {
+            guard !personaID.isEmpty else { suggestions = []; return }
+            suggestions = await appState.suggestedQuestions(for: personaID)
+        }
     }
 
     // MARK: - Persona workbench (task cards for the chosen persona)
@@ -50,6 +56,9 @@ public struct HomeView: View {
         let q = workSearch.trimmingCharacters(in: .whitespaces).lowercased()
         let filtered = q.isEmpty ? works : works.filter { $0.searchText.contains(q) }
         return VStack(alignment: .leading, spacing: 14) {
+            if !suggestions.isEmpty {
+                archiveSuggestions
+            }
             HStack(spacing: 8) {
                 Text("Your tasks").font(.title3.bold())
                 Spacer()
@@ -78,6 +87,42 @@ public struct HomeView: View {
                 }
             }
         }
+    }
+
+    /// "Questions from your archive" — grounded in the user's own ledger, tap to ask.
+    private var archiveSuggestions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles.rectangle.stack")
+                    .font(.caption).foregroundStyle(Theme.brand)
+                Text("Questions from your archive")
+                    .font(.subheadline.weight(.semibold))
+            }
+            Text("Grounded in what your documents actually contain — tap to ask.")
+                .font(.caption2).foregroundStyle(.secondary)
+            ForEach(suggestions) { s in
+                Button {
+                    appState.pendingAskQuestion = s.text
+                    onNavigate(.ask)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.caption2).foregroundStyle(Theme.brand)
+                        Text(s.text).font(.callout).foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 6).padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 14, tint: Theme.brand)
     }
 
     private func workCard(_ w: PersonaWork) -> some View {
