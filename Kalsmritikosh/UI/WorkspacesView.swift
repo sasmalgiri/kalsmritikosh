@@ -12,6 +12,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -372,6 +373,13 @@ public struct WorkspacesView: View {
                     else { Label("Compose & Export…", systemImage: "square.and.arrow.up") }
                 }
                 .disabled(composing)
+                Button {
+                    Task { await exportReceipt(ws) }
+                } label: {
+                    Label("Verifiable receipt…", systemImage: "checkmark.seal")
+                }
+                .disabled(composing)
+                .help("Export a tamper-evident receipt: each claim pinned to its cited source + custody hash, re-checkable offline.")
             }
             if let status = reportStatus {
                 Text(status).font(.caption2).foregroundStyle(.secondary)
@@ -565,6 +573,70 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Exported \(inputs.count) events + \(contradictions.count) conflicts to \(url.lastPathComponent)." }
         } catch {
             await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+        }
+        #else
+        await MainActor.run { reportStatus = "Export is available on macOS." }
+        #endif
+    }
+
+    /// F4 + wedge — export a tamper-evident receipt for the composed work
+    /// product: each claim pinned to its cited source(s) + custody hash, chained
+    /// so any later edit breaks the seal. Re-checkable offline via Verify Receipt.
+    private func exportReceipt(_ ws: Workspace) async {
+        await MainActor.run { composing = true; reportStatus = nil }
+        defer { Task { @MainActor in composing = false } }
+
+        let eventRows = (try? await appState.events?.recent(limit: 500)) ?? []
+        let filenames = (try? await appState.events?.sourceFilenames(forEventIDs: eventRows.map(\.id))) ?? [:]
+        let inputs = eventRows.map { WorkProductComposer.EventInput(event: $0, filename: filenames[$0.id]) }
+        let contradictions = await appState.contradictions?.all() ?? []
+        let gaps = await appState.gapNodes?.all(includeDismissed: false) ?? []
+        let wp = WorkProductComposer.compose(
+            template: reportTemplate,
+            title: "\(ws.title) — \(reportTemplate.displayName)",
+            scopeNote: "Work product for the \"\(ws.title)\" workspace (\(ws.template.displayName)).",
+            events: inputs, contradictions: contradictions, gaps: gaps,
+            disclaimer: PersonaTemplateCatalog.disclaimer(for: ws.template)
+        )
+
+        // Each claim → a sealed entry pinned to its cited source(s) + custody hash.
+        var drafts: [ReceiptDraft] = []
+        for section in wp.sections {
+            for claim in section.claims {
+                let cites = claim.supporting
+                let source = cites.first.map {
+                    $0.effectiveLocator.isEmpty ? $0.sourceTitle : "\($0.sourceTitle) — \($0.effectiveLocator)"
+                } ?? "(no source)"
+                let pinned = cites.map { c -> String in
+                    let loc = c.effectiveLocator.isEmpty ? "" : " \(c.effectiveLocator)"
+                    let h = c.sourceHash.map { " sha256:\($0)" } ?? " (unresolved)"
+                    return "\(c.sourceTitle)\(loc)\(h)"
+                }.joined(separator: "; ")
+                let passage = "[\(claim.status.displayName)] " + (pinned.isEmpty ? "no citation" : pinned)
+                drafts.append(ReceiptDraft(claim: claim.text, source: source, date: cites.first?.date, passage: passage))
+            }
+        }
+        guard !drafts.isEmpty else {
+            await MainActor.run { reportStatus = "Nothing to receipt yet — compose finds no claims in scope." }
+            return
+        }
+        let sealed = VerifiableReceipt.seal(title: "\(ws.title) — \(reportTemplate.displayName)", drafts: drafts)
+        let json = VerifiableReceipt.json(sealed)
+
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        if let jsonType = UTType(filenameExtension: "json") { panel.allowedContentTypes = [jsonType] }
+        panel.nameFieldStringValue = "receipt-\(sanitized(ws.title))-\(reportTemplate.rawValue).json"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else {
+            await MainActor.run { reportStatus = "Receipt export cancelled." }
+            return
+        }
+        do {
+            try json.write(to: url, atomically: true, encoding: .utf8)
+            await MainActor.run { reportStatus = "Sealed \(drafts.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
+        } catch {
+            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
         }
         #else
         await MainActor.run { reportStatus = "Export is available on macOS." }
