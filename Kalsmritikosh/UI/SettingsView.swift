@@ -123,6 +123,8 @@ public struct SettingsView: View {
                 Divider()
                 optionalIngestSection
                 Divider()
+                dataSection
+                Divider()
                 legalSection
 
                 // ── Advanced (collapsed by default) ───────────────────────
@@ -975,6 +977,9 @@ public struct SettingsView: View {
     @State private var maintenanceIdleMinutes: Int = FeatureFlags.shared.maintenanceIdleMinutes
     /// Status line for the on-demand "Distill memory now" button.
     @State private var distillStatus: String?
+    /// "Delete all my data" confirmation + status.
+    @State private var confirmDeleteAll = false
+    @State private var deleteAllStatus: String?
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1011,6 +1016,47 @@ public struct SettingsView: View {
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }
 
+
+    /// Your data — the global "erase everything" control. Always visible so it's
+    /// easy to find (the app previously only had a per-folder forget in Sources).
+    private var dataSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "trash").foregroundStyle(.red)
+                Text("Your data").font(.title3.bold())
+            }
+            Text("Erase everything Kalsmritikosh has learned — all ingested documents, the extracted ledger, timeline, entities, and search index. **Your original files on disk are not touched**; you can re-add them any time. This cannot be undone.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button(role: .destructive) {
+                    confirmDeleteAll = true
+                } label: {
+                    if appState.deletingAllData {
+                        Label("Erasing…", systemImage: "hourglass")
+                    } else {
+                        Label("Delete all my data", systemImage: "trash")
+                    }
+                }
+                .disabled(appState.deletingAllData)
+                if let s = deleteAllStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .alert("Delete all your data?", isPresented: $confirmDeleteAll) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete everything", role: .destructive) {
+                Task {
+                    deleteAllStatus = "Erasing…"
+                    let n = await appState.deleteAllData()
+                    deleteAllStatus = "Erased. \(n) tables cleared — re-add folders in Sources to start fresh."
+                }
+            }
+        } message: {
+            Text("This permanently erases the ingested ledger (documents, timeline, entities, search index). Your original files on disk are NOT affected. This cannot be undone.")
+        }
+    }
 
     /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
     /// third-party notices. Always visible (not hidden under Advanced) so the

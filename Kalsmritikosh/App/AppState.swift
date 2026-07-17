@@ -2099,6 +2099,45 @@ public final class AppState {
         return (try? await files.countUnderRoot(url)) ?? 0
     }
 
+    /// True while a full erase is in flight (drives the Settings button state).
+    public private(set) var deletingAllData = false
+
+    /// User-initiated FULL ERASE of all ingested + derived data — the global
+    /// "Delete all my data" the app was missing. Removes every watched folder
+    /// and empties every ledger table; the on-disk vector-index cache is dropped
+    /// too. Your ORIGINAL files on disk are NOT touched. This is a deliberate
+    /// user action — the preserve-everything directive guards against SILENT
+    /// loss, not an explicit erase. Returns the number of tables cleared.
+    @discardableResult
+    public func deleteAllData() async -> Int {
+        guard let db = database, !deletingAllData else { return 0 }
+        deletingAllData = true
+        defer { deletingAllData = false }
+
+        // 1. Forget every watched root so nothing re-ingests. (Copy the list —
+        //    removeRoot mutates bookmarks.roots.)
+        for root in Array(bookmarks.roots) {
+            await removeRoot(root, strategy: .stopAndForget)
+        }
+        // 2. Empty every user table. Skip sqlite internals and FTS shadow
+        //    tables (those are maintained by triggers on their base tables, so
+        //    deleting the base rows cleans the index). FK off during the wipe so
+        //    parent/child delete order doesn't matter.
+        let rows = (try? await db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%';",
+            [])) ?? []
+        let tables = rows.compactMap { $0.string(0) }
+        try? await db.exec("PRAGMA foreign_keys=OFF;", [])
+        for t in tables { try? await db.exec("DELETE FROM \"\(t)\";", []) }
+        try? await db.exec("PRAGMA foreign_keys=ON;", [])
+        // 3. Drop the vector-index cache so it rebuilds empty.
+        let cache = db.url.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
+        try? FileManager.default.removeItem(at: cache)
+        newFilesSinceLaunch = 0
+        KalsmritikoshLog.app.info("Deleted all ingested data (\(tables.count, privacy: .public) tables cleared) — user-initiated full erase")
+        return tables.count
+    }
+
     public func removeRoot(_ root: BookmarkStore.Root, strategy: RootRemovalStrategy) async {
         let url = try? bookmarks.resolve(root)
         defer { if let url { bookmarks.stopAccessing(url) } }
