@@ -157,6 +157,7 @@ public final class AppState {
     public private(set) var enrichment: EnrichmentStatusRepository?
     /// System 3 — inferred missing-evidence gap nodes.
     public private(set) var gapNodes: GapNodeRepository?
+    public private(set) var monitorSnapshots: MonitorSnapshotRepository?
     /// System 3 — persisted conflicts between simultaneously-supported claims.
     public private(set) var contradictions: ContradictionsRepository?
     /// T17 — append-only human-review ledger over reconstructed facts.
@@ -432,6 +433,7 @@ public final class AppState {
             let answerLedgerRepo = AnswerLedgerRepository(database: db)
             let enrichmentRepo = EnrichmentStatusRepository(database: db)
             let gapNodesRepo = GapNodeRepository(database: db)
+            let monitorSnapshotsRepo = MonitorSnapshotRepository(database: db)
             let contradictionsRepo = ContradictionsRepository(database: db)
             let factReviewsRepo = FactReviewsRepository(database: db)
             let custodyRepo = CustodyRepository(database: db)
@@ -1372,6 +1374,7 @@ public final class AppState {
             self.answerLedger = answerLedgerRepo
             self.enrichment = enrichmentRepo
             self.gapNodes = gapNodesRepo
+            self.monitorSnapshots = monitorSnapshotsRepo
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
@@ -1993,6 +1996,51 @@ public final class AppState {
             )
         }
         return ResolvedConnection(nodes: nodes, hops: resolvedHops)
+    }
+
+    /// Proactive change-monitoring: what contradictions/gaps are NEW or RESOLVED
+    /// since the last acknowledged snapshot. Reads the currently-stored ledger
+    /// sets (run the scans first for freshest results); deterministic, no LLM.
+    public func changeDigest() async -> ChangeReport {
+        let contradictions = (await self.contradictions?.all()) ?? []
+        let gaps = (await self.gapNodes?.all(includeDismissed: false)) ?? []
+        let cSig = Dictionary(contradictions.map { (ChangeDigest.signature($0), $0) }, uniquingKeysWith: { a, _ in a })
+        let gSig = Dictionary(gaps.map { (ChangeDigest.signature($0), $0) }, uniquingKeysWith: { a, _ in a })
+        let current = Set(cSig.keys).union(gSig.keys)
+
+        let baseline = await monitorSnapshots?.latest()
+        let previous = Set(baseline?.signatures ?? [])
+        let (added, removed) = ChangeDigest.diff(previous: previous, current: current)
+
+        let newContras = added.compactMap { cSig[$0] }
+            .sorted { $0.severity.rawValue > $1.severity.rawValue }
+        let newGaps = added.compactMap { gSig[$0] }
+        let resolvedContra = removed.filter { $0.hasPrefix("contradiction|") }.count
+        let resolvedGap = removed.filter { $0.hasPrefix("gap|") }.count
+
+        return ChangeReport(
+            previousDate: baseline?.createdAt,
+            newContradictions: newContras,
+            resolvedContradictionCount: resolvedContra,
+            newGaps: newGaps,
+            resolvedGapCount: resolvedGap,
+            currentSignatures: Array(current),
+            currentContradictionCount: contradictions.count,
+            currentGapCount: gaps.count
+        )
+    }
+
+    /// Mark the current state as reviewed: save it as the new baseline so the
+    /// next digest diffs against it. Prunes old snapshots.
+    public func acknowledgeChanges(_ report: ChangeReport) async {
+        guard let monitorSnapshots else { return }
+        await monitorSnapshots.save(MonitorSnapshot(
+            createdAt: Date(),
+            signatures: report.currentSignatures,
+            contradictionCount: report.currentContradictionCount,
+            gapCount: report.currentGapCount
+        ))
+        await monitorSnapshots.prune()
     }
 
     /// "Where do these two both appear?" — the documents that mention BOTH

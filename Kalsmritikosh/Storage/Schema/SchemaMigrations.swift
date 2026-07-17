@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 52
+    public static let latestVersion = 53
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,11 +76,12 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v52 adds `entities.merged_into` — check that column (newest object).
+    /// v53 adds the `monitor_snapshots` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(entities);", [])
-        // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk.
-        return rows.contains { $0.string(1) == "merged_into" }
+        let rows = try await database.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='monitor_snapshots';", []
+        )
+        return !rows.isEmpty
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
@@ -136,7 +137,8 @@ public enum SchemaMigrations {
         (49, v49),
         (50, v50),
         (51, v51),
-        (52, v52)
+        (52, v52),
+        (53, v53)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1946,5 +1948,23 @@ public enum SchemaMigrations {
     private static let v52: String = """
     ALTER TABLE entities ADD COLUMN merged_into TEXT NULL REFERENCES entities(id);
     CREATE INDEX IF NOT EXISTS idx_entities_merged_into ON entities(merged_into);
+    """
+
+    // MARK: - v53 — proactive change-monitoring snapshots
+    //
+    // A snapshot captures the set of content-derived SIGNATURES of the
+    // contradictions + gaps present at a moment (kind + normalized claims/desc,
+    // NOT the volatile per-scan UUIDs), so a later diff can surface what's NEW or
+    // RESOLVED since the user last acknowledged. One row per acknowledged
+    // snapshot; the newest is the baseline. Derived data — safe to clear/rebuild.
+    private static let v53: String = """
+    CREATE TABLE IF NOT EXISTS monitor_snapshots (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        created_at          REAL NOT NULL,
+        signatures_json     TEXT NOT NULL DEFAULT '[]',
+        contradiction_count INTEGER NOT NULL DEFAULT 0,
+        gap_count           INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_monitor_snapshots_created ON monitor_snapshots(created_at);
     """
 }

@@ -29,7 +29,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case timeline, history, findings, notebook, dossier, explore, matrix, connections
     case review
     case transcripts
-    case insights
+    case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
     case sources, convert, completeness, live
     case guide, settings
@@ -53,6 +53,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
+        case .changes:      return "What Changed"
         case .knowledge:    return "Knowledge"
         case .assertions:   return "Assertions"
         case .answers:      return "Answers"
@@ -86,6 +87,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
+        case .changes:      return "bell.badge"
         case .knowledge:    return "books.vertical"
         case .assertions:   return "scroll"
         case .answers:      return "text.bubble"
@@ -135,6 +137,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
+        case .changes:      return "What's new or resolved since your last review — as documents arrive"
         case .knowledge:    return "Canonical entities, events and distilled memory"
         case .assertions:   return "Extracted claims with their supporting evidence"
         case .answers:      return "Past answers with their evidence — replayable and auditable"
@@ -163,7 +166,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search]
-            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .matrix, .connections, .transcripts, .notebook, .dossier, .explore, .insights]
+            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .matrix, .connections, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
@@ -813,6 +816,7 @@ public struct RootView: View {
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()
+        case .changes:      ChangesView()
         case .knowledge:    KnowledgeView()
         case .assertions:   AssertionsView()
         case .answers:      AnswersView()
