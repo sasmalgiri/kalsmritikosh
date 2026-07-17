@@ -19,16 +19,100 @@ public struct HomeView: View {
     }
 
     private let columns = [GridItem(.adaptive(minimum: 300), spacing: 16)]
+    /// Chosen persona (shared with the sidebar). Empty → show the chooser.
+    @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
+    /// Filters the persona's work cards.
+    @State private var workSearch: String = ""
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 hero
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(GuideContent.personas) { personaCard($0) }
+                if personaID.isEmpty {
+                    // No focus chosen yet — offer the persona lenses to pick from.
+                    Text("Pick the lens that fits your work.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    LazyVGrid(columns: columns, spacing: 16) {
+                        ForEach(GuideContent.personas) { personaCard($0) }
+                    }
+                } else {
+                    workbench
                 }
             }
             .padding(20)
+        }
+    }
+
+    // MARK: - Persona workbench (task cards for the chosen persona)
+
+    private var workbench: some View {
+        let works = PersonaWorkCatalog.works(for: personaID)
+        let q = workSearch.trimmingCharacters(in: .whitespaces).lowercased()
+        let filtered = q.isEmpty ? works : works.filter { $0.searchText.contains(q) }
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Text("Your tasks").font(.title3.bold())
+                Spacer()
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search your tasks…", text: $workSearch)
+                    .textFieldStyle(.plain)
+                if !workSearch.isEmpty {
+                    Button { workSearch = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                    }.buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Color.primary.opacity(0.05), in: Capsule())
+            .overlay(Capsule().stroke(Theme.brand.opacity(0.15), lineWidth: 1))
+
+            if filtered.isEmpty {
+                Text("No matching task. Try the sidebar, or clear the search.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 30)
+            } else {
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(filtered) { workCard($0) }
+                }
+            }
+        }
+    }
+
+    private func workCard(_ w: PersonaWork) -> some View {
+        Button { run(w) } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: w.icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Theme.brandGradient(), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.forward.circle.fill")
+                        .foregroundStyle(Theme.brand.opacity(0.5))
+                }
+                Text(w.title).font(.headline).multilineTextAlignment(.leading)
+                Text(w.subtitle).font(.caption).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+            .cardSurface(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func run(_ w: PersonaWork) {
+        switch w.action {
+        case .open(let dest):
+            onNavigate(dest)
+        case .ask(let question):
+            appState.pendingAskQuestion = question
+            onNavigate(.ask)
         }
     }
 
