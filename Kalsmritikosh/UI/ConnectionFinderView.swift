@@ -15,9 +15,17 @@ import AppKit
 public struct ConnectionFinderView: View {
     @Environment(AppState.self) private var appState
 
+    enum Mode: String, CaseIterable, Identifiable {
+        case path = "How they link"
+        case overlap = "Where they overlap"
+        var id: String { rawValue }
+    }
+
+    @State private var mode: Mode = .path
     @State private var entityA: EntitySummaryRow?
     @State private var entityB: EntitySummaryRow?
     @State private var connection: ResolvedConnection?
+    @State private var comparison: EntityComparison?
     @State private var searching = false
     @State private var didRun = false
 
@@ -25,11 +33,17 @@ public struct ConnectionFinderView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("How are these connected?")
+            Text("Connect two entities")
                 .font(.title3.bold())
-            Text("Pick two people or organizations. The app finds the shortest chain of relationships between them — every hop backed by a document.")
+            Text("Pick two people or organizations. See the shortest chain of relationships that links them, or the documents where they both appear — evidence either way.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Picker("Mode", selection: $mode) {
+                ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: mode) { _, _ in connection = nil; comparison = nil; didRun = false }
 
             EntityPickerField(label: "First entity", selection: $entityA)
             EntityPickerField(label: "Second entity", selection: $entityB)
@@ -37,7 +51,8 @@ public struct ConnectionFinderView: View {
             Button {
                 run()
             } label: {
-                Label("Find the connection", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                Label(mode == .path ? "Find the connection" : "Show shared documents",
+                      systemImage: mode == .path ? "point.topleft.down.to.point.bottomright.curvepath" : "doc.on.doc")
             }
             .buttonStyle(.borderedProminent)
             .disabled(entityA == nil || entityB == nil || entityA?.id == entityB?.id || searching)
@@ -45,11 +60,16 @@ public struct ConnectionFinderView: View {
             Divider()
 
             if searching {
-                ProgressView("Tracing the graph…").frame(maxWidth: .infinity)
-            } else if let connection {
+                ProgressView(mode == .path ? "Tracing the graph…" : "Intersecting the evidence…")
+                    .frame(maxWidth: .infinity)
+            } else if mode == .path, let connection {
                 chain(connection)
+            } else if mode == .overlap, let comparison {
+                overlapView(comparison)
             } else if didRun {
-                Label("No connection found within 5 hops. They may be linked only through documents not yet ingested.",
+                Label(mode == .path
+                        ? "No connection found within 5 hops. They may be linked only through documents not yet ingested."
+                        : "No document mentions both — they don't co-appear in the archive yet.",
                       systemImage: "questionmark.circle")
                     .font(.callout).foregroundStyle(.secondary)
             }
@@ -57,6 +77,49 @@ public struct ConnectionFinderView: View {
         }
         .padding(16)
         .navigationTitle("Connections")
+    }
+
+    // MARK: - Overlap mode
+
+    private func overlapView(_ c: EntityComparison) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                footprintCard(c.a)
+                footprintCard(c.b)
+            }
+            Text(c.shared.isEmpty ? "No shared documents" : "\(c.shared.count) shared document(s) — both appear here")
+                .font(.subheadline.weight(.semibold))
+            List(c.shared) { doc in
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.on.doc").foregroundStyle(Theme.brand)
+                    Text(doc.filename).font(.callout).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    if let date = doc.date {
+                        Text(date, style: .date).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if doc.url != nil {
+                        Button {
+                            #if canImport(AppKit)
+                            if let u = doc.url { NSWorkspace.shared.activateFileViewerSelecting([u]) }
+                            #endif
+                        } label: { Image(systemName: "arrow.up.forward.square") }
+                        .buttonStyle(.borderless).controlSize(.small)
+                    }
+                }
+            }
+            .listStyle(.inset)
+        }
+    }
+
+    private func footprintCard(_ f: EntityFootprint) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(f.name).font(.headline).lineLimit(1)
+            Text("\(f.mentionCount) mention(s)").font(.caption).foregroundStyle(.secondary)
+            Text("\(f.documentCount) document(s)").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
     }
 
     private func chain(_ c: ResolvedConnection) -> some View {
@@ -126,11 +189,12 @@ public struct ConnectionFinderView: View {
         guard let a = entityA?.id, let b = entityB?.id else { return }
         searching = true
         Task {
-            let result = await appState.connectionPath(from: a, to: b)
-            await MainActor.run {
-                self.connection = result
-                self.searching = false
-                self.didRun = true
+            if mode == .path {
+                let result = await appState.connectionPath(from: a, to: b)
+                await MainActor.run { self.connection = result; self.searching = false; self.didRun = true }
+            } else {
+                let result = await appState.compareEntities(a: a, b: b)
+                await MainActor.run { self.comparison = result; self.searching = false; self.didRun = true }
             }
         }
     }
@@ -140,62 +204,5 @@ public struct ConnectionFinderView: View {
         guard let url = hop.evidenceURL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
         #endif
-    }
-}
-
-/// A small type-to-search entity picker: shows matches as you type; picking one
-/// collapses to a chip you can clear.
-private struct EntityPickerField: View {
-    @Environment(AppState.self) private var appState
-    let label: String
-    @Binding var selection: EntitySummaryRow?
-    @State private var query = ""
-    @State private var matches: [EntitySummaryRow] = []
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            if let sel = selection {
-                HStack(spacing: 8) {
-                    Text(sel.value).font(.body.weight(.medium))
-                    Spacer()
-                    Button { selection = nil; query = ""; matches = [] } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }.buttonStyle(.plain)
-                }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 9))
-            } else {
-                TextField("Search people or organizations…", text: $query)
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: query) { _, q in Task { await search(q) } }
-                if !matches.isEmpty {
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(matches.prefix(6)) { row in
-                            Button {
-                                selection = row; matches = []; query = ""
-                            } label: {
-                                HStack {
-                                    Text(row.value).font(.callout)
-                                    Spacer()
-                                }
-                                .contentShape(Rectangle())
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                            }
-                            .buttonStyle(.plain)
-                            Divider()
-                        }
-                    }
-                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
-        }
-    }
-
-    private func search(_ q: String) async {
-        let trimmed = q.trimmingCharacters(in: .whitespaces)
-        guard trimmed.count >= 2, let entities = appState.entities else { matches = []; return }
-        let found = (try? await entities.search(value: trimmed, limit: 8)) ?? []
-        await MainActor.run { matches = found }
     }
 }

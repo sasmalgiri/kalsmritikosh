@@ -1995,6 +1995,32 @@ public final class AppState {
         return ResolvedConnection(nodes: nodes, hops: resolvedHops)
     }
 
+    /// "Where do these two both appear?" — the documents that mention BOTH
+    /// entities, plus each entity's footprint (mentions, distinct docs).
+    /// Deterministic set intersection over the mention ledger; no model.
+    public func compareEntities(a: Entity.ID, b: Entity.ID) async -> EntityComparison? {
+        guard a != b, let entities else { return nil }
+        let names = Dictionary(
+            uniqueKeysWithValues: ((try? await entities.findByIDs([a, b])) ?? []).map { ($0.id, $0.value) }
+        )
+        let aMentions = (try? await entities.mentions(forEntityID: a, limit: 1000)) ?? []
+        let bMentions = (try? await entities.mentions(forEntityID: b, limit: 1000)) ?? []
+
+        func docMap(_ rows: [EntityMentionRow]) -> EntityOverlap.DocMap {
+            var m: EntityOverlap.DocMap = [:]
+            for r in rows where m[r.objectID] == nil {
+                m[r.objectID] = (r.sourceFile.lastPathComponent, r.createdAt, r.sourceFile)
+            }
+            return m
+        }
+        let aDocs = docMap(aMentions), bDocs = docMap(bMentions)
+        return EntityComparison(
+            a: EntityFootprint(name: names[a] ?? "First", mentionCount: aMentions.count, documentCount: aDocs.count),
+            b: EntityFootprint(name: names[b] ?? "Second", mentionCount: bMentions.count, documentCount: bDocs.count),
+            shared: EntityOverlap.shared(aDocs, bDocs)
+        )
+    }
+
     /// Load a bounded sample of objects with their body + email subject
     /// (from metadata) for the rule-based gap detectors. No LLM.
     private func loadObjectSample(
