@@ -1934,6 +1934,67 @@ public final class AppState {
         return rows
     }
 
+    /// "How are these two connected?" — the shortest chain of relationships
+    /// linking two entities, each hop with its citation. Bounded breadth-first
+    /// expansion over the evidence-backed relationship graph (reusing
+    /// RelationshipsRepository.neighbors), then a deterministic shortest path.
+    /// Returns nil when no connection is found within `maxHops`.
+    public func connectionPath(
+        from source: Entity.ID, to target: Entity.ID, maxHops: Int = 5
+    ) async -> ResolvedConnection? {
+        guard source != target, let relationships, let entities, let objects else { return nil }
+
+        // 1. Bounded BFS expansion from the source, collecting undirected edges.
+        var adjacency: [Entity.ID: [ConnectionEdge]] = [:]
+        var visited: Set<Entity.ID> = [source]
+        var frontier: [Entity.ID] = [source]
+        let nodeBudget = 800
+        var hops = 0
+        while !frontier.isEmpty, hops < maxHops, visited.count < nodeBudget {
+            var next: [Entity.ID] = []
+            for node in frontier {
+                let rels = (try? await relationships.neighbors(of: node, limit: 80)) ?? []
+                for r in rels {
+                    let nb = r.fromEntityID == node ? r.toEntityID : r.fromEntityID
+                    guard nb != node else { continue }
+                    let label = r.kind.rawValue.replacingOccurrences(of: "_", with: " ")
+                    adjacency[node, default: []].append(
+                        ConnectionEdge(neighbor: nb, label: label, evidenceObjectID: r.sourceObjectID)
+                    )
+                    if !visited.contains(nb) { visited.insert(nb); next.append(nb) }
+                }
+            }
+            if visited.contains(target) { break }
+            frontier = next
+            hops += 1
+        }
+
+        // 2. Deterministic shortest path over the collected graph.
+        guard let path = ConnectionFinder.shortestPath(from: source, to: target, adjacency: adjacency),
+              !path.hops.isEmpty else { return nil }
+
+        // 3. Resolve names + evidence citations.
+        let nameByID = Dictionary(
+            uniqueKeysWithValues: ((try? await entities.findByIDs(path.nodes)) ?? [])
+                .map { ($0.id, ($0.value, $0.kind.rawValue)) }
+        )
+        let evidenceIDs = Set(path.hops.compactMap(\.evidenceObjectID))
+        let filenames = (try? await objects.sourceFilenames(for: evidenceIDs)) ?? [:]
+        var urls: [KnowledgeObject.ID: URL] = [:]
+        for id in evidenceIDs { if let u = try? await objects.fetchSourceURL(id: id) { urls[id] = u } }
+
+        func name(_ id: Entity.ID) -> String { nameByID[id]?.0 ?? "an entity" }
+        let nodes = path.nodes.map { ConnectionNode(id: $0, name: name($0), kind: nameByID[$0]?.1 ?? "") }
+        let resolvedHops = path.hops.enumerated().map { (i, h) in
+            ResolvedConnectionHop(
+                id: i, label: h.label, fromName: name(h.from), toName: name(h.to),
+                evidenceFilename: h.evidenceObjectID.flatMap { filenames[$0] },
+                evidenceURL: h.evidenceObjectID.flatMap { urls[$0] }
+            )
+        }
+        return ResolvedConnection(nodes: nodes, hops: resolvedHops)
+    }
+
     /// Load a bounded sample of objects with their body + email subject
     /// (from metadata) for the rule-based gap detectors. No LLM.
     private func loadObjectSample(
