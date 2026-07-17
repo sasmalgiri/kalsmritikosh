@@ -472,7 +472,10 @@ public actor IngestCoordinator {
             KalsmritikoshLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
             throw error
         }
-        let cleaned = cleaner.clean(raw)
+        // Decode embedded encoded blobs (base64/hex/quoted-printable/percent)
+        // into readable, searchable text — non-destructively appended. Runs after
+        // the Cleaner so the idempotency hash stays tied to the original content.
+        let cleaned = ContentDecoder().decode(cleaner.clean(raw))
         let docClass = classifier.classify(cleaned)
 
         // Idempotency: if this URL was already ingested and the cleaned
