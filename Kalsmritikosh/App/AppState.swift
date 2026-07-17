@@ -2138,6 +2138,32 @@ public final class AppState {
         return tables.count
     }
 
+    /// A cheap progress snapshot for the live-activity panel's bars: how many
+    /// files are parsed and how many chunks are embedded, each with its total.
+    /// One query, four COUNTs — safe to poll every couple of seconds.
+    public struct IngestProgress: Sendable, Equatable {
+        public var filesDone = 0, filesTotal = 0
+        public var embedDone = 0, embedTotal = 0
+        public var parsing: Bool { filesTotal > 0 && filesDone < filesTotal }
+        public var embedding: Bool { embedTotal > 0 && embedDone < embedTotal }
+        public var idle: Bool { !parsing && !embedding }
+    }
+
+    public func ingestProgress() async -> IngestProgress {
+        guard let db = database else { return IngestProgress() }
+        let rows = (try? await db.query("""
+        SELECT (SELECT COUNT(*) FROM files),
+               (SELECT COUNT(*) FROM files WHERE ingested_at IS NOT NULL),
+               (SELECT COUNT(*) FROM chunks WHERE admit_embedding = 1),
+               (SELECT COUNT(*) FROM vectors);
+        """, [])) ?? []
+        guard let r = rows.first else { return IngestProgress() }
+        return IngestProgress(
+            filesDone: Int(r.int(1) ?? 0), filesTotal: Int(r.int(0) ?? 0),
+            embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
+        )
+    }
+
     public func removeRoot(_ root: BookmarkStore.Root, strategy: RootRemovalStrategy) async {
         let url = try? bookmarks.resolve(root)
         defer { if let url { bookmarks.stopAccessing(url) } }

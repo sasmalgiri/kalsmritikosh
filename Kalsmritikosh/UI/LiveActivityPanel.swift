@@ -18,10 +18,15 @@ struct LiveActivityPanel: View {
     /// Jump to the full Live dashboard for detail.
     let onOpen: () -> Void
 
-    private var ingesting: Bool { appState.ingestActiveCount > 0 }
+    /// Live parse/embed progress, refreshed on a light poll while the panel is
+    /// on screen (it always is — it lives in the sidebar).
+    @State private var progress = AppState.IngestProgress()
+
+    private var ingesting: Bool { appState.ingestActiveCount > 0 || progress.parsing }
     private var distilling: Bool { appState.isDistillingMemory }
     private var maintaining: Bool { appState.maintenanceActive }
-    private var anyActive: Bool { ingesting || distilling || maintaining }
+    private var embedding: Bool { progress.embedding }
+    private var anyActive: Bool { ingesting || distilling || maintaining || embedding }
 
     var body: some View {
         Button(action: onOpen) {
@@ -29,6 +34,12 @@ struct LiveActivityPanel: View {
                 header
                 Divider().opacity(0.5)
                 ingestRow
+                if progress.parsing {
+                    progressBar("Reading documents", done: progress.filesDone, total: progress.filesTotal)
+                }
+                if progress.embedding {
+                    progressBar("Indexing meaning", done: progress.embedDone, total: progress.embedTotal)
+                }
                 if distilling { activityRow("brain.head.profile", "Distilling memory…", tint: Theme.brand, pulse: true) }
                 maintenanceRow
             }
@@ -46,6 +57,30 @@ struct LiveActivityPanel: View {
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
         .animation(.easeInOut(duration: 0.25), value: anyActive)
+        .task {
+            // Light poll (~2s) while the sidebar is on screen, so the bars
+            // track parse + embed progress without a heavy always-on loop.
+            while !Task.isCancelled {
+                progress = await appState.ingestProgress()
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    /// A labeled "done / total" progress bar with a percentage.
+    private func progressBar(_ label: String, done: Int, total: Int) -> some View {
+        let frac = total > 0 ? Double(done) / Double(total) : 0
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(label).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text("\(done)/\(total) · \(Int(frac * 100))%")
+                    .font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+            }
+            ProgressView(value: frac)
+                .progressViewStyle(.linear)
+                .tint(Theme.brand)
+        }
     }
 
     /// Title line: a pulsing dot + "Working…" when anything is running, or a
