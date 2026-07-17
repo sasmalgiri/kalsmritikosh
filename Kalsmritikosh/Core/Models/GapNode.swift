@@ -51,6 +51,11 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
     /// A5.7 — only a draft of a document is present; no final / signed version
     /// sharing its name is in the archive. The final may live elsewhere.
     case finalVersion
+    /// A masked / redacted value is present in the text ("****1234",
+    /// "XXX-XX-6789", "[REDACTED]", blacked-out spans). The hidden value is not
+    /// recoverable from the redacted copy — flagged so it isn't mistaken for
+    /// absent data; the unredacted original, if any, may hold it.
+    case redactedValue
 
     /// Short label shown in the UI.
     public var displayName: String {
@@ -65,6 +70,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .custodyBreak:         return "Custody Break"
         case .expectedResponse:     return "Awaiting Reply"
         case .finalVersion:         return "Draft Only"
+        case .redactedValue:        return "Redacted Value"
         }
     }
 
@@ -81,6 +87,7 @@ public nonisolated enum GapKind: String, Codable, Sendable, CaseIterable {
         case .custodyBreak:         return "checkmark.shield.fill"
         case .expectedResponse:     return "bubble.left.and.exclamationmark.bubble.right"
         case .finalVersion:         return "doc.badge.clock"
+        case .redactedValue:        return "eye.slash"
         }
     }
 }

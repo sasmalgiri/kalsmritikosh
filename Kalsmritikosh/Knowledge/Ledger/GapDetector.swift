@@ -444,6 +444,71 @@ public nonisolated struct GapDetector: Sendable {
         return gaps
     }
 
+    // MARK: Redacted / masked values (A5.7)
+
+    /// Explicit redaction markers: bracketed keywords (any case) or a bare
+    /// all-caps REDACTED. Bracketing is required for the softer words so an
+    /// ordinary "this email is confidential" footer isn't flagged.
+    private static let redactionMarkerRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"\[\s*(?:redacted|withheld|removed|confidential|sealed)\s*\]|\bREDACTED\b"#,
+        options: [.caseInsensitive]
+    )
+
+    /// Masked-value shapes: a run of masking glyphs revealing trailing digits
+    /// ("****1234", "xxxx 4242"), a segmented identifier ("XXX-XX-6789"), or a
+    /// blacked-out block run ("█████").
+    private static let maskedValueRegexes: [NSRegularExpression] = {
+        [
+            #"[*xX•]{3,}[-\s]?\d{2,4}"#,
+            #"[*xX•]{2,}[-\s][*xX•]{2,}[-\s]\d{2,4}"#,
+            #"[█▉▓▊▋▌]{3,}"#
+        ].compactMap { try? NSRegularExpression(pattern: $0) }
+    }()
+
+    /// A5.7 — flag documents that carry masked / redacted values. The hidden
+    /// value CANNOT be recovered from a redacted copy — this surfaces the
+    /// redaction so it isn't mistaken for data that was simply never there, and
+    /// points the user at the unredacted original if one exists. One gap per
+    /// document, aggregating its hits; the masked snippets are safe to show.
+    ///
+    /// - Parameter texts: per-object (objectID, extracted text).
+    public func detectRedactedValues(
+        texts: [(objectID: UUID, text: String)],
+        limit: Int = 50
+    ) -> [GapNode] {
+        var gaps: [GapNode] = []
+        for entry in texts {
+            let text = entry.text
+            let full = NSRange(text.startIndex..., in: text)
+            var seen = Set<String>()
+            var hits: [String] = []
+
+            func collect(_ rx: NSRegularExpression?) {
+                guard let rx else { return }
+                for m in rx.matches(in: text, range: full) {
+                    guard let r = Range(m.range, in: text) else { continue }
+                    let snip = String(text[r]).trimmingCharacters(in: .whitespaces)
+                    guard !snip.isEmpty, seen.insert(snip).inserted else { continue }
+                    hits.append(snip)
+                }
+            }
+            collect(Self.redactionMarkerRegex)
+            for rx in Self.maskedValueRegexes { collect(rx) }
+
+            guard !hits.isEmpty else { continue }
+            let preview = hits.prefix(3).joined(separator: ", ")
+            gaps.append(GapNode(
+                kind: .redactedValue,
+                description: "Masked or redacted value(s) in a document",
+                reason: "this document contains masked/redacted content (e.g. \"\(preview)\") — the hidden value is not recoverable from the redacted copy. It matters because a redacted field can be the very fact in question; the unredacted original, if it exists, may hold it. Flagged so redaction isn't mistaken for data that was never there.",
+                confidence: 0.3,
+                evidenceObjectID: entry.objectID
+            ))
+            if gaps.count >= limit { break }
+        }
+        return gaps
+    }
+
     // MARK: Thread parents
 
     /// Detect replies/forwards whose original message wasn't ingested.
