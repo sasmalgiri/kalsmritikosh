@@ -282,9 +282,16 @@ public enum ReleaseReadiness {
                 if !(p.eagerMemoryDistillation && p.contextPrefixBackfill) {
                     fails.append("fullLLM should eager-distill + prefix-backfill")
                 }
-            case .hotWarmCold, .ledgerEventDriven:
+            case .hotWarmCold:
                 if !p.firstChunkCard || p.eagerMemoryDistillation || p.contextPrefixBackfill {
-                    fails.append("\(mode.rawValue) should be firstChunkCard-only")
+                    fails.append("hotWarmCold should be firstChunkCard-only")
+                }
+            case .ledgerEventDriven:
+                // v1 locked engine: ZERO generative LLM at ingest (spec P0.4) —
+                // no per-file card, no eager distillation, no context-prefix
+                // backfill. (This is the profile check #13 also verifies.)
+                if p.firstChunkCard || p.eagerMemoryDistillation || p.contextPrefixBackfill {
+                    fails.append("ledgerEventDriven should be zero-LLM at ingest")
                 }
             }
         }
