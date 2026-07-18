@@ -83,9 +83,14 @@ public struct RerankerLadder: Sendable {
             if next.count != candidates.count { continue }
             scores = next
             consumed.append(tier.id)
-            // Fast-path skip: enough confident survivors? Stop here.
+            // Fast-path: stop early ONLY when this cheaper tier already produced
+            // ENOUGH confident survivors (≥ fastPathMinSurvivors) — then the
+            // expensive tiers add nothing. When it produced FEW or ZERO confident
+            // candidates, that's exactly when the more powerful tier (cross-
+            // encoder) should run, so keep going. (This was inverted: `<=` gave
+            // up precisely when 0 candidates were confident — audit #5.)
             let confident = scores.filter { $0 >= fastPathFloor }.count
-            if confident <= fastPathMinSurvivors {
+            if confident >= fastPathMinSurvivors {
                 break
             }
         }
