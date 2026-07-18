@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 53
+    public static let latestVersion = 54
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v53 adds the `monitor_snapshots` table — check it exists (newest object).
+    /// v54 adds the `chunk_embeddings` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='monitor_snapshots';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_embeddings';", []
         )
         return !rows.isEmpty
     }
@@ -138,7 +138,8 @@ public enum SchemaMigrations {
         (50, v50),
         (51, v51),
         (52, v52),
-        (53, v53)
+        (53, v53),
+        (54, v54)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -1966,5 +1967,43 @@ public enum SchemaMigrations {
         gap_count           INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_monitor_snapshots_created ON monitor_snapshots(created_at);
+    """
+
+    // MARK: - v54 — evidence-first chunking + model-aware embeddings (Phase 1)
+    //
+    // Two additive changes, both preserving every existing row (audit P0:
+    // "Do not remove chunks or vectors").
+    //
+    // 1. chunks.evidence_block_id + block_kind — a chunk derived from a typed
+    //    EvidenceBlock records exactly which block it came from and that block's
+    //    kind. NULL for legacy chunks (derived from flattened KO.content) and
+    //    for formats with no structural parser, so retrieval can prefer
+    //    block-backed chunks without breaking the fallback path.
+    //
+    // 2. chunk_embeddings — model-aware vector storage keyed by
+    //    (chunk_id, model_id) so an Apple index and a quality (Core ML) index
+    //    can COEXIST instead of one overwriting the other (audit P0 #6). The
+    //    legacy `vectors` table is left untouched; its rows are backfilled here
+    //    tagged with the current Apple model id, so no embedding is lost and the
+    //    read path can migrate incrementally.
+    private static let v54: String = """
+    ALTER TABLE chunks ADD COLUMN evidence_block_id TEXT NULL;
+    CREATE INDEX IF NOT EXISTS idx_chunks_evidence_block ON chunks(evidence_block_id);
+    ALTER TABLE chunks ADD COLUMN block_kind TEXT NULL;
+
+    CREATE TABLE IF NOT EXISTS chunk_embeddings (
+        chunk_id      TEXT NOT NULL,
+        model_id      TEXT NOT NULL,
+        model_version TEXT NOT NULL DEFAULT '1',
+        dim           INTEGER NOT NULL,
+        q             BLOB NOT NULL,
+        scale         REAL NOT NULL,
+        created_at    REAL NOT NULL,
+        PRIMARY KEY (chunk_id, model_id),
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model ON chunk_embeddings(model_id);
+    INSERT OR IGNORE INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+        SELECT chunk_id, 'apple.nl.v1', '1', dim, q, scale, strftime('%s','now') FROM vectors;
     """
 }
