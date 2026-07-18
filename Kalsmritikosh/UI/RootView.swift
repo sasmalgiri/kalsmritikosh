@@ -678,6 +678,9 @@ public struct RootView: View {
                         : AnyShapeStyle(Theme.brand.opacity(0.10)),
                     in: RoundedRectangle(cornerRadius: 7, style: .continuous)
                 )
+                // Make the whole 30×26 frame the hover/hit region so the tooltip
+                // fires anywhere over the chip, not just the glyph pixels.
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help("\(dest.title) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
@@ -877,6 +880,7 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("\(dest.title) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
         .onHover { h in
             withAnimation(.easeOut(duration: 0.12)) { hovering = h }
         }
