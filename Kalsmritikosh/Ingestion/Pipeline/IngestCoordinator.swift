@@ -831,13 +831,28 @@ public actor IngestCoordinator {
             throw error
         }
 
-        var chunked = chunker.chunk(objectID: object.id, content: object.content)
+        // v54 evidence-first chunking (audit P0 #1/#2) — when the structural
+        // parser produced typed EvidenceBlocks for this KO, derive chunks
+        // (retrieval units) directly from them with exact block lineage; each
+        // chunk records its evidence_block_id + block_kind. Fall back to the
+        // flattened KO.content for formats with no structural parser (and, until
+        // Phase1 step 4, for multi-KO mbox messages, which arrive with blocks=[]).
+        var chunked = blocks.isEmpty
+            ? chunker.chunk(objectID: object.id, content: object.content)
+            : chunker.chunk(objectID: object.id, blocks: blocks)
         // Stage 1 ingest quality gate ("do not embed everything") — mark
         // non-substantive chunks (blank, tiny fragment, bare page number, lone
         // nav token) as NOT admitted to the vector index. They are still stored
         // and stay FTS-/citation-searchable; only embedding skips them. Verified
-        // on the real corpus at <0.5% incidence on genuine content.
-        chunked = chunked.map { $0.withAdmitEmbedding(ChunkAdmissionGate.evaluate($0.text).admitted) }
+        // on the real corpus at <0.5% incidence on genuine content. Block-derived
+        // chunks additionally exclude boilerplate kinds (page furniture, email
+        // signature/disclaimer) from embedding — down-ranked, never dropped.
+        chunked = chunked.map { c in
+            let isBoilerplate = c.blockKind
+                .flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
+            let admit = !isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted
+            return c.withAdmitEmbedding(admit)
+        }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
         // same prefix. Skipped when chunks.count < 2 (single-chunk

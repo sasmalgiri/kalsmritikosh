@@ -274,6 +274,65 @@ public struct Chunker: Sendable {
         return chunks
     }
 
+    /// v54 evidence-first chunking — derive retrieval units directly from typed
+    /// EvidenceBlocks instead of re-splitting flattened content. Each chunk
+    /// links to exactly ONE block (exact lineage per the audit); a block larger
+    /// than the budget is split by sentence into multiple chunks all tagged with
+    /// that block's id. Hard chunk boundaries (email body, table, slide,
+    /// transcript, archive member) are honoured for free because blocks are
+    /// never merged across boundaries here. Empty/container blocks (a table or
+    /// section parent that carries no own text) are skipped. `characterRange` is
+    /// a synthetic within-KO cursor — the exact source position now lives on the
+    /// linked block's locator.
+    public nonisolated func chunk(
+        objectID: KnowledgeObject.ID,
+        blocks: [EvidenceBlock]
+    ) -> [Chunk] {
+        var chunks: [Chunk] = []
+        var ordinal = 0
+        var cursor = 0
+
+        func emit(_ text: String, block: EvidenceBlock) {
+            let range = cursor ..< (cursor + text.count)
+            cursor += text.count
+            chunks.append(Chunk(
+                objectID: objectID,
+                ordinal: ordinal,
+                text: text,
+                characterRange: range,
+                pageNumber: block.locator.page,
+                evidenceBlockID: block.id,
+                blockKind: block.kind.rawValue
+            ))
+            ordinal += 1
+        }
+
+        for block in blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
+            let source = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
+            let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+
+            if text.count <= targetCharacterCount {
+                emit(text, block: block)
+                continue
+            }
+            // Oversized block — split by sentence, keeping every piece tied to
+            // the same block. Fall back to the whole block if the tokenizer
+            // yields nothing.
+            let pieces = sentenceSplit(text, range: 0..<text.utf16.count)
+            if pieces.isEmpty {
+                emit(text, block: block)
+            } else {
+                for sub in pieces {
+                    let subText = sub.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !subText.isEmpty else { continue }
+                    emit(subText, block: block)
+                }
+            }
+        }
+        return chunks
+    }
+
     // MARK: - Block detection
 
     private nonisolated struct Block {
