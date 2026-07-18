@@ -18,6 +18,8 @@ struct LiveActivityPanel: View {
     /// Live parse/embed progress, refreshed on a light ~2s poll while the panel
     /// is on screen (it always is — it lives in the sidebar).
     @State private var progress = AppState.IngestProgress()
+    /// Ticked on each poll so elapsed/ETA on active processes stay live.
+    @State private var now = Date()
 
     private enum Stage { case reading, search, organizing, tidying, ready }
 
@@ -62,6 +64,13 @@ struct LiveActivityPanel: View {
                 } else if stage == .search, progress.embedTotal > 0 {
                     bar(progress.embedDone, progress.embedTotal)
                 }
+                // Every other named background task (milestone rebuild, gap /
+                // contradiction scans, memory distillation) with a start time,
+                // live elapsed, and — when measurable — % + ETA.
+                if !appState.activeProcesses.isEmpty {
+                    Divider().padding(.top, 2)
+                    ForEach(appState.activeProcesses) { activityRow($0) }
+                }
             }
             .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,7 +89,34 @@ struct LiveActivityPanel: View {
         .task {
             while !Task.isCancelled {
                 progress = await appState.ingestProgress()
+                now = Date()
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    /// One named background task: title, live status line, and a bar when the
+    /// work is measurable.
+    private func activityRow(_ a: ProcessActivity) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "gearshape.2")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.brand)
+                    .symbolEffect(.pulse)
+                Text(a.title)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(a.statusLine(now: now))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            if let frac = a.fraction {
+                ProgressView(value: frac)
+                    .progressViewStyle(.linear)
+                    .tint(Theme.brand)
             }
         }
     }

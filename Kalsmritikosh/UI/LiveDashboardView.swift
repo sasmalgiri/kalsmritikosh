@@ -27,6 +27,9 @@ public struct LiveDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                if !appState.activeProcesses.isEmpty {
+                    activeTasksPanel
+                }
                 if let live = appState.liveMetrics {
                     snapshotRow(live.current)
                     llmBudgetPanel(live.current)
@@ -109,6 +112,56 @@ public struct LiveDashboardView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    // MARK: - Active tasks (every long-running job: start, elapsed, ETA)
+
+    private var activeTasksPanel: some View {
+        // Recomputed each ~2s poll (liveMetrics.current changes drive a redraw),
+        // so elapsed/ETA stay live without a separate timer here.
+        let now = Date()
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "gearshape.2")
+                    .foregroundStyle(Theme.brand)
+                    .symbolEffect(.pulse)
+                Text("Active tasks")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("\(appState.activeProcesses.count) running")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(appState.activeProcesses) { a in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(a.title).font(.callout.weight(.medium))
+                        Spacer()
+                        Text(a.statusLine(now: now))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 8) {
+                        Text("started \(a.startedAt.formatted(date: .omitted, time: .standard))")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        Spacer()
+                        Text("elapsed \(ProcessActivity.mmss(a.elapsed(now: now)))")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                    if let frac = a.fraction {
+                        ProgressView(value: frac)
+                            .progressViewStyle(.linear)
+                            .tint(Theme.brand)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12, tint: Theme.brand)
     }
 
     // MARK: - Snapshot

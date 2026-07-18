@@ -120,6 +120,8 @@ public final class AppState {
     public func distillMemory(maxPerKind: Int = 200) async -> Int {
         guard let distiller = memoryDistiller, !isDistillingMemory else { return 0 }
         isDistillingMemory = true
+        let activity = beginProcess("Distilling memory")
+        defer { finishProcess(activity) }
         let bannerWasActive = maintenanceActive
         maintenanceActive = true
         maintenanceStatus = "Distilling memory…"
@@ -160,6 +162,29 @@ public final class AppState {
     /// System 3 — inferred missing-evidence gap nodes.
     public private(set) var gapNodes: GapNodeRepository?
     public private(set) var monitorSnapshots: MonitorSnapshotRepository?
+
+    // MARK: - Unified activity tracker
+    /// Every long-running task the user should see — title, start time, progress,
+    /// ETA. The live panel + dashboard render this. Determinate tasks set a total.
+    public private(set) var activeProcesses: [ProcessActivity] = []
+
+    /// Register a task. Returns its id for update/finish.
+    @discardableResult
+    public func beginProcess(_ title: String, total: Int? = nil) -> UUID {
+        let a = ProcessActivity(title: title, unitsTotal: total)
+        activeProcesses.append(a)
+        return a.id
+    }
+
+    public func updateProcess(_ id: UUID, done: Int, total: Int? = nil) {
+        guard let i = activeProcesses.firstIndex(where: { $0.id == id }) else { return }
+        activeProcesses[i].unitsDone = done
+        if let total { activeProcesses[i].unitsTotal = total }
+    }
+
+    public func finishProcess(_ id: UUID) {
+        activeProcesses.removeAll { $0.id == id }
+    }
     /// System 3 — persisted conflicts between simultaneously-supported claims.
     public private(set) var contradictions: ContradictionsRepository?
     /// T17 — append-only human-review ledger over reconstructed facts.
@@ -1744,6 +1769,8 @@ public final class AppState {
     @discardableResult
     public func scanForGaps() async -> Int {
         guard let entities, let gapNodes else { return 0 }
+        let activity = beginProcess("Scanning for evidence gaps")
+        defer { finishProcess(activity) }
         await gapNodes.clear()
         let detector = GapDetector()
         var found: [GapNode] = []
@@ -1880,6 +1907,8 @@ public final class AppState {
     @discardableResult
     public func scanForContradictions() async -> Int {
         guard let events, let contradictions else { return 0 }
+        let activity = beginProcess("Scanning for contradictions")
+        defer { finishProcess(activity) }
         let recent = (try? await events.recent(limit: 2_000)) ?? []
         let detector = ContradictionDetector()
         // A5.6 — date + amount detectors over the same event set.
@@ -2111,23 +2140,34 @@ public final class AppState {
         // Idempotent: clear prior milestone events first so re-runs (and the
         // auto-run at boot) never duplicate. Milestones are derived data.
         try? await events.deleteMilestoneEvents()
-        var created = 0
+
+        // Gather all object ids up front (cheap — just UUIDs) so the activity
+        // has a real total → % + ETA.
+        var allObjectIDs: [KnowledgeObject.ID] = []
         var offset = 0
         let pageSize = 500
         while true {
             let ids = (try? await objects.allIDs(offset: offset, pageSize: pageSize)) ?? []
             if ids.isEmpty { break }
-            for id in ids {
-                guard let content = try? await objects.fetchContent(id: id), !content.isEmpty else { continue }
+            allObjectIDs.append(contentsOf: ids)
+            offset += ids.count
+            if ids.count < pageSize { break }
+        }
+
+        let activity = beginProcess("Rebuilding legal milestones", total: allObjectIDs.count)
+        defer { finishProcess(activity) }
+        var created = 0
+        for (i, id) in allObjectIDs.enumerated() {
+            if let content = try? await objects.fetchContent(id: id), !content.isEmpty {
                 let milestones = PatentLegalEventExtractor.extract(text: content, sourceObjectID: id)
                 if !milestones.isEmpty {
                     try? await events.insertBatch(milestones)
                     created += milestones.count
                 }
             }
-            offset += ids.count
-            if ids.count < pageSize { break }
+            if i % 20 == 0 { updateProcess(activity, done: i + 1) }
         }
+        updateProcess(activity, done: allObjectIDs.count)
         KalsmritikoshLog.knowledge.info("Legal-milestone backfill created \(created, privacy: .public) event(s)")
         return created
     }
