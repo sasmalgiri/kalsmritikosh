@@ -25,28 +25,32 @@ public struct DocxLoader: Ingestor {
         case .odt:
             return try ingestODT(url: url, size: size)
         case .doc:
-            // Legacy binary .doc (OLE2 Compound File). Full FIB / piece-
-            // table parsing is a multi-month effort; until then the lean
-            // scanner pulls printable strings out of WordDocument /
-            // 0Table / 1Table streams. Imperfect formatting but real
-            // searchable content.
-            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .doc)
-            if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw IngestorError.empty(url)
-            }
+            // Phase 2 — legacy binary .doc (OLE2 / [MS-DOC]). Reconstruct real
+            // text via DocStructuralParser (FIB + piece table); the same parser
+            // runs again in the structural pass to persist typed blocks that
+            // drive evidence-first chunking. Never DROP an unreadable legacy
+            // file (audit: partial, not silently dropped) — produce a KO tagged
+            // with the extraction status so it ingests and stays visible.
+            let data = (try? Data(contentsOf: url, options: .mappedIfSafe)) ?? Data()
+            let parsed = try? await DocStructuralParser().parse(
+                data: data, filename: url.lastPathComponent, type: .doc,
+                logicalSourceID: UUID(), sourceVersionID: UUID())
+            let text = (parsed?.blocks.map(\.rawText).joined(separator: "\n") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let status = parsed?.extractionStatus ?? .empty
+            let partial = status != .complete
             return KnowledgeObject(
                 sourceFile: url,
                 sourceType: .doc,
-                content: extraction.text,
+                content: text,
                 metadata: [
                     "filename": AnyCodable(.string(url.lastPathComponent)),
                     "binarySize": AnyCodable(.int(size)),
-                    "loader": AnyCodable(.string("doc-lean-ole2")),
-                    "streamsScanned": AnyCodable(.int(Int64(extraction.streamsScanned))),
-                    "bytesScanned": AnyCodable(.int(Int64(extraction.bytesScanned))),
-                    "runCount": AnyCodable(.int(Int64(extraction.runCount)))
+                    "loader": AnyCodable(.string("doc-structural")),
+                    "extractionStatus": AnyCodable(.string(status.rawValue)),
+                    "extractionPartial": AnyCodable(.bool(partial))
                 ],
-                confidence: .medium
+                confidence: text.isEmpty ? .low : (partial ? .medium : .high)
             )
         default:
             throw IngestorError.unsupportedType(type)

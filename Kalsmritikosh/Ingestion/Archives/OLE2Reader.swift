@@ -215,9 +215,14 @@ public nonisolated struct OLE2Reader: Sendable {
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\0")) ?? ""
 
                 let type = data[offset + 66]
-                let childID = Int(readInt32(data, offset: offset + 68))
-                let leftID = Int(readInt32(data, offset: offset + 72))
-                let rightID = Int(readInt32(data, offset: offset + 76))
+                // [MS-CFB] §2.6.1 directory entry layout: Left Sibling ID at
+                // +68, Right Sibling ID at +72, Child ID at +76. (These were
+                // previously read swapped — child from +68 — which made
+                // rootChildren() return nothing for standard compound files
+                // whose stream tree hangs off the Child pointer at +76.)
+                let leftID = Int(readInt32(data, offset: offset + 68))
+                let rightID = Int(readInt32(data, offset: offset + 72))
+                let childID = Int(readInt32(data, offset: offset + 76))
                 let startSector = Int(readInt32(data, offset: offset + 116))
                 let size: Int
                 if sectorSize == 4096 {

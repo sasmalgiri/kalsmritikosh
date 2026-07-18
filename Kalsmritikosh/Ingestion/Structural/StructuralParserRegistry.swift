@@ -21,6 +21,7 @@ public struct StructuralParserRegistry: Sendable {
     private static let selfContainedParsers: [StructuralParser] = [
         PlainTextStructuralParser(),
         DocxStructuralParser(),
+        DocStructuralParser(),        // Phase 2 — legacy Word 97–2003 .doc
         CSVStructuralParser(),
         XLSXStructuralParser(),
         PPTXStructuralParser(),
