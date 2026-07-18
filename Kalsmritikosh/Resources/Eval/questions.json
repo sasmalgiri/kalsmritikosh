@@ -28,6 +28,83 @@
     "expectedSourceFiles": ["invoice-401.eml"]
   },
   {
+    "id": "L5",
+    "text": "What is the total contract value for Project Delta?",
+    "class": "lookup",
+    "expectedKeywords": ["1,800,000"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L6",
+    "text": "What drawing revision must the turbine blade assemblies meet?",
+    "class": "lookup",
+    "expectedKeywords": ["r3"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L7",
+    "text": "How many turbine blade assemblies does the Project Delta contract cover?",
+    "class": "lookup",
+    "expectedKeywords": ["24"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L8",
+    "text": "Who signed the Project Delta contract for Northwind?",
+    "class": "lookup",
+    "expectedKeywords": ["carter"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L9",
+    "text": "Who signed the Project Delta contract for Supplier ABC?",
+    "class": "lookup",
+    "expectedKeywords": ["lopez"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "L10",
+    "text": "What is the effective date of amendment 7?",
+    "class": "lookup",
+    "expectedKeywords": ["may"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "L11",
+    "text": "What is the amount due on invoice 432?",
+    "class": "lookup",
+    "expectedKeywords": ["540,000"],
+    "expectedSourceFiles": ["invoice-432.eml"]
+  },
+  {
+    "id": "L12",
+    "text": "What is the wire transfer reference for the invoice 401 payment?",
+    "class": "lookup",
+    "expectedKeywords": ["nw-pay-882"],
+    "expectedSourceFiles": ["invoice-401.eml"]
+  },
+  {
+    "id": "L13",
+    "text": "What liquidated damages amount is specified in amendment 7?",
+    "class": "lookup",
+    "expectedKeywords": ["25,000"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "L14",
+    "text": "What is the revised first-lot delivery date in amendment 7?",
+    "class": "lookup",
+    "expectedKeywords": ["2024-05-28"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "L15",
+    "text": "Who is the client named in the Project Delta contract?",
+    "class": "lookup",
+    "expectedKeywords": ["northwind"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
     "id": "A1",
     "text": "What is the total of all issued invoices?",
     "class": "aggregation",
@@ -70,6 +147,87 @@
     ]
   },
   {
+    "id": "A5",
+    "text": "What is the combined amount of the two milestone invoices?",
+    "class": "aggregation",
+    "expectedKeywords": ["540,000"],
+    "expectedSourceFiles": ["invoice-401.eml", "invoice-432.eml"]
+  },
+  {
+    "id": "A6",
+    "text": "How many turbine blade assemblies are in the second lot?",
+    "class": "aggregation",
+    "expectedKeywords": ["16"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "A7",
+    "text": "List the two rescheduled delivery dates set in amendment 7.",
+    "class": "aggregation",
+    "expectedKeywords": ["2024-05-28", "2024-08-15"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "A8",
+    "text": "How many invoices were issued for Project Delta?",
+    "class": "aggregation",
+    "expectedKeywords": ["invoice"],
+    "expectedSourceFiles": ["invoice-401.eml", "invoice-432.eml"]
+  },
+  {
+    "id": "A9",
+    "text": "What are the three payment installments in the Project Delta contract?",
+    "class": "aggregation",
+    "expectedKeywords": ["30"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "A10",
+    "text": "Which invoices remain unpaid?",
+    "class": "aggregation",
+    "expectedKeywords": ["432"],
+    "expectedSourceFiles": ["invoice-432.eml"]
+  },
+  {
+    "id": "A11",
+    "text": "How many emails did Maria Lopez send about the first-lot delay?",
+    "class": "aggregation",
+    "expectedKeywords": ["lopez"],
+    "expectedSourceFiles": ["supplier_abc_22.eml", "supplier_abc_23.eml"]
+  },
+  {
+    "id": "A12",
+    "text": "List every person who signed a Project Delta document.",
+    "class": "aggregation",
+    "expectedKeywords": ["carter", "lopez"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "A13",
+    "text": "What is the total number of turbine blade assemblies across both lots?",
+    "class": "aggregation",
+    "expectedKeywords": ["24"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "A14",
+    "text": "Which documents mention material certification issues?",
+    "class": "aggregation",
+    "expectedKeywords": ["certification"],
+    "expectedSourceFiles": [
+      "supplier_abc_22.eml",
+      "supplier_abc_23.eml",
+      "amendment-7.md"
+    ]
+  },
+  {
+    "id": "A15",
+    "text": "How many weeks of schedule slippage are reported for Project Delta?",
+    "class": "aggregation",
+    "expectedKeywords": ["slippage"],
+    "expectedSourceFiles": ["invoice-432.eml", "supplier_abc_25.eml"]
+  },
+  {
     "id": "T1",
     "text": "What changed between week 22 and week 25 of Project Delta?",
     "class": "temporal",
@@ -86,7 +244,7 @@
     "text": "When did Supplier ABC first report a delay?",
     "class": "temporal",
     "expectedKeywords": ["delay"],
-    "expectedSourceFiles": ["supplier_abc_24.eml"]
+    "expectedSourceFiles": ["supplier_abc_22.eml"]
   },
   {
     "id": "T3",
@@ -104,6 +262,83 @@
       "supplier_abc_24.eml",
       "supplier_abc_25.eml"
     ]
+  },
+  {
+    "id": "T5",
+    "text": "When was the Project Delta contract signed?",
+    "class": "temporal",
+    "expectedKeywords": ["january"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "T6",
+    "text": "When was invoice 401 paid?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-02-19"],
+    "expectedSourceFiles": ["invoice-401.eml"]
+  },
+  {
+    "id": "T7",
+    "text": "When was amendment 7 approved?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-05-02"],
+    "expectedSourceFiles": ["amendment-7.md", "supplier_abc_25.eml"]
+  },
+  {
+    "id": "T8",
+    "text": "What was the original first-lot delivery date before any amendment?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-04-15"],
+    "expectedSourceFiles": ["contract.md"]
+  },
+  {
+    "id": "T9",
+    "text": "When did Maria Lopez first raise the material certification delay?",
+    "class": "temporal",
+    "expectedKeywords": ["april"],
+    "expectedSourceFiles": ["supplier_abc_22.eml"]
+  },
+  {
+    "id": "T10",
+    "text": "How long did Northwind estimate the amendment approval would take?",
+    "class": "temporal",
+    "expectedKeywords": ["weeks"],
+    "expectedSourceFiles": ["supplier_abc_24.eml"]
+  },
+  {
+    "id": "T11",
+    "text": "By what date was invoice 432 overdue?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-06-29"],
+    "expectedSourceFiles": ["invoice-432.eml", "supplier_abc_25.eml"]
+  },
+  {
+    "id": "T12",
+    "text": "What is the sequence of delivery-date changes for the first lot?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-05-28"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "T13",
+    "text": "When was the Project Delta weekly status digest issued?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-05-24"],
+    "expectedSourceFiles": ["supplier_abc_25.eml"]
+  },
+  {
+    "id": "T14",
+    "text": "When was invoice 432 issued?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-05-30"],
+    "expectedSourceFiles": ["invoice-432.eml", "supplier_abc_25.eml"]
+  },
+  {
+    "id": "T15",
+    "text": "What is the revised delivery date for the remaining 16 units?",
+    "class": "temporal",
+    "expectedKeywords": ["2024-08-15"],
+    "expectedSourceFiles": ["amendment-7.md"]
   },
   {
     "id": "M1",
@@ -145,5 +380,86 @@
       "contract.md",
       "amendment-7.md"
     ]
+  },
+  {
+    "id": "M5",
+    "text": "Why was the amendment approval delayed on Northwind's side?",
+    "class": "multihop",
+    "expectedKeywords": ["review"],
+    "expectedSourceFiles": ["amendment-7.md", "supplier_abc_24.eml"]
+  },
+  {
+    "id": "M6",
+    "text": "Trace how the titanium vendor's delay led to the contract amendment.",
+    "class": "multihop",
+    "expectedKeywords": ["titanium", "amendment"],
+    "expectedSourceFiles": [
+      "supplier_abc_22.eml",
+      "supplier_abc_23.eml",
+      "amendment-7.md"
+    ]
+  },
+  {
+    "id": "M7",
+    "text": "Connect the first-lot delivery slip to the overdue invoice.",
+    "class": "multihop",
+    "expectedKeywords": ["delivery", "invoice"],
+    "expectedSourceFiles": ["amendment-7.md", "invoice-432.eml"]
+  },
+  {
+    "id": "M8",
+    "text": "Who signed both the contract and amendment 7, and what changed between them?",
+    "class": "multihop",
+    "expectedKeywords": ["carter", "lopez"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "M9",
+    "text": "How did the first-lot delivery date change from the contract to the final schedule?",
+    "class": "multihop",
+    "expectedKeywords": ["2024-04-15", "2024-05-28"],
+    "expectedSourceFiles": ["contract.md", "amendment-7.md"]
+  },
+  {
+    "id": "M10",
+    "text": "What was the financial impact of the delivery delay on Project Delta?",
+    "class": "multihop",
+    "expectedKeywords": ["invoice", "delay"],
+    "expectedSourceFiles": ["invoice-432.eml", "supplier_abc_25.eml"]
+  },
+  {
+    "id": "M11",
+    "text": "Link the material certification delay to the revised first-lot date.",
+    "class": "multihop",
+    "expectedKeywords": ["certification"],
+    "expectedSourceFiles": ["supplier_abc_23.eml", "amendment-7.md"]
+  },
+  {
+    "id": "M12",
+    "text": "Trace the escalation from Maria Lopez's first delay notice to the program-office status digest.",
+    "class": "multihop",
+    "expectedKeywords": ["delay"],
+    "expectedSourceFiles": ["supplier_abc_22.eml", "supplier_abc_25.eml"]
+  },
+  {
+    "id": "M13",
+    "text": "How does the waiver of liquidated damages relate to the first-lot delay?",
+    "class": "multihop",
+    "expectedKeywords": ["25,000"],
+    "expectedSourceFiles": ["amendment-7.md"]
+  },
+  {
+    "id": "M14",
+    "text": "Connect invoice 401's payment to the contract's installment schedule.",
+    "class": "multihop",
+    "expectedKeywords": ["540,000"],
+    "expectedSourceFiles": ["invoice-401.eml", "contract.md"]
+  },
+  {
+    "id": "M15",
+    "text": "Why is Project Delta's status amber in the weekly digest?",
+    "class": "multihop",
+    "expectedKeywords": ["amber"],
+    "expectedSourceFiles": ["supplier_abc_25.eml", "invoice-432.eml"]
   }
 ]

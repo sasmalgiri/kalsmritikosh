@@ -132,24 +132,55 @@ public struct EvalKitRunner {
         outputDir: URL? = nil
     ) async throws -> URL {
         let questions = try loadQuestions()
+        let (byClass, perQuestion) = await score(questions: questions, brain: brain, objects: objects)
+        let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("eval-report.md", isDirectory: false)
+        try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
+        KalsmritikoshLog.app.info("EvalKit wrote \(reportURL.path, privacy: .public)")
+        return reportURL
+    }
+
+    /// Same as `run`, but also returns the per-class metrics so a caller
+    /// (Gate1Baseline) can apply the GoldEvalGate regression check. The
+    /// report is still written for humans.
+    @MainActor
+    public func runWithMetrics(
+        brain: MasterBrain,
+        objects: KnowledgeObjectRepository,
+        outputDir: URL? = nil
+    ) async throws -> (reportURL: URL, byClass: [String: ClassMetrics]) {
+        let questions = try loadQuestions()
+        let (byClass, perQuestion) = await score(questions: questions, brain: brain, objects: objects)
+        let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("eval-report.md", isDirectory: false)
+        try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
+        KalsmritikoshLog.app.info("EvalKit (with metrics) wrote \(reportURL.path, privacy: .public)")
+        return (reportURL, byClass)
+    }
+
+    /// The shared scoring loop used by `run`, `runWithMetrics`, and
+    /// `runSubset`. Walks each question through the brain and accumulates
+    /// per-class metrics + per-question diagnostic rows.
+    @MainActor
+    private func score(
+        questions: [Question],
+        brain: MasterBrain,
+        objects: KnowledgeObjectRepository
+    ) async -> ([String: ClassMetrics], [PerQuestionRecord]) {
         var byClass: [String: ClassMetrics] = [:]
         var perQuestion: [PerQuestionRecord] = []
-        for q in questions {
-            if byClass[q.class] == nil {
-                byClass[q.class] = ClassMetrics(className: q.class)
-            }
+        for q in questions where byClass[q.class] == nil {
+            byClass[q.class] = ClassMetrics(className: q.class)
         }
-
         for q in questions {
             // G2-1.5 — eval questions are independent. Without this
             // reset the in-memory SessionProfile accumulates entities
-            // across all 16 turns, and by question N the reranker
-            // prompt's MENTIONED THIS SESSION line is polluted with
-            // entities from prior unrelated questions — driving
-            // multihop recall down because the model anchors on the
-            // wrong context. Real users keep the session for legitimate
-            // follow-ups; the eval harness is the only caller that
-            // resets per-question.
+            // across all turns, and by question N the reranker prompt's
+            // MENTIONED THIS SESSION line is polluted with entities from
+            // prior unrelated questions — driving multihop recall down
+            // because the model anchors on the wrong context. Real users
+            // keep the session for legitimate follow-ups; the eval
+            // harness is the only caller that resets per-question.
             await brain.resetSession()
             let started = Date()
             let answer = await brain.answer(question: q.text)
@@ -157,9 +188,9 @@ public struct EvalKitRunner {
             // UPDATE_13 Item 4 — keyword-hit must score against the
             // synthesized answer text only, not the full body. Otherwise
             // an expected name surviving in the "Subjects in scope"
-            // footer satisfies the metric while the system never
-            // actually answered the question. answerText is the post-
-            // UPDATE_13 path; body is the legacy/refusal path.
+            // footer satisfies the metric while the system never actually
+            // answered the question. answerText is the post-UPDATE_13
+            // path; body is the legacy/refusal path.
             let scoringText = (answer.answerText ?? answer.body).lowercased()
             let keywordHit = q.expectedKeywords.allSatisfy {
                 scoringText.contains($0.lowercased())
@@ -201,12 +232,7 @@ public struct EvalKitRunner {
                 walkStepCount: walkStepCount
             ))
         }
-
-        let reportURL = (outputDir ?? FileManager.default.temporaryDirectory)
-            .appendingPathComponent("eval-report.md", isDirectory: false)
-        try renderReport(byClass: byClass, perQuestion: perQuestion, to: reportURL)
-        KalsmritikoshLog.app.info("EvalKit wrote \(reportURL.path, privacy: .public)")
-        return reportURL
+        return (byClass, perQuestion)
     }
 
     /// Fast Eval — same scoring as `run`, but limited to a chosen subset
