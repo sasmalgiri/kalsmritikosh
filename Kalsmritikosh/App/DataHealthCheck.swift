@@ -41,7 +41,9 @@ public enum DataHealthCheck {
         let mentionCount = await scalarCount(database, "SELECT COUNT(*) FROM entity_mentions;")
         let eventCount = (try? await state.events?.count()) ?? 0
         let chunkCount = await scalarCount(database, "SELECT COUNT(*) FROM chunks;")
-        let vectorCount = await scalarCount(database, "SELECT COUNT(*) FROM vectors;")
+        // v54 — vectors now live in chunk_embeddings (model-aware); count
+        // distinct embedded chunks so the metric keeps meaning "chunks embedded".
+        let vectorCount = await scalarCount(database, "SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings;")
         let relationshipCount = (try? await state.relationships?.count()) ?? 0
         let bondCount = (try? await state.factBonds?.count()) ?? 0
         let memoryCount = (try? await state.memoryRepo?.count()) ?? 0
@@ -75,7 +77,7 @@ public enum DataHealthCheck {
         let koNoVectors = await scalarCount(database, """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (
-          SELECT 1 FROM chunks c JOIN vectors v ON v.chunk_id = c.id
+          SELECT 1 FROM chunks c JOIN chunk_embeddings v ON v.chunk_id = c.id
           WHERE c.object_id = k.id
         );
         """)

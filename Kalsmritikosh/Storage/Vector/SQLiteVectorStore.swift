@@ -22,15 +22,28 @@ public actor SQLiteVectorStore: VectorStore {
     /// every cold boot.
     private let annIndex: HNSWVectorIndex?
 
+    /// v54 — the model whose rows in `chunk_embeddings` this store owns. All
+    /// reads/writes are scoped `WHERE model_id = <this>` so an Apple index and
+    /// a quality index coexist without overwriting each other.
+    public nonisolated let embeddingModelID: String
+    private nonisolated let embeddingModelVersion: String
+
     /// Soft cap. Beyond this row count we still scan, but log a Gate 3
     /// reminder so latency regressions are visible. `nonisolated` so the
     /// actor's own `nearest` (running on the actor) can read it without
     /// hopping back through MainActor isolation.
     public nonisolated static let bruteForceWarnAt = 2_000_000
 
-    public init(database: Database, annIndex: HNSWVectorIndex? = nil) {
+    public init(
+        database: Database,
+        annIndex: HNSWVectorIndex? = nil,
+        modelID: String = "apple.nl.v1",
+        modelVersion: String = "1"
+    ) {
         self.database = database
         self.annIndex = annIndex
+        self.embeddingModelID = modelID
+        self.embeddingModelVersion = modelVersion
     }
 
     /// Public so HNSWVectorIndex.build can page through. Each row carries
@@ -45,17 +58,21 @@ public actor SQLiteVectorStore: VectorStore {
     /// load-from-disk validation to decide whether a persisted index
     /// is still in sync with the ledger.
     public func count() async throws -> Int {
-        let rows = try await database.query("SELECT COUNT(*) FROM vectors;")
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;",
+            [.text(embeddingModelID)]
+        )
         return Int(rows.first?.int(0) ?? 0)
     }
 
     /// Paged enumeration of every vector row. Used by HNSW build.
     public func listAll(offset: Int = 0, pageSize: Int = 5_000) async throws -> [RawVector] {
         let rows = try await database.query("""
-        SELECT chunk_id, q, scale FROM vectors
+        SELECT chunk_id, q, scale FROM chunk_embeddings
+        WHERE model_id = ?
         ORDER BY chunk_id ASC
         LIMIT ? OFFSET ?;
-        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        """, [.text(embeddingModelID), .integer(Int64(pageSize)), .integer(Int64(offset))])
         var out: [RawVector] = []
         for row in rows {
             guard let cid = row.uuid(0),
@@ -72,17 +89,22 @@ public actor SQLiteVectorStore: VectorStore {
         guard !embedding.isEmpty else { return }
         let (qBlob, scale) = quantize(embedding)
         try await database.exec("""
-        INSERT INTO vectors (chunk_id, dim, q, scale)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(chunk_id) DO UPDATE SET
+        INSERT INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(chunk_id, model_id) DO UPDATE SET
+            model_version = excluded.model_version,
             dim = excluded.dim,
             q = excluded.q,
-            scale = excluded.scale;
+            scale = excluded.scale,
+            created_at = excluded.created_at;
         """, [
             .uuid(chunkID),
+            .text(embeddingModelID),
+            .text(embeddingModelVersion),
             .integer(Int64(embedding.count)),
             .blob(qBlob),
-            .real(scale)
+            .real(scale),
+            .date(Date())
         ])
     }
 
@@ -117,15 +139,17 @@ public actor SQLiteVectorStore: VectorStore {
             if candidates.isEmpty { return [] }
             // Bounded by the caller's candidate set — a single query is fine.
             let placeholders = Array(repeating: "?", count: candidates.count).joined(separator: ",")
-            let sql = "SELECT chunk_id, dim, q, scale FROM vectors WHERE chunk_id IN (\(placeholders));"
-            let rows = try await database.query(sql, candidates.map { SQLValue.uuid($0) })
+            let sql = "SELECT chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ? AND chunk_id IN (\(placeholders));"
+            let rows = try await database.query(sql, [.text(embeddingModelID)] + candidates.map { SQLValue.uuid($0) })
             for row in rows {
                 if let hit = score(row: row, col: 0, qBytes: qBytes, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
                     top.offer(hit.0, hit.1)
                 }
             }
         } else {
-            let totalRows = try await database.query("SELECT COUNT(*) FROM vectors;", [])
+            let totalRows = try await database.query(
+                "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;", [.text(embeddingModelID)]
+            )
             let total = Int(totalRows.first?.int(0) ?? 0)
             if total > Self.bruteForceWarnAt {
                 KalsmritikoshLog.storage.warning("ANN required — Gate 3 (vector corpus = \(total, privacy: .public))")
@@ -137,8 +161,8 @@ public actor SQLiteVectorStore: VectorStore {
             var lastRowID: Int64 = 0
             while true {
                 let rows = try await database.query(
-                    "SELECT rowid, chunk_id, dim, q, scale FROM vectors WHERE rowid > ? ORDER BY rowid LIMIT ?;",
-                    [.integer(lastRowID), .integer(Int64(pageSize))]
+                    "SELECT rowid, chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ? AND rowid > ? ORDER BY rowid LIMIT ?;",
+                    [.text(embeddingModelID), .integer(lastRowID), .integer(Int64(pageSize))]
                 )
                 if rows.isEmpty { break }
                 for row in rows {
@@ -182,7 +206,12 @@ public actor SQLiteVectorStore: VectorStore {
     }
 
     public func remove(chunkID: Chunk.ID) async throws {
-        try await database.exec("DELETE FROM vectors WHERE chunk_id = ?;", [.uuid(chunkID)])
+        // Remove this model's embedding for the chunk. (Chunk deletion itself
+        // cascades all models via the FK.)
+        try await database.exec(
+            "DELETE FROM chunk_embeddings WHERE chunk_id = ? AND model_id = ?;",
+            [.uuid(chunkID), .text(embeddingModelID)]
+        )
     }
 
     // MARK: - Quantization

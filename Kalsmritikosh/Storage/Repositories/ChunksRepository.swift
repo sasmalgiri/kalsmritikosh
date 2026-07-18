@@ -57,27 +57,31 @@ public actor ChunksRepository {
     /// background embedding backfill: it survives restarts (a chunk with no
     /// vector is always re-found), so deferred embeddings can never be
     /// permanently lost — only delayed.
-    public func findChunksMissingVector(limit: Int = 128) async throws -> [Chunk] {
+    /// v54 — model-aware: a chunk is "missing a vector" when it has no row in
+    /// `chunk_embeddings` for the ACTIVE model. So when a second (quality) model
+    /// is wired, its index backfills independently without disturbing the Apple
+    /// index. `modelID` must match the active vector store's `embeddingModelID`.
+    public func findChunksMissingVector(limit: Int = 128, modelID: String = "apple.nl.v1") async throws -> [Chunk] {
         let rows = try await database.query("""
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source
         FROM chunks c
-        LEFT JOIN vectors v ON v.chunk_id = c.id
-        WHERE v.chunk_id IS NULL
+        LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
+        WHERE ce.chunk_id IS NULL
           AND c.admit_embedding = 1
         ORDER BY c.created_at DESC
         LIMIT ?;
-        """, [.integer(Int64(limit))])
+        """, [.text(modelID), .integer(Int64(limit))])
         return rows.compactMap(decode)
     }
 
-    /// PERF.1 — count of chunks awaiting embedding (Settings / diagnostics).
-    public func countChunksMissingVector() async throws -> Int {
+    /// PERF.1 — count of chunks awaiting embedding for the active model.
+    public func countChunksMissingVector(modelID: String = "apple.nl.v1") async throws -> Int {
         let rows = try await database.query("""
         SELECT COUNT(*) FROM chunks c
-        LEFT JOIN vectors v ON v.chunk_id = c.id
-        WHERE v.chunk_id IS NULL
+        LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
+        WHERE ce.chunk_id IS NULL
           AND c.admit_embedding = 1;
-        """, [])
+        """, [.text(modelID)])
         return Int(rows.first?.int(0) ?? 0)
     }
 

@@ -2544,7 +2544,7 @@ public final class AppState {
         SELECT (SELECT COUNT(*) FROM files),
                (SELECT COUNT(*) FROM files WHERE ingested_at IS NOT NULL),
                (SELECT COUNT(*) FROM chunks WHERE admit_embedding = 1),
-               (SELECT COUNT(*) FROM vectors);
+               (SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings);
         """, [])) ?? []
         guard let r = rows.first else { return IngestProgress() }
         return IngestProgress(

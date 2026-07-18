@@ -222,8 +222,9 @@ public actor IngestCoordinator {
         // launch (or a better embedder) retries from scratch — nothing is lost,
         // and these chunks stay fully searchable via FTS + structure.
         var unembeddable = Set<Chunk.ID>()
+        let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
-            let fetched = (try? await chunks.findChunksMissingVector(limit: 256)) ?? []
+            let fetched = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
             let batch = fetched.filter { !unembeddable.contains($0.id) }
             if batch.isEmpty {
                 // Fully drained, or everything still missing is known-unembeddable.
@@ -258,8 +259,9 @@ public actor IngestCoordinator {
     /// production relies on the background drain instead. Safe to call anytime.
     public func drainEmbeddingsNow() async {
         guard let embedder, let vectors else { return }
+        let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
-            let batch = (try? await chunks.findChunksMissingVector(limit: 256)) ?? []
+            let batch = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
             if batch.isEmpty { break }
             let texts: [String] = batch.map { c in
                 if let p = c.contextPrefix, !p.isEmpty { return "\(p)\n---\n\(c.text)" }

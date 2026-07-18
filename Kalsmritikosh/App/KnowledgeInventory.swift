@@ -106,7 +106,7 @@ public enum KnowledgeInventory {
             // Chunks count
             let chunkCount = await scalar(database, "SELECT COUNT(*) FROM chunks WHERE object_id = ?;", [.uuid(koID)])
             let vectorCount = await scalar(database, """
-            SELECT COUNT(*) FROM vectors v
+            SELECT COUNT(DISTINCT v.chunk_id) FROM chunk_embeddings v
             JOIN chunks c ON c.id = v.chunk_id
             WHERE c.object_id = ?;
             """, [.uuid(koID)])

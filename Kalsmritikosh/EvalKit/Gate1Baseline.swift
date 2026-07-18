@@ -472,7 +472,7 @@ public enum Gate1Baseline {
             FROM files f
             LEFT JOIN knowledge_objects k ON k.file_id = f.id
             LEFT JOIN chunks c ON c.object_id = k.id
-            LEFT JOIN vectors v ON v.chunk_id = c.id
+            LEFT JOIN chunk_embeddings v ON v.chunk_id = c.id
             GROUP BY f.id, f.url
             ORDER BY f.url;
             """, [])
