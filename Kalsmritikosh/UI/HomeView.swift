@@ -212,10 +212,22 @@ public struct HomeView: View {
 
     private func personaCard(_ p: GuidePersona) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                Text(p.emoji).font(.system(size: 26))
-                Text(p.title).font(.title3.weight(.semibold))
+            // Tap the header to make this your focus (drives the workbench + the
+            // "For you" sidebar). Was display-only before.
+            Button {
+                withAnimation(Theme.springFast) { personaID = p.id }
+            } label: {
+                HStack(spacing: 10) {
+                    Text(p.emoji).font(.system(size: 26))
+                    Text(p.title).font(.title3.weight(.semibold))
+                    Spacer(minLength: 0)
+                    Image(systemName: "checkmark.circle")
+                        .foregroundStyle(Theme.brand)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help("Focus the app on this role")
             Text(p.tagline)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -264,6 +276,19 @@ public struct HomeView: View {
                     .buttonStyle(.plain)
                 }
             }
+
+            Divider()
+
+            // Primary action — the clear way to pick this persona.
+            Button {
+                withAnimation(Theme.springFast) { personaID = p.id }
+            } label: {
+                Label("Choose this focus", systemImage: "checkmark.seal")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.brand)
+            .controlSize(.small)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
