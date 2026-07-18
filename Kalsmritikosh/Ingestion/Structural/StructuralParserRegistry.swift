@@ -24,6 +24,7 @@ public struct StructuralParserRegistry: Sendable {
         DocStructuralParser(),        // Phase 2 — legacy Word 97–2003 .doc
         CSVStructuralParser(),
         XLSXStructuralParser(),
+        XlsStructuralParser(),        // Phase 2 — legacy Excel 97–2003 .xls (BIFF8)
         PPTXStructuralParser(),
         EPUBStructuralParser(),
         RTFStructuralParser(),

@@ -25,29 +25,33 @@ public struct SpreadsheetLoader: Ingestor {
         case .ods:
             return try ingestODS(at: url)
         case .xls:
-            // Legacy .xls (BIFF8 / OLE2). Full BIFF-record parsing
-            // would be ideal, but the lean scanner over Workbook +
-            // SST streams recovers cell text + sheet names well
-            // enough for FTS and entity extraction.
-            let extraction = try LegacyOfficeScanner.extractText(at: url, kind: .xls)
-            if extraction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                throw IngestorError.empty(url)
-            }
+            // Phase 2 — legacy .xls (BIFF8 / OLE2). Reconstruct real sheets/rows/
+            // cells via XlsStructuralParser; the same parser runs again in the
+            // structural pass to persist typed blocks that drive evidence-first
+            // chunking. Never DROP an unreadable legacy file (audit: partial, not
+            // dropped) — produce a KO tagged with the extraction status.
             let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
             let size = (attrs[.size] as? Int64) ?? 0
+            let data = (try? Data(contentsOf: url, options: .mappedIfSafe)) ?? Data()
+            let parsed = try? await XlsStructuralParser().parse(
+                data: data, filename: url.lastPathComponent, type: .xls,
+                logicalSourceID: UUID(), sourceVersionID: UUID())
+            let text = (parsed?.blocks.map(\.rawText).joined(separator: "\n") ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let statusStr = (parsed?.extractionStatus ?? .empty).rawValue
+            let partial = (parsed?.extractionStatus ?? .empty) != .complete
             return KnowledgeObject(
                 sourceFile: url,
                 sourceType: .xls,
-                content: extraction.text,
+                content: text,
                 metadata: [
                     "filename": AnyCodable(.string(url.lastPathComponent)),
                     "binarySize": AnyCodable(.int(size)),
-                    "loader": AnyCodable(.string("xls-lean-ole2")),
-                    "streamsScanned": AnyCodable(.int(Int64(extraction.streamsScanned))),
-                    "bytesScanned": AnyCodable(.int(Int64(extraction.bytesScanned))),
-                    "runCount": AnyCodable(.int(Int64(extraction.runCount)))
+                    "loader": AnyCodable(.string("xls-structural")),
+                    "extractionStatus": AnyCodable(.string(statusStr)),
+                    "extractionPartial": AnyCodable(.bool(partial))
                 ],
-                confidence: .medium
+                confidence: text.isEmpty ? .low : (partial ? .medium : .high)
             )
         default:
             throw IngestorError.unsupportedType(type)
