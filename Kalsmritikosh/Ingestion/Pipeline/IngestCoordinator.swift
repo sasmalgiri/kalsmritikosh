@@ -301,6 +301,24 @@ public actor IngestCoordinator {
         }
     }
 
+    /// v54 MBOX lineage — the structural blocks that belong to ONE
+    /// KnowledgeObject. For a single-KO file that's the whole document. For a
+    /// multi-KO file (mbox → one KO per message) it's the blocks the parser
+    /// stamped with the same `messageIndex` the loader put on the KO, so a
+    /// message's chunks/events/entities link only to that message's blocks. If
+    /// the two splitters disagree (no match), returns [] and the caller falls
+    /// back to content chunking — degrade, never cross-link.
+    private nonisolated static func blocks(
+        for ko: KnowledgeObject, from all: [EvidenceBlock], singleKO: Bool
+    ) -> [EvidenceBlock] {
+        if singleKO { return all }
+        guard case .int(let idx)? = ko.metadata["messageIndex"]?.value else { return [] }
+        return all.filter {
+            if case .int(let bi)? = $0.attributes["messageIndex"]?.value { return bi == idx }
+            return false
+        }
+    }
+
     /// The result of parsing a file's structural document once, before both
     /// extraction (which links events to blocks) and persistence.
     private struct StructuralParse: Sendable {
@@ -654,12 +672,14 @@ public actor IngestCoordinator {
         // A5.3 / A2 parse-once — parse the structural document a SINGLE time
         // here (past all the skip/alias/move early returns, so only real
         // ingests reach it). The same ParsedDocument feeds event extraction
-        // (so events link to specific source blocks) AND is persisted below, so
-        // event.sourceBlockIDs resolve to real persisted blocks. Blocks are fed
-        // to the extractor for single-KO files only, so mbox messages don't
-        // cross-link; multi-KO files still get their blocks persisted.
+        // (so events link to specific source blocks) AND is persisted below.
+        // v54 MBOX lineage — a multi-KO (mbox) file's blocks all live in one
+        // ParsedDocument stamped per-message with messageIndex; each message-KO
+        // now receives ITS OWN blocks (matched by messageIndex) so its chunks/
+        // events/entities link to that message's blocks, never cross-linking.
         let structural = await parseStructuralOnce(url: url, type: type, fileID: fileRecord.id)
-        let blocksForExtraction = perFileKOs.count == 1 ? (structural?.doc.blocks ?? []) : []
+        let allBlocks = structural?.doc.blocks ?? []
+        let singleKO = perFileKOs.count == 1
 
         var totalChunks = 0
         var totalEntities = 0
@@ -669,11 +689,12 @@ public actor IngestCoordinator {
 
         for rawKO in perFileKOs {
             do {
+                let koBlocks = Self.blocks(for: rawKO, from: allBlocks, singleKO: singleKO)
                 let processed = try await processKnowledgeObject(
                     rawKO,
                     fileID: fileRecord.id,
                     documentClass: docClass,
-                    blocks: blocksForExtraction
+                    blocks: koBlocks
                 )
                 totalChunks += processed.chunkCount
                 totalEntities += processed.entityCount
