@@ -26,7 +26,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case home
     case ask, search
     case workspaces
-    case timeline, history, findings, notebook, dossier, explore, matrix, connections
+    case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
     case review
     case transcripts
     case insights, changes
@@ -50,6 +50,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "Explore"
         case .matrix:       return "Cross-Doc Matrix"
         case .connections:  return "Connections"
+        case .story:        return "Case Story"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
@@ -84,6 +85,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "point.3.connected.trianglepath.dotted"
         case .matrix:       return "square.grid.3x3.topleft.filled"
         case .connections:  return "point.topleft.down.to.point.bottomright.curvepath"
+        case .story:        return "book.pages"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
@@ -134,6 +136,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "Entity graph — see who and what connects"
         case .matrix:       return "Ask one question across every document — what each source says, cited"
         case .connections:  return "Find the shortest chain of relationships linking two people or organizations"
+        case .story:        return "The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
@@ -166,7 +169,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search]
-            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .matrix, .connections, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
@@ -813,6 +816,7 @@ public struct RootView: View {
         case .explore:      ExplorerView()
         case .matrix:       CrossDocumentMatrixView()
         case .connections:  ConnectionFinderView()
+        case .story:        CaseStoryView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()

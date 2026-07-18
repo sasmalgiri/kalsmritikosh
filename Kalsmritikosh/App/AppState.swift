@@ -2010,6 +2010,83 @@ public final class AppState {
         return ResolvedConnection(nodes: nodes, hops: resolvedHops)
     }
 
+    /// "The whole story of X, in one cited file." Assembles a chronological,
+    /// source-cited dossier for a subject (a patent number, person, project…)
+    /// from the ledger: overview passages, parties, dated timeline, key clauses,
+    /// roadblocks (contradictions), and gaps. Deterministic; every line cites a
+    /// source. Returns nil when nothing matches. Renders markdown for export.
+    public func subjectDossier(term rawTerm: String) async -> String? {
+        let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else { return nil }
+        let lower = term.lowercased()
+        var input = SubjectDossierInput(subject: term)
+        var filenames: Set<String> = []
+
+        // 1. Matching passages → overview + clause-flavored terms.
+        let hits = (try? await chunks?.searchFTS(term, limit: 40)) ?? []
+        let koIDs = Array(Set(hits.map(\.objectID)))
+        let names = (try? await objects?.sourceFilenames(for: Set(koIDs))) ?? [:]
+        func fn(_ id: KnowledgeObject.ID) -> String { names[id] ?? "source \(id.uuidString.prefix(8))" }
+        let clauseTerms = ["clause", "grant", "claim", "right", "licen", "provision", "royalt", "assign", "term"]
+        for c in hits {
+            let f = fn(c.objectID); filenames.insert(f)
+            let p = SubjectDossierInput.Passage(text: c.text, filename: f)
+            let lc = c.text.lowercased()
+            if clauseTerms.contains(where: { lc.contains($0) }), input.clauses.count < 8 {
+                input.clauses.append(p)
+            } else if input.overview.count < 6 {
+                input.overview.append(p)
+            }
+        }
+
+        // 2. Parties — entities appearing in the matched source documents.
+        if let entities, !koIDs.isEmpty {
+            let ents = (try? await entities.findInObjects(koIDs, limit: 40)) ?? []
+            input.parties = ents.map(\.0)
+                .filter { [.person, .organization, .vendor, .client].contains($0.kind) }
+                .prefix(15).map(\.value)
+        }
+        if input.parties.isEmpty, let entities {
+            input.parties = ((try? await entities.search(value: term, limit: 10)) ?? []).map(\.value)
+        }
+
+        // 3. Timeline — events whose title/summary mentions the term or that come
+        //    from a matched source document.
+        if let events {
+            let koSet = Set(koIDs)
+            let recent = (try? await events.recent(limit: 2_000)) ?? []
+            let matched = recent.filter { ev in
+                ev.title.lowercased().contains(lower)
+                || (ev.summary?.lowercased().contains(lower) ?? false)
+                || koSet.contains(ev.sourceObjectID)
+            }
+            let efns = (try? await events.sourceFilenames(forEventIDs: matched.map(\.id))) ?? [:]
+            for ev in matched.prefix(60) {
+                let f = efns[ev.id] ?? fn(ev.sourceObjectID); filenames.insert(f)
+                input.timeline.append(.init(
+                    date: ev.date, datePhrase: ev.datePrecision.renderPhrase(date: ev.date),
+                    title: ev.title, summary: ev.summary, filename: f
+                ))
+            }
+        }
+
+        // 4. Roadblocks + gaps mentioning the term.
+        if let contradictions {
+            input.contradictions = (await contradictions.all())
+                .filter { $0.description.lowercased().contains(lower) || $0.claimA.lowercased().contains(lower) || $0.claimB.lowercased().contains(lower) }
+                .prefix(20).map { "\($0.description) — \($0.claimA) / \($0.claimB)" }
+        }
+        if let gapNodes {
+            input.gaps = (await gapNodes.all(includeDismissed: false))
+                .filter { $0.description.lowercased().contains(lower) || $0.reason.lowercased().contains(lower) }
+                .prefix(20).map(\.description)
+        }
+        input.sourceFiles = Array(filenames)
+
+        guard !input.isEmpty else { return nil }
+        return SubjectDossier.markdown(input)
+    }
+
     /// Retrieval self-eval: recall@k measured by querying the vector index with
     /// text drawn from stored chunks and checking whether each chunk comes back.
     /// Label-free quality signal on the user's own data (not the human-labelled

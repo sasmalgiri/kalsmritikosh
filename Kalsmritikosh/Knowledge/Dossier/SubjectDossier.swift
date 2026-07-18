@@ -1,0 +1,128 @@
+//
+//  SubjectDossier.swift
+//  Kalsmritikosh
+//
+//  "Tell me the whole story of X, in one cited file." Given a subject (a patent
+//  number, a person, a project…), assemble a chronological, source-cited dossier
+//  from the ledger: overview passages, the parties involved, a dated timeline,
+//  the key clauses/terms, the roadblocks (contradictions), the gaps, and the
+//  sources — everything the app already extracted, gathered around one topic.
+//
+//  Deterministic assembly (no model): AppState gathers the matching rows; this
+//  renders them. Nothing is invented — every line traces to a source file.
+//
+
+import Foundation
+
+public struct SubjectDossierInput: Sendable {
+    public struct Passage: Sendable, Hashable {
+        public let text: String
+        public let filename: String
+        public init(text: String, filename: String) { self.text = text; self.filename = filename }
+    }
+    public struct TimelineItem: Sendable, Hashable {
+        public let date: Date?
+        public let datePhrase: String     // pre-rendered, precision-aware
+        public let title: String
+        public let summary: String?
+        public let filename: String
+        public init(date: Date?, datePhrase: String, title: String, summary: String?, filename: String) {
+            self.date = date; self.datePhrase = datePhrase; self.title = title
+            self.summary = summary; self.filename = filename
+        }
+    }
+
+    public var subject: String
+    public var overview: [Passage]
+    public var parties: [String]          // entity display names
+    public var timeline: [TimelineItem]
+    public var clauses: [Passage]         // passages matching clause/grant/claim terms
+    public var contradictions: [String]
+    public var gaps: [String]
+    public var sourceFiles: [String]
+
+    public init(
+        subject: String, overview: [Passage] = [], parties: [String] = [],
+        timeline: [TimelineItem] = [], clauses: [Passage] = [],
+        contradictions: [String] = [], gaps: [String] = [], sourceFiles: [String] = []
+    ) {
+        self.subject = subject; self.overview = overview; self.parties = parties
+        self.timeline = timeline; self.clauses = clauses
+        self.contradictions = contradictions; self.gaps = gaps; self.sourceFiles = sourceFiles
+    }
+
+    public var isEmpty: Bool {
+        overview.isEmpty && parties.isEmpty && timeline.isEmpty
+            && clauses.isEmpty && contradictions.isEmpty && gaps.isEmpty
+    }
+}
+
+public enum SubjectDossier {
+
+    /// Render the gathered material as a cited, chronological markdown dossier.
+    /// Timeline is sorted oldest→newest (undated last). Pure + deterministic.
+    public static func markdown(_ input: SubjectDossierInput) -> String {
+        var md = "# Case story: \(input.subject)\n\n"
+        md += "_Assembled from your ingested documents. Every section cites its source; "
+        md += "nothing here is generated or inferred beyond what the files state. "
+        md += "Conflicting accounts and missing evidence are shown, not hidden._\n\n"
+
+        if !input.overview.isEmpty {
+            md += "## Overview\n\n"
+            for p in input.overview { md += "- \(clip(p.text)) — *\(p.filename)*\n" }
+            md += "\n"
+        }
+        if !input.parties.isEmpty {
+            md += "## Parties involved\n\n"
+            for name in input.parties { md += "- \(name)\n" }
+            md += "\n"
+        }
+        md += "## Chronology\n\n"
+        if input.timeline.isEmpty {
+            md += "_No dated events matched this subject._\n\n"
+        } else {
+            let sorted = input.timeline.sorted { lhs, rhs in
+                switch (lhs.date, rhs.date) {
+                case let (l?, r?): return l < r
+                case (nil, _?):    return false
+                case (_?, nil):    return true
+                case (nil, nil):   return lhs.title < rhs.title
+                }
+            }
+            for item in sorted {
+                md += "- **\(item.datePhrase)** — \(item.title)"
+                if let s = item.summary, !s.isEmpty { md += ": \(clip(s))" }
+                md += " *(\(item.filename))*\n"
+            }
+            md += "\n"
+        }
+        if !input.clauses.isEmpty {
+            md += "## Key clauses / terms\n\n"
+            for p in input.clauses { md += "- \(clip(p.text)) — *\(p.filename)*\n" }
+            md += "\n"
+        }
+        if !input.contradictions.isEmpty {
+            md += "## Roadblocks & conflicts\n\n"
+            for c in input.contradictions { md += "- ⚠︎ \(clip(c))\n" }
+            md += "\n"
+        }
+        if !input.gaps.isEmpty {
+            md += "## Missing / unresolved\n\n"
+            for g in input.gaps { md += "- \(clip(g))\n" }
+            md += "\n"
+        }
+        if !input.sourceFiles.isEmpty {
+            md += "## Sources\n\n"
+            for f in input.sourceFiles.sorted() { md += "- \(f)\n" }
+            md += "\n"
+        }
+        md += "_Generated by Kalsmritikosh — on-device, evidence-first._\n"
+        return md
+    }
+
+    private static func clip(_ s: String, max: Int = 240) -> String {
+        let t = s.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count > max else { return t }
+        return String(t.prefix(max)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
