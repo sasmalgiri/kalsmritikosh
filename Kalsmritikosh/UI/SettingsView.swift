@@ -49,6 +49,8 @@ public struct SettingsView: View {
     @State private var selfEvalStatus: String?
     @State private var milestoneRunning = false
     @State private var milestoneStatus: String?
+    @State private var legacyRecoveryRunning = false
+    @State private var legacyRecoveryStatus: String?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -592,6 +594,12 @@ public struct SettingsView: View {
                 .disabled(milestoneRunning)
                 .help("Scan ingested documents for legal/patent milestones (filed, hearing, objection, granted) and add them as dated events — the story spine.")
                 if milestoneRunning { ProgressView().controlSize(.mini) }
+                Button("Recover legacy .doc/.xls") {
+                    Task { await runLegacyRecovery() }
+                }
+                .disabled(legacyRecoveryRunning)
+                .help("Re-ingest legacy Word/Excel (.doc/.xls) files that failed before the real OLE2 parsers landed. Idempotent.")
+                if legacyRecoveryRunning { ProgressView().controlSize(.mini) }
                 if let url = realDataProbeURL {
                     Button("Reveal probe") {
                         #if canImport(AppKit)
@@ -659,6 +667,13 @@ public struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let status = milestoneStatus {
+                Divider().padding(.vertical, 2)
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let status = legacyRecoveryStatus {
                 Divider().padding(.vertical, 2)
                 Text(status)
                     .font(.caption.monospaced())
@@ -735,6 +750,15 @@ public struct SettingsView: View {
         milestoneStatus = n > 0
             ? "✓ Added \(n) milestone event(s). Open Timeline or ask about the matter to see the full story."
             : "No legal/patent milestones found in the current documents."
+    }
+
+    /// Re-ingest legacy .doc/.xls files that failed before the real OLE2 parsers
+    /// landed. Idempotent + per-document atomic.
+    private func runLegacyRecovery() async {
+        legacyRecoveryRunning = true
+        legacyRecoveryStatus = "Re-ingesting legacy .doc / .xls files that failed before…"
+        defer { legacyRecoveryRunning = false }
+        legacyRecoveryStatus = await appState.recoverLegacyDocuments()
     }
 
     private func runFastEval() async {

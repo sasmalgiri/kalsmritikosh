@@ -2148,6 +2148,24 @@ public final class AppState {
     /// inserts the dated milestone events — the "story spine" for legal matters.
     /// Returns the number of milestone events created.
     @discardableResult
+    /// Phase 2 recovery — re-ingest legacy .doc/.xls files that failed before the
+    /// real OLE2 parsers landed. Returns a human-readable summary line. Reports
+    /// progress via the activity tracker.
+    public func recoverLegacyDocuments() async -> String {
+        guard let ingest else { return "Ingest not ready." }
+        let activity = beginProcess("Recovering legacy .doc / .xls")
+        defer { finishProcess(activity) }
+        let r = await ingest.reingestFailedLegacy()
+        if r.attempted == 0 && r.missing == 0 {
+            return "No previously-failed .doc/.xls files found."
+        }
+        var msg = "✓ Recovered \(r.recovered) of \(r.attempted) legacy file(s)."
+        if r.missing > 0 {
+            msg += " \(r.missing) were extracted email/zip attachments no longer on disk — re-ingest their source folder (or the mailbox) to recover them through the new parsers."
+        }
+        return msg
+    }
+
     public func backfillLegalMilestones() async -> Int {
         guard let objects, let events else { return 0 }
         // Idempotent: clear prior milestone events first so re-runs (and the

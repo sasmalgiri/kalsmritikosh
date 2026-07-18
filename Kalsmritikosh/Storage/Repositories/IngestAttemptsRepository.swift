@@ -75,6 +75,24 @@ public actor IngestAttemptsRepository {
         return rows.compactMap { $0.string(0).flatMap(URL.init(string:)) }
     }
 
+    /// Phase 2 recovery — URLs whose LATEST attempt failed and whose extension
+    /// is one of `extensions` (lowercased, no dot), e.g. ["doc","xls"]. Used to
+    /// re-ingest legacy files that failed before the real OLE2 parsers landed.
+    public func failedURLs(matchingExtensions extensions: Set<String>, limit: Int = 5_000) async -> [URL] {
+        let rows = (try? await database.query("""
+        SELECT url FROM (
+            SELECT url, status,
+                   ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
+            FROM ingest_file_attempts
+        ) WHERE rn = 1 AND status = 'failed'
+        LIMIT ?;
+        """, [.integer(Int64(limit))])) ?? []
+        return rows.compactMap { row -> URL? in
+            guard let s = row.string(0), let u = URL(string: s) else { return nil }
+            return extensions.contains(u.pathExtension.lowercased()) ? u : nil
+        }
+    }
+
     /// Count of files whose LATEST attempt failed — a Sources signal.
     public func failedCount() async -> Int {
         let rows = (try? await database.query("""

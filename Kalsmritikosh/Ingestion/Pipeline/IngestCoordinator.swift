@@ -306,6 +306,36 @@ public actor IngestCoordinator {
         }
     }
 
+    /// Phase 2 recovery — outcome of re-ingesting legacy files that failed
+    /// before the real OLE2 parsers landed.
+    public struct LegacyRecovery: Sendable {
+        public let attempted: Int    // failed .doc/.xls still readable in place
+        public let recovered: Int    // re-ingested and now queryable
+        public let missing: Int      // no longer readable (e.g. extracted email/zip attachments)
+    }
+
+    /// Re-ingest the .doc/.xls files whose last attempt failed (they were
+    /// dropped when the legacy loaders were text-sweep stubs). Idempotent +
+    /// per-document atomic. Files that no longer exist in place — chiefly email/
+    /// zip attachments staged in a since-cleared temp dir — are counted `missing`
+    /// and recovered instead by re-ingesting their parent container.
+    @discardableResult
+    public func reingestFailedLegacy() async -> LegacyRecovery {
+        guard let ingestAttempts else { return LegacyRecovery(attempted: 0, recovered: 0, missing: 0) }
+        let urls = await ingestAttempts.failedURLs(matchingExtensions: ["doc", "xls"])
+        var attempted = 0, recovered = 0, missing = 0
+        for url in urls {
+            guard FileManager.default.isReadableFile(atPath: url.path) else { missing += 1; continue }
+            attempted += 1
+            do {
+                let r = try await ingest(fileAt: url)
+                if r.chunkCount > 0 { recovered += 1 }
+            } catch { /* ingest() recorded .failed */ }
+        }
+        KalsmritikoshLog.ingestion.info("Legacy recovery: attempted \(attempted, privacy: .public), recovered \(recovered, privacy: .public), missing \(missing, privacy: .public)")
+        return LegacyRecovery(attempted: attempted, recovered: recovered, missing: missing)
+    }
+
     /// v54 resume/recovery — re-ingest any file whose last recorded attempt is
     /// still `.started`, i.e. an ingest interrupted by a crash or quit. Safe to
     /// call at boot: re-ingest is idempotent (unchanged files skip via
