@@ -777,9 +777,28 @@ public actor HybridRetriever: Retriever {
         let rankedEntities = Self.rankByTier(entities, includeT3: showT3)
         let rankedEvents   = Self.rankByTier(events,   includeT3: showT3, keyPath: \.qualityTier)
 
+        // UPDATE_07 — near-duplicate collapse + per-source diversity. Email
+        // reply-chains produce dozens of near-identical quoted chunks that
+        // embed to nearly the same vector and flood the top-K, burying the one
+        // authoritative document (a grant certificate, a contract) under copies
+        // of a subject line. Collapse chunks with the same normalized-text
+        // signature and cap how many any single source contributes, preserving
+        // the existing priority order (FTS/metadata chunks already precede
+        // vector chunks). Preserve-not-delete: rows stay on disk; only this
+        // result window is de-duplicated.
+        let diverseChunks = Self.diversify(chunks)
+
+        // UPDATE_07 — the same hygiene for events: the timeline/reconstruction
+        // path was drowning in email noise (empty-title events, internal
+        // "Archived entry —" version markers, delivery-failure / processing-error
+        // notifications, and dozens of duplicate-title emails), which pushed the
+        // authoritative dated facts out of the answer window. Filter that noise
+        // from the surfaced set (rows stay on disk).
+        let cleanedEvents = Self.cleanEvents(rankedEvents)
+
         return RetrievalResult(
-            chunks: chunks,
-            events: rankedEvents,
+            chunks: diverseChunks,
+            events: cleanedEvents,
             entities: rankedEntities,
             relationships: relationships,
             summaries: summaries,
@@ -787,6 +806,75 @@ public actor HybridRetriever: Retriever {
             shortCircuitedAt: shortCircuit,
             walkSteps: walkSteps
         )
+    }
+
+    /// UPDATE_07 — collapse near-duplicate chunk texts and cap how many chunks
+    /// any single source document contributes, preserving input (priority)
+    /// order. Kills the email reply-chain flood (dozens of quoted near-identical
+    /// chunks) that buries authoritative single-source documents. Deterministic.
+    nonisolated static func diversify(_ chunks: [RetrievedChunk], maxPerSource: Int = 4) -> [RetrievedChunk] {
+        var seenText = Set<String>()
+        var perSource: [KnowledgeObject.ID: Int] = [:]
+        var out: [RetrievedChunk] = []
+        out.reserveCapacity(chunks.count)
+        for rc in chunks {
+            let sig = chunkSignature(rc.chunk.text)
+            if !sig.isEmpty {
+                guard seenText.insert(sig).inserted else { continue }   // near-duplicate text
+            }
+            let n = perSource[rc.chunk.objectID, default: 0]
+            guard n < maxPerSource else { continue }                    // one source can't dominate
+            perSource[rc.chunk.objectID] = n + 1
+            out.append(rc)
+        }
+        return out
+    }
+
+    /// System-notification / non-substantive email subjects that are never a
+    /// real ledger event. Conservative — only unambiguous machine noise.
+    private nonisolated static let eventNoisePatterns: [String] = [
+        "processing error", "delivery status notification", "mail delivery",
+        "undeliverable", "out of office", "automatic reply", "read receipt",
+        "failure notice", "returned mail"
+    ]
+
+    /// Filter obvious noise from the events a retrieval surfaces and collapse
+    /// duplicate-title events. Preserve-not-delete: on-disk rows are untouched;
+    /// this only cleans the answer/timeline window. Deterministic.
+    nonisolated static func cleanEvents(_ events: [Event]) -> [Event] {
+        var seen = Set<String>()
+        var out: [Event] = []
+        out.reserveCapacity(events.count)
+        for e in events {
+            let title = e.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if title.isEmpty { continue }                               // empty-title noise
+            let lower = title.lowercased()
+            if lower.hasPrefix("archived entry") { continue }           // internal version marker
+            if eventNoisePatterns.contains(where: { lower.contains($0) }) { continue }
+            let sig = String(lower.prefix(60))
+            guard seen.insert(sig).inserted else { continue }           // duplicate-title collapse
+            out.append(e)
+        }
+        return out
+    }
+
+    /// Normalized-text fingerprint for near-duplicate detection: lowercased,
+    /// letters/digits/space only, whitespace-collapsed, first ~160 chars — long
+    /// enough to separate genuinely different passages, short enough that quoted
+    /// reply-chains with the same header collapse together.
+    nonisolated static func chunkSignature(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        var lastSpace = false
+        for s in text.lowercased().unicodeScalars {
+            let isAlnum = (s.value >= 97 && s.value <= 122) || (s.value >= 48 && s.value <= 57)
+            if isAlnum {
+                scalars.append(s); lastSpace = false
+            } else if !lastSpace {
+                scalars.append(" "); lastSpace = true
+            }
+            if scalars.count >= 160 { break }
+        }
+        return String(scalars).trimmingCharacters(in: .whitespaces)
     }
 
     /// Stable tier-aware sort. Items with higher
