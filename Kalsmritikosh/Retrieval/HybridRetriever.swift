@@ -188,13 +188,15 @@ public actor HybridRetriever: Retriever {
                     collectedBondSteps.append(contentsOf: bondOutcome.steps)
                 }
             case .vector:
-                // UPDATE_06 Item 2 — prefer a prefiltered scan over the
-                // pre-collected chunk set; fall back to full scan only if
-                // no earlier layer produced candidates. Keeps query latency
-                // flat as the corpus grows.
-                let candidateIDs = collectedChunks.map(\.chunk.id)
-                let prefilter: [Chunk.ID]? = candidateIDs.isEmpty ? nil : candidateIDs
-                collectedChunks.append(contentsOf: try await vectorLayer(intent, candidateChunkIDs: prefilter))
+                // Audit P0 #2/#8 — the dense channel must retrieve INDEPENDENTLY,
+                // not be confined to the chunk ids the lexical layers already
+                // found. Confining it defeated semantic recall whenever FTS/
+                // entity/metadata missed the right passage (measured: lookup
+                // retrieval recall 0.07 on the gold set). A full-index scan
+                // (ANN-accelerated when the HNSW index is built) surfaces the
+                // semantically-nearest chunks regardless of what earlier layers
+                // found; results fuse with the rest in `assemble`.
+                collectedChunks.append(contentsOf: try await vectorLayer(intent, candidateChunkIDs: nil))
             }
         }
 

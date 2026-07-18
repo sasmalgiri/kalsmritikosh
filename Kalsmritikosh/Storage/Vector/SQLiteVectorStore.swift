@@ -119,8 +119,18 @@ public actor SQLiteVectorStore: VectorStore {
         // index answers in O(log N) instead of O(N) brute-force.
         // Pre-filtered queries still take the SQL path so the
         // vector layer can honour upstream layer prefilters.
-        if let ann = annIndex, candidateChunkIDs == nil {
-            if await ann.isBuilt() {
+        if let ann = annIndex, candidateChunkIDs == nil, await ann.isBuilt() {
+            // Only trust the ANN when it's in sync with the ledger. It's built
+            // once (often at boot, before the background embedding drain has
+            // written this session's vectors), and isn't rebuilt on every
+            // upsert — so a stale/empty index would silently return nothing and
+            // bypass the durable SQL scan (observed: vector retrieval dead after
+            // a fresh ingest, lookup recall 0.07). When the index is smaller
+            // than the stored vector count, fall through to the SQL brute-force,
+            // which always reflects the current embeddings.
+            let annSize = await ann.size()
+            let stored = (try? await self.count()) ?? annSize
+            if annSize > 0 && annSize >= stored {
                 return await ann.nearest(to: embedding, limit: limit)
             }
         }
