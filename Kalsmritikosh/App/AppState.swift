@@ -2087,6 +2087,35 @@ public final class AppState {
         return SubjectDossier.markdown(input)
     }
 
+    /// Backfill legal/patent MILESTONE events over already-ingested documents
+    /// (new ingests get them automatically via the coordinator). Runs the
+    /// deterministic PatentLegalEventExtractor across every object's content and
+    /// inserts the dated milestone events — the "story spine" for legal matters.
+    /// Returns the number of milestone events created.
+    @discardableResult
+    public func backfillLegalMilestones() async -> Int {
+        guard let objects, let events else { return 0 }
+        var created = 0
+        var offset = 0
+        let pageSize = 500
+        while true {
+            let ids = (try? await objects.allIDs(offset: offset, pageSize: pageSize)) ?? []
+            if ids.isEmpty { break }
+            for id in ids {
+                guard let content = try? await objects.fetchContent(id: id), !content.isEmpty else { continue }
+                let milestones = PatentLegalEventExtractor.extract(text: content, sourceObjectID: id)
+                if !milestones.isEmpty {
+                    try? await events.insertBatch(milestones)
+                    created += milestones.count
+                }
+            }
+            offset += ids.count
+            if ids.count < pageSize { break }
+        }
+        KalsmritikoshLog.knowledge.info("Legal-milestone backfill created \(created, privacy: .public) event(s)")
+        return created
+    }
+
     /// Retrieval self-eval: recall@k measured by querying the vector index with
     /// text drawn from stored chunks and checking whether each chunk comes back.
     /// Label-free quality signal on the user's own data (not the human-labelled

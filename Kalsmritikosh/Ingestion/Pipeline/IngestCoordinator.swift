@@ -1015,7 +1015,15 @@ public actor IngestCoordinator {
                 entities: extractedEntities,
                 blocks: blocks
             )) ?? []
-            let remapped = rawEvents.map { event in
+            // Legal/patent MILESTONE events — the "story spine" the generic
+            // extractor misses (filed / hearing / objection / granted). Dated,
+            // high-trust, from official-document boilerplate. Deterministic.
+            let milestoneEvents = PatentLegalEventExtractor.extract(
+                text: object.content,
+                sourceObjectID: object.id,
+                entityIDs: extractedEntities.map(\.id)
+            )
+            let remapped = (rawEvents + milestoneEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             }
             try? await events.insertBatch(remapped)
