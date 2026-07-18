@@ -169,6 +169,20 @@ public actor ChunksRepository {
         return rows.compactMap(decode)
     }
 
+    /// A deterministic sample of embeddable, non-rejected chunks (ordered by
+    /// rowid, so the same DB yields the same sample). Used by the retrieval
+    /// self-eval to measure recall@k on the user's OWN data.
+    public func sample(limit: Int) async throws -> [Chunk] {
+        let rows = try await database.query("""
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        FROM chunks
+        WHERE review_status IS NULL AND admit_embedding = 1 AND length(text) >= 40
+        ORDER BY rowid
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     // MARK: - Human-in-loop review status (v51)
 
     /// Soft-exclude ("reject") or restore a chunk. "rejected" excludes it from

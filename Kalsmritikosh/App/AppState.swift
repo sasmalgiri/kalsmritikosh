@@ -141,6 +141,8 @@ public final class AppState {
     public private(set) var files: FilesRepository?
     public private(set) var objects: KnowledgeObjectRepository?
     public private(set) var chunks: ChunksRepository?
+    /// Exposed for the retrieval self-eval (recall@k on the user's own data).
+    public private(set) var embedder: (any Embedder)?
     public private(set) var entities: EntitiesRepository?
     public private(set) var events: EventsRepository?
     public private(set) var summariesRepo: SummariesRepository?
@@ -1373,6 +1375,7 @@ public final class AppState {
             self.files = files
             self.objects = objects
             self.chunks = chunks
+            self.embedder = embedder
             self.entities = entities
             self.events = events
             self.summariesRepo = summariesRepo
@@ -2005,6 +2008,19 @@ public final class AppState {
             )
         }
         return ResolvedConnection(nodes: nodes, hops: resolvedHops)
+    }
+
+    /// Retrieval self-eval: recall@k measured by querying the vector index with
+    /// text drawn from stored chunks and checking whether each chunk comes back.
+    /// Label-free quality signal on the user's own data (not the human-labelled
+    /// answer benchmark). Returns nil when the vector layer isn't wired.
+    public func runRetrievalSelfEval(sampleSize: Int = 200) async -> RetrievalSelfEvalReport? {
+        guard let chunks, let embedder, let vectorStore else { return nil }
+        let report = await RetrievalSelfEval.run(
+            chunks: chunks, embedder: embedder, vectors: vectorStore, sampleSize: sampleSize
+        )
+        KalsmritikoshLog.app.info("Retrieval self-eval: \(report.summary, privacy: .public)")
+        return report
     }
 
     /// Proactive change-monitoring: what contradictions/gaps are NEW or RESOLVED

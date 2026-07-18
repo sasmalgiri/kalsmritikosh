@@ -45,6 +45,8 @@ public struct SettingsView: View {
     @State private var realDataProbeRunning = false
     @State private var realDataProbeStatus: String?
     @State private var realDataProbeURL: URL?
+    @State private var selfEvalRunning = false
+    @State private var selfEvalStatus: String?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -577,6 +579,11 @@ public struct SettingsView: View {
                 }
                 .disabled(realDataProbeRunning)
                 if realDataProbeRunning { ProgressView().controlSize(.mini) }
+                Button("Retrieval self-check") {
+                    Task { await runRetrievalSelfEval() }
+                }
+                .disabled(selfEvalRunning)
+                if selfEvalRunning { ProgressView().controlSize(.mini) }
                 if let url = realDataProbeURL {
                     Button("Reveal probe") {
                         #if canImport(AppKit)
@@ -636,6 +643,13 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let status = selfEvalStatus {
+                Divider().padding(.vertical, 2)
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .background(verdictColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -676,6 +690,22 @@ public struct SettingsView: View {
         ✓ Real-data probe: \(result.questionCount) question(s)
         avg \(String(format: "%.1f", result.avgCallsPerQuestion)) LLM call(s)/question · avg \(String(format: "%.1f", result.avgLatencySeconds))s/question · \(String(format: "%.1f", result.totalSeconds))s total
         Report: \(result.reportURL?.lastPathComponent ?? "—")
+        """
+    }
+
+    /// Label-free retrieval quality on the user's own data: recall@k for whether
+    /// the index returns a chunk when queried with text drawn from it. Read-only.
+    private func runRetrievalSelfEval() async {
+        selfEvalRunning = true
+        selfEvalStatus = "Sampling your chunks and measuring retrieval recall (read-only)…"
+        defer { selfEvalRunning = false }
+        guard let report = await appState.runRetrievalSelfEval() else {
+            selfEvalStatus = "Retrieval self-check unavailable — the vector layer isn't ready yet."
+            return
+        }
+        selfEvalStatus = """
+        ✓ Retrieval self-check: \(report.summary)
+        Measures whether the index finds what it stored — a real quality signal, but NOT the human-labelled answer-accuracy benchmark.
         """
     }
 
