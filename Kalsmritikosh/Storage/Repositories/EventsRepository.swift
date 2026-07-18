@@ -57,6 +57,21 @@ public actor EventsRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// Count events carrying a `milestone` attribute (the legal/patent spine).
+    public func milestoneCount() async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM events WHERE attributes_json LIKE '%\"milestone\"%';")
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Delete previously-generated milestone events so a re-run is idempotent.
+    /// These are derived (re-generatable from documents), so deleting is safe;
+    /// their event_entities rows cascade.
+    public func deleteMilestoneEvents() async throws {
+        try await database.exec(
+            "DELETE FROM events WHERE attributes_json LIKE '%\"milestone\"%';")
+    }
+
     public func between(start: Date, end: Date, limit: Int = 500) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status

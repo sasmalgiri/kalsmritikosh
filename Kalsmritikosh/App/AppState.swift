@@ -1496,6 +1496,19 @@ public final class AppState {
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
 
+            // One-time catch-up: apply the legal/patent milestone extractor to
+            // documents ingested BEFORE it existed. New documents already get
+            // milestones inline at ingest, so this runs once (flag-guarded) and
+            // never blocks boot. Idempotent (backfill clears+regenerates), and
+            // suppressed during isolated eval boots to keep them deterministic.
+            if !suppressAutoReingest,
+               !UserDefaults.standard.bool(forKey: "kalsmritikosh.milestones.backfilled.v1") {
+                Task { [weak self] in
+                    _ = await self?.backfillLegalMilestones()
+                    UserDefaults.standard.set(true, forKey: "kalsmritikosh.milestones.backfilled.v1")
+                }
+            }
+
             // Post-boot auto-reingest: if a bookmark exists but the DB
             // has zero file rows under that root (recovered from a wiped
             // DB, fresh install on a backed-up machine, or schema migration
@@ -2095,6 +2108,9 @@ public final class AppState {
     @discardableResult
     public func backfillLegalMilestones() async -> Int {
         guard let objects, let events else { return 0 }
+        // Idempotent: clear prior milestone events first so re-runs (and the
+        // auto-run at boot) never duplicate. Milestones are derived data.
+        try? await events.deleteMilestoneEvents()
         var created = 0
         var offset = 0
         let pageSize = 500
