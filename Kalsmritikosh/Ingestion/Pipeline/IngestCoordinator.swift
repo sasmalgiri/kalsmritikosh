@@ -285,6 +285,11 @@ public actor IngestCoordinator {
         // A2 §7.3/§7.7 — record the outcome durably so failures/skips are
         // visible and re-tryable (best-effort; never affects the ingest).
         ensureEmbeddingDrain()   // PERF.1 — vectors deepen in the background
+        // v54 resume — durable in-progress marker. If the app is killed mid-
+        // ingest, this row stays the latest for the URL and boot's
+        // resumeIncompleteIngests() re-runs it. Superseded moments later by the
+        // terminal outcome below.
+        await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
             let result = try await ingestCore(fileAt: url)
             await ingestAttempts?.record(
@@ -299,6 +304,32 @@ public actor IngestCoordinator {
                                          detail: String(describing: error).prefix(500).description)
             throw error
         }
+    }
+
+    /// v54 resume/recovery — re-ingest any file whose last recorded attempt is
+    /// still `.started`, i.e. an ingest interrupted by a crash or quit. Safe to
+    /// call at boot: re-ingest is idempotent (unchanged files skip via
+    /// content-hash) and the per-document atomic commit guarantees no partial KO
+    /// was left behind to duplicate. Best-effort per file; a file that's no
+    /// longer readable in place is recorded failed and skipped. Returns the
+    /// number of files actually re-ingested.
+    @discardableResult
+    public func resumeIncompleteIngests() async -> Int {
+        guard let ingestAttempts else { return 0 }
+        let urls = await ingestAttempts.interruptedURLs()
+        guard !urls.isEmpty else { return 0 }
+        KalsmritikoshLog.ingestion.info("Resuming \(urls.count, privacy: .public) interrupted ingest(s)")
+        var resumed = 0
+        for url in urls {
+            guard FileManager.default.isReadableFile(atPath: url.path) else {
+                await ingestAttempts.record(url: url, status: .failed, stage: "resume",
+                                            detail: "file no longer readable at resume")
+                continue
+            }
+            do { _ = try await ingest(fileAt: url); resumed += 1 }
+            catch { /* ingest() already recorded .failed */ }
+        }
+        return resumed
     }
 
     /// v54 MBOX lineage — the structural blocks that belong to ONE
@@ -924,7 +955,22 @@ public actor IngestCoordinator {
             }
             chunked = withPrefix
         }
-        try? await chunks.insertBatch(chunked)
+        // v54 per-document atomicity — the core evidence commit (this KO + its
+        // chunks) is all-or-nothing. If chunk persistence fails, delete the KO so
+        // no partial document survives (the FK cascade drops any rows already
+        // written, incl. chunk_embeddings). Scoped to this koID, so it's safe
+        // under concurrent ingest fan-out — no shared transaction, no actor
+        // reentrancy hazard. The per-file loop records the file's attempt failed;
+        // re-ingest is idempotent via content-hash. (Derived enrichment below —
+        // entities/events/relationships — stays best-effort and re-derivable, so
+        // it is intentionally NOT part of the atomic core.)
+        do {
+            try await chunks.insertBatch(chunked)
+        } catch {
+            KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
+            try? await objects.deleteByID(object.id)
+            throw error
+        }
         await pipelineMetrics?.bump(.chunked, by: chunked.count)
 
         // G2-SYNTHETIC-QUESTIONS — generate hypothetical questions per

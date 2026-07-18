@@ -1553,6 +1553,19 @@ public final class AppState {
                 Task.detached(priority: .utility) { [weak self] in
                     await self?.autoReingestEmptyRoots()
                 }
+                // v54 resume — re-ingest any file whose last attempt is still
+                // `.started` (a crash/quit interrupted it). Detached + best-
+                // effort; idempotent via content-hash + the per-document atomic
+                // commit (no partial KO can survive a crash).
+                if let ingest = self.ingest {
+                    Task.detached(priority: .utility) { [weak self] in
+                        let n = await ingest.resumeIncompleteIngests()
+                        if n > 0 {
+                            KalsmritikoshLog.app.info("AppState: resumed \(n, privacy: .public) interrupted ingest(s)")
+                            _ = self
+                        }
+                    }
+                }
             } else {
                 KalsmritikoshLog.app.info("AppState: auto-reingest suppressed (eval / smoke boot)")
             }

@@ -20,6 +20,9 @@ public actor IngestAttemptsRepository {
 
     /// The outcome of one ingest attempt for a file.
     public enum Status: String, Sendable {
+        case started     // v54 — ingest began; a durable in-progress marker. If
+                         // this is still the LATEST status for a URL at boot, the
+                         // ingest was interrupted (crash/quit) and is resumable.
         case queryable   // parsed + persisted; answerable
         case unchanged   // hash matched a prior ingest; skipped
         case aliased     // deduped to a canonical copy
@@ -55,6 +58,21 @@ public actor IngestAttemptsRepository {
             detail.map { .text($0) } ?? .null,
             .real(when.timeIntervalSince1970)
         ])
+    }
+
+    /// v54 resume — URLs whose LATEST attempt is still `.started`, i.e. an
+    /// ingest that began but never recorded a terminal outcome (interrupted by a
+    /// crash or quit). These are the files to re-ingest on the next launch.
+    public func interruptedURLs(limit: Int = 1_000) async -> [URL] {
+        let rows = (try? await database.query("""
+        SELECT url FROM (
+            SELECT url, status,
+                   ROW_NUMBER() OVER (PARTITION BY url ORDER BY attempted_at DESC) AS rn
+            FROM ingest_file_attempts
+        ) WHERE rn = 1 AND status = 'started'
+        LIMIT ?;
+        """, [.integer(Int64(limit))])) ?? []
+        return rows.compactMap { $0.string(0).flatMap(URL.init(string:)) }
     }
 
     /// Count of files whose LATEST attempt failed — a Sources signal.

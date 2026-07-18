@@ -42,6 +42,15 @@ public actor KnowledgeObjectRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// v54 per-document atomicity — remove a KO and everything derived from it.
+    /// Every derived table (chunks, chunk_embeddings, entity_mentions, events,
+    /// qa_pairs, …) declares `ON DELETE CASCADE` on its knowledge_objects FK and
+    /// the connection runs with `PRAGMA foreign_keys=ON`, so this one delete is a
+    /// clean, concurrency-safe compensating rollback of a failed document commit.
+    public func deleteByID(_ id: KnowledgeObject.ID) async throws {
+        try await database.exec("DELETE FROM knowledge_objects WHERE id = ?;", [.uuid(id)])
+    }
+
     // MARK: - T18 privilege (§21)
 
     /// Mark / unmark a KnowledgeObject as privileged. Privileged material is
