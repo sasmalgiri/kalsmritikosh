@@ -47,6 +47,8 @@ public struct SettingsView: View {
     @State private var realDataProbeURL: URL?
     @State private var selfEvalRunning = false
     @State private var selfEvalStatus: String?
+    @State private var milestoneRunning = false
+    @State private var milestoneStatus: String?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -584,6 +586,12 @@ public struct SettingsView: View {
                 }
                 .disabled(selfEvalRunning)
                 if selfEvalRunning { ProgressView().controlSize(.mini) }
+                Button("Rebuild legal milestones") {
+                    Task { await runMilestoneBackfill() }
+                }
+                .disabled(milestoneRunning)
+                .help("Scan ingested documents for legal/patent milestones (filed, hearing, objection, granted) and add them as dated events — the story spine.")
+                if milestoneRunning { ProgressView().controlSize(.mini) }
                 if let url = realDataProbeURL {
                     Button("Reveal probe") {
                         #if canImport(AppKit)
@@ -650,6 +658,13 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let status = milestoneStatus {
+                Divider().padding(.vertical, 2)
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(12)
         .background(verdictColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -707,6 +722,19 @@ public struct SettingsView: View {
         ✓ Retrieval self-check: \(report.summary)
         Measures whether the index finds what it stored — a real quality signal, but NOT the human-labelled answer-accuracy benchmark.
         """
+    }
+
+    /// Rebuild the legal/patent milestone events over already-ingested documents
+    /// (new ingests get them automatically). Additive — inserts dated events; it
+    /// never deletes.
+    private func runMilestoneBackfill() async {
+        milestoneRunning = true
+        milestoneStatus = "Scanning documents for filed / hearing / objection / grant milestones…"
+        defer { milestoneRunning = false }
+        let n = await appState.backfillLegalMilestones()
+        milestoneStatus = n > 0
+            ? "✓ Added \(n) milestone event(s). Open Timeline or ask about the matter to see the full story."
+            : "No legal/patent milestones found in the current documents."
     }
 
     private func runFastEval() async {
