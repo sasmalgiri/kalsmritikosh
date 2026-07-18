@@ -2178,8 +2178,13 @@ public final class AppState {
     /// answer benchmark). Returns nil when the vector layer isn't wired.
     public func runRetrievalSelfEval(sampleSize: Int = 200) async -> RetrievalSelfEvalReport? {
         guard let chunks, let embedder, let vectorStore else { return nil }
+        let activity = beginProcess("Retrieval self-check", total: sampleSize)
+        defer { finishProcess(activity) }
         let report = await RetrievalSelfEval.run(
-            chunks: chunks, embedder: embedder, vectors: vectorStore, sampleSize: sampleSize
+            chunks: chunks, embedder: embedder, vectors: vectorStore, sampleSize: sampleSize,
+            progress: { [weak self] done, total in
+                Task { @MainActor in self?.updateProcess(activity, done: done, total: total) }
+            }
         )
         KalsmritikoshLog.app.info("Retrieval self-eval: \(report.summary, privacy: .public)")
         return report

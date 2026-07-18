@@ -62,21 +62,24 @@ public enum RetrievalSelfEval {
         embedder: any Embedder,
         vectors: any VectorStore,
         sampleSize: Int = 200,
-        maxK: Int = 10
+        maxK: Int = 10,
+        progress: (@Sendable (_ done: Int, _ total: Int) -> Void)? = nil
     ) async -> RetrievalSelfEvalReport {
         let sample = (try? await chunks.sample(limit: sampleSize)) ?? []
+        progress?(0, sample.count)
         var ranks: [Int?] = []
-        for chunk in sample {
+        for (i, chunk) in sample.enumerated() {
             let q = query(from: chunk.text)
-            guard q.count >= 8 else { continue }
+            guard q.count >= 8 else { progress?(i + 1, sample.count); continue }
             let vector = await embedder.embed(q)
-            guard !vector.isEmpty else { continue }
+            guard !vector.isEmpty else { progress?(i + 1, sample.count); continue }
             let hits = (try? await vectors.nearest(to: vector, limit: maxK)) ?? []
             if let idx = hits.firstIndex(where: { $0.chunkID == chunk.id }) {
                 ranks.append(idx + 1)   // 1-based rank
             } else {
                 ranks.append(nil)       // not retrieved
             }
+            progress?(i + 1, sample.count)
         }
         return RetrievalSelfEvalReport(
             sampled: sample.count,
