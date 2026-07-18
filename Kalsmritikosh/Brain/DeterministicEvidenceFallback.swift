@@ -49,20 +49,27 @@ public enum DeterministicEvidenceFallback {
                 ))
             }
         }
-        if events.isEmpty {
-            for hit in chunks {
-                let snippet = hit.chunk.text
-                    .replacingOccurrences(of: "\n", with: " ")
-                    .prefix(160)
-                supportLines.append("- \(snippet)")
-                if seen.insert(hit.chunk.objectID).inserted {
-                    citations.append(VerifiedAnswer.Citation(
-                        objectID: hit.chunk.objectID,
-                        chunkID: hit.chunk.id,
-                        eventID: nil,
-                        snippet: String(snippet)
-                    ))
-                }
+        // ALWAYS surface the top authoritative passages — not only when there
+        // are no events. The decisive fact for a factual question (a grant date,
+        // a patent number, a clause) lives in a DOCUMENT chunk, not in an email
+        // "event"; the previous `if events.isEmpty` gate meant an email-heavy
+        // archive (hundreds of emailReceived events) hid the one certificate/
+        // intimation passage that answers the question. Verbatim + cited.
+        var passageLines: [String] = []
+        for hit in chunks {
+            let snippet = hit.chunk.text
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespaces)
+                .prefix(300)
+            guard snippet.count >= 20 else { continue }
+            passageLines.append("- \(snippet)")
+            if seen.insert(hit.chunk.objectID).inserted {
+                citations.append(VerifiedAnswer.Citation(
+                    objectID: hit.chunk.objectID,
+                    chunkID: hit.chunk.id,
+                    eventID: nil,
+                    snippet: String(snippet)
+                ))
             }
         }
 
@@ -71,9 +78,20 @@ public enum DeterministicEvidenceFallback {
             events: events, eventLinks: eventLinks
         )
 
-        // Timeline framing when we have dated events; otherwise a plain support list.
-        var md = events.isEmpty ? "## What the archive supports\n\n" : "## Timeline (from your evidence)\n\n"
-        md += supportLines.isEmpty ? "- (no directly citable items)\n" : supportLines.joined(separator: "\n") + "\n"
+        // Key passages first — the authoritative document text that most likely
+        // holds the answer (grant date, patent number, clause). Then the dated
+        // timeline for context.
+        var md = ""
+        if !passageLines.isEmpty {
+            md += "## Key passages from your documents\n\n"
+            md += passageLines.joined(separator: "\n") + "\n\n"
+        }
+        if !events.isEmpty {
+            md += "## Timeline (from your evidence)\n\n"
+            md += supportLines.joined(separator: "\n") + "\n"
+        } else if passageLines.isEmpty {
+            md += "## What the archive supports\n\n- (no directly citable items)\n"
+        }
 
         if !contradictions.isEmpty {
             md += "\n## Contradictions\n\n"
