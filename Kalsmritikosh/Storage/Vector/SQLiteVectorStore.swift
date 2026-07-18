@@ -111,53 +111,74 @@ public actor SQLiteVectorStore: VectorStore {
         let queryNorm = queryNormSquared.squareRoot() * queryScale
         if queryNorm == 0 { return [] }
 
-        let rows: [SQLRow]
+        var top = BoundedTopK(limit: limit)
+
         if let candidates = candidateChunkIDs {
             if candidates.isEmpty { return [] }
+            // Bounded by the caller's candidate set — a single query is fine.
             let placeholders = Array(repeating: "?", count: candidates.count).joined(separator: ",")
             let sql = "SELECT chunk_id, dim, q, scale FROM vectors WHERE chunk_id IN (\(placeholders));"
-            let bindings = candidates.map { SQLValue.uuid($0) }
-            rows = try await database.query(sql, bindings)
+            let rows = try await database.query(sql, candidates.map { SQLValue.uuid($0) })
+            for row in rows {
+                if let hit = score(row: row, col: 0, qBytes: qBytes, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
+                    top.offer(hit.0, hit.1)
+                }
+            }
         } else {
             let totalRows = try await database.query("SELECT COUNT(*) FROM vectors;", [])
             let total = Int(totalRows.first?.int(0) ?? 0)
             if total > Self.bruteForceWarnAt {
                 KalsmritikoshLog.storage.warning("ANN required — Gate 3 (vector corpus = \(total, privacy: .public))")
             }
-            rows = try await database.query("SELECT chunk_id, dim, q, scale FROM vectors;", [])
-        }
-
-        var hits: [(Chunk.ID, Double)] = []
-        hits.reserveCapacity(rows.count)
-        for row in rows {
-            guard let cid = row.uuid(0),
-                  let dim = row.int(1).map(Int.init),
-                  let blob = row.blob(2),
-                  let scale = row.double(3),
-                  dim == embedding.count,
-                  blob.count == dim,
-                  qBytes.count == dim else { continue }
-            var dot: Double = 0
-            var rowNormSquared: Double = 0
-            blob.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-                let rowPtr = raw.bindMemory(to: Int8.self)
-                qBytes.withUnsafeBufferPointer { qBuf in
-                    let n = min(rowPtr.count, qBuf.count, dim)
-                    for i in 0..<n {
-                        let a = Double(Int8(bitPattern: qBuf[i]))
-                        let b = Double(rowPtr[i])
-                        dot += a * b
-                        rowNormSquared += b * b
+            // MEMORY-BOUNDED full scan (P9.3): page by rowid so peak memory is one
+            // page + K, never the whole table — the fallback that must survive a
+            // corpus too big for the in-memory HNSW.
+            let pageSize = 10_000
+            var lastRowID: Int64 = 0
+            while true {
+                let rows = try await database.query(
+                    "SELECT rowid, chunk_id, dim, q, scale FROM vectors WHERE rowid > ? ORDER BY rowid LIMIT ?;",
+                    [.integer(lastRowID), .integer(Int64(pageSize))]
+                )
+                if rows.isEmpty { break }
+                for row in rows {
+                    if let rid = row.int(0) { lastRowID = rid }
+                    if let hit = score(row: row, col: 1, qBytes: qBytes, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
+                        top.offer(hit.0, hit.1)
                     }
                 }
+                if rows.count < pageSize { break }
             }
-            let rowNorm = rowNormSquared.squareRoot() * scale
-            if rowNorm == 0 { continue }
-            let cosine = (dot * queryScale * scale) / (queryNorm * rowNorm)
-            hits.append((cid, cosine))
         }
-        hits.sort { $0.1 > $1.1 }
-        return hits.prefix(limit).map { VectorHit(chunkID: $0.0, score: $0.1) }
+        return top.sortedDescending().map { VectorHit(chunkID: $0.0, score: $0.1) }
+    }
+
+    /// Cosine of one vectors row against the query, computed on int8 blobs. `col`
+    /// is the column offset of `chunk_id` (0 for the candidate query, 1 when a
+    /// leading `rowid` is selected). Returns nil for dim mismatches / zero norm.
+    private func score(
+        row: SQLRow, col: Int, qBytes: [UInt8], queryScale: Double, queryNorm: Double, dimExpected: Int
+    ) -> (Chunk.ID, Double)? {
+        guard let cid = row.uuid(col),
+              let dim = row.int(col + 1).map(Int.init),
+              let blob = row.blob(col + 2),
+              let scale = row.double(col + 3),
+              dim == dimExpected, blob.count == dim, qBytes.count == dim else { return nil }
+        var dot: Double = 0
+        var rowNormSquared: Double = 0
+        blob.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let rowPtr = raw.bindMemory(to: Int8.self)
+            qBytes.withUnsafeBufferPointer { qBuf in
+                let n = min(rowPtr.count, qBuf.count, dim)
+                for i in 0..<n {
+                    dot += Double(Int8(bitPattern: qBuf[i])) * Double(rowPtr[i])
+                    rowNormSquared += Double(rowPtr[i]) * Double(rowPtr[i])
+                }
+            }
+        }
+        let rowNorm = rowNormSquared.squareRoot() * scale
+        guard rowNorm != 0 else { return nil }
+        return (cid, (dot * queryScale * scale) / (queryNorm * rowNorm))
     }
 
     public func remove(chunkID: Chunk.ID) async throws {
@@ -189,4 +210,34 @@ public actor SQLiteVectorStore: VectorStore {
         }
         return (out, scale)
     }
+}
+
+/// A fixed-size best-K collector: keeps only the top `limit` (chunkID, score)
+/// pairs seen, so a full scan of any-size corpus uses O(limit) memory. `limit`
+/// is tiny (≤ ~50), so the kept list stays sorted ascending by insertion.
+struct BoundedTopK {
+    private let limit: Int
+    /// Ascending by score — the weakest kept hit is at index 0.
+    private var items: [(Chunk.ID, Double)] = []
+
+    init(limit: Int) { self.limit = max(0, limit) }
+
+    mutating func offer(_ id: Chunk.ID, _ score: Double) {
+        guard limit > 0 else { return }
+        if items.count < limit {
+            insert((id, score))
+        } else if score > items[0].1 {
+            items.removeFirst()
+            insert((id, score))
+        }
+    }
+
+    private mutating func insert(_ hit: (Chunk.ID, Double)) {
+        var i = 0
+        while i < items.count && items[i].1 < hit.1 { i += 1 }
+        items.insert(hit, at: i)
+    }
+
+    /// Best-first (descending score).
+    func sortedDescending() -> [(Chunk.ID, Double)] { items.reversed() }
 }
