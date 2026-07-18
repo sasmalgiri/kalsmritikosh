@@ -788,7 +788,17 @@ public actor HybridRetriever: Retriever {
         // the existing priority order (FTS/metadata chunks already precede
         // vector chunks). Preserve-not-delete: rows stay on disk; only this
         // result window is de-duplicated.
-        let diverseChunks = Self.diversify(chunks)
+        // Audit P0 #4/#9 — fuse the channels by Reciprocal Rank Fusion BEFORE
+        // diversifying. Previously the final order was just the layer-append
+        // order (metadata → graph → vector LAST), so the semantically-correct
+        // vector hits landed at the bottom of the window and the experts saw
+        // them last (measured: recall@3 ~0.07 while recall@all ~0.98 — the right
+        // evidence was retrieved but buried). RRF ranks each chunk by its rank
+        // WITHIN each channel that found it, rewarding cross-channel agreement,
+        // on one comparable scale instead of mixing 1/FTS-rank vs cosine vs the
+        // fixed graph score. diversify() then preserves this relevance order.
+        let fused = Self.rrfRank(chunks)
+        let diverseChunks = Self.diversify(fused)
 
         // UPDATE_07 — the same hygiene for events: the timeline/reconstruction
         // path was drowning in email noise (empty-title events, internal
@@ -814,6 +824,40 @@ public actor HybridRetriever: Retriever {
     /// any single source document contributes, preserving input (priority)
     /// order. Kills the email reply-chain flood (dozens of quoted near-identical
     /// chunks) that buries authoritative single-source documents. Deterministic.
+    /// Reciprocal Rank Fusion across retrieval channels (audit P0 #4/#9). Each
+    /// chunk is scored by Σ 1/(k + rank) over every channel (viaLayer) that
+    /// surfaced it, where `rank` is its 1-based position within that channel
+    /// sorted by the channel's own score. This puts FTS's 1/rank, the dense
+    /// channel's cosine, and the graph's fixed score on ONE comparable scale and
+    /// rewards chunks that more than one independent channel agrees on.
+    /// De-duplicated by chunk id (keeping the highest-scoring channel's
+    /// representative); stable and deterministic. k=60 is the standard constant.
+    nonisolated static func rrfRank(_ chunks: [RetrievedChunk], k: Double = 60) -> [RetrievedChunk] {
+        guard !chunks.isEmpty else { return [] }
+        var byLayer: [RetrievalLayer: [RetrievedChunk]] = [:]
+        for c in chunks { byLayer[c.viaLayer, default: []].append(c) }
+        var rrf: [Chunk.ID: Double] = [:]
+        var best: [Chunk.ID: RetrievedChunk] = [:]
+        var firstIndex: [Chunk.ID: Int] = [:]
+        for (i, c) in chunks.enumerated() where firstIndex[c.chunk.id] == nil { firstIndex[c.chunk.id] = i }
+        for (_, group) in byLayer {
+            for (rank, c) in group.sorted(by: { $0.score > $1.score }).enumerated() {
+                rrf[c.chunk.id, default: 0] += 1.0 / (k + Double(rank + 1))
+                if let cur = best[c.chunk.id] {
+                    if c.score > cur.score { best[c.chunk.id] = c }
+                } else {
+                    best[c.chunk.id] = c
+                }
+            }
+        }
+        return best.values.sorted { a, b in
+            let ra = rrf[a.chunk.id] ?? 0, rb = rrf[b.chunk.id] ?? 0
+            if ra != rb { return ra > rb }
+            if a.score != b.score { return a.score > b.score }
+            return (firstIndex[a.chunk.id] ?? 0) < (firstIndex[b.chunk.id] ?? 0)
+        }
+    }
+
     nonisolated static func diversify(_ chunks: [RetrievedChunk], maxPerSource: Int = 4) -> [RetrievedChunk] {
         var seenText = Set<String>()
         var perSource: [KnowledgeObject.ID: Int] = [:]
