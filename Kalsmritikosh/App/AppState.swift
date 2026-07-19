@@ -2602,6 +2602,25 @@ public final class AppState {
         return tables.count
     }
 
+    /// One-click "start fresh": erase every ingested row IN PLACE (works even
+    /// while the DB is open — no file-handle games) and then force a full
+    /// re-ingest of all bookmarked roots through the current pipeline. This is
+    /// the reliable wipe: a file-level delete of knowledge.sqlite is defeated by
+    /// the app's open handle, and the boot auto-reingest only fires when a root
+    /// has ZERO files — so once any rows survive, it silently skips. Returns a
+    /// human-readable summary. Progress shows on the live panel + activity tracker.
+    @discardableResult
+    public func wipeAndReingestEverything() async -> String {
+        let wipe = beginProcess("Erasing all ingested data")
+        let cleared = await deleteAllData()
+        finishProcess(wipe)
+        // Let boot-time one-shots (milestone spine) re-run over the fresh corpus.
+        UserDefaults.standard.removeObject(forKey: "kalsmritikosh.milestones.backfilled.v1")
+        let n = await ingestAllRoots()
+        _ = await backfillLegalMilestones()
+        return "✓ Erased \(cleared) tables, re-ingested \(n) file(s) with the evidence-first pipeline. Vectors deepen in the background."
+    }
+
     /// A cheap progress snapshot for the live-activity panel's bars: how many
     /// files are parsed and how many chunks are embedded, each with its total.
     /// One query, four COUNTs — safe to poll every couple of seconds.

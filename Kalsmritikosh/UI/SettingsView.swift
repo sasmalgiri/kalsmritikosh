@@ -51,6 +51,8 @@ public struct SettingsView: View {
     @State private var milestoneStatus: String?
     @State private var legacyRecoveryRunning = false
     @State private var legacyRecoveryStatus: String?
+    @State private var wipeReingestRunning = false
+    @State private var wipeReingestStatus: String?
     @State private var rebuildBondsRunning = false
     @State private var rebuildBondsStatus: String?
     @State private var rebuildSynthQRunning = false
@@ -600,6 +602,12 @@ public struct SettingsView: View {
                 .disabled(legacyRecoveryRunning)
                 .help("Re-ingest legacy Word/Excel (.doc/.xls) files that failed before the real OLE2 parsers landed. Idempotent.")
                 if legacyRecoveryRunning { ProgressView().controlSize(.mini) }
+                Button(role: .destructive) {
+                    Task { await runWipeReingest() }
+                } label: { Text("Wipe & re-ingest everything") }
+                .disabled(wipeReingestRunning)
+                .help("Start fresh: erase all ingested data and re-ingest every source folder through the current pipeline. Destructive — clears the ledger (workspaces/reviews too). Runs in place; no relaunch needed.")
+                if wipeReingestRunning { ProgressView().controlSize(.mini) }
                 if let url = realDataProbeURL {
                     Button("Reveal probe") {
                         #if canImport(AppKit)
@@ -674,6 +682,13 @@ public struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let status = legacyRecoveryStatus {
+                Divider().padding(.vertical, 2)
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let status = wipeReingestStatus {
                 Divider().padding(.vertical, 2)
                 Text(status)
                     .font(.caption.monospaced())
@@ -759,6 +774,14 @@ public struct SettingsView: View {
         legacyRecoveryStatus = "Re-ingesting legacy .doc / .xls files that failed before…"
         defer { legacyRecoveryRunning = false }
         legacyRecoveryStatus = await appState.recoverLegacyDocuments()
+    }
+
+    /// Start fresh: erase all ingested data + force a full re-ingest.
+    private func runWipeReingest() async {
+        wipeReingestRunning = true
+        wipeReingestStatus = "Erasing all data, then re-ingesting every source folder…"
+        defer { wipeReingestRunning = false }
+        wipeReingestStatus = await appState.wipeAndReingestEverything()
     }
 
     private func runFastEval() async {
