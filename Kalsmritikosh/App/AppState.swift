@@ -2766,14 +2766,45 @@ public final class AppState {
         while let next = enumerator?.nextObject() as? URL {
             let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             guard isRegular else { continue }
-            await self.withIngestActivity(file: next.lastPathComponent) {
+            let fileURL = next
+            await self.withIngestActivity(file: fileURL.lastPathComponent) {
                 do {
-                    _ = try await ingest.ingest(fileAt: next)
+                    // Per-file wall-clock timeout so ONE hung file can't freeze
+                    // the whole corpus ingest. Observed: a .3gp video attachment
+                    // blocked the entire re-ingest at 0% CPU (audio/video
+                    // transcription hang). 180s is generous for legitimate work
+                    // (large PDF OCR, LLM extraction); a true hang exceeds it and
+                    // the loop moves on. The abandoned task may keep running
+                    // detached, but the corpus continues.
+                    _ = try await Self.withFileTimeout(180) { try await ingest.ingest(fileAt: fileURL) }
                     if let counter { await counter.increment() }
+                } catch is IngestTimeout {
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .public) — skipped so the ingest can continue")
                 } catch {
-                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(next.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
                 }
             }
+        }
+    }
+
+    /// Run `op` with a wall-clock timeout; throws `IngestTimeout` if it exceeds
+    /// `seconds`. If `op` ignores cancellation (a blocking Speech/AV call), its
+    /// task keeps running detached — but the caller is unblocked, so one hung
+    /// file can't stall the whole ingest.
+    struct IngestTimeout: Error {}
+
+    nonisolated static func withFileTimeout<T: Sendable>(
+        _ seconds: Double, _ op: @Sendable @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await op() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw IngestTimeout()
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw IngestTimeout() }
+            return result
         }
     }
 
