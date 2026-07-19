@@ -186,7 +186,13 @@ public final class AppState {
         "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "webm"
     ]
 
+    /// Pre-count the units of ingest work under `urls`: each non-media file is 1
+    /// unit, but a mailbox (.mbox) is counted as its MESSAGE COUNT — because one
+    /// 91 MB Sent.mbox expands into hundreds of messages, and treating it as "1
+    /// file" made the bar sit at ~95% for the entire (long) mbox pass. Message
+    /// count is a fast mmap'd scan of the "\nFrom " separators.
     nonisolated func countRegularFiles(in urls: [URL]) -> Int {
+        let mboxSep: [UInt8] = [0x0A, 0x46, 0x72, 0x6F, 0x6D, 0x20]   // "\nFrom "
         var n = 0
         for url in urls {
             let e = FileManager.default.enumerator(
@@ -195,11 +201,38 @@ public final class AppState {
             )
             while let next = e?.nextObject() as? URL {
                 guard (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
-                if Self.mediaExtensions.contains(next.pathExtension.lowercased()) { continue }
-                n += 1
+                let ext = next.pathExtension.lowercased()
+                if Self.mediaExtensions.contains(ext) { continue }
+                if ext == "mbox" || ext == "mbx" {
+                    if let data = try? Data(contentsOf: next, options: .mappedIfSafe) {
+                        n += max(1, Self.countPattern(mboxSep, in: data) + 1)  // +1: first message has no leading \n
+                    } else { n += 1 }
+                } else {
+                    n += 1
+                }
             }
         }
         return n
+    }
+
+    /// Count non-overlapping occurrences of a short byte pattern in `data`
+    /// (mmap-friendly linear scan). Used to size a mailbox by its message count.
+    private nonisolated static func countPattern(_ pattern: [UInt8], in data: Data) -> Int {
+        guard !pattern.isEmpty, data.count >= pattern.count else { return 0 }
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var count = 0, i = 0
+            let n = bytes.count, m = pattern.count
+            while i <= n - m {
+                if bytes[i] == pattern[0] {
+                    var k = 1
+                    while k < m && bytes[i + k] == pattern[k] { k += 1 }
+                    if k == m { count += 1; i += m; continue }
+                }
+                i += 1
+            }
+            return count
+        }
     }
 
     /// Register a task. Returns its id for update/finish.
@@ -2635,19 +2668,23 @@ public final class AppState {
     public func ingestProgress() async -> IngestProgress {
         guard let db = database else { return IngestProgress() }
         let rows = (try? await db.query("""
-        SELECT (SELECT COUNT(*) FROM files),
-               (SELECT COUNT(*) FROM files WHERE ingested_at IS NOT NULL),
+        SELECT (SELECT COUNT(*) FROM knowledge_objects),
+               (SELECT COUNT(*) FROM files),
                (SELECT COUNT(*) FROM chunks WHERE admit_embedding = 1),
                (SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings);
         """, [])) ?? []
         guard let r = rows.first else { return IngestProgress() }
-        let dbFilesTotal = Int(r.int(0) ?? 0)
-        // Honest denominator: during a bulk (re)ingest use the pre-counted corpus
-        // total so the bar reflects true % across ALL files, not just the ones
-        // discovered so far. Outside a bulk pass, the DB count is the truth.
-        let filesTotal = max(ingestPlannedFileTotal, dbFilesTotal)
+        // Numerator = knowledge objects, which grows per ingested UNIT (one per
+        // email message + one per file/attachment) — so the bar advances smoothly
+        // through a big mailbox instead of jumping only when the whole mbox ends.
+        let koDone = Int(r.int(0) ?? 0)
+        let dbFileCount = Int(r.int(1) ?? 0)
+        // Denominator = the pre-counted units (files + mailbox messages). Outside
+        // a bulk pass, fall back to whatever's larger so the bar reads 100% idle.
+        let planned = max(ingestPlannedFileTotal, dbFileCount)
+        let filesTotal = max(planned, koDone)   // cap at 100% (attachments add extra KOs)
         return IngestProgress(
-            filesDone: Int(r.int(1) ?? 0), filesTotal: filesTotal,
+            filesDone: koDone, filesTotal: filesTotal,
             embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
         )
     }
@@ -2798,13 +2835,17 @@ public final class AppState {
             await self.withIngestActivity(file: fileURL.lastPathComponent) {
                 do {
                     // Per-file wall-clock timeout so ONE hung file can't freeze
-                    // the whole corpus ingest. Observed: a .3gp video attachment
-                    // blocked the entire re-ingest at 0% CPU (audio/video
-                    // transcription hang). 180s is generous for legitimate work
-                    // (large PDF OCR, LLM extraction); a true hang exceeds it and
-                    // the loop moves on. The abandoned task may keep running
-                    // detached, but the corpus continues.
-                    _ = try await Self.withFileTimeout(180) { try await ingest.ingest(fileAt: fileURL) }
+                    // the whole corpus ingest (a .3gp video attachment blocked the
+                    // re-ingest at 0% CPU). CONTAINERS (mbox/pst/nsf/zip) legitimately
+                    // process HUNDREDS of nested messages + attachments in one
+                    // ingest() call — a 91 MB Sent.mbox with 526 messages takes many
+                    // minutes — so they get a large budget (1h); regular files get
+                    // 180s (generous for a big PDF's OCR). A true hang still exceeds
+                    // these and the loop moves on.
+                    let ext = fileURL.pathExtension.lowercased()
+                    let isContainer = ["mbox", "pst", "nsf", "zip", "mbx"].contains(ext)
+                    let budget: Double = isContainer ? 3600 : 180
+                    _ = try await Self.withFileTimeout(budget) { try await ingest.ingest(fileAt: fileURL) }
                     if let counter { await counter.increment() }
                 } catch is IngestTimeout {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .public) — skipped so the ingest can continue")
