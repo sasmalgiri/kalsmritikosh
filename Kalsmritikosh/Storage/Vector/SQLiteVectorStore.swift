@@ -13,6 +13,7 @@
 
 import Foundation
 import OSLog
+import Accelerate
 
 public actor SQLiteVectorStore: VectorStore {
     private let database: Database
@@ -135,12 +136,17 @@ public actor SQLiteVectorStore: VectorStore {
             }
         }
         let (qBytes, queryScale) = quantizeToBytes(embedding)
-        var queryNormSquared: Double = 0
-        for b in qBytes {
-            let v = Double(Int8(bitPattern: b))
-            queryNormSquared += v * v
+        // Accelerate/vDSP: convert the int8 query to Float ONCE (per query, not
+        // per row) and reuse it for every row's SIMD dot-product + norm below.
+        var qFloat = [Float](repeating: 0, count: qBytes.count)
+        qBytes.withUnsafeBytes { raw in
+            if let p = raw.bindMemory(to: Int8.self).baseAddress {
+                vDSP_vflt8(p, 1, &qFloat, 1, vDSP_Length(qBytes.count))
+            }
         }
-        let queryNorm = queryNormSquared.squareRoot() * queryScale
+        var queryNormSq: Float = 0
+        vDSP_svesq(qFloat, 1, &queryNormSq, vDSP_Length(qFloat.count))
+        let queryNorm = Double(queryNormSq).squareRoot() * queryScale
         if queryNorm == 0 { return [] }
 
         var top = BoundedTopK(limit: limit)
@@ -152,7 +158,7 @@ public actor SQLiteVectorStore: VectorStore {
             let sql = "SELECT chunk_id, dim, q, scale FROM chunk_embeddings WHERE model_id = ? AND chunk_id IN (\(placeholders));"
             let rows = try await database.query(sql, [.text(embeddingModelID)] + candidates.map { SQLValue.uuid($0) })
             for row in rows {
-                if let hit = score(row: row, col: 0, qBytes: qBytes, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
+                if let hit = score(row: row, col: 0, qFloat: qFloat, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
                     top.offer(hit.0, hit.1)
                 }
             }
@@ -177,7 +183,7 @@ public actor SQLiteVectorStore: VectorStore {
                 if rows.isEmpty { break }
                 for row in rows {
                     if let rid = row.int(0) { lastRowID = rid }
-                    if let hit = score(row: row, col: 1, qBytes: qBytes, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
+                    if let hit = score(row: row, col: 1, qFloat: qFloat, queryScale: queryScale, queryNorm: queryNorm, dimExpected: embedding.count) {
                         top.offer(hit.0, hit.1)
                     }
                 }
@@ -187,32 +193,32 @@ public actor SQLiteVectorStore: VectorStore {
         return top.sortedDescending().map { VectorHit(chunkID: $0.0, score: $0.1) }
     }
 
-    /// Cosine of one vectors row against the query, computed on int8 blobs. `col`
-    /// is the column offset of `chunk_id` (0 for the candidate query, 1 when a
-    /// leading `rowid` is selected). Returns nil for dim mismatches / zero norm.
+    /// Cosine of one vectors row against the query, computed on int8 blobs via
+    /// Accelerate/vDSP (SIMD dot-product + sum-of-squares). `col` is the column
+    /// offset of `chunk_id` (0 for the candidate query, 1 when a leading `rowid`
+    /// is selected). Returns nil for dim mismatches / zero norm. `qFloat` is the
+    /// query pre-converted to Float once by the caller.
     private func score(
-        row: SQLRow, col: Int, qBytes: [UInt8], queryScale: Double, queryNorm: Double, dimExpected: Int
+        row: SQLRow, col: Int, qFloat: [Float], queryScale: Double, queryNorm: Double, dimExpected: Int
     ) -> (Chunk.ID, Double)? {
         guard let cid = row.uuid(col),
               let dim = row.int(col + 1).map(Int.init),
               let blob = row.blob(col + 2),
               let scale = row.double(col + 3),
-              dim == dimExpected, blob.count == dim, qBytes.count == dim else { return nil }
-        var dot: Double = 0
-        var rowNormSquared: Double = 0
+              dim == dimExpected, blob.count == dim, qFloat.count == dim else { return nil }
+        var rowFloat = [Float](repeating: 0, count: dim)
         blob.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
-            let rowPtr = raw.bindMemory(to: Int8.self)
-            qBytes.withUnsafeBufferPointer { qBuf in
-                let n = min(rowPtr.count, qBuf.count, dim)
-                for i in 0..<n {
-                    dot += Double(Int8(bitPattern: qBuf[i])) * Double(rowPtr[i])
-                    rowNormSquared += Double(rowPtr[i]) * Double(rowPtr[i])
-                }
+            if let p = raw.bindMemory(to: Int8.self).baseAddress {
+                vDSP_vflt8(p, 1, &rowFloat, 1, vDSP_Length(dim))
             }
         }
-        let rowNorm = rowNormSquared.squareRoot() * scale
+        var dot: Float = 0
+        vDSP_dotpr(qFloat, 1, rowFloat, 1, &dot, vDSP_Length(dim))
+        var rowNormSq: Float = 0
+        vDSP_svesq(rowFloat, 1, &rowNormSq, vDSP_Length(dim))
+        let rowNorm = Double(rowNormSq).squareRoot() * scale
         guard rowNorm != 0 else { return nil }
-        return (cid, (dot * queryScale * scale) / (queryNorm * rowNorm))
+        return (cid, (Double(dot) * queryScale * scale) / (queryNorm * rowNorm))
     }
 
     public func remove(chunkID: Chunk.ID) async throws {
