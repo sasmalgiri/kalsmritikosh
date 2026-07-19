@@ -74,9 +74,15 @@ public struct ImageStructuralParser: StructuralParser {
         // but skip the (expensive, serialized) OCR passes. Unknown dimensions →
         // don't skip (fail open to OCR).
         let tooSmallForOCR = pxW > 0 && pxH > 0 && (min(pxW, pxH) < 64 || pxW * pxH < 64 * 64)
+        // The container block tracks that an image exists (+ its dimensions), but
+        // its rawText is intentionally EMPTY: the filename is not document content
+        // and must not leak into chunks/FTS as searchable text (a text-free photo
+        // otherwise injected "photo.jpg" as its only "content"). Provenance keeps
+        // the name via ParsedDocument.filename and the attributes below.
+        imageAttrs["filename"] = AnyCodable(.string(filename))
         let imageBlock = EvidenceBlock(
             documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
-            kind: .image, rawText: filename,
+            kind: .image, rawText: "",
             locator: SourceLocator(), extractionMethod: .native, attributes: imageAttrs
         )
         blocks.append(imageBlock)

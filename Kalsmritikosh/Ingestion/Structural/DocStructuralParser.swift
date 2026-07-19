@@ -97,9 +97,13 @@ public nonisolated struct DocStructuralParser: StructuralParser {
 
         let hadTableCells = text!.contains("\u{07}")
         if hadTableCells {
+            // Table CELL TEXT is fully recovered via the piece table; only the
+            // exact table GEOMETRY is approximate (cells emitted as paragraphs).
+            // That's an informational note, not content loss — it must not
+            // downgrade a complete extraction to .partial (which would make the
+            // confidence layer under-trust a faithful text extraction).
             warnings.append(ParserWarning(severity: .info, code: "doc.tablePartial",
                 message: "Tables detected — cells emitted as paragraphs; exact geometry not recovered."))
-            if status == .complete { status = .partial }
         }
 
         let blocks = paragraphBlocks(

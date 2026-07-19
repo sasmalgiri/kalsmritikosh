@@ -100,15 +100,25 @@ public struct PDFStructuralParser: StructuralParser {
                 ))
                 ordinal += 1
             } else {
-                warnings.append(ParserWarning(severity: .warning, code: "pdf.empty_page",
+                // A page with no native text and nothing from OCR is (almost
+                // always) genuinely blank — an informational note, NOT lost
+                // content. Recorded for provenance but must not downgrade a
+                // document whose other pages extracted faithfully.
+                warnings.append(ParserWarning(severity: .info, code: "pdf.empty_page",
                                               message: "Page \(pageNumber): no extractable text."))
             }
             #endif
         }
 
+        // Only genuine content degradation/loss (.warning/.error — e.g. a page
+        // kept as low-confidence mojibake) downgrades to .partial. Informational
+        // notes such as a blank page (.info) do NOT: the pages we extracted are
+        // faithful, and flagging the whole document "partial" would make the
+        // confidence layer under-trust a complete extraction.
+        let degraded = warnings.contains { $0.severity == .warning || $0.severity == .error }
         let status: ExtractionStatus = blocks.isEmpty
             ? .empty
-            : (warnings.isEmpty ? .complete : .partial)
+            : (degraded ? .partial : .complete)
         return ParsedDocument(
             id: documentID, logicalSourceID: logicalSourceID, sourceVersionID: sourceVersionID,
             filename: filename, detectedType: .pdf, mimeType: "application/pdf",
