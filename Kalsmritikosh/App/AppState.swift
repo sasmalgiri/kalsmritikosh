@@ -168,6 +168,31 @@ public final class AppState {
     /// ETA. The live panel + dashboard render this. Determinate tasks set a total.
     public private(set) var activeProcesses: [ProcessActivity] = []
 
+    /// True total files to process during a bulk (re)ingest, pre-counted by
+    /// walking the bookmarked roots BEFORE ingesting — so the progress bar's
+    /// denominator is the WHOLE corpus, not just the files discovered so far
+    /// (which made it read ~100% while only ~12% done). 0 = no bulk pass active.
+    public private(set) var ingestPlannedFileTotal: Int = 0
+
+    /// Set/clear the pre-counted bulk-ingest total (MainActor mutator).
+    public func setIngestPlannedTotal(_ n: Int) { ingestPlannedFileTotal = max(0, n) }
+
+    /// Count regular, non-hidden files under `urls` — a fast pre-pass (no file
+    /// reads) so ingest progress has an honest denominator. Nonisolated: pure FS.
+    nonisolated func countRegularFiles(in urls: [URL]) -> Int {
+        var n = 0
+        for url in urls {
+            let e = FileManager.default.enumerator(
+                at: url, includingPropertiesForKeys: [.isRegularFileKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            )
+            while let next = e?.nextObject() as? URL {
+                if (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { n += 1 }
+            }
+        }
+        return n
+    }
+
     /// Register a task. Returns its id for update/finish.
     @discardableResult
     public func beginProcess(_ title: String, total: Int? = nil) -> UUID {
@@ -2588,8 +2613,13 @@ public final class AppState {
                (SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings);
         """, [])) ?? []
         guard let r = rows.first else { return IngestProgress() }
+        let dbFilesTotal = Int(r.int(0) ?? 0)
+        // Honest denominator: during a bulk (re)ingest use the pre-counted corpus
+        // total so the bar reflects true % across ALL files, not just the ones
+        // discovered so far. Outside a bulk pass, the DB count is the truth.
+        let filesTotal = max(ingestPlannedFileTotal, dbFilesTotal)
         return IngestProgress(
-            filesDone: Int(r.int(1) ?? 0), filesTotal: Int(r.int(0) ?? 0),
+            filesDone: Int(r.int(1) ?? 0), filesTotal: filesTotal,
             embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
         )
     }
@@ -2644,6 +2674,10 @@ public final class AppState {
             rootsToIngest.append((root.displayName, url))
         }
 
+        // Pre-count the whole corpus so the progress bar's denominator is honest
+        // (fixes the "100% while only 12% done" bar). Cleared when the pass ends.
+        setIngestPlannedTotal(countRegularFiles(in: rootsToIngest.map(\.url)))
+
         // Hand each root to the nonisolated enumerator so the
         // per-file loop runs without MainActor scheduling pressure.
         let bookmarksRef = bookmarks
@@ -2658,6 +2692,7 @@ public final class AppState {
                 }
             }
         }
+        setIngestPlannedTotal(0)
         KalsmritikoshLog.app.info("Auto-reingest pass complete")
     }
 
@@ -2671,6 +2706,8 @@ public final class AppState {
             urls.append(url)
         }
         let bookmarksRef = bookmarks
+        // Honest progress denominator across the whole corpus.
+        setIngestPlannedTotal(countRegularFiles(in: urls))
         // Counter must be Sendable + actor-safe; a tiny actor is enough.
         let counter = IngestCounter()
         await withTaskGroup(of: Void.self) { group in
@@ -2689,6 +2726,7 @@ public final class AppState {
                 }
             }
         }
+        setIngestPlannedTotal(0)
         return await counter.value
     }
 

@@ -121,16 +121,18 @@ struct LiveActivityPanel: View {
         }
     }
 
-    /// A simple bar with a trailing percentage.
+    /// A simple bar with a trailing "done/total · %" so the count is honest and
+    /// legible (not just a bare percentage that can read 100% mid-scan).
     private func bar(_ done: Int, _ total: Int) -> some View {
-        let frac = total > 0 ? Double(done) / Double(total) : 0
+        let frac = total > 0 ? min(1.0, Double(done) / Double(total)) : 0
         return HStack(spacing: 8) {
             ProgressView(value: frac)
                 .progressViewStyle(.linear)
                 .tint(Theme.brand)
-            Text("\(Int(frac * 100))%")
+            Text("\(done)/\(total) · \(Int(frac * 100))%")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.secondary)
+                .fixedSize()
         }
     }
 }
