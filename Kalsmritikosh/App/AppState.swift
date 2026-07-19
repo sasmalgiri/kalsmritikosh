@@ -179,6 +179,13 @@ public final class AppState {
 
     /// Count regular, non-hidden files under `urls` — a fast pre-pass (no file
     /// reads) so ingest progress has an honest denominator. Nonisolated: pure FS.
+    /// Extensions ingestion skips (audio/video, deferred format) — excluded from
+    /// the progress denominator so the honest bar still reaches 100%.
+    private nonisolated static let mediaExtensions: Set<String> = [
+        "mp3", "wav", "m4a", "aac", "aiff", "caf", "flac", "3gp", "3gpp",
+        "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "webm"
+    ]
+
     nonisolated func countRegularFiles(in urls: [URL]) -> Int {
         var n = 0
         for url in urls {
@@ -187,7 +194,9 @@ public final class AppState {
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             )
             while let next = e?.nextObject() as? URL {
-                if (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true { n += 1 }
+                guard (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+                if Self.mediaExtensions.contains(next.pathExtension.lowercased()) { continue }
+                n += 1
             }
         }
         return n

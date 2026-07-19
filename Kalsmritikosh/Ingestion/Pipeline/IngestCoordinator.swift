@@ -15,6 +15,10 @@ import CryptoKit
 
 
 public actor IngestCoordinator {
+    /// Thrown when a file is intentionally NOT ingested (not a failure). Callers
+    /// treat it as "processed, skipped" so it doesn't count as an error.
+    public enum IngestSkipped: Error, Sendable { case mediaDeferred }
+
     public struct Result: Sendable {
         public let fileRecord: FileRecord
         public let object: KnowledgeObject
@@ -285,6 +289,18 @@ public actor IngestCoordinator {
         // A2 §7.3/§7.7 — record the outcome durably so failures/skips are
         // visible and re-tryable (best-effort; never affects the ingest).
         ensureEmbeddingDrain()   // PERF.1 — vectors deepen in the background
+        // Audio/video are a DEFERRED format — skip transcription entirely. It's
+        // slow and hang-prone (a .3gp email attachment froze the whole ingest at
+        // 0% CPU), and these are typically personal media, not evidence. Recorded
+        // as deferred (never a "failure"); this is the single chokepoint so it
+        // also covers media attachments extracted from mbox/zip. Re-enable later
+        // by transcribing on demand. Applies to direct files AND attachments.
+        let detected = SourceType.detect(from: url)
+        if detected.category == .audio || detected.category == .video {
+            await ingestAttempts?.record(url: url, status: .unchanged, stage: "media-deferred",
+                                         detail: "audio/video not transcribed (deferred format)")
+            throw IngestSkipped.mediaDeferred
+        }
         // v54 resume — durable in-progress marker. If the app is killed mid-
         // ingest, this row stays the latest for the URL and boot's
         // resumeIncompleteIngests() re-runs it. Superseded moments later by the
