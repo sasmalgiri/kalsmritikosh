@@ -40,6 +40,9 @@ public final class AppState {
     /// Most recent finished file's display name (for the banner subtext
     /// — "last: invoice-432.eml"). Cleared when the counter hits 0.
     public private(set) var ingestLastFile: String?
+    /// The file being ingested RIGHT NOW — so a slow/stuck file is visible
+    /// (e.g. a large mailbox that takes minutes). Cleared when idle.
+    public private(set) var ingestCurrentFile: String?
 
     // Idle maintenance (idle-driven summarization/distillation). The UI
     // shows a banner when a pass is running so the user knows the app is
@@ -1669,6 +1672,10 @@ public final class AppState {
     ) async rethrows -> T {
         await MainActor.run {
             self.ingestActiveCount += 1
+            // Surface the file being worked on RIGHT NOW so a slow/stuck file is
+            // visible to the user (e.g. a 91 MB mailbox that legitimately takes
+            // minutes). Set before body(); cleared when the last file finishes.
+            self.ingestCurrentFile = displayName
         }
         defer {
             // The end-state mutation is scheduled on MainActor but
@@ -1679,6 +1686,7 @@ public final class AppState {
                 self.ingestActiveCount = max(0, self.ingestActiveCount - 1)
                 self.ingestLastFile = displayName
                 if self.ingestActiveCount == 0 {
+                    self.ingestCurrentFile = nil
                     // Clear "last file" after a brief delay so the user
                     // sees it for a beat once everything finishes.
                     try? await Task.sleep(nanoseconds: 4_000_000_000)

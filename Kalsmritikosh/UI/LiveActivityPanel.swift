@@ -61,6 +61,27 @@ struct LiveActivityPanel: View {
                 }
                 if stage == .reading, progress.filesTotal > 0 {
                     bar(progress.filesDone, progress.filesTotal)
+                    // How many items are LEFT + which file is being read right now,
+                    // so a slow/stuck file (e.g. a large mailbox) is visible and
+                    // the user can see exactly what's taking time.
+                    let remaining = max(0, progress.filesTotal - progress.filesDone)
+                    if remaining > 0 {
+                        Text("\(remaining) item\(remaining == 1 ? "" : "s") remaining")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                    if let current = appState.ingestCurrentFile {
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.system(size: 8))
+                                .foregroundStyle(Theme.brand)
+                            Text("now: \(current)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
                 } else if stage == .search, progress.embedTotal > 0 {
                     bar(progress.embedDone, progress.embedTotal)
                 }
