@@ -2658,7 +2658,9 @@ public final class AppState {
         // Let boot-time one-shots (milestone spine) re-run over the fresh corpus.
         UserDefaults.standard.removeObject(forKey: "kalsmritikosh.milestones.backfilled.v1")
         let n = await ingestAllRoots()
+        let mile = beginProcess("Building timeline milestones…")
         _ = await backfillLegalMilestones()
+        finishProcess(mile)
         return "✓ Erased \(cleared) tables, re-ingested \(n) file(s) with the evidence-first pipeline. Vectors deepen in the background."
     }
 
@@ -2749,7 +2751,16 @@ public final class AppState {
 
         // Pre-count the whole corpus so the progress bar's denominator is honest
         // (fixes the "100% while only 12% done" bar). Cleared when the pass ends.
-        setIngestPlannedTotal(countRegularFiles(in: rootsToIngest.map(\.url)))
+        // Count OFF the MainActor — reading + byte-scanning a 91 MB mailbox to size
+        // the bar must NOT run on the main thread (it froze the live panel at the
+        // very start of a re-ingest, so the status looked dead). Detached + utility.
+        let scanURLs = rootsToIngest.map(\.url)
+        let scanProc = beginProcess("Scanning your files…")
+        let plannedTotal = await Task.detached(priority: .utility) { [weak self] in
+            self?.countRegularFiles(in: scanURLs) ?? 0
+        }.value
+        setIngestPlannedTotal(plannedTotal)
+        finishProcess(scanProc)
 
         // Hold an activity assertion for the whole pass so macOS App Nap doesn't
         // suspend the background ingest when the window loses focus — the real
@@ -2790,8 +2801,16 @@ public final class AppState {
             urls.append(url)
         }
         let bookmarksRef = bookmarks
-        // Honest progress denominator across the whole corpus.
-        setIngestPlannedTotal(countRegularFiles(in: urls))
+        // Honest progress denominator across the whole corpus. Count OFF the
+        // MainActor — scanning a 91 MB mailbox on the main thread froze the live
+        // panel at the start of a wipe+re-ingest, so the status showed nothing.
+        let scanURLs = urls
+        let scanProc = beginProcess("Scanning your files…")
+        let plannedTotal = await Task.detached(priority: .utility) { [weak self] in
+            self?.countRegularFiles(in: scanURLs) ?? 0
+        }.value
+        setIngestPlannedTotal(plannedTotal)
+        finishProcess(scanProc)
         // Keep macOS App Nap from suspending the ingest when unfocused.
         let napGuard = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .automaticTerminationDisabled],
