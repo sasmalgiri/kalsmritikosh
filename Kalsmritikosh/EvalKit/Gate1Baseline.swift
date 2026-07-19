@@ -183,8 +183,28 @@ public enum Gate1Baseline {
 
         let queryStarted = Date()
         let runner = EvalKitRunner()
-        let reportURL = try await runner.run(brain: state.brain, objects: objects, outputDir: reportDir)
+        let (reportURL, byClass) = try await runner.runWithMetrics(brain: state.brain, objects: objects, outputDir: reportDir)
         let querySeconds = Date().timeIntervalSince(queryStarted)
+
+        // Gold-eval regression gate: compare this run's per-class metrics to the
+        // committed baseline (establishing it on the first run), and write a
+        // PASS/FAIL/BASELINE verdict next to the report. This is the answer-level
+        // safety net for future retrieval/rerank changes.
+        let current = GoldEvalGate.scores(from: byClass)
+        let baselineURL = reportDir.appendingPathComponent(GoldEvalGate.baselineFileName)
+        let baseline = GoldEvalGate.loadBaseline(from: baselineURL)
+        let verdict = GoldEvalGate.evaluate(current: current, baseline: baseline)
+        if verdict.establishedNewBaseline {
+            let snapshot = GoldEvalBaseline(
+                establishedAt: Date(),
+                questionCount: byClass.values.reduce(0) { $0 + $1.count },
+                byClass: current
+            )
+            GoldEvalGate.saveBaseline(snapshot, to: baselineURL)
+        }
+        try? verdict.renderMarkdown().data(using: .utf8)?
+            .write(to: reportDir.appendingPathComponent("eval-gold-gate.md"), options: .atomic)
+        KalsmritikoshLog.app.info("Gold gate: \(verdict.establishedNewBaseline ? "BASELINE ESTABLISHED" : (verdict.passed ? "PASS" : "FAIL"), privacy: .public)")
 
         // Load question count for the result surface.
         let questionCount = (try? runner.loadQuestions().count) ?? 0
