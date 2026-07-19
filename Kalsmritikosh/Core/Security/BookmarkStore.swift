@@ -101,10 +101,26 @@ public final class BookmarkStore {
 
     // MARK: - Persistence
 
+    /// The pre-rename key. The atlas→kalsmritikosh rename started writing roots
+    /// under `defaultsKey` but never migrated existing ones, so a user who had
+    /// registered a folder before the rename was left with an EMPTY new key and
+    /// their real root stranded here — the app then had nothing to ingest.
+    private let legacyDefaultsKey = "atlas.bookmarks"
+
     private func load() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return }
-        if let decoded = try? JSONDecoder().decode([Root].self, from: data) {
+        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+           let decoded = try? JSONDecoder().decode([Root].self, from: data),
+           !decoded.isEmpty {
             roots = decoded
+            return
+        }
+        // One-time recovery: adopt roots stranded under the legacy key and copy
+        // them forward under the current key.
+        if let legacy = UserDefaults.standard.data(forKey: legacyDefaultsKey),
+           let decoded = try? JSONDecoder().decode([Root].self, from: legacy),
+           !decoded.isEmpty {
+            roots = decoded
+            persist()
         }
     }
 
