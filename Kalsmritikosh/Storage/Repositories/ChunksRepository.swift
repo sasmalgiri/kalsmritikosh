@@ -42,7 +42,7 @@ public actor ChunksRepository {
     /// the LLM during ingest.
     public func findChunksMissingContextPrefix(limit: Int = 100) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
         FROM chunks
         WHERE context_prefix IS NULL
           AND object_id IN (
@@ -65,7 +65,7 @@ public actor ChunksRepository {
     /// index. `modelID` must match the active vector store's `embeddingModelID`.
     public func findChunksMissingVector(limit: Int = 128, modelID: String = "apple.nl.v1") async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
         LEFT JOIN chunk_embeddings ce ON ce.chunk_id = c.id AND ce.model_id = ?
         WHERE ce.chunk_id IS NULL
@@ -128,7 +128,7 @@ public actor ChunksRepository {
     /// writer.
     public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
         FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
         """, [.uuid(id)])
         return rows.compactMap(decode)
@@ -139,7 +139,7 @@ public actor ChunksRepository {
     /// hydrates the answer-side KO into a `RetrievedChunk`.
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
         FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return rows.first.flatMap(decode)
@@ -152,7 +152,7 @@ public actor ChunksRepository {
             // Rejected chunks are excluded here too, so a passage a user
             // soft-excluded stops surfacing via vector-hit / synth hydration.
             let rows = try await database.query("""
-            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
             FROM chunks WHERE id = ? AND review_status IS NULL LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let chunk = decode(row) {
@@ -165,7 +165,7 @@ public actor ChunksRepository {
     public func searchFTS(_ query: String, limit: Int = 50) async throws -> [Chunk] {
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
         let rows = try await database.query("""
-        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at
+        SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
         JOIN chunks_fts ON chunks_fts.rowid = c.rowid
         WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
@@ -180,7 +180,7 @@ public actor ChunksRepository {
     /// self-eval to measure recall@k on the user's OWN data.
     public func sample(limit: Int) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
         FROM chunks
         WHERE review_status IS NULL AND admit_embedding = 1 AND length(text) >= 40
         ORDER BY rowid
@@ -221,7 +221,14 @@ public actor ChunksRepository {
             pageNumber: row.int(6).map(Int.init),
             createdAt: created,
             contextPrefix: row.string(8),
-            contextPrefixSource: row.string(9)
+            contextPrefixSource: row.string(9),
+            // v54 — the evidence-first block link. Written by insertBatch but
+            // omitted from every SELECT until now, so readers always saw nil and
+            // the chunk→EvidenceBlock provenance was unusable at query time.
+            // Optional row accessors return nil when a SELECT doesn't project
+            // these columns, so this is safe for the (few) narrower queries.
+            evidenceBlockID: row.uuid(10),
+            blockKind: row.string(11)
         )
     }
 }
