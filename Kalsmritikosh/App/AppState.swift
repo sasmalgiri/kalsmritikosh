@@ -446,7 +446,16 @@ public final class AppState {
             // SQLiteVectorStore so `nearest()` takes the index path
             // once it's built (brute force remains the fallback).
             let hnsw = HNSWVectorIndex()
-            let vectors = SQLiteVectorStore(database: db, annIndex: hnsw)
+            // P6.2 — label the vector index by the ACTIVE embedder so the
+            // model-aware chunk_embeddings store is honest (the bundled Core ML
+            // BGE model, when present, is the real embedder — its 384-dim vectors
+            // must not masquerade as 'apple.nl.v1'). isAvailable() is a cheap
+            // file+tokenizer check. Reconciliation of any already-stored vectors
+            // written under the placeholder label happens just below, after
+            // migrate().
+            let activeEmbeddingModelID = await CoreMLEmbedderProvider().isAvailable()
+                ? "bge-small.v1" : "apple.nl.v1"
+            let vectors = SQLiteVectorStore(database: db, annIndex: hnsw, modelID: activeEmbeddingModelID)
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
             let chunks = ChunksRepository(database: db)
@@ -1021,25 +1030,26 @@ public final class AppState {
             // left prior-session pending embeddings stranded until a new ingest.
             // Starting here guarantees they finish on any launch.
             //
-            // P6.2 — embedder-swap reconciliation. Runs ONLY when the bundled
-            // Core ML embedder is present; a no-op otherwise (today's path). When
-            // present, any stored vectors at a different dimension (e.g. the old
-            // 300-dim Apple embeddings) are stale: delete them so the drain
-            // re-embeds every chunk at the new dimension, and drop the HNSW cache
-            // so it rebuilds. Vectors are DERIVED (re-derivable) — this is not the
-            // protected extracted data; chunks/FTS/entities are untouched.
-            if await coreMLEmbedder.isAvailable() {
-                let target = Int64(coreMLEmbedder.dimension)
-                let stale = (try? await db.query(
-                    "SELECT COUNT(*) FROM vectors WHERE dim != ?;", [.integer(target)]
+            // P6.2 — honest model-aware label reconciliation. The bundled Core ML
+            // BGE embedder (384-dim) has been the active embedder, but earlier
+            // builds wrote its vectors under the default 'apple.nl.v1' label. When
+            // BGE is active, relabel those 384-dim rows to their true model id so
+            // a future embedder swap can COEXIST per the model-aware design
+            // (never delete — the vectors are correct, only mislabeled). Genuine
+            // 300-dim NLEmbedding rows are left as 'apple.nl.v1'. Idempotent.
+            if activeEmbeddingModelID == "bge-small.v1" {
+                let mislabeled = (try? await db.query(
+                    "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = 'apple.nl.v1' AND dim = 384;", []
                 ))?.first?.int(0) ?? 0
-                if stale > 0 {
-                    try? await db.exec("DELETE FROM vectors WHERE dim != ?;", [.integer(target)])
+                if mislabeled > 0 {
+                    try? await db.exec(
+                        "UPDATE chunk_embeddings SET model_id = 'bge-small.v1' WHERE model_id = 'apple.nl.v1' AND dim = 384;", []
+                    )
                     let cacheURL = resolvedDBURL
                         .deletingLastPathComponent()
                         .appendingPathComponent("hnsw-index.bin")
                     try? FileManager.default.removeItem(at: cacheURL)
-                    KalsmritikoshLog.app.info("Embedder swap: cleared \(stale, privacy: .public) stale-dimension vector(s); re-embedding at dim \(target, privacy: .public)")
+                    KalsmritikoshLog.app.info("Embedder labels: relabeled \(mislabeled, privacy: .public) BGE vector(s) apple.nl.v1 → bge-small.v1; HNSW cache dropped for rebuild")
                 }
             }
             await ingest.startBackgroundEmbeddingDrain()
