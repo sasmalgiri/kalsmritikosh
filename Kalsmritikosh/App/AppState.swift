@@ -2678,6 +2678,17 @@ public final class AppState {
         // (fixes the "100% while only 12% done" bar). Cleared when the pass ends.
         setIngestPlannedTotal(countRegularFiles(in: rootsToIngest.map(\.url)))
 
+        // Hold an activity assertion for the whole pass so macOS App Nap doesn't
+        // suspend the background ingest when the window loses focus — the real
+        // cause of the multi-minute stalls (a full bulk re-ingest froze at ~12%
+        // for 73 minutes when unfocused). .userInitiated keeps the app at full
+        // scheduling priority + blocks sudden termination until the pass ends.
+        let napGuard = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .automaticTerminationDisabled],
+            reason: "Ingesting documents"
+        )
+        defer { ProcessInfo.processInfo.endActivity(napGuard) }
+
         // Hand each root to the nonisolated enumerator so the
         // per-file loop runs without MainActor scheduling pressure.
         let bookmarksRef = bookmarks
@@ -2708,6 +2719,12 @@ public final class AppState {
         let bookmarksRef = bookmarks
         // Honest progress denominator across the whole corpus.
         setIngestPlannedTotal(countRegularFiles(in: urls))
+        // Keep macOS App Nap from suspending the ingest when unfocused.
+        let napGuard = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .automaticTerminationDisabled],
+            reason: "Ingesting documents"
+        )
+        defer { ProcessInfo.processInfo.endActivity(napGuard) }
         // Counter must be Sendable + actor-safe; a tiny actor is enough.
         let counter = IngestCounter()
         await withTaskGroup(of: Void.self) { group in
