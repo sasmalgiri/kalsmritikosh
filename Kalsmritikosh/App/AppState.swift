@@ -85,6 +85,15 @@ public final class AppState {
     /// checkpoints (between files / between embed batches).
     public let ingestControl = IngestControl()
 
+    /// Set at boot when the only available local reasoning model does NOT fit
+    /// this Mac comfortably (≤70% RAM) — e.g. a 26 GB model on a 16 GB device.
+    /// The UI surfaces a consent prompt recommending a device-suitable model to
+    /// pull via Ollama. nil = a fitting model is present (nothing to suggest).
+    /// The heavy model keeps working until the user agrees to install the lighter one.
+    public private(set) var pendingModelSuggestion: OllamaSetupAdvisor.ModelSuggestion?
+    /// 0…1 while a recommended model is downloading; nil when idle.
+    public private(set) var modelInstallProgress: Double?
+
     // Idle maintenance (idle-driven summarization/distillation). The UI
     // shows a banner when a pass is running so the user knows the app is
     // working while their machine is idle — and that it stops the moment
@@ -246,6 +255,50 @@ public final class AppState {
             await ingestControl.stop()
             await ingest?.setDrainPaused(false)
             await ingest?.stopEmbeddingDrain()
+        }
+    }
+
+    // MARK: - Device-suitable model install (consent-gated)
+
+    /// User declined the suggested lighter model — hide the prompt for this session.
+    public func dismissModelSuggestion() { pendingModelSuggestion = nil }
+
+    /// Pull the recommended device-suitable model via Ollama (only after the user
+    /// consents in the UI), streaming progress, then register it as a provider so
+    /// the resolver can prefer it over the heavy one. No download happens without
+    /// this explicit call.
+    public func installRecommendedModel() async {
+        guard let sug = pendingModelSuggestion, let capabilities else { return }
+        let base = URL(string: "http://localhost:11434")!
+        let proc = beginProcess("Downloading \(sug.displayName)…")
+        modelInstallProgress = 0
+        let installer = OllamaInstaller(baseURL: base)
+        var ok = false
+        let stream = await installer.pull(modelTag: sug.modelTag)
+        for await result in stream {
+            switch result {
+            case .success(let p):
+                modelInstallProgress = p.fractionComplete
+                if p.totalBytes > 0 { updateProcess(proc, done: Int(p.completedBytes), total: Int(p.totalBytes)) }
+                if p.isComplete { ok = true }
+            case .failure(let e):
+                KalsmritikoshLog.app.error("Model pull failed: \(String(describing: e), privacy: .public)")
+            }
+        }
+        finishProcess(proc)
+        modelInstallProgress = nil
+        if ok {
+            await capabilities.register(OllamaProvider(
+                id: "provider.local.network.\(sug.modelTag)",
+                baseURL: base,
+                modelTag: sug.modelTag,
+                embeddingModelTag: "nomic-embed-text",
+                enabled: true,
+                displayName: "Ollama \(sug.modelTag)",
+                tier: .medium
+            ))
+            KalsmritikoshLog.app.info("Installed + registered device-suitable model \(sug.modelTag, privacy: .public)")
+            pendingModelSuggestion = nil
         }
     }
 
@@ -764,6 +817,22 @@ public final class AppState {
             )
             if setupSuggestion.action != .nothingNeeded {
                 KalsmritikoshLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
+            }
+            // Device-fit gate. Even when a reasoning model IS installed, if NONE
+            // of them fits this Mac comfortably (≤70% RAM) — e.g. only a 26 GB
+            // model on a 16 GB device — don't silently keep using the heavy one.
+            // Surface a consent prompt recommending a device-suitable model; the
+            // user keeps using what's there until they agree to pull the lighter one.
+            if ollamaReachable {
+                let ramBudget = Int64(Double(hardware.totalRAMBytes) * 0.7)
+                let hasFittingModel = detectedOllama.contains {
+                    $0.estimatedRAMBytes > 0 && $0.estimatedRAMBytes <= ramBudget
+                }
+                if !hasFittingModel {
+                    let sug = OllamaSetupAdvisor.recommendModel(totalRAMBytes: hardware.totalRAMBytes)
+                    self.pendingModelSuggestion = sug
+                    KalsmritikoshLog.app.info("No comfortably-fitting reasoning model on \(hardware.totalRAMBytes / 1_073_741_824, privacy: .public)GB device — suggesting \(sug.modelTag, privacy: .public)")
+                }
             }
             if internalProvidersEnabled, detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(

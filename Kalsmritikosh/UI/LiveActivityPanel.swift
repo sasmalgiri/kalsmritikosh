@@ -58,6 +58,7 @@ struct LiveActivityPanel: View {
                 .buttonStyle(.plain)
                 .help("What the app is doing — tap for details")
             if showControls { controls }
+            if let sug = appState.pendingModelSuggestion { modelBanner(sug) }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 10)
@@ -193,6 +194,43 @@ struct LiveActivityPanel: View {
         }
         .padding(.horizontal, 4)
         .disabled(appState.ingestRunState == .stopping)
+    }
+
+    // MARK: - Device-suitable model consent prompt
+
+    @ViewBuilder
+    private func modelBanner(_ sug: OllamaSetupAdvisor.ModelSuggestion) -> some View {
+        let diskGB = String(format: "%.1f GB", Double(sug.approxDiskBytes) / 1_073_741_824)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10)).foregroundStyle(.orange)
+                Text("Model too heavy for this Mac")
+                    .font(.caption2.weight(.bold)).foregroundStyle(.primary)
+            }
+            Text("Install **\(sug.displayName)** (\(diskGB)) — a better fit that answers much faster. Your current model keeps working until then.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let p = appState.modelInstallProgress {
+                ProgressView(value: p).progressViewStyle(.linear).tint(Theme.brand)
+                Text("Downloading… \(Int(p * 100))%").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 8) {
+                    Button { Task { await appState.installRecommendedModel() } } label: {
+                        Text("Install").font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Theme.brand.opacity(0.16), in: Capsule()).foregroundStyle(Theme.brand)
+                    }.buttonStyle(.plain)
+                    Button { appState.dismissModelSuggestion() } label: {
+                        Text("Not now").font(.caption2).foregroundStyle(.secondary)
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.orange.opacity(0.3), lineWidth: 1))
     }
 
     private func ctlButton(_ label: String, _ icon: String, tint: Color, _ action: @escaping () -> Void) -> some View {
