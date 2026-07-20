@@ -95,9 +95,12 @@ public struct EntityLinker: Sendable {
         case .phoneNumber:
             return entity.value.filter(\.isNumber)
         case .person, .organization, .vendor, .client:
+            // Collapse internal whitespace runs (not just the ends) so
+            // NER-glued forms fold together: "Bank of  India" == "Bank of India".
             return entity.value
                 .lowercased()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split(whereSeparator: { $0.isWhitespace })
+                .joined(separator: " ")
         default:
             return entity.normalizedValue ?? entity.value.lowercased()
         }

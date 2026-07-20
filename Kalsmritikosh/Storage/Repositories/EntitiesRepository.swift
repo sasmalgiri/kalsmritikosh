@@ -662,7 +662,18 @@ public actor EntitiesRepository {
 
     private func rawNormalize(_ entity: Entity) -> String {
         let candidate = entity.normalizedValue ?? entity.value
-        return candidate.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        // Collapse INTERNAL whitespace runs, not just the ends — NER frequently
+        // glues fields across multiple spaces ("Bank of     India", "Niraj
+        // AGARWAL", "Agarwal Packers  and  Movers Limited"), which otherwise
+        // stored as SEPARATE canonical rows from their clean single-space twin.
+        // Collapsing here makes the (kind, normalized) key dedup them.
+        return Self.collapseWhitespace(candidate).lowercased()
+    }
+
+    /// Collapse every run of whitespace/newlines to a single space and trim.
+    /// Used for both the dedup key and the stored display value.
+    static func collapseWhitespace(_ s: String) -> String {
+        s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
     /// Apply the canonical-alias map only to organization-shaped kinds
@@ -705,7 +716,7 @@ public actor EntitiesRepository {
         """, [
             .uuid(e.id),
             .text(e.kind.rawValue),
-            .text(e.value),
+            .text(Self.collapseWhitespace(e.value)),
             .text(normalized),
             .uuid(e.sourceObjectID),
             .real(e.confidence.value),

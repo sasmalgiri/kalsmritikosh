@@ -51,6 +51,12 @@ public struct EntityQualityGate: Sendable {
         "june", "july", "august", "september", "october", "november", "december"
     ]
 
+    /// Bare prepositions/conjunctions that a real person/org name never STARTS
+    /// with. Articles (the/a/an) are intentionally omitted — "The Home Depot".
+    public nonisolated static let leadingStopWords: Set<String> = [
+        "of", "and", "for", "to", "in", "on", "at", "with", "by", "from", "or", "as"
+    ]
+
     /// Identifiers the app's own pipeline emits when NLTagger reads its
     /// internal class names off log strings the entity extractor
     /// inadvertently sees.
@@ -92,6 +98,17 @@ public struct EntityQualityGate: Sendable {
         // Hostname-shaped (mixed letters + digits, no spaces, ≥6 chars):
         // "tyzpr01mb4530", "seqmbx01", "d22rediffmail".
         if isNameKind, isHostnameShape(surface) {
+            return false
+        }
+
+        // A person/org surface whose FIRST token is a bare preposition/conjunction
+        // ("of","and","for"…) is a sentence fragment NER mis-tagged as a name
+        // ("OF MONOESTER FROM AQ ML OF DSE"). Articles (the/a/an) are deliberately
+        // EXCLUDED so real "The Home Depot"-style names survive; real orgs almost
+        // never start with a bare preposition.
+        if isNameKind,
+           let first = surface.split(whereSeparator: { $0.isWhitespace }).first,
+           Self.leadingStopWords.contains(String(first).lowercased()) {
             return false
         }
 
