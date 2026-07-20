@@ -67,15 +67,21 @@ public struct AskView: View {
                         }
                     }
                     .padding()
+                    .frame(maxWidth: .infinity)
                     .animation(Theme.springSoft, value: turns.count)
                 }
                 .onChange(of: turns.count) { _, _ in
                     if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
                 .scrollContentBackground(.hidden)
+                // Pin the composer to the bottom of the scroll region. Was a
+                // plain VStack sibling, which the greedy ScrollView pushed off
+                // the bottom of the window on tall layouts — so the input bar
+                // vanished. safeAreaInset keeps it always visible.
+                .safeAreaInset(edge: .bottom, spacing: 0) { input }
             }
-            input
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
         .onAppear {
@@ -357,6 +363,8 @@ public struct AskView: View {
         .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)   // clean pinned-bar backing over scroll content
     }
 
     // MARK: - Turn bubbles
