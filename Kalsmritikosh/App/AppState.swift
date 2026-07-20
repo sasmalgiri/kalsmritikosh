@@ -21,6 +21,35 @@ public actor IngestCounter {
     public func increment() { value += 1 }
 }
 
+/// Cooperative pause/stop shared between the (nonisolated) bulk-ingest loop and
+/// the coordinator's embedding drain. Callers hit `checkpoint()` at safe points:
+/// it returns `false` when a Stop was requested (caller should break) and blocks
+/// while Paused. No forced cancellation — work already in flight (one file's
+/// atomic commit) always finishes, so the ledger is never left half-written.
+public actor IngestControl {
+    private var paused = false
+    private var stopped = false
+    public init() {}
+
+    public func pause()  { paused = true }
+    public func resume() { paused = false }
+    public func stop()   { stopped = true; paused = false }
+    /// Call when a fresh bulk pass begins so a prior Stop doesn't leak in.
+    public func reset()  { paused = false; stopped = false }
+    public var isStopped: Bool { stopped }
+    public var isPaused: Bool { paused }
+
+    /// Safe point: `false` → stop (break the loop); otherwise waits out any pause
+    /// and returns `true` to continue.
+    public func checkpoint() async -> Bool {
+        if stopped { return false }
+        while paused && !stopped {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+        }
+        return !stopped
+    }
+}
+
 @MainActor
 @Observable
 public final class AppState {
@@ -43,6 +72,18 @@ public final class AppState {
     /// The file being ingested RIGHT NOW — so a slow/stuck file is visible
     /// (e.g. a large mailbox that takes minutes). Cleared when idle.
     public private(set) var ingestCurrentFile: String?
+
+    /// User-facing ingest run state driving the Pause / Resume / Stop controls
+    /// in the live panel. `.paused` idles the pipeline BETWEEN files (never
+    /// mid-record, so the per-document atomic commit stays intact); `.stopping`
+    /// ends the current bulk pass at the next safe checkpoint.
+    public enum IngestRunState: String, Sendable { case idle, running, paused, stopping }
+    public private(set) var ingestRunState: IngestRunState = .idle
+
+    /// Cooperative pause/stop flag shared with the nonisolated bulk-ingest loop
+    /// AND the coordinator's background embedding drain. Both consult it at safe
+    /// checkpoints (between files / between embed batches).
+    public let ingestControl = IngestControl()
 
     // Idle maintenance (idle-driven summarization/distillation). The UI
     // shows a banner when a pass is running so the user knows the app is
@@ -179,6 +220,34 @@ public final class AppState {
 
     /// Set/clear the pre-counted bulk-ingest total (MainActor mutator).
     public func setIngestPlannedTotal(_ n: Int) { ingestPlannedFileTotal = max(0, n) }
+
+    // MARK: - Ingest run control (Pause / Resume / Stop)
+
+    /// Pause the whole pipeline — the bulk-ingest loop idles between files and
+    /// the background embedding drain idles between batches. Nothing in flight
+    /// is interrupted, so no record is left half-written.
+    public func pauseIngest() {
+        ingestRunState = .paused
+        Task { await ingestControl.pause(); await ingest?.setDrainPaused(true) }
+    }
+
+    /// Resume after a pause.
+    public func resumeIngest() {
+        ingestRunState = .running
+        Task { await ingestControl.resume(); await ingest?.setDrainPaused(false) }
+    }
+
+    /// Stop the current bulk pass at the next safe checkpoint and halt the
+    /// embedding drain. Already-ingested files stay; a later ingest resumes the
+    /// remaining ones (content-hash dedup skips what's done).
+    public func stopIngest() {
+        ingestRunState = .stopping
+        Task {
+            await ingestControl.stop()
+            await ingest?.setDrainPaused(false)
+            await ingest?.stopEmbeddingDrain()
+        }
+    }
 
     /// Count regular, non-hidden files under `urls` — a fast pre-pass (no file
     /// reads) so ingest progress has an honest denominator. Nonisolated: pure FS.
@@ -2733,6 +2802,12 @@ public final class AppState {
     /// App Nap when the window lost focus.
     public func autoReingestEmptyRoots() async {
         guard let ingest, let files else { return }
+        // Fresh pass — clear any prior Stop/Pause and mark running for the
+        // live Pause/Resume/Stop controls.
+        await ingestControl.reset()
+        await ingest.setDrainPaused(false)
+        ingestRunState = .running
+        defer { ingestRunState = .idle }
         // Snapshot the URLs that need a fresh pass while we're still on
         // MainActor (bookmarks resolution requires it). Each URL keeps
         // its security-scoped access live until the detached worker
@@ -2794,6 +2869,12 @@ public final class AppState {
     @discardableResult
     public func ingestAllRoots() async -> Int {
         guard let ingest else { return 0 }
+        // Fresh pass — clear any prior Stop/Pause and mark running for the
+        // live Pause/Resume/Stop controls.
+        await ingestControl.reset()
+        await ingest.setDrainPaused(false)
+        ingestRunState = .running
+        defer { ingestRunState = .idle }
         // Snapshot URLs on MainActor (BookmarkStore is MainActor-isolated).
         var urls: [URL] = []
         for root in bookmarks.roots {
@@ -2856,6 +2937,12 @@ public final class AppState {
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
         while let next = enumerator?.nextObject() as? URL {
+            // Live Pause/Stop checkpoint — between files, so a Stop never
+            // interrupts a document mid-commit and a Pause idles cleanly.
+            guard await ingestControl.checkpoint() else {
+                KalsmritikoshLog.ingestion.info("\(label, privacy: .public): stopped by user")
+                break
+            }
             let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             guard isRegular else { continue }
             let fileURL = next

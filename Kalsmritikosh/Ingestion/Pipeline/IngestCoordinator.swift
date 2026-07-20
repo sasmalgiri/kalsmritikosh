@@ -188,10 +188,25 @@ public actor IngestCoordinator {
     // (avoids actor-init self-capture), cancelled on shutdown.
     private var embeddingDrainStarted = false
     private var embeddingDrainTask: Task<Void, Never>?
+    /// Pause/Stop hooks for the live ingest controls. `drainPaused` idles the
+    /// background embedding loop between batches (Resume clears it).
+    private var drainPaused = false
 
     public func shutdown() {
         embeddingDrainTask?.cancel()
         invalidationContinuation.finish()
+    }
+
+    /// Pause (true) / resume (false) the background embedding drain. Wired to the
+    /// live-panel Pause/Resume controls via AppState.
+    public func setDrainPaused(_ paused: Bool) { drainPaused = paused }
+
+    /// Stop the embedding drain entirely (the Stop control). Cancels the task and
+    /// clears the started flag so a later ingest restarts it from the pending set.
+    public func stopEmbeddingDrain() {
+        embeddingDrainTask?.cancel()
+        embeddingDrainStarted = false
+        drainPaused = false
     }
 
     /// PERF.1 — start the resumable background embedding drain WITHOUT needing a
@@ -228,6 +243,11 @@ public actor IngestCoordinator {
         var unembeddable = Set<Chunk.ID>()
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
+            // Live Pause — idle between batches until resumed (or cancelled).
+            while drainPaused && !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            if Task.isCancelled { break }
             let fetched = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
             let batch = fetched.filter { !unembeddable.contains($0.id) }
             if batch.isEmpty {

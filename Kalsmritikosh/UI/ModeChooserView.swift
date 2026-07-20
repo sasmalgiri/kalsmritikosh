@@ -56,7 +56,7 @@ public struct ModeChooserView: View {
                 .font(Theme.display(23, .bold))
                 .foregroundStyle(Theme.brandGradient())
                 .multilineTextAlignment(.center)
-            Text("This sets how much on-device LLM work runs while ingesting. Deeper = richer ledger but slower. You can change it later in Settings.")
+            Text("Pick an ingestion path. **Full LLM** (assertive) extracts the most meaning up front — richest ledger, slowest. **Ledger event-driven** (fast) runs rules + embeddings only and defers the LLM to question time. Each card shows how it behaves and roughly how long it takes per 100 MB. You can change this later in Settings.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
