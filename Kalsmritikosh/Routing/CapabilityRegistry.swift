@@ -167,7 +167,21 @@ public actor CapabilityRegistry {
         let eligible = providers.values.filter { provider -> Bool in
             let manifest = provider.manifest
             guard spec.requires.isSubset(of: manifest.capabilities) else { return false }
-            return isPrivacyEligible(manifest: manifest, spec: spec)
+            guard isPrivacyEligible(manifest: manifest, spec: spec) else { return false }
+            // STRICT device-fit gate. A GENERATIVE model whose estimated working
+            // set exceeds 70% of device RAM only "runs" by swapping to disk
+            // (a 26 GB model on a 16 GB Mac = unusably slow), so we never select
+            // it — not even if the user pinned it (pins require eligibility).
+            // minRAMBytes == 0 means unknown (e.g. Apple on-device) → allowed
+            // (fail-open). Embedders (no .textGeneration) are never gated.
+            if manifest.capabilities.contains(.textGeneration), manifest.minRAMBytes > 0 {
+                let budget = Int64(Double(hardware.totalRAMBytes) * 0.7)
+                if manifest.minRAMBytes > budget {
+                    KalsmritikoshLog.app.info("Model-fit gate: excluding \(manifest.id, privacy: .public) — needs \(manifest.minRAMBytes / 1_073_741_824, privacy: .public)GB > budget \(budget / 1_073_741_824, privacy: .public)GB")
+                    return false
+                }
+            }
+            return true
         }
 
         if eligible.isEmpty {
