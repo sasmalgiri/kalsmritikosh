@@ -119,6 +119,28 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Content-based fallback for when the filename has no (or an unknown)
+    /// extension — reads leading magic bytes. Used by the ingest path only when
+    /// `detect(from:)` returns `.unknown` (e.g. an email attachment named as a
+    /// bare hash). OLE2 (.doc/.xls/.ppt) is intentionally NOT sniffed here —
+    /// magic bytes can't tell those apart without parsing the CFB directory, so
+    /// we leave them to the MIME-type mapping rather than risk mis-routing.
+    public nonisolated static func sniffMagicBytes(_ data: Data) -> SourceType? {
+        let b = [UInt8](data.prefix(16))
+        guard b.count >= 4 else { return nil }
+        func has(_ sig: [UInt8]) -> Bool { b.count >= sig.count && Array(b.prefix(sig.count)) == sig }
+        if has([0xFF, 0xD8, 0xFF]) { return .jpg }
+        if has([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) { return .png }
+        if has([0x25, 0x50, 0x44, 0x46]) { return .pdf }                       // %PDF
+        if has([0x49, 0x49, 0x2A, 0x00]) || has([0x4D, 0x4D, 0x00, 0x2A]) { return .tiff }
+        if has([0x52, 0x49, 0x46, 0x46]), b.count >= 12,
+           Array(b[8..<12]) == [0x57, 0x45, 0x42, 0x50] { return .webp }        // RIFF....WEBP
+        // ZIP container (also docx/xlsx/pptx/epub) — route to the archive path,
+        // which expands members and types each one individually.
+        if has([0x50, 0x4B, 0x03, 0x04]) { return .zip }
+        return nil
+    }
+
     public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub: return .document

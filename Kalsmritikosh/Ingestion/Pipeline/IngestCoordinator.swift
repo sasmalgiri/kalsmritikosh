@@ -315,7 +315,15 @@ public actor IngestCoordinator {
         // as deferred (never a "failure"); this is the single chokepoint so it
         // also covers media attachments extracted from mbox/zip. Re-enable later
         // by transcribing on demand. Applies to direct files AND attachments.
-        let detected = SourceType.detect(from: url)
+        var detected = SourceType.detect(from: url)
+        // Content-based fallback: an attachment with no/unknown extension (e.g. a
+        // bare-hash filename) whose bytes are a real JPEG/PNG/PDF/… was falling to
+        // TextLoader and getting refused as binary. Sniff magic bytes and re-route.
+        if detected == .unknown,
+           let head = try? Data(contentsOf: url, options: .mappedIfSafe),
+           let sniffed = SourceType.sniffMagicBytes(head) {
+            detected = sniffed
+        }
         if detected.category == .audio || detected.category == .video {
             await ingestAttempts?.record(url: url, status: .unchanged, stage: "media-deferred",
                                          detail: "audio/video not transcribed (deferred format)")
@@ -551,7 +559,15 @@ public actor IngestCoordinator {
 
     private func ingestCore(fileAt url: URL) async throws -> Result {
         await pipelineMetrics?.bump(.discovered)
-        let type = SourceType.detect(from: url)
+        var type = SourceType.detect(from: url)
+        // Content-based fallback for extensionless / unknown files (e.g. an email
+        // attachment named as a bare hash) — sniff magic bytes so a real image /
+        // PDF / zip routes to the right parser instead of falling to TextLoader.
+        if type == .unknown,
+           let head = try? Data(contentsOf: url, options: .mappedIfSafe),
+           let sniffed = SourceType.sniffMagicBytes(head) {
+            type = sniffed
+        }
 
         // ZIP archives expand recursively. We still emit a manifest KO for
         // the archive itself (via the ArchiveLoader.ingest path below) so

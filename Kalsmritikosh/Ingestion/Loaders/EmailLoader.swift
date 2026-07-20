@@ -665,7 +665,16 @@ public struct EmailLoader: Ingestor {
                 // the same on-disk filename (correct — T7's hash-first
                 // dedup folds them into one canonical KO downstream).
                 let raw = part.filename ?? "attachment-\(UUID().uuidString.prefix(8))"
-                let safe = sanitizeFilename(raw)
+                var safe = sanitizeFilename(raw)
+                // If the attachment filename carries NO extension, derive one from
+                // the MIME Content-Type. Downstream routing (SourceType.detect) is
+                // extension-based, so an extensionless "image/jpeg" was falling to
+                // TextLoader and getting refused as binary. Giving it ".jpg" here
+                // routes it to the image parser (+ OCR) like any other image.
+                if (safe as NSString).pathExtension.isEmpty,
+                   let mimeExt = Self.fileExtension(forMIME: part.contentType) {
+                    safe += ".\(mimeExt)"
+                }
                 let hashTag = Self.shortContentHash(part.body)
                 let uniqueName: String = {
                     if let dot = safe.lastIndex(of: ".") {
@@ -699,6 +708,39 @@ public struct EmailLoader: Ingestor {
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
+    }
+
+    /// Map a MIME Content-Type to a file extension so an attachment whose
+    /// filename lacks one still routes to the right parser. Only the formats the
+    /// pipeline actually parses are listed; anything else stays extensionless
+    /// (and the ingest-time magic-byte sniff is the final safety net).
+    static func fileExtension(forMIME contentType: String) -> String? {
+        let mime = contentType.lowercased()
+            .split(separator: ";").first.map(String.init)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        switch mime {
+        case "image/jpeg", "image/jpg":                                                     return "jpg"
+        case "image/png":                                                                   return "png"
+        case "image/heic", "image/heif":                                                    return "heic"
+        case "image/tiff":                                                                  return "tiff"
+        case "image/webp":                                                                  return "webp"
+        case "application/pdf":                                                             return "pdf"
+        case "application/msword":                                                          return "doc"
+        case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":     return "docx"
+        case "application/vnd.ms-excel":                                                    return "xls"
+        case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":           return "xlsx"
+        case "application/vnd.ms-powerpoint":                                               return "ppt"
+        case "application/vnd.openxmlformats-officedocument.presentationml.presentation":   return "pptx"
+        case "application/vnd.oasis.opendocument.text":                                     return "odt"
+        case "application/vnd.oasis.opendocument.spreadsheet":                              return "ods"
+        case "application/rtf", "text/rtf":                                                 return "rtf"
+        case "application/epub+zip":                                                        return "epub"
+        case "application/zip":                                                             return "zip"
+        case "text/csv":                                                                    return "csv"
+        case "text/plain":                                                                  return "txt"
+        case "text/html":                                                                   return "html"
+        default:                                                                            return nil
+        }
     }
 
     private static func sanitizeFilename(_ name: String) -> String {
