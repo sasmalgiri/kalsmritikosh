@@ -1,0 +1,117 @@
+# PRODUCTION_STATUS
+
+**Generated:** 2026-07-22 (GOV-003), from committed code + this session's real-data runs.
+**Baseline:** `main` at the GOV-002 commit. **Authority:** `SHIP_DECISIONS.md` (CURRENT).
+
+Status vocabulary: `NOT_STARTED` · `IMPLEMENTED` (code compiles, no independent proof) ·
+`UNIT_VERIFIED` · `INTEGRATION_VERIFIED` (runnable gate/in-app) · `REAL_DATA_VERIFIED`
+(owner corpus this session) · `RELEASE_VERIFIED` · `DEFERRED` · `BLOCKED`.
+
+> **Promotion rule (pack §19.5):** a status here is *proposed* unless it names verification
+> evidence. Anything marked **⚠proposed** is inferred from commits/task manifest and has
+> **not** been re-verified in code this session — treat as unverified until checked.
+> No `UNIT_VERIFIED` is reachable until the test target exists (TST-001, BLOCKED).
+
+## 1. Workstream summary
+
+| Phase | Workstream | Net status | Evidence |
+|---|---|---|---|
+| P0 | Governance | **DONE** | commits `d785e09`, `75f7f62`, this commit |
+| P0 | Audit | AUD-001 DONE; AUD-002/003 NOT_STARTED | `778f8f4`; `FULL_REPOSITORY_STATIC_AUDIT.md` |
+| P0 | Testing | **BLOCKED** | 49 test files exist, 0 in target (`grep -c KalsmritikoshTests project.pbxproj` = 0) |
+| P0 | CI | BLOCKED (depends TST) | no mandatory test job |
+| P0 | Evaluation | INTEGRATION_VERIFIED (fixture) | ProjectDelta gold gate recall/precision 1.00 |
+| P1 | Evidence authority | IMPLEMENTED-partial | `source_documents`/`source_versions`/`evidence_blocks` in schema v54; not yet sole authority |
+| P2 | Ingestion durability | IMPLEMENTED-partial | PI.1 done; PI.2/PI.3 pending; ingest itself REAL_DATA_VERIFIED |
+| P3 | Parsers | REAL_DATA_VERIFIED (fidelity) / IMPLEMENTED (coverage report) | 17 parsers; 526/526 msgs this session |
+| P4 | Semantics/domain packs | mostly NOT_STARTED | `SourceType` exists; `DocumentRole` split not done |
+| P5 | Retrieval authority | **IMPLEMENTED-heuristic — not release-ready** | `HybridRetriever` density boost; RET-001/003 open |
+| P6 | Claims/Reconstruction | IMPLEMENTED | detectors + outline exist; verification incomplete |
+| P7 | Personas/Exports | IMPLEMENTED | F1–F6, F8 complete; end-to-end jobs unverified |
+| P8 | Workbench/DataLab | **NOT_STARTED** | greenfield subsystem |
+| P8 | UX/IA | IMPLEMENTED-partial | 30 destinations; dev surfaces hidden; a11y unverified |
+| P9 | Security/Redaction | IMPLEMENTED (privacy) / DEFERRED (redaction) | PrivacyGate; F7 safety-gated |
+| P10 | Models | MOD-001 DONE; runtime DEFERRED | GOV-001 locked Apple FM + BGE, no GGUF in v1 |
+| P11 | Scale | NOT_STARTED / owner-gated | in-memory HNSW only; no recorded large run |
+| P12 | Release | BLOCKED / owner-gated | no signed clean-machine run |
+
+## 2. P0 — verified this session
+
+| ID | Task | Status | Evidence |
+|---|---|---|---|
+| GOV-001 | Resolve SHIP_DECISIONS | **DONE** | `d785e09` — one locked model/OS/network/scale contract |
+| GOV-002 | Banner stale trackers + SHIPPING runbook | **DONE** | `75f7f62` — 11 docs bannered, SHIPPING→App Store |
+| GOV-003 | Generate PRODUCTION_STATUS | **DONE** | this file |
+| GOV-004 | Root agent instructions point to pack | **DONE** | CLAUDE.md Authority-chain banner (`75f7f62`) |
+| AUD-001 | Full static repository audit | **DONE** | `778f8f4` — `FULL_REPOSITORY_STATIC_AUDIT.md` |
+| AUD-002 | File ownership/authority/test map CSV | NOT_STARTED | — |
+| AUD-003 | Schema authority/rebuildability map | NOT_STARTED | — |
+| TST-001 | Create test target + test plan | **BLOCKED** | needs Xcode closed to edit `project.pbxproj` |
+| TST-002 | Add test files to target | BLOCKED | depends TST-001 |
+| CI-001 | Mandatory build+unit tests | BLOCKED | depends TST-001/002 |
+| CI-002 | Migration/parser/security/export jobs | BLOCKED | depends CI-001 |
+| EVAL-001 | Record 60Q baseline | INTEGRATION_VERIFIED (fixture) / ⚠proposed (60Q) | gold gate runs; 60Q recording not re-run this session |
+| EVAL-002 | Private real-data owner question pack | REAL_DATA_VERIFIED-partial | 3 real questions probed this session (2 still wrong — RET-003) |
+
+## 3. P1 Evidence & P2 Ingestion (near-term active)
+
+| ID | Status | Evidence / note |
+|---|---|---|
+| EV-001 canonical authority | IMPLEMENTED-partial | structural tables exist; KO/chunks not yet demoted to projections. **Next actionable code task.** |
+| EV-002 lossless SourceLocator citations | ⚠proposed IMPLEMENTED | `SourceLocator` model present; unify not proven |
+| EV-003 KO/chunk → version+blocks | IMPLEMENTED-partial | `chunks.evidence_block_id` written+read (this session fix `70bea2c`) |
+| EV-004 corpus/processing snapshots | NOT_STARTED | — |
+| EV-005 managed evidence vault | NOT_STARTED | — |
+| EV-006 consolidate version mechanisms | NOT_STARTED | two historical version layers still coexist |
+| ING-001 durable ingest state machine | NOT_STARTED (PI.3) | IngestAttempts exists; no persisted transitions |
+| ING-002 atomic queryable-core commit | NOT_STARTED (PI.2) | batch inserts don't self-transact |
+| ING-003 idempotent deferred-job queue | IMPLEMENTED-partial | resumable embedding drain (`PERF.1`) via LEFT JOIN |
+| ING-004 resume/rollback | NOT_STARTED | crash-recovery tests need TST-001 |
+| ING-005 typed errors for required writes | ⚠proposed partial | some `try?` on required writes remain |
+| ING-006 query-priority scheduler | IMPLEMENTED-partial | background QoS + idle gating; not strict pre-emption |
+| ING-007 multi-dim readiness UX | IMPLEMENTED-partial | LiveActivityPanel stage chips (`f9efdf2`) |
+
+## 4. P5 Retrieval — the decisive open gap
+
+| ID | Status | Evidence / note |
+|---|---|---|
+| RET-001 QueryPlan compiler | NOT_STARTED | required before RET-003 |
+| RET-003 DocumentFitness channel | NOT_STARTED | must replace the density boost (`8d3184e`) flagged prohibited by pack §7 |
+| RET-002/004/005/006/007/008/009 | NOT_STARTED / IMPLEMENTED-partial | reranker ladder + RRF exist; sufficiency/hierarchy/corroboration not built |
+
+Current real-data behaviour: 1 of 3 probed questions correct; 2 wrong (receipt-image
+payment; dual-dense employer). Root cause is ranking authority, not data (all present + FTS-findable).
+
+## 5. Models (P10) — resolved by GOV-001
+
+| ID | Status | Evidence |
+|---|---|---|
+| MOD-001 model/OS strategy | **DONE** | `SHIP_DECISIONS.md` 2026-07-22 — Apple FM + BGE, macOS 26, no GGUF/cloud in v1 |
+| MOD-002 budget-guarded generation | IMPLEMENTED | `LLMCallBudget` / `LLMRequestContext`; per-class maxima |
+| MOD-003 native GGUF runtime | **DEFERRED** | not in v1 (optional v1.x) |
+| MOD-004 resumable downloader | DEFERRED | tied to optional GGUF |
+| MOD-005 model approval record | DEFERRED (GGUF) / N/A for BGE-only v1 | BGE record in MODEL_ATTRIBUTIONS.md |
+
+## 6. Phases P3–P12 — proposed from manifest (⚠ NOT re-verified in code this session)
+
+These reflect prior commits and the task manifest; per the promotion rule they are
+**unverified** until a code/test check promotes them. Highlights:
+
+- **Parsers (P3):** 17 parsers REAL_DATA_VERIFIED for fidelity; PAR-001 capability manifest,
+  PAR-002 coverage report (FULL/PARTIAL/PRESERVED surfaced), PAR-010 advertised matrix — NOT_STARTED.
+- **Semantics (P4):** SEM-001 DocumentRole split, SEM-002 BlockSemantics, SEM-003 GenericFact — NOT_STARTED; SEM-009 reversible entity merge/split IMPLEMENTED (schema v49 human-in-loop).
+- **Claims/Reconstruction (P6):** contradiction/gap detectors + reconstruction outline + alternatives IMPLEMENTED; CLM-001 full verifier, CLM-002 causal-language, REC-001 outline-gates-generation — incomplete.
+- **Personas/Exports (P7):** F1–F6, F8 DONE (workspaces, tags/views, citation+export, composer, contradiction workflow, persona templates, transcripts); PER-003..007 end-to-end jobs unverified.
+- **Workbench/DataLab (P8):** NOT_STARTED (greenfield).
+- **UX (P8):** dev surfaces hidden from release nav; UX-004 accessibility NOT verified.
+- **Security/Redaction (P9):** PrivacyGate + release provider gating IMPLEMENTED; SEC-003 security fixtures exist but unwired; RED-001/002 redaction DEFERRED (F7, safety-critical).
+- **Scale (P11):** in-memory HNSW only; SCL-002 disk-backed ANN + SCL-004 advertised-max run NOT_STARTED/owner-gated.
+- **Release (P12):** REL-001 project/signing config, REL-002 clean-machine, REL-003 owner acceptance, REL-006 sign-off — BLOCKED/owner-gated.
+
+## 7. Immediate critical path (unblocked-now, in order)
+
+1. **EV-001** — declare canonical source/version/block authority (code, build-verifiable now).
+2. **ING-001/002** — durable+atomic ingest state machine (code; tests written as source, wired at TST-001).
+3. **RET-001 → RET-003** — QueryPlan compiler then DocumentFitness channel (replaces density boost).
+4. **When Xcode is closed:** TST-001/TST-002 (test target) → CI-001/002 → promote statuses to `UNIT_VERIFIED`.
+5. **Owner-gated:** SCL-004 scale run, REL-* release operations.
