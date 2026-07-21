@@ -1,85 +1,75 @@
 # kalsmritikosh — Ship Decisions (LOCKED)
 
-Decisions captured 18 Jun 2026. Treat each row as a contract: when a future engineering question's answer would contradict one of these, the decision wins unless explicitly revisited and updated here.
+**Status: CURRENT.** Authority chain: the *Production Readiness Instruction Pack*
+(`01_MASTER_PRODUCTION_DIRECTIVE`, `03_LOCKED_PRODUCT_CONTRACT_AND_MOAT`) → this file →
+committed code → tests. When this file conflicts with an older tracker, this file wins.
+Any change to a product claim, model, minimum OS, supported format, scale, privacy
+behaviour, release provider, evidence vocabulary or persona list **requires a dated entry
+in the change-control log at the bottom**.
 
-The point of this file is to stop scope creep and re-debating decided things. If something feels uncertain, check here first.
-
----
-
-## Product
-
-| Decision | Pick | Implication |
-|---|---|---|
-| **Buyer persona** | Privacy-first, all personas | Headline leads with privacy, not workflow vertical. Demo must work for lawyer + researcher + archivist + curious individual without changing copy. |
-| **Distribution path** | Mac App Store | Apple handles payment, 15-30% cut. No license server to build. App Sandbox mandatory (✓ already configured). Apple review process required. |
-| **Pricing** | $29-$49 one-time (Personal tier) | Serious-tool benchmark. Pro tier reserved for later (corpus size / export / advanced reconstruction differentiators TBD). |
-| **Launch timeline** | No deadline | Quality-driven, not calendar-driven. Risk shifts from "missing date" to "scope inflation" — this doc is the scope inflation control. |
-| **Ship bar (v1.0)** | Set C-prime — Set C minus the 10-tester gate, plus owner self-test | Original Set C required 10 real beta users with ≥7 recommend. Owner has no warm channel and no audience to recruit from; meeting that gate would take 3-6 months of audience-building first. Path B chosen: ship to App Store as the public beta, replace the 10-tester gate with a single-operator self-test on the owner's own 100 GB+ archive plus a clean-machine install check. App Store reviews/ratings become the feedback loop after launch. |
-
-## Engine direction
-
-| Decision | Pick | Implication |
-|---|---|---|
-| **Reasoning model strategy** | Bundled on-device, **tiered by detected RAM** | `LlamaCppProvider` (currently stub) must be unstubbed. **Default bundled**: 3B (Llama 3.2 3B Q4_0, ~2 GB on disk, runs in 4-5 GB RAM) — ships with every install, works on the 8 GB hardware floor. **Optional in-app download**: 7-8B for users whose `HardwareProbe.totalRAMBytes` ≥ 16 GB — surfaced as "download better model" in Settings, free, no upsell. Capability registry picks the larger model automatically when present. No "install Ollama" friction for end users at any tier. Model names continue to live ONLY in `App/AppState.swift` per the architecture invariant. |
-| **Ingest performance model** | Two-pass + OCR opt-in + query-priority | Ingest must reach "queryable" fast (Tier 0/1: parse + FTS + entities + events + blocks), then **deepen in the background** (Tier 2: embeddings/vectors) — not block on thousands of embeddings. OCR (Vision, serialized on the Neural Engine) is the dominant cost on image-heavy archives and is **opt-out** via `FeatureFlags.ocrDuringIngest` (per-folder opt-in is a later refinement). Active user queries must outrank background ingest (P9.1). Restores the intent of the earlier "G2-INGEST two-pass + per-folder OCR opt-in" gate. |
-| **Embedding model** | Bundled BGE-small-en-v1.5 (MIT), 384-dim Core ML (~130 MB) | Decided 13 Jul 2026. Replaces the NLEmbedding word-average fallback whose ceiling is below the locked precision goals. Reuses the existing BGE tokenizer + reranker infra. Dimension is FIXED corpus-wide (stored vectors must stay comparable) — it does NOT vary by device. A re-embedding migration re-vectorizes on model change; NLEmbedding stays only as a degraded last resort. |
-| **Answer UX** | G2-PROGRESSIVE — instant → stream → deep → verified | Spec in `GATE2_ROADMAP.md`. Visible trust contract: every phase shows its state tag in the bubble (`🕒 Quick read · verifying…` → `✎ Synthesizing…` → `🔍 Reading sources…` → Quality Strip locked). |
-| **Engine state at Gate 1 lock** | Partial G2-0 rollback (`7b23986`) | Shared retrieval kept (~15× wall-clock win on temporal/multihop). WorkerPool reverted 8→4. Multihop recall regressed to 0.54 vs Gate 1 lock 0.67 — accepted because the wall-clock win unblocks all subsequent G2 work; recall expected to recover with G2-1 reranker. |
-| **Toggle for users** | Fast/Accurate switch in Settings (deferred) | Lets users choose retrieval mode at query time. Spec to be drafted as a small Gate 2 item if precision/recall trade remains visible after G2-1. |
-
-## Ship gates (must ALL be true before App Store submission)
-
-These derive from "Set C" but are restated here as binary checks:
-
-- [ ] Bundled on-device reasoning model — no Ollama install required
-- [ ] Lookup citation precision ≥ 0.8 (currently 0.33, gap closed by G2-1 reranker)
-- [ ] Aggregation keyword-hit ≥ 0.8 (currently 0.50, gap closed by reranker + contextual retrieval + stronger bundled model)
-- [ ] Multi-hop retrieval recall ≥ 0.6 (currently 0.54 in partial G2-0, must recover to 0.67+)
-- [ ] Eval corpus expanded from 16 → 60 questions; numbers above re-verified at N=60
-- [ ] Adaptive-scale stress test passes. **Revised 13 Jul 2026 (dual-mode, dynamic):** the app supports BOTH scales via an automatic index-strategy selector — in-memory HNSW for corpora that fit the device RAM budget, and a disk-backed/sharded ANN (mmap segments, bounded working set, lazy shard load, folder/time segmentation) for corpora that don't. The selector chooses by (estimated vector footprint) vs (HardwareProbe RAM × safety fraction), with a manual override in Settings, and migrates the index when the corpus crosses the threshold. **Marketing rule:** ship saying "tested to 100 GB" (the owner self-test) until a real 1 TB stress run passes on owner hardware; only then may copy say "up to 1 TB." The disk-backed ANN is the largest single engineering item and REQUIRES owner-hardware validation before the 1 TB claim.
-- [ ] PrivacyInfo.xcprivacy manifest present
-- [ ] Privacy Policy URL hosted, linked
-- [ ] Terms of Use / EULA hosted, linked
-- [ ] Owner self-test passes: 100 GB+ personal archive ingested, ~20 representative real-world questions answered correctly with citations the owner can open and verify
-- [ ] Clean-machine install passes on a Mac that has never had Xcode or the app
-- [ ] App Store release notes call v1.0 "early access — feedback welcome via [contact URL]"
-- [ ] App Store metadata complete: name, subtitle, keywords, description, screenshots (no PII), category, age rating, privacy nutrition labels
-- [ ] Clean-machine install test passes on minimum hardware (see Open below)
-
-## Out of scope for v1.0 (defer to v1.x)
-
-- Pro tier definition and pricing
-- Direct DMG distribution (App Store only at launch)
-- Cloud-routed model option (privacy promise rules this out for v1; could revisit as opt-in)
-- Multi-language UI (English only)
-- iOS / iPad companion
-- Legacy Office binaries (.doc, .xls, .ppt) — Gate 3
-- Microsoft Publisher (.pub) — never planned
-- PST/OST/MSG/NSF email formats (GS-MAIL block in TASKS.md, Gate 3)
-
-## Hardware floor
-
-| Decision | Pick | Implication |
-|---|---|---|
-| **Minimum OS** | macOS 15.6 | Locked Jun 18 (pbxproj `MACOSX_DEPLOYMENT_TARGET = 15.6`). |
-| **Minimum RAM** | 8 GB | Widest install base (every M1 MacBook Air, every base-config Mac since 2020). Pairs with the 3B default bundled model. The 16 GB+ tier auto-upgrades to 8B via optional download. |
-
-## Ask view + App Store screenshots
-
-| Decision | Pick | Implication |
-|---|---|---|
-| **Ask view first state** | Blank — no placeholder text, no suggestion grid | Calm tool, no leading the witness. `AskView.suggestionGrid` removed; `TextField` placeholder reduced to minimal "Ask…" or nothing. The user discovers their own questions. |
-| **App Store screenshot order** | Sources → Ask → Knowledge | Privacy-first lens. Screenshot 1 (hero, what people see in search results): Sources view showing folder list with "files stay where they are" framing. Screenshot 2: Ask view showing a real question answered with citations + Quality Strip. Screenshot 3: Knowledge view showing the entity graph — proves "memory, not search". Timeline can play screenshot 4 if more slots are added. |
-
-## Open (still to decide)
-
-- v1 vs v1.1 / v2 specific feature cuts (beyond Set C metrics)
-- Beta tester recruitment plan (10 names)
-- One-sentence positioning pitch (owner-only; planning thread held this rail)
-- Pro tier differentiators
+Every technical number here must name its verification evidence, or be marked *unverified*.
 
 ---
 
-Last updated: 13 Jul 2026 — locked embedding model (BGE-small-en-v1.5), adopted DUAL-MODE dynamic scale (in-memory HNSW ↔ disk-backed/sharded ANN, auto-selected by corpus size × device RAM; 100 GB marketed until 1 TB proven on owner hardware), confirmed Llama-3.2-3B bundled default + Llama-3.1-8B optional (device-adaptive). See PROJECT_COMPLETION_INSTRUCTIONS.md for the phased task plan (#19–#46).
+## 1. Locked product contract (v1)
 
-Prior: 18 Jun 2026 — Gate 1 baseline lock (`4bcf4e5`) + G2-0 partial rollback (`7b23986`) + G2-PROGRESSIVE spec (`e9486e9`).
+| Area | Decision | Implication |
+|---|---|---|
+| **Reasoning model** | **Apple Foundation Models where available; deterministic evidence engine always works with zero model.** No bundled Llama, no Ollama, no cloud in the release build. | Release ships no third-party LLM weights. On a Mac where Foundation Models is unavailable, the app is honestly deterministic-only (search, timelines, matrices, contradictions, gaps, deterministic reports) and must not claim "AI answers" it cannot produce. Optional downloaded local GGUF is a **v1.x** possibility, gated on the §6 checks — **not** in v1. |
+| **Embedding model** | **Bundled BGE-small-en-v1.5 (MIT), 384-dim Core ML (~130 MB).** | Fixed dimension corpus-wide; reuses the existing BGE tokenizer/reranker infra. NLEmbedding remains only as a clearly-labelled degraded fallback. A re-embedding migration re-vectorizes on model change. |
+| **Minimum OS** | **macOS 26.** | Apple Intelligence / Foundation Models baseline. Requires `MACOSX_DEPLOYMENT_TARGET = 26.0` in pbxproj (owner-run, Xcode-closed step). |
+| **Network / privacy** | **No network provider in the release build.** | `PrivacyGate` filters all cloud providers out of capability resolution; the only network code path (Routing/Providers) is compiled out or unreachable in release. Fully offline. Ollama/MLX/Cloud stay compiled but dev/internal-only (`#if DEBUG`). |
+| **Advertised scale** | **"Tested to <N> GB" only — where N is a recorded owner-hardware run.** | No 100 GB / 1 TB marketing claim until a real run is recorded (§ship gates). The disk-backed/sharded ANN (task P9.3) remains the scale engineering item; until it and a measured run exist, copy states only the tested figure. |
+| **Distribution** | **Mac App Store only.** | Apple payment + review; App Sandbox mandatory (already configured). No DMG/notarization path at launch, no license server. |
+| **Pricing** | **$29–49 one-time, Personal tier.** | Pro tier deferred to v1.x. |
+| **Launch claim** | **Early access — "works with mixed document collections."** | Never "understands every document"; never list a format that has not passed the declared matrix; never claim universal AI answers where no reasoning provider can resolve. |
+| **Personas** | **Five lenses over one engine:** Lawyer, Investigator, Journalist, Researcher/Historian, Individual. | Persona changes terminology/work-cards/defaults only — never evidence, truth state, confidence, contradiction logic or source independence. No sixth persona before release. |
+| **Evidence vocabulary** | One vocabulary across storage/UI/exports: `DIRECTLY_OBSERVED`, `SOURCE_ASSERTED`, `DETERMINISTICALLY_DERIVED`, `INFERRED`, `CONTRADICTED`, `UNSUPPORTED`, `MISSING_EVIDENCE`, `HUMAN_CONFIRMED`, `HUMAN_CORRECTED`, `HUMAN_REJECTED`. | Model text is never primary evidence; human-confirmed is not automatically proven; contradictions show both sides; missing evidence states searched scope. |
+
+## 2. Answer modes (both share one evidence ledger and truth rules)
+
+| Mode | Contract |
+|---|---|
+| **Fast** | Currently-queryable evidence; deterministic exact paths first; zero model calls when possible; **max 1 generative call** for an ordinary supported question; shows readiness/coverage limits; never fabricates missing fields. |
+| **Deep Analysis** | Completes required deferred work for the scope; broader structured/lexical/dense/temporal/graph evidence; may decompose within a hard request budget; selects only necessary experts; builds contradictions/gaps/alternatives; shows expected resource use and permits cancellation. |
+
+Hard generative-call budgets (enforced, shared across classifier/experts/planner/synthesis/retry/fallback; a failed call still consumes budget): deterministic 0, ordinary 1, moderate 2, complex 3, reconstruction 3, deep-reconstruction 5, investigation 5, unsupported 0.
+
+## 3. Ship gates (ALL must be true before App Store submission)
+
+- [ ] Reasoning path: Apple Foundation Models resolves on macOS 26 target hardware **or** the app clearly presents deterministic-only mode. No Ollama/cloud/terminal dependency.
+- [ ] Bundled BGE embedder loads with the correct WordPiece tokenizer, fixed ID/dimension; re-embedding migration proven; mixed-model rejection enforced. *(P6.2)*
+- [ ] Retrieval: query-conditioned document-fitness authority (RET-001/RET-003) replaces the density heuristic; real-corpus questions cite the authoritative source; eval gate no regression. *(unverified until RET-003 lands + measured)*
+- [ ] Executable macOS test target exists and CI runs unit + integration + migration + retrieval-eval + security tests as a mandatory merge gate. *(TST-001/CI-001 — owner-run, Xcode-closed)*
+- [ ] Every material answer claim opens its exact source locator; unsupported claims excluded from final output.
+- [ ] Redaction: exported work products verified for text **and** visual/binary redaction. *(F7 — safety-critical, deferred)*
+- [ ] Privacy: network audit confirms no egress in release; `PrivacyInfo.xcprivacy` present; sensitive-logging audited.
+- [ ] Scale: index-strategy selector (in-memory HNSW ↔ disk-backed ANN) + a **recorded** owner-hardware run at the marketed figure. *(P9.3 + P9.2)*
+- [ ] Owner self-test: personal archive ingested; ~20 representative real questions answered correctly with openable citations.
+- [ ] Clean-machine install on a Mac that never had Xcode/the app; offline replay of a historical answer against its corpus snapshot.
+- [ ] Privacy Policy + Terms/EULA hosted and linked; App Store metadata complete (no PII in screenshots); release notes state "early access."
+
+## 4. Out of scope for v1.0 (defer to v1.x)
+
+- Optional downloaded local GGUF reasoning runtime (llama.cpp binding, licence, App Store checks) — **P1.2/P3.1 DEFERRED**.
+- Pro tier definition/pricing; DMG distribution; cloud-routed model; multi-language UI; iOS/iPad companion.
+- Legacy binary Office edge cases beyond the tested matrix; PST/OST/NSF email formats.
+- 1 TB advertised scale (until a recorded run exists).
+
+## 5. Change-control log
+
+- **2026-07-22 (GOV-001, this rewrite):** Model/OS contract **resolved and flipped**. v1 reasoning = **Apple Foundation Models + deterministic engine**, **no bundled Llama, no Ollama/cloud in release**; **minimum OS macOS 26**; embedding = bundled BGE-small (unchanged); advertised scale = **tested-figure-only, no 100 GB/1 TB claim without a recorded run**. Consequences: llama.cpp packaging (P1.2) and GGUF bundling (P3.1) **DEFERRED to v1.x**; Llama licence work (P3.2) retained only for that optional path. Superseded the 2026-07-13 "bundled Llama-3.2-3B / macOS 15.6 / 8 GB floor" decision (preserved below). Removed obsolete "currently N" eval numbers — live status now lives in `PRODUCTION_STATUS.md` (GOV-003).
+- **2026-07-13:** Locked BGE-small embedder; adopted dual-mode dynamic scale; confirmed (now-superseded) Llama-3.2-3B bundled default + 8B optional.
+- **2026-06-18:** Gate 1 baseline lock (`4bcf4e5`); G2-0 partial rollback (`7b23986`); G2-PROGRESSIVE spec (`e9486e9`); Mac App Store + one-time pricing + macOS 15.6 (now raised to 26).
+
+---
+
+## Appendix — SUPERSEDED decisions (historical, do not act on)
+
+> Retained per document-governance rule ("never delete history"). These reflect the
+> 2026-07-13 contract and are **no longer in force** after the 2026-07-22 flip above.
+
+- **Reasoning (superseded):** bundled Llama-3.2-3B Q4 default + optional 8B download, tiered by detected RAM; `LlamaCppProvider` unstubbed; no Ollama for end users.
+- **Minimum OS (superseded):** macOS 15.6; **Minimum RAM:** 8 GB floor paired with the 3B default.
+- **Scale (superseded wording):** "tested to 100 GB" until a 1 TB run passed; the dual-mode selector itself remains the plan, only the marketing figure rule tightened.
+- The 2026-07-13 "currently 0.33 / 0.50 / 0.54" eval numbers and the 10-tester→owner-self-test ("Set C-prime") gate history are retained in `docs/history/` and superseded by the current ship gates + `PRODUCTION_STATUS.md`.
