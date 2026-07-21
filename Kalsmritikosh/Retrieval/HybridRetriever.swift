@@ -200,6 +200,33 @@ public actor HybridRetriever: Retriever {
             }
         }
 
+        // P5.1 — direct-evidence-first AUTHORITY. For the query's entity seeds,
+        // find documents that DENSELY feature them: a résumé/bio names a person
+        // ~15× in ONE knowledge object, while an mbox (which fans out to
+        // per-message KOs) spreads the name ~1×/KO across their correspondence.
+        // So a high per-KO mention count identifies the authoritative document.
+        // We (a) INJECT those chunks — so they're present even when vector/FTS
+        // missed them — and (b) record their KOs so `assemble` ranks them first,
+        // preventing an authoritative doc from being outvoted by high-volume
+        // incidental mentions (the "answered from a patent email, not the
+        // résumé" failure). Gated on entity seeds → no effect on other queries.
+        var authorityKOs: Set<KnowledgeObject.ID> = []
+        for e in collectedEntities.prefix(4) {
+            let rows = (try? await entities.mentions(forEntityID: e.id, limit: 500)) ?? []
+            var counts: [KnowledgeObject.ID: Int] = [:]
+            for r in rows { counts[r.objectID, default: 0] += 1 }
+            for (ko, n) in counts where n >= 3 { authorityKOs.insert(ko) }
+        }
+        if !authorityKOs.isEmpty {
+            let present = Set(collectedChunks.map(\.chunk.objectID))
+            for ko in authorityKOs where !present.contains(ko) {
+                let injected = (try? await chunks.findByObjectID(ko)) ?? []
+                for c in injected.prefix(4) {
+                    collectedChunks.append(RetrievedChunk(chunk: c, score: 1.0, viaLayer: .entity))
+                }
+            }
+        }
+
         // G3.20 — translate raw bond steps into typed [WalkStep] for
         // the "Why this answer?" UI. Skipped when no explainer is
         // wired or no steps were produced.
@@ -254,7 +281,8 @@ public actor HybridRetriever: Retriever {
             summaries: collectedSummaries,
             layers: usedLayers,
             shortCircuit: nil,
-            walkSteps: walkSteps
+            walkSteps: walkSteps,
+            authorityKOs: authorityKOs
         )
     }
 
@@ -762,7 +790,8 @@ public actor HybridRetriever: Retriever {
         summaries: [Summary],
         layers: [RetrievalLayer],
         shortCircuit: RetrievalLayer?,
-        walkSteps: [WalkStep] = []
+        walkSteps: [WalkStep] = [],
+        authorityKOs: Set<KnowledgeObject.ID> = []
     ) -> RetrievalResult {
         // HISTORY Phase A.4 — tier-aware re-ranking.
         // Entities are sorted by (-tier.defaultWeight, originalIndex)
@@ -798,7 +827,14 @@ public actor HybridRetriever: Retriever {
         // on one comparable scale instead of mixing 1/FTS-rank vs cosine vs the
         // fixed graph score. diversify() then preserves this relevance order.
         let fused = Self.rrfRank(chunks)
-        let diverseChunks = Self.diversify(fused)
+        // P5.1 — stable-promote chunks from authoritative (dense-subject) docs to
+        // the front of the fused window so an authoritative document isn't buried
+        // under high-volume incidental mentions. Pure reorder (no add/drop);
+        // diversify still caps how many any one source contributes.
+        let prioritized = authorityKOs.isEmpty ? fused
+            : fused.filter { authorityKOs.contains($0.chunk.objectID) }
+                + fused.filter { !authorityKOs.contains($0.chunk.objectID) }
+        let diverseChunks = Self.diversify(prioritized)
 
         // UPDATE_07 — the same hygiene for events: the timeline/reconstruction
         // path was drowning in email noise (empty-title events, internal

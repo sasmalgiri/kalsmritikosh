@@ -667,13 +667,35 @@ public actor EntitiesRepository {
         // AGARWAL", "Agarwal Packers  and  Movers Limited"), which otherwise
         // stored as SEPARATE canonical rows from their clean single-space twin.
         // Collapsing here makes the (kind, normalized) key dedup them.
-        return Self.collapseWhitespace(candidate).lowercased()
+        var n = Self.collapseWhitespace(candidate).lowercased()
+        // Person names also fold honorifics + surrounding quotes so "Mr.
+        // Shirshendu Sasmal", "'Shirshendu Sasmal'" and "Shirshendu Sasmal"
+        // collapse to ONE canonical person (they were 5 separate entities,
+        // scattering entity-based retrieval).
+        if entity.kind == .person { n = Self.stripPersonAffixes(n) }
+        return n
     }
 
     /// Collapse every run of whitespace/newlines to a single space and trim.
     /// Used for both the dedup key and the stored display value.
     static func collapseWhitespace(_ s: String) -> String {
         s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+    }
+
+    /// Strip surrounding quotes/punctuation and a single leading honorific so
+    /// person-name variants fold to one canonical. Deliberately conservative:
+    /// only a known honorific as the FIRST token is removed (never trailing
+    /// content words like "… Patent No", which could be distinct entities).
+    static func stripPersonAffixes(_ s: String) -> String {
+        let edges = CharacterSet(charactersIn: "'\"“”‘’ .,")
+        var v = s.trimmingCharacters(in: edges)
+        let honorifics: Set<String> = ["mr", "mrs", "ms", "mx", "dr", "prof", "shri", "smt", "sri", "miss"]
+        let parts = v.split(separator: " ", maxSplits: 1).map(String.init)
+        if parts.count == 2,
+           honorifics.contains(parts[0].trimmingCharacters(in: CharacterSet(charactersIn: "."))) {
+            v = parts[1]
+        }
+        return v.trimmingCharacters(in: edges)
     }
 
     /// Apply the canonical-alias map only to organization-shaped kinds
