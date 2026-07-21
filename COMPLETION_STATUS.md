@@ -1,3 +1,5 @@
+> **DOC STATUS: HISTORICAL** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Regenerated as PRODUCTION_STATUS.md (GOV-003). _(bannered 2026-07-22, GOV-002.)_
+
 # Kalsmritikosh — Completion Status
 
 > **Authoritative plan: `PROJECT_COMPLETION_INSTRUCTIONS.md`** (dependency-ordered

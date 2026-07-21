@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Directional; verify against current code. _(bannered 2026-07-22, GOV-002.)_
+
 # Three Independent Systems — Implementation
 
 **Kalsmritikosh** ships three selectable architectures in **one codebase, no forks**.

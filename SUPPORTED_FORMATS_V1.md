@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Format claims split into parser/fixture/advertised/limits when SUPPORTED_SOURCES.md is generated. _(bannered 2026-07-22, GOV-002.)_
+
 # Kalsmritikosh — Supported Formats (v1)
 
 Honest per-format status. **Advertise only what is here as "advertised".** Support

@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Historical task IDs kept as reference; the pack backlog is the active plan. _(bannered 2026-07-22, GOV-002.)_
+
 # TASKS.md — kalsmritikosh upgrade plan (Gate 0 → Gate 1)
 
 Rules: execute in order, one task per session, fresh session per task. Each task is

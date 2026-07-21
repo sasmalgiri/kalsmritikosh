@@ -1,3 +1,5 @@
+> **DOC STATUS: HISTORICAL** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Superseded by PRODUCTION_BACKLOG.csv. _(bannered 2026-07-22, GOV-002.)_
+
 # Kalsmritikosh — Remaining Work & Handoff
 
 > **SUPERSEDED for planning by `PROJECT_COMPLETION_INSTRUCTIONS.md`** (authoritative

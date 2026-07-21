@@ -1,149 +1,74 @@
-# Shipping — items that need user / business decisions
+> **DOC STATUS: CURRENT (runbook) + HISTORICAL (appendix)** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. _(rewritten 2026-07-22, GOV-002.)_
 
-Three Gate-2 / Gate-3 line items can't be code-only. Each is documented
-below with what's already done in the repo, what's pending, and the
-exact decision needed to unblock.
+# Shipping — Mac App Store release runbook
 
----
+The locked launch path is **Mac App Store only**, **one-time Personal pricing**, **no
+cloud release**, **no DMG/notarization**, **minimum macOS 26** (per `SHIP_DECISIONS.md`).
+This file is the current runbook. The prior DMG / GB-tiered-cloud-pricing / sqlite-vec
+material is retained, superseded, in the appendix — do not act on it.
 
-## 1. Notarization + hardened-runtime signing
+## 1. Signing & identity (owner, one-time)
 
-**Status:** entitlement scaffolding landed (`Kalsmritikosh.entitlements`
-extended with the four hardened-runtime keys, all defaulted safely);
-notarization upload is a manual step requiring the user's Apple
-Developer signing identity.
+1. **Apple Developer Team ID** — set `DEVELOPMENT_TEAM = <team_id>` in the Xcode project.
+2. **Signing** — Signing & Capabilities → **Apple Distribution** (App Store), automatic
+   signing on. (Developer ID / notarization is NOT used — App Store review signs the build.)
+3. **Bundle identity** — confirm bundle ID, version, build number.
 
-**What's already in the repo:**
+## 2. Entitlements (already in `Kalsmritikosh.entitlements`)
 
-- `Kalsmritikosh.entitlements` ships:
-  - `com.apple.security.app-sandbox` = true
-  - `com.apple.security.files.user-selected.read-write` = true
-  - `com.apple.security.files.bookmarks.app-scope` = true
-  - `com.apple.security.network.client` = true
-  - `com.apple.security.device.audio-input` = false
-  - `com.apple.security.automation.apple-events` = false
-  - `com.apple.security.cs.allow-unsigned-executable-memory` = false
-  - `com.apple.security.cs.disable-library-validation` = false
-  - `com.apple.security.cs.allow-jit` = false
-- All `cs.allow-*` keys default false. Flip any to true ONLY if a
-  framework we adopt requires it; document the why next to the key.
+- `com.apple.security.app-sandbox = true`
+- `com.apple.security.files.user-selected.read-write = true`
+- `com.apple.security.files.bookmarks.app-scope = true`
+- `com.apple.security.device.audio-input = false`
+- `com.apple.security.automation.apple-events = false`
+- `com.apple.security.cs.allow-unsigned-executable-memory = false`
+- `com.apple.security.cs.disable-library-validation = false`
+- `com.apple.security.cs.allow-jit = false`
+- **`com.apple.security.network.client`** — must be **absent/false in the release
+  configuration** (no cloud provider ships). If present for internal builds, gate it out
+  of the App Store configuration. Verify with the privacy/network audit (P8.1).
 
-**Pending decisions / actions (need user input):**
+## 3. Pre-submission gates (see `SHIP_DECISIONS.md` §3)
 
-1. **Apple Developer Team ID**. Set
-   `DEVELOPMENT_TEAM = <team_id>` in `Kalsmritikosh.xcodeproj`
-   (already a project-level setting in modern Xcode; tied to your
-   Apple ID).
-2. **Signing identity**. In Xcode → Signing & Capabilities, pick a
-   Developer ID Application certificate (for outside-store
-   distribution) OR Apple Distribution (for Mac App Store). The
-   project currently builds locally without notarization because
-   the team is unset.
-3. **Notarization workflow**. Recommended:
-   - Build the Release archive in Xcode.
-   - `xcrun notarytool submit Kalsmritikosh.dmg --apple-id <id>
-     --team-id <id> --password <app-specific-pw> --wait`
-   - `xcrun stapler staple Kalsmritikosh.app`
-   - Distribute the stapled DMG.
-4. **App-specific password** for `notarytool`. Generated at
-   appleid.apple.com → Sign-In and Security → App-Specific
-   Passwords. Store in Keychain via `xcrun notarytool
-   store-credentials`.
+Do not submit until every ship gate is green: reasoning path resolves (Apple Foundation
+Models on macOS 26) or deterministic-only is clearly presented; bundled BGE loads;
+retrieval authority (RET-003) landed with no eval regression; executable test target + CI
+mandatory; redaction verified; network audit clean; scale run recorded; owner self-test;
+clean-machine install; legal pages hosted; metadata complete.
 
-The repo doesn't bundle credentials — these are all per-machine
-secrets you set once.
+## 4. Archive & upload
 
-**Validation:** `codesign --verify --strict --deep
-Kalsmritikosh.app` should report nothing; `spctl --assess --verbose
-Kalsmritikosh.app` should accept the bundle.
+1. Product → Archive (Release configuration, `MACOSX_DEPLOYMENT_TARGET = 26.0`).
+2. Organizer → Distribute App → **App Store Connect** → Upload.
+3. In App Store Connect: attach build, complete metadata, privacy nutrition labels
+   (declare on-device processing / no data collection), pricing (one-time Personal),
+   screenshots (Sources → Ask → Knowledge, no PII), age rating, release notes ("early access").
+4. Submit for review.
+
+## 5. Validation
+
+- `codesign --verify --strict --deep Kalsmritikosh.app` reports nothing.
+- App Store Connect validation passes.
+- Clean-machine install from a TestFlight/App Store build launches offline with no
+  Xcode/Homebrew/terminal/Ollama present.
 
 ---
 
-## 2. GB-tiered pricing copy
+## Appendix — SUPERSEDED (historical, do NOT act on)
 
-**Status:** copy not yet committed; needs business decision on
-price points and tier semantics.
+> Retained per document-governance rule. The following reflected a DMG-notarization +
+> GB-tiered-cloud-pricing + sqlite-vec plan that the locked contract has replaced
+> (App Store only, one-time pricing, no cloud, no third-party dep without task approval).
 
-**What's already in the repo:**
+### (superseded) Notarization + hardened-runtime signing
+DMG notarization via `notarytool submit … --wait` + `stapler staple` — **not used**;
+App Store review handles signing. Entitlement scaffolding above is still current.
 
-- `OnboardingView` has a `scope` step that shows hardware tier
-  (small / medium / large) and provider count detected. No prices.
-- `SettingsView` has a Privacy / Capability tier picker. No prices.
+### (superseded) GB-tiered pricing copy
+Local/Boosted/Pro cloud tiers with monthly pricing — **replaced** by one-time Personal
+pricing, no cloud reasoning in release. Anthropic/OpenAI backends are not shipped.
 
-**Pending decisions (need user / product input):**
-
-1. **Tier structure.** Likely shape, but to be confirmed:
-   - **Local** — Apple Intelligence / Ollama only, no cloud calls.
-     Free? Or one-time?
-   - **Boosted** — adds cloud reasoning (Anthropic / OpenAI on
-     request). Monthly?
-   - **Pro / Archive** — large GB ingest limits + priority Tier-3
-     re-runs. Monthly or annual?
-2. **GB thresholds per tier.** What's the inclusive ingest GB
-   ceiling for each tier? What happens at the ceiling — soft
-   warning, hard stop, overage charge?
-3. **What costs us money.** Anthropic / OpenAI cloud reasoning is
-   the only paid backend today (Ollama and Apple are free at our
-   margin). Pricing should track our actual cost curve, not be
-   GB-only.
-4. **Where the copy lives.** A new AboutView with a Pricing pane?
-   A modal off SettingsView? In-app purchase via StoreKit?
-
-**Suggested next action:** lock the three-tier names + price points
-in a separate planning pass, then we land copy + StoreKit wiring in
-one commit. Doing it now without those decisions would just
-write-then-rewrite.
-
----
-
-## 3. sqlite-vec / ANN behind VectorStore
-
-**Status:** the abstraction is already in place; swapping to
-sqlite-vec requires adding a third-party dependency, which
-CLAUDE.md forbids without explicit approval.
-
-**What's already in the repo:**
-
-- `Kalsmritikosh/Storage/Vector/VectorStore.swift` is the protocol
-  every retrieval path goes through.
-- `SQLiteVectorStore.swift` implements it on top of plain SQLite
-  rows + brute-force int8 cosine scan.
-- `HNSWVectorIndex.swift` is the in-memory HNSW that warms up from
-  SQLiteVectorStore rows at app start. The graph layer (Memory →
-  Timeline → Entity → FTS → Summary → Graph → Vector) hits the
-  HNSW; brute-force is only the cold-start path.
-
-**Why sqlite-vec would help:**
-
-- Native ANN inside SQLite → no warm-up step, lower RAM ceiling
-  for very large archives (>500k chunks).
-- Persistent index → faster cold start.
-- The protocol already abstracts it; consumers don't need to
-  change.
-
-**Pending decisions (need user approval):**
-
-1. **Permission to add the dependency.** CLAUDE.md's "no
-   third-party dependencies" rule requires explicit task approval.
-2. **Distribution form.** sqlite-vec is a C extension that needs
-   to be loaded into the sqlite handle at open time. Two options:
-   - Statically link the extension into our copy of sqlite (build
-     setting change, no SwiftPM package needed).
-   - Ship as a SwiftPM-managed framework — but sqlite-vec's
-     SwiftPM packaging isn't first-party.
-3. **Migration plan.** sqlite-vec's table format differs from our
-   current schema; needs a new migration `vN` that copies vectors
-   from the existing `chunks_vec` table into `vec0` and drops the
-   old table.
-
-**Implementation effort once approved:** ~1 day for the migration
-and a `SqliteVecStore: VectorStore` impl, plus a Settings toggle to
-switch backends until we trust it on real archives.
-
----
-
-## Once these three are decided
-
-The G2 / G3 backlog from `GATE2_ROADMAP.md` and `TASKS.md` is then
-complete. The HISTORY_RECONSTRUCTION_PLAN.md ledger-first redesign
-is the next milestone.
+### (superseded) sqlite-vec / ANN behind VectorStore
+Adding sqlite-vec as a C extension — **not approved**. The scale path is the in-house
+disk-backed/sharded ANN (task P9.3) behind the existing `VectorStore` protocol; no
+third-party dependency ships without an explicit approved task.

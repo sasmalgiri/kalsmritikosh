@@ -1,3 +1,5 @@
+> **DOC STATUS: HISTORICAL** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Superseded by the pack backlog. _(bannered 2026-07-22, GOV-002.)_
+
 # G3 — The Periodic Table of Facts (detailed roadmap)
 
 Date: 2026-06-20

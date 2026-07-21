@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Task IDs are reference-only; live status is in PRODUCTION_STATUS.md. _(bannered 2026-07-22, GOV-002.)_
+
 # Kalsmritikosh — Project Completion Instructions (Authoritative Tracker)
 
 Single source of truth for v1 completion. Consolidates

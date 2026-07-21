@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Reconstruction contract now lives in pack file 08. _(bannered 2026-07-22, GOV-002.)_
+
 # Plan: Reach the Core Promise
 
 > **Directive:** At any user question, if the data exists, the system should be able to recreate the history / facts / context with maximum detailing possible as per data ingested. Preserve all data; arrange, don't filter.

@@ -7,7 +7,19 @@ specialist experts behind an evidence gate — fully on-device.
 
 This is NOT a chat-with-files RAG app. The intelligence lives in the database, not the model.
 
-## Prime directive
+## Authority chain (updated 2026-07-22, GOV-002)
+The active plan is the **Production Readiness Instruction Pack** and the repo backlog, not
+the legacy `TASKS.md`. Authority order:
+1. `01_MASTER_PRODUCTION_DIRECTIVE.md` + `03_LOCKED_PRODUCT_CONTRACT_AND_MOAT.md` (in the pack)
+2. `SHIP_DECISIONS.md` (CURRENT locked contract) + `PRODUCTION_STATUS.md`
+3. The relevant subsystem file in the pack + `PRODUCTION_BACKLOG.csv`
+4. Committed code, then tests/measured reports
+5. Older roadmaps / `TASKS.md` — reference only (PARTIALLY SUPERSEDED)
+
+No claim of completion without the required verification level (see the pack's status
+vocabulary). A build passing is never release verification.
+
+## Prime directive (legacy — superseded by the Authority chain above)
 Execute the tasks in `TASKS.md`, strictly in order, **one task per session**.
 Do not start a task without reading its full spec. Do not do work outside the task's scope.
 When the task's acceptance checks pass, commit and stop.

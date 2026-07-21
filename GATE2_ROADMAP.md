@@ -1,3 +1,5 @@
+> **DOC STATUS: HISTORICAL** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Superseded by the pack backlog. _(bannered 2026-07-22, GOV-002.)_
+
 # Gate 2 — Roadmap
 
 Derived from the locked Gate 1 dual-baseline ([eval-report.md](./eval-report.md), commit `4bcf4e5`, 18 Jun 2026). Every item below has an eval metric that proves success against the heuristic-floor and LLM-on baselines locked at Gate 1. Items are ordered for measurement cost first, then quality wins, then ergonomics.

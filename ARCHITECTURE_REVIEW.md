@@ -1,3 +1,5 @@
+> **DOC STATUS: PARTIALLY SUPERSEDED** — authority chain is the Production Readiness pack -> `SHIP_DECISIONS.md` (CURRENT) -> committed code. Directional; verify specifics against current code. _(bannered 2026-07-22, GOV-002.)_
+
 # Kalsmritikosh — Architecture Review Packet
 
 Compiled in response to the "everything must be AI-enriched before the
