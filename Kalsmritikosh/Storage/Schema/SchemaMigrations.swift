@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 55
+    public static let latestVersion = 56
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v55 adds the `evidence_datasets` table — check it exists (newest object).
+    /// v56 adds the `ingest_runs` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_datasets';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ingest_runs';", []
         )
         return !rows.isEmpty
     }
@@ -140,7 +140,8 @@ public enum SchemaMigrations {
         (52, v52),
         (53, v53),
         (54, v54),
-        (55, v55)
+        (55, v55),
+        (56, v56)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2028,5 +2029,33 @@ public enum SchemaMigrations {
         FOREIGN KEY (dataset_id) REFERENCES evidence_datasets(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_dataset_rows_dataset ON dataset_rows(dataset_id);
+    """
+
+    // ING-001 — durable ingest run-state so an interrupted ingest can be resumed instead of
+    // silently half-done. `ingest_runs` is the run header; `ingest_run_files` records each
+    // file's transition (pending→running→done/failed) keyed by a stable path hash. Append-only,
+    // additive. A run left in 'running'/'paused' at boot is resumable.
+    private static let v56: String = """
+    CREATE TABLE IF NOT EXISTS ingest_runs (
+        id              TEXT PRIMARY KEY,
+        status          TEXT NOT NULL,        -- pending|running|paused|completed|failed
+        total_files     INTEGER NOT NULL DEFAULT 0,
+        completed_files INTEGER NOT NULL DEFAULT 0,
+        failed_files    INTEGER NOT NULL DEFAULT 0,
+        started_at      REAL NOT NULL,
+        updated_at      REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ingest_run_files (
+        run_id     TEXT NOT NULL,
+        path_hash  TEXT NOT NULL,
+        path       TEXT NOT NULL,
+        state      TEXT NOT NULL,             -- pending|running|done|failed
+        error      TEXT NULL,
+        updated_at REAL NOT NULL,
+        PRIMARY KEY (run_id, path_hash),
+        FOREIGN KEY (run_id) REFERENCES ingest_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ingest_run_files_run ON ingest_run_files(run_id);
+    CREATE INDEX IF NOT EXISTS idx_ingest_runs_status ON ingest_runs(status);
     """
 }
