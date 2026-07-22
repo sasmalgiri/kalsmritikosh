@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 54
+    public static let latestVersion = 55
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v54 adds the `chunk_embeddings` table — check it exists (newest object).
+    /// v55 adds the `evidence_datasets` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_embeddings';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='evidence_datasets';", []
         )
         return !rows.isEmpty
     }
@@ -139,7 +139,8 @@ public enum SchemaMigrations {
         (51, v51),
         (52, v52),
         (53, v53),
-        (54, v54)
+        (54, v54),
+        (55, v55)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2005,5 +2006,27 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_model ON chunk_embeddings(model_id);
     INSERT OR IGNORE INTO chunk_embeddings (chunk_id, model_id, model_version, dim, q, scale, created_at)
         SELECT chunk_id, 'apple.nl.v1', '1', dim, q, scale, strftime('%s','now') FROM vectors;
+    """
+
+    // LAB-002 — durable, paged store for the Workbench EvidenceDataset kernel. A dataset's
+    // columns live in `evidence_datasets`; its rows are paged in `dataset_rows` (cells as
+    // JSON, each carrying its source-block lineage). Append-only, additive — no existing
+    // table touched. FK cascade so deleting a dataset drops its rows.
+    private static let v55: String = """
+    CREATE TABLE IF NOT EXISTS evidence_datasets (
+        id           TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        version      INTEGER NOT NULL DEFAULT 1,
+        columns_json TEXT NOT NULL,
+        created_at   REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dataset_rows (
+        dataset_id TEXT NOT NULL,
+        ordinal    INTEGER NOT NULL,
+        cells_json TEXT NOT NULL,
+        PRIMARY KEY (dataset_id, ordinal),
+        FOREIGN KEY (dataset_id) REFERENCES evidence_datasets(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_dataset_rows_dataset ON dataset_rows(dataset_id);
     """
 }
