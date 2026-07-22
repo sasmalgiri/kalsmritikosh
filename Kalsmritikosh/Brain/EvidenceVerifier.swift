@@ -549,6 +549,13 @@ public struct EvidenceVerifier: Verifier {
         if !disclosure.isEmpty {
             footerParts.append(disclosure)
         }
+        // CLM-002 — flag any causal over-claim: if the answer asserts a cause but the
+        // evidence shows only sequence, say so (adjacency is not causation).
+        let causalCaution = CausalLanguageGuard()
+            .assess(claims: [answerText], evidenceTexts: retrieval.chunks.map(\.chunk.text))
+        if !causalCaution.isEmpty {
+            footerParts.append(causalCaution)
+        }
         if report.agreementScore <= 0.6 {
             footerParts.append("Note: experts disagreed across some of these claims.")
         }
