@@ -240,7 +240,7 @@ public actor HybridRetriever: Retriever {
             }
             let candidates = Array(candidateSet.prefix(48))
             let scorer = DocumentFitnessScorer()
-            var scored: [DocumentFitness] = []
+            var candidateSignals: [DocumentSignals] = []
             for ko in candidates {
                 guard let obj = try? await objects.load(id: ko) else { continue }
                 let name = obj.sourceFile.lastPathComponent
@@ -249,14 +249,23 @@ public actor HybridRetriever: Retriever {
                 let signals = DocumentSignals(
                     objectID: ko, fileName: name, sourceType: obj.sourceType,
                     roleHints: roles, presentFields: fields,
-                    subjectMentionCount: mentionCounts[ko] ?? 0)
-                scored.append(scorer.score(plan: plan, candidate: signals))
+                    subjectMentionCount: mentionCounts[ko] ?? 0,
+                    contentSignature: DocumentRoleInference.contentSignature(obj.content))
+                candidateSignals.append(signals)
             }
-            let ranked = scored.sorted { $0.score > $1.score }
+            // RET-008 — collapse near-duplicate copies (e.g. the same résumé re-sent
+            // 15×) to one authoritative representative, so duplicates neither crowd
+            // the window nor fake corroboration.
+            let (ranked, collapsed) = scorer.rankDeduped(plan: plan, candidates: candidateSignals)
+            if collapsed > 0 {
+                KalsmritikoshLog.storage.notice("RET-008: collapsed \(collapsed, privacy: .public) duplicate doc(s) in authority ranking.")
+            }
             authorityRanking = ranked.filter { $0.score > 0 }.map(\.objectID)
             // Inject density candidates PLUS strong role-matchers (adds low-mention
             // authoritative docs like a receipt); ranking demotes pure correspondence.
-            authorityKOs = densityKOs
+            // Only deduped representatives are eligible → duplicates aren't injected N×.
+            let repIDs = Set(ranked.map(\.objectID))
+            authorityKOs = densityKOs.intersection(repIDs).union(densityKOs.subtracting(Set(candidateSignals.map(\.objectID))))
             for f in ranked where f.matchedRole != nil && f.score > 0.5 { authorityKOs.insert(f.objectID) }
         } else {
             authorityKOs = densityKOs   // fallback: prior density-only authority

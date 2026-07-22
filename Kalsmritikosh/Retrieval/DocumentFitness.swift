@@ -35,6 +35,9 @@ public struct DocumentSignals: Sendable, Hashable {
     /// Per-subject mention count (the OLD authority signal) — retained only as a
     /// weak tie-breaker, never the primary score.
     public let subjectMentionCount: Int
+    /// Near-duplicate grouping key (RET-008). Documents sharing a signature are the
+    /// same content and count as ONE independent source, not N corroborations.
+    public let contentSignature: String?
 
     public nonisolated init(
         objectID: KnowledgeObject.ID,
@@ -42,7 +45,8 @@ public struct DocumentSignals: Sendable, Hashable {
         sourceType: SourceType,
         roleHints: [PreferredSourceRole],
         presentFields: Set<RequestedField>,
-        subjectMentionCount: Int = 0
+        subjectMentionCount: Int = 0,
+        contentSignature: String? = nil
     ) {
         self.objectID = objectID
         self.fileName = fileName
@@ -50,6 +54,7 @@ public struct DocumentSignals: Sendable, Hashable {
         self.roleHints = roleHints
         self.presentFields = presentFields
         self.subjectMentionCount = subjectMentionCount
+        self.contentSignature = contentSignature
     }
 }
 
@@ -124,6 +129,42 @@ public struct DocumentFitnessScorer: Sendable {
             .sorted { $0.element.score != $1.element.score ? $0.element.score > $1.element.score : $0.offset < $1.offset }
             .map(\.element)
     }
+
+    /// RET-008 — rank, then collapse near-duplicate documents (same
+    /// `contentSignature`) to a single authoritative representative. Fifteen
+    /// identical copies of one résumé are ONE source, not fifteen: promoting each
+    /// would crowd the evidence window and fake corroboration. The best-scoring
+    /// member of each duplicate group survives; the rest are dropped from the
+    /// authority set (they remain retrievable, just not promoted as independent).
+    /// Documents with no signature are always treated as unique.
+    public nonisolated func rankDeduped(plan: QueryPlan, candidates: [DocumentSignals])
+        -> (ranked: [DocumentFitness], duplicatesCollapsed: Int) {
+        let ranked = rank(plan: plan, candidates: candidates)   // best-first
+        var seen = Set<String>()
+        var reps: [DocumentFitness] = []
+        var collapsed = 0
+        let sigByID = Dictionary(candidates.map { ($0.objectID, $0.contentSignature) },
+                                 uniquingKeysWith: { a, _ in a })
+        for f in ranked {
+            if let sig = sigByID[f.objectID] ?? nil, !sig.isEmpty {
+                if seen.contains(sig) { collapsed += 1; continue }
+                seen.insert(sig)
+            }
+            reps.append(f)   // unique, or first (best) of its duplicate group
+        }
+        return (reps, collapsed)
+    }
+
+    /// Number of INDEPENDENT sources among candidates — duplicates count once
+    /// (RET-008 corroboration rule). Signature-less docs each count as unique.
+    public nonisolated func independentSourceCount(_ candidates: [DocumentSignals]) -> Int {
+        var sigs = Set<String>()
+        var uniqueless = 0
+        for c in candidates {
+            if let s = c.contentSignature, !s.isEmpty { sigs.insert(s) } else { uniqueless += 1 }
+        }
+        return sigs.count + uniqueless
+    }
 }
 
 // MARK: - Bridge role inference (pending SEM-001 canonical DocumentRole)
@@ -176,6 +217,19 @@ public enum DocumentRoleInference {
 
         if roles.isEmpty { add(.any) }
         return roles
+    }
+
+    /// Near-duplicate grouping key (RET-008): normalized alphanumeric prefix of the
+    /// content. Copies of the same document (e.g. a résumé re-sent 15 times) share
+    /// a signature and are collapsed to one authority. Deterministic; cheap.
+    public nonisolated static func contentSignature(_ text: String) -> String {
+        var out = ""
+        out.reserveCapacity(400)
+        for ch in text.lowercased() where ch.isLetter || ch.isNumber {
+            out.append(ch)
+            if out.count >= 400 { break }
+        }
+        return out
     }
 
     /// Which requested fields a DOCUMENT's text actually exposes. This is the

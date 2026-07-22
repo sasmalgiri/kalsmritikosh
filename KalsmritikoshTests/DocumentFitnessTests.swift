@@ -103,6 +103,26 @@ struct DocumentFitnessTests {
         #expect(roles == [.correspondence])
     }
 
+    @Test("RET-008: duplicate copies collapse to one independent source")
+    func duplicatesAreNotCorroboration() {
+        let cvA = "Curriculum Vitae Shirshendu Sasmal — worked at Orchid Chemicals."
+        let cvB = "Curriculum   Vitae, Shirshendu Sasmal — worked at Orchid Chemicals!"  // same content, different whitespace/punct
+        let other = "Completely different document about a patent filing."
+        func s(_ file: String, _ text: String) -> DocumentSignals {
+            DocumentSignals(objectID: UUID(), fileName: file, sourceType: .doc,
+                roleHints: [.biographical], presentFields: [.employment], subjectMentionCount: 2,
+                contentSignature: DocumentRoleInference.contentSignature(text))
+        }
+        let cands = [s("cv1.doc", cvA), s("cv2.doc", cvB), s("cv3.doc", cvA), s("patent.doc", other)]
+        #expect(scorer.independentSourceCount(cands) == 2) // the CV (any spelling) + the other
+        let (reps, collapsed) = scorer.rankDeduped(plan:
+            qc.compile(intent: UserIntent(kind: .factualLookup, scope: .person("Sasmal"), rawQuestion: "Where has Sasmal worked?"),
+                       category: .fact, queryClass: .ordinary),
+            candidates: cands)
+        #expect(collapsed == 2)          // two extra CV copies collapsed
+        #expect(reps.count == 2)
+    }
+
     @Test("Role inference maps filenames to roles by reusable signal, not by example")
     func roleInferenceSignals() {
         #expect(DocumentRoleInference.inferRoles(fileName: "MyResume.pdf", sourceType: .pdf, presentFields: []).contains(.biographical))
