@@ -16,6 +16,10 @@
 import Foundation
 
 public nonisolated struct SourceLocator: Codable, Sendable, Hashable {
+    // Evidence anchor (EV-002) — the block this locator points at. Lossless: a citation
+    // resolves to its EvidenceBlock even if chunks are re-sliced. Optional so old locators
+    // (and formats without blocks) still decode unchanged.
+    public var evidenceBlockID: UUID?
     // Text/position
     public var chunkID: UUID?
     public var characterLower: Int?
@@ -48,6 +52,7 @@ public nonisolated struct SourceLocator: Codable, Sendable, Hashable {
     public var databaseRowKey: String?
 
     public nonisolated init(
+        evidenceBlockID: UUID? = nil,
         chunkID: UUID? = nil,
         characterRange: Range<Int>? = nil,
         page: Int? = nil,
@@ -71,6 +76,7 @@ public nonisolated struct SourceLocator: Codable, Sendable, Hashable {
         speaker: String? = nil,
         databaseRowKey: String? = nil
     ) {
+        self.evidenceBlockID = evidenceBlockID
         self.chunkID = chunkID
         self.characterLower = characterRange?.lowerBound
         self.characterUpper = characterRange?.upperBound
