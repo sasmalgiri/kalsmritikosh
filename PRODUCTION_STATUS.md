@@ -117,8 +117,10 @@ These reflect prior commits and the task manifest; per the promotion rule they a
   adapters (new SourceTypes + `StructuredTextStructuralParser`; JSON leaf blocks, HTML/XML
   element-path blocks, log records; `30e5af1`). **PAR-009 IMPLEMENTED** — read-only SQLite
   table adapter (`SQLiteStructuralParser` on `ExternalSQLiteSource`; rows cite db/table/key;
-  `8064802`). PAR-004 (PDF token boxes) + PAR-010 (advertised matrix — manifest auto-generates;
-  needs per-format fixtures) remain.
+  `8064802`). **PAR-004 IMPLEMENTED** — PDF paragraph region boxes (`[x,y,w,h]` via PDFKit
+  characterBounds + pure `PDFBoxMath`; exact-highlight citations; `1c0d68a`). **PAR-010
+  IMPLEMENTED** — advertised-matrix guard (`1515ee8`). Only PAR-006 (email-thread-fidelity
+  limitation) + PAR-007 (audio deferred by design) remain, both intentional.
 - **Semantics (P4):** SEM-001 DocumentRole split, SEM-002 BlockSemantics, SEM-003 GenericFact — NOT_STARTED; SEM-009 reversible entity merge/split IMPLEMENTED (schema v49 human-in-loop).
 - **Claims/Reconstruction (P6):** contradiction/gap detectors + reconstruction outline + alternatives IMPLEMENTED; CLM-001 full verifier, CLM-002 causal-language, REC-001 outline-gates-generation — incomplete.
 - **Personas/Exports (P7):** F1–F6, F8 DONE (workspaces, tags/views, citation+export, composer, contradiction workflow, persona templates, transcripts); PER-003..007 end-to-end jobs unverified.
