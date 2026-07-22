@@ -18,6 +18,8 @@ public struct SourcesView: View {
     @State private var recents: [KnowledgeObjectSummaryRow] = []
     @State private var fileCount: Int = 0
     @State private var ingesting = false
+    /// ING-002 — the last bulk ingest's outcome; drives the failure banner.
+    @State private var ingestSummary: IngestBatchSummary?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     /// Minimum-touch: drop folders anywhere on this screen to add them —
@@ -30,6 +32,9 @@ public struct SourcesView: View {
         VStack(spacing: 0) {
             header
             Divider()
+            if let summary = ingestSummary, !summary.failures.isEmpty {
+                ingestFailureBanner(summary)
+            }
             ScrollView {
                 rootsSection
                     .padding(.horizontal)
@@ -235,8 +240,36 @@ public struct SourcesView: View {
     private func runIngestion() async {
         ingesting = true
         _ = await appState.ingestAllRoots()
+        ingestSummary = appState.lastIngestSummary   // ING-002 — surface which files failed
         await refresh()
         ingesting = false
+    }
+
+    /// ING-002 — a neutral banner naming the files that couldn't be processed, so a
+    /// bulk ingest never silently drops files. Preserve-not-hide: rows stay on disk;
+    /// this only reports what the run could not turn into evidence.
+    @ViewBuilder
+    private func ingestFailureBanner(_ summary: IngestBatchSummary) -> some View {
+        let shown = summary.failures.prefix(5)
+        VStack(alignment: .leading, spacing: 4) {
+            Label(summary.headline, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.orange)
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, f in
+                Text("• \(f.fileName) — \(f.stage == .timeout ? "timed out" : "couldn't be processed")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if summary.failures.count > shown.count {
+                Text("…and \(summary.failures.count - shown.count) more")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal)
+        .padding(.top, 8)
     }
 
     private func resolvedPath(for root: BookmarkStore.Root) -> String {
