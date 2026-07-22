@@ -22,6 +22,13 @@ public final class BookmarkStore {
     private let defaultsKey = "kalsmritikosh.bookmarks"
     public private(set) var roots: [Root] = []
 
+    /// When true the store neither loads persisted roots at init nor writes
+    /// roots back to `UserDefaults`. Used by the eval harness so its "isolated"
+    /// store starts genuinely empty — otherwise it would inherit the user's
+    /// real watched folders and the eval would ingest the real archive into
+    /// the throwaway DB, contaminating every metric.
+    private let ephemeral: Bool
+
     public struct Root: Codable, Identifiable, Hashable, Sendable {
         public let id: UUID
         public let displayName: String
@@ -42,7 +49,16 @@ public final class BookmarkStore {
     }
 
     public init() {
+        self.ephemeral = false
         load()
+    }
+
+    /// Create a store for the eval / test harness. `ephemeral: true` starts
+    /// with no roots and never touches `UserDefaults`, so it can neither
+    /// inherit nor overwrite the user's real bookmarks.
+    public init(ephemeral: Bool) {
+        self.ephemeral = ephemeral
+        if !ephemeral { load() }
     }
 
     public func register(url: URL) throws {
@@ -125,6 +141,7 @@ public final class BookmarkStore {
     }
 
     private func persist() {
+        guard !ephemeral else { return }
         guard let data = try? JSONEncoder().encode(roots) else { return }
         UserDefaults.standard.set(data, forKey: defaultsKey)
     }

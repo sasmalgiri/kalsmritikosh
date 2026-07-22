@@ -59,7 +59,10 @@ public enum Gate1Baseline {
         // it must run BEFORE the file is unlinked.
         let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
 
-        let isolatedBookmarks = BookmarkStore()
+        // Ephemeral: NO real watched folders. A default BookmarkStore() would
+        // load the user's persisted roots and boot would walk the real archive
+        // into this throwaway DB — contaminating every eval metric.
+        let isolatedBookmarks = BookmarkStore(ephemeral: true)
         let state = AppState(bookmarks: isolatedBookmarks)
         await state.boot(databaseURL: isolatedDBURL)
 
@@ -250,7 +253,10 @@ public enum Gate1Baseline {
             .appendingPathComponent("Gate1Fast-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
-        let isolatedBookmarks = BookmarkStore()
+        // Ephemeral: NO real watched folders. A default BookmarkStore() would
+        // load the user's persisted roots and boot would walk the real archive
+        // into this throwaway DB — contaminating every eval metric.
+        let isolatedBookmarks = BookmarkStore(ephemeral: true)
         let state = AppState(bookmarks: isolatedBookmarks)
         await state.boot(databaseURL: isolatedDBURL)
 
@@ -321,6 +327,9 @@ public enum Gate1Baseline {
                 )
             }
 
+            // Refuse to score a contaminated corpus (see helper doc).
+            try await Self.assertHermeticCorpus(objects: objects)
+
             let queryStarted = Date()
             let runner = EvalKitRunner()
             let reportURL = try await runner.runSubset(
@@ -365,7 +374,10 @@ public enum Gate1Baseline {
             .appendingPathComponent("Gate3Multihop-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let isolatedDBURL = tempDir.appendingPathComponent("eval.sqlite", isDirectory: false)
-        let isolatedBookmarks = BookmarkStore()
+        // Ephemeral: NO real watched folders. A default BookmarkStore() would
+        // load the user's persisted roots and boot would walk the real archive
+        // into this throwaway DB — contaminating every eval metric.
+        let isolatedBookmarks = BookmarkStore(ephemeral: true)
         let state = AppState(bookmarks: isolatedBookmarks)
         await state.boot(databaseURL: isolatedDBURL)
 
@@ -746,6 +758,33 @@ public enum Gate1Baseline {
                     Kalsmritikosh target as a folder reference (or ensure the missing \
                     files are members of "Copy Bundle Resources") so they ship in the \
                     app bundle. A Gate 1 run on a partial corpus is worse than no run.
+                    """]
+            )
+        }
+    }
+
+    /// Post-ingest hermeticity gate. After the isolated eval DB is populated,
+    /// every source in it must be a ProjectDelta fixture. If ANY foreign file
+    /// leaked in (the classic failure: a non-ephemeral BookmarkStore inheriting
+    /// the user's real watched folders, so boot walked the real archive into the
+    /// throwaway DB), the metrics are contaminated and MUST NOT be reported.
+    /// Fails loud rather than scoring a polluted corpus.
+    private static func assertHermeticCorpus(objects: KnowledgeObjectRepository) async throws {
+        let ids = Set(try await objects.allIDs(pageSize: 5000))
+        guard !ids.isEmpty else { return }
+        let names = try await objects.sourceFilenames(for: ids)
+        let distinct = Set(names.values)
+        let extras = distinct.subtracting(Self.expectedFixtureFilenames)
+        guard extras.isEmpty else {
+            throw NSError(
+                domain: "Gate1Baseline",
+                code: 5,
+                userInfo: [NSLocalizedDescriptionKey: """
+                    Eval corpus is NOT hermetic — \(extras.count) non-fixture source(s) \
+                    leaked into the isolated DB: \(extras.sorted().joined(separator: ", ")). \
+                    Every metric would be contaminated by the real archive. Refusing to \
+                    score. Ensure the eval boots with BookmarkStore(ephemeral: true) so no \
+                    real watched folder is walked into the throwaway database.
                     """]
             )
         }
