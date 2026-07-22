@@ -245,7 +245,13 @@ public actor HybridRetriever: Retriever {
             for oid in collectedChunks.map(\.chunk.objectID) where candidateSet.count < 48 {
                 candidateSet.insert(oid)
             }
-            let candidates = Array(candidateSet.prefix(48))
+            // Deterministic truncation: a Set's iteration order is randomized
+            // per process, so `prefix` would pick an arbitrary 48 at scale and
+            // make the authority ranking (and thus the answer) vary run-to-run.
+            // Sort by a stable key before capping.
+            let candidates = Array(
+                candidateSet.sorted { $0.uuidString < $1.uuidString }.prefix(48)
+            )
             let scorer = DocumentFitnessScorer()
             var candidateSignals: [DocumentSignals] = []
             for ko in candidates {
@@ -964,7 +970,7 @@ public actor HybridRetriever: Retriever {
             shortCircuitedAt: shortCircuit,
             walkSteps: walkSteps,
             authorityObjectIDs: authorityRanking.isEmpty
-                ? Array(authorityKOs)
+                ? authorityKOs.sorted { $0.uuidString < $1.uuidString }
                 : authorityRanking
         )
     }

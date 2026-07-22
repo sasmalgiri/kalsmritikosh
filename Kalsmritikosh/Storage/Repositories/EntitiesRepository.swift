@@ -319,7 +319,7 @@ public actor EntitiesRepository {
         JOIN files f ON f.id = k.file_id
         WHERE (m.entity_id = ?
             OR m.entity_id IN (SELECT id FROM entities WHERE merged_into = ?))
-        ORDER BY k.created_at DESC
+        ORDER BY k.created_at DESC, m.source_object_id
         LIMIT ?;
         """, [.uuid(id), .uuid(id), .integer(Int64(limit))])
         return rows.compactMap { row in

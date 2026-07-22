@@ -222,6 +222,7 @@ public actor FactBondsRepository {
                    confidence, weight
             FROM fact_bonds
             WHERE from_fact_id = ? AND bond_name = ?
+            ORDER BY confidence DESC, weight DESC, id
             LIMIT ?;
             """
             bindings = [.uuid(factID), .text(name), .integer(Int64(limit))]
@@ -232,6 +233,7 @@ public actor FactBondsRepository {
                    confidence, weight
             FROM fact_bonds
             WHERE from_fact_id = ?
+            ORDER BY confidence DESC, weight DESC, id
             LIMIT ?;
             """
             bindings = [.uuid(factID), .integer(Int64(limit))]
@@ -251,6 +253,7 @@ public actor FactBondsRepository {
                    confidence, weight
             FROM fact_bonds
             WHERE to_fact_id = ? AND bond_name = ?
+            ORDER BY confidence DESC, weight DESC, id
             LIMIT ?;
             """
             bindings = [.uuid(factID), .text(name), .integer(Int64(limit))]
@@ -261,6 +264,7 @@ public actor FactBondsRepository {
                    confidence, weight
             FROM fact_bonds
             WHERE to_fact_id = ?
+            ORDER BY confidence DESC, weight DESC, id
             LIMIT ?;
             """
             bindings = [.uuid(factID), .integer(Int64(limit))]

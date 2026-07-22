@@ -228,7 +228,7 @@ public actor KnowledgeObjectRepository {
         let rows = try await database.query("""
         SELECT id, content FROM knowledge_objects
         WHERE content LIKE ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id
         LIMIT ?;
         """, [.text(pattern), .integer(Int64(limit))])
         return rows.compactMap { row in
