@@ -124,6 +124,43 @@ jobs:
           fi
           echo "No try! / fatalError() in non-UI code."
 
+      - name: No network in the evidence/answer layers (privacy invariant)
+        run: |
+          set +e
+          # Network may live ONLY in the networking boundary: Routing/ (providers +
+          # ModelDownloader) and Ingestion/ASR/ (the optional, release-gated cloud
+          # transcriber). The core evidence/answer layers — Brain, Knowledge, Retrieval,
+          # Storage, Experts, Export, UI, Core — must NEVER touch the network. Comment-only
+          # lines excluded. (ASR cloud transcription must itself be release-gated — P8.1.)
+          MATCHES=$(grep -rnE "URLSession|URLRequest|\.dataTask" \
+            Kalsmritikosh/ --include="*.swift" 2>/dev/null \
+            | grep -vE "^Kalsmritikosh/Routing/" \
+            | grep -vE "^Kalsmritikosh/Ingestion/ASR/" \
+            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Network call found in an evidence/answer layer — privacy contract violation"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "No network calls in the evidence/answer layers."
+
+      - name: No synthetic-question types in release path (PI.4)
+        run: |
+          set +e
+          # Synthetic questions are a DEBUG-only diagnostic. A release build must not
+          # reference the generator/queue outside a #if DEBUG. Heuristic guard: flag any
+          # non-comment reference in Brain/ (the answer path) — synthetic Qs belong to
+          # Ingestion/Knowledge diagnostics only.
+          MATCHES=$(grep -rnE "SyntheticQuestion(Generator|Queue)" \
+            Kalsmritikosh/Brain/ --include="*.swift" 2>/dev/null \
+            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Synthetic-question type referenced in the answer path (Brain/)"
+            echo "$MATCHES"
+            exit 1
+          fi
+          echo "No synthetic-question types in the answer path."
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
