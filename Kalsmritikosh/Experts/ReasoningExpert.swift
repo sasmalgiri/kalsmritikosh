@@ -27,14 +27,20 @@ public struct ReasoningExpert: Expert {
             layers: [.memory, .timeline, .entity, .metadata, .summary, .vector]
         )
 
+        // SEM — the deterministically-extracted domain facts that ride this
+        // retrieval are ground truth (not model output), so they LEAD the
+        // expert's claims on both paths, cited to their backing document.
+        let factClaims = Self.factClaims(from: result)
+
         let frame = PromptTemplates.reasoningAnalysis(intent: intent, retrieval: result)
         let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
+            let claims = factClaims + llm.claims
             return ExpertFindings(
                 expertID: id,
-                claims: llm.claims,
+                claims: claims,
                 confidence: Confidence.aggregate(
-                    llm.claims.map(\.confidence),
+                    claims.map(\.confidence),
                     agreement: 1.0,
                     diversity: 1.0,
                     contradictionPenalty: 0.0
@@ -43,9 +49,10 @@ public struct ReasoningExpert: Expert {
             )
         }
 
-        // Deterministic fallback (no model): surface the top retrieved
-        // snippets as coarse claims so the expert still contributes offline.
-        let claims = result.chunks.prefix(5).map { hit in
+        // Deterministic fallback (no model): lead with the domain facts, then
+        // surface the top retrieved snippets as coarse claims so the expert
+        // still contributes offline.
+        let snippetClaims = result.chunks.prefix(5).map { hit in
             ExpertFindings.Claim(
                 statement: hit.chunk.text.isEmpty
                     ? "Relevant material via \(hit.viaLayer.rawValue)"
@@ -55,13 +62,41 @@ public struct ReasoningExpert: Expert {
                 evidenceGranularity: .coarse
             )
         }
+        let claims = factClaims + Array(snippetClaims)
         return ExpertFindings(
             expertID: id,
-            claims: Array(claims),
+            claims: claims,
             confidence: claims.isEmpty ? .zero : .low,
             notes: claims.isEmpty ? "No evidence to reason over." : nil,
             droppedUnverifiable: llm.dropped
         )
+    }
+
+    /// SEM — turn the assertable GenericFacts that ride `result` into deterministic
+    /// `.coarse` claims, each cited to the document whose evidence block produced it
+    /// (first backing chunk in the retrieved set). Facts whose block isn't among the
+    /// surfaced chunks are skipped, so every claim's supporting id is in the retrieval
+    /// set (the claim–evidence contract holds). Pure + testable.
+    nonisolated static func factClaims(from result: RetrievalResult) -> [ExpertFindings.Claim] {
+        var blockToObject: [UUID: KnowledgeObject.ID] = [:]
+        for c in result.chunks {
+            if let b = c.chunk.evidenceBlockID, blockToObject[b] == nil {
+                blockToObject[b] = c.chunk.objectID
+            }
+        }
+        var claims: [ExpertFindings.Claim] = []
+        for f in result.genericFacts where f.status.isAssertable {
+            guard let obj = f.sourceBlockIDs.lazy.compactMap({ blockToObject[$0] }).first else { continue }
+            let field = f.field.prefix(1).uppercased() + f.field.dropFirst()
+            let unit = f.unit.map { " \($0)" } ?? ""
+            claims.append(ExpertFindings.Claim(
+                statement: "\(field): \(f.value)\(unit)",
+                supportingObjectIDs: [obj],
+                confidence: Confidence(f.confidence),
+                evidenceGranularity: .coarse
+            ))
+        }
+        return claims
     }
 
     private func runLLM(
