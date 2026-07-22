@@ -392,6 +392,8 @@ public final class AppState {
     public private(set) var derivedObjects: DerivedObjectsRepository?
     /// A2 — canonical structural evidence store (typed blocks + versions).
     public private(set) var evidenceStore: EvidenceStore?
+    /// PERF.2 — durable deferred-enrichment job ledger.
+    public private(set) var enrichmentJobs: EnrichmentJobRepository?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -686,6 +688,9 @@ public final class AppState {
                 root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
+            // PERF.2 — durable deferred-enrichment job ledger. Boot recovery below
+            // re-queues any job left `running` by a crash (idempotent stages).
+            let enrichmentJobsRepo = EnrichmentJobRepository(database: db)
             // A2 §7.6 — parent→child source provenance recorder.
             let sourceRelationsRepo = SourceRelationsRepository(database: db)
 
@@ -1634,6 +1639,7 @@ public final class AppState {
 
             // Commit
             self.database = db
+            self.enrichmentJobs = enrichmentJobsRepo
             self.vectorStore = vectors
             self.files = files
             self.objects = objects
@@ -1801,6 +1807,12 @@ public final class AppState {
                         if n > 0 {
                             KalsmritikoshLog.app.info("AppState: resumed \(n, privacy: .public) interrupted ingest(s)")
                             _ = self
+                        }
+                        // PERF.2 — re-queue any deferred-enrichment job stranded `running`
+                        // by a crash so a fresh drainer picks it up (idempotent stages).
+                        if let requeued = try? await self?.enrichmentJobs?.requeueStuckRunning(),
+                           requeued > 0 {
+                            KalsmritikoshLog.app.info("AppState: re-queued \(requeued, privacy: .public) stuck enrichment job(s)")
                         }
                     }
                 }
