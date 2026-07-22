@@ -17,6 +17,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // deterministic structure we can parse into typed blocks.
     case html, json, xml, log
 
+    // PAR-009 — a generic read-only SQLite database (rows cite db/table/key).
+    case sqlite
+
     // Spreadsheets
     case xlsx, xls, csv, ods
 
@@ -92,6 +95,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "json", "jsonl", "ndjson": return .json
         case "xml", "plist": return .xml
         case "log": return .log
+        case "sqlite", "sqlite3", "db": return .sqlite
         case "xlsx": return .xlsx
         case "xls": return .xls
         case "csv": return .csv
@@ -146,13 +150,15 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // ZIP container (also docx/xlsx/pptx/epub) — route to the archive path,
         // which expands members and types each one individually.
         if has([0x50, 0x4B, 0x03, 0x04]) { return .zip }
+        // "SQLite format 3\0" — a generic SQLite database (PAR-009).
+        if has([0x53, 0x51, 0x4C, 0x69, 0x74, 0x65]) { return .sqlite }   // "SQLite"
         return nil
     }
 
     public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
-             .html, .json, .xml, .log: return .document
+             .html, .json, .xml, .log, .sqlite: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email

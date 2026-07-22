@@ -33,7 +33,8 @@ public struct StructuralParserRegistry: Sendable {
         EmailStructuralParser(),
         MBOXStructuralParser(),
         EMLXStructuralParser(),
-        StructuredTextStructuralParser()   // PAR-008 — HTML / JSON / XML / log
+        StructuredTextStructuralParser(),  // PAR-008 — HTML / JSON / XML / log
+        SQLiteStructuralParser()           // PAR-009 — read-only SQLite tables
     ]
 
     /// The default v1 registry — every format with a dependency-free structural
