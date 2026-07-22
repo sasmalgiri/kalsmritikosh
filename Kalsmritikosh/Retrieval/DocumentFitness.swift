@@ -171,52 +171,21 @@ public struct DocumentFitnessScorer: Sendable {
 
 public enum DocumentRoleInference {
 
-    /// Infer role hints from general, reusable signals: filename keywords, source
-    /// type, and which fields the text exposes. NOT a per-document special case.
+    /// Infer role hints for the fitness scorer. Delegates to the canonical
+    /// `DocumentRoleClassifier` (SEM-001) and maps each semantic role to its coarse
+    /// retrieval bucket, so the two vocabularies stay reconciled and there is one
+    /// classification rule rather than two copies.
     public nonisolated static func inferRoles(
         fileName: String,
         sourceType: SourceType,
         presentFields: Set<RequestedField>
     ) -> [PreferredSourceRole] {
-        // A source's role is its DOCUMENT TYPE, not the content it happens to
-        // quote. An email/mbox that quotes a résumé or a receipt is still
-        // CORRESPONDENCE — otherwise a giant whole-mailbox KO (which contains
-        // everyone's quoted CVs, receipts and contracts) would read as every
-        // role at once and outrank the focused authoritative document. So the
-        // email family short-circuits to correspondence, ignoring filename /
-        // content-field signals below.
-        switch sourceType {
-        case .mbox, .eml, .appleMail, .pst, .msg, .nsf, .imessage, .chatExport:
-            return [.correspondence]
-        default:
-            break
-        }
-
-        let n = fileName.lowercased()
         var roles: [PreferredSourceRole] = []
-        func add(_ r: PreferredSourceRole) { if !roles.contains(r) { roles.append(r) } }
-
-        // Filename signals
-        if n.contains("resume") || n.contains("cv") || n.contains("curriculum")
-            || n.contains("bio") || n.contains("profile") { add(.biographical) }
-        if n.contains("receipt") || n.contains("invoice") || n.contains("transaction")
-            || n.contains("payment") || n.contains("statement") || n.contains("bill") { add(.transactional) }
-        if n.contains("contract") || n.contains("agreement") || n.contains("mou")
-            || n.contains("nda") || n.contains("terms") { add(.contractual) }
-        if n.contains("patent") || n.contains("certificate") || n.contains("grant")
-            || n.contains("registration") || n.contains("licen") { add(.official) }
-        if n.contains("report") || n.contains("study") || n.contains("article")
-            || n.contains("paper") { add(.report) }
-
-        // Content-field signals (a doc exposing amount+counterparty reads transactional)
-        if presentFields.contains(.monetaryAmount) && presentFields.contains(.counterparty) {
-            add(.transactional)
+        for role in DocumentRoleClassifier.classify(fileName: fileName, sourceType: sourceType, presentFields: presentFields) {
+            let mapped = role.preferredSourceRole
+            if !roles.contains(mapped) { roles.append(mapped) }
         }
-        if presentFields.contains(.employment) { add(.biographical) }
-        if presentFields.contains(.terms) { add(.contractual) }
-
-        if roles.isEmpty { add(.any) }
-        return roles
+        return roles.isEmpty ? [.any] : roles
     }
 
     /// Near-duplicate grouping key (RET-008): normalized alphanumeric prefix of the
