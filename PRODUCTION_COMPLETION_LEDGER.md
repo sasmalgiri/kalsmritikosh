@@ -12,6 +12,14 @@ is safe to finish under the test net. Since this flipped, two deep-wiring items 
 CI-verified: **SEM persistence** (migration v57 + `GenericFactRepository`, `f3c7800`) and
 **domain-pack fact extraction at ingest** (`8a7b7d0`).
 
+**UPDATE 3 — parser workstream extended (head `1515ee8`, 431 tests green).** Added, all
+CI-verified: **PAR-008** structural HTML/JSON/XML/log adapters (new SourceTypes +
+`StructuredTextStructuralParser`), **PAR-009** read-only SQLite table adapter (rows cite
+db/table/key, on `ExternalSQLiteSource`), **PAR-010** advertised-format-matrix guard (the
+manifest can't over-advertise a format the app can't parse). Remaining parser items: PAR-004
+(PDF token boxes — needs PDFKit + real-PDF fixtures) and PAR-006/007 (email-thread fidelity
+limitation / audio deferred by design). Everything else remaining is app-run/UI/owner-gated.
+
 **UPDATE 2 — pack now in hand; CI-verifiable foundational backlog CLEARED (head `e257f97`, 418 tests green).**
 This session landed, all CI-verified: SEM fact loop (extract→persist→retrieve→all 3 answer
 paths→trace); brain wiring (RET-007 corrective retrieval + per-expert facts); ING-002
