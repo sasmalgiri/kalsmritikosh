@@ -12,6 +12,18 @@ is safe to finish under the test net. Since this flipped, two deep-wiring items 
 CI-verified: **SEM persistence** (migration v57 + `GenericFactRepository`, `f3c7800`) and
 **domain-pack fact extraction at ingest** (`8a7b7d0`).
 
+**UPDATE 2 — pack now in hand; CI-verifiable foundational backlog CLEARED (head `e257f97`, 418 tests green).**
+This session landed, all CI-verified: SEM fact loop (extract→persist→retrieve→all 3 answer
+paths→trace); brain wiring (RET-007 corrective retrieval + per-expert facts); ING-002
+(collected failures + UI — atomic core was already v54); **EV-004** corpus snapshots (v58,
+extended the existing table), **EV-005** managed evidence vault, **EV-006** one-version-model
+consolidation (physical merge deferred as owner-gated); **PERF.2** enrichment_jobs ledger
+(v59); **PAR-005** spreadsheet formula/value/number-format model (additive, fidelity-safe).
+Schema v57→v59. Every remaining pack item is now either **live-wiring/UI verifiable only by
+running the app** (confidence would drop from CI-green to compiles-only) or **owner/data-gated**
+(EV-006 physical merge, scale runs, App Store, in-app eval). This is the honest CI-verified
+ceiling for headless work.
+
 ## A. Complete (code written, build-green, verified as noted)
 
 **Whole workstreams complete:**
