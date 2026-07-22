@@ -59,4 +59,10 @@ public struct StructuralParserRegistry: Sendable {
     public nonisolated var supportedTypes: Set<SourceType> {
         parsers.reduce(into: Set<SourceType>()) { $0.formUnion($1.supportedTypes) }
     }
+
+    /// PAR-001 — per-parser capability, read straight from the registered parsers so
+    /// the coverage matrix is GENERATED FROM CODE and cannot drift from reality.
+    public nonisolated var capabilities: [(name: String, version: String, types: Set<SourceType>)] {
+        parsers.map { ($0.parserName, $0.parserVersion, $0.supportedTypes) }
+    }
 }
