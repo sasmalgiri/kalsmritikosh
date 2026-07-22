@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 56
+    public static let latestVersion = 57
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v56 adds the `ingest_runs` table — check it exists (newest object).
+    /// v57 adds the `generic_facts` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='ingest_runs';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='generic_facts';", []
         )
         return !rows.isEmpty
     }
@@ -141,7 +141,8 @@ public enum SchemaMigrations {
         (53, v53),
         (54, v54),
         (55, v55),
-        (56, v56)
+        (56, v56),
+        (57, v57)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2057,5 +2058,24 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_ingest_run_files_run ON ingest_run_files(run_id);
     CREATE INDEX IF NOT EXISTS idx_ingest_runs_status ON ingest_runs(status);
+    """
+
+    // SEM — durable store for domain-pack GenericFacts (subject/field/value + evidence + the
+    // locked EvidenceStatus vocabulary). Source blocks kept as JSON so a fact always drills to
+    // evidence. Append-only, additive. Indexed by (subject_label, field) for lookup.
+    private static let v57: String = """
+    CREATE TABLE IF NOT EXISTS generic_facts (
+        id                TEXT PRIMARY KEY,
+        subject_id        TEXT NULL,
+        subject_label     TEXT NOT NULL,
+        field             TEXT NOT NULL,
+        value             TEXT NOT NULL,
+        unit              TEXT NULL,
+        status            TEXT NOT NULL,
+        confidence        REAL NOT NULL,
+        source_blocks_json TEXT NOT NULL,
+        created_at        REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_generic_facts_subject_field ON generic_facts(subject_label, field);
     """
 }
