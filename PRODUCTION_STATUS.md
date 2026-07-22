@@ -64,10 +64,10 @@ Status vocabulary: `NOT_STARTED` · `IMPLEMENTED` (code compiles, no independent
 | EV-005 managed evidence vault | NOT_STARTED | — |
 | EV-006 consolidate version mechanisms | NOT_STARTED | two historical version layers still coexist |
 | ING-001 durable ingest state machine | NOT_STARTED (PI.3) | IngestAttempts exists; no persisted transitions |
-| ING-002 atomic queryable-core commit | NOT_STARTED (PI.2) | batch inserts don't self-transact |
+| ING-002 atomic queryable-core commit + collected failures | IMPLEMENTED | atomic core WAS already done (v54: KO+chunks commit-or-rollback via cascade-delete on chunk-insert failure, `IngestCoordinator.processKnowledgeObject`). Collected-failures half added this session (`IngestFailureLog` → `IngestBatchSummary` → `SourcesView` banner, `6aee055`/`45e9e8f`). NOTE: a write-txn across the pipeline's mid-write LLM calls stays deliberately unimplemented (SQLITE_BUSY) — that is NOT part of ING-002. |
 | ING-003 idempotent deferred-job queue | IMPLEMENTED-partial | resumable embedding drain (`PERF.1`) via LEFT JOIN |
 | ING-004 resume/rollback | NOT_STARTED | crash-recovery tests need TST-001 |
-| ING-005 typed errors for required writes | ⚠proposed partial | some `try?` on required writes remain |
+| ING-005 typed errors for required writes | IMPLEMENTED (as designed) | verified: the REQUIRED writes (file record, KO, chunks) already `try`/throw with rollback; the remaining `try?` are on the DELIBERATELY best-effort derived writes (entities/events/relationships/custody/attempts) — throwing there would violate the "derived enrichment is re-derivable, not part of the atomic core" decision. No change needed. |
 | ING-006 query-priority scheduler | IMPLEMENTED-partial | background QoS + idle gating; not strict pre-emption |
 | ING-007 multi-dim readiness UX | IMPLEMENTED-partial | LiveActivityPanel stage chips (`f9efdf2`) |
 
