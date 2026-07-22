@@ -551,6 +551,68 @@ public actor MasterBrain {
     /// Quality-or-nothing: returns nil when no provider is available
     /// or no chunks were retrieved. The caller falls back to the
     /// existing "Kalsmritikosh couldn't reconstruct" refusal in those cases.
+    /// RET-007 — decide + (optionally) run one focused corrective retrieval, then merge.
+    /// `retrieve` is injected so this orchestration is testable without a live retriever.
+    /// Returns the first result unchanged when no corrective pass is warranted.
+    nonisolated static func applyCorrectiveRetrieval(
+        first: RetrievalResult, intent: UserIntent, layers: [RetrievalLayer],
+        retrieve: (UserIntent) async -> RetrievalResult
+    ) async -> RetrievalResult {
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        let sufficiency = EvidenceSufficiencyAssessor().assess(
+            plan: plan, evidenceTexts: first.chunks.map { $0.chunk.text })
+        let decision = CorrectiveRetrievalPlanner().decide(
+            plan: plan, sufficiency: sufficiency, correctivePassesUsed: 0,
+            retrievalBudgetRemaining: first.chunks.isEmpty ? 0 : 1)
+        guard decision.shouldRetry else { return first }
+        // Focus the second pass: bias the query toward the still-missing fields and the
+        // plan's subjects (added as entity hints + appended to the raw question).
+        let missingLabels = decision.targetFields.map { EvidenceSufficiency.label($0) }
+        let hints = Array(Set(intent.entityHints + decision.targetSubjects))
+        let focusedQuestion = missingLabels.isEmpty ? intent.rawQuestion
+            : "\(intent.rawQuestion) (\(missingLabels.joined(separator: ", ")))"
+        let focused = UserIntent(
+            kind: intent.kind, scope: intent.scope, timeframe: intent.timeframe,
+            entityHints: hints, rawQuestion: focusedQuestion)
+        let extra = await retrieve(focused)
+        return mergeRetrievals(first, extra)
+    }
+
+    /// RET-007 — union a corrective retrieval pass into the base result. Base items
+    /// keep their order/priority; new items are appended, deduped by identity (chunks
+    /// by chunk id, events/entities/facts by id). Pure + testable; never drops base
+    /// evidence. Used so one focused second pass can ADD the missing-field evidence
+    /// without disturbing the first pass's authority ordering.
+    nonisolated static func mergeRetrievals(_ base: RetrievalResult, _ extra: RetrievalResult) -> RetrievalResult {
+        var chunkIDs = Set(base.chunks.map(\.chunk.id))
+        var chunks = base.chunks
+        for c in extra.chunks where chunkIDs.insert(c.chunk.id).inserted { chunks.append(c) }
+
+        var eventIDs = Set(base.events.map(\.id))
+        var events = base.events
+        for e in extra.events where eventIDs.insert(e.id).inserted { events.append(e) }
+
+        var entityIDs = Set(base.entities.map(\.id))
+        var entities = base.entities
+        for e in extra.entities where entityIDs.insert(e.id).inserted { entities.append(e) }
+
+        var factIDs = Set(base.genericFacts.map(\.id))
+        var facts = base.genericFacts
+        for f in extra.genericFacts where factIDs.insert(f.id).inserted { facts.append(f) }
+
+        var summaryIDs = Set(base.summaries.map(\.id))
+        var summaries = base.summaries
+        for s in extra.summaries where summaryIDs.insert(s.id).inserted { summaries.append(s) }
+
+        let layers = base.layersUsed + extra.layersUsed.filter { !base.layersUsed.contains($0) }
+        return RetrievalResult(
+            chunks: chunks, events: events, entities: entities,
+            relationships: base.relationships, summaries: summaries,
+            layersUsed: layers, shortCircuitedAt: base.shortCircuitedAt,
+            walkSteps: base.walkSteps, genericFacts: facts
+        )
+    }
+
     /// Pure, testable construction of the evidence-grounded fallback prompt.
     /// Labels chunks `[C1..Cn]`, and — when domain-pack facts ride the retrieval —
     /// prepends a VERIFIED-FACTS block listing each assertable fact tagged with the
@@ -967,10 +1029,21 @@ public actor MasterBrain {
         // SQL + vector traffic. Wall-clock saving is N retrieval round
         // trips per question; for `factualLookup` (which routes to all
         // experts) that's ~7× fewer retrieval passes per question.
-        let sharedRetrieval = (try? await retriever.retrieve(
+        let firstRetrieval = (try? await retriever.retrieve(
             for: intent,
             layers: decision.retrievalLayers
         )) ?? RetrievalResult()
+
+        // RET-007 — bounded corrective retrieval. If the first pass didn't cover the
+        // fields the question asked for, run ONE focused second pass biased at the
+        // still-missing fields + the plan's subjects, and MERGE it in (base ordering
+        // preserved). Deterministic, no LLM; capped at one pass. When nothing is
+        // missing / no budget / nothing specific to target, this is a no-op and the
+        // first result is used verbatim.
+        let sharedRetrieval = await Self.applyCorrectiveRetrieval(
+            first: firstRetrieval, intent: intent, layers: decision.retrievalLayers,
+            retrieve: { focused in (try? await retriever.retrieve(for: focused, layers: decision.retrievalLayers)) ?? RetrievalResult() }
+        )
 
         let context = ExpertContext(
             retriever: retriever,
