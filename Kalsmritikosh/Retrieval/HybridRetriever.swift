@@ -272,11 +272,18 @@ public actor HybridRetriever: Retriever {
         }
 
         if !authorityKOs.isEmpty {
+            // RET-004 — inject the chunks of an authoritative doc that actually MATCH the
+            // question (by query-term overlap), not just its first N (no prefix-only injection).
+            let selector = HierarchicalEvidenceSelector()
+            let selTerms = selector.terms(from: plan)
             let present = Set(collectedChunks.map(\.chunk.objectID))
             for ko in authorityKOs where !present.contains(ko) {
                 let injected = (try? await chunks.findByObjectID(ko)) ?? []
-                for c in injected.prefix(4) {
-                    collectedChunks.append(RetrievedChunk(chunk: c, score: 1.0, viaLayer: .entity))
+                let pick = selTerms.isEmpty
+                    ? Array(injected.indices.prefix(4))
+                    : selector.selectWithinDocument(chunkTexts: injected.map(\.text), terms: selTerms, limit: 4)
+                for i in pick where i < injected.count {
+                    collectedChunks.append(RetrievedChunk(chunk: injected[i], score: 1.0, viaLayer: .entity))
                 }
             }
         }
