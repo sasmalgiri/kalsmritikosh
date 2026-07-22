@@ -54,6 +54,9 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
         public let relationships: Int
         public let summaries: Int
         public let walkSteps: Int
+        /// SEM — domain-pack facts that rode this retrieval's evidence (option A).
+        /// Surfaced in the "Why this answer?" trace so the fact layer is observable.
+        public let genericFacts: Int
 
         public nonisolated init(
             events: Int = 0,
@@ -61,7 +64,8 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
             chunks: Int = 0,
             relationships: Int = 0,
             summaries: Int = 0,
-            walkSteps: Int = 0
+            walkSteps: Int = 0,
+            genericFacts: Int = 0
         ) {
             self.events = events
             self.entities = entities
@@ -69,6 +73,7 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
             self.relationships = relationships
             self.summaries = summaries
             self.walkSteps = walkSteps
+            self.genericFacts = genericFacts
         }
     }
 

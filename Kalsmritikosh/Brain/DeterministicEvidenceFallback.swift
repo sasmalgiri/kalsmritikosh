@@ -150,7 +150,8 @@ public enum DeterministicEvidenceFallback {
                 chunks: retrieval.chunks.count,
                 relationships: retrieval.relationships.count,
                 summaries: retrieval.summaries.count,
-                walkSteps: retrieval.walkSteps.count
+                walkSteps: retrieval.walkSteps.count,
+                genericFacts: retrieval.genericFacts.count
             ),
             assumptions: ["Rendered deterministically (no LLM) — analysis budget exhausted or no provider available."],
             uncertainties: contradictions.map(\.description)

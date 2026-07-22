@@ -456,7 +456,8 @@ public actor MasterBrain {
                 chunks: retrieval.chunks.count,
                 relationships: retrieval.relationships.count,
                 summaries: retrieval.summaries.count,
-                walkSteps: retrieval.walkSteps.count
+                walkSteps: retrieval.walkSteps.count,
+                genericFacts: retrieval.genericFacts.count
             ),
             assumptions: Self.assumptionsFromNarrative(narrative),
             uncertainties: contradictions.map(\.description)
@@ -696,7 +697,8 @@ public actor MasterBrain {
                 chunks: retrieval.chunks.count,
                 relationships: retrieval.relationships.count,
                 summaries: retrieval.summaries.count,
-                walkSteps: retrieval.walkSteps.count
+                walkSteps: retrieval.walkSteps.count,
+                genericFacts: retrieval.genericFacts.count
             ),
             assumptions: [
                 "Used the chunk-RAG fallback because structured reconstruction produced no usable chapters.",
@@ -1051,7 +1053,8 @@ public actor MasterBrain {
                 chunks: sharedRetrieval.chunks.count,
                 relationships: sharedRetrieval.relationships.count,
                 summaries: sharedRetrieval.summaries.count,
-                walkSteps: sharedRetrieval.walkSteps.count
+                walkSteps: sharedRetrieval.walkSteps.count,
+                genericFacts: sharedRetrieval.genericFacts.count
             ),
             assumptions: Self.assumptionsFromExpertReport(verified),
             uncertainties: verified.contradictions.map(\.description)
