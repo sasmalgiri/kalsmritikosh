@@ -394,6 +394,11 @@ public final class AppState {
     public private(set) var evidenceStore: EvidenceStore?
     /// PERF.2 — durable deferred-enrichment job ledger.
     public private(set) var enrichmentJobs: EnrichmentJobRepository?
+    /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
+    /// handlers are registered (a kind with no handler is never drained), so it
+    /// is a strict no-op today; this is the integration point the future
+    /// embedding/typedFacts/… engines register into.
+    public private(set) var enrichmentDrainer: EnrichmentDrainer?
     /// Count of open contradictions from the last proactive/maintenance scan.
     public private(set) var proactiveContradictionCount: Int = 0
 
@@ -1644,6 +1649,11 @@ public final class AppState {
             // Commit
             self.database = db
             self.enrichmentJobs = enrichmentJobsRepo
+            // PERF.2 — the drainer yields to interactive queries via the same
+            // priority gate the brain/ingest use (ING-006). No handlers are
+            // registered yet, so drainAll() below is a no-op until the per-kind
+            // engines plug in.
+            self.enrichmentDrainer = EnrichmentDrainer(jobs: enrichmentJobsRepo, priorityGate: priorityGate)
             self.vectorStore = vectors
             self.files = files
             self.objects = objects
@@ -1823,6 +1833,10 @@ public final class AppState {
                         // files only). After the per-file resume so mid-commit files
                         // are already handled; idempotent, so any overlap is a no-op.
                         await self?.resumeInterruptedRuns()
+                        // PERF.2 — drain any pending deferred-enrichment jobs (crash-
+                        // requeued above). A strict no-op until per-kind handlers are
+                        // registered; wired here so the consumer is live infrastructure.
+                        _ = await self?.enrichmentDrainer?.drainAll()
                     }
                 }
             } else {
