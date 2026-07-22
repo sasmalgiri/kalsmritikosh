@@ -71,16 +71,29 @@ Status vocabulary: `NOT_STARTED` · `IMPLEMENTED` (code compiles, no independent
 | ING-006 query-priority scheduler | IMPLEMENTED-partial | background QoS + idle gating; not strict pre-emption |
 | ING-007 multi-dim readiness UX | IMPLEMENTED-partial | LiveActivityPanel stage chips (`f9efdf2`) |
 
-## 4. P5 Retrieval — the decisive open gap
+## 4. P5 Retrieval — decisive gap, now largely closed in code
 
 | ID | Status | Evidence / note |
 |---|---|---|
-| RET-001 QueryPlan compiler | NOT_STARTED | required before RET-003 |
-| RET-003 DocumentFitness channel | NOT_STARTED | must replace the density boost (`8d3184e`) flagged prohibited by pack §7 |
-| RET-002/004/005/006/007/008/009 | NOT_STARTED / IMPLEMENTED-partial | reranker ladder + RRF exist; sufficiency/hierarchy/corroboration not built |
+| RET-001 QueryPlan compiler | **IMPLEMENTED + UNIT_VERIFIED** | `73f0bda`; `Retrieval/QueryPlan.swift` + tests; snippet-verified |
+| RET-003 DocumentFitness channel | **IMPLEMENTED + UNIT_VERIFIED** | `62510c3`; role+field match; density log-damped |
+| RET-009 wire fitness / demote density | **IMPLEMENTED + UNIT_VERIFIED (real signals)** | `bc5b3f6`,`f36b124`; résumé 1.855 > mbox 0.380 on real DB |
+| RET-008 duplicates≠corroboration | **IMPLEMENTED + UNIT_VERIFIED (real)** | `1f6f9ff`; 8 copies→4 sources |
+| RET-006 evidence sufficiency | **IMPLEMENTED + UNIT_VERIFIED, WIRED** | `35569b6`,`e381cca`; honest missing-field footer |
+| RET-002/004/005/007 | NOT_STARTED / partial | reranker ladder + RRF exist; fielded FTS/hierarchy/corrective not built |
 
-Current real-data behaviour: 1 of 3 probed questions correct; 2 wrong (receipt-image
-payment; dual-dense employer). Root cause is ranking authority, not data (all present + FTS-findable).
+Root cause was ranking **authority**, not data (all present + FTS-findable). The density
+heuristic (pack §7 prohibited) is superseded by question-conditioned fitness. **Remaining:
+real-app end-to-end confirmation** (needs a live run) and **entity de-fragmentation** (needs
+a user-triggered re-ingest).
+
+## 4b. P6 Claims — partial
+
+| ID | Status | Evidence / note |
+|---|---|---|
+| CLM-002 causal-language guard | **IMPLEMENTED + UNIT_VERIFIED, WIRED** | `c3247e2`; adjacency≠causation caution in footer |
+| CLM-001 full claim verifier | NOT_STARTED | entity/date/amount/status grounding — next in this workstream |
+| CLM-003/004 | IMPLEMENTED-partial (detectors exist) | contradiction/gap detectors present; canonical comparison pending |
 
 ## 5. Models (P10) — resolved by GOV-001
 
