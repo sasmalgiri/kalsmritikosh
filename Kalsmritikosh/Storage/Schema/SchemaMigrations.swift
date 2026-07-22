@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 58
+    public static let latestVersion = 59
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,12 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v58 adds the `snapshot_sources` table — check it exists (newest object).
-    /// (NOT `corpus_snapshots`, which predates v58 — using that as the sentinel
-    /// would falsely report a fully-applied schema on a pre-v58 database.)
+    /// v59 adds the `enrichment_jobs` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='snapshot_sources';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='enrichment_jobs';", []
         )
         return !rows.isEmpty
     }
@@ -145,7 +143,8 @@ public enum SchemaMigrations {
         (55, v55),
         (56, v56),
         (57, v57),
-        (58, v58)
+        (58, v58),
+        (59, v59)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2104,5 +2103,27 @@ public enum SchemaMigrations {
         PRIMARY KEY (snapshot_id, source_version_id)
     );
     CREATE INDEX IF NOT EXISTS idx_snapshot_sources_snapshot ON snapshot_sources(snapshot_id);
+    """
+
+    // PERF.2 — durable enrichment-job ledger for the two-pass model (06_INGESTION §2/§4/§5).
+    // The queryable core commits fast; deep enrichment (embeddings, typed facts, entity
+    // reconciliation, contradiction/gap scans, OCR/ASR) is queued here as durable,
+    // idempotent, resumable post-commit jobs. UNIQUE(subject_id, kind) makes enqueue
+    // idempotent (a re-ingest doesn't duplicate work); state lets boot recovery find and
+    // resume incomplete jobs and Sources show per-dimension readiness. Append-only rows;
+    // never leaves invisible partial state.
+    private static let v59: String = """
+    CREATE TABLE IF NOT EXISTS enrichment_jobs (
+        id           TEXT PRIMARY KEY NOT NULL,
+        subject_id   TEXT NOT NULL,
+        kind         TEXT NOT NULL,
+        state        TEXT NOT NULL,
+        attempts     INTEGER NOT NULL DEFAULT 0,
+        last_error   TEXT,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL,
+        UNIQUE(subject_id, kind)
+    );
+    CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_state ON enrichment_jobs(state, kind);
     """
 }
