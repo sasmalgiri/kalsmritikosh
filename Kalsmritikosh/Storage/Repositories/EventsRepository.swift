@@ -358,6 +358,38 @@ public actor EventsRepository {
         return out
     }
 
+    /// HIST-031 — the COMPLETE ID-linked timeline for one entity: every event the
+    /// entity participates in, chronologically. This is the history-scoped read
+    /// that replaces the "recent global events" anti-pattern — results are bounded
+    /// to the subject by the event_entities join, never the whole archive.
+    /// Deterministic order: date, then id for stable ties. Paged.
+    public func allForEntity(_ entityID: Entity.ID, offset: Int = 0, pageSize: Int = 1_000) async throws -> [Event] {
+        let rows = try await database.query("""
+        SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id,
+               e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status
+        FROM events e
+        JOIN event_entities ee ON ee.event_id = e.id
+        WHERE ee.entity_id = ?
+        ORDER BY e.date ASC, e.id ASC
+        LIMIT ? OFFSET ?;
+        """, [.uuid(entityID), .integer(Int64(pageSize)), .integer(Int64(offset))])
+        var out: [Event] = []
+        for row in rows {
+            guard let base = decode(row) else { continue }
+            let participants = try await database.query("""
+            SELECT entity_id FROM event_entities WHERE event_id = ?;
+            """, [.uuid(base.id)])
+            let entityIDs = participants.compactMap { $0.uuid(0) }
+            out.append(Event(
+                id: base.id, kind: base.kind, date: base.date, endDate: base.endDate,
+                title: base.title, summary: base.summary, entityIDs: entityIDs,
+                sourceObjectID: base.sourceObjectID, sourceRange: base.sourceRange,
+                confidence: base.confidence, dateConfidence: base.dateConfidence,
+                attributes: base.attributes, status: base.status))
+        }
+        return out
+    }
+
     /// G3.22 — counts of events grouped by their classified fact_type.
     /// NULL-typed rows aren't returned. Smoke + eval diag uses this to
     /// confirm the classifier actually labeled something.

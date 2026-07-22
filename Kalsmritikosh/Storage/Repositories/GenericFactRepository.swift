@@ -47,6 +47,21 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// HIST-033 — all typed facts about one canonical subject id, for history
+    /// materialisation. Deterministic order (confidence desc, then id). Optional
+    /// field filter (normalized). Facts whose subject_id is NULL are label-only
+    /// and excluded from ID-scoped collection.
+    public func facts(subjectID: UUID, fields: Set<String>? = nil) async throws -> [GenericFact] {
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json
+        FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
+        """, [.uuid(subjectID)])
+        let all = rows.compactMap(Self.decode)
+        guard let fields, !fields.isEmpty else { return all }
+        let wanted = Set(fields.map { FactSchemaRegistry.normalizeField($0) })
+        return all.filter { wanted.contains(FactSchemaRegistry.normalizeField($0.field)) }
+    }
+
     /// Facts whose evidence intersects ANY of `blockIDs` — the query-time join
     /// (option A): once retrieval surfaces authoritative blocks, the facts derived
     /// from those exact blocks ride along. Matches on the JSON-encoded block-id
