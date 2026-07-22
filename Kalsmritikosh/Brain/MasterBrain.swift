@@ -550,6 +550,53 @@ public actor MasterBrain {
     /// Quality-or-nothing: returns nil when no provider is available
     /// or no chunks were retrieved. The caller falls back to the
     /// existing "Kalsmritikosh couldn't reconstruct" refusal in those cases.
+    /// Pure, testable construction of the evidence-grounded fallback prompt.
+    /// Labels chunks `[C1..Cn]`, and — when domain-pack facts ride the retrieval —
+    /// prepends a VERIFIED-FACTS block listing each assertable fact tagged with the
+    /// `[C#]` of the chunk whose evidence block produced it (facts whose block isn't
+    /// among these chunks are omitted, so the model can't cite a source it can't see).
+    nonisolated static func buildEvidencePrompt(
+        question: String, chunks: [RetrievedChunk], facts: [GenericFact]
+    ) -> String {
+        let blocks = chunks.enumerated().map { idx, c -> String in
+            let snippet = c.chunk.text
+                .replacingOccurrences(of: "\n", with: " ")
+                .prefix(600)
+            return "[C\(idx + 1)] \(snippet)"
+        }.joined(separator: "\n\n")
+
+        var blockToLabel: [UUID: String] = [:]
+        for (idx, c) in chunks.enumerated() {
+            if let b = c.chunk.evidenceBlockID, blockToLabel[b] == nil {
+                blockToLabel[b] = "C\(idx + 1)"
+            }
+        }
+        var factLines: [String] = []
+        for f in facts where f.status.isAssertable {
+            guard let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
+            else { continue }
+            let unit = f.unit.map { " \($0)" } ?? ""
+            factLines.append("- \(f.field): \(f.value)\(unit) [\(label)]")
+        }
+        let verifiedBlock = factLines.isEmpty ? "" : """
+        Verified facts (deterministically extracted from the chunks below — prefer these exact values for specifics and cite the tagged chunk label):
+        \(factLines.joined(separator: "\n"))
+
+
+        """
+
+        return """
+        Question: \(question)
+
+        Use ONLY the chunks below to answer. After every fact, cite the chunk label like [C3]. If the chunks don't contain enough information to answer, say "I don't have enough in your archive to answer this confidently." — do not invent.
+
+        \(verifiedBlock)Chunks:
+        \(blocks)
+
+        Answer:
+        """
+    }
+
     private func chunkBasedFallback(
         question: String,
         intent: UserIntent,
@@ -578,24 +625,13 @@ public actor MasterBrain {
         let topChunks = Array(retrieval.chunks.prefix(12))
         guard !topChunks.isEmpty else { return nil }
 
-        let blocks = topChunks.enumerated().map { idx, c -> String in
-            let label = "[C\(idx + 1)]"
-            let snippet = c.chunk.text
-                .replacingOccurrences(of: "\n", with: " ")
-                .prefix(600)
-            return "\(label) \(snippet)"
-        }.joined(separator: "\n\n")
-
-        let prompt = """
-        Question: \(question)
-
-        Use ONLY the chunks below to answer. After every fact, cite the chunk label like [C3]. If the chunks don't contain enough information to answer, say "I don't have enough in your archive to answer this confidently." — do not invent.
-
-        Chunks:
-        \(blocks)
-
-        Answer:
-        """
+        // SEM — the deterministically-extracted facts that ride this retrieval
+        // are injected as VERIFIED values the model should prefer for specifics
+        // (amounts, dates, employers, …), each tagged with the chunk that backs
+        // it so the model cites the same [C#] label. Pure prompt construction is
+        // in a testable static helper below.
+        let prompt = Self.buildEvidencePrompt(
+            question: question, chunks: topChunks, facts: retrieval.genericFacts)
         let options = GenerationOptions(
             maxTokens: 500,
             temperature: 0.2,
