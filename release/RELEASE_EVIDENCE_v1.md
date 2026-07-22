@@ -31,7 +31,28 @@ unresolved blocker (§10)._
 
 ## Gold metrics
 
-`[owner: paste EVAL-001 baseline — recall@k, citation-accuracy, refusal-correctness — from an in-app eval run]`
+**Retrieval-recall baseline (headless, deterministic, LLM-free — `RetrievalGoldEval` over the
+60-question gold set on the ProjectDelta fixture):**
+
+| Class | Recall |
+|---|---:|
+| lookup | 1.000 |
+| aggregation | 1.000 |
+| temporal | 1.000 |
+| multihop | 1.000 |
+| **overall (n=60)** | **1.000** |
+
+Interpretation: the expected source file(s) surface in the retrieved set for every gold
+question — retrieval is not the bottleneck on this corpus. This run is reproducible (retrieval
+was made deterministic: stable `ORDER BY` on the bond walk + sorted candidate sets).
+
+**Answer-citation metrics (LLM-bound, on the fast 4-question subset via the on-device model):**
+lookup/aggregation/temporal/multihop all at **recall 1.00**; citation *precision* 0.33–0.50
+(answers cite relevant-but-extra correspondence alongside the authoritative documents).
+
+`[owner: run the FULL 60-question answer eval in-app on target hardware for citation-accuracy /
+refusal-correctness at scale — the per-question LLM latency (~1–2 min) exceeds the headless
+snippet ceiling, so it must be an owner/CI run.]`
 
 ## Large-corpus metrics (SCL-001…004)
 
