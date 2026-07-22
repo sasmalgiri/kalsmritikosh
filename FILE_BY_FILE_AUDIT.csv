@@ -1,0 +1,386 @@
+path,subsystem,authority_level,runtime_role,test_coverage,release_visibility,known_risk,owner
+Kalsmritikosh/App/AppState.swift,App,"composition root","runtime",unwired (no test target),"dev/internal (gated)","MED: high-conflict god-object; model names live here",owner
+Kalsmritikosh/App/DataHealthCheck.swift,App,"composition root","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/App/FeatureFlags.swift,App,"composition root","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/App/KnowledgeInventory.swift,App,"composition root","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/App/LiveMetrics.swift,App,"composition root","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/App/PipelineMetrics.swift,App,"composition root","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/App/ReleaseCapabilityProfile.swift,App,"composition root","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/App/SmokeTest.swift,App,"composition root","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/AnswerSynthesizer.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","MED: Subjects-in-scope debug leak into answer body",owner
+Kalsmritikosh/Brain/AnswerUpdate.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/BGETokenizer.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/ConfidenceEngine.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/CoreMLCrossEncoderTier.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/DeterministicEvidenceFallback.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/EmbeddingReranker.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/EvidenceRanker.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/EvidenceVerifier.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/ExpertCouncil.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/Investigation.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/InvestigationPlanner.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/InvestigationReportBuilder.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/InvestigationRunner.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/LLMQueryClass.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/LLMQueryClassifier.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/MasterBrain.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","MED: generative-call orchestration - budget discipline",owner
+Kalsmritikosh/Brain/QueryCategory.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Brain/ReasoningTrace.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/Reranker.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/RerankerLadder.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Brain/SessionProfile.swift,Brain,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/ContentView.swift,Kalsmritikosh/ContentView.swift,"n/a","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/BackgroundService.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/BackgroundTaskScheduler.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/CalibrationStore.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/LLMCallCounters.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/LastRunStatus.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/ProcessActivity.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Concurrency/ResourceLane.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Core/Concurrency/SystemActivity.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/LLM/LLMCallBudget.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/LLM/LLMRequestContext.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/LegalNotice.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Logging/KalsmritikoshLogger.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/AnyCodable.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Assertion.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/CausalLink.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Chunk.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/CitationRecord.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Confidence.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Contradiction.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/CustodyEvent.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/DatePrecision.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/DerivedObject.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/DocumentProfile.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Entity.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Event.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/EvidenceBlock.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/EvidenceBlockKind.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/FactReview.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/FactStatus.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/GapNode.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/KnowledgeObject.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/MemoryChange.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/MemoryObject.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/ParsedDocument.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/ParserWarning.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/PersonaTemplateCatalog.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Relationship.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/ReviewVocabularies.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Screening.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/SourceLocator.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/SourceRange.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/SourceType.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Core/Models/Summary.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/TranscriptSegment.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/WorkProduct.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Models/Workspace.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Security/BookmarkStore.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Expert.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Extractor.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Ingestor.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/ModelProvider.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Core/Services/Retriever.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Router.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Summarizer.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/TokenBudget.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Core/Services/Verifier.swift,Core,"authority (models/contracts)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/EvalKit/ErrorAnalysisClassifier.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/EvalKitRunner.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/Gate1Baseline.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/EvalKit/GoldEvalGate.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/GroundTruthEvalKit.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/NarrativeEvalKit.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/NarrativeEvalReportStore.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/RealDataProbe.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/ReleaseReadiness.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/EvalKit/RetrievalGoldEval.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/EvalKit/RetrievalSelfEval.swift,EvalKit,"verification","dev/eval",unwired (no test target),"dev/internal","",owner
+Kalsmritikosh/Experts/EmailExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/FinancialExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/LegalExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/OCRExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Experts/ProjectExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/ReasoningExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/ResearchExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/Shared/PromptTemplates.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Experts/TimelineExpert.swift,Experts,"projection (stateless readers)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Export/CitationRenderer.swift,Export,"projection (renders evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Export/ExportManifest.swift,Export,"projection (renders evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Export/VerifiableReceipt.swift,Export,"projection (renders evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Export/WorkProductComposer.swift,Export,"projection (renders evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Export/WorkProductExporter.swift,Export,"projection (renders evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/ASR/OpenAIWhisperTranscriber.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/ASR/SpeechTranscriber.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/ASR/WhisperKitTranscriber.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Archives/NSFReader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Archives/OLE2Reader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Archives/PSTReader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Archives/ZIPReader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/ChunkAdmissionGate.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Classification/DocumentClassifier.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Cleaning/Cleaner.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Cleaning/ContentDecoder.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Export/DocumentExporter.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Export/ZipWriter.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/ArchiveLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/AudioLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/BrowserHistoryLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/ChatExportLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/DocxLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/EmailLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Loaders/EpubLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/ExternalSQLiteSource.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Loaders/IMessageLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/ImageLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/LegacyOfficeScanner.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/MIMEParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/PresentationLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/SpreadsheetLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/TextLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/ThreadCoalescer.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Loaders/VideoLoader.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/OCR/LogisticsTableMapper.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/OCR/TableOCR.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/OCR/VisionOCR.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Pipeline/Chunker.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Pipeline/ContextPrefixGenerator.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Pipeline/FolderWatcher.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Pipeline/IncrementalUpdater.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","HIGH: not crash-atomic - ING-001/002",owner
+Kalsmritikosh/Ingestion/Pipeline/LoaderRegistry.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Pipeline/SubjectInvalidation.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/CSVStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/DocStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/DocxStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/EMLXStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Structural/EPUBStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/EmailStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Structural/ImageStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/MBOXStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/ODSStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/ODTStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/PDFStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/PPTXStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/PlainTextStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/RTFStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/StructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/StructuralParserRegistry.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Ingestion/Structural/XLSXStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Ingestion/Structural/XlsStructuralParser.swift,Ingestion,"authority-writer (produces evidence)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/KalsmritikoshApp.swift,Kalsmritikosh/KalsmritikoshApp.swift,"n/a","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Backfill/ContextPrefixBackfiller.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/Backfill/NarrativeSlotBackfiller.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Backfill/QualityTierBackfiller.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Boilerplate/BoilerplateRegistry.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Briefings/WeeklyBriefingGenerator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Causal/AllenInterval.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Causal/CausalDiscoverer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Causal/ConfidencePropagator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Causal/ContradictionFinder.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Causal/CounterfactualSimulator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Cleaning/AITextCorrector.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Dossier/SubjectDossier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityDossier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityLinker.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityQualityGate.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityReconciler.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/EntityTrie.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/NameSimilarity.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Entities/QualityTierClassifier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Environments/DocumentEnvironment.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Events/EventExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Events/EventNarrativeSlots.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Events/NarrativeSlotExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Events/PatentLegalEventExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Graph/GraphStore.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Graph/RelationshipExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/ContradictionDetector.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/FactStatusClassifier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/FullLLMEngine.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/GapDetector.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/HotWarmColdEngine.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/ImportanceScorer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/IngestEstimator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/InvestigationTemplates.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/LedgerEventDrivenEngine.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/LedgerPromoter.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/SystemEngine.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ledger/TierPromoter.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Memory/MemoryDistiller.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Memory/MemoryHashCache.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Monitoring/ChangeDigest.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/AlternativeHistory.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/ChronologicalPlanner.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/LLMNarrativeComposer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/Narrative.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/NarrativeClaimVerifier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/ReconstructionOutline.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/ReconstructionOutlineRenderer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Narrative/RuleBasedNarrativeComposer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/BondBackfill.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/BondConstructor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/BondWalker.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/FactSchema.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/FactTypeClassifier.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/InMemoryBondGraph.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/LLMSlotExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/Ontology/Ontology.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/OntologyBackfill.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/OntologyValidator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/SlotExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Ontology/WalkExplainer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Provenance/ProvenanceTracer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/QAPairs/QAPairExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/Statements/StatementExtractor.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Suggestions/SuggestedQuestionBuilder.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Summaries/CompressionScheduler.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Summaries/HeuristicSummarizer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Summaries/LLMSummarizer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/SyntheticQuestions/SyntheticQuestionGenerator.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/SyntheticQuestions/SyntheticQuestionQueue.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/SyntheticQuestions/SyntheticQuestionsBackfill.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Knowledge/Temporal/DateGrammar.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Timelines/EntityTimeline.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Timelines/TimelineEngine.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Topics/AgglomerativeCommunityDetector.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Topics/CommunitySummarizer.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Knowledge/Topics/CooccurrenceGraphBuilder.swift,Knowledge,"projection (derived ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Retrieval/ConnectionFinder.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Retrieval/CrossDocumentMatrix.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Retrieval/EntityOverlap.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Retrieval/HybridRetriever.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"dev/internal (gated)","HIGH: density-heuristic authority - RET-003 to replace",owner
+Kalsmritikosh/Retrieval/TableQueryEngine.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Retrieval/TopicRetriever.swift,Retrieval,"projection (read-only over ledger)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/AutoRecommendation.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/CapabilityRegistry.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/CapabilitySpec.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/ComplexityAnalyzer.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/DeterministicRouter.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/ExpertRegistry.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/ExpertRelevanceScorer.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/HardwareProbe.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/IntentDetector.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/ModelCapabilityCatalog.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/ModelChoiceAdvisor.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/ModelDownloader.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/ModelManifest.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/PerformanceBenchmark.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/PrivacyGate.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/BERTWordPieceTokenizer.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/Providers/CloudEndpointRegistry.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/CloudProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/CoreMLEmbedderProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/Providers/FoundationModelsProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/Providers/FoundationModelsStructuredOutput.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/GGUFRegistry.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/Providers/LlamaCppProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Routing/Providers/MLXDiscovery.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/MLXProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/OllamaDiscovery.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/OllamaInstaller.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/OllamaProvider.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/Providers/OllamaSetupAdvisor.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Routing/UserPreferences.swift,Routing,"config (capabilities/providers)","routing",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Database/Database+Binding.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Database/DatabaseStack.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/AnswerLedgerRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/AssertionsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/ChunksRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Storage/Repositories/ContradictionsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/ConversationsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/CorpusSnapshotRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/CustodyRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/DerivedObjectsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EmbeddingCacheRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EnrichmentStatusRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EntitiesRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EventLinksRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EventMutator.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EventVersionsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EventsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/EvidenceStore.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/FactBondsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/FactReviewsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/FilesRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/GapNodeRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/IngestAttemptsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/InvestigationsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/KnowledgeObjectRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/MemoryRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/MonitorSnapshotRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/QAPairsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/RelationshipsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/ReviewRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/SavedQueriesRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/ScreeningRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/SourceRelationsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/SummariesRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/SyntheticQuestionsRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Storage/Repositories/TranscriptRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Repositories/WorkspaceRepository.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Schema/SchemaMigrations.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"dev/internal (gated)","HIGH: shipped migrations immutable - new version only",owner
+Kalsmritikosh/Storage/Vector/CachedEmbedder.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Vector/CapabilityResolvedEmbedder.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Storage/Vector/Embedder.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/Storage/Vector/EmbeddingCache.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Vector/HNSWVectorIndex.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Vector/SQLiteVectorStore.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/Storage/Vector/VectorStore.swift,Storage,"authority/projection (schema+repos)","runtime",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/AnswersView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/AskView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/AssertionsView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/AuditView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/CaseStoryView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ChangesView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/CompletenessView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ConnectionFinderView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ConvertView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/CrossDocumentMatrixView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/DossierView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/EvalDashboardView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/EventDetailSheet.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ExplorerView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/FactStatusView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/GuideContent.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/GuideView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/HistoryView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/HomeView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/IngestGuideView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/InsightsView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Killer/GraphExplorerView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Killer/KillerFeaturesView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/KnowledgeView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/LibraryView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/LiveActivityPanel.swift,UI,"presentation","view",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/UI/LiveDashboardView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ModeChooserView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/NotebookView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/OnboardingTips.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/OnboardingView.swift,UI,"presentation","view",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/UI/PersonaWorkCatalog.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/QualityStrip.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ReceiptVerifierView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ReviewView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/RootView.swift,UI,"presentation","view",unwired (no test target),"partial (DEBUG-gated code present)","",owner
+Kalsmritikosh/UI/SavedQueriesView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/ScreeningView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/SearchView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/SettingsView.swift,UI,"presentation","view",unwired (no test target),"dev/internal (gated)","",owner
+Kalsmritikosh/UI/Shared/DesignSystem.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Shared/EntityPickerField.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Shared/InfoPopoverButton.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Shared/SharedComponents.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/Shared/SourceViewer.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/SourcesView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/TimelineView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/TranscriptsView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/UI/WorkspacesView.swift,UI,"presentation","view",unwired (no test target),"release","",owner
+Kalsmritikosh/Workers/BackgroundMemoryDistiller.swift,Workers,"process (background)","background service",unwired (no test target),"release","",owner
+Kalsmritikosh/Workers/MaturationNotifier.swift,Workers,"process (background)","background service",unwired (no test target),"release","",owner
+Kalsmritikosh/Workers/ParallelExecutor.swift,Workers,"process (background)","background service",unwired (no test target),"release","",owner
+Kalsmritikosh/Workers/Tier3Escalator.swift,Workers,"process (background)","background service",unwired (no test target),"release","",owner
+Kalsmritikosh/Workers/WorkerPool.swift,Workers,"process (background)","background service",unwired (no test target),"release","",owner
