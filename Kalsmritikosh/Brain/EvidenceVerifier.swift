@@ -539,6 +539,16 @@ public struct EvidenceVerifier: Verifier {
         if !subjectLine.isEmpty {
             footerParts.append(subjectLine)
         }
+        // RET-006 — honest sufficiency disclosure: if the question asked for specific
+        // fields the retrieved evidence does not contain, say so neutrally rather than
+        // leaving a vague gap. Absence is disclosed, never presented as proof.
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        let sufficiency = EvidenceSufficiencyAssessor()
+            .assess(plan: plan, evidenceTexts: retrieval.chunks.map(\.chunk.text))
+        let disclosure = sufficiency.disclosure()
+        if !disclosure.isEmpty {
+            footerParts.append(disclosure)
+        }
         if report.agreementScore <= 0.6 {
             footerParts.append("Note: experts disagreed across some of these claims.")
         }
