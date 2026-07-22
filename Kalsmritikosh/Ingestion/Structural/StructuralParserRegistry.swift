@@ -32,7 +32,8 @@ public struct StructuralParserRegistry: Sendable {
         ODSStructuralParser(),
         EmailStructuralParser(),
         MBOXStructuralParser(),
-        EMLXStructuralParser()
+        EMLXStructuralParser(),
+        StructuredTextStructuralParser()   // PAR-008 — HTML / JSON / XML / log
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

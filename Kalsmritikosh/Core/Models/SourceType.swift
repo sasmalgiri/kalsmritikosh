@@ -13,6 +13,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Documents
     case pdf, docx, doc, txt, markdown, rtf, odt, epub
 
+    // PAR-008 — structured text: web/data/config/log formats with a
+    // deterministic structure we can parse into typed blocks.
+    case html, json, xml, log
+
     // Spreadsheets
     case xlsx, xls, csv, ods
 
@@ -84,6 +88,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "rtf": return .rtf
         case "odt": return .odt
         case "epub": return .epub
+        case "html", "htm", "xhtml": return .html
+        case "json", "jsonl", "ndjson": return .json
+        case "xml", "plist": return .xml
+        case "log": return .log
         case "xlsx": return .xlsx
         case "xls": return .xls
         case "csv": return .csv
@@ -143,7 +151,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
 
     public nonisolated var category: Category {
         switch self {
-        case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub: return .document
+        case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
+             .html, .json, .xml, .log: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
