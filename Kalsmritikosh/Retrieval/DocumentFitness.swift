@@ -137,6 +137,20 @@ public enum DocumentRoleInference {
         sourceType: SourceType,
         presentFields: Set<RequestedField>
     ) -> [PreferredSourceRole] {
+        // A source's role is its DOCUMENT TYPE, not the content it happens to
+        // quote. An email/mbox that quotes a résumé or a receipt is still
+        // CORRESPONDENCE — otherwise a giant whole-mailbox KO (which contains
+        // everyone's quoted CVs, receipts and contracts) would read as every
+        // role at once and outrank the focused authoritative document. So the
+        // email family short-circuits to correspondence, ignoring filename /
+        // content-field signals below.
+        switch sourceType {
+        case .mbox, .eml, .appleMail, .pst, .msg, .nsf, .imessage, .chatExport:
+            return [.correspondence]
+        default:
+            break
+        }
+
         let n = fileName.lowercased()
         var roles: [PreferredSourceRole] = []
         func add(_ r: PreferredSourceRole) { if !roles.contains(r) { roles.append(r) } }
@@ -159,12 +173,6 @@ public enum DocumentRoleInference {
         }
         if presentFields.contains(.employment) { add(.biographical) }
         if presentFields.contains(.terms) { add(.contractual) }
-
-        // Source-type signals (email family reads as correspondence)
-        switch sourceType {
-        case .mbox, .eml, .appleMail, .pst, .msg, .nsf: add(.correspondence)
-        default: break
-        }
 
         if roles.isEmpty { add(.any) }
         return roles

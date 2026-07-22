@@ -222,9 +222,23 @@ public actor HybridRetriever: Retriever {
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         let hasSpecificRole = plan.preferredSourceRoles.contains { $0 != .any && $0 != .correspondence }
         if let objects, hasSpecificRole {
-            // Candidate set: dense KOs + highest-mention KOs (bounded for load cost).
-            let topByMention = mentionCounts.sorted { $0.value > $1.value }.prefix(24).map(\.key)
-            let candidates = Array(densityKOs.union(topByMention).prefix(24))
+            // Candidate set by mention EXISTENCE + the retrieved set — NOT mention
+            // count. A person names themselves only once or twice in their own CV
+            // (measured: the résumé had 2 subject mentions, < the density floor),
+            // so a count-based gate would EXCLUDE the very document that is most
+            // authoritative. We therefore consider: (a) documents any subject is
+            // mentioned in at all, (b) whatever the retrieval channels surfaced,
+            // and (c) the dense KOs — then let fitness decide authority.
+            var candidateSet = densityKOs
+            for subject in plan.targetSubjects.prefix(3) {
+                let hits = (try? await objects.findMentioning(subject, limit: 40)) ?? []
+                for h in hits { candidateSet.insert(h.id) }
+            }
+            // Fill remaining budget from the retrieved chunk set.
+            for oid in collectedChunks.map(\.chunk.objectID) where candidateSet.count < 48 {
+                candidateSet.insert(oid)
+            }
+            let candidates = Array(candidateSet.prefix(48))
             let scorer = DocumentFitnessScorer()
             var scored: [DocumentFitness] = []
             for ko in candidates {

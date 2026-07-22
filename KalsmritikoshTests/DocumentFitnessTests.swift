@@ -79,6 +79,30 @@ struct DocumentFitnessTests {
         #expect(verdict.score < 0) // penalty dominates a no-fit correspondence doc
     }
 
+    @Test("A résumé outranks a whole-mailbox super-KO that quotes the same CV text")
+    func resumeBeatsMboxSuperDocument() {
+        // Real-corpus failure: the whole Sent.mbox is one giant KO whose content
+        // quotes everyone's CVs/receipts, so it reads as 'employment' too and has
+        // MORE subject mentions than the focused résumé. It must still lose:
+        // a source's role is its document type (correspondence), not quoted text.
+        let plan = qc.compile(
+            intent: UserIntent(kind: .factualLookup, scope: .person("Shirshendu Sasmal"),
+                               rawQuestion: "Where has Shirshendu Sasmal worked?"),
+            category: .fact, queryClass: .ordinary)
+        let resume = signals("Resume.doc", .doc, fields: [.employment], mentions: 2)      // low mentions
+        let mbox = signals("Sent.mbox", .mbox, fields: [.employment], mentions: 40)       // quotes CV, high mentions
+        let ranked = scorer.rank(plan: plan, candidates: [mbox, resume])
+        #expect(ranked.first?.objectID == resume.objectID)
+    }
+
+    @Test("Email family is correspondence regardless of quoted content")
+    func emailAlwaysCorrespondence() {
+        // Even a file named 'Resume.eml' with employment content is correspondence,
+        // never biographical — the attachment .doc is the biographical source.
+        let roles = DocumentRoleInference.inferRoles(fileName: "Resume forwarded.eml", sourceType: .eml, presentFields: [.employment])
+        #expect(roles == [.correspondence])
+    }
+
     @Test("Role inference maps filenames to roles by reusable signal, not by example")
     func roleInferenceSignals() {
         #expect(DocumentRoleInference.inferRoles(fileName: "MyResume.pdf", sourceType: .pdf, presentFields: []).contains(.biographical))
