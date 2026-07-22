@@ -378,7 +378,8 @@ public actor HybridRetriever: Retriever {
             chunks: result.chunks, events: result.events, entities: result.entities,
             relationships: result.relationships, summaries: result.summaries,
             layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
-            walkSteps: result.walkSteps, genericFacts: facts
+            walkSteps: result.walkSteps, genericFacts: facts,
+            authorityObjectIDs: result.authorityObjectIDs   // must survive the fact-attach rewrap
         )
     }
 

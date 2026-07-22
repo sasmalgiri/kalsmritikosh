@@ -574,19 +574,25 @@ public actor MasterBrain {
         }
 
         // Authoritative structural docs (RET-009 fitness ranking) that the
-        // narrative could NOT cite because they produced no dated event. Fold in
-        // those that (a) have a citable chunk and (b) match ≥1 discriminative
-        // term — best fitness first (authorityObjectIDs is already ranked). The
-        // overlap gate is deliberately kept (rather than trusting the ranking
-        // unconditionally): the end-to-end reconstruct answer is composed by a
-        // non-deterministic LLM, so a conservative, relevance-gated fold has far
-        // lower run-to-run variance than force-injecting the top-ranked doc.
+        // narrative could NOT cite because they produced no dated event. The TOP
+        // fitness docs are force-kept — their DOCUMENT-level role match is the
+        // trust signal, and the single chunk fragment that happened to surface
+        // may not carry the question's literal terms (measured: contract.md's
+        // Scope/Signatures chunk surfaced for "contract status", with neither
+        // word in it, so an overlap gate wrongly dropped the #1 authority doc).
+        // This force-keep was previously reverted for run-to-run variance; it is
+        // safe now that retrieval is deterministic (stable ORDER BY / sorted Sets).
+        // Lower-ranked authority docs still need a discriminative match.
+        let topAuthority = Set(authorityObjectIDs.prefix(2))
         var authorityCitations: [VerifiedAnswer.Citation] = []
+        var forced = Set<KnowledgeObject.ID>()
         var seen = Set<KnowledgeObject.ID>()
         for oid in authorityObjectIDs {
             guard seen.insert(oid).inserted else { continue }
             guard let chunk = chunkByObject[oid] else { continue }
-            guard overlap(oid, fallback: chunk.text) > 0 else { continue }
+            let isTop = topAuthority.contains(oid)
+            guard isTop || overlap(oid, fallback: chunk.text) > 0 else { continue }
+            if isTop { forced.insert(oid) }
             authorityCitations.append(VerifiedAnswer.Citation(
                 objectID: oid,
                 chunkID: chunk.id,
@@ -596,25 +602,27 @@ public actor MasterBrain {
         }
 
         // Candidate pool: authoritative docs first, then the narrative's own.
-        // `isAuthority` breaks overlap ties toward the structural doc.
-        var pool: [(c: VerifiedAnswer.Citation, authority: Bool)] = []
+        // `forceKeep` = a top-fitness authority doc; it survives even at zero
+        // chunk-level overlap. `isAuthority` breaks overlap ties toward the doc.
+        var pool: [(c: VerifiedAnswer.Citation, authority: Bool, force: Bool)] = []
         var pooled = Set<KnowledgeObject.ID>()
         for c in authorityCitations where pooled.insert(c.objectID).inserted {
-            pool.append((c, true))
+            pool.append((c, true, forced.contains(c.objectID)))
         }
         for c in narrativeCitations where pooled.insert(c.objectID).inserted {
-            pool.append((c, false))
+            pool.append((c, false, false))
         }
 
-        let scored = pool.map { (item) -> (c: VerifiedAnswer.Citation, s: Int, a: Bool) in
-            (item.c, overlap(item.c.objectID, fallback: item.c.snippet), item.authority)
+        let scored = pool.map { (item) -> (c: VerifiedAnswer.Citation, s: Int, a: Bool, force: Bool) in
+            (item.c, overlap(item.c.objectID, fallback: item.c.snippet), item.authority, item.force)
         }
-        // No discriminative signal anywhere → don't meddle with a grounded answer.
-        guard scored.contains(where: { $0.s > 0 }) else { return narrativeCitations }
+        // No discriminative signal AND no forced authority → don't meddle.
+        guard scored.contains(where: { $0.s > 0 || $0.force }) else { return narrativeCitations }
 
         let kept = scored
-            .filter { $0.s > 0 }
+            .filter { $0.s > 0 || $0.force }
             .sorted { lhs, rhs in
+                if lhs.force != rhs.force { return lhs.force && !rhs.force }
                 if lhs.s != rhs.s { return lhs.s > rhs.s }
                 if lhs.a != rhs.a { return lhs.a && !rhs.a }
                 return false
