@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 59
+    public static let latestVersion = 60
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v59 adds the `enrichment_jobs` table — check it exists (newest object).
+    /// v60 adds the `temporal_claims` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='enrichment_jobs';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='temporal_claims';", []
         )
         return !rows.isEmpty
     }
@@ -144,7 +144,8 @@ public enum SchemaMigrations {
         (56, v56),
         (57, v57),
         (58, v58),
-        (59, v59)
+        (59, v59),
+        (60, v60)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2125,5 +2126,33 @@ public enum SchemaMigrations {
         UNIQUE(subject_id, kind)
     );
     CREATE INDEX IF NOT EXISTS idx_enrichment_jobs_state ON enrichment_jobs(state, kind);
+    """
+
+    // HIST-020/022 (Universal History, Phase 3) — subject-scoped temporal claims
+    // (facts true over an interval). object/temporal values are JSON-encoded so the
+    // neutral predicate model stays flexible. Also indexes event_entities(entity_id)
+    // so the Phase-2 collector's allForEntity join is indexed (HIST-031).
+    private static let v60: String = """
+    CREATE TABLE IF NOT EXISTS temporal_claims (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        subject_id              TEXT NOT NULL,
+        predicate               TEXT NOT NULL,
+        object_json             TEXT NOT NULL,
+        valid_from_json         TEXT,
+        valid_to_json           TEXT,
+        observed_at_json        TEXT,
+        status                  TEXT NOT NULL,
+        confidence              REAL NOT NULL DEFAULT 0.5,
+        source_object_ids_json  TEXT NOT NULL DEFAULT '[]',
+        source_block_ids_json   TEXT NOT NULL DEFAULT '[]',
+        assertion_ids_json      TEXT NOT NULL DEFAULT '[]',
+        generic_fact_ids_json   TEXT NOT NULL DEFAULT '[]',
+        extractor_id            TEXT NOT NULL,
+        extractor_version       TEXT NOT NULL,
+        created_at              REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_temporal_claims_subject ON temporal_claims(subject_id, predicate);
+    CREATE INDEX IF NOT EXISTS idx_temporal_claims_subject_created ON temporal_claims(subject_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_event_entities_entity ON event_entities(entity_id);
     """
 }
