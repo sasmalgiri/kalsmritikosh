@@ -73,6 +73,32 @@ public enum DeterministicEvidenceFallback {
             }
         }
 
+        // SEM — the domain-pack facts that ride this retrieval (already filtered
+        // to assertable statuses by the retriever) are the most decisive, fully
+        // deterministic items we can show. Render them first, and cite each via
+        // the surfaced chunk that shares its evidence block so the source stays
+        // clickable. No fact is shown without a backing chunk in this set.
+        var blockToChunk: [UUID: RetrievedChunk] = [:]
+        for c in retrieval.chunks {
+            if let b = c.chunk.evidenceBlockID, blockToChunk[b] == nil { blockToChunk[b] = c }
+        }
+        var factLines: [String] = []
+        for fact in retrieval.genericFacts {
+            guard let backing = fact.sourceBlockIDs.lazy.compactMap({ blockToChunk[$0] }).first
+            else { continue }   // only facts whose evidence is in THIS surfaced set
+            let field = fact.field.prefix(1).uppercased() + fact.field.dropFirst()
+            let unit = fact.unit.map { " \($0)" } ?? ""
+            factLines.append("- **\(field):** \(fact.value)\(unit)")
+            if seen.insert(backing.chunk.objectID).inserted {
+                citations.append(VerifiedAnswer.Citation(
+                    objectID: backing.chunk.objectID,
+                    chunkID: backing.chunk.id,
+                    eventID: nil,
+                    snippet: String(backing.chunk.text.prefix(160))
+                ))
+            }
+        }
+
         // Contradictions are found deterministically (no LLM).
         let contradictions = await MasterBrain.findCrossRetrievalContradictions(
             events: events, eventLinks: eventLinks
@@ -82,6 +108,10 @@ public enum DeterministicEvidenceFallback {
         // holds the answer (grant date, patent number, clause). Then the dated
         // timeline for context.
         var md = ""
+        if !factLines.isEmpty {
+            md += "## Extracted facts (from your evidence)\n\n"
+            md += factLines.joined(separator: "\n") + "\n\n"
+        }
         if !passageLines.isEmpty {
             md += "## Key passages from your documents\n\n"
             md += passageLines.joined(separator: "\n") + "\n\n"
