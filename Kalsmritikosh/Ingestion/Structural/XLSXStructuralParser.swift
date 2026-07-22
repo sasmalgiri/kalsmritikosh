@@ -70,7 +70,9 @@ public struct XLSXStructuralParser: StructuralParser {
 
             for (i, path) in sheetPaths.enumerated() {
                 let name = sheetNames[path] ?? sheetNames["sheet\(i + 1)"] ?? "Sheet \(i + 1)"
-                let rows = Self.parseSheetRows(try zip.read(path), sharedStrings: shared)
+                let sheetData = try zip.read(path)
+                let rows = Self.parseSheetRows(sheetData, sharedStrings: shared)
+                let formulaRows = Self.parseSheetFormulas(sheetData)   // PAR-005 — additive
                 let columnCount = rows.map(\.count).max() ?? 0
                 let headers = rows.first ?? []
                 add(.spreadsheetSheet,
@@ -81,12 +83,20 @@ public struct XLSXStructuralParser: StructuralParser {
                      "headers": AnyCodable(.array(headers.map { .string($0) }))])
                 for (r, row) in rows.enumerated() {
                     let padded = row + Array(repeating: "", count: max(0, columnCount - row.count))
-                    add(.spreadsheetRow,
-                        padded.joined(separator: " | "),
-                        SourceLocator(row: r, sheet: name),
-                        ["row": AnyCodable(.int(Int64(r))),
-                         "isHeader": AnyCodable(.bool(r == 0)),
-                         "cells": AnyCodable(.array(padded.map { .string($0) }))])
+                    var attrs: [String: AnyCodable] = [
+                        "row": AnyCodable(.int(Int64(r))),
+                        "isHeader": AnyCodable(.bool(r == 0)),
+                        "cells": AnyCodable(.array(padded.map { .string($0) }))]
+                    // PAR-005 — carry per-cell formulas so a formula-vs-value query can
+                    // distinguish `=A1+B1` from a literal, WITHOUT altering the cell text
+                    // above. Only attached when the row actually has a formula.
+                    let formulas = r < formulaRows.count ? formulaRows[r] : []
+                    if formulas.contains(where: { !$0.isEmpty }) {
+                        let paddedF = formulas + Array(repeating: "", count: max(0, columnCount - formulas.count))
+                        attrs["cellFormulas"] = AnyCodable(.array(paddedF.map { .string($0) }))
+                    }
+                    add(.spreadsheetRow, padded.joined(separator: " | "),
+                        SourceLocator(row: r, sheet: name), attrs)
                 }
             }
         } catch {
@@ -181,6 +191,64 @@ public struct XLSXStructuralParser: StructuralParser {
                 inner = advance
             }
             rows.append(cells)
+            cursor = rowClose.upperBound
+        }
+        return rows
+    }
+
+    // MARK: - PAR-005 formula/value model
+
+    /// The formula expression of a cell (`<f>…</f>`), or nil if the cell holds a literal
+    /// value. This is the "formula vs value" distinction: two cells can DISPLAY 42 while
+    /// one is the literal 42 and the other is `=A1+B1` — an exact query must tell them apart.
+    static func cellFormula(inBody body: String) -> String? {
+        guard let open = body.range(of: "<f"),
+              let gt = body.range(of: ">", range: open.upperBound..<body.endIndex) else { return nil }
+        // Self-closing `<f/>` (shared-formula slave) carries no expression here.
+        if body[open.upperBound..<gt.lowerBound].contains("/") { return nil }
+        guard let close = body.range(of: "</f>", range: gt.upperBound..<body.endIndex) else { return nil }
+        let expr = DocxLoader.stripTags(String(body[gt.upperBound..<close.lowerBound]))
+            .trimmingCharacters(in: .whitespaces)
+        return expr.isEmpty ? nil : expr
+    }
+
+    /// The cached raw value of a cell (`<v>…</v>`), or nil if absent. For a formula cell
+    /// this is the last computed result stored in the file.
+    static func cellRawValue(inBody body: String) -> String? {
+        guard let open = body.range(of: "<v>"),
+              let close = body.range(of: "</v>", range: open.upperBound..<body.endIndex) else { return nil }
+        return DocxLoader.stripTags(String(body[open.upperBound..<close.lowerBound]))
+    }
+
+    /// Per-cell formula expressions for each row, aligned to `parseSheetRows`' cell order
+    /// (empty string where a cell has no formula). Additive to the text path.
+    static func parseSheetFormulas(_ data: Data) -> [[String]] {
+        let xml = String(decoding: data, as: UTF8.self)
+        var rows: [[String]] = []
+        var cursor = xml.startIndex
+        while cursor < xml.endIndex {
+            guard let rowOpen = xml.range(of: "<row", range: cursor..<xml.endIndex),
+                  let rowClose = xml.range(of: "</row>", range: rowOpen.upperBound..<xml.endIndex) else { break }
+            let row = String(xml[rowOpen.upperBound..<rowClose.lowerBound])
+            var formulas: [String] = []
+            var inner = row.startIndex
+            while inner < row.endIndex {
+                guard let cellOpen = row.range(of: "<c", range: inner..<row.endIndex),
+                      let cellGT = row.range(of: ">", range: cellOpen.upperBound..<row.endIndex) else { break }
+                let header = String(row[cellOpen.upperBound..<cellGT.lowerBound])
+                let advance: String.Index
+                let body: String
+                if header.hasSuffix("/") {
+                    body = ""; advance = cellGT.upperBound
+                } else if let end = row.range(of: "</c>", range: cellGT.upperBound..<row.endIndex) {
+                    body = String(row[cellGT.upperBound..<end.lowerBound]); advance = end.upperBound
+                } else {
+                    body = ""; advance = cellGT.upperBound
+                }
+                formulas.append(cellFormula(inBody: body) ?? "")
+                inner = advance
+            }
+            rows.append(formulas)
             cursor = rowClose.upperBound
         }
         return rows
