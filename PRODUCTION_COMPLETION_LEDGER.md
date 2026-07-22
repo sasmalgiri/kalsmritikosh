@@ -1,10 +1,16 @@
 # PRODUCTION_COMPLETION_LEDGER
 
-**Generated:** 2026-07-22. **Head:** `ae98c4a` (~62 commits this program).
+**Generated:** 2026-07-22 (updated). **Head:** `8a7b7d0`.
 **Purpose:** the definitive, honest status of all 104 pack tasks + the exact unblock for
-anything not done. Statuses use the pack vocabulary. "UNIT_VERIFIED*" = verified via
-`BuildProject` + `RunCodeSnippet` (some against the real DB), tests written but not yet run
-under a CI test target (TST-001 gates promotion to CI-verified).
+anything not done. Statuses use the pack vocabulary.
+
+**UPDATE — TST-001/002 are now DONE (no longer the gate).** The `KalsmritikoshTests`
+target exists (created in the Xcode UI); the ~30 written suites now run under it and
+**all 383 tests pass** via `RunAllTests`. Everything previously marked "UNIT_VERIFIED*"
+(build + snippet only) is now **CI-verified**, and the Section-B live-schema/wiring work
+is safe to finish under the test net. Since this flipped, two deep-wiring items landed
+CI-verified: **SEM persistence** (migration v57 + `GenericFactRepository`, `f3c7800`) and
+**domain-pack fact extraction at ingest** (`8a7b7d0`).
 
 ## A. Complete (code written, build-green, verified as noted)
 
@@ -44,18 +50,21 @@ RET-006 sufficiency + CLM-001 grounding + CLM-002 causal guard in the answer foo
 
 | Task(s) | Blocker | Exact unblock |
 |---|---|---|
-| **TST-001/002, CI test-run** | editing `project.pbxproj` needs **Xcode fully quit** (ends this in-IDE session) | quit Xcode → I add the `KalsmritikoshTests` target (filesystem-synced group auto-includes the ~30 test files) → CI runs them |
 | SCL-001–004 (scale) | recorded runs on **your hardware** at 1/10/100 GB | run the scale harness on your Mac |
 | REL-001–006 (release) | Apple **signing, clean-machine, App Store, your acceptance** | your Developer account + a clean Mac |
 | EVAL-001/002 | in-app eval runs against the live stack | tap the eval/SmokeTest in-app |
 | MOD-003/004/005, P1.2, P3.1 | **DEFERRED by GOV-001** (no bundled GGUF in v1) | only if v1.x adds optional GGUF |
 
-## D. One thing unlocks the most
-**TST-001 (test target).** It converts ~30 written test suites + all Section-A work from
-"UNIT_VERIFIED*" to CI-verified, and makes the Section-B live-schema/wiring work safe to
-finish (a regression would be caught). It needs Xcode quit once — the only action that
-turns this large, verified-in-isolation body of work into release-grade.
+## D. What's now unblocked (test target is live)
+With TST-001 done and 383 tests green, the remaining **codeable** work is Section B,
+now finishable safely because a regression would be caught by the suite:
+- **Deep wiring** (in progress): SEM persistence + ingest fact extraction landed. Next:
+  fitness→answer feed into MasterBrain; corrective-retrieval loop; make persisted
+  GenericFacts readable at the answer layer (currently write-only).
+- **Live-schema** EV-005/006, ING-002/003/005/006/007 — additive migrations + coordinator
+  wiring, each verified on a throwaway DB then under the suite.
+- **SwiftUI views** LAB-005–009, UX-001/003/004, EXP-001 — compile-checkable; final proof
+  is running the app.
 
-_This ledger is the honest endpoint of "complete all": everything completable by writing and
-self-verifying code is done or precisely scoped; the rest is gated on actions only you or a
-non-IDE environment can perform._
+_The genuinely gated remainder (Section C) is scale runs, Apple release/signing, in-app
+eval runs, and deferred GGUF — actions only you or a non-IDE environment can perform._
