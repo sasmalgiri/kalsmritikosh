@@ -200,23 +200,54 @@ public actor HybridRetriever: Retriever {
             }
         }
 
-        // P5.1 — direct-evidence-first AUTHORITY. For the query's entity seeds,
-        // find documents that DENSELY feature them: a résumé/bio names a person
-        // ~15× in ONE knowledge object, while an mbox (which fans out to
-        // per-message KOs) spreads the name ~1×/KO across their correspondence.
-        // So a high per-KO mention count identifies the authoritative document.
-        // We (a) INJECT those chunks — so they're present even when vector/FTS
-        // missed them — and (b) record their KOs so `assemble` ranks them first,
-        // preventing an authoritative doc from being outvoted by high-volume
-        // incidental mentions (the "answered from a patent email, not the
-        // résumé" failure). Gated on entity seeds → no effect on other queries.
+        // RET-009 — question-conditioned AUTHORITY (supersedes the pure density
+        // heuristic). Per-KO mention count still selects CANDIDATE documents
+        // (preserving recall), but WHICH candidate is authoritative — and the
+        // order it promotes in — is now decided by DocumentFitness (role +
+        // requested-field match against the compiled QueryPlan), NOT raw mention
+        // count. So a résumé outranks a 186×-mention patent email for "where
+        // worked", and a LOW-mention receipt image can still win a payment
+        // question. Gated on the objects repo being wired AND the question naming
+        // a specific source role; otherwise falls back to the prior density
+        // behavior so the offline eval baseline is unchanged.
         var authorityKOs: Set<KnowledgeObject.ID> = []
+        var authorityRanking: [KnowledgeObject.ID] = []   // best→worst by fitness
+        var mentionCounts: [KnowledgeObject.ID: Int] = [:]
         for e in collectedEntities.prefix(4) {
             let rows = (try? await entities.mentions(forEntityID: e.id, limit: 500)) ?? []
-            var counts: [KnowledgeObject.ID: Int] = [:]
-            for r in rows { counts[r.objectID, default: 0] += 1 }
-            for (ko, n) in counts where n >= 3 { authorityKOs.insert(ko) }
+            for r in rows { mentionCounts[r.objectID, default: 0] += 1 }
         }
+        let densityKOs = Set(mentionCounts.filter { $0.value >= 3 }.map(\.key))
+
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        let hasSpecificRole = plan.preferredSourceRoles.contains { $0 != .any && $0 != .correspondence }
+        if let objects, hasSpecificRole {
+            // Candidate set: dense KOs + highest-mention KOs (bounded for load cost).
+            let topByMention = mentionCounts.sorted { $0.value > $1.value }.prefix(24).map(\.key)
+            let candidates = Array(densityKOs.union(topByMention).prefix(24))
+            let scorer = DocumentFitnessScorer()
+            var scored: [DocumentFitness] = []
+            for ko in candidates {
+                guard let obj = try? await objects.load(id: ko) else { continue }
+                let name = obj.sourceFile.lastPathComponent
+                let fields = DocumentRoleInference.presentFields(inText: obj.content)
+                let roles = DocumentRoleInference.inferRoles(fileName: name, sourceType: obj.sourceType, presentFields: fields)
+                let signals = DocumentSignals(
+                    objectID: ko, fileName: name, sourceType: obj.sourceType,
+                    roleHints: roles, presentFields: fields,
+                    subjectMentionCount: mentionCounts[ko] ?? 0)
+                scored.append(scorer.score(plan: plan, candidate: signals))
+            }
+            let ranked = scored.sorted { $0.score > $1.score }
+            authorityRanking = ranked.filter { $0.score > 0 }.map(\.objectID)
+            // Inject density candidates PLUS strong role-matchers (adds low-mention
+            // authoritative docs like a receipt); ranking demotes pure correspondence.
+            authorityKOs = densityKOs
+            for f in ranked where f.matchedRole != nil && f.score > 0.5 { authorityKOs.insert(f.objectID) }
+        } else {
+            authorityKOs = densityKOs   // fallback: prior density-only authority
+        }
+
         if !authorityKOs.isEmpty {
             let present = Set(collectedChunks.map(\.chunk.objectID))
             for ko in authorityKOs where !present.contains(ko) {
@@ -282,7 +313,8 @@ public actor HybridRetriever: Retriever {
             layers: usedLayers,
             shortCircuit: nil,
             walkSteps: walkSteps,
-            authorityKOs: authorityKOs
+            authorityKOs: authorityKOs,
+            authorityRanking: authorityRanking
         )
     }
 
@@ -791,7 +823,8 @@ public actor HybridRetriever: Retriever {
         layers: [RetrievalLayer],
         shortCircuit: RetrievalLayer?,
         walkSteps: [WalkStep] = [],
-        authorityKOs: Set<KnowledgeObject.ID> = []
+        authorityKOs: Set<KnowledgeObject.ID> = [],
+        authorityRanking: [KnowledgeObject.ID] = []
     ) -> RetrievalResult {
         // HISTORY Phase A.4 — tier-aware re-ranking.
         // Entities are sorted by (-tier.defaultWeight, originalIndex)
@@ -827,13 +860,32 @@ public actor HybridRetriever: Retriever {
         // on one comparable scale instead of mixing 1/FTS-rank vs cosine vs the
         // fixed graph score. diversify() then preserves this relevance order.
         let fused = Self.rrfRank(chunks)
-        // P5.1 — stable-promote chunks from authoritative (dense-subject) docs to
-        // the front of the fused window so an authoritative document isn't buried
-        // under high-volume incidental mentions. Pure reorder (no add/drop);
-        // diversify still caps how many any one source contributes.
-        let prioritized = authorityKOs.isEmpty ? fused
-            : fused.filter { authorityKOs.contains($0.chunk.objectID) }
+        // RET-009 — stable-promote authoritative-document chunks to the front of
+        // the fused window. When a fitness ranking is present, authority chunks
+        // are ordered by their document's FITNESS (role+field match) so the most
+        // authoritative doc leads; otherwise (density fallback) they keep fused
+        // order. Pure reorder (no add/drop); diversify still caps per-source.
+        let prioritized: [RetrievedChunk]
+        if authorityKOs.isEmpty {
+            prioritized = fused
+        } else if authorityRanking.isEmpty {
+            prioritized = fused.filter { authorityKOs.contains($0.chunk.objectID) }
                 + fused.filter { !authorityKOs.contains($0.chunk.objectID) }
+        } else {
+            let rankIndex = Dictionary(
+                authorityRanking.enumerated().map { ($0.element, $0.offset) },
+                uniquingKeysWith: { a, _ in a })
+            let authorityChunks = fused.enumerated()
+                .filter { authorityKOs.contains($0.element.chunk.objectID) }
+                .sorted {
+                    let a = rankIndex[$0.element.chunk.objectID] ?? Int.max
+                    let b = rankIndex[$1.element.chunk.objectID] ?? Int.max
+                    return a != b ? a < b : $0.offset < $1.offset
+                }
+                .map(\.element)
+            let rest = fused.filter { !authorityKOs.contains($0.chunk.objectID) }
+            prioritized = authorityChunks + rest
+        }
         let diverseChunks = Self.diversify(prioritized)
 
         // UPDATE_07 — the same hygiene for events: the timeline/reconstruction

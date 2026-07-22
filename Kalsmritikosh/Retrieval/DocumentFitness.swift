@@ -169,4 +169,39 @@ public enum DocumentRoleInference {
         if roles.isEmpty { add(.any) }
         return roles
     }
+
+    /// Which requested fields a DOCUMENT's text actually exposes. This is the
+    /// doc-side complement of `QueryPlanCompiler.requestedFields` (which reads a
+    /// QUESTION). Used by fitness field-match. Deterministic; scans a bounded
+    /// prefix for speed. Reusable signal patterns, not per-document rules.
+    public nonisolated static func presentFields(inText text: String) -> Set<RequestedField> {
+        let t = String(text.prefix(6000)).lowercased()
+        var f: Set<RequestedField> = []
+        let hasDigit = t.contains(where: \.isNumber)
+
+        if hasDigit && (t.contains("₹") || t.contains("$") || t.contains("rs.") || t.contains("inr")
+            || t.contains("usd") || t.contains("amount") || t.contains("paid") || t.contains("total")
+            || t.contains("balance")) {
+            f.insert(.monetaryAmount)
+        }
+        if t.contains("paid to") || t.contains("payee") || t.contains("recipient")
+            || t.contains("beneficiary") || t.contains("transferred to") || t.contains("received from") {
+            f.insert(.counterparty)
+        }
+        if t.contains("worked at") || t.contains("employer") || t.contains("designation")
+            || t.contains("position") || t.contains("employed") || t.contains("responsibilit")
+            || t.contains("experience") || t.contains("organization") || t.contains("work experience")
+            || t.contains("professional") || t.contains("career") {
+            f.insert(.employment)
+        }
+        if t.contains("terms") || t.contains("clause") || t.contains("hereby")
+            || t.contains("shall") || t.contains("obligation") || t.contains("agreement") {
+            f.insert(.terms)
+        }
+        if t.contains("granted") || t.contains("approved") || t.contains("issued")
+            || t.contains("registered") || t.contains("pending") || t.contains("final version") {
+            f.insert(.status)
+        }
+        return f
+    }
 }
