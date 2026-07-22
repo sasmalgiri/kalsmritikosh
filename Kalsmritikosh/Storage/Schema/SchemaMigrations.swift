@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 57
+    public static let latestVersion = 58
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,12 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v57 adds the `generic_facts` table — check it exists (newest object).
+    /// v58 adds the `snapshot_sources` table — check it exists (newest object).
+    /// (NOT `corpus_snapshots`, which predates v58 — using that as the sentinel
+    /// would falsely report a fully-applied schema on a pre-v58 database.)
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='generic_facts';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='snapshot_sources';", []
         )
         return !rows.isEmpty
     }
@@ -142,7 +144,8 @@ public enum SchemaMigrations {
         (54, v54),
         (55, v55),
         (56, v56),
-        (57, v57)
+        (57, v57),
+        (58, v58)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2077,5 +2080,29 @@ public enum SchemaMigrations {
         created_at        REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_generic_facts_subject_field ON generic_facts(subject_label, field);
+    """
+
+    // EV-004 — extend the EXISTING v28 `corpus_snapshots` census table with the
+    // processing-version fields that make an output reproducible (embedding model,
+    // retrieval-config / persona-policy / parser versions, scope, readiness), and add
+    // `snapshot_sources` pinning the exact source-version IDs + content hashes the
+    // snapshot covered. ALTER (not CREATE) because the table already exists — this is
+    // the EV-006 "one version model" consolidation, not a parallel table. Append-only;
+    // ADD COLUMN runs exactly once (guarded by user_version), so no duplicate-column
+    // error. No cascade delete removes historical snapshots.
+    private static let v58: String = """
+    ALTER TABLE corpus_snapshots ADD COLUMN scope TEXT;
+    ALTER TABLE corpus_snapshots ADD COLUMN embedding_model TEXT;
+    ALTER TABLE corpus_snapshots ADD COLUMN retrieval_config_version TEXT;
+    ALTER TABLE corpus_snapshots ADD COLUMN persona_policy_version TEXT;
+    ALTER TABLE corpus_snapshots ADD COLUMN parser_versions_json TEXT;
+    ALTER TABLE corpus_snapshots ADD COLUMN readiness REAL;
+    CREATE TABLE IF NOT EXISTS snapshot_sources (
+        snapshot_id       TEXT NOT NULL,
+        source_version_id TEXT NOT NULL,
+        content_hash      TEXT NULL,
+        PRIMARY KEY (snapshot_id, source_version_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_snapshot_sources_snapshot ON snapshot_sources(snapshot_id);
     """
 }
