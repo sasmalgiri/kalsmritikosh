@@ -60,9 +60,9 @@ Status vocabulary: `NOT_STARTED` · `IMPLEMENTED` (code compiles, no independent
 | EV-001 canonical authority | IMPLEMENTED-partial | structural tables exist; KO/chunks not yet demoted to projections. **Next actionable code task.** |
 | EV-002 lossless SourceLocator citations | ⚠proposed IMPLEMENTED | `SourceLocator` model present; unify not proven |
 | EV-003 KO/chunk → version+blocks | IMPLEMENTED-partial | `chunks.evidence_block_id` written+read (this session fix `70bea2c`) |
-| EV-004 corpus/processing snapshots | NOT_STARTED | — |
-| EV-005 managed evidence vault | NOT_STARTED | — |
-| EV-006 consolidate version mechanisms | NOT_STARTED | two historical version layers still coexist |
+| EV-004 corpus/processing snapshots | IMPLEMENTED | v58 EXTENDS the existing v28 corpus_snapshots (ALTER) with scope + embedding/retrieval/persona/parser versions + readiness, adds snapshot_sources pinning source-version IDs + hashes; repo `snapshot(id:)` gives the full reproducibility view. Verified on fresh DB (`51f8d6f`). |
+| EV-005 managed evidence vault | IMPLEMENTED | `EvidenceVault` content-addressed immutable copy store (SHA-256, sharded, dedup, read-only, storage accounting, explicit audited delete). Disk-only, no migration (`5e8e5b0`). Wiring the mode toggle into ingest is the remaining UI/settings step. |
+| EV-006 consolidate version mechanisms | IMPLEMENTED (model half) | `SourceVersionView` + pure `VersionModelConsolidator` present ONE version model (canonical wins, legacy flagged lower-confidence + never current, no double-count, exactly one current). Zero data movement (`5c5dc85`). The physical table merge is a separate OWNER-GATED, throwaway-DB-proven migration — not run blind over the live archive. |
 | ING-001 durable ingest state machine | NOT_STARTED (PI.3) | IngestAttempts exists; no persisted transitions |
 | ING-002 atomic queryable-core commit + collected failures | IMPLEMENTED | atomic core WAS already done (v54: KO+chunks commit-or-rollback via cascade-delete on chunk-insert failure, `IngestCoordinator.processKnowledgeObject`). Collected-failures half added this session (`IngestFailureLog` → `IngestBatchSummary` → `SourcesView` banner, `6aee055`/`45e9e8f`). NOTE: a write-txn across the pipeline's mid-write LLM calls stays deliberately unimplemented (SQLITE_BUSY) — that is NOT part of ING-002. |
 | ING-003 idempotent deferred-job queue | IMPLEMENTED-partial | resumable embedding drain (`PERF.1`) via LEFT JOIN |
