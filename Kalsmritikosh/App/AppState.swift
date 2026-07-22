@@ -208,6 +208,10 @@ public final class AppState {
     public private(set) var summariesRepo: SummariesRepository?
     public private(set) var relationships: RelationshipsRepository?
     public private(set) var memoryRepo: MemoryRepository?
+    /// Universal History program — canonical subject-scoped reconstruction engine
+    /// and its versioned artifact store (both over the one ledger).
+    public private(set) var historyEngine: HistoryReconstructionEngine?
+    public private(set) var historyArtifacts: HistoryArtifactRepository?
     public private(set) var conversations: ConversationsRepository?
     /// Ledger-AI v28 — closed-corpus answer contract stores. A corpus
     /// snapshot is taken per answer; the answer + its claims + evidence
@@ -1721,6 +1725,13 @@ public final class AppState {
             self.assertions = assertionsRepo
             self.ingestAttempts = ingestAttemptsRepo
             self.ingestRuns = IngestRunRepository(database: db)
+            // Universal History program (Phase 10 wiring) — the canonical
+            // reconstruction engine + its versioned artifact store, over the SAME
+            // ledger. Deterministic; no LLM required.
+            self.historyEngine = HistoryReconstructionEngine(
+                entities: entities, events: events, assertions: assertionsRepo,
+                genericFacts: genericFactsRepo, relationships: relationships)
+            self.historyArtifacts = HistoryArtifactRepository(database: db)
             self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
             // actor was created earlier (above the IngestCoordinator)
