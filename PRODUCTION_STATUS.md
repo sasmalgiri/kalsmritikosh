@@ -68,7 +68,7 @@ Status vocabulary: `NOT_STARTED` · `IMPLEMENTED` (code compiles, no independent
 | ING-003 idempotent deferred-job queue | IMPLEMENTED (ledger) | PERF.2 `enrichment_jobs` ledger (v59): idempotent enqueue per (subject, kind), claim/done/fail, boot-recovery requeue, per-kind pending counts (`6f749a2`). Generalizes the PERF.1 embedding LEFT-JOIN drain to all Pass-2 kinds. Per-kind drainers + coordinator enqueue wire on top. |
 | ING-004 resume/rollback | NOT_STARTED | crash-recovery tests need TST-001 |
 | ING-005 typed errors for required writes | IMPLEMENTED (as designed) | verified: the REQUIRED writes (file record, KO, chunks) already `try`/throw with rollback; the remaining `try?` are on the DELIBERATELY best-effort derived writes (entities/events/relationships/custody/attempts) — throwing there would violate the "derived enrichment is re-derivable, not part of the atomic core" decision. No change needed. |
-| ING-006 query-priority scheduler | IMPLEMENTED-partial | background QoS + idle gating; not strict pre-emption |
+| ING-006 query-priority scheduler | IMPLEMENTED | `QueryPriorityGate` — interactive queries pre-empt background: `MasterBrain` holds it for the whole answer, the embedding drain yields between batches (`5622555`). Gate logic unit-tested. |
 | ING-007 multi-dim readiness UX | IMPLEMENTED-partial | LiveActivityPanel stage chips (`f9efdf2`) |
 
 ## 4. P5 Retrieval — decisive gap, now largely closed in code
@@ -124,7 +124,8 @@ These reflect prior commits and the task manifest; per the promotion rule they a
 - **Personas/Exports (P7):** F1–F6, F8 DONE (workspaces, tags/views, citation+export, composer, contradiction workflow, persona templates, transcripts); PER-003..007 end-to-end jobs unverified.
 - **Workbench/DataLab (P8):** NOT_STARTED (greenfield).
 - **UX (P8):** dev surfaces hidden from release nav; UX-004 accessibility NOT verified.
-- **Security/Redaction (P9):** PrivacyGate + release provider gating IMPLEMENTED; SEC-003 security fixtures exist but unwired; RED-001/002 redaction DEFERRED (F7, safety-critical).
+- **Security/Redaction (P9):** PrivacyGate + release provider gating IMPLEMENTED; SEC-003 security fixtures exist but unwired. RED-001 text redaction (`PIIRedactor`) IMPLEMENTED; **RED-002 verification gate IMPLEMENTED** (`RedactionVerifier` — protected values proven unrecoverable via exact/case/whitespace/markup channels + package check; `0d5506d`). Remaining redaction gap: format-specific burn-in for PDF/image exports (needs real-artifact verification).
+- **Perf/Ingest (PERF.2/ING-006):** `enrichment_jobs` ledger (v59) + boot recovery wired into AppState (`e0f525d`); `QueryPriorityGate` (ING-006) wired — interactive pre-empts background (`5622555`). Per-kind enrichment drainers remain (app-run-gated to avoid duplicating existing passes).
 - **Scale (P11):** in-memory HNSW only; SCL-002 disk-backed ANN + SCL-004 advertised-max run NOT_STARTED/owner-gated.
 - **Release (P12):** REL-001 project/signing config, REL-002 clean-machine, REL-003 owner acceptance, REL-006 sign-off — BLOCKED/owner-gated.
 
