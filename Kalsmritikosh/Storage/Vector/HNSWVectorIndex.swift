@@ -226,7 +226,7 @@ public actor HNSWVectorIndex {
         do {
             try data.write(to: url, options: .atomic)
             persistedVectorCount = nodes.count
-            KalsmritikoshLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .public) (\(data.count, privacy: .public) bytes)")
+            KalsmritikoshLog.storage.info("HNSW: persisted \(self.nodes.count, privacy: .public) vectors to \(url.lastPathComponent, privacy: .private) (\(data.count, privacy: .public) bytes)")
             return true
         } catch {
             KalsmritikoshLog.storage.error("HNSW: persist failed → \(String(describing: error), privacy: .public)")

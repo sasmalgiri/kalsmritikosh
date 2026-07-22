@@ -213,7 +213,7 @@ public enum KnowledgeInventory {
         try md.data(using: .utf8)?.write(to: url, options: .atomic)
 
         let elapsed = Date().timeIntervalSince(started)
-        KalsmritikoshLog.app.info("KnowledgeInventory: wrote \(allKOIDs.count, privacy: .public) KOs to \(url.path, privacy: .public) in \(String(format: "%.1f", elapsed), privacy: .public)s")
+        KalsmritikoshLog.app.info("KnowledgeInventory: wrote \(allKOIDs.count, privacy: .public) KOs to \(url.path, privacy: .private) in \(String(format: "%.1f", elapsed), privacy: .public)s")
         _ = filesRepo // suppress unused warning if we don't fan out further
         return Result(
             reportURL: url,

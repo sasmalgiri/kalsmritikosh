@@ -192,7 +192,7 @@ public actor IncrementalUpdater: BackgroundService {
                     .init(kind: entry.subject.kind, identifier: entry.subject.identifier),
                     triggeredBy: entry.trigger
                 )
-                KalsmritikoshLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .public)")
+                KalsmritikoshLog.knowledge.info("Distilled memory for \(entry.subject.kind.rawValue, privacy: .public): \(entry.subject.identifier, privacy: .private)")
                 // G2-misc — answer-matured notification: tell the
                 // user iff they asked about this subject recently.
                 // The notifier handles the gate + UNUserNotification
@@ -202,7 +202,7 @@ public actor IncrementalUpdater: BackgroundService {
                     subjectIdentifier: entry.subject.identifier
                 )
             } catch {
-                KalsmritikoshLog.knowledge.error("Memory distillation failed for \(entry.subject.identifier, privacy: .public): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.knowledge.error("Memory distillation failed for \(entry.subject.identifier, privacy: .private): \(String(describing: error), privacy: .public)")
             }
         }
     }

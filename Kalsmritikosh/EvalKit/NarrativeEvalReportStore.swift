@@ -55,7 +55,7 @@ public actor NarrativeEvalReportStore {
         let url = directory.appendingPathComponent("\(stamp).json")
         let data = try encoder.encode(report)
         try data.write(to: url, options: .atomic)
-        KalsmritikoshLog.app.info("NarrativeEval: saved report \(url.lastPathComponent, privacy: .public)")
+        KalsmritikoshLog.app.info("NarrativeEval: saved report \(url.lastPathComponent, privacy: .private)")
     }
 
     /// Most-recent-first list, capped so the dashboard's table stays

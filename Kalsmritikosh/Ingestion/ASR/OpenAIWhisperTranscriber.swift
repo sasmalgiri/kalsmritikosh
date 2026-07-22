@@ -108,7 +108,7 @@ public actor OpenAIWhisperTranscriber: AudioTranscribing {
         }
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            KalsmritikoshLog.knowledge.error("OpenAIWhisperTranscriber: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("OpenAIWhisperTranscriber: HTTP \(http.statusCode, privacy: .public): \(bodyStr.prefix(400), privacy: .private)")
             throw NSError(
                 domain: "kalsmritikosh.asr.openai-whisper",
                 code: http.statusCode,

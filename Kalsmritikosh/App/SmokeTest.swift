@@ -71,7 +71,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
             ingested += 1
         } catch {
-            KalsmritikoshLog.app.error("Smoke ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.app.error("Smoke ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -197,7 +197,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             brain: state.brain,
             events: events
         )
-        KalsmritikoshLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .public)")
+        KalsmritikoshLog.app.info("Narrative eval report:\n\(report.markdownTable, privacy: .private)")
         print(report.markdownTable)
         // HISTORY F.4 — persist each run to Application Support so
         // the EvalDashboardView can render trend lines across runs.
@@ -1324,7 +1324,7 @@ private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
     do {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try Data(md.utf8).write(to: url, options: .atomic)
-        KalsmritikoshLog.app.info("Smoke report written to \(url.path, privacy: .public)")
+        KalsmritikoshLog.app.info("Smoke report written to \(url.path, privacy: .private)")
     } catch {
         KalsmritikoshLog.app.error("Smoke report write failed: \(String(describing: error), privacy: .public)")
     }

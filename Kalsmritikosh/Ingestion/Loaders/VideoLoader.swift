@@ -79,7 +79,7 @@ public struct VideoLoader: Ingestor {
             try await export.export(to: outputURL, as: .m4a)
             return outputURL
         } catch {
-            KalsmritikoshLog.knowledge.error("VideoLoader: audio export failed for \(original.lastPathComponent, privacy: .public) — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("VideoLoader: audio export failed for \(original.lastPathComponent, privacy: .private) — \(String(describing: error), privacy: .public)")
             return nil
         }
     }

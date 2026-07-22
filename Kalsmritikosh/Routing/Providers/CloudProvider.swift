@@ -146,7 +146,7 @@ public actor CloudProvider: @preconcurrency ModelProvider {
         }
         if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
             let bodyStr = String(data: data, encoding: .utf8) ?? "<binary>"
-            KalsmritikoshLog.routing.error("CloudProvider \(self.id, privacy: .public) HTTP \(http.statusCode, privacy: .public): \(bodyStr, privacy: .public)")
+            KalsmritikoshLog.routing.error("CloudProvider \(self.id, privacy: .public) HTTP \(http.statusCode, privacy: .public): \(bodyStr, privacy: .private)")
             throw ModelProviderError.generationFailed(
                 reason: "HTTP \(http.statusCode): \(bodyStr.prefix(400))"
             )

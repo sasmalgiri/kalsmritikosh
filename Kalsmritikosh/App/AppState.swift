@@ -632,7 +632,7 @@ public final class AppState {
             let db = try Database(url: resolvedDBURL)
             await db.loadSqliteVecIfAvailable()
             try await SchemaMigrations.migrate(db)
-            KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .public)")
+            KalsmritikoshLog.storage.info("Database open at \(db.url.path, privacy: .private)")
 
             // HNSW ANN index — built lazily after boot. Pass it to
             // SQLiteVectorStore so `nearest()` takes the index path
@@ -1588,7 +1588,7 @@ public final class AppState {
                                         do {
                                             _ = try await ingest.ingest(fileAt: url)
                                         } catch {
-                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                                            KalsmritikoshLog.ingestion.error("Watcher-triggered ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                                         }
                                     }
                                 }
@@ -1973,7 +1973,7 @@ public final class AppState {
                     )
                     claimed.insert(loser.id)
                     folded += 1
-                    KalsmritikoshLog.knowledge.info("Reconcile: '\(loser.value, privacy: .public)' → variant of '\(winner.value, privacy: .public)'")
+                    KalsmritikoshLog.knowledge.info("Reconcile: '\(loser.value, privacy: .private)' → variant of '\(winner.value, privacy: .private)'")
                 } catch {
                     KalsmritikoshLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
                 }
@@ -3031,9 +3031,9 @@ public final class AppState {
                     _ = try await Self.withFileTimeout(budget) { try await ingest.ingest(fileAt: fileURL) }
                     if let counter { await counter.increment() }
                 } catch is IngestTimeout {
-                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .public) — skipped so the ingest can continue")
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .private) — skipped so the ingest can continue")
                 } catch {
-                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
         }

@@ -481,14 +481,14 @@ public actor IngestCoordinator {
                 sizeBytes: parse.sizeBytes, originalURL: url.absoluteString,
                 makeCurrent: true, startedAt: parse.startedAt
             )
-            KalsmritikoshLog.ingestion.info("Structural: \(parse.doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .public)")
+            KalsmritikoshLog.ingestion.info("Structural: \(parse.doc.blocks.count, privacy: .public) block(s) for \(url.lastPathComponent, privacy: .private)")
             // A5.1 — derive directly-observed assertions from the typed blocks.
             if let assertions {
                 await deriveAssertions(from: parse.doc, sourceVersionID: parse.doc.sourceVersionID,
                                        extractorVersion: parse.parserVersion, into: assertions)
             }
         } catch {
-            KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -579,7 +579,7 @@ public actor IngestCoordinator {
         var expandedMemberIDs: [UUID] = []
         if type == .zip {
             if let (root, files) = try? ArchiveLoader.expandZIP(at: url) {
-                KalsmritikoshLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .public) → \(files.count, privacy: .public) entries")
+                KalsmritikoshLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .private) → \(files.count, privacy: .public) entries")
                 defer { try? FileManager.default.removeItem(at: root) }
                 for entry in files {
                     // Avoid recursive expansion of nested zips — they
@@ -591,7 +591,7 @@ public actor IngestCoordinator {
                         let member = try await self.ingest(fileAt: entry)
                         expandedMemberIDs.append(member.fileRecord.id)
                     } catch {
-                        KalsmritikoshLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                        KalsmritikoshLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                     }
                 }
             }
@@ -602,7 +602,7 @@ public actor IngestCoordinator {
         do {
             raw = try await loader.ingest(fileAt: url, type: type)
         } catch {
-            KalsmritikoshLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             throw error
         }
         // Decode embedded encoded blobs (base64/hex/quoted-printable/percent)
@@ -622,7 +622,7 @@ public actor IngestCoordinator {
         }()
         if let existing = try? await files.findByURL(url) {
             if let newHash, existing.contentHash == newHash {
-                KalsmritikoshLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .public)")
+                KalsmritikoshLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .private)")
                 // T18 — re-ingest with a matching hash confirms custody.
                 try? await custody?.record(CustodyEvent(
                     fileID: existing.id, kind: .hashVerified,
@@ -652,7 +652,7 @@ public actor IngestCoordinator {
                 try await files.archiveVersionBeforeSupersede(existing, supersededBy: nil)
                 try await files.deleteByID(existing.id)
             } catch {
-                KalsmritikoshLog.ingestion.error("Version preserve/supersede failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public) — keeping prior rows, not deleting")
+                KalsmritikoshLog.ingestion.error("Version preserve/supersede failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public) — keeping prior rows, not deleting")
             }
         }
 
@@ -670,7 +670,7 @@ public actor IngestCoordinator {
             let canonicalStillAtOldURL = FileManager.default.fileExists(atPath: canonical.url.path)
             if !canonicalStillAtOldURL {
                 try? await files.updateURL(id: canonical.id, to: url)
-                KalsmritikoshLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .public) (was at \(canonical.url.lastPathComponent, privacy: .public))")
+                KalsmritikoshLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .private) (was at \(canonical.url.lastPathComponent, privacy: .private))")
                 let updated = FileRecord(
                     id: canonical.id,
                     url: url,
@@ -713,7 +713,7 @@ public actor IngestCoordinator {
                 aliasOf: canonical.id
             )
             try? await files.upsert(aliasRecord)
-            KalsmritikoshLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .public) → canonical \(canonical.id, privacy: .public)")
+            KalsmritikoshLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .private) → canonical \(canonical.id, privacy: .public)")
             return Result(
                 fileRecord: aliasRecord,
                 object: cleaned,
@@ -744,7 +744,7 @@ public actor IngestCoordinator {
         do {
             try await files.upsert(fileRecord)
         } catch {
-            KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             throw error
         }
         // A2 §7.6 — now the archive's file row exists, link its members.
@@ -767,7 +767,7 @@ public actor IngestCoordinator {
         do {
             perFileKOs = try await loader.ingestMany(fileAt: url, type: type)
         } catch {
-            KalsmritikoshLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             throw error
         }
         guard !perFileKOs.isEmpty else {
@@ -850,12 +850,12 @@ public actor IngestCoordinator {
                             totalEvents += attachmentResult.eventCount
                             allInvalidations.append(contentsOf: attachmentResult.invalidations)
                         } catch {
-                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                         }
                     }
                 }
             } catch {
-                KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .public) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
                 // Console echo so dev / smoke runs can see the cause
                 // without subscribing to OSLog; quiet enough not to
                 // spam a healthy ingest.
@@ -883,14 +883,14 @@ public actor IngestCoordinator {
                 }
                 do {
                     try await qaRepo.insertBatch(rows)
-                    KalsmritikoshLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .public)")
+                    KalsmritikoshLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .private)")
                 } catch {
-                    KalsmritikoshLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
         }
 
-        KalsmritikoshLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .public): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
+        KalsmritikoshLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .private): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
 
         // A5.3 / A2 — persist the already-parsed structural document (blocks +
         // source version + document profile) and derive directly-observed

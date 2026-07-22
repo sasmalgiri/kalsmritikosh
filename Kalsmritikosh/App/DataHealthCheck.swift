@@ -381,7 +381,7 @@ public enum DataHealthCheck {
         fact_type: entities \(entityTyped)/\(entityCount), events \(eventTyped)/\(eventCount)
         Issues found: \(issues.count)
         """
-        KalsmritikoshLog.app.info("DataHealthCheck complete → \(url.path, privacy: .public) (\(issues.count, privacy: .public) issues)")
+        KalsmritikoshLog.app.info("DataHealthCheck complete → \(url.path, privacy: .private) (\(issues.count, privacy: .public) issues)")
         return Result(reportURL: url, summary: summary, issuesFound: issues.count)
     }
 

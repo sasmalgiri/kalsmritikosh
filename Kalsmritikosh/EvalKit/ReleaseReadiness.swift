@@ -832,7 +832,7 @@ public enum ReleaseReadiness {
         md += "- `eval-report-gate3-multihop.md` — Gate 3 per-question metrics\n"
 
         try md.data(using: .utf8)?.write(to: url, options: .atomic)
-        KalsmritikoshLog.app.info("ReleaseReadiness report → \(url.path, privacy: .public)")
+        KalsmritikoshLog.app.info("ReleaseReadiness report → \(url.path, privacy: .private)")
         return url
     }
 }

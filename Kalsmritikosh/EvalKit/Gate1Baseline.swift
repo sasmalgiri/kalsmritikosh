@@ -111,7 +111,7 @@ public enum Gate1Baseline {
                 _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
                 ingested += 1
             } catch {
-                KalsmritikoshLog.app.error("Gate 1 baseline ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                KalsmritikoshLog.app.error("Gate 1 baseline ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             }
         }
         let ingestSeconds = Date().timeIntervalSince(ingestStarted)
@@ -283,7 +283,7 @@ public enum Gate1Baseline {
                     _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
                     ingested += 1
                 } catch {
-                    KalsmritikoshLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.app.error("Fast eval ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
@@ -398,7 +398,7 @@ public enum Gate1Baseline {
                     _ = try await ingest.ingest(fileAt: url); await ingest.drainEmbeddingsNow()
                     ingested += 1
                 } catch {
-                    KalsmritikoshLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+                    KalsmritikoshLog.app.error("Gate 3 ingest failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                 }
             }
             let ingestSeconds = Date().timeIntervalSince(ingestStarted)
