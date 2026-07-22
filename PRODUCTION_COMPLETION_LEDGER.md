@@ -63,8 +63,12 @@ now finishable safely because a regression would be caught by the suite:
   `facts(forBlockIDs:)`) → render in the zero-LLM answer (cited) → inject into the LLM
   fallback prompt as a tagged VERIFIED-FACTS block → count surfaced in the reasoning
   trace. Both answer paths consume facts; every hop is evidence-gated (no orphan/
-  non-assertable facts). Remaining deep-wiring (separate): fitness→answer into MasterBrain;
-  corrective-retrieval loop; expert-council (per-expert) fact consumption.
+  non-assertable facts).
+- **RET-007 corrective-retrieval loop — WIRED + CI-verified** (392 tests): `MasterBrain`
+  assesses field sufficiency after the first retrieval and runs ONE focused, deduped,
+  merged corrective pass when a requested field is missing (was: planner written but wired
+  nowhere). Deterministic, no LLM, hard-capped at one pass. Remaining deep-wiring (separate):
+  fitness→answer attribution into MasterBrain; expert-council (per-expert) fact consumption.
 - **Live-schema** EV-005/006, ING-002/003/005/006/007 — additive migrations + coordinator
   wiring, each verified on a throwaway DB then under the suite.
 - **SwiftUI views** LAB-005–009, UX-001/003/004, EXP-001 — compile-checkable; final proof
