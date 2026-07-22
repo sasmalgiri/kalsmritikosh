@@ -176,6 +176,31 @@ exactly the behavior the product thesis requires.
 
 ---
 
+## Part E — Additional independent hardening (after the retrieval core)
+
+These are self-contained improvements in *other* subsystems, each build- + snippet-verified,
+tests written (run at TST-001):
+
+- **RET-008 (duplicates ≠ corroboration)** — near-duplicate documents collapse to one
+  authoritative representative (your ~15 résumé copies → 4 independent sources). `1f6f9ff`.
+- **RET-006 (evidence sufficiency)** — the answer footer now honestly discloses which
+  requested fields the evidence does NOT contain ("Not found: amount, payee") instead of a
+  vague non-answer. Wired. `35569b6`,`e381cca`.
+- **CLM-002 (causal-language guard)** — flags "X caused Y" when the evidence shows only
+  sequence (adjacency ≠ causation). Wired into the footer. `c3247e2`.
+- **CLM-001 (claim grounding)** — material specifics (amounts, dates, multi-word names) in a
+  claim are checked against the cited evidence; a fabricated "₹5,000" or "Reliance
+  Industries" not in evidence is flagged. High-precision. `50f061b`.
+- **SEC-002 (logging privacy audit)** — user content/PII in logs (entity values, HTTP bodies,
+  filenames/paths) moved `privacy:.public` → `.private`, so persisted/exported logs redact
+  them (still visible live in Xcode for dev). `37e79e2`.
+- **PAR-001 (parser capability manifest)** — the format-coverage matrix is now generated
+  from the parser registry (can't drift); `SUPPORTED_SOURCES.md` written: 15 FULL, 6 PARTIAL
+  (OCR), 10 DEFERRED (media), 12 PRESERVED-ONLY. `b78191c`.
+
+Correction folded in: the `"Subjects in scope"` line is an intentional footer, not a debug
+leak (see Part D item 6).
+
 ## One-line bottom line
 The wrong-document problem was a **retrieval-authority** problem, not an ingestion or model
 problem. It is now fixed in code by question-conditioned document fitness (role + field match)
