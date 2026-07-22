@@ -80,6 +80,11 @@ public actor IngestCoordinator {
     /// exact block ids they came from). nil = domain facts not derived from ingest.
     private let genericFacts: GenericFactRepository?
     private let domainFactExtractor = DomainFactExtractor()
+    /// EV-005 — optional managed-evidence vault. When wired AND the managedEvidenceMode
+    /// flag is on, each real ingest also copies the source bytes into the content-addressed
+    /// vault so the exact version can be reopened later. nil, or flag off, = reference mode
+    /// (no copy) — the default, unchanged behavior.
+    private let evidenceVault: EvidenceVault?
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
@@ -148,12 +153,14 @@ public actor IngestCoordinator {
         assertions: AssertionsRepository? = nil,
         ingestAttempts: IngestAttemptsRepository? = nil,
         sourceRelations: SourceRelationsRepository? = nil,
-        genericFacts: GenericFactRepository? = nil
+        genericFacts: GenericFactRepository? = nil,
+        evidenceVault: EvidenceVault? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
         self.genericFacts = genericFacts
+        self.evidenceVault = evidenceVault
         self.ingestAttempts = ingestAttempts
         self.sourceRelations = sourceRelations
         self.custody = custody
@@ -790,6 +797,13 @@ public actor IngestCoordinator {
         } catch {
             KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             throw error
+        }
+        // EV-005 — managed evidence mode: copy the source bytes into the content-addressed
+        // vault so this exact version stays reopenable even if the original is later moved/
+        // replaced. Opt-in (default reference mode) + best-effort; never fails the ingest.
+        if let evidenceVault, FeatureFlags.managedEvidenceModeValue() {
+            do { _ = try await evidenceVault.store(contentsOf: url) }
+            catch { KalsmritikoshLog.ingestion.error("Evidence vault copy failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)") }
         }
         // A2 §7.6 — now the archive's file row exists, link its members.
         for memberID in expandedMemberIDs {

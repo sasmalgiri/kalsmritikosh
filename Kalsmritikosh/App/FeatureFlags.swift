@@ -367,6 +367,22 @@ public final class FeatureFlags {
         set { UserDefaults.standard.set(newValue, forKey: Self.kIngestDistill) }
     }
 
+    /// EV-005 — managed evidence vault mode. OFF by default (reference mode): the app keeps
+    /// a bookmark + hash + derived evidence, and the source stays in place. When ON, each
+    /// ingested file's bytes are ALSO copied into a local content-addressed immutable vault
+    /// so every source version can be reopened byte-for-byte even if the original is later
+    /// moved or replaced — recommended for investigations/legal. Costs disk; the Settings UI
+    /// shows storage impact. Takes effect for files ingested while enabled.
+    public var managedEvidenceMode: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.kManagedEvidence) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kManagedEvidence) }
+    }
+
+    /// Thread-safe read for the non-main-actor ingest path.
+    public nonisolated static func managedEvidenceModeValue() -> Bool {
+        UserDefaults.standard.bool(forKey: kManagedEvidence)
+    }
+
     // MARK: - Storage keys
 
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
@@ -383,4 +399,5 @@ public final class FeatureFlags {
     private static let kChatExport       = "kalsmritikosh.feature.chatExport.enabled"
     private static let kContextPrefixBackfill = "kalsmritikosh.feature.contextPrefixBackfill.enabled"
     private static let kOCRDuringIngest  = "kalsmritikosh.feature.ocrDuringIngest.enabled"
+    private static let kManagedEvidence  = "kalsmritikosh.feature.managedEvidenceMode.enabled"
 }

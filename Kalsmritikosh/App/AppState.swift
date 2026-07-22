@@ -680,6 +680,10 @@ public final class AppState {
             // SEM — durable domain-pack facts (derived projections carrying block
             // lineage), populated additively during ingest from structural blocks.
             let genericFactsRepo = GenericFactRepository(database: db)
+            // EV-005 — managed-evidence vault, rooted next to the DB in the app container.
+            // Passed to ingest; only copies bytes when managedEvidenceMode is on (default off).
+            let evidenceVault = EvidenceVault(
+                root: resolvedDBURL.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true))
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // A2 §7.6 — parent→child source provenance recorder.
@@ -1238,7 +1242,8 @@ public final class AppState {
                 assertions: assertionsRepo,
                 ingestAttempts: ingestAttemptsRepo,
                 sourceRelations: sourceRelationsRepo,
-                genericFacts: genericFactsRepo
+                genericFacts: genericFactsRepo,
+                evidenceVault: evidenceVault   // EV-005 — copies only when managed mode on
             )
 
             // PERF.1 — resume the resumable background embedding drain as soon
