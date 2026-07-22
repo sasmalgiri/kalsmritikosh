@@ -75,6 +75,11 @@ public actor IngestCoordinator {
     /// (the claim–evidence ledger between EvidenceBlocks and typed rows). nil =
     /// assertion ledger not populated from ingest (no regression).
     private let assertions: AssertionsRepository?
+    /// SEM — when wired, the domain packs run over each substantive block's text
+    /// and persist evidence-linked GenericFacts (derived projections carrying the
+    /// exact block ids they came from). nil = domain facts not derived from ingest.
+    private let genericFacts: GenericFactRepository?
+    private let domainFactExtractor = DomainFactExtractor()
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
@@ -142,11 +147,13 @@ public actor IngestCoordinator {
         structuralRegistry: StructuralParserRegistry? = nil,
         assertions: AssertionsRepository? = nil,
         ingestAttempts: IngestAttemptsRepository? = nil,
-        sourceRelations: SourceRelationsRepository? = nil
+        sourceRelations: SourceRelationsRepository? = nil,
+        genericFacts: GenericFactRepository? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
+        self.genericFacts = genericFacts
         self.ingestAttempts = ingestAttempts
         self.sourceRelations = sourceRelations
         self.custody = custody
@@ -487,6 +494,11 @@ public actor IngestCoordinator {
                 await deriveAssertions(from: parse.doc, sourceVersionID: parse.doc.sourceVersionID,
                                        extractorVersion: parse.parserVersion, into: assertions)
             }
+            // SEM — derive domain-pack GenericFacts from the same blocks (additive;
+            // never fails the ingest). Facts carry their block ids for drill-back.
+            if let genericFacts {
+                await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts)
+            }
         } catch {
             KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
         }
@@ -555,6 +567,38 @@ public actor IngestCoordinator {
         )
         do { try await assertions.insert(assertion) }
         catch { KalsmritikoshLog.ingestion.error("Assertion insert failed: \(String(describing: error), privacy: .public)") }
+    }
+
+    /// SEM — run the domain packs over each substantive block's text and persist
+    /// the evidence-linked GenericFacts they produce. Facts are derived projections:
+    /// each carries the exact block id it came from so it always drills back to
+    /// evidence. The subject label is the document's title (or filename stem) so a
+    /// document's facts group together. Best-effort — never fails the ingest.
+    private func deriveGenericFacts(
+        from doc: ParsedDocument, url: URL, into repo: GenericFactRepository
+    ) async {
+        let subjectLabel: String = {
+            if let title = doc.blocks.first(where: { $0.kind == .documentTitle }) {
+                let t = title.normalizedText.isEmpty ? title.rawText : title.normalizedText
+                let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return String(trimmed.prefix(120)) }
+            }
+            return url.deletingPathExtension().lastPathComponent
+        }()
+        var derived: [GenericFact] = []
+        for block in doc.blocks {
+            guard !block.kind.isBoilerplate else { continue }
+            let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
+            guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
+            derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id)
+        }
+        guard !derived.isEmpty else { return }
+        do {
+            try await repo.upsert(DomainFactExtractor.merge(derived))
+            KalsmritikoshLog.ingestion.info("Domain facts: \(derived.count, privacy: .public) fact(s) for \(url.lastPathComponent, privacy: .private)")
+        } catch {
+            KalsmritikoshLog.ingestion.error("Domain-fact persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func ingestCore(fileAt url: URL) async throws -> Result {

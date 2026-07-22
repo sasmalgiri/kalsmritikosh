@@ -672,6 +672,9 @@ public final class AppState {
             // A5.1 — assertion ledger, constructed here so the ingest path can
             // derive directly-observed assertions from structural blocks.
             let assertionsRepo = AssertionsRepository(database: db)
+            // SEM — durable domain-pack facts (derived projections carrying block
+            // lineage), populated additively during ingest from structural blocks.
+            let genericFactsRepo = GenericFactRepository(database: db)
             // A2 §7.3 — durable per-file ingest outcome recorder.
             let ingestAttemptsRepo = IngestAttemptsRepository(database: db)
             // A2 §7.6 — parent→child source provenance recorder.
@@ -1228,7 +1231,8 @@ public final class AppState {
                 structuralRegistry: .standard(ocr: VisionOCR()),
                 assertions: assertionsRepo,
                 ingestAttempts: ingestAttemptsRepo,
-                sourceRelations: sourceRelationsRepo
+                sourceRelations: sourceRelationsRepo,
+                genericFacts: genericFactsRepo
             )
 
             // PERF.1 — resume the resumable background embedding drain as soon
