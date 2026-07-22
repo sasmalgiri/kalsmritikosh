@@ -40,6 +40,23 @@ struct GenericFactRepositoryTests {
         #expect(try await repo.count() >= 2)
     }
 
+    @Test("facts(forBlockIDs:) returns only facts whose evidence intersects the blocks")
+    func blockJoin() async throws {
+        let repo = GenericFactRepository(database: try await freshDB())
+        let blkA = UUID(), blkB = UUID(), blkC = UUID()
+        try await repo.upsert(GenericFact(subjectLabel: "doc", field: "employer", value: "Orchid",
+                                          status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [blkA]))
+        try await repo.upsert(GenericFact(subjectLabel: "doc", field: "amount", value: "₹3,800",
+                                          status: .directlyObserved, confidence: 0.9, sourceBlockIDs: [blkB]))
+        // Ask for A + an unrelated block → only the A fact rides along.
+        let hits = try await repo.facts(forBlockIDs: [blkA, blkC])
+        #expect(hits.count == 1)
+        #expect(hits.first?.value == "Orchid")
+        // Both blocks → both facts, highest confidence first.
+        let both = try await repo.facts(forBlockIDs: [blkA, blkB])
+        #expect(both.map(\.value) == ["₹3,800", "Orchid"])
+    }
+
     @Test("Upsert is idempotent on fact id")
     func idempotent() async throws {
         let repo = GenericFactRepository(database: try await freshDB())

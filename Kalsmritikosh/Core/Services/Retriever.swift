@@ -29,6 +29,11 @@ public struct RetrievalResult: Codable, Sendable {
     /// the "Why this answer?" UI. Empty when no bond walks ran (no
     /// entity seeds, no walker wired, or intent budget = 0).
     public let walkSteps: [WalkStep]
+    /// SEM — domain-pack facts derived from the evidence blocks that this
+    /// retrieval surfaced (option A: facts ride the evidence). Empty when no
+    /// GenericFact repo is wired or the surfaced blocks carry no facts. Each
+    /// fact keeps its source-block ids, so the answer layer can cite them.
+    public let genericFacts: [GenericFact]
 
     public nonisolated init(
         chunks: [RetrievedChunk] = [],
@@ -38,7 +43,8 @@ public struct RetrievalResult: Codable, Sendable {
         summaries: [Summary] = [],
         layersUsed: [RetrievalLayer] = [],
         shortCircuitedAt: RetrievalLayer? = nil,
-        walkSteps: [WalkStep] = []
+        walkSteps: [WalkStep] = [],
+        genericFacts: [GenericFact] = []
     ) {
         self.chunks = chunks
         self.events = events
@@ -48,6 +54,7 @@ public struct RetrievalResult: Codable, Sendable {
         self.layersUsed = layersUsed
         self.shortCircuitedAt = shortCircuitedAt
         self.walkSteps = walkSteps
+        self.genericFacts = genericFacts
     }
 }
 

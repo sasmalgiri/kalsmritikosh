@@ -80,6 +80,11 @@ public actor HybridRetriever: Retriever {
     /// per-layer algorithms and their ordering untouched. nil, or zero
     /// privileged objects, makes this a strict no-op (eval baseline unchanged).
     private let objects: KnowledgeObjectRepository?
+    /// SEM — optional. When wired, after the result is assembled the retriever
+    /// looks up the domain-pack GenericFacts derived from the evidence blocks it
+    /// surfaced (option A: facts ride the evidence) and attaches the ASSERTABLE
+    /// ones to the result. nil, or blocks with no facts, is a strict no-op.
+    private let genericFacts: GenericFactRepository?
 
     public init(
         memory: MemoryRepository,
@@ -100,9 +105,11 @@ public actor HybridRetriever: Retriever {
         entityTimeline: EntityTimeline? = nil,
         bondWalkSeedLimit: Int = 3,
         bondWalkChunkLimit: Int = 10,
-        objects: KnowledgeObjectRepository? = nil
+        objects: KnowledgeObjectRepository? = nil,
+        genericFacts: GenericFactRepository? = nil
     ) {
         self.objects = objects
+        self.genericFacts = genericFacts
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -334,7 +341,7 @@ public actor HybridRetriever: Retriever {
             }
         }
 
-        return assemble(
+        let result = assemble(
             chunks: visibleChunks,
             events: visibleEvents,
             entities: visibleEntities,
@@ -345,6 +352,27 @@ public actor HybridRetriever: Retriever {
             walkSteps: walkSteps,
             authorityKOs: authorityKOs,
             authorityRanking: authorityRanking
+        )
+        return await attachGenericFacts(to: result)
+    }
+
+    /// SEM (option A) — attach the ASSERTABLE domain-pack facts derived from the
+    /// evidence blocks in the assembled result. Keyed on the surfaced chunks'
+    /// `evidenceBlockID`, so a fact only rides an answer whose evidence actually
+    /// backs it. Strict no-op when no repo is wired or no surfaced chunk carries
+    /// a block id. Never throws into the retrieval path.
+    private func attachGenericFacts(to result: RetrievalResult) async -> RetrievalResult {
+        guard let genericFacts else { return result }
+        let blockIDs = result.chunks.compactMap { $0.chunk.evidenceBlockID }
+        guard !blockIDs.isEmpty else { return result }
+        let facts = ((try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? [])
+            .filter { $0.status.isAssertable }
+        guard !facts.isEmpty else { return result }
+        return RetrievalResult(
+            chunks: result.chunks, events: result.events, entities: result.entities,
+            relationships: result.relationships, summaries: result.summaries,
+            layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
+            walkSteps: result.walkSteps, genericFacts: facts
         )
     }
 

@@ -977,7 +977,8 @@ public final class AppState {
                 memoryCache: memoryHashCache,
                 entityTrie: entityTrieCache,
                 entityTimeline: entityTimelineCache,
-                objects: objects   // T18 §21 — enables the privilege post-filter
+                objects: objects,   // T18 §21 — enables the privilege post-filter
+                genericFacts: genericFactsRepo   // SEM — facts ride the surfaced evidence
             )
 
             let expertRegistry = ExpertRegistry()

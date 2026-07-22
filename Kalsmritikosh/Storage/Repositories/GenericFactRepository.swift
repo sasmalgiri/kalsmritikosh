@@ -47,6 +47,23 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// Facts whose evidence intersects ANY of `blockIDs` — the query-time join
+    /// (option A): once retrieval surfaces authoritative blocks, the facts derived
+    /// from those exact blocks ride along. Matches on the JSON-encoded block-id
+    /// array (uppercased UUID strings, as Foundation encodes them). Returns
+    /// highest-confidence first, deduped by fact id.
+    public func facts(forBlockIDs blockIDs: [UUID]) async throws -> [GenericFact] {
+        let ids = Array(Set(blockIDs)).prefix(64)   // bound the OR-scan cost
+        guard !ids.isEmpty else { return [] }
+        let clauses = ids.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
+        let binds = ids.map { SQLValue.text("%\($0.uuidString)%") }
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json
+        FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
+        """, binds)
+        return rows.compactMap(Self.decode)
+    }
+
     public func count() async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM generic_facts;", [])).first?.int(0) ?? 0)
     }

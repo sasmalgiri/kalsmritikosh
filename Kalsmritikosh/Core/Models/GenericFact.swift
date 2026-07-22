@@ -30,7 +30,7 @@ public enum EvidenceStatus: String, Codable, Sendable, Hashable, CaseIterable {
     case humanRejected         = "HUMAN_REJECTED"
 
     /// May this status back a MATERIAL claim in a final answer?
-    public var isAssertable: Bool {
+    public nonisolated var isAssertable: Bool {
         switch self {
         case .directlyObserved, .sourceAsserted, .deterministicallyDerived,
              .humanConfirmed, .humanCorrected:
