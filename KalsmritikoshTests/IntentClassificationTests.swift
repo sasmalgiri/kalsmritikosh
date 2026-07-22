@@ -12,7 +12,7 @@ import Testing
 struct IntentClassificationTests {
 
     private func kind(_ q: String) async throws -> UserIntent.Kind {
-        try await IntentDetector().detect(question: q).kind
+        try await RuleIntentDetector().detect(question: q).kind
     }
 
     // Exact lookups → NOT reconstruction (spec P1.5 counter-examples).

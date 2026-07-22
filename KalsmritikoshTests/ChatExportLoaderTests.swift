@@ -2,6 +2,7 @@
 //  ChatExportLoaderTests.swift
 //
 
+import Foundation
 import Testing
 @testable import Kalsmritikosh
 

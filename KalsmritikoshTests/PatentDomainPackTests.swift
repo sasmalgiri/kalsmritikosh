@@ -19,8 +19,9 @@ struct PatentDomainPackTests {
     func granted() {
         let f = PatentDomainPack.extractFacts(fromText: "Patent No. 402349 has been granted.",
                                               subjectLabel: "patent", blockID: block)
+        // GenericFact lowercases/normalizes field names, so "patentNumber" → "patentnumber".
         let byField = Dictionary(uniqueKeysWithValues: f.map { ($0.field, $0.value) })
-        #expect(byField["patentNumber"]?.contains("402349") == true)
+        #expect(byField["patentnumber"]?.contains("402349") == true)
         #expect(byField["status"] == "granted")
         #expect(f.allSatisfy { $0.status == .sourceAsserted && $0.sourceBlockIDs == [block] })
     }

@@ -67,10 +67,13 @@ struct TransformationGraphTests {
         #expect(child.steps.count == 1)
     }
 
-    @Test("apply is deterministic for the same graph + base")
+    @Test("apply is deterministic for the same graph + base (content, ignoring fresh ids)")
     func deterministic() {
         var g = TransformationGraph()
         g.push(.countByGroup(keyColumn: 1))
-        #expect(g.apply(to: base()) == g.apply(to: base()))
+        let a = g.apply(to: base()), b = g.apply(to: base())
+        // Row identity UUIDs are freshly minted per apply; compare the meaningful content.
+        #expect(a.rows.map { $0.cells.map(\.value) } == b.rows.map { $0.cells.map(\.value) })
+        #expect(a.rows.map { $0.cells.map(\.sourceBlockIDs) } == b.rows.map { $0.cells.map(\.sourceBlockIDs) })
     }
 }

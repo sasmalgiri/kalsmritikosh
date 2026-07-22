@@ -5,6 +5,7 @@
 //  SEM-003 — domain-neutral fact layer + field schema.
 //
 
+import Foundation
 import Testing
 @testable import Kalsmritikosh
 

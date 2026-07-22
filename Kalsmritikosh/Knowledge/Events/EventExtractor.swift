@@ -378,9 +378,13 @@ public struct RuleEventExtractor: EventExtractor {
 
     // "signed by <Name>", "executed by <Name>", "/s/ <Name>". Captures 1-4
     // capitalized words (a personal name) after the marker.
+    // The TRIGGER is case-insensitive (inline (?i:…)), but the NAME capture stays
+    // case-sensitive so it stops at a lowercase word — "signed by Alice Martin on Tuesday"
+    // captures "Alice Martin", not "Alice Martin on Tuesday" (a global .caseInsensitive made
+    // [A-Z] match "on"/"tuesday" and over-captured).
     private static let signatoryRegex = try? NSRegularExpression(
-        pattern: #"(?:signed\s+by|executed\s+by|/s/)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})"#,
-        options: [.caseInsensitive]
+        pattern: #"(?:(?i:signed\s+by|executed\s+by)|/s/)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})"#,
+        options: []
     )
 
     /// The first named signatory in the text (normalized, lowercased), or nil.

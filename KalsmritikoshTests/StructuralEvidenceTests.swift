@@ -52,7 +52,7 @@ struct StructuralEvidenceTests {
     }
 
     @Test func locatorCodableSurvivesRoundTrip() throws {
-        let loc = SourceLocator(page: 2, sheet: "Sheet1", row: 4, column: "B", cellRange: "B4")
+        let loc = SourceLocator(page: 2, row: 4, column: "B", cellRange: "B4", sheet: "Sheet1")
         let data = try JSONEncoder().encode(loc)
         let back = try JSONDecoder().decode(SourceLocator.self, from: data)
         #expect(back == loc)

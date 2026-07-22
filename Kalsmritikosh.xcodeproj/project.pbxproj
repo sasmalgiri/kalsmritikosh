@@ -6,7 +6,18 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		B47CBE6A3010B2DF0079FE03 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B4B18B362FD0E4B300840C82 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B4B18B3D2FD0E4B300840C82;
+			remoteInfo = Kalsmritikosh;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KalsmritikoshTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -21,6 +32,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = KalsmritikoshTests;
+			sourceTree = "<group>";
+		};
 		B4B18B402FD0E4B300840C82 /* Kalsmritikosh */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -32,6 +48,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		B47CBE633010B2DF0079FE03 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3B2FD0E4B300840C82 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
+				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
 				B4B18B3F2FD0E4B300840C82 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */,
+				B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,6 +86,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B47CBE6C3010B2DF0079FE03 /* Build configuration list for PBXNativeTarget "KalsmritikoshTests" */;
+			buildPhases = (
+				B47CBE623010B2DF0079FE03 /* Sources */,
+				B47CBE633010B2DF0079FE03 /* Frameworks */,
+				B47CBE643010B2DF0079FE03 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B47CBE6B3010B2DF0079FE03 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
+			);
+			name = KalsmritikoshTests;
+			packageProductDependencies = (
+			);
+			productName = KalsmritikoshTests;
+			productReference = B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B4B18B492FD0E4B500840C82 /* Build configuration list for PBXNativeTarget "Kalsmritikosh" */;
@@ -90,9 +138,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2650;
+				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					B47CBE653010B2DF0079FE03 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = B4B18B3D2FD0E4B300840C82;
+					};
 					B4B18B3D2FD0E4B300840C82 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -113,11 +165,19 @@
 			projectRoot = "";
 			targets = (
 				B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */,
+				B47CBE653010B2DF0079FE03 /* KalsmritikoshTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		B47CBE643010B2DF0079FE03 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3C2FD0E4B300840C82 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -128,6 +188,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B47CBE623010B2DF0079FE03 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B4B18B3A2FD0E4B300840C82 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -137,7 +204,59 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		B47CBE6B3010B2DF0079FE03 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B4B18B3D2FD0E4B300840C82 /* Kalsmritikosh */;
+			targetProxy = B47CBE6A3010B2DF0079FE03 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		B47CBE6D3010B2DF0079FE03 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.KalsmritikoshTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kalsmritikosh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kalsmritikosh";
+			};
+			name = Debug;
+		};
+		B47CBE6E3010B2DF0079FE03 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6TPTCJD42Q;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.KalsmritikoshTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Kalsmritikosh.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Kalsmritikosh";
+			};
+			name = Release;
+		};
 		B4B18B472FD0E4B500840C82 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -376,6 +495,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		B47CBE6C3010B2DF0079FE03 /* Build configuration list for PBXNativeTarget "KalsmritikoshTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B47CBE6D3010B2DF0079FE03 /* Debug */,
+				B47CBE6E3010B2DF0079FE03 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B4B18B392FD0E4B300840C82 /* Build configuration list for PBXProject "Kalsmritikosh" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

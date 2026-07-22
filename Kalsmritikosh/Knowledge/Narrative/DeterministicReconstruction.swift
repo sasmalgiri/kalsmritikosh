@@ -82,11 +82,14 @@ public struct DeterministicReconstruction: Sendable {
     // MARK: - Formatting
 
     nonisolated static func format(_ date: Date, precision: DatePrecision) -> String {
-        let cal = Calendar(identifier: .gregorian)
+        // Format in the same time zone the dates are expressed in (system local), so a date
+        // built as "1 Jan 2004" local doesn't shift to Dec 2003 under a forced-UTC formatter.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
         let f = DateFormatter()
         f.calendar = cal
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(identifier: "UTC")
+        f.timeZone = .current
         switch precision {
         case .unknown:  return "date unknown"
         case .decade:

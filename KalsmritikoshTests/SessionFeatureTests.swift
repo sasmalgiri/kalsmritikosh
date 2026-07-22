@@ -83,7 +83,9 @@ struct SessionFeatureTests {
         let review = FactReview(subjectKind: .event, subjectID: ev.id, action: .accept)
         let items = FactStatusClassifier().classify(
             events: [ev], assertions: [], contradictions: [], gaps: [], reviews: [ev.id: review])
-        #expect(items.first?.status == .proven)
+        // A human "accept" marks HUMAN_CONFIRMED — not auto-"proven" (locked vocabulary:
+        // human-confirmed is not automatically proven).
+        #expect(items.first?.status == .humanConfirmed)
     }
 
     // MARK: Logistics table mapper (ocr-table-pipeline port)
