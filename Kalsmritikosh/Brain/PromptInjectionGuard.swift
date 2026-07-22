@@ -61,6 +61,19 @@ public struct PromptInjectionGuard: Sendable {
         return Sanitized(delimitedText: delimited, injectionSuspected: suspected, neutralizedCount: neutralized)
     }
 
+    /// Inline defang for a single evidence snippet embedded in a larger prompt (no delimiter
+    /// wrapper — the surrounding prompt already marks evidence untrusted). Neutralizes
+    /// injection directives and code fences so the snippet reads as data.
+    public nonisolated func defang(_ text: String) -> String {
+        var working = text
+        for pattern in Self.injectionPatterns {
+            if let range = working.range(of: pattern, options: [.caseInsensitive]) {
+                working.replaceSubrange(range, with: "(quoted) " + working[range])
+            }
+        }
+        return working.replacingOccurrences(of: "```", with: "ʼʼʼ")
+    }
+
     /// Convenience: sanitize + join several evidence snippets into one untrusted block.
     public nonisolated func sanitizeBlock(_ snippets: [String]) -> Sanitized {
         let parts = snippets.map { sanitizeEvidence($0) }

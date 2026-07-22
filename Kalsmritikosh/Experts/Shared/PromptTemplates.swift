@@ -80,9 +80,12 @@ public enum PromptTemplates {
         map: inout [String: EvidenceCitation]
     ) -> Int {
         var index = startingIndex
+        let injectionGuard = PromptInjectionGuard()
         for hit in retrieval.chunks.prefix(limit) {
             let tag = "E\(index)"
-            let snippet = String(hit.chunk.text.prefix(240))
+            // SEC-003 — document text is untrusted; defang injection directives before it
+            // enters the prompt so a source can't hijack the model.
+            let snippet = injectionGuard.defang(String(hit.chunk.text.prefix(240)))
                 .replacingOccurrences(of: "\n", with: " ")
             lines.append("[\(tag)] DOC (\(hit.viaLayer.rawValue)) \(snippet)")
             map[tag] = EvidenceCitation(supportingObjectIDs: [hit.chunk.objectID])
