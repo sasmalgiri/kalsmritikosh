@@ -80,6 +80,11 @@ public final class AppState {
     public enum IngestRunState: String, Sendable { case idle, running, paused, stopping }
     public private(set) var ingestRunState: IngestRunState = .idle
 
+    /// ING-002 — the last bulk ingest's collected outcome (how many succeeded and which
+    /// files could not be processed). nil until a batch has run. Surfaced so the UI can
+    /// report failures instead of only a success count.
+    public private(set) var lastIngestSummary: IngestBatchSummary?
+
     /// Cooperative pause/stop flag shared with the nonisolated bulk-ingest loop
     /// AND the coordinator's background embedding drain. Both consult it at safe
     /// checkpoints (between files / between embed batches).
@@ -2974,6 +2979,9 @@ public final class AppState {
         defer { ProcessInfo.processInfo.endActivity(napGuard) }
         // Counter must be Sendable + actor-safe; a tiny actor is enough.
         let counter = IngestCounter()
+        // ING-002 — collect per-file failures/timeouts across the parallel group so
+        // the run reports which files didn't make it, not just how many did.
+        let failures = IngestFailureLog()
         await withTaskGroup(of: Void.self) { group in
             for url in urls {
                 group.addTask { [weak self] in
@@ -2982,7 +2990,8 @@ public final class AppState {
                         url: url,
                         ingest: ingest,
                         label: "Bulk ingest",
-                        counter: counter
+                        counter: counter,
+                        failures: failures
                     )
                     await MainActor.run {
                         bookmarksRef.stopAccessing(url)
@@ -2991,7 +3000,13 @@ public final class AppState {
             }
         }
         setIngestPlannedTotal(0)
-        return await counter.value
+        let succeeded = await counter.value
+        let summary = IngestBatchSummary(succeeded: succeeded, failures: await failures.all())
+        lastIngestSummary = summary
+        if !summary.failures.isEmpty {
+            KalsmritikoshLog.ingestion.notice("Bulk ingest: \(summary.headline, privacy: .public)")
+        }
+        return succeeded
     }
 
     /// Per-root walker. `nonisolated` so the loop runs on whatever
@@ -3003,7 +3018,8 @@ public final class AppState {
         url: URL,
         ingest: IngestCoordinator,
         label: String,
-        counter: IngestCounter? = nil
+        counter: IngestCounter? = nil,
+        failures: IngestFailureLog? = nil
     ) async {
         let enumerator = FileManager.default.enumerator(
             at: url,
@@ -3037,8 +3053,14 @@ public final class AppState {
                     if let counter { await counter.increment() }
                 } catch is IngestTimeout {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .private) — skipped so the ingest can continue")
+                    await failures?.record(IngestFailure(
+                        fileName: fileURL.lastPathComponent, stage: .timeout,
+                        reason: "exceeded the per-file time budget"))
                 } catch {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    await failures?.record(IngestFailure(
+                        fileName: fileURL.lastPathComponent, stage: .failed,
+                        reason: String(describing: error).prefix(200).description))
                 }
             }
         }
