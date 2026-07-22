@@ -20,6 +20,8 @@ public struct SourcesView: View {
     @State private var ingesting = false
     /// ING-002 — the last bulk ingest's outcome; drives the failure banner.
     @State private var ingestSummary: IngestBatchSummary?
+    /// UX-002 / ING-007 — multi-dimensional readiness (not one vague %).
+    @State private var readiness: AppState.IngestProgress?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     /// Minimum-touch: drop folders anywhere on this screen to add them —
@@ -34,6 +36,9 @@ public struct SourcesView: View {
             Divider()
             if let summary = ingestSummary, !summary.failures.isEmpty {
                 ingestFailureBanner(summary)
+            }
+            if let r = readiness, (r.filesTotal > 0 || r.embedTotal > 0) {
+                readinessStrip(r)
             }
             ScrollView {
                 rootsSection
@@ -235,6 +240,7 @@ public struct SourcesView: View {
         guard let files = appState.files, let objects = appState.objects else { return }
         fileCount = (try? await files.count()) ?? 0
         recents = (try? await objects.recent(limit: 25)) ?? []
+        readiness = await appState.ingestProgress()   // UX-002 / ING-007
     }
 
     private func runIngestion() async {
@@ -243,6 +249,42 @@ public struct SourcesView: View {
         ingestSummary = appState.lastIngestSummary   // ING-002 — surface which files failed
         await refresh()
         ingesting = false
+    }
+
+    /// UX-002 / ING-007 — multi-dimensional readiness, shown as separate honest dimensions
+    /// (parse vs search-embeddings), never a single vague percentage. Each dimension shows
+    /// its own done/total and an in-progress hint.
+    @ViewBuilder
+    private func readinessStrip(_ r: AppState.IngestProgress) -> some View {
+        HStack(spacing: 16) {
+            readinessDimension(
+                title: "Parsed", done: r.filesDone, total: r.filesTotal,
+                busy: r.parsing, symbol: "doc.text.magnifyingglass")
+            readinessDimension(
+                title: "Embedded", done: r.embedDone, total: r.embedTotal,
+                busy: r.embedding, symbol: "sparkles")
+            if r.idle {
+                Label("Ready", systemImage: "checkmark.seal.fill")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.green)
+            }
+            Spacer()
+        }
+        .padding(.horizontal).padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private func readinessDimension(title: String, done: Int, total: Int,
+                                    busy: Bool, symbol: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol)
+                .foregroundStyle(busy ? Theme.brand : .secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.caption2).foregroundStyle(.secondary)
+                Text(total > 0 ? "\(done)/\(total)" : "—")
+                    .font(.caption.weight(.semibold)).monospacedDigit()
+            }
+            if busy { ProgressView().controlSize(.mini) }
+        }
     }
 
     /// ING-002 — a neutral banner naming the files that couldn't be processed, so a
