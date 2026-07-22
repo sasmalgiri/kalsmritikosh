@@ -67,8 +67,13 @@ now finishable safely because a regression would be caught by the suite:
 - **RET-007 corrective-retrieval loop — WIRED + CI-verified** (392 tests): `MasterBrain`
   assesses field sufficiency after the first retrieval and runs ONE focused, deduped,
   merged corrective pass when a requested field is missing (was: planner written but wired
-  nowhere). Deterministic, no LLM, hard-capped at one pass. Remaining deep-wiring (separate):
-  fitness→answer attribution into MasterBrain; expert-council (per-expert) fact consumption.
+  nowhere). Deterministic, no LLM, hard-capped at one pass.
+- **Per-expert fact consumption — DONE + CI-verified** (394 tests): the generalist
+  `ReasoningExpert` emits the assertable facts riding the shared retrieval as leading
+  `.coarse` claims, cited to their backing document (claim–evidence contract holds). The
+  fact feature now reaches the answer via ALL THREE paths (deterministic / LLM fallback /
+  expert council). **Brain-wiring lane complete** — fitness→answer was already satisfied by
+  the RET-009 authority ordering both answer paths consume (no separate gap).
 - **Live-schema** EV-005/006, ING-002/003/005/006/007 — additive migrations + coordinator
   wiring, each verified on a throwaway DB then under the suite.
 - **SwiftUI views** LAB-005–009, UX-001/003/004, EXP-001 — compile-checkable; final proof
