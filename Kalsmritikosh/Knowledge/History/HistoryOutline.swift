@@ -58,12 +58,12 @@ public struct HistoryOutline: Sendable {
     public let coverage: HistoryCoverage
     // Filled by Phase 6 reconciliation; empty in Phase 5.
     public let contradictions: [Contradiction]
-    public let gaps: [GapNode]
+    public let gaps: [HistoryGap]
 
     public nonisolated init(
         subject: ResolvedHistorySubject, corpusSnapshotID: UUID?, items: [HistoryItem],
         chapters: [HistoryChapterPlan], actors: [Entity.ID], relationships: [Relationship],
-        coverage: HistoryCoverage, contradictions: [Contradiction] = [], gaps: [GapNode] = []
+        coverage: HistoryCoverage, contradictions: [Contradiction] = [], gaps: [HistoryGap] = []
     ) {
         self.subject = subject; self.corpusSnapshotID = corpusSnapshotID; self.items = items
         self.chapters = chapters; self.actors = actors; self.relationships = relationships
