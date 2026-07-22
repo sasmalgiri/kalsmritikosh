@@ -58,11 +58,13 @@ RET-006 sufficiency + CLM-001 grounding + CLM-002 causal guard in the answer foo
 ## D. What's now unblocked (test target is live)
 With TST-001 done and 383 tests green, the remaining **codeable** work is Section B,
 now finishable safely because a regression would be caught by the suite:
-- **Deep wiring** — SEM fact loop is now **closed end-to-end + CI-verified** (386 tests):
+- **Deep wiring — SEM fact workstream COMPLETE end-to-end + CI-verified** (389 tests):
   extract at ingest → persist (v57) → surface at retrieval (facts ride the evidence via
-  `facts(forBlockIDs:)`) → render in the zero-LLM answer, cited + evidence-gated. Next:
-  fitness→answer feed into MasterBrain; corrective-retrieval loop; expert-council path
-  consumption of `retrieval.genericFacts` (deterministic path done, LLM path pending).
+  `facts(forBlockIDs:)`) → render in the zero-LLM answer (cited) → inject into the LLM
+  fallback prompt as a tagged VERIFIED-FACTS block → count surfaced in the reasoning
+  trace. Both answer paths consume facts; every hop is evidence-gated (no orphan/
+  non-assertable facts). Remaining deep-wiring (separate): fitness→answer into MasterBrain;
+  corrective-retrieval loop; expert-council (per-expert) fact consumption.
 - **Live-schema** EV-005/006, ING-002/003/005/006/007 — additive migrations + coordinator
   wiring, each verified on a throwaway DB then under the suite.
 - **SwiftUI views** LAB-005–009, UX-001/003/004, EXP-001 — compile-checkable; final proof
