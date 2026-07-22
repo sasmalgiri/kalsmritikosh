@@ -61,11 +61,16 @@ public struct PDFStructuralParser: StructuralParser {
             let native = page.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
             if !native.isEmpty && !PDFLoader.looksLikeMojibake(native) {
+                // PAR-004 — resolve each paragraph's page-region box for exact-highlight
+                // citations. Best-effort: a nil box just omits the region (page still cited).
+                let pageString = page.string ?? native
+                var searchStart = pageString.startIndex
                 for (p, para) in Self.paragraphize(native).enumerated() {
+                    let box = Self.paragraphBox(para, in: pageString, from: &searchStart, page: page)
                     blocks.append(EvidenceBlock(
                         documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
                         kind: .paragraph, rawText: para,
-                        locator: SourceLocator(page: pageNumber, paragraphIndex: p),
+                        locator: SourceLocator(page: pageNumber, boundingBox: box, paragraphIndex: p),
                         extractionMethod: .native
                     ))
                     ordinal += 1
@@ -141,6 +146,30 @@ public struct PDFStructuralParser: StructuralParser {
         ParsedDocument(id: id, logicalSourceID: logical, sourceVersionID: version, filename: filename,
                        detectedType: .pdf, contentHash: hash, blocks: [], warnings: warnings, extractionStatus: status)
     }
+
+    /// PAR-004 — the [x, y, w, h] locator box (page points) for a paragraph, found by
+    /// locating its text in the page string and unioning the PDFKit character bounds over
+    /// its range. nil when the range can't be resolved. `#if` so tests can run the pure
+    /// math even where PDFKit char bounds aren't exercised.
+    #if canImport(PDFKit)
+    static func paragraphBox(_ paragraph: String, in pageString: String,
+                             from searchStart: inout String.Index, page: PDFPage) -> [Double]? {
+        guard let r = pageString.range(of: paragraph, range: searchStart..<pageString.endIndex) else { return nil }
+        searchStart = r.upperBound
+        let ns = NSRange(r, in: pageString)
+        guard ns.length > 0 else { return nil }
+        // Sample up to a few character bounds across the range (first, quartiles, last)
+        // and union — enough to bound the paragraph without O(n) per-char calls.
+        let offsets = PDFBoxMath.sampleOffsets(location: ns.location, length: ns.length, samples: 6)
+        var rects: [CGRect] = []
+        for o in offsets {
+            let b = page.characterBounds(at: o)
+            if b.width > 0 || b.height > 0 { rects.append(b) }
+        }
+        guard let u = PDFBoxMath.union(rects) else { return nil }
+        return PDFBoxMath.array(u)
+    }
+    #endif
 
     /// Split page text into paragraphs on blank-line boundaries, keeping single
     /// newlines inside a paragraph. Falls back to the whole page as one block.
