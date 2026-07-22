@@ -556,6 +556,14 @@ public struct EvidenceVerifier: Verifier {
         if !causalCaution.isEmpty {
             footerParts.append(causalCaution)
         }
+        // CLM-001 — flag ungrounded material specifics: if the answer states an amount/date/
+        // multi-word name that does NOT appear in the retrieved evidence, caution rather than
+        // present it as established.
+        let grounding = ClaimGrounding().check(claim: answerText, evidenceTexts: retrieval.chunks.map(\.chunk.text))
+        if grounding.hasUngroundedMaterial {
+            footerParts.append("Caution: not found verbatim in the evidence: "
+                + grounding.ungroundedTokens.joined(separator: ", ") + ".")
+        }
         if report.agreementScore <= 0.6 {
             footerParts.append("Note: experts disagreed across some of these claims.")
         }
