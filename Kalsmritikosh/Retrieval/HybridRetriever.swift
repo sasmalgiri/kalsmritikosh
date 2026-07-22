@@ -962,7 +962,10 @@ public actor HybridRetriever: Retriever {
             summaries: summaries,
             layersUsed: layers,
             shortCircuitedAt: shortCircuit,
-            walkSteps: walkSteps
+            walkSteps: walkSteps,
+            authorityObjectIDs: authorityRanking.isEmpty
+                ? Array(authorityKOs)
+                : authorityRanking
         )
     }
 

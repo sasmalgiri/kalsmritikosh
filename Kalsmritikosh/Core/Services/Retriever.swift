@@ -34,6 +34,13 @@ public struct RetrievalResult: Codable, Sendable {
     /// GenericFact repo is wired or the surfaced blocks carry no facts. Each
     /// fact keeps its source-block ids, so the answer layer can cite them.
     public let genericFacts: [GenericFact]
+    /// RET-009 — the authoritative source documents this retrieval identified,
+    /// best→worst by DocumentFitness (role + requested-field match against the
+    /// compiled QueryPlan). Empty on the density-only fallback path. The
+    /// reconstruct answer path reads this to cite the authoritative structural
+    /// document (a contract/amendment) that produced no dated event and so was
+    /// uncitable from the narrative's event sources alone (P5.2).
+    public let authorityObjectIDs: [KnowledgeObject.ID]
 
     public nonisolated init(
         chunks: [RetrievedChunk] = [],
@@ -44,7 +51,8 @@ public struct RetrievalResult: Codable, Sendable {
         layersUsed: [RetrievalLayer] = [],
         shortCircuitedAt: RetrievalLayer? = nil,
         walkSteps: [WalkStep] = [],
-        genericFacts: [GenericFact] = []
+        genericFacts: [GenericFact] = [],
+        authorityObjectIDs: [KnowledgeObject.ID] = []
     ) {
         self.chunks = chunks
         self.events = events
@@ -55,6 +63,7 @@ public struct RetrievalResult: Codable, Sendable {
         self.shortCircuitedAt = shortCircuitedAt
         self.walkSteps = walkSteps
         self.genericFacts = genericFacts
+        self.authorityObjectIDs = authorityObjectIDs
     }
 }
 

@@ -472,11 +472,27 @@ public actor MasterBrain {
             assumptions: Self.assumptionsFromNarrative(narrative),
             uncertainties: contradictions.map(\.description)
         )
+        // P5.2 — reconstruct-path citation refinement. The narrative can only
+        // cite documents that produced a dated event; an authoritative
+        // structural doc (contract/amendment) that yields no event is otherwise
+        // uncitable even when RET-009 surfaced it. Fold those in and rank by the
+        // question's DISCRIMINATIVE terms so the answer cites the contract for a
+        // "contract status" question, not the invoices that merely mention the
+        // project. Conservative: a no-op unless discriminative terms exist AND a
+        // candidate actually matches them.
+        let refinedCitations = Self.refineReconstructCitations(
+            question: question,
+            entityHints: intent.entityHints,
+            narrativeCitations: narrative.citations,
+            chunks: retrieval.chunks,
+            authorityObjectIDs: retrieval.authorityObjectIDs,
+            cap: 6   // mirrors EvidenceVerifier.reconstructCitationCap
+        )
         return VerifiedAnswer(
             body: body,
             answerText: body,
             intentKind: intent.kind.rawValue,
-            citations: narrative.citations,
+            citations: refinedCitations,
             confidence: Confidence(avgConf),
             contradictions: contradictions,
             refused: false,
@@ -486,6 +502,126 @@ public actor MasterBrain {
             source: .historical,
             reasoningTrace: trace
         )
+    }
+
+    // MARK: - Reconstruct citation refinement (P5.2)
+
+    /// Content words of `question`, lowercased, minus stopwords and minus the
+    /// SUBJECT tokens (entity hints) — the subject appears in every candidate so
+    /// it can't discriminate the authoritative doc from incidental mentions.
+    /// Light stemming folds verb inflections ("delayed" → "delay") so a lexical
+    /// match survives tense differences. Pure/deterministic; unit-tested.
+    nonisolated static func discriminativeTerms(question: String, entityHints: [String]) -> Set<String> {
+        let stop: Set<String> = [
+            "how", "did", "do", "does", "was", "were", "is", "are", "has", "have",
+            "had", "the", "a", "an", "of", "for", "to", "and", "or", "in", "on",
+            "at", "by", "with", "why", "what", "which", "who", "whom", "when",
+            "where", "over", "this", "that", "its", "it", "as", "from", "into",
+            "about", "been", "be", "will", "would", "could", "should", "than",
+            "then", "there", "their", "all", "any", "some", "our", "we", "you"
+        ]
+        func stem(_ w: String) -> String {
+            if w.count > 5, w.hasSuffix("ing") { return String(w.dropLast(3)) }
+            if w.count > 4, w.hasSuffix("ed") { return String(w.dropLast(2)) }
+            return w
+        }
+        func tokens(_ s: String) -> [String] {
+            s.lowercased()
+                .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .map(String.init)
+                .filter { $0.count >= 3 }
+        }
+        let subject = Set(entityHints.flatMap(tokens))
+        var out = Set<String>()
+        for t in tokens(question) where !stop.contains(t) && !subject.contains(t) {
+            out.insert(stem(t))
+        }
+        return out
+    }
+
+    /// See the call site: fold authoritative structural docs (RET-009 injected
+    /// them into `chunks` at score ≥ 0.9) into the narrative's event-sourced
+    /// citations, keep only citations whose evidence matches ≥1 discriminative
+    /// term, rank (best overlap first, authority breaking ties), and cap.
+    /// Returns the narrative's citations UNCHANGED when there are no
+    /// discriminative terms or nothing matches them — so it never empties a
+    /// grounded answer or fights a synonym-only question.
+    nonisolated static func refineReconstructCitations(
+        question: String,
+        entityHints: [String],
+        narrativeCitations: [VerifiedAnswer.Citation],
+        chunks: [RetrievedChunk],
+        authorityObjectIDs: [KnowledgeObject.ID],
+        cap: Int
+    ) -> [VerifiedAnswer.Citation] {
+        let terms = discriminativeTerms(question: question, entityHints: entityHints)
+        guard !terms.isEmpty else { return narrativeCitations }
+
+        // Longest retrieved chunk text per object → the richest surface to match,
+        // plus the best chunk to cite for each object.
+        var textByObject: [KnowledgeObject.ID: String] = [:]
+        var chunkByObject: [KnowledgeObject.ID: Chunk] = [:]
+        for rc in chunks {
+            let t = rc.chunk.text.lowercased()
+            if (textByObject[rc.chunk.objectID]?.count ?? 0) < t.count {
+                textByObject[rc.chunk.objectID] = t
+                chunkByObject[rc.chunk.objectID] = rc.chunk
+            }
+        }
+        func overlap(_ objectID: KnowledgeObject.ID, fallback: String) -> Int {
+            let hay = textByObject[objectID] ?? fallback.lowercased()
+            return terms.reduce(0) { $0 + (hay.contains($1) ? 1 : 0) }
+        }
+
+        // Authoritative structural docs (RET-009 fitness ranking) that the
+        // narrative could NOT cite because they produced no dated event. Fold in
+        // those that (a) have a citable chunk and (b) match ≥1 discriminative
+        // term — best fitness first (authorityObjectIDs is already ranked). The
+        // overlap gate is deliberately kept (rather than trusting the ranking
+        // unconditionally): the end-to-end reconstruct answer is composed by a
+        // non-deterministic LLM, so a conservative, relevance-gated fold has far
+        // lower run-to-run variance than force-injecting the top-ranked doc.
+        var authorityCitations: [VerifiedAnswer.Citation] = []
+        var seen = Set<KnowledgeObject.ID>()
+        for oid in authorityObjectIDs {
+            guard seen.insert(oid).inserted else { continue }
+            guard let chunk = chunkByObject[oid] else { continue }
+            guard overlap(oid, fallback: chunk.text) > 0 else { continue }
+            authorityCitations.append(VerifiedAnswer.Citation(
+                objectID: oid,
+                chunkID: chunk.id,
+                eventID: nil,
+                snippet: String(chunk.text.prefix(180))
+            ))
+        }
+
+        // Candidate pool: authoritative docs first, then the narrative's own.
+        // `isAuthority` breaks overlap ties toward the structural doc.
+        var pool: [(c: VerifiedAnswer.Citation, authority: Bool)] = []
+        var pooled = Set<KnowledgeObject.ID>()
+        for c in authorityCitations where pooled.insert(c.objectID).inserted {
+            pool.append((c, true))
+        }
+        for c in narrativeCitations where pooled.insert(c.objectID).inserted {
+            pool.append((c, false))
+        }
+
+        let scored = pool.map { (item) -> (c: VerifiedAnswer.Citation, s: Int, a: Bool) in
+            (item.c, overlap(item.c.objectID, fallback: item.c.snippet), item.authority)
+        }
+        // No discriminative signal anywhere → don't meddle with a grounded answer.
+        guard scored.contains(where: { $0.s > 0 }) else { return narrativeCitations }
+
+        let kept = scored
+            .filter { $0.s > 0 }
+            .sorted { lhs, rhs in
+                if lhs.s != rhs.s { return lhs.s > rhs.s }
+                if lhs.a != rhs.a { return lhs.a && !rhs.a }
+                return false
+            }
+            .prefix(cap)
+            .map(\.c)
+        return kept.isEmpty ? narrativeCitations : Array(kept)
     }
 
     /// Phase J.2 — call the ContradictionFinder on the retrieval set
