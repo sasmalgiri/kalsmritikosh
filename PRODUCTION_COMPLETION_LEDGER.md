@@ -32,6 +32,18 @@ running the app** (confidence would drop from CI-green to compiles-only) or **ow
 (EV-006 physical merge, scale runs, App Store, in-app eval). This is the honest CI-verified
 ceiling for headless work.
 
+**UPDATE 4 — remaining code-level work written (head after UI batch, 443 tests green).**
+Since UPDATE 3: ING-006 `QueryPriorityGate` (interactive pre-empts background, wired) ·
+PERF.2 ledger wired + boot recovery · RED-002 `RedactionVerifier` · PAR-004 PDF region
+boxes · UX-002/ING-007 readiness strip. Then the **UI batch** (owner-requested, explicitly
+COMPILES-ONLY — SwiftUI rendering is app-run-verified, not unit-tested): `TableWorkbenchView`
+(LAB-005), `EvidenceCanvasView` (LAB-009), `EvidenceBarChartView` (LAB-006), `ReportEditorView`
+(EXP-001). LAB-007/008 + UX-001/003 were already served by existing views (LiveDashboardView,
+EvalDashboardView, CaseStoryView, RootView, QualityStrip, AnswersView). **All remaining backlog
+is now owner/hardware/App-Store-gated or a decided-not-to-do** (see Section C): EV-006 physical
+merge, SCL scale runs, REL release, EVAL in-app runs, MOD-003/004/005 GGUF, UX-004 accessibility
+audit, format-specific redaction burn-in.
+
 ## A. Complete (code written, build-green, verified as noted)
 
 **Whole workstreams complete:**
