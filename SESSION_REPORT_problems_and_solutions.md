@@ -163,7 +163,11 @@ exactly the behavior the product thesis requires.
    `UNIT_VERIFIED via snippet`, never `RELEASE_VERIFIED`.
 5. **SEM-001 canonical `DocumentRole`** — the role inference is currently a reusable bridge;
    it should graduate to the real document-role model.
-6. **Minor:** a `"Subjects in scope: …"` debug string still leaks into some answer bodies.
+6. **Correction (not a bug):** the `"Subjects in scope: …"` line is an *intentional*
+   retrieval footer (`EvidenceVerifier.swift:534–549`), rendered below a `---` separator "for
+   the user's situational awareness" and explicitly excluded from scoring. Earlier notes
+   called it a debug leak — that was wrong; it is by design. Whether to keep/restyle it is a
+   product/UX decision (UX-003), not a defect to silently remove.
 
 ### Verification levels reached (per pack vocabulary)
 - Governance/audit docs: **complete**.
