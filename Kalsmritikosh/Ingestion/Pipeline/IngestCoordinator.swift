@@ -85,6 +85,9 @@ public actor IngestCoordinator {
     /// vault so the exact version can be reopened later. nil, or flag off, = reference mode
     /// (no copy) — the default, unchanged behavior.
     private let evidenceVault: EvidenceVault?
+    /// ING-006 — when wired, the background embedding drain yields to interactive queries
+    /// via this gate (checked between batches). nil = no priority gating (drain runs freely).
+    private let priorityGate: QueryPriorityGate?
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
@@ -154,13 +157,15 @@ public actor IngestCoordinator {
         ingestAttempts: IngestAttemptsRepository? = nil,
         sourceRelations: SourceRelationsRepository? = nil,
         genericFacts: GenericFactRepository? = nil,
-        evidenceVault: EvidenceVault? = nil
+        evidenceVault: EvidenceVault? = nil,
+        priorityGate: QueryPriorityGate? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
         self.genericFacts = genericFacts
         self.evidenceVault = evidenceVault
+        self.priorityGate = priorityGate
         self.ingestAttempts = ingestAttempts
         self.sourceRelations = sourceRelations
         self.custody = custody
@@ -261,6 +266,9 @@ public actor IngestCoordinator {
             while drainPaused && !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
+            if Task.isCancelled { break }
+            // ING-006 — yield to any in-flight interactive query before the next batch.
+            await priorityGate?.awaitClearance()
             if Task.isCancelled { break }
             let fetched = (try? await chunks.findChunksMissingVector(limit: 256, modelID: modelID)) ?? []
             let batch = fetched.filter { !unembeddable.contains($0.id) }

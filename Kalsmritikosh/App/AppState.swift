@@ -1090,6 +1090,9 @@ public final class AppState {
             )
             await causalDiscoverer.start()
 
+            // ING-006 — shared query-priority gate: the answer path holds it, the
+            // background embedding drain yields to it (interactive pre-empts background).
+            let priorityGate = QueryPriorityGate()
             let brain = MasterBrain(
                 intentDetector: intentDetector,
                 router: router,
@@ -1107,7 +1110,8 @@ public final class AppState {
                 derivedObjects: derivedObjectsRepo,
                 answerLedger: answerLedgerRepo,
                 evidenceStore: evidenceStoreRepo,
-                objects: objects
+                objects: objects,
+                priorityGate: priorityGate
             )
 
             // ── Ingestion ────────────────────────────────────────────
@@ -1243,7 +1247,8 @@ public final class AppState {
                 ingestAttempts: ingestAttemptsRepo,
                 sourceRelations: sourceRelationsRepo,
                 genericFacts: genericFactsRepo,
-                evidenceVault: evidenceVault   // EV-005 — copies only when managed mode on
+                evidenceVault: evidenceVault,   // EV-005 — copies only when managed mode on
+                priorityGate: priorityGate      // ING-006 — drain yields to interactive queries
             )
 
             // PERF.1 — resume the resumable background embedding drain as soon

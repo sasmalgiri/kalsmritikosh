@@ -97,7 +97,8 @@ public actor MasterBrain {
         derivedObjects: DerivedObjectsRepository? = nil,
         answerLedger: AnswerLedgerRepository? = nil,
         evidenceStore: EvidenceStore? = nil,
-        objects: KnowledgeObjectRepository? = nil
+        objects: KnowledgeObjectRepository? = nil,
+        priorityGate: QueryPriorityGate? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -116,7 +117,12 @@ public actor MasterBrain {
         self.answerLedger = answerLedger
         self.evidenceStore = evidenceStore
         self.objects = objects
+        self.priorityGate = priorityGate
     }
+
+    /// ING-006 — held for the duration of an answer so the background embedding/enrichment
+    /// drain yields to the user's question. nil = no gating.
+    private let priorityGate: QueryPriorityGate?
 
     /// Fire-and-forget: persist an answer's verified claims as derived ledger
     /// objects with provenance (§16). Deduped by content hash in the repo, so
@@ -249,6 +255,10 @@ public actor MasterBrain {
         AsyncStream { continuation in
             Task { [weak self] in
                 guard let self else { continuation.finish(); return }
+                // ING-006 — hold interactive priority for the whole answer so the
+                // background embedding/enrichment drain yields to the user's question.
+                await self.priorityGate?.beginInteractive()
+                defer { let g = self.priorityGate; Task { await g?.endInteractive() } }
 
                 // G2-PROGRESSIVE Phase 1 — emit an instant cached read
                 // if a confident MemoryObject for the resolved subject
