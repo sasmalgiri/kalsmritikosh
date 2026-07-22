@@ -111,7 +111,10 @@ These reflect prior commits and the task manifest; per the promotion rule they a
 **unverified** until a code/test check promotes them. Highlights:
 
 - **Parsers (P3):** 17 parsers REAL_DATA_VERIFIED for fidelity; PAR-001 capability manifest,
-  PAR-002 coverage report (FULL/PARTIAL/PRESERVED surfaced), PAR-010 advertised matrix — NOT_STARTED.
+  PAR-002 coverage report (FULL/PARTIAL/PRESERVED surfaced). **PAR-005 formula-vs-value model
+  IMPLEMENTED** (XLSX `cellFormulas` attribute, additive — text path unchanged; `6c67e0e`);
+  number-format string resolution (styles.xml) is the remaining sub-item. PAR-010 advertised
+  matrix — NOT_STARTED.
 - **Semantics (P4):** SEM-001 DocumentRole split, SEM-002 BlockSemantics, SEM-003 GenericFact — NOT_STARTED; SEM-009 reversible entity merge/split IMPLEMENTED (schema v49 human-in-loop).
 - **Claims/Reconstruction (P6):** contradiction/gap detectors + reconstruction outline + alternatives IMPLEMENTED; CLM-001 full verifier, CLM-002 causal-language, REC-001 outline-gates-generation — incomplete.
 - **Personas/Exports (P7):** F1–F6, F8 DONE (workspaces, tags/views, citation+export, composer, contradiction workflow, persona templates, transcripts); PER-003..007 end-to-end jobs unverified.
