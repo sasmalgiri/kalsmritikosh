@@ -68,11 +68,17 @@ public struct XLSXStructuralParser: StructuralParser {
                 ], .corrupt)
             }
 
+            // PAR-005 — cell number-format codes (custom + built-in) from styles.xml, once.
+            var numberFormats: [Int: String] = [:]
+            if entries.contains("xl/styles.xml") {
+                numberFormats = Self.parseNumberFormats(try zip.read("xl/styles.xml"))
+            }
             for (i, path) in sheetPaths.enumerated() {
                 let name = sheetNames[path] ?? sheetNames["sheet\(i + 1)"] ?? "Sheet \(i + 1)"
                 let sheetData = try zip.read(path)
                 let rows = Self.parseSheetRows(sheetData, sharedStrings: shared)
                 let formulaRows = Self.parseSheetFormulas(sheetData)   // PAR-005 — additive
+                let formatRows = Self.parseSheetFormats(sheetData, formats: numberFormats)  // PAR-005
                 let columnCount = rows.map(\.count).max() ?? 0
                 let headers = rows.first ?? []
                 add(.spreadsheetSheet,
@@ -94,6 +100,12 @@ public struct XLSXStructuralParser: StructuralParser {
                     if formulas.contains(where: { !$0.isEmpty }) {
                         let paddedF = formulas + Array(repeating: "", count: max(0, columnCount - formulas.count))
                         attrs["cellFormulas"] = AnyCodable(.array(paddedF.map { .string($0) }))
+                    }
+                    // PAR-005 — per-cell number-format codes (date/%/currency), additive.
+                    let fmts = r < formatRows.count ? formatRows[r] : []
+                    if fmts.contains(where: { !$0.isEmpty }) {
+                        let paddedFmt = fmts + Array(repeating: "", count: max(0, columnCount - fmts.count))
+                        attrs["cellFormats"] = AnyCodable(.array(paddedFmt.map { .string($0) }))
                     }
                     add(.spreadsheetRow, padded.joined(separator: " | "),
                         SourceLocator(row: r, sheet: name), attrs)
@@ -196,6 +208,71 @@ public struct XLSXStructuralParser: StructuralParser {
         return rows
     }
 
+    // MARK: - PAR-005 number-format model
+
+    /// A subset of the OOXML built-in number-format ids (numFmtId → format code). Custom
+    /// formats (id ≥ 164) come from styles.xml and override these. Enough to answer
+    /// "is this cell a date / percentage / currency?" deterministically.
+    static let builtinNumberFormats: [Int: String] = [
+        0: "General", 1: "0", 2: "0.00", 3: "#,##0", 4: "#,##0.00",
+        9: "0%", 10: "0.00%", 11: "0.00E+00", 12: "# ?/?", 13: "# ??/??",
+        14: "mm-dd-yy", 15: "d-mmm-yy", 16: "d-mmm", 17: "mmm-yy", 18: "h:mm AM/PM",
+        19: "h:mm:ss AM/PM", 20: "h:mm", 21: "h:mm:ss", 22: "m/d/yy h:mm",
+        37: "#,##0 ;(#,##0)", 38: "#,##0 ;[Red](#,##0)", 39: "#,##0.00;(#,##0.00)",
+        40: "#,##0.00;[Red](#,##0.00)", 44: "_(\"$\"* #,##0.00_)", 45: "mm:ss",
+        46: "[h]:mm:ss", 47: "mmss.0", 48: "##0.0E+0", 49: "@"
+    ]
+
+    /// Map each cellXf index (a cell's `s="N"`) to its number-format CODE, resolving
+    /// custom `<numFmt>` entries and falling back to the built-in table. Pure parse of
+    /// `xl/styles.xml`; empty map when styles are absent (cells then have no format facet).
+    static func parseNumberFormats(_ data: Data) -> [Int: String] {
+        let xml = String(decoding: data, as: UTF8.self)
+        // Custom numFmtId → formatCode.
+        var custom: [Int: String] = [:]
+        var cursor = xml.startIndex
+        while let open = xml.range(of: "<numFmt ", range: cursor..<xml.endIndex),
+              let close = xml.range(of: ">", range: open.upperBound..<xml.endIndex) {
+            let attrs = String(xml[open.upperBound..<close.lowerBound])
+            if let id = Self.attr("numFmtId", in: attrs).flatMap(Int.init),
+               let code = Self.attr("formatCode", in: attrs) {
+                custom[id] = code
+            }
+            cursor = close.upperBound
+        }
+        // cellXfs: xf entries in order; xfIndex → numFmtId → code.
+        guard let xfsOpen = xml.range(of: "<cellXfs"),
+              let xfsClose = xml.range(of: "</cellXfs>", range: xfsOpen.upperBound..<xml.endIndex)
+        else { return [:] }
+        let xfsBlock = String(xml[xfsOpen.upperBound..<xfsClose.lowerBound])
+        var result: [Int: String] = [:]
+        var idx = 0
+        var c = xfsBlock.startIndex
+        while let open = xfsBlock.range(of: "<xf", range: c..<xfsBlock.endIndex),
+              let close = xfsBlock.range(of: ">", range: open.upperBound..<xfsBlock.endIndex) {
+            let attrs = String(xfsBlock[open.upperBound..<close.lowerBound])
+            let numFmtId = Self.attr("numFmtId", in: attrs).flatMap(Int.init) ?? 0
+            if let code = custom[numFmtId] ?? builtinNumberFormats[numFmtId] {
+                result[idx] = code
+            }
+            idx += 1
+            c = close.upperBound
+        }
+        return result
+    }
+
+    /// The style index (`s="N"`) of a cell header, or nil if unstyled (implicitly 0).
+    static func cellStyleIndex(inHeader header: String) -> Int? {
+        Self.attr("s", in: header).flatMap(Int.init)
+    }
+
+    /// Extract a double-quoted attribute value from an XML attribute string.
+    private static func attr(_ name: String, in attrs: String) -> String? {
+        guard let key = attrs.range(of: "\(name)=\"") ,
+              let end = attrs.range(of: "\"", range: key.upperBound..<attrs.endIndex) else { return nil }
+        return String(attrs[key.upperBound..<end.lowerBound])
+    }
+
     // MARK: - PAR-005 formula/value model
 
     /// The formula expression of a cell (`<f>…</f>`), or nil if the cell holds a literal
@@ -249,6 +326,42 @@ public struct XLSXStructuralParser: StructuralParser {
                 inner = advance
             }
             rows.append(formulas)
+            cursor = rowClose.upperBound
+        }
+        return rows
+    }
+
+    /// Per-cell number-format codes for each row (empty string where a cell is unstyled or
+    /// its style has no format). `formats` is `parseNumberFormats(styles.xml)`. Aligned to
+    /// `parseSheetRows`' cell order. Additive to the text path.
+    static func parseSheetFormats(_ data: Data, formats: [Int: String]) -> [[String]] {
+        guard !formats.isEmpty else { return [] }
+        let xml = String(decoding: data, as: UTF8.self)
+        var rows: [[String]] = []
+        var cursor = xml.startIndex
+        while cursor < xml.endIndex {
+            guard let rowOpen = xml.range(of: "<row", range: cursor..<xml.endIndex),
+                  let rowClose = xml.range(of: "</row>", range: rowOpen.upperBound..<xml.endIndex) else { break }
+            let row = String(xml[rowOpen.upperBound..<rowClose.lowerBound])
+            var codes: [String] = []
+            var inner = row.startIndex
+            while inner < row.endIndex {
+                guard let cellOpen = row.range(of: "<c", range: inner..<row.endIndex),
+                      let cellGT = row.range(of: ">", range: cellOpen.upperBound..<row.endIndex) else { break }
+                let header = String(row[cellOpen.upperBound..<cellGT.lowerBound])
+                let advance: String.Index
+                if header.hasSuffix("/") {
+                    advance = cellGT.upperBound
+                } else if let end = row.range(of: "</c>", range: cellGT.upperBound..<row.endIndex) {
+                    advance = end.upperBound
+                } else {
+                    advance = cellGT.upperBound
+                }
+                let styleIdx = cellStyleIndex(inHeader: header) ?? 0
+                codes.append(formats[styleIdx] ?? "")
+                inner = advance
+            }
+            rows.append(codes)
             cursor = rowClose.upperBound
         }
         return rows
