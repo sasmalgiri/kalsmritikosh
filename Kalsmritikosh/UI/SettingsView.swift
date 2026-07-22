@@ -1039,6 +1039,14 @@ public struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Divider().padding(.vertical, 4)
+            Toggle("Managed evidence copies (keep originals reopenable)", isOn: Binding(
+                get: { FeatureFlags.shared.managedEvidenceMode },
+                set: { FeatureFlags.shared.managedEvidenceMode = $0 }
+            ))
+            Text("EV-005. Default OFF (**reference mode**): Kalsmritikosh keeps a bookmark + hash + the derived evidence, and your files stay where they are — but if a file is later moved or replaced, its exact original bytes may no longer reopen. Turn ON (**managed mode**) to also keep a local, read-only, content-addressed copy of each ingested file, so every version can always be reopened byte-for-byte — recommended for investigations and legal matters. Costs disk (identical files are stored once). Applies to newly-ingested files.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
             Toggle("iMessage (chat.db)", isOn: Binding(
                 get: { FeatureFlags.shared.iMessageLoaderEnabled },
                 set: { FeatureFlags.shared.iMessageLoaderEnabled = $0 }
