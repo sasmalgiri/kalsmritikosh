@@ -35,7 +35,7 @@ struct TemporalClaimRepositoryTests {
     func migration() async throws {
         let db = try await freshDB()
         #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
-        #expect(SchemaMigrations.latestVersion == 60)
+        #expect(SchemaMigrations.latestVersion >= 60)   // v60 introduced temporal_claims
         let t = try await db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='temporal_claims';", [])
         #expect(!t.isEmpty)
     }

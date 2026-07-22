@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 60
+    public static let latestVersion = 61
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,10 +76,10 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v60 adds the `temporal_claims` table — check it exists (newest object).
+    /// v61 adds the `history_artifacts` table — check it exists (newest object).
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
         let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='temporal_claims';", []
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='history_artifacts';", []
         )
         return !rows.isEmpty
     }
@@ -145,7 +145,8 @@ public enum SchemaMigrations {
         (57, v57),
         (58, v58),
         (59, v59),
-        (60, v60)
+        (60, v60),
+        (61, v61)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2154,5 +2155,86 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_temporal_claims_subject ON temporal_claims(subject_id, predicate);
     CREATE INDEX IF NOT EXISTS idx_temporal_claims_subject_created ON temporal_claims(subject_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_event_entities_entity ON event_entities(entity_id);
+    """
+
+    // HIST-060/061 (Universal History, Phase 9) — persistent, versioned history
+    // artifacts (spec §19). Rebuild creates a NEW artifact and links the old via
+    // superseded_by; nothing is overwritten (preserve-not-delete).
+    private static let v61: String = """
+    CREATE TABLE IF NOT EXISTS history_artifacts (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        subject_kind       TEXT NOT NULL,
+        subject_id         TEXT,
+        subject_label      TEXT NOT NULL,
+        corpus_snapshot_id TEXT,
+        engine_version     TEXT NOT NULL,
+        request_json       TEXT NOT NULL DEFAULT '{}',
+        title              TEXT NOT NULL,
+        summary            TEXT,
+        coverage_json      TEXT NOT NULL DEFAULT '{}',
+        quality_json       TEXT NOT NULL DEFAULT '{}',
+        created_at         REAL NOT NULL,
+        superseded_by      TEXT
+    );
+    CREATE TABLE IF NOT EXISTS history_chapters (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        artifact_id        TEXT NOT NULL,
+        ordinal            INTEGER NOT NULL,
+        title              TEXT NOT NULL,
+        subtitle           TEXT,
+        deterministic_text TEXT NOT NULL DEFAULT '',
+        generated_text     TEXT,
+        confidence         REAL NOT NULL DEFAULT 0.5
+    );
+    CREATE TABLE IF NOT EXISTS history_items (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        artifact_id           TEXT NOT NULL,
+        chapter_id            TEXT,
+        item_kind             TEXT NOT NULL,
+        title                 TEXT NOT NULL,
+        description           TEXT,
+        temporal_json         TEXT NOT NULL DEFAULT '{}',
+        actors_json           TEXT NOT NULL DEFAULT '[]',
+        status                TEXT NOT NULL,
+        confidence            REAL NOT NULL DEFAULT 0.5,
+        contradiction_group_id TEXT,
+        alternative_account_id TEXT,
+        review_status         TEXT
+    );
+    CREATE TABLE IF NOT EXISTS history_item_evidence (
+        history_item_id     TEXT NOT NULL,
+        knowledge_object_id TEXT NOT NULL,
+        evidence_block_id   TEXT,
+        assertion_id        TEXT,
+        generic_fact_id     TEXT,
+        event_id            TEXT,
+        source_version_id   TEXT,
+        locator_json        TEXT,
+        evidence_role       TEXT NOT NULL DEFAULT 'supports',
+        PRIMARY KEY (history_item_id, knowledge_object_id, evidence_block_id)
+    );
+    CREATE TABLE IF NOT EXISTS history_gaps (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        artifact_id           TEXT NOT NULL,
+        gap_kind              TEXT NOT NULL,
+        description           TEXT NOT NULL,
+        temporal_json         TEXT,
+        expected_evidence_json TEXT NOT NULL DEFAULT '[]',
+        confidence            REAL NOT NULL DEFAULT 0.5,
+        review_status         TEXT
+    );
+    CREATE TABLE IF NOT EXISTS history_alternative_accounts (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        artifact_id               TEXT NOT NULL,
+        subject                   TEXT NOT NULL,
+        account_json              TEXT NOT NULL,
+        decisive_missing_evidence TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_history_artifacts_subject ON history_artifacts(subject_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_history_artifacts_snapshot ON history_artifacts(corpus_snapshot_id);
+    CREATE INDEX IF NOT EXISTS idx_history_chapters_artifact ON history_chapters(artifact_id, ordinal);
+    CREATE INDEX IF NOT EXISTS idx_history_items_artifact ON history_items(artifact_id);
+    CREATE INDEX IF NOT EXISTS idx_history_item_evidence_ko ON history_item_evidence(knowledge_object_id);
+    CREATE INDEX IF NOT EXISTS idx_history_gaps_artifact ON history_gaps(artifact_id);
     """
 }
