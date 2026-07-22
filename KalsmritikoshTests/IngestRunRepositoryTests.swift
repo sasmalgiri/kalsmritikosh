@@ -55,4 +55,40 @@ struct IngestRunRepositoryTests {
         #expect(IngestRunRepository.pathHash("/x/y.pdf") == IngestRunRepository.pathHash("/x/y.pdf"))
         #expect(IngestRunRepository.pathHash("/a") != IngestRunRepository.pathHash("/b"))
     }
+
+    /// PI.3 — models the exact sequence AppState.resumeInterruptedRuns() performs
+    /// on boot after a crash. Because ingest streams a folder enumerator, only
+    /// files the pass actually REACHED are recorded; a file recorded `.running`
+    /// when the crash hit is the resumable unit (files never reached are covered
+    /// by the idempotent re-enumeration path, not the run row). Recovery re-drives
+    /// the recorded-unfinished files, marks them, and finalizes the run — after
+    /// which it is no longer resumable.
+    @Test("Full crash→boot recovery cycle: resume the in-flight file, finalize, not resumable")
+    func fullRecoveryCycle() async throws {
+        let r = try await repo()
+        // Bulk pass starts; /a finishes; /b is recorded in-flight when the crash hits.
+        let run = try await r.startRun(totalFiles: 3, atMillis: 1)
+        try await r.setFileState(run: run, path: "/a", state: .done, atMillis: 2)
+        try await r.setFileState(run: run, path: "/b", state: .running, atMillis: 3)
+        // ——— crash / quit here (run row stays `running`) ———
+
+        // Boot: the run is discoverable and its recorded-remaining work is /b.
+        let found = try #require(try await r.resumableRuns().first)
+        #expect(found.id == run)
+        #expect(found.completedFiles == 1)
+        #expect(try await r.pendingFiles(run: run) == ["/b"])
+
+        // Recovery drives the pending file (idempotent re-ingest) and marks it done.
+        for path in try await r.pendingFiles(run: run) {
+            try await r.setFileState(run: run, path: path, state: .done, atMillis: 10)
+        }
+        try await r.finish(run: run, status: .completed, atMillis: 11)
+
+        // Run is settled: gone from resumable, nothing pending.
+        #expect(try await r.resumableRuns().isEmpty)
+        #expect(try await r.pendingFiles(run: run).isEmpty)
+        // A fresh run does not resurrect the finished one.
+        let other = try await r.startRun(totalFiles: 1, atMillis: 12)
+        #expect(try await r.resumableRuns().map(\.id) == [other])
+    }
 }

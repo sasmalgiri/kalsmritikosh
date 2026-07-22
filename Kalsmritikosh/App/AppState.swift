@@ -572,6 +572,10 @@ public final class AppState {
     public private(set) var assertions: AssertionsRepository?
     /// A2 §7.7 — durable per-file ingest outcomes (Sources failure surface).
     public private(set) var ingestAttempts: IngestAttemptsRepository?
+    /// PI.3 (ING-001/004) — durable RUN-level ingest state: each bulk pass and
+    /// every file's transition, so an interrupted run resumes from its remaining
+    /// files instead of restarting from scratch.
+    public private(set) var ingestRuns: IngestRunRepository?
     /// A2 §7.6 — parent→child source provenance (email→attachment, …).
     public private(set) var sourceRelations: SourceRelationsRepository?
     /// Persona features Epic 1 (F1) — bounded workspaces (filtered views over
@@ -1706,6 +1710,7 @@ public final class AppState {
             )
             self.assertions = assertionsRepo
             self.ingestAttempts = ingestAttemptsRepo
+            self.ingestRuns = IngestRunRepository(database: db)
             self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
             // actor was created earlier (above the IngestCoordinator)
@@ -1814,6 +1819,10 @@ public final class AppState {
                            requeued > 0 {
                             KalsmritikoshLog.app.info("AppState: re-queued \(requeued, privacy: .public) stuck enrichment job(s)")
                         }
+                        // PI.3 — resume any bulk run left mid-flight (its remaining
+                        // files only). After the per-file resume so mid-commit files
+                        // are already handled; idempotent, so any overlap is a no-op.
+                        await self?.resumeInterruptedRuns()
                     }
                 }
             } else {
@@ -2900,6 +2909,46 @@ public final class AppState {
     /// off to a nonisolated helper so it runs on the cooperative pool.
     /// Without this the per-file `await ingest.ingest()` continuations
     /// queued back through the AppKit main run loop and stalled under
+    /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives
+    /// ONLY each interrupted run's not-done files (content-hash idempotent, so a
+    /// file that actually finished is a cheap no-op), then finalizes the run.
+    /// Complements the per-file `.started` resume (`resumeIncompleteIngests`):
+    /// that catches files interrupted mid-commit; this catches files a bulk pass
+    /// planned but never reached. Best-effort; the caller gates it out of
+    /// eval/smoke boots. The bulk of the work runs during `await ingest.ingest`,
+    /// which releases MainActor, so the UI is not blocked.
+    public func resumeInterruptedRuns() async {
+        guard let runs = ingestRuns, let ingest else { return }
+        let resumable = (try? await runs.resumableRuns()) ?? []
+        guard !resumable.isEmpty else { return }
+        // Hold security scope for every root so the pending file URLs open.
+        var scoped: [URL] = []
+        for root in bookmarks.roots {
+            if let url = try? bookmarks.resolve(root) { scoped.append(url) }
+        }
+        defer { for url in scoped { bookmarks.stopAccessing(url) } }
+        for run in resumable {
+            let pending = (try? await runs.pendingFiles(run: run.id)) ?? []
+            guard !pending.isEmpty else {
+                try? await runs.finish(run: run.id, status: .completed, atMillis: Self.nowMillis())
+                continue
+            }
+            KalsmritikoshLog.app.info("PI.3: resuming run \(run.id.uuidString, privacy: .public) — \(pending.count, privacy: .public) file(s) remaining")
+            for path in pending {
+                guard await ingestControl.checkpoint() else { break }   // honor a fresh Stop/Pause
+                let fileURL = URL(fileURLWithPath: path)
+                do {
+                    _ = try await ingest.ingest(fileAt: fileURL)
+                    try? await runs.setFileState(run: run.id, path: path, state: .done, atMillis: Self.nowMillis())
+                } catch {
+                    try? await runs.setFileState(run: run.id, path: path, state: .failed,
+                                                 error: String(describing: error).prefix(200).description, atMillis: Self.nowMillis())
+                }
+            }
+            try? await runs.finish(run: run.id, status: .completed, atMillis: Self.nowMillis())
+        }
+    }
+
     /// App Nap when the window lost focus.
     public func autoReingestEmptyRoots() async {
         guard let ingest, let files else { return }
@@ -3004,6 +3053,11 @@ public final class AppState {
         // ING-002 — collect per-file failures/timeouts across the parallel group so
         // the run reports which files didn't make it, not just how many did.
         let failures = IngestFailureLog()
+        // PI.3 — open a durable run so an interrupted bulk pass (crash/quit) is
+        // recoverable from its remaining files. Best-effort: a nil runID just
+        // means no run row (ingest proceeds unchanged).
+        let runsRepo = self.ingestRuns
+        let runID = try? await runsRepo?.startRun(totalFiles: plannedTotal, atMillis: Self.nowMillis())
         await withTaskGroup(of: Void.self) { group in
             for url in urls {
                 group.addTask { [weak self] in
@@ -3013,13 +3067,21 @@ public final class AppState {
                         ingest: ingest,
                         label: "Bulk ingest",
                         counter: counter,
-                        failures: failures
+                        failures: failures,
+                        run: runID,
+                        runs: runsRepo
                     )
                     await MainActor.run {
                         bookmarksRef.stopAccessing(url)
                     }
                 }
             }
+        }
+        // Finalize the run: a user Stop leaves it resumable (paused); a clean
+        // sweep completes it. A crash leaves it `running` → recovered at boot.
+        if let runID {
+            let stopped = await ingestControl.isStopped
+            try? await runsRepo?.finish(run: runID, status: stopped ? .paused : .completed, atMillis: Self.nowMillis())
         }
         setIngestPlannedTotal(0)
         let succeeded = await counter.value
@@ -3041,7 +3103,9 @@ public final class AppState {
         ingest: IngestCoordinator,
         label: String,
         counter: IngestCounter? = nil,
-        failures: IngestFailureLog? = nil
+        failures: IngestFailureLog? = nil,
+        run: UUID? = nil,
+        runs: IngestRunRepository? = nil
     ) async {
         let enumerator = FileManager.default.enumerator(
             at: url,
@@ -3058,6 +3122,11 @@ public final class AppState {
             let isRegular = (try? next.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) ?? false
             guard isRegular else { continue }
             let fileURL = next
+            // PI.3 — durable run state: mark this file in-flight before work so a
+            // crash/quit leaves it as a resumable `running`/`pending` slot. All
+            // run bookkeeping is best-effort (`try?`) — it must never alter the
+            // ingest control flow or fail a file.
+            if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .running, atMillis: Self.nowMillis()) }
             await self.withIngestActivity(file: fileURL.lastPathComponent) {
                 do {
                     // Per-file wall-clock timeout so ONE hung file can't freeze
@@ -3073,16 +3142,19 @@ public final class AppState {
                     let budget: Double = isContainer ? 3600 : 180
                     _ = try await Self.withFileTimeout(budget) { try await ingest.ingest(fileAt: fileURL) }
                     if let counter { await counter.increment() }
+                    if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .done, atMillis: Self.nowMillis()) }
                 } catch is IngestTimeout {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public): TIMEOUT after 180s on \(fileURL.lastPathComponent, privacy: .private) — skipped so the ingest can continue")
                     await failures?.record(IngestFailure(
                         fileName: fileURL.lastPathComponent, stage: .timeout,
                         reason: "exceeded the per-file time budget"))
+                    if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .failed, error: "timeout", atMillis: Self.nowMillis()) }
                 } catch {
                     KalsmritikoshLog.ingestion.error("\(label, privacy: .public) failed for \(fileURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                     await failures?.record(IngestFailure(
                         fileName: fileURL.lastPathComponent, stage: .failed,
                         reason: String(describing: error).prefix(200).description))
+                    if let run { try? await runs?.setFileState(run: run, path: fileURL.path, state: .failed, error: String(describing: error).prefix(200).description, atMillis: Self.nowMillis()) }
                 }
             }
         }
@@ -3093,6 +3165,10 @@ public final class AppState {
     /// task keeps running detached — but the caller is unblocked, so one hung
     /// file can't stall the whole ingest.
     struct IngestTimeout: Error {}
+
+    /// Wall-clock milliseconds for the durable ingest-run ledger (the repository
+    /// is deterministic and takes caller-supplied timestamps).
+    nonisolated static func nowMillis() -> Double { Date().timeIntervalSince1970 * 1000 }
 
     nonisolated static func withFileTimeout<T: Sendable>(
         _ seconds: Double, _ op: @Sendable @escaping () async throws -> T
