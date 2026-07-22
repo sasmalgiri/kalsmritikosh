@@ -270,6 +270,20 @@ public struct QueryPlanCompiler: Sendable {
                 break
             }
         }
+        // A question that NAMES a contract/agreement/amendment is authoritatively
+        // answered by the contractual document itself (and its amendments) — the
+        // status, terms, and evolution of a contract live there, not in the
+        // correspondence that merely references it. Prepend `.contractual` so it
+        // outranks the (often high-mention) email pile in the fitness ranking;
+        // without this a "contract status over time" question mapped only to
+        // `.official` and the authoritative .md contract/amendment were evicted
+        // by supplier email density (measured: temporal T3 retrieval recall 0.00).
+        if q.contains("contract") || q.contains("agreement")
+            || q.contains("amendment") || q.contains("clause") {
+            roles.removeAll { $0 == .contractual }
+            roles.insert(.contractual, at: 0)
+        }
+
         // Correspondence is context, never a strong default authority.
         add(.correspondence)
         add(.any)
