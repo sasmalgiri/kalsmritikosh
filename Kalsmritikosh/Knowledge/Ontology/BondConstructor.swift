@@ -302,7 +302,10 @@ public actor BondConstructor {
                             fromKind: .entity,
                             fromID: projectID,
                             toKind: .entity,
-                            toID: orgID
+                            toID: orgID,
+                            // Weaker: org may be inferred from the sender's email
+                            // domain, not an explicit delivery participant.
+                            confidence: .low
                         ))
                     }
                 }
@@ -324,7 +327,10 @@ public actor BondConstructor {
                         fromKind: .event,
                         fromID: event.id,
                         toKind: .event,
-                        toID: contract.id
+                        toID: contract.id,
+                        // Weaker: a same-document heuristic ("likely amends"),
+                        // not a resolved cross-document amendment link.
+                        confidence: .low
                     ))
                 }
 

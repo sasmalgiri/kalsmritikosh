@@ -60,6 +60,23 @@ struct FactBondsOrderingTests {
         #expect(all.map(\.toID) == [high, mid, low])
     }
 
+    @Test("Per-bond confidence flows through upsertBonds; direct bond outranks inferred")
+    func perBondConfidenceOrders() async throws {
+        let repo = try await freshRepo()
+        let from = UUID(), direct = UUID(), inferred = UUID()
+        // `direct` uses the batch default (.medium); `inferred` is marked .low
+        // per-bond (a same-doc heuristic / domain-inferred edge).
+        let bonds = [
+            FactBondsRepository.BondUpsert(bondName: "participates", fromKind: .entity, fromID: from, toKind: .entity, toID: direct),
+            FactBondsRepository.BondUpsert(bondName: "delivered_by", fromKind: .entity, fromID: from, toKind: .entity, toID: inferred, confidence: .low),
+        ]
+        try await repo.upsertBonds(bonds, sourceObjectID: UUID(), confidence: .medium)
+        let top = try await repo.outgoing(from: from, limit: 10)
+        #expect(top.count == 2)
+        #expect(top.first?.toID == direct)      // .medium ranks ahead of .low
+        #expect(top.last?.toID == inferred)
+    }
+
     @Test("incoming LIMIT keeps the highest-confidence bonds, in a stable order")
     func incomingOrderedByConfidence() async throws {
         let repo = try await freshRepo()

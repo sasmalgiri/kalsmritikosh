@@ -34,19 +34,28 @@ public actor FactBondsRepository {
         public let fromID: UUID
         public let toKind: FactKind
         public let toID: UUID
+        /// Per-bond confidence. `nil` = use the batch default passed to
+        /// `upsertBonds` (backward-compatible). Set it lower for bonds derived
+        /// from a WEAKER inference (a same-document "amends" guess, an org
+        /// pulled from a sender's email domain) so the bond walk ranks direct
+        /// participation ahead of inferred edges (the `ORDER BY confidence` on
+        /// the neighbour queries was inert while every bond was `.medium`).
+        public let confidence: Confidence?
 
         public init(
             bondName: String,
             fromKind: FactKind,
             fromID: UUID,
             toKind: FactKind,
-            toID: UUID
+            toID: UUID,
+            confidence: Confidence? = nil
         ) {
             self.bondName = bondName
             self.fromKind = fromKind
             self.fromID = fromID
             self.toKind = toKind
             self.toID = toID
+            self.confidence = confidence
         }
     }
 
@@ -90,7 +99,7 @@ public actor FactBondsRepository {
                 if let newBond = try await upsertBond(
                     bond,
                     sourceObjectID: sourceObjectID,
-                    confidence: confidence
+                    confidence: bond.confidence ?? confidence
                 ) {
                     written.append(newBond)
                 }
