@@ -67,6 +67,56 @@ struct EvidenceAssessmentInfraTests {
                 && d.availability == .partiallyAvailable && d.conflict == .none)
     }
 
+    @Test("Legacy precedence parses legacy_status and status independently")
+    func legacyPrecedence() {
+        // Malformed legacy_status + valid status → recover from status.
+        let a = EvidenceAssessmentRowDecoder.decode(
+            .init(legacyStatus: "FUTURE_UNKNOWN", status: "SOURCE_ASSERTED"))
+        #expect(a.basis == .sourceAsserted)
+        #expect(a.legacyStatus == .sourceAsserted)
+        // Valid legacy_status + a DIFFERENT valid status → prefer legacy_status.
+        let b = EvidenceAssessmentRowDecoder.decode(
+            .init(legacyStatus: "INFERRED", status: "SOURCE_ASSERTED"))
+        #expect(b.basis == .inferred)
+        #expect(b.legacyStatus == .inferred)
+        // Both malformed → conservative defaults, no crash.
+        let c = EvidenceAssessmentRowDecoder.decode(
+            .init(legacyStatus: "NOPE", status: "ALSO_NOPE"))
+        #expect(c.basis == .unknownLegacy)
+        #expect(c.legacyStatus == nil)
+    }
+
+    @Test("A derived .none never erases a stored/legacy conflict; meaningful states override")
+    func conflictOverridePrecedence() {
+        let legacyContradicted = EvidenceAssessmentRowDecoder.Row(status: "CONTRADICTED")
+        // legacy contradicted + derived nil → contradicted.
+        #expect(EvidenceAssessmentRowDecoder.decode(legacyContradicted, derivedConflict: nil).conflict == .contradicted)
+        // legacy contradicted + derived .none → still contradicted (none is NOT an override).
+        #expect(EvidenceAssessmentRowDecoder.decode(legacyContradicted, derivedConflict: .none).conflict == .contradicted)
+        // legacy contradicted + derived .resolved → resolved (meaningful override).
+        #expect(EvidenceAssessmentRowDecoder.decode(legacyContradicted, derivedConflict: .resolved).conflict == .resolved)
+        // legacy none + derived .contradicted → contradicted.
+        let clean = EvidenceAssessmentRowDecoder.Row(status: "SOURCE_ASSERTED")
+        #expect(EvidenceAssessmentRowDecoder.decode(clean, derivedConflict: .contradicted).conflict == .contradicted)
+    }
+
+    @Test("Builder derives locator from evidence blockIDs — callers pass no locator Boolean")
+    func builderDerivesLocator() {
+        let builder = AssertabilityContextBuilder()
+        let obj = UUID()
+        let assessment = EvidenceAssessment(basis: .directlyObserved, origin: .sourceExtraction)
+        // Evidence WITH a block id → located → assertAsFact.
+        let located = builder.decision(assessment: assessment,
+            evidence: [AssertabilityEvidence(objectID: obj, blockID: UUID(), independenceKey: "k")])
+        #expect(located.context.hasExactLocator)
+        #expect(located.decision == .assertAsFact)
+        // Same object, NO block id → not located → attributed, not a bare fact.
+        let unlocated = builder.decision(assessment: assessment,
+            evidence: [AssertabilityEvidence(objectID: obj, blockID: nil, independenceKey: "k")])
+        #expect(!unlocated.context.hasExactLocator)
+        #expect(unlocated.decision == .assertWithAttribution)
+    }
+
     @Test("History-item review precedence: disposition → mapped review_status → needsReview; conflict derived")
     func historyItemReviewAndConflict() {
         // No disposition column, legacy review_status 'accepted' → confirmed.

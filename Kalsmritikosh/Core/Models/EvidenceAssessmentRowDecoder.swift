@@ -38,26 +38,44 @@ public enum EvidenceAssessmentRowDecoder {
         }
     }
 
-    /// The assessment implied by the row's legacy `legacy_status` (preferred) or `status`.
-    /// Nil when neither is a recognisable EvidenceStatus.
+    private static func parsedStatus(_ raw: String?) -> EvidenceStatus? {
+        raw.flatMap(EvidenceStatus.init(rawValue:))
+    }
+
+    /// The legacy EvidenceStatus for this row: a VALID `legacy_status` is preferred, but a
+    /// non-null-yet-malformed `legacy_status` must NOT block a valid `status` — each is
+    /// parsed independently (valid legacy_status → valid status → nil).
+    static func legacyEvidenceStatus(_ row: Row) -> EvidenceStatus? {
+        parsedStatus(row.legacyStatus) ?? parsedStatus(row.status)
+    }
+
+    /// The assessment implied by the row's legacy status. Nil when neither legacy_status
+    /// nor status is a recognisable EvidenceStatus.
     static func legacyFallback(_ row: Row) -> EvidenceAssessment? {
-        let raw = row.legacyStatus ?? row.status
-        return raw.flatMap(EvidenceStatus.init(rawValue:)).map(LegacyEvidenceStatusAdapter.decode)
+        legacyEvidenceStatus(row).map(LegacyEvidenceStatusAdapter.decode)
+    }
+
+    /// A derived conflict only OVERRIDES when it's meaningful. `.none` means "no override"
+    /// — it must NOT erase a stored or legacy contradicted/unresolved/resolved state.
+    static func meaningfulDerivedConflict(_ value: ConflictStatus?) -> ConflictStatus? {
+        guard let value, value != .none else { return nil }
+        return value
     }
 
     /// Decode a generic_facts / temporal_claims row. `derivedConflict` (from a real
-    /// contradiction relation) wins over the stored/legacy conflict when supplied.
+    /// contradiction relation) wins over the stored/legacy conflict ONLY when meaningful.
     public static func decode(_ row: Row, derivedConflict: ConflictStatus? = nil) -> EvidenceAssessment {
         let fb = legacyFallback(row)
         let basis = EvidenceBasis(rawValue: row.evidenceBasis ?? "") ?? fb?.basis ?? .unknownLegacy
         let review = ReviewDisposition(rawValue: row.reviewDisposition ?? "") ?? fb?.review ?? .needsReview
         let origin = ProposalOrigin(rawValue: row.proposalOrigin ?? "") ?? fb?.origin ?? .importedLegacy
         let availability = AvailabilityStatus(rawValue: row.availabilityStatus ?? "") ?? fb?.availability ?? .partiallyAvailable
-        let conflict = derivedConflict
+        // Precedence: meaningful derived → stored dimension → legacy → none.
+        let conflict = meaningfulDerivedConflict(derivedConflict)
             ?? ConflictStatus(rawValue: row.conflictStatus ?? "")
             ?? fb?.conflict ?? .none
-        // Preserve the exact original raw value where present.
-        let legacy = (row.legacyStatus ?? row.status).flatMap(EvidenceStatus.init(rawValue:)) ?? fb?.legacyStatus
+        // Preserve the exact original raw value (independently-parsed legacy status).
+        let legacy = legacyEvidenceStatus(row)
         return EvidenceAssessment(basis: basis, review: review, origin: origin,
                                   availability: availability, conflict: conflict, legacyStatus: legacy)
     }
