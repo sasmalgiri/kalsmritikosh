@@ -78,22 +78,21 @@ public struct ReasoningExpert: Expert {
     /// surfaced chunks are skipped, so every claim's supporting id is in the retrieval
     /// set (the claim–evidence contract holds). Pure + testable.
     nonisolated static func factClaims(from result: RetrievalResult) -> [ExpertFindings.Claim] {
-        var blockToObject: [UUID: KnowledgeObject.ID] = [:]
-        for c in result.chunks {
-            if let b = c.chunk.evidenceBlockID, blockToObject[b] == nil {
-                blockToObject[b] = c.chunk.objectID
-            }
-        }
+        // Consume the retrieval-produced ClaimEvaluations UNCHANGED (do not re-evaluate or
+        // re-resolve evidence). Join with the surfaced facts by ledger id for field/value.
+        let evalByID = Dictionary(result.claimEvaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var claims: [ExpertFindings.Claim] = []
-        for f in result.genericFacts where f.status.isAssertable {
-            guard let obj = f.sourceBlockIDs.lazy.compactMap({ blockToObject[$0] }).first else { continue }
+        for f in result.genericFacts {
+            guard let eval = evalByID[f.id], eval.decision.isAssertiveDecision,
+                  let obj = eval.evidence.first?.objectID else { continue }
             let field = f.field.prefix(1).uppercased() + f.field.dropFirst()
             let unit = f.unit.map { " \($0)" } ?? ""
             claims.append(ExpertFindings.Claim(
                 statement: "\(field): \(f.value)\(unit)",
                 supportingObjectIDs: [obj],
                 confidence: Confidence(f.confidence),
-                evidenceGranularity: .coarse
+                evidenceGranularity: .coarse,
+                evaluation: eval                      // carried unchanged
             ))
         }
         return claims

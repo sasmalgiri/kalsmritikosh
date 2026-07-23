@@ -370,17 +370,38 @@ public actor HybridRetriever: Retriever {
     private func attachGenericFacts(to result: RetrievalResult) async -> RetrievalResult {
         guard let genericFacts else { return result }
         let blockIDs = result.chunks.compactMap { $0.chunk.evidenceBlockID }
-        guard !blockIDs.isEmpty else { return result }
-        let facts = ((try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? [])
-            .filter { $0.status.isAssertable }
-        guard !facts.isEmpty else { return result }
+        guard !blockIDs.isEmpty else { return result }                 // zero work when no blocks
+        let facts = (try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? []
+        guard !facts.isEmpty else { return result }                    // zero work when no facts
+
+        // Independence keys resolved ONCE per distinct object for the whole request. No
+        // reliable persisted source is wired yet, so keys stay nil — conservative: unkeyed
+        // evidence supports attribution but never corroboration. Then evaluate through the
+        // ONE shared evaluator (identical definition used by tests), with EXACT evidence only.
+        let keys = independenceKeys(forObjects: [])
+        let evaluations = ClaimEvaluator.evaluate(facts: facts, chunks: result.chunks, independenceKeys: keys)
+        guard !evaluations.isEmpty else { return result }
+        // Deprecated compat field: the surfaced facts (any maySurface decision), so a reader
+        // can still join field/value with the canonical evaluation by id.
+        let surfacedIDs = Set(evaluations.map(\.id))
+        let compatFacts = facts.filter { surfacedIDs.contains($0.id) }
         return RetrievalResult(
             chunks: result.chunks, events: result.events, entities: result.entities,
             relationships: result.relationships, summaries: result.summaries,
             layersUsed: result.layersUsed, shortCircuitedAt: result.shortCircuitedAt,
-            walkSteps: result.walkSteps, genericFacts: facts,
+            walkSteps: result.walkSteps, genericFacts: compatFacts, claimEvaluations: evaluations,
             authorityObjectIDs: result.authorityObjectIDs   // must survive the fact-attach rewrap
         )
+    }
+
+    /// Request-scoped independent-evidence keys, one entry per distinct object. There is no
+    /// reliable persisted lineage/content-identity source wired into this path yet, so this
+    /// conservatively returns no keys — unkeyed evidence can support an attributed claim but
+    /// can NEVER make it corroborated (S0.5 item 2 C2). Structured so a real per-object
+    /// provider can be injected later without touching callers; does zero work for an empty set.
+    private func independenceKeys(forObjects objects: Set<KnowledgeObject.ID>) -> [KnowledgeObject.ID: String] {
+        guard !objects.isEmpty else { return [:] }
+        return [:]
     }
 
     /// The set of privileged KnowledgeObject IDs. Guarded so it costs nothing

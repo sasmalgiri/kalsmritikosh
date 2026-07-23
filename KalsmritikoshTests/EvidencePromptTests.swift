@@ -27,7 +27,8 @@ struct EvidencePromptTests {
         let chunks = [chunk(obj, b1, "first passage"), chunk(obj, b2, "Amount ₹3,800 paid.")]
         let facts = [GenericFact(subjectLabel: "r", field: "amount", value: "₹3,800",
                                  status: .directlyObserved, confidence: 0.9, sourceBlockIDs: [b2])]
-        let prompt = MasterBrain.buildEvidencePrompt(question: "how much?", chunks: chunks, facts: facts)
+        let evals = ClaimEvaluator.evaluate(facts: facts, chunks: chunks)
+        let prompt = MasterBrain.buildEvidencePrompt(question: "how much?", chunks: chunks, facts: facts, evaluations: evals)
         #expect(prompt.contains("Verified facts"))
         #expect(prompt.contains("amount: ₹3,800 [C2]"))   // b2 is the 2nd chunk → C2
     }
@@ -38,7 +39,8 @@ struct EvidencePromptTests {
         let chunks = [chunk(obj, shown, "some passage")]
         let facts = [GenericFact(subjectLabel: "r", field: "employer", value: "Orchid",
                                  status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [orphan])]
-        let prompt = MasterBrain.buildEvidencePrompt(question: "who?", chunks: chunks, facts: facts)
+        let evals = ClaimEvaluator.evaluate(facts: facts, chunks: chunks)
+        let prompt = MasterBrain.buildEvidencePrompt(question: "who?", chunks: chunks, facts: facts, evaluations: evals)
         #expect(!prompt.contains("Verified facts"))
         #expect(!prompt.contains("Orchid"))
     }
@@ -49,7 +51,8 @@ struct EvidencePromptTests {
         let chunks = [chunk(obj, b, "passage")]
         let facts = [GenericFact(subjectLabel: "r", field: "amount", value: "₹1",
                                  status: .inferred, confidence: 0.5, sourceBlockIDs: [b])]
-        let prompt = MasterBrain.buildEvidencePrompt(question: "?", chunks: chunks, facts: facts)
-        #expect(!prompt.contains("Verified facts"))
+        let evals = ClaimEvaluator.evaluate(facts: facts, chunks: chunks)
+        let prompt = MasterBrain.buildEvidencePrompt(question: "?", chunks: chunks, facts: facts, evaluations: evals)
+        #expect(!prompt.contains("Verified facts"))   // inferred fact → inference, not an assertive verified fact
     }
 }

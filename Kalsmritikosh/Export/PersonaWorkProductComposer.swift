@@ -42,12 +42,14 @@ public struct PersonaWorkProductComposer: Sendable {
                                   sourceBlockIDs: [entry.sourceObjectID], status: .sourceAsserted)
                 }
             case .narrative, .summary, .matrix, .transactions, .bibliography:
-                claims = facts.filter(\.isMaterialAndSupported).map { f in
-                    ComposedClaim(text: "\(f.field): \(f.value)", sourceBlockIDs: f.sourceBlockIDs, status: f.status)
+                claims = facts.filter { Self.isAssertive($0) }.map { f in
+                    ComposedClaim(text: "\(f.field): \(f.value)", sourceBlockIDs: f.sourceBlockIDs,
+                                  status: LegacyEvidenceStatusAdapter.encode(f.assessment))
                 }
             case .relationships, .exhibitList:
-                claims = facts.filter(\.isMaterialAndSupported).prefix(20).map { f in
-                    ComposedClaim(text: "\(f.subjectLabel) — \(f.field)", sourceBlockIDs: f.sourceBlockIDs, status: f.status)
+                claims = facts.filter { Self.isAssertive($0) }.prefix(20).map { f in
+                    ComposedClaim(text: "\(f.subjectLabel) — \(f.field)", sourceBlockIDs: f.sourceBlockIDs,
+                                  status: LegacyEvidenceStatusAdapter.encode(f.assessment))
                 }
             case .gapsAndConflicts:
                 claims = []   // non-claim section; validator does not require evidence here
@@ -57,5 +59,18 @@ public struct PersonaWorkProductComposer: Sendable {
         }
 
         return ComposedWorkProduct(blueprint: blueprint, sections: sections, manifestSourceIDs: manifest)
+    }
+
+    /// Whether a fact may stand as a material export claim — decided by AssertabilityPolicy
+    /// (S0.5 item 2 C2), NOT by the deprecated `isMaterialAndSupported`. Evidence is the
+    /// fact's exact blocks; independence is unknown here (no corroboration); blocks are exact
+    /// locators. A fact with no blocks has no exact citation → refused.
+    nonisolated static func isAssertive(_ f: GenericFact) -> Bool {
+        let blocks = Set(f.sourceBlockIDs)
+        let ctx = AssertabilityContext(
+            assessment: f.assessment, exactEvidenceCount: blocks.count,
+            independentEvidenceGroupCount: 0, hasExactLocator: !blocks.isEmpty,
+            hasReproducibleDerivation: false)
+        return AssertabilityPolicy.evaluate(ctx).isAssertiveDecision
     }
 }

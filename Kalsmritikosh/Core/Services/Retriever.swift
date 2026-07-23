@@ -33,7 +33,15 @@ public struct RetrievalResult: Codable, Sendable {
     /// retrieval surfaced (option A: facts ride the evidence). Empty when no
     /// GenericFact repo is wired or the surfaced blocks carry no facts. Each
     /// fact keeps its source-block ids, so the answer layer can cite them.
+    /// DEPRECATED compatibility field — the surfaced facts as raw GenericFacts. The
+    /// canonical output is `claimEvaluations` (S0.5 item 2 C2); this is retained only for
+    /// any residual reader and holds the facts whose evaluation may surface.
     public let genericFacts: [GenericFact]
+    /// S0.5 item 2 C2 — the CANONICAL per-claim assertability evaluations, produced once at
+    /// retrieval (with real evidence context) and threaded UNCHANGED to the expert/brain and
+    /// export validator. `refuse` decisions are already excluded. This is the single source
+    /// of truth for whether/how a GenericFact-derived claim may surface.
+    public let claimEvaluations: [ClaimEvaluation]
     /// RET-009 — the authoritative source documents this retrieval identified,
     /// best→worst by DocumentFitness (role + requested-field match against the
     /// compiled QueryPlan). Empty on the density-only fallback path. The
@@ -52,6 +60,7 @@ public struct RetrievalResult: Codable, Sendable {
         shortCircuitedAt: RetrievalLayer? = nil,
         walkSteps: [WalkStep] = [],
         genericFacts: [GenericFact] = [],
+        claimEvaluations: [ClaimEvaluation] = [],
         authorityObjectIDs: [KnowledgeObject.ID] = []
     ) {
         self.chunks = chunks
@@ -63,6 +72,7 @@ public struct RetrievalResult: Codable, Sendable {
         self.shortCircuitedAt = shortCircuitedAt
         self.walkSteps = walkSteps
         self.genericFacts = genericFacts
+        self.claimEvaluations = claimEvaluations
         self.authorityObjectIDs = authorityObjectIDs
     }
 }

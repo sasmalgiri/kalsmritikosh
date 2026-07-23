@@ -25,10 +25,11 @@ struct ReasoningExpertFactClaimsTests {
     @Test("An assertable fact becomes a coarse claim cited to its backing document")
     func factBecomesClaim() {
         let obj = UUID(), blk = UUID()
-        let result = RetrievalResult(
-            chunks: [chunk(obj, blk, "Amount ₹3,800 paid.")],
-            genericFacts: [GenericFact(subjectLabel: "r", field: "amount", value: "₹3,800",
-                                       status: .directlyObserved, confidence: 0.9, sourceBlockIDs: [blk])])
+        let chunks = [chunk(obj, blk, "Amount ₹3,800 paid.")]
+        let facts = [GenericFact(subjectLabel: "r", field: "amount", value: "₹3,800",
+                                 status: .directlyObserved, confidence: 0.9, sourceBlockIDs: [blk])]
+        let result = RetrievalResult(chunks: chunks, genericFacts: facts,
+                                     claimEvaluations: ClaimEvaluator.evaluate(facts: facts, chunks: chunks))
         let claims = ReasoningExpert.factClaims(from: result)
         #expect(claims.count == 1)
         #expect(claims[0].statement == "Amount: ₹3,800")
@@ -39,14 +40,15 @@ struct ReasoningExpertFactClaimsTests {
     @Test("Orphan and non-assertable facts are skipped")
     func skips() {
         let obj = UUID(), blk = UUID(), orphan = UUID()
-        let result = RetrievalResult(
-            chunks: [chunk(obj, blk, "passage")],
-            genericFacts: [
-                GenericFact(subjectLabel: "r", field: "amount", value: "₹1",
-                            status: .inferred, confidence: 0.5, sourceBlockIDs: [blk]),      // not assertable
-                GenericFact(subjectLabel: "r", field: "employer", value: "Orchid",
-                            status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [orphan]) // orphan block
-            ])
+        let chunks = [chunk(obj, blk, "passage")]
+        let facts = [
+            GenericFact(subjectLabel: "r", field: "amount", value: "₹1",
+                        status: .inferred, confidence: 0.5, sourceBlockIDs: [blk]),        // → inference, not assertive
+            GenericFact(subjectLabel: "r", field: "employer", value: "Orchid",
+                        status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [orphan]) // orphan block → refused
+        ]
+        let result = RetrievalResult(chunks: chunks, genericFacts: facts,
+                                     claimEvaluations: ClaimEvaluator.evaluate(facts: facts, chunks: chunks))
         #expect(ReasoningExpert.factClaims(from: result).isEmpty)
     }
 }

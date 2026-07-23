@@ -166,6 +166,11 @@ public struct ExpertFindings: Codable, Sendable {
         public let supportingEntityIDs: [Entity.ID]
         public let confidence: Confidence
         public let evidenceGranularity: EvidenceGranularity
+        /// S0.5 item 2 C2 — the canonical assertability evaluation this claim was derived
+        /// from (present for GenericFact-derived deterministic claims; nil for LLM claims
+        /// still under the evidence-verification contract). Carried UNCHANGED from retrieval
+        /// so the brain/validator cannot strengthen it.
+        public let evaluation: ClaimEvaluation?
 
         public nonisolated init(
             statement: String,
@@ -173,7 +178,8 @@ public struct ExpertFindings: Codable, Sendable {
             supportingEventIDs: [Event.ID] = [],
             supportingEntityIDs: [Entity.ID] = [],
             confidence: Confidence,
-            evidenceGranularity: EvidenceGranularity = .specific
+            evidenceGranularity: EvidenceGranularity = .specific,
+            evaluation: ClaimEvaluation? = nil
         ) {
             self.statement = statement
             self.supportingObjectIDs = supportingObjectIDs
@@ -181,11 +187,12 @@ public struct ExpertFindings: Codable, Sendable {
             self.supportingEntityIDs = supportingEntityIDs
             self.confidence = confidence
             self.evidenceGranularity = evidenceGranularity
+            self.evaluation = evaluation
         }
 
         private enum CodingKeys: String, CodingKey {
             case statement, supportingObjectIDs, supportingEventIDs,
-                 supportingEntityIDs, confidence, evidenceGranularity
+                 supportingEntityIDs, confidence, evidenceGranularity, evaluation
         }
 
         public nonisolated init(from decoder: Decoder) throws {
@@ -196,6 +203,7 @@ public struct ExpertFindings: Codable, Sendable {
             self.supportingEntityIDs = try c.decodeIfPresent([Entity.ID].self, forKey: .supportingEntityIDs) ?? []
             self.confidence = try c.decode(Confidence.self, forKey: .confidence)
             self.evidenceGranularity = try c.decodeIfPresent(EvidenceGranularity.self, forKey: .evidenceGranularity) ?? .specific
+            self.evaluation = try c.decodeIfPresent(ClaimEvaluation.self, forKey: .evaluation)
         }
     }
 }

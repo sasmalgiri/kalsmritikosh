@@ -773,7 +773,8 @@ public actor MasterBrain {
     /// `[C#]` of the chunk whose evidence block produced it (facts whose block isn't
     /// among these chunks are omitted, so the model can't cite a source it can't see).
     nonisolated static func buildEvidencePrompt(
-        question: String, chunks: [RetrievedChunk], facts: [GenericFact]
+        question: String, chunks: [RetrievedChunk], facts: [GenericFact],
+        evaluations: [ClaimEvaluation]
     ) -> String {
         let blocks = chunks.enumerated().map { idx, c -> String in
             let snippet = c.chunk.text
@@ -788,9 +789,14 @@ public actor MasterBrain {
                 blockToLabel[b] = "C\(idx + 1)"
             }
         }
+        // Consume the retrieval-produced evaluations UNCHANGED — the "Verified facts" block
+        // lists only ASSERTIVE decisions (never strengthening; inference/conflict are not
+        // rendered as verified specifics). No re-evaluation here.
+        let evalByID = Dictionary(evaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var factLines: [String] = []
-        for f in facts where f.status.isAssertable {
-            guard let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
+        for f in facts {
+            guard let eval = evalByID[f.id], eval.decision.isAssertiveDecision,
+                  let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
             let unit = f.unit.map { " \($0)" } ?? ""
             factLines.append("- \(f.field): \(f.value)\(unit) [\(label)]")
@@ -848,7 +854,8 @@ public actor MasterBrain {
         // it so the model cites the same [C#] label. Pure prompt construction is
         // in a testable static helper below.
         let prompt = Self.buildEvidencePrompt(
-            question: question, chunks: topChunks, facts: retrieval.genericFacts)
+            question: question, chunks: topChunks, facts: retrieval.genericFacts,
+            evaluations: retrieval.claimEvaluations)
         let options = GenerationOptions(
             maxTokens: 500,
             temperature: 0.2,
