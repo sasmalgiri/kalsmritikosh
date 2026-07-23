@@ -27,48 +27,63 @@ public enum SchemaMigrations {
     /// migration runs inside a SAVEPOINT so a partial DDL failure leaves
     /// the schema at the previous version instead of half-applied.
     public static func migrate(_ database: Database) async throws {
+        try await migrate(database, through: latestVersion)
+    }
+
+    /// Apply every migration in `(current, targetVersion]`. The public `migrate` calls
+    /// this with `latestVersion`; tests use a smaller target to build a genuine
+    /// intermediate-version database (e.g. a real v61 DB) and then step to the next.
+    /// Only a full migration to `latestVersion` performs the stale-counter self-heal /
+    /// final stamp — a targeted partial migration leaves the counter exactly where its
+    /// last applied migration put it.
+    static func migrate(_ database: Database, through targetVersion: Int) async throws {
         let current = try await database.currentUserVersion()
         // Self-heal a stale counter. Observed in the field: some databases carry
         // a fully-applied latest schema while `user_version` is stuck at an early
-        // value (root cause not reproducible in isolation — migrate() persists
-        // correctly on a fresh DB). Blindly re-running the pending migrations
-        // would fail, because most use bare `CREATE TABLE` (no IF NOT EXISTS) and
-        // would raise "table already exists", bricking boot. So: if the counter
-        // looks stale BUT the newest migration's table already exists, the schema
-        // is genuinely complete — just reconcile the counter and return.
-        if current < latestVersion, try await isSchemaFullyApplied(database) {
+        // value. Blindly re-running the pending migrations would fail (bare CREATE
+        // TABLE would raise "table already exists"). So: if the counter looks stale
+        // BUT the full latest schema is already present, reconcile and return. Only
+        // when migrating all the way to latest (not a targeted partial migration).
+        if targetVersion == latestVersion, current < latestVersion,
+           try await isSchemaFullyApplied(database) {
             try await database.setUserVersion(latestVersion)
             return
         }
-        for (version, sql) in all where version > current {
-            let savepoint = "kalsmritikosh_mig_v\(version)"
-            do {
-                try await database.exec("SAVEPOINT \(savepoint);")
-                try await database.exec(sql)
-                try await database.setUserVersion(version)
-                try await database.exec("RELEASE SAVEPOINT \(savepoint);")
-            } catch {
-                try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
-                try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
-                throw DatabaseError.migrationFailed(
-                    version: version,
-                    message: "\(error)"
-                )
-            }
+        for (version, sql) in all where version > current && version <= targetVersion {
+            try await applyOne(database, version: version, sql: sql)
         }
-        // Belt-and-suspenders: after a fully-successful migration pass, stamp
-        // the final version ONCE in plain autocommit context (outside any
-        // SAVEPOINT). In some runtime/WAL configurations a `PRAGMA
-        // user_version` issued inside a SAVEPOINT was observed NOT to persist
-        // even though the migration DDL committed — leaving the counter stale
-        // (e.g. stuck at an early version) while the schema was fully applied.
-        // A stale counter would make a LATER boot re-run already-applied
-        // migrations. This reconciles the on-disk counter with reality; it is a
-        // no-op when the per-migration stamps already stuck, and only advances
-        // (never downgrades a newer DB opened by an older build).
-        if try await database.currentUserVersion() < Self.latestVersion {
+        // Belt-and-suspenders: after a fully-successful migration pass, stamp the
+        // final version ONCE outside any SAVEPOINT (some WAL configs were observed
+        // NOT to persist a PRAGMA user_version issued inside a SAVEPOINT). Only when
+        // targeting latest; never downgrades a newer DB opened by an older build.
+        if targetVersion == latestVersion,
+           try await database.currentUserVersion() < Self.latestVersion {
             try await database.setUserVersion(Self.latestVersion)
         }
+    }
+
+    /// Apply one migration inside its own SAVEPOINT so a partial DDL failure rolls the
+    /// whole statement batch back (SQLite DDL is transactional) and leaves the schema +
+    /// `user_version` at the previous version. Internal so a test can drive a
+    /// deliberately-failing migration and assert clean rollback.
+    static func applyOne(_ database: Database, version: Int, sql: String) async throws {
+        let savepoint = "kalsmritikosh_mig_v\(version)"
+        do {
+            try await database.exec("SAVEPOINT \(savepoint);")
+            try await database.exec(sql)
+            try await database.setUserVersion(version)
+            try await database.exec("RELEASE SAVEPOINT \(savepoint);")
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
+            try? await database.exec("RELEASE SAVEPOINT \(savepoint);")
+            throw DatabaseError.migrationFailed(version: version, message: "\(error)")
+        }
+    }
+
+    /// The DDL for a given migration version (internal — used by migration tests to
+    /// drive a real v62 batch with an injected failure).
+    static func migrationSQL(for version: Int) -> String? {
+        all.first { $0.0 == version }?.1
     }
 
     /// True when the LATEST migration's marker already exists — i.e. the schema
@@ -76,11 +91,27 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v62 adds `generic_facts.evidence_basis` (among other columns) — the newest
-    /// object is a COLUMN, so probe it via PRAGMA table_info rather than sqlite_master.
+    /// True only when the FULL v62 shape is present. v62 adds columns to three tables,
+    /// so probe the complete required set — a single column is NOT sufficient proof that
+    /// every v62 statement completed. Under normal SAVEPOINT rollback the migration is
+    /// atomic; this stricter check protects the self-heal path from stamping the counter
+    /// to 62 over a schema that only partially matches. UPDATE when a new migration adds
+    /// objects, to the newest complete shape.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query("PRAGMA table_info(generic_facts);", [])
-        return rows.contains { $0.string(1) == "evidence_basis" }
+        let required: [String: Set<String>] = [
+            "generic_facts":   ["evidence_basis", "review_disposition", "proposal_origin",
+                                 "availability_status", "conflict_status", "legacy_status"],
+            "temporal_claims": ["evidence_basis", "review_disposition", "proposal_origin",
+                                 "availability_status", "conflict_status", "legacy_status"],
+            "history_items":   ["evidence_basis", "review_disposition", "proposal_origin",
+                                 "availability_status", "legacy_status"]
+        ]
+        for (table, expected) in required {
+            let rows = try await database.query("PRAGMA table_info(\(table));", [])
+            let actual = Set(rows.compactMap { $0.string(1) })
+            guard actual.isSuperset(of: expected) else { return false }
+        }
+        return true
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
