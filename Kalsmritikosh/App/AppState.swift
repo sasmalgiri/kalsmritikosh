@@ -2934,6 +2934,28 @@ public final class AppState {
     /// off to a nonisolated helper so it runs on the cooperative pool.
     /// Without this the per-file `await ingest.ingest()` continuations
     /// queued back through the AppKit main run loop and stalled under
+    // MARK: - Universal History program (Phase 10 wiring)
+
+    /// Resolve a free-text subject to a canonical entity (or ambiguity/notFound) so
+    /// the Dossier never sends a bare name to a global search (trust rule 3).
+    public func resolveHistorySubject(_ text: String) async -> HistoryResolution? {
+        guard let entities else { return nil }
+        return try? await HistorySubjectResolver(entities: entities).resolve(freeText: text)
+    }
+
+    /// Stream a reconstruction for a canonical subject via the engine.
+    public func reconstructHistory(subject: HistorySubject) -> AsyncStream<HistoryUpdate> {
+        guard let engine = historyEngine else { return AsyncStream { $0.finish() } }
+        return engine.reconstruct(subject: subject, request: HistoryRequest())
+    }
+
+    /// Persist a verified reconstruction as a versioned artifact (best-effort).
+    @discardableResult
+    public func persistHistory(_ result: HistoryReconstructionResult, narrative: HistoryNarrative?) async -> UUID? {
+        guard let repo = historyArtifacts else { return nil }
+        return try? await repo.save(result, narrative: narrative, at: Date())
+    }
+
     /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives
     /// ONLY each interrupted run's not-done files (content-hash idempotent, so a
     /// file that actually finished is a cheap no-op), then finalizes the run.
