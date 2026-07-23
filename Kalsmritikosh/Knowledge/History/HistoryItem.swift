@@ -63,7 +63,7 @@ public struct EvidenceReference: Sendable, Codable, Hashable {
 
 /// What a history item was projected FROM (lineage; §13 projection preserves refs).
 public struct DerivedReference: Sendable, Codable, Hashable {
-    public enum Kind: String, Codable, Sendable { case event, assertion, genericFact, temporalClaim, relationship }
+    public enum Kind: String, Codable, Sendable { case event, assertion, genericFact, temporalClaim, relationship, historyItem }
     public let kind: Kind
     public let id: UUID
     public nonisolated init(kind: Kind, id: UUID) { self.kind = kind; self.id = id }

@@ -41,9 +41,9 @@ struct EvidenceDimensionMigrationTests {
     @Test("Fresh migration reaches v62 and adds the dimension columns to all three tables")
     func freshV62() async throws {
         let db = try await freshDB()
-        #expect(SchemaMigrations.latestVersion == 62)
+        #expect(SchemaMigrations.latestVersion >= 62)   // v62 columns land from v62 onward
         #expect(SchemaMigrations.migrationListIsConsistent)
-        #expect(try await db.currentUserVersion() == 62)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
 
         let gf = try await columns(db, "generic_facts")
         for c in ["evidence_basis", "review_disposition", "proposal_origin", "availability_status", "conflict_status", "legacy_status"] {
@@ -144,7 +144,7 @@ struct EvidenceDimensionMigrationTests {
         // A stale counter must self-heal without re-running DDL (which would throw).
         try await db.setUserVersion(2)
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 62)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await repo.count() == 1)              // row survived
         // A second ordinary migrate() is also a no-op.
         try await SchemaMigrations.migrate(db)
@@ -225,7 +225,7 @@ struct EvidenceDimensionMigrationTests {
 
         // A subsequent real migration still succeeds.
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 62)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect((try await columns(db, "generic_facts")).contains("evidence_basis"))
     }
 

@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 62
+    public static let latestVersion = 63
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -104,7 +104,11 @@ public enum SchemaMigrations {
             "temporal_claims": ["evidence_basis", "review_disposition", "proposal_origin",
                                  "availability_status", "conflict_status", "legacy_status"],
             "history_items":   ["evidence_basis", "review_disposition", "proposal_origin",
-                                 "availability_status", "legacy_status"]
+                                 "availability_status", "legacy_status"],
+            // v63 — the shared Claim engine's canonical table (newest object).
+            "claims":          ["id", "subject_id", "statement", "evidence_basis",
+                                 "review_disposition", "proposal_origin", "availability_status",
+                                 "conflict_status", "legacy_status", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -177,7 +181,8 @@ public enum SchemaMigrations {
         (59, v59),
         (60, v60),
         (61, v61),
-        (62, v62)
+        (62, v62),
+        (63, v63)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2314,5 +2319,85 @@ public enum SchemaMigrations {
         ELSE 'needsReview'
     END
     WHERE review_disposition IS NULL;
+    """
+
+    // PA-009 (persona-v2 Stage 1) — the shared Claim engine. ONE canonical, persona-neutral
+    // claim table all five personas point at, plus its evidence / lineage / contradiction /
+    // review / usage links. Claims REFERENCE source truth by id (claim_lineage, claim_evidence)
+    // and never duplicate it. Trust is the canonical five-dimension EvidenceAssessment stored
+    // NOT NULL here (this is a brand-new table with no legacy rows) — never a forked enum;
+    // `legacy_status` stays nullable for the lossy round-trip value only.
+    private static let v63: String = """
+    CREATE TABLE IF NOT EXISTS claims (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        subject_id              TEXT,
+        subject_label           TEXT NOT NULL,
+        statement               TEXT NOT NULL,
+        confidence              REAL NOT NULL DEFAULT 0.5,
+        contradiction_group_id  TEXT,
+        created_at              REAL NOT NULL,
+        evidence_basis          TEXT NOT NULL,
+        review_disposition      TEXT NOT NULL,
+        proposal_origin         TEXT NOT NULL,
+        availability_status     TEXT NOT NULL,
+        conflict_status         TEXT NOT NULL,
+        legacy_status           TEXT
+    );
+    -- EXACT evidence backing a canonical claim (mirrors history_item_evidence).
+    -- NOTE: named `claim_evidence_ref` to avoid the pre-existing `claim_evidence`
+    -- table (the unrelated answer→block replay feature); the two are distinct.
+    CREATE TABLE IF NOT EXISTS claim_evidence_ref (
+        claim_id            TEXT NOT NULL,
+        knowledge_object_id TEXT NOT NULL,
+        evidence_block_id   TEXT,
+        assertion_id        TEXT,
+        generic_fact_id     TEXT,
+        event_id            TEXT,
+        source_version_id   TEXT,
+        evidence_role       TEXT NOT NULL DEFAULT 'supports',
+        PRIMARY KEY (claim_id, knowledge_object_id, evidence_block_id)
+    );
+    -- What source-truth objects a claim was derived FROM (by id; DerivedReference.Kind).
+    CREATE TABLE IF NOT EXISTS claim_lineage (
+        claim_id    TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        source_id   TEXT NOT NULL,
+        PRIMARY KEY (claim_id, source_kind, source_id)
+    );
+    -- Many-to-many link between a claim and the Contradiction records it participates in.
+    CREATE TABLE IF NOT EXISTS claim_contradictions (
+        claim_id         TEXT NOT NULL,
+        contradiction_id TEXT NOT NULL,
+        PRIMARY KEY (claim_id, contradiction_id)
+    );
+    -- Append-only human review actions on a claim (preserve-not-delete).
+    CREATE TABLE IF NOT EXISTS claim_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        claim_id     TEXT NOT NULL,
+        disposition  TEXT NOT NULL,
+        prior_value  TEXT,
+        new_value    TEXT,
+        reviewer     TEXT NOT NULL,
+        reason       TEXT,
+        reviewed_at  REAL NOT NULL
+    );
+    -- Append-only usage ledger: where a claim was used (answer / work product / export / …).
+    CREATE TABLE IF NOT EXISTS claim_usage (
+        id           TEXT PRIMARY KEY NOT NULL,
+        claim_id     TEXT NOT NULL,
+        context      TEXT NOT NULL,
+        reference_id TEXT,
+        note         TEXT,
+        used_at      REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_claims_subject ON claims(subject_id);
+    CREATE INDEX IF NOT EXISTS idx_claims_contradiction ON claims(contradiction_group_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_claim ON claim_evidence_ref(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_object ON claim_evidence_ref(knowledge_object_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_lineage_claim ON claim_lineage(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_contradictions_claim ON claim_contradictions(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_contradictions_cid ON claim_contradictions(contradiction_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_reviews_claim ON claim_reviews(claim_id, reviewed_at);
+    CREATE INDEX IF NOT EXISTS idx_claim_usage_claim ON claim_usage(claim_id);
     """
 }
