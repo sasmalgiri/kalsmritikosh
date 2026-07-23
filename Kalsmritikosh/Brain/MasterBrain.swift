@@ -760,34 +760,52 @@ public actor MasterBrain {
 
         let layers = base.layersUsed + extra.layersUsed.filter { !base.layersUsed.contains($0) }
 
-        // Preserve the canonical ClaimEvaluations through corrective retrieval (C2.1). When
-        // the SAME ledger claim reappears with extra exact evidence, UNION the normalized
-        // evidence and REBUILD context+decision through the shared builder — so added
-        // evidence can strengthen (e.g. reach corroboration) but a re-derived `refuse`
-        // never silently drops a claim that already surfaced. Base assessment is kept
-        // (same ledger id ⇒ same fact); deterministic order by id.
+        // Preserve the canonical ClaimEvaluations through corrective retrieval (C2.1). Two
+        // evaluations sharing a ledger id are UNIONed+rebuilt ONLY when they truly describe
+        // the same claim — same claimKind, same canonical assessment, AND the same underlying
+        // GenericFact payload. On ANY mismatch we keep the base evaluation conservatively
+        // (never union, never strengthen). Added independent evidence can strengthen (reach
+        // corroboration); a re-derived `refuse` never demotes a claim that already surfaced.
         let builder = AssertabilityContextBuilder()
+        func payload(_ id: UUID, _ facts: [GenericFact]) -> [String]? {
+            guard let f = facts.first(where: { $0.id == id }) else { return nil }
+            return [f.subjectID?.uuidString ?? "-", f.subjectLabel, f.field, f.value, f.unit ?? "-"]
+        }
         var evalByID: [UUID: ClaimEvaluation] = [:]
         for e in base.claimEvaluations { evalByID[e.id] = e }
         for e in extra.claimEvaluations {
             guard let existing = evalByID[e.id] else { evalByID[e.id] = e; continue }
+            let sameClaim = existing.claimKind == e.claimKind
+                && existing.assessment == e.assessment
+                && payload(e.id, base.genericFacts) != nil
+                && payload(e.id, base.genericFacts) == payload(e.id, extra.genericFacts)
+            guard sameClaim else { continue }   // mismatch → keep base, do not union/strengthen
             let unioned = Array(Set(existing.evidence).union(e.evidence))
-                .sorted { ($0.objectID.uuidString, $0.blockID?.uuidString ?? "") < ($1.objectID.uuidString, $1.blockID?.uuidString ?? "") }
             let ctx = builder.build(assessment: existing.assessment, evidence: unioned)
             let decision = AssertabilityPolicy.evaluate(ctx)
-            evalByID[e.id] = decision.maySurface
-                ? ClaimEvaluation(id: e.id, claimKind: existing.claimKind, assessment: ctx.assessment,
-                                  evidence: unioned, context: ctx, decision: decision)
-                : existing   // adding evidence must never demote a surfaced claim to refused
+            if decision.maySurface {
+                evalByID[e.id] = ClaimEvaluation(id: e.id, claimKind: existing.claimKind,
+                    assessment: ctx.assessment, evidence: unioned, context: ctx, decision: decision)
+            }   // else keep existing — added evidence must never demote a surfaced claim
         }
-        let mergedEvals = evalByID.values.sorted { $0.id.uuidString < $1.id.uuidString }
+        // Enforce a 1:1 intersection ONLY on the C2 production path (where evaluations
+        // exist): no surfaced fact without an evaluation, and no evaluation without its
+        // matching fact. A purely-legacy merge (no evaluations on either side) keeps its
+        // facts unchanged rather than deleting them.
+        let anyEvals = !base.claimEvaluations.isEmpty || !extra.claimEvaluations.isEmpty
+        let factIDsPresent = Set(facts.map(\.id))
+        let mergedEvals = anyEvals
+            ? evalByID.values.filter { factIDsPresent.contains($0.id) }.sorted { $0.id.uuidString < $1.id.uuidString }
+            : []
+        let evalIDs = Set(mergedEvals.map(\.id))
+        let alignedFacts = anyEvals ? facts.filter { evalIDs.contains($0.id) } : facts
         let authority = base.authorityObjectIDs + extra.authorityObjectIDs.filter { !base.authorityObjectIDs.contains($0) }
 
         return RetrievalResult(
             chunks: chunks, events: events, entities: entities,
             relationships: base.relationships, summaries: summaries,
             layersUsed: layers, shortCircuitedAt: base.shortCircuitedAt,
-            walkSteps: base.walkSteps, genericFacts: facts, claimEvaluations: mergedEvals,
+            walkSteps: base.walkSteps, genericFacts: alignedFacts, claimEvaluations: mergedEvals,
             authorityObjectIDs: authority
         )
     }

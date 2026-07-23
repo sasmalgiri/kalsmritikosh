@@ -120,22 +120,37 @@ struct EvidenceDecisionWiringTests {
         #expect(report.violations.contains { if case .claimDecisionMismatch = $0 { return true } else { return false } })
     }
 
-    @Test("Corrective merge preserves evaluations and can strengthen via added independent evidence")
+    private func evalFor(_ f: GenericFact, _ ev: [AssertabilityEvidence]) -> ClaimEvaluation {
+        let ctx = AssertabilityContextBuilder().build(assessment: f.assessment, evidence: ev)
+        return ClaimEvaluation(id: f.id, claimKind: .genericFact, assessment: ctx.assessment,
+                               evidence: ev, context: ctx, decision: AssertabilityPolicy.evaluate(ctx))
+    }
+
+    @Test("Corrective merge preserves the fact↔evaluation pair and strengthens via added independent evidence")
     func mergePreservesAndStrengthens() {
-        let o1 = UUID(), o2 = UUID(), b1 = UUID(), b2 = UUID(), factID = UUID()
-        let a = EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction)
-        let builder = AssertabilityContextBuilder()
-        func eval(_ ev: [AssertabilityEvidence]) -> ClaimEvaluation {
-            let ctx = builder.build(assessment: a, evidence: ev)
-            return ClaimEvaluation(id: factID, claimKind: .genericFact, assessment: ctx.assessment,
-                                   evidence: ev, context: ctx, decision: AssertabilityPolicy.evaluate(ctx))
-        }
-        let base = RetrievalResult(claimEvaluations: [eval([AssertabilityEvidence(objectID: o1, blockID: b1, independenceKey: "h1")])])
-        let extra = RetrievalResult(claimEvaluations: [eval([AssertabilityEvidence(objectID: o2, blockID: b2, independenceKey: "h2")])])
+        let o1 = UUID(), o2 = UUID(), b1 = UUID(), b2 = UUID()
+        let f = fact(.sourceAsserted, blocks: [b1, b2])           // one ledger fact
+        let base = RetrievalResult(genericFacts: [f], claimEvaluations: [evalFor(f, [AssertabilityEvidence(objectID: o1, blockID: b1, independenceKey: "h1")])])
+        let extra = RetrievalResult(genericFacts: [f], claimEvaluations: [evalFor(f, [AssertabilityEvidence(objectID: o2, blockID: b2, independenceKey: "h2")])])
         #expect(base.claimEvaluations.first?.decision == .assertWithAttribution)   // one source alone
         let merged = MasterBrain.mergeRetrievals(base, extra)
-        #expect(merged.claimEvaluations.count == 1)                                // preserved (not dropped)
-        #expect(merged.claimEvaluations.first?.decision == .assertAsCorroborated)  // strengthened by union
+        #expect(merged.claimEvaluations.count == 1)                                // preserved
+        #expect(merged.genericFacts.count == 1)                                    // 1:1 with the fact
+        #expect(merged.claimEvaluations.first?.decision == .assertAsCorroborated)  // strengthened
+    }
+
+    @Test("Corrective merge does NOT union across a mismatched assessment for the same ledger id")
+    func mergeRejectsMismatch() {
+        let o1 = UUID(), o2 = UUID(), b1 = UUID(), b2 = UUID()
+        // Same id, but the extra copy carries a DIFFERENT assessment (data anomaly / tamper).
+        let fBase = fact(.sourceAsserted, blocks: [b1, b2])
+        let fExtra = GenericFact(id: fBase.id, subjectLabel: fBase.subjectLabel, field: fBase.field, value: fBase.value,
+                                 status: .directlyObserved, confidence: fBase.confidence, sourceBlockIDs: fBase.sourceBlockIDs)
+        let base = RetrievalResult(genericFacts: [fBase], claimEvaluations: [evalFor(fBase, [AssertabilityEvidence(objectID: o1, blockID: b1, independenceKey: "h1")])])
+        let extra = RetrievalResult(genericFacts: [fExtra], claimEvaluations: [evalFor(fExtra, [AssertabilityEvidence(objectID: o2, blockID: b2, independenceKey: "h2")])])
+        let merged = MasterBrain.mergeRetrievals(base, extra)
+        #expect(merged.claimEvaluations.count == 1)
+        #expect(merged.claimEvaluations.first?.decision == .assertWithAttribution)  // base kept, NOT corroborated
     }
 
     @Test("MasterBrain groups by presentation: attributed is NOT a verified fact; inference is labelled")

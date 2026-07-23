@@ -83,7 +83,11 @@ public struct ClaimEvaluation: Codable, Sendable, Hashable, Identifiable {
     /// a canonical, length-prefixed encoding. Length prefixes + an explicit nil marker make
     /// it unambiguous: nil ≠ literal "-", keys containing `|`/`;` can't collide, reordering
     /// is normalized by sorting, and duplicates are preserved as distinct items.
+    private static let fingerprintVersion: UInt8 = 1
+
     public nonisolated static func fingerprint(_ evidence: [AssertabilityEvidence]) -> String {
+        // Encode each field length-prefixed with an explicit nil marker (nil ≠ any string,
+        // delimiter-safe).
         func field(_ s: String?) -> Data {
             var d = Data()
             guard let s else { d.append(contentsOf: [0xFF, 0xFF, 0xFF, 0xFF]); return d }   // nil marker
@@ -92,12 +96,25 @@ public struct ClaimEvaluation: Codable, Sendable, Hashable, Identifiable {
             d.append(b)
             return d
         }
-        let items = evidence
-            .map { (obj: $0.objectID.uuidString, blk: $0.blockID?.uuidString, key: $0.independenceKey) }
-            .sorted { ($0.obj, $0.blk ?? "\u{FFFF}", $0.key ?? "\u{FFFF}") < ($1.obj, $1.blk ?? "\u{FFFF}", $1.key ?? "\u{FFFF}") }
-        var data = Data()
-        withUnsafeBytes(of: UInt32(items.count).bigEndian) { data.append(contentsOf: $0) }
-        for it in items { data.append(field(it.obj)); data.append(field(it.blk)); data.append(field(it.key)) }
+        // Encode each item to canonical bytes, then sort the BYTE SEQUENCES lexicographically
+        // — no sentinel-string ordering, so a real key can never compare equal to a nil marker.
+        // Duplicates are preserved (kept as separate items).
+        let encodedItems: [[UInt8]] = evidence.map { e in
+            var d = Data()
+            d.append(field(e.objectID.uuidString))
+            d.append(field(e.blockID?.uuidString))
+            d.append(field(e.independenceKey))
+            return Array(d)
+        }.sorted { lhs, rhs in
+            for i in 0..<min(lhs.count, rhs.count) where lhs[i] != rhs[i] { return lhs[i] < rhs[i] }
+            return lhs.count < rhs.count
+        }
+        var data = Data([fingerprintVersion])
+        withUnsafeBytes(of: UInt32(encodedItems.count).bigEndian) { data.append(contentsOf: $0) }
+        for item in encodedItems {
+            withUnsafeBytes(of: UInt32(item.count).bigEndian) { data.append(contentsOf: $0) }   // item length
+            data.append(contentsOf: item)
+        }
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

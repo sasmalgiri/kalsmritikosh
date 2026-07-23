@@ -104,7 +104,9 @@ public struct ReasoningExpert: Expert {
     /// conflict claim is never rendered as a bare fact.
     nonisolated static func framePrefix(_ p: ClaimPresentation) -> String {
         switch p {
-        case .fact, .corroborated, .derivation: return ""
+        case .fact:           return ""                    // a directly-observed fact stands unframed
+        case .corroborated:   return "Corroborated: "
+        case .derivation:     return "Derived: "
         case .attributed:     return "Reported: "
         case .userAttributed: return "User-confirmed: "
         case .inference:      return "Inference: "
