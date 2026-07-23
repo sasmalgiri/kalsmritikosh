@@ -48,4 +48,27 @@ public struct SourceIndependenceGrouper: Sendable {
                                keys: [KnowledgeObject.ID: String]) -> Bool {
         independentCount(objectIDs: objectIDs, keys: keys) >= 2
     }
+
+    // MARK: - Conservative count for ASSERTABILITY (C2 mandatory safeguard)
+
+    /// A CONSERVATIVE independent-source count for corroboration decisions. Unlike
+    /// `independentCount`, an object WITHOUT a reliable (non-empty) independence key does
+    /// NOT count as its own independent source — because missing key coverage is not proof
+    /// of independence, and two unkeyed forwarded/duplicate copies must never look like two
+    /// independent sources. Only DISTINCT, non-empty, trimmed keys raise this count.
+    ///
+    /// Unkeyed evidence may still SUPPORT an attributed assertion (exactEvidenceCount can be
+    /// ≥1); it just can't make a claim `corroborated`. The history reconciliation path keeps
+    /// using `independentCount` unchanged; this API exists solely for AssertabilityPolicy.
+    public func verifiedIndependentCount(objectIDs: [KnowledgeObject.ID],
+                                         keys: [KnowledgeObject.ID: String]) -> Int {
+        let reliableKeys = Set(
+            objectIDs.compactMap { oid -> String? in
+                guard let key = keys[oid] else { return nil }
+                let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        )
+        return reliableKeys.count
+    }
 }
