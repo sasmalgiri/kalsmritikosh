@@ -51,6 +51,49 @@ public struct ComposedWorkProduct: Sendable, Hashable {
 public struct WorkProductValidator: Sendable {
     public nonisolated init() {}
 
+    /// C2.1 Part 3B — adapt the PRODUCTION `WorkProduct` (what WorkspacesView actually
+    /// exports) into the validated `ComposedWorkProduct`, gating ONLY material claims. A
+    /// material claim (direct evidence / source assertion / deterministic derivation) must
+    /// carry a RESOLVED, block-backed citation; inference and human-note claims are
+    /// disclosures and are not required to carry evidence, so they're excluded from the
+    /// evidence-required set (never fabricated, never blocked). This lets the export fail
+    /// CLOSED on an unsupported material claim without rejecting legitimate labelled
+    /// disclosures.
+    public nonisolated static func materialComposition(from wp: WorkProduct) -> ComposedWorkProduct {
+        func isMaterial(_ s: EpistemicStatus) -> Bool {
+            switch s {
+            case .directEvidence, .sourceAssertion, .deterministicDerivation: return true
+            case .inference, .humanNote: return false
+            }
+        }
+        func mapStatus(_ s: EpistemicStatus) -> EvidenceStatus {
+            switch s {
+            case .directEvidence:          return .directlyObserved
+            case .sourceAssertion:         return .sourceAsserted
+            case .deterministicDerivation: return .deterministicallyDerived
+            case .inference:               return .inferred
+            case .humanNote:               return .unsupported
+            }
+        }
+        var manifest = Set<UUID>()
+        var sections: [ComposedSection] = []
+        for sec in wp.sections {
+            let material = sec.claims.filter { isMaterial($0.status) }
+            let composed = material.map { c -> ComposedClaim in
+                // Only RESOLVED citations contribute blocks → a material claim backed only by
+                // unresolved citations has zero exact evidence and will be blocked.
+                let blocks = c.supporting.filter(\.isResolved).flatMap(\.evidenceBlockIDs)
+                manifest.formUnion(blocks)
+                return ComposedClaim(text: c.text, sourceBlockIDs: blocks, status: mapStatus(c.status))
+            }
+            let bp = BlueprintSection(title: sec.title, kind: .matrix,
+                                      requiresEvidence: !material.isEmpty, minEvidencePerClaim: 1)
+            sections.append(ComposedSection(blueprint: bp, claims: composed))
+        }
+        let blueprint = WorkProductBlueprint(name: wp.title, persona: .general, sections: sections.map(\.blueprint))
+        return ComposedWorkProduct(blueprint: blueprint, sections: sections, manifestSourceIDs: manifest)
+    }
+
     public enum Violation: Sendable, Hashable {
         case sectionMissingClaims(section: String)
         case claimUnderEvidenced(section: String, claim: String, has: Int, needs: Int)
