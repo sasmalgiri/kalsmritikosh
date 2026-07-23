@@ -70,7 +70,15 @@ public struct TemporalEventProjector: Sendable {
 
     // MARK: - History items from events + claims
 
-    public func projectItems(from material: HistoryMaterial, claims: [TemporalClaim]) -> [HistoryItem] {
+    /// `blockResolution` maps EvidenceBlock ids to their owning KnowledgeObject (S0.5).
+    /// It is empty by default so the projector stays pure and existing callers/tests are
+    /// unchanged; the reconstruction engine passes a real map so GenericFact-derived
+    /// items (which carry only block ids) still get objectID+blockID citations rather
+    /// than an empty evidence array (trust rule 1: no history item without provenance).
+    public func projectItems(
+        from material: HistoryMaterial, claims: [TemporalClaim],
+        blockResolution: [EvidenceBlock.ID: ResolvedEvidenceReference] = [:]
+    ) -> [HistoryItem] {
         let subject = material.subject.subject
         var byID: [UUID: HistoryItem] = [:]
 
@@ -91,7 +99,7 @@ public struct TemporalEventProjector: Sendable {
         // Claim projection — a claim becomes a period / state / milestone item.
         for c in claims {
             let hid = Self.itemID(kind: "claim", key: c.id.uuidString)
-            let evidence = c.sourceObjectIDs.map { EvidenceReference(objectID: $0) }
+            let evidence = Self.evidence(for: c, blockResolution: blockResolution)
             byID[hid] = HistoryItem(
                 id: hid, subject: subject, kind: Self.itemKind(forPredicate: c.predicate, hasEnd: c.validTo != nil),
                 title: Self.title(for: c), description: nil,
@@ -104,6 +112,33 @@ public struct TemporalEventProjector: Sendable {
     }
 
     // MARK: - Deterministic mappings
+
+    /// Build a claim's evidence references. Assertion-backed claims (non-empty
+    /// `sourceObjectIDs`) keep object-level refs exactly as before. An object-less claim
+    /// — the GenericFact-only case that previously produced an EMPTY evidence array —
+    /// resolves each of its blocks to the owning KnowledgeObject so the item carries a
+    /// real objectID+blockID citation (trust rule 1). When no resolution map is supplied
+    /// the object-less claim still resolves to nothing, but the engine always passes one.
+    static func evidence(
+        for c: TemporalClaim, blockResolution: [EvidenceBlock.ID: ResolvedEvidenceReference]
+    ) -> [EvidenceReference] {
+        if !c.sourceObjectIDs.isEmpty {
+            return c.sourceObjectIDs.map { EvidenceReference(objectID: $0) }
+        }
+        // Attach the single generic-fact id when unambiguous (multi-fact claims omit it;
+        // the blockID still identifies exact provenance).
+        let factID = c.genericFactIDs.count == 1 ? c.genericFactIDs.first : nil
+        var seen = Set<EvidenceBlock.ID>()
+        var refs: [EvidenceReference] = []
+        for bid in c.sourceBlockIDs where !seen.contains(bid) {
+            guard let r = blockResolution[bid] else { continue }
+            seen.insert(bid)
+            refs.append(EvidenceReference(
+                objectID: r.objectID, blockID: bid, genericFactID: factID,
+                sourceVersionID: r.sourceVersionID, role: .supports))
+        }
+        return refs
+    }
 
     static func claimValue(from o: Assertion.Object) -> ClaimValue {
         switch o {

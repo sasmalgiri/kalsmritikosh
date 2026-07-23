@@ -11,7 +11,7 @@
 
 import Foundation
 
-public actor EvidenceStore {
+public actor EvidenceStore: EvidenceBlockResolving {
     private let database: Database
 
     public init(database: Database) {
@@ -172,6 +172,33 @@ public actor EvidenceStore {
     public func blockCount() async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM evidence_blocks;", [])
         return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// S0.5 — resolve EvidenceBlock ids to the KnowledgeObject / source version / locator
+    /// that back them. A block belongs to a source version (or, when its version id is
+    /// null, to the current version of its document); that version's `logical_source_id`
+    /// IS the KnowledgeObject id. This is what lets a GenericFact-derived HistoryItem
+    /// carry a reopenable objectID+blockID citation instead of an empty evidence array.
+    /// Order is not guaranteed; the caller keys by blockID.
+    public func resolveEvidenceBlocks(_ blockIDs: [EvidenceBlock.ID]) async throws -> [ResolvedEvidenceReference] {
+        guard !blockIDs.isEmpty else { return [] }
+        let placeholders = blockIDs.map { _ in "?" }.joined(separator: ", ")
+        let rows = try await database.query("""
+        SELECT b.id, b.locator,
+               COALESCE(sv1.id, sv2.id)                 AS version_id,
+               COALESCE(sv1.logical_source_id, sv2.logical_source_id) AS object_id
+        FROM evidence_blocks b
+        LEFT JOIN source_versions sv1 ON sv1.id = b.source_version_id
+        LEFT JOIN source_versions sv2 ON sv2.document_id = b.document_id AND sv2.is_current = 1
+        WHERE b.id IN (\(placeholders));
+        """, blockIDs.map { SQLValue.uuid($0) })
+        return rows.compactMap { row in
+            guard let blockID = row.uuid(0), let objectID = row.uuid(3) else { return nil }
+            let locator = row.string(1).flatMap { Self.decode(SourceLocator.self, $0) }
+            return ResolvedEvidenceReference(
+                objectID: objectID, blockID: blockID,
+                sourceVersionID: row.uuid(2), locator: locator)
+        }
     }
 
     /// A6.1 — full-text search over the structural evidence layer (schema v41).

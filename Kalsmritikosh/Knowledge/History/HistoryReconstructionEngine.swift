@@ -21,6 +21,10 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
     private let projector: TemporalEventProjector
     private let outlineBuilder: HistoryOutlineBuilder
     private let reconciler: HistoryReconciliationEngine
+    /// Resolves GenericFact block ids to their owning KnowledgeObject so GenericFact-only
+    /// history items carry exact citations (S0.5). Optional so the engine still builds
+    /// when no evidence store is available; production always injects one.
+    private let blockResolver: EvidenceBlockResolving?
     private let clock: @Sendable () -> Date
 
     public init(
@@ -29,6 +33,7 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         assertions: AssertionsRepository,
         genericFacts: GenericFactRepository,
         relationships: RelationshipsRepository,
+        blockResolver: EvidenceBlockResolving? = nil,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.resolver = HistorySubjectResolver(entities: entities)
@@ -37,6 +42,7 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         self.projector = TemporalEventProjector(now: clock())
         self.outlineBuilder = HistoryOutlineBuilder()
         self.reconciler = HistoryReconciliationEngine()
+        self.blockResolver = blockResolver
         self.clock = clock
     }
 
@@ -63,7 +69,17 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         yield(.collecting(itemsSoFar: material.totalItems))
 
         let claims = projector.projectClaims(from: material)
-        let items0 = projector.projectItems(from: material, claims: claims)
+        // Resolve every block the claims cite back to its owning KnowledgeObject so
+        // GenericFact-only items get exact objectID+blockID citations (S0.5). Best-effort:
+        // a resolution failure leaves object-backed items intact and never fails the run.
+        var blockResolution: [EvidenceBlock.ID: ResolvedEvidenceReference] = [:]
+        if let blockResolver {
+            let blockIDs = Array(Set(claims.flatMap { $0.sourceBlockIDs }))
+            if !blockIDs.isEmpty, let resolved = try? await blockResolver.resolveEvidenceBlocks(blockIDs) {
+                blockResolution = Dictionary(resolved.map { ($0.blockID, $0) }, uniquingKeysWith: { a, _ in a })
+            }
+        }
+        let items0 = projector.projectItems(from: material, claims: claims, blockResolution: blockResolution)
         let items = request.includeUndated ? items0 : items0.filter { !$0.isUndated }
         yield(.temporalising(claims: claims.count))
 

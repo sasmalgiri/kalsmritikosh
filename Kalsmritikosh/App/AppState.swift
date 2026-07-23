@@ -1730,7 +1730,8 @@ public final class AppState {
             // ledger. Deterministic; no LLM required.
             self.historyEngine = HistoryReconstructionEngine(
                 entities: entities, events: events, assertions: assertionsRepo,
-                genericFacts: genericFactsRepo, relationships: relationships)
+                genericFacts: genericFactsRepo, relationships: relationships,
+                blockResolver: evidenceStoreRepo)
             self.historyArtifacts = HistoryArtifactRepository(database: db)
             self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
