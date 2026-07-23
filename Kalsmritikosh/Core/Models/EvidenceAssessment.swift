@@ -89,6 +89,13 @@ public struct EvidenceAssessment: Codable, Sendable, Hashable {
         self.conflict = conflict
         self.legacyStatus = legacyStatus
     }
+
+    /// A copy with a replaced review disposition — used to reconcile a HistoryItem's
+    /// assessment.review with its authoritative `reviewStatus` (history vocabulary).
+    public nonisolated func with(review: ReviewDisposition) -> EvidenceAssessment {
+        EvidenceAssessment(basis: basis, review: review, origin: origin,
+                           availability: availability, conflict: conflict, legacyStatus: legacyStatus)
+    }
 }
 
 /// Bidirectional bridge between the legacy `EvidenceStatus` and the new

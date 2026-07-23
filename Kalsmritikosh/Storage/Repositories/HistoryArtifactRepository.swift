@@ -69,13 +69,12 @@ public actor HistoryArtifactRepository {
         for item in outline.items {
             let temporal = Self.json(TemporalPair(start: item.start, end: item.end))
             let actors = Self.json(item.actors)
-            // Dual-write (S0.5 item 2, Commit B): keep legacy `status` + `review_status`,
-            // and populate the separated dimensions. review_disposition comes from the
-            // item's OWN review status (its vocabulary), NOT from the evidence status —
-            // the other dimensions come from decoding evidenceStatus. Conflict stays
-            // DERIVED (contradiction_group_id), so no conflict column here.
-            let a = LegacyEvidenceStatusAdapter.decode(item.evidenceStatus)
-            let reviewDisp = Self.reviewDisposition(from: item.reviewStatus)
+            // Write from the CANONICAL assessment (Commit C). review_disposition comes from
+            // the assessment's review (already reconciled to the item's reviewStatus); the
+            // legacy `review_status` column is preserved. Conflict stays DERIVED
+            // (contradiction_group_id), so there is no conflict column here.
+            let a = item.assessment
+            let enc = LegacyEvidenceStatusAdapter.encode(a)
             try await database.exec("""
             INSERT INTO history_items
                 (id, artifact_id, chapter_id, item_kind, title, description, temporal_json,
@@ -86,12 +85,12 @@ public actor HistoryArtifactRepository {
                   chapterIDForItem[item.id].map { SQLValue.uuid($0) } ?? .null,
                   .text(item.kind.rawValue), .text(item.title),
                   item.description.map { SQLValue.text($0) } ?? .null,
-                  .text(temporal), .text(actors), .text(item.evidenceStatus.rawValue), .real(item.confidence),
+                  .text(temporal), .text(actors), .text(enc.rawValue), .real(item.confidence),
                   item.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
                   item.alternativeAccountID.map { SQLValue.uuid($0) } ?? .null,
                   .text(item.reviewStatus.rawValue),
-                  .text(a.basis.rawValue), .text(reviewDisp.rawValue), .text(a.origin.rawValue),
-                  .text(a.availability.rawValue), .text(item.evidenceStatus.rawValue)])
+                  .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
+                  .text(a.availability.rawValue), .text((a.legacyStatus ?? enc).rawValue)])
             for ev in item.evidence {
                 try await database.exec("""
                 INSERT OR IGNORE INTO history_item_evidence

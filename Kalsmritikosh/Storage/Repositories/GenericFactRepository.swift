@@ -20,10 +20,13 @@ public actor GenericFactRepository {
 
     public func upsert(_ fact: GenericFact) async throws {
         let blocksJSON = String(data: try Self.encoder.encode(fact.sourceBlockIDs), encoding: .utf8) ?? "[]"
-        // Dual-write (S0.5 item 2, Commit B): keep the legacy `status` column AND populate
-        // the five separated dimensions, derived deterministically from the status until
-        // the model carries an EvidenceAssessment directly (Commit C).
-        let a = LegacyEvidenceStatusAdapter.decode(fact.status)
+        // Write from the CANONICAL assessment (S0.5 item 2, Commit C): dimension columns ←
+        // assessment; status ← the compatibility encoding; legacy_status ← the preserved
+        // original raw value (or the compatibility encoding when none). The dimensions are
+        // NOT derived back from the compatibility status — that would discard explicit
+        // review/origin/availability/conflict.
+        let a = fact.assessment
+        let enc = LegacyEvidenceStatusAdapter.encode(a)
         try await database.exec("""
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
@@ -34,10 +37,11 @@ public actor GenericFactRepository {
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
             .text(fact.subjectLabel), .text(fact.field), .text(fact.value),
             fact.unit.map { SQLValue.text($0) } ?? .null,
-            .text(fact.status.rawValue), .real(fact.confidence),
+            .text(enc.rawValue), .real(fact.confidence),
             .text(blocksJSON), .real(Date().timeIntervalSince1970),
             .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
-            .text(a.availability.rawValue), .text(a.conflict.rawValue), .text(fact.status.rawValue)
+            .text(a.availability.rawValue), .text(a.conflict.rawValue),
+            .text((a.legacyStatus ?? enc).rawValue)
         ])
     }
 
@@ -48,7 +52,8 @@ public actor GenericFactRepository {
     /// Facts about a subject for a field (e.g. all "employer" facts for "Sasmal").
     public func facts(subjectLabel: String, field: String) async throws -> [GenericFact] {
         let rows = try await database.query("""
-        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
         FROM generic_facts WHERE subject_label = ? AND field = ? ORDER BY confidence DESC;
         """, [.text(subjectLabel), .text(FactSchemaRegistry.normalizeField(field))])
         return rows.compactMap(Self.decode)
@@ -60,7 +65,8 @@ public actor GenericFactRepository {
     /// and excluded from ID-scoped collection.
     public func facts(subjectID: UUID, fields: Set<String>? = nil) async throws -> [GenericFact] {
         let rows = try await database.query("""
-        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
         FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
         """, [.uuid(subjectID)])
         let all = rows.compactMap(Self.decode)
@@ -80,7 +86,8 @@ public actor GenericFactRepository {
         let clauses = ids.map { _ in "source_blocks_json LIKE ?" }.joined(separator: " OR ")
         let binds = ids.map { SQLValue.text("%\($0.uuidString)%") }
         let rows = try await database.query("""
-        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
         FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
         """, binds)
         return rows.compactMap(Self.decode)
@@ -91,12 +98,17 @@ public actor GenericFactRepository {
     }
 
     private nonisolated static func decode(_ r: SQLRow) -> GenericFact? {
+        // A row is only dropped when its IDENTITY/content is unusable — never because one
+        // evidence DIMENSION is malformed (the decoder falls back per field).
         guard let id = r.uuid(0), let label = r.string(2), let field = r.string(3),
-              let value = r.string(4), let statusRaw = r.string(6),
-              let status = EvidenceStatus(rawValue: statusRaw) else { return nil }
+              let value = r.string(4) else { return nil }
         let blocks = (r.string(8)).flatMap { try? decoder.decode([UUID].self, from: Data($0.utf8)) } ?? []
+        let assessment = EvidenceAssessmentRowDecoder.decode(.init(
+            evidenceBasis: r.string(9), reviewDisposition: r.string(10), proposalOrigin: r.string(11),
+            availabilityStatus: r.string(12), conflictStatus: r.string(13),
+            legacyStatus: r.string(14), status: r.string(6)))
         return GenericFact(id: id, subjectID: r.uuid(1), subjectLabel: label, field: field,
-                           value: value, unit: r.string(5), status: status,
+                           value: value, unit: r.string(5), assessment: assessment,
                            confidence: r.double(7) ?? 0, sourceBlockIDs: blocks)
     }
 }

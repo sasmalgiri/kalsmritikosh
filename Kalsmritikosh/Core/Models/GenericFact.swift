@@ -52,11 +52,42 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     public let value: String
     /// Optional unit / currency / precision qualifier (e.g. "INR", "year").
     public let unit: String?
-    public let status: EvidenceStatus
+    /// The CANONICAL trust classification — the five separated dimensions (S0.5 item 2 C2).
+    public let assessment: EvidenceAssessment
     public let confidence: Double
     /// Evidence blocks that support this fact (the claim–evidence contract).
     public let sourceBlockIDs: [UUID]
 
+    /// Deprecated compatibility shim — derived from `assessment`. Kept so existing readers
+    /// and the repository's legacy `status` column keep working during migration.
+    @available(*, deprecated, message: "Use assessment (+ AssertabilityPolicy)")
+    public var status: EvidenceStatus { LegacyEvidenceStatusAdapter.encode(assessment) }
+
+    /// Canonical initializer.
+    public nonisolated init(
+        id: UUID = UUID(),
+        subjectID: UUID? = nil,
+        subjectLabel: String,
+        field: String,
+        value: String,
+        unit: String? = nil,
+        assessment: EvidenceAssessment,
+        confidence: Double,
+        sourceBlockIDs: [UUID]
+    ) {
+        self.id = id
+        self.subjectID = subjectID
+        self.subjectLabel = subjectLabel
+        self.field = FactSchemaRegistry.normalizeField(field)
+        self.value = value
+        self.unit = unit
+        self.assessment = assessment
+        self.confidence = confidence
+        self.sourceBlockIDs = sourceBlockIDs
+    }
+
+    /// Legacy initializer — decodes a single `EvidenceStatus` into the separated
+    /// dimensions via the adapter. Retained so existing call sites compile unchanged.
     public nonisolated init(
         id: UUID = UUID(),
         subjectID: UUID? = nil,
@@ -68,21 +99,16 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         confidence: Double,
         sourceBlockIDs: [UUID]
     ) {
-        self.id = id
-        self.subjectID = subjectID
-        self.subjectLabel = subjectLabel
-        self.field = FactSchemaRegistry.normalizeField(field)
-        self.value = value
-        self.unit = unit
-        self.status = status
-        self.confidence = confidence
-        self.sourceBlockIDs = sourceBlockIDs
+        self.init(id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
+                  value: value, unit: unit, assessment: LegacyEvidenceStatusAdapter.decode(status),
+                  confidence: confidence, sourceBlockIDs: sourceBlockIDs)
     }
 
-    /// A material fact may appear in a final answer only if its status is assertable
-    /// AND it carries at least one supporting evidence block.
+    /// A material fact may appear in a final answer only if its assessment is assertable
+    /// AND it carries at least one supporting evidence block. (Kept for existing callers;
+    /// the full decision is AssertabilityPolicy via the shared context builder.)
     public var isMaterialAndSupported: Bool {
-        status.isAssertable && !sourceBlockIDs.isEmpty
+        LegacyEvidenceStatusAdapter.encode(assessment).isAssertable && !sourceBlockIDs.isEmpty
     }
 }
 

@@ -81,7 +81,9 @@ public struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
     public let actors: [Entity.ID]
     public let relatedSubjects: [Entity.ID]
 
-    public let evidenceStatus: EvidenceStatus
+    /// The CANONICAL trust classification. Its `review` is always reconciled to the
+    /// authoritative `reviewStatus` (history vocabulary), so the two never disagree.
+    public let assessment: EvidenceAssessment
     public let confidence: Double
     public let evidence: [EvidenceReference]
     public let derivedFrom: [DerivedReference]
@@ -90,6 +92,47 @@ public struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
     public let alternativeAccountID: UUID?
     public let reviewStatus: HistoryReviewStatus
 
+    /// Deprecated compatibility shim — derived from `assessment`.
+    @available(*, deprecated, message: "Use assessment (+ AssertabilityPolicy)")
+    public var evidenceStatus: EvidenceStatus { LegacyEvidenceStatusAdapter.encode(assessment) }
+
+    /// The shared ReviewDisposition for a history review status (authoritative here).
+    public nonisolated static func reviewDisposition(for s: HistoryReviewStatus) -> ReviewDisposition {
+        switch s {
+        case .unreviewed: return .unreviewed
+        case .accepted:   return .confirmed
+        case .corrected:  return .corrected
+        case .rejected:   return .rejected
+        }
+    }
+
+    /// Canonical initializer. The assessment's review is RECONCILED to `reviewStatus` so
+    /// in-memory and persisted review can never diverge.
+    public nonisolated init(
+        id: UUID = UUID(), subject: HistorySubject, kind: HistoryItemKind,
+        title: String, description: String? = nil,
+        start: TemporalValue? = nil, end: TemporalValue? = nil,
+        actors: [Entity.ID] = [], relatedSubjects: [Entity.ID] = [],
+        assessment: EvidenceAssessment, confidence: Double,
+        evidence: [EvidenceReference] = [], derivedFrom: [DerivedReference] = [],
+        contradictionGroupID: UUID? = nil, alternativeAccountID: UUID? = nil,
+        reviewStatus: HistoryReviewStatus = .unreviewed
+    ) {
+        self.id = id; self.subject = subject; self.kind = kind
+        self.title = title; self.description = description
+        self.start = start; self.end = end
+        self.actors = actors; self.relatedSubjects = relatedSubjects
+        self.assessment = assessment.with(review: Self.reviewDisposition(for: reviewStatus))
+        self.confidence = confidence
+        self.evidence = evidence; self.derivedFrom = derivedFrom
+        self.contradictionGroupID = contradictionGroupID
+        self.alternativeAccountID = alternativeAccountID
+        self.reviewStatus = reviewStatus
+    }
+
+    /// Legacy initializer — decodes `evidenceStatus`, then reconciles the review dimension
+    /// with the mapped `reviewStatus` (so an item built with evidenceStatus .sourceAsserted
+    /// + reviewStatus .accepted carries review == .confirmed, matching what the repo writes).
     public nonisolated init(
         id: UUID = UUID(), subject: HistorySubject, kind: HistoryItemKind,
         title: String, description: String? = nil,
@@ -100,15 +143,12 @@ public struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
         contradictionGroupID: UUID? = nil, alternativeAccountID: UUID? = nil,
         reviewStatus: HistoryReviewStatus = .unreviewed
     ) {
-        self.id = id; self.subject = subject; self.kind = kind
-        self.title = title; self.description = description
-        self.start = start; self.end = end
-        self.actors = actors; self.relatedSubjects = relatedSubjects
-        self.evidenceStatus = evidenceStatus; self.confidence = confidence
-        self.evidence = evidence; self.derivedFrom = derivedFrom
-        self.contradictionGroupID = contradictionGroupID
-        self.alternativeAccountID = alternativeAccountID
-        self.reviewStatus = reviewStatus
+        self.init(id: id, subject: subject, kind: kind, title: title, description: description,
+                  start: start, end: end, actors: actors, relatedSubjects: relatedSubjects,
+                  assessment: LegacyEvidenceStatusAdapter.decode(evidenceStatus), confidence: confidence,
+                  evidence: evidence, derivedFrom: derivedFrom,
+                  contradictionGroupID: contradictionGroupID, alternativeAccountID: alternativeAccountID,
+                  reviewStatus: reviewStatus)
     }
 
     /// A history item is undated when neither bound carries a concrete date — such

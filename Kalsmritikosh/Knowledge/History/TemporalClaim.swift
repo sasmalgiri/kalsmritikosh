@@ -55,7 +55,8 @@ public struct TemporalClaim: Sendable, Codable, Hashable, Identifiable {
     public let validTo: TemporalValue?
     public let observedAt: TemporalValue?
 
-    public let status: EvidenceStatus
+    /// The CANONICAL trust classification — the five separated dimensions (S0.5 item 2 C2).
+    public let assessment: EvidenceAssessment
     public let confidence: Double
     public let sourceObjectIDs: [KnowledgeObject.ID]
     public let sourceBlockIDs: [EvidenceBlock.ID]
@@ -66,6 +67,28 @@ public struct TemporalClaim: Sendable, Codable, Hashable, Identifiable {
     public let extractorVersion: String
     public let createdAt: Date
 
+    /// Deprecated compatibility shim — derived from `assessment`.
+    @available(*, deprecated, message: "Use assessment (+ AssertabilityPolicy)")
+    public var status: EvidenceStatus { LegacyEvidenceStatusAdapter.encode(assessment) }
+
+    /// Canonical initializer.
+    public nonisolated init(
+        id: UUID = UUID(), subjectID: Entity.ID, predicate: String, object: ClaimValue,
+        validFrom: TemporalValue? = nil, validTo: TemporalValue? = nil, observedAt: TemporalValue? = nil,
+        assessment: EvidenceAssessment, confidence: Double,
+        sourceObjectIDs: [KnowledgeObject.ID] = [], sourceBlockIDs: [EvidenceBlock.ID] = [],
+        assertionIDs: [Assertion.ID] = [], genericFactIDs: [GenericFact.ID] = [],
+        extractorID: String, extractorVersion: String, createdAt: Date
+    ) {
+        self.id = id; self.subjectID = subjectID; self.predicate = predicate; self.object = object
+        self.validFrom = validFrom; self.validTo = validTo; self.observedAt = observedAt
+        self.assessment = assessment; self.confidence = confidence
+        self.sourceObjectIDs = sourceObjectIDs; self.sourceBlockIDs = sourceBlockIDs
+        self.assertionIDs = assertionIDs; self.genericFactIDs = genericFactIDs
+        self.extractorID = extractorID; self.extractorVersion = extractorVersion; self.createdAt = createdAt
+    }
+
+    /// Legacy initializer — decodes a single `EvidenceStatus` into the dimensions.
     public nonisolated init(
         id: UUID = UUID(), subjectID: Entity.ID, predicate: String, object: ClaimValue,
         validFrom: TemporalValue? = nil, validTo: TemporalValue? = nil, observedAt: TemporalValue? = nil,
@@ -74,12 +97,12 @@ public struct TemporalClaim: Sendable, Codable, Hashable, Identifiable {
         assertionIDs: [Assertion.ID] = [], genericFactIDs: [GenericFact.ID] = [],
         extractorID: String, extractorVersion: String, createdAt: Date
     ) {
-        self.id = id; self.subjectID = subjectID; self.predicate = predicate; self.object = object
-        self.validFrom = validFrom; self.validTo = validTo; self.observedAt = observedAt
-        self.status = status; self.confidence = confidence
-        self.sourceObjectIDs = sourceObjectIDs; self.sourceBlockIDs = sourceBlockIDs
-        self.assertionIDs = assertionIDs; self.genericFactIDs = genericFactIDs
-        self.extractorID = extractorID; self.extractorVersion = extractorVersion; self.createdAt = createdAt
+        self.init(id: id, subjectID: subjectID, predicate: predicate, object: object,
+                  validFrom: validFrom, validTo: validTo, observedAt: observedAt,
+                  assessment: LegacyEvidenceStatusAdapter.decode(status), confidence: confidence,
+                  sourceObjectIDs: sourceObjectIDs, sourceBlockIDs: sourceBlockIDs,
+                  assertionIDs: assertionIDs, genericFactIDs: genericFactIDs,
+                  extractorID: extractorID, extractorVersion: extractorVersion, createdAt: createdAt)
     }
 }
 

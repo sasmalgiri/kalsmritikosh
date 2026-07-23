@@ -23,9 +23,10 @@ public actor TemporalClaimRepository {
     }()
 
     public func insert(_ claim: TemporalClaim) async throws {
-        // Dual-write (S0.5 item 2, Commit B): legacy `status` + the five separated
-        // dimensions, derived from the status until the model carries an assessment (C).
-        let a = LegacyEvidenceStatusAdapter.decode(claim.status)
+        // Write from the CANONICAL assessment (Commit C): dimensions ← assessment;
+        // status ← compatibility encoding; legacy_status ← preserved original.
+        let a = claim.assessment
+        let enc = LegacyEvidenceStatusAdapter.encode(a)
         try await database.exec("""
         INSERT OR REPLACE INTO temporal_claims
             (id, subject_id, predicate, object_json, valid_from_json, valid_to_json,
@@ -38,13 +39,13 @@ public actor TemporalClaimRepository {
             .uuid(claim.id), .uuid(claim.subjectID), .text(claim.predicate),
             .text(Self.encode(claim.object)),
             Self.encodeOpt(claim.validFrom), Self.encodeOpt(claim.validTo), Self.encodeOpt(claim.observedAt),
-            .text(claim.status.rawValue), .real(claim.confidence),
+            .text(enc.rawValue), .real(claim.confidence),
             .text(Self.encodeIDs(claim.sourceObjectIDs)), .text(Self.encodeIDs(claim.sourceBlockIDs)),
             .text(Self.encodeIDs(claim.assertionIDs)), .text(Self.encodeIDs(claim.genericFactIDs)),
             .text(claim.extractorID), .text(claim.extractorVersion),
             .real(claim.createdAt.timeIntervalSince1970),
             .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
-            .text(a.availability.rawValue), .text(a.conflict.rawValue), .text(claim.status.rawValue)
+            .text(a.availability.rawValue), .text(a.conflict.rawValue), .text((a.legacyStatus ?? enc).rawValue)
         ])
     }
 
@@ -79,7 +80,8 @@ public actor TemporalClaimRepository {
     SELECT id, subject_id, predicate, object_json, valid_from_json, valid_to_json,
            observed_at_json, status, confidence, source_object_ids_json,
            source_block_ids_json, assertion_ids_json, generic_fact_ids_json,
-           extractor_id, extractor_version, created_at
+           extractor_id, extractor_version, created_at,
+           evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
     """
 
     private static func encode(_ v: ClaimValue) -> String {
@@ -102,16 +104,20 @@ public actor TemporalClaimRepository {
     }
 
     private nonisolated static func decode(_ r: SQLRow) -> TemporalClaim? {
+        // Drop only on unusable identity/content — never because a dimension is malformed.
         guard let id = r.uuid(0), let subject = r.uuid(1), let predicate = r.string(2),
               let objJSON = r.string(3), let objData = objJSON.data(using: .utf8),
-              let object = try? decoder.decode(ClaimValue.self, from: objData),
-              let statusRaw = r.string(7), let status = EvidenceStatus(rawValue: statusRaw)
+              let object = try? decoder.decode(ClaimValue.self, from: objData)
         else { return nil }
+        let assessment = EvidenceAssessmentRowDecoder.decode(.init(
+            evidenceBasis: r.string(16), reviewDisposition: r.string(17), proposalOrigin: r.string(18),
+            availabilityStatus: r.string(19), conflictStatus: r.string(20),
+            legacyStatus: r.string(21), status: r.string(7)))
         return TemporalClaim(
             id: id, subjectID: subject, predicate: predicate, object: object,
             validFrom: decodeTemporal(r.string(4)), validTo: decodeTemporal(r.string(5)),
             observedAt: decodeTemporal(r.string(6)),
-            status: status, confidence: r.double(8) ?? 0.5,
+            assessment: assessment, confidence: r.double(8) ?? 0.5,
             sourceObjectIDs: decodeIDs(r.string(9)), sourceBlockIDs: decodeIDs(r.string(10)),
             assertionIDs: decodeIDs(r.string(11)), genericFactIDs: decodeIDs(r.string(12)),
             extractorID: r.string(13) ?? "", extractorVersion: r.string(14) ?? "",
