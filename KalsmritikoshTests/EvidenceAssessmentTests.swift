@@ -21,10 +21,16 @@ struct EvidenceAssessmentTests {
     func decodeAllLegacyStatuses() {
         func a(_ s: EvidenceStatus) -> EvidenceAssessment { LegacyEvidenceStatusAdapter.decode(s) }
 
-        #expect(a(.directlyObserved) == EvidenceAssessment(basis: .directlyObserved, origin: .sourceExtraction, legacyStatus: .directlyObserved))
-        #expect(a(.sourceAsserted) == EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction, legacyStatus: .sourceAsserted))
+        // Legacy value cannot establish origin → importedLegacy, EXCEPT the rule basis.
+        #expect(a(.directlyObserved) == EvidenceAssessment(basis: .directlyObserved, origin: .importedLegacy, legacyStatus: .directlyObserved))
+        #expect(a(.sourceAsserted) == EvidenceAssessment(basis: .sourceAsserted, origin: .importedLegacy, legacyStatus: .sourceAsserted))
         #expect(a(.deterministicallyDerived) == EvidenceAssessment(basis: .deterministicallyDerived, origin: .deterministicRule, legacyStatus: .deterministicallyDerived))
-        #expect(a(.inferred) == EvidenceAssessment(basis: .inferred, origin: .modelProposed, legacyStatus: .inferred))
+        #expect(a(.inferred) == EvidenceAssessment(basis: .inferred, origin: .importedLegacy, legacyStatus: .inferred))   // NOT modelProposed
+        #expect(a(.humanCorrected).origin == .importedLegacy)   // NOT userCreated
+        // Every non-rule legacy status decodes with importedLegacy origin.
+        for s in EvidenceStatus.allCases where s != .deterministicallyDerived {
+            #expect(a(s).origin == .importedLegacy)
+        }
 
         // Relational + availability legacy statuses → their own dimensions, basis unknown.
         #expect(a(.contradicted).conflict == .contradicted)
@@ -53,22 +59,35 @@ struct EvidenceAssessmentTests {
         }
     }
 
-    @Test("Reverse encode is deterministic and prioritises conflict → review → availability → basis")
+    @Test("Reverse encode prioritises conflict → availability → basis; review never overrides basis")
     func encodePriority() {
         // Conflict wins.
-        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .directlyObserved, origin: .sourceExtraction, conflict: .contradicted)) == .contradicted)
-        // Then human review.
-        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: .rejected, origin: .sourceExtraction)) == .humanRejected)
-        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: .confirmed, origin: .sourceExtraction)) == .humanConfirmed)
-        // Then availability.
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .directlyObserved, origin: .importedLegacy, conflict: .contradicted)) == .contradicted)
+        // Availability before basis.
         #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .unknownLegacy, origin: .importedLegacy, availability: .missingEvidence)) == .missingEvidence)
-        // Then basis.
-        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .inferred, origin: .modelProposed)) == .inferred)
+        // Basis.
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .inferred, origin: .importedLegacy)) == .inferred)
         // unknownLegacy with no other signal falls back to its preserved raw value.
-        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .unknownLegacy, origin: .importedLegacy, legacyStatus: .sourceAsserted)) == .sourceAsserted)
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .unknownLegacy, origin: .importedLegacy, legacyStatus: .humanConfirmed)) == .humanConfirmed)
         // Determinism: same input, same output.
-        let x = EvidenceAssessment(basis: .sourceAsserted, review: .disputed, origin: .sourceExtraction)
+        let x = EvidenceAssessment(basis: .sourceAsserted, review: .disputed, origin: .importedLegacy)
         #expect(LegacyEvidenceStatusAdapter.encode(x) == LegacyEvidenceStatusAdapter.encode(x))
+    }
+
+    @Test("New compatibility writes never synthesise human statuses, and disputed invents no conflict")
+    func encodeNeverSynthesisesHumanOrConflict() {
+        // Review disposition must NOT override a known basis or create a human legacy value.
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: .confirmed, origin: .sourceExtraction)) == .sourceAsserted)
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .directlyObserved, review: .corrected, origin: .userCreated)) == .directlyObserved)
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: .rejected, origin: .sourceExtraction)) == .sourceAsserted)
+        // disputed WITHOUT an actual conflict must not become contradicted.
+        #expect(LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: .disputed, origin: .sourceExtraction)) == .sourceAsserted)
+        // No assessment lacking a legacy human value ever encodes to a human status.
+        let humans: Set<EvidenceStatus> = [.humanConfirmed, .humanCorrected, .humanRejected]
+        for review in ReviewDisposition.allCases {
+            let s = LegacyEvidenceStatusAdapter.encode(.init(basis: .sourceAsserted, review: review, origin: .sourceExtraction))
+            #expect(!humans.contains(s))
+        }
     }
 
     @Test("Forward decode carries assertability intent through the reverse encode")

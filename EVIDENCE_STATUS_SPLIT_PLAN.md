@@ -49,24 +49,29 @@ the evidence basis**:
 
 | Legacy status | basis | review | origin | availability | conflict |
 |---|---|---|---|---|---|
-| directlyObserved | directlyObserved | unreviewed | sourceExtraction | present | none |
-| sourceAsserted | sourceAsserted | unreviewed | sourceExtraction | present | none |
+| directlyObserved | directlyObserved | unreviewed | **importedLegacy** | present | none |
+| sourceAsserted | sourceAsserted | unreviewed | **importedLegacy** | present | none |
 | deterministicallyDerived | deterministicallyDerived | unreviewed | deterministicRule | present | none |
-| inferred | inferred | unreviewed | modelProposed | present | none |
+| inferred | inferred | unreviewed | **importedLegacy** | present | none |
 | contradicted | unknownLegacy | unreviewed | importedLegacy | present | **contradicted** |
 | unsupported | unknownLegacy | unreviewed | importedLegacy | **unsupported** | none |
 | missingEvidence | unknownLegacy | unreviewed | importedLegacy | **missingEvidence** | none |
 | humanConfirmed | **unknownLegacy** (basis NOT recoverable) | **confirmed** | importedLegacy | present | none |
-| humanCorrected | unknownLegacy | **corrected** | userCreated | present | none |
+| humanCorrected | unknownLegacy | **corrected** | **importedLegacy** | present | none |
 | humanRejected | unknownLegacy | **rejected** | importedLegacy | present | none |
 
-Explicitly **do NOT** map `humanConfirmed → sourceAsserted`. Confirmation doesn't prove how
-the underlying information was originally established → `basis = unknownLegacy`.
+Origin rule: the legacy enum does NOT record who/what created the item, so origin is
+`importedLegacy` for everything EXCEPT `deterministicallyDerived` (rule origin is implied by
+the basis). An old `.inferred` could be model, heuristic, or another path — do NOT infer
+`modelProposed`. Explicitly **do NOT** map `humanConfirmed → sourceAsserted`.
 
-Legacy-encode (assessment → status): conflict `.contradicted`→`contradicted`; review
-`.rejected`→`humanRejected`, `.corrected`→`humanCorrected`, `.confirmed`→`humanConfirmed`;
-else availability `.missingEvidence`/`.unsupported`→ those; else map `basis`. Round-trip is
-NOT lossless (five dims → one) — that's expected; `legacyStatus` preserves the true original.
+Legacy-encode (assessment → status) — **review disposition is NOT consulted**; it must not
+override a known basis or synthesise a new human status. Priority: actual conflict
+(`contradicted`/`unresolved`)→`contradicted`; then availability `.missingEvidence`/
+`.unsupported`→those; then `basis`; `unknownLegacy`→`legacyStatus ?? .unsupported`. So
+`.disputed` never invents a contradiction, and new writes NEVER create `humanConfirmed/
+Corrected/Rejected` — those survive only via `legacyStatus`. (This makes Commit D nearly
+free.) Round-trip is NOT lossless (five dims → one); `legacyStatus` preserves the original.
 
 ## Assertability is a POLICY, not a Bool
 
@@ -90,10 +95,11 @@ until reviewed+grounded.
 
 ## Per-table schema (v62, additive; NOT four identical columns)
 
-- **generic_facts**: add `evidence_basis, review_disposition, proposal_origin, availability_status, legacy_status`. Keep `status`.
-- **temporal_claims**: add the same five, but claims normally **inherit** review/basis from source assertions/facts. Keep `status`.
-- **history_items**: already has `status` AND `review_status`. Add `evidence_basis, proposal_origin, availability_status, legacy_status` ONLY — **reuse `review_status`** for the review dimension (migrate its decoder to `ReviewDisposition`). No duplicate review column.
+- **generic_facts**: add `evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status`. Keep `status`.
+- **temporal_claims**: add the same six, but claims normally **inherit** review/basis from source assertions/facts. Keep `status`.
+- **history_items**: already has `status` AND `review_status` (raw vocab `unreviewed/accepted/rejected/corrected` = `HistoryReviewStatus`). Add `evidence_basis, review_disposition, proposal_origin, availability_status, legacy_status`. Do NOT reuse `review_status` (its vocabulary differs from `ReviewDisposition`, which adds `confirmed/disputed/needsReview`). Keep `review_status` unchanged; add a NEW `review_disposition` column and backfill deterministically: `unreviewed→unreviewed`, `accepted→confirmed`, `corrected→corrected`, `rejected→rejected`, unknown→`needsReview`. Do NOT rewrite the old column in place. Conflict stays DERIVED from `contradiction_group_id` + contradiction records — no `conflict_status` column on history_items.
 - **DO NOT touch in v62**: `events`, `assertions`, existing contradiction tables, existing `review_decisions`, and work-product tables (which don't exist yet). Provide read-time compatibility adapters for Events/Assertions instead. Change the projector's `EventStatus.reviewed → humanConfirmed` / `.rejected → humanRejected` mapping to emit separate basis + review dimensions.
+- New columns are **nullable** at the SQLite level during compatibility; repository writes for NEW records still supply all dimensions.
 
 Migration is nullable/default-safe, SAVEPOINT-wrapped, sentinel → newest touched table,
 verified on a throwaway DB with v61→v62, fresh-v62, interrupted-recovery and no-row-loss tests.

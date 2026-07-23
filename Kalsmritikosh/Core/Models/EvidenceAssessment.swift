@@ -98,19 +98,23 @@ public struct EvidenceAssessment: Codable, Sendable, Hashable {
 /// migration. Human review NEVER sets the evidence basis.
 public enum LegacyEvidenceStatusAdapter {
 
-    /// Legacy status → separated dimensions. `humanConfirmed/Corrected/Rejected` carry
-    /// a review disposition but leave the basis `unknownLegacy` — confirmation does not
-    /// establish how the underlying information was originally produced.
+    /// Legacy status → separated dimensions. The old enum does NOT record who/what
+    /// created the item, so `ProposalOrigin` is `importedLegacy` for everything except
+    /// `deterministicallyDerived` (whose rule origin IS implied by the basis). An old
+    /// `.inferred` could be a model, a heuristic, or another reconstruction path — the
+    /// legacy value alone can't establish `modelProposed`. `humanConfirmed/Corrected/
+    /// Rejected` carry a review disposition but leave the basis `unknownLegacy` —
+    /// confirmation does not establish how the underlying information was produced.
     public nonisolated static func decode(_ status: EvidenceStatus) -> EvidenceAssessment {
         switch status {
         case .directlyObserved:
-            return .init(basis: .directlyObserved, origin: .sourceExtraction, legacyStatus: status)
+            return .init(basis: .directlyObserved, origin: .importedLegacy, legacyStatus: status)
         case .sourceAsserted:
-            return .init(basis: .sourceAsserted, origin: .sourceExtraction, legacyStatus: status)
+            return .init(basis: .sourceAsserted, origin: .importedLegacy, legacyStatus: status)
         case .deterministicallyDerived:
             return .init(basis: .deterministicallyDerived, origin: .deterministicRule, legacyStatus: status)
         case .inferred:
-            return .init(basis: .inferred, origin: .modelProposed, legacyStatus: status)
+            return .init(basis: .inferred, origin: .importedLegacy, legacyStatus: status)
         case .contradicted:
             return .init(basis: .unknownLegacy, origin: .importedLegacy, conflict: .contradicted, legacyStatus: status)
         case .unsupported:
@@ -120,24 +124,21 @@ public enum LegacyEvidenceStatusAdapter {
         case .humanConfirmed:
             return .init(basis: .unknownLegacy, review: .confirmed, origin: .importedLegacy, legacyStatus: status)
         case .humanCorrected:
-            return .init(basis: .unknownLegacy, review: .corrected, origin: .userCreated, legacyStatus: status)
+            return .init(basis: .unknownLegacy, review: .corrected, origin: .importedLegacy, legacyStatus: status)
         case .humanRejected:
             return .init(basis: .unknownLegacy, review: .rejected, origin: .importedLegacy, legacyStatus: status)
         }
     }
 
-    /// Assessment → best-effort legacy status for old readers. Priority: conflict, then
-    /// human review, then availability, then basis. Lossy by design — callers that need
-    /// the exact original use `assessment.legacyStatus`.
+    /// Assessment → best-effort legacy status for old readers. Review disposition is
+    /// DELIBERATELY not consulted: it must not override a known evidence basis, and it
+    /// must never SYNTHESISE a new `humanConfirmed/Corrected/Rejected` value (those old
+    /// values survive only when preserved in `legacyStatus`). `disputed` does not invent
+    /// a contradiction. Priority: actual conflict → missing/unsupported availability →
+    /// known basis → preserved legacy status → safe `unsupported` fallback. Lossy by
+    /// design; callers needing the exact original read `assessment.legacyStatus`.
     public nonisolated static func encode(_ a: EvidenceAssessment) -> EvidenceStatus {
         if a.conflict == .contradicted || a.conflict == .unresolved { return .contradicted }
-        switch a.review {
-        case .rejected:  return .humanRejected
-        case .corrected: return .humanCorrected
-        case .confirmed: return .humanConfirmed
-        case .disputed:  return .contradicted     // nearest non-assertable legacy signal
-        case .unreviewed, .needsReview: break
-        }
         switch a.availability {
         case .missingEvidence: return .missingEvidence
         case .unsupported:     return .unsupported
