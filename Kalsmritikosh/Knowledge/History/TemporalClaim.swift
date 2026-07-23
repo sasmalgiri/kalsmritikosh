@@ -104,6 +104,61 @@ public struct TemporalClaim: Sendable, Codable, Hashable, Identifiable {
                   assertionIDs: assertionIDs, genericFactIDs: genericFactIDs,
                   extractorID: extractorID, extractorVersion: extractorVersion, createdAt: createdAt)
     }
+
+    // MARK: - Backward-compatible Codable (S0.5 item 2 C)
+
+    private enum CodingKeys: String, CodingKey {
+        case id, subjectID, predicate, object, validFrom, validTo, observedAt
+        case assessment, status, confidence
+        case sourceObjectIDs, sourceBlockIDs, assertionIDs, genericFactIDs
+        case extractorID, extractorVersion, createdAt
+    }
+
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.subjectID = try c.decode(UUID.self, forKey: .subjectID)
+        self.predicate = try c.decode(String.self, forKey: .predicate)
+        self.object = try c.decode(ClaimValue.self, forKey: .object)
+        self.validFrom = try c.decodeIfPresent(TemporalValue.self, forKey: .validFrom)
+        self.validTo = try c.decodeIfPresent(TemporalValue.self, forKey: .validTo)
+        self.observedAt = try c.decodeIfPresent(TemporalValue.self, forKey: .observedAt)
+        self.confidence = try c.decode(Double.self, forKey: .confidence)
+        self.sourceObjectIDs = try c.decodeIfPresent([UUID].self, forKey: .sourceObjectIDs) ?? []
+        self.sourceBlockIDs = try c.decodeIfPresent([UUID].self, forKey: .sourceBlockIDs) ?? []
+        self.assertionIDs = try c.decodeIfPresent([UUID].self, forKey: .assertionIDs) ?? []
+        self.genericFactIDs = try c.decodeIfPresent([UUID].self, forKey: .genericFactIDs) ?? []
+        self.extractorID = try c.decode(String.self, forKey: .extractorID)
+        self.extractorVersion = try c.decode(String.self, forKey: .extractorVersion)
+        self.createdAt = try c.decode(Date.self, forKey: .createdAt)
+        if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
+            self.assessment = a
+        } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .status) {
+            self.assessment = LegacyEvidenceStatusAdapter.decode(s)
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "TemporalClaim: neither `assessment` nor legacy `status` present"))
+        }
+    }
+
+    public nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(subjectID, forKey: .subjectID)
+        try c.encode(predicate, forKey: .predicate); try c.encode(object, forKey: .object)
+        try c.encodeIfPresent(validFrom, forKey: .validFrom)
+        try c.encodeIfPresent(validTo, forKey: .validTo)
+        try c.encodeIfPresent(observedAt, forKey: .observedAt)
+        try c.encode(assessment, forKey: .assessment)
+        try c.encode(LegacyEvidenceStatusAdapter.encode(assessment), forKey: .status)   // compatibility
+        try c.encode(confidence, forKey: .confidence)
+        try c.encode(sourceObjectIDs, forKey: .sourceObjectIDs)
+        try c.encode(sourceBlockIDs, forKey: .sourceBlockIDs)
+        try c.encode(assertionIDs, forKey: .assertionIDs)
+        try c.encode(genericFactIDs, forKey: .genericFactIDs)
+        try c.encode(extractorID, forKey: .extractorID)
+        try c.encode(extractorVersion, forKey: .extractorVersion)
+        try c.encode(createdAt, forKey: .createdAt)
+    }
 }
 
 /// HIST-024 — the domain-NEUTRAL predicate registry. Domain packs may add more, but

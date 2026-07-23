@@ -157,4 +157,62 @@ public struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
     public var isUndated: Bool {
         (start?.start == nil && start?.end == nil) && (end?.start == nil && end?.end == nil)
     }
+
+    // MARK: - Backward-compatible Codable (S0.5 item 2 C)
+
+    /// Includes BOTH `assessment` and the legacy `evidenceStatus` key. Decode precedence:
+    /// valid assessment → valid legacy evidenceStatus → throw; then the review dimension is
+    /// RECONCILED to `reviewStatus` so decoded items match freshly-constructed ones.
+    private enum CodingKeys: String, CodingKey {
+        case id, subject, kind, title, description, start, end, actors, relatedSubjects
+        case assessment, evidenceStatus, confidence, evidence, derivedFrom
+        case contradictionGroupID, alternativeAccountID, reviewStatus
+    }
+
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.subject = try c.decode(HistorySubject.self, forKey: .subject)
+        self.kind = try c.decode(HistoryItemKind.self, forKey: .kind)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.description = try c.decodeIfPresent(String.self, forKey: .description)
+        self.start = try c.decodeIfPresent(TemporalValue.self, forKey: .start)
+        self.end = try c.decodeIfPresent(TemporalValue.self, forKey: .end)
+        self.actors = try c.decodeIfPresent([Entity.ID].self, forKey: .actors) ?? []
+        self.relatedSubjects = try c.decodeIfPresent([Entity.ID].self, forKey: .relatedSubjects) ?? []
+        self.confidence = try c.decode(Double.self, forKey: .confidence)
+        self.evidence = try c.decodeIfPresent([EvidenceReference].self, forKey: .evidence) ?? []
+        self.derivedFrom = try c.decodeIfPresent([DerivedReference].self, forKey: .derivedFrom) ?? []
+        self.contradictionGroupID = try c.decodeIfPresent(UUID.self, forKey: .contradictionGroupID)
+        self.alternativeAccountID = try c.decodeIfPresent(UUID.self, forKey: .alternativeAccountID)
+        let review = try c.decodeIfPresent(HistoryReviewStatus.self, forKey: .reviewStatus) ?? .unreviewed
+        self.reviewStatus = review
+        let decoded: EvidenceAssessment
+        if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
+            decoded = a
+        } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .evidenceStatus) {
+            decoded = LegacyEvidenceStatusAdapter.decode(s)
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "HistoryItem: neither `assessment` nor legacy `evidenceStatus` present"))
+        }
+        // Reconcile review with the authoritative reviewStatus (matches the initializers).
+        self.assessment = decoded.with(review: Self.reviewDisposition(for: review))
+    }
+
+    public nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(subject, forKey: .subject)
+        try c.encode(kind, forKey: .kind); try c.encode(title, forKey: .title)
+        try c.encodeIfPresent(description, forKey: .description)
+        try c.encodeIfPresent(start, forKey: .start); try c.encodeIfPresent(end, forKey: .end)
+        try c.encode(actors, forKey: .actors); try c.encode(relatedSubjects, forKey: .relatedSubjects)
+        try c.encode(assessment, forKey: .assessment)
+        try c.encode(LegacyEvidenceStatusAdapter.encode(assessment), forKey: .evidenceStatus)  // compatibility
+        try c.encode(confidence, forKey: .confidence)
+        try c.encode(evidence, forKey: .evidence); try c.encode(derivedFrom, forKey: .derivedFrom)
+        try c.encodeIfPresent(contradictionGroupID, forKey: .contradictionGroupID)
+        try c.encodeIfPresent(alternativeAccountID, forKey: .alternativeAccountID)
+        try c.encode(reviewStatus, forKey: .reviewStatus)
+    }
 }

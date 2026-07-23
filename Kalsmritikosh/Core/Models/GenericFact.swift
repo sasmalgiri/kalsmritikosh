@@ -110,6 +110,49 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     public var isMaterialAndSupported: Bool {
         LegacyEvidenceStatusAdapter.encode(assessment).isAssertable && !sourceBlockIDs.isEmpty
     }
+
+    // MARK: - Backward-compatible Codable (S0.5 item 2 C)
+
+    /// Includes BOTH the canonical `assessment` and the legacy `status` key so pre-change
+    /// JSON (which had only `status`) still decodes, and new JSON dual-encodes both during
+    /// the transition. Decode precedence: valid assessment → valid legacy status → throw.
+    private enum CodingKeys: String, CodingKey {
+        case id, subjectID, subjectLabel, field, value, unit, assessment, status, confidence, sourceBlockIDs
+    }
+
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.subjectID = try c.decodeIfPresent(UUID.self, forKey: .subjectID)
+        self.subjectLabel = try c.decode(String.self, forKey: .subjectLabel)
+        self.field = try c.decode(String.self, forKey: .field)
+        self.value = try c.decode(String.self, forKey: .value)
+        self.unit = try c.decodeIfPresent(String.self, forKey: .unit)
+        self.confidence = try c.decode(Double.self, forKey: .confidence)
+        self.sourceBlockIDs = try c.decodeIfPresent([UUID].self, forKey: .sourceBlockIDs) ?? []
+        if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
+            self.assessment = a
+        } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .status) {
+            self.assessment = LegacyEvidenceStatusAdapter.decode(s)
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "GenericFact: neither `assessment` nor legacy `status` present"))
+        }
+    }
+
+    public nonisolated func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(subjectID, forKey: .subjectID)
+        try c.encode(subjectLabel, forKey: .subjectLabel)
+        try c.encode(field, forKey: .field)
+        try c.encode(value, forKey: .value)
+        try c.encodeIfPresent(unit, forKey: .unit)
+        try c.encode(assessment, forKey: .assessment)
+        try c.encode(LegacyEvidenceStatusAdapter.encode(assessment), forKey: .status)   // compatibility
+        try c.encode(confidence, forKey: .confidence)
+        try c.encode(sourceBlockIDs, forKey: .sourceBlockIDs)
+    }
 }
 
 /// Maps free-form field names to a canonical field + expected value shape. Open — an
