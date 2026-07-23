@@ -37,18 +37,21 @@ struct ReasoningExpertFactClaimsTests {
         #expect(claims[0].evidenceGranularity == .coarse)
     }
 
-    @Test("Orphan and non-assertable facts are skipped")
-    func skips() {
+    @Test("Orphan facts are refused; an inference surfaces but is explicitly labelled")
+    func orphanRefusedInferenceLabelled() {
         let obj = UUID(), blk = UUID(), orphan = UUID()
         let chunks = [chunk(obj, blk, "passage")]
         let facts = [
             GenericFact(subjectLabel: "r", field: "amount", value: "₹1",
-                        status: .inferred, confidence: 0.5, sourceBlockIDs: [blk]),        // → inference, not assertive
+                        status: .inferred, confidence: 0.5, sourceBlockIDs: [blk]),        // → inference, visible + labelled
             GenericFact(subjectLabel: "r", field: "employer", value: "Orchid",
                         status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [orphan]) // orphan block → refused
         ]
         let result = RetrievalResult(chunks: chunks, genericFacts: facts,
                                      claimEvaluations: ClaimEvaluator.evaluate(facts: facts, chunks: chunks))
-        #expect(ReasoningExpert.factClaims(from: result).isEmpty)
+        let claims = ReasoningExpert.factClaims(from: result)
+        #expect(claims.count == 1)                                   // orphan refused; inference remains
+        #expect(claims.first?.evaluation?.presentation == .inference)
+        #expect(claims.first?.statement.hasPrefix("Inference: ") == true)  // never a bare fact
     }
 }

@@ -85,6 +85,9 @@ public actor HybridRetriever: Retriever {
     /// surfaced (option A: facts ride the evidence) and attaches the ASSERTABLE
     /// ones to the result. nil, or blocks with no facts, is a strict no-op.
     private let genericFacts: GenericFactRepository?
+    /// C2.1 — resolves reliable independence keys for corroboration. nil ⇒ conservative
+    /// (unkeyed evidence never corroborates). Called at most once per retrieval.
+    private let independenceProvider: SourceIndependenceKeyProvider?
 
     public init(
         memory: MemoryRepository,
@@ -106,10 +109,12 @@ public actor HybridRetriever: Retriever {
         bondWalkSeedLimit: Int = 3,
         bondWalkChunkLimit: Int = 10,
         objects: KnowledgeObjectRepository? = nil,
-        genericFacts: GenericFactRepository? = nil
+        genericFacts: GenericFactRepository? = nil,
+        independenceProvider: SourceIndependenceKeyProvider? = nil
     ) {
         self.objects = objects
         self.genericFacts = genericFacts
+        self.independenceProvider = independenceProvider
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -374,11 +379,19 @@ public actor HybridRetriever: Retriever {
         let facts = (try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? []
         guard !facts.isEmpty else { return result }                    // zero work when no facts
 
-        // Independence keys resolved ONCE per distinct object for the whole request. No
-        // reliable persisted source is wired yet, so keys stay nil — conservative: unkeyed
-        // evidence supports attribution but never corroboration. Then evaluate through the
-        // ONE shared evaluator (identical definition used by tests), with EXACT evidence only.
-        let keys = independenceKeys(forObjects: [])
+        // Resolve the distinct objects the facts' blocks actually map to (in-memory, from the
+        // retrieved chunks — no repo calls, no invented objects). Then resolve independence
+        // keys in ONE batch for exactly that set. Skip the batch when nothing resolves.
+        var blockToObject: [UUID: KnowledgeObject.ID] = [:]
+        for c in result.chunks where c.chunk.evidenceBlockID != nil {
+            let b = c.chunk.evidenceBlockID!
+            if blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
+        }
+        let resolvedObjects = Set(facts.flatMap { $0.sourceBlockIDs.compactMap { blockToObject[$0] } })
+        var keys: [KnowledgeObject.ID: String] = [:]
+        if let independenceProvider, !resolvedObjects.isEmpty {
+            keys = (try? await independenceProvider.keys(for: resolvedObjects)) ?? [:]   // one batch call
+        }
         let evaluations = ClaimEvaluator.evaluate(facts: facts, chunks: result.chunks, independenceKeys: keys)
         guard !evaluations.isEmpty else { return result }
         // Deprecated compat field: the surfaced facts (any maySurface decision), so a reader
@@ -394,15 +407,6 @@ public actor HybridRetriever: Retriever {
         )
     }
 
-    /// Request-scoped independent-evidence keys, one entry per distinct object. There is no
-    /// reliable persisted lineage/content-identity source wired into this path yet, so this
-    /// conservatively returns no keys — unkeyed evidence can support an attributed claim but
-    /// can NEVER make it corroborated (S0.5 item 2 C2). Structured so a real per-object
-    /// provider can be injected later without touching callers; does zero work for an empty set.
-    private func independenceKeys(forObjects objects: Set<KnowledgeObject.ID>) -> [KnowledgeObject.ID: String] {
-        guard !objects.isEmpty else { return [:] }
-        return [:]
-    }
 
     /// The set of privileged KnowledgeObject IDs. Guarded so it costs nothing
     /// when no objects repo is wired or nothing is privileged.

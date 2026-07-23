@@ -759,11 +759,36 @@ public actor MasterBrain {
         for s in extra.summaries where summaryIDs.insert(s.id).inserted { summaries.append(s) }
 
         let layers = base.layersUsed + extra.layersUsed.filter { !base.layersUsed.contains($0) }
+
+        // Preserve the canonical ClaimEvaluations through corrective retrieval (C2.1). When
+        // the SAME ledger claim reappears with extra exact evidence, UNION the normalized
+        // evidence and REBUILD context+decision through the shared builder — so added
+        // evidence can strengthen (e.g. reach corroboration) but a re-derived `refuse`
+        // never silently drops a claim that already surfaced. Base assessment is kept
+        // (same ledger id ⇒ same fact); deterministic order by id.
+        let builder = AssertabilityContextBuilder()
+        var evalByID: [UUID: ClaimEvaluation] = [:]
+        for e in base.claimEvaluations { evalByID[e.id] = e }
+        for e in extra.claimEvaluations {
+            guard let existing = evalByID[e.id] else { evalByID[e.id] = e; continue }
+            let unioned = Array(Set(existing.evidence).union(e.evidence))
+                .sorted { ($0.objectID.uuidString, $0.blockID?.uuidString ?? "") < ($1.objectID.uuidString, $1.blockID?.uuidString ?? "") }
+            let ctx = builder.build(assessment: existing.assessment, evidence: unioned)
+            let decision = AssertabilityPolicy.evaluate(ctx)
+            evalByID[e.id] = decision.maySurface
+                ? ClaimEvaluation(id: e.id, claimKind: existing.claimKind, assessment: ctx.assessment,
+                                  evidence: unioned, context: ctx, decision: decision)
+                : existing   // adding evidence must never demote a surfaced claim to refused
+        }
+        let mergedEvals = evalByID.values.sorted { $0.id.uuidString < $1.id.uuidString }
+        let authority = base.authorityObjectIDs + extra.authorityObjectIDs.filter { !base.authorityObjectIDs.contains($0) }
+
         return RetrievalResult(
             chunks: chunks, events: events, entities: entities,
             relationships: base.relationships, summaries: summaries,
             layersUsed: layers, shortCircuitedAt: base.shortCircuitedAt,
-            walkSteps: base.walkSteps, genericFacts: facts
+            walkSteps: base.walkSteps, genericFacts: facts, claimEvaluations: mergedEvals,
+            authorityObjectIDs: authority
         )
     }
 
@@ -789,24 +814,35 @@ public actor MasterBrain {
                 blockToLabel[b] = "C\(idx + 1)"
             }
         }
-        // Consume the retrieval-produced evaluations UNCHANGED — the "Verified facts" block
-        // lists only ASSERTIVE decisions (never strengthening; inference/conflict are not
-        // rendered as verified specifics). No re-evaluation here.
+        // Consume the retrieval-produced evaluations UNCHANGED and render EACH by its exact
+        // presentation (C2.1): verified-strength facts, attributed reports, labelled
+        // inferences and conflicts are SEPARATE groups. MasterBrain never strengthens — an
+        // attributed/user/inference/conflict claim is never placed in the verified group.
         let evalByID = Dictionary(evaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        var factLines: [String] = []
+        var byPresentation: [ClaimPresentation: [String]] = [:]
         for f in facts {
-            guard let eval = evalByID[f.id], eval.decision.isAssertiveDecision,
+            guard let eval = evalByID[f.id], let presentation = eval.presentation,
                   let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
             let unit = f.unit.map { " \($0)" } ?? ""
-            factLines.append("- \(f.field): \(f.value)\(unit) [\(label)]")
+            byPresentation[presentation, default: []].append("- \(f.field): \(f.value)\(unit) [\(label)]")
         }
-        let verifiedBlock = factLines.isEmpty ? "" : """
-        Verified facts (deterministically extracted from the chunks below — prefer these exact values for specifics and cite the tagged chunk label):
-        \(factLines.joined(separator: "\n"))
-
-
-        """
+        // Fixed group order + headers. Verified-strength first; attributed/user next; then
+        // the explicitly-labelled non-assertive disclosures.
+        let order: [(ClaimPresentation, String)] = [
+            (.fact,          "Verified facts (deterministically extracted — prefer these exact values, cite the tagged chunk label):"),
+            (.corroborated,  "Corroborated facts (independent sources — prefer these, cite the label):"),
+            (.derivation,    "Deterministically derived values (cite the label):"),
+            (.attributed,    "Reported by a source (attributed, NOT independently verified — attribute, do not state as fact):"),
+            (.userAttributed,"User-confirmed / corrected (attribute to the user, not as an established fact):"),
+            (.inference,     "Inferences (LABELLED — not verified; present as inference only):"),
+            (.conflict,      "Conflicting accounts (present BOTH sides; do not resolve):")
+        ]
+        let factBlock = order.compactMap { (p, header) -> String? in
+            guard let lines = byPresentation[p], !lines.isEmpty else { return nil }
+            return "\(header)\n\(lines.joined(separator: "\n"))"
+        }.joined(separator: "\n\n")
+        let verifiedBlock = factBlock.isEmpty ? "" : factBlock + "\n\n\n"
 
         return """
         Question: \(question)

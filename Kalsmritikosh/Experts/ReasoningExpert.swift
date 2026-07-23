@@ -83,12 +83,14 @@ public struct ReasoningExpert: Expert {
         let evalByID = Dictionary(result.claimEvaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var claims: [ExpertFindings.Claim] = []
         for f in result.genericFacts {
-            guard let eval = evalByID[f.id], eval.decision.isAssertiveDecision,
-                  let obj = eval.evidence.first?.objectID else { continue }
+            // maySurface (not only assertive): inference and conflict REMAIN VISIBLE, framed
+            // by their carried evaluation's presentation. Only `refuse` is dropped.
+            guard let eval = evalByID[f.id], eval.decision.maySurface,
+                  let obj = eval.evidence.first?.objectID, let presentation = eval.presentation else { continue }
             let field = f.field.prefix(1).uppercased() + f.field.dropFirst()
             let unit = f.unit.map { " \($0)" } ?? ""
             claims.append(ExpertFindings.Claim(
-                statement: "\(field): \(f.value)\(unit)",
+                statement: "\(Self.framePrefix(presentation))\(field): \(f.value)\(unit)",
                 supportingObjectIDs: [obj],
                 confidence: Confidence(f.confidence),
                 evidenceGranularity: .coarse,
@@ -96,6 +98,18 @@ public struct ReasoningExpert: Expert {
             ))
         }
         return claims
+    }
+
+    /// The framing prefix a claim's presentation requires — an attributed/user/inference/
+    /// conflict claim is never rendered as a bare fact.
+    nonisolated static func framePrefix(_ p: ClaimPresentation) -> String {
+        switch p {
+        case .fact, .corroborated, .derivation: return ""
+        case .attributed:     return "Reported: "
+        case .userAttributed: return "User-confirmed: "
+        case .inference:      return "Inference: "
+        case .conflict:       return "Conflicting accounts: "
+        }
     }
 
     private func runLLM(

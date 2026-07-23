@@ -30,6 +30,7 @@ public enum EvidenceStatus: String, Codable, Sendable, Hashable, CaseIterable {
     case humanRejected         = "HUMAN_REJECTED"
 
     /// May this status back a MATERIAL claim in a final answer?
+    @available(*, deprecated, message: "Use AssertabilityPolicy with a complete AssertabilityContext")
     public nonisolated var isAssertable: Bool {
         switch self {
         case .directlyObserved, .sourceAsserted, .deterministicallyDerived,
@@ -105,10 +106,18 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     }
 
     /// A material fact may appear in a final answer only if its assessment is assertable
-    /// AND it carries at least one supporting evidence block. (Kept for existing callers;
-    /// the full decision is AssertabilityPolicy via the shared context builder.)
+    /// AND it carries at least one supporting evidence block.
+    @available(*, deprecated, message: "Use ClaimEvaluation + AssertabilityPolicy")
     public var isMaterialAndSupported: Bool {
-        LegacyEvidenceStatusAdapter.encode(assessment).isAssertable && !sourceBlockIDs.isEmpty
+        let s = LegacyEvidenceStatusAdapter.encode(assessment)
+        let assertable: Bool = {
+            switch s {
+            case .directlyObserved, .sourceAsserted, .deterministicallyDerived,
+                 .humanConfirmed, .humanCorrected: return true
+            default: return false
+            }
+        }()
+        return assertable && !sourceBlockIDs.isEmpty
     }
 
     // MARK: - Backward-compatible Codable (S0.5 item 2 C)

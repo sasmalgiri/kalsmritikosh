@@ -120,6 +120,41 @@ struct EvidenceDecisionWiringTests {
         #expect(report.violations.contains { if case .claimDecisionMismatch = $0 { return true } else { return false } })
     }
 
+    @Test("Corrective merge preserves evaluations and can strengthen via added independent evidence")
+    func mergePreservesAndStrengthens() {
+        let o1 = UUID(), o2 = UUID(), b1 = UUID(), b2 = UUID(), factID = UUID()
+        let a = EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction)
+        let builder = AssertabilityContextBuilder()
+        func eval(_ ev: [AssertabilityEvidence]) -> ClaimEvaluation {
+            let ctx = builder.build(assessment: a, evidence: ev)
+            return ClaimEvaluation(id: factID, claimKind: .genericFact, assessment: ctx.assessment,
+                                   evidence: ev, context: ctx, decision: AssertabilityPolicy.evaluate(ctx))
+        }
+        let base = RetrievalResult(claimEvaluations: [eval([AssertabilityEvidence(objectID: o1, blockID: b1, independenceKey: "h1")])])
+        let extra = RetrievalResult(claimEvaluations: [eval([AssertabilityEvidence(objectID: o2, blockID: b2, independenceKey: "h2")])])
+        #expect(base.claimEvaluations.first?.decision == .assertWithAttribution)   // one source alone
+        let merged = MasterBrain.mergeRetrievals(base, extra)
+        #expect(merged.claimEvaluations.count == 1)                                // preserved (not dropped)
+        #expect(merged.claimEvaluations.first?.decision == .assertAsCorroborated)  // strengthened by union
+    }
+
+    @Test("MasterBrain groups by presentation: attributed is NOT a verified fact; inference is labelled")
+    func presentationGroups() {
+        let obj = UUID(), b1 = UUID(), b2 = UUID()
+        // sourceAsserted (no independence) → attributed; directlyObserved+locator → fact.
+        let attributed = fact(.sourceAsserted, blocks: [b1])
+        let observed = GenericFact(subjectLabel: "S", field: "date", value: "2004",
+                                   status: .directlyObserved, confidence: 0.9, sourceBlockIDs: [b2])
+        let chunks = [chunk(obj, b1), chunk(obj, b2)]
+        let evals = ClaimEvaluator.evaluate(facts: [attributed, observed], chunks: chunks)
+        let prompt = MasterBrain.buildEvidencePrompt(question: "?", chunks: chunks, facts: [attributed, observed], evaluations: evals)
+        #expect(prompt.contains("Verified facts"))               // the observed fact
+        #expect(prompt.contains("Reported by a source"))         // the source-asserted fact, attributed
+        // The attributed employer value must NOT sit under the verified header.
+        let verifiedSection = prompt.components(separatedBy: "Reported by a source").first ?? prompt
+        #expect(!verifiedSection.contains("employer: Orchid"))
+    }
+
     @Test("A refused/ inference export claim is rejected as non-assertive")
     func validatorRejectsNonAssertive() throws {
         let obj = UUID(), blk = UUID()

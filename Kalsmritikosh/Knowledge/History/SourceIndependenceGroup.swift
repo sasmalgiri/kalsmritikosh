@@ -11,6 +11,14 @@
 
 import Foundation
 
+/// Resolves reliable, persisted independence keys (content hash / message id / lineage) for
+/// a set of objects, in ONE batch. Missing or uncertain identity data must be omitted (left
+/// nil) — object id, filename, retrieval rank and order are NEVER independence keys. When no
+/// provider is wired the caller stays conservative (no key ⇒ no corroboration). (C2.1)
+public protocol SourceIndependenceKeyProvider: Sendable {
+    func keys(for objectIDs: Set<KnowledgeObject.ID>) async throws -> [KnowledgeObject.ID: String]
+}
+
 public struct SourceIndependenceGrouper: Sendable {
     public init() {}
 

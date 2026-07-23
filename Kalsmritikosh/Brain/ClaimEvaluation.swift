@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 /// The kind of ledger claim an evaluation describes (extensible as more canonical
 /// assessment paths appear; today only GenericFact flows through this envelope).
@@ -78,11 +79,25 @@ public struct ClaimEvaluation: Codable, Sendable, Hashable, Identifiable {
     /// May this claim surface at all? (Everything except a `refuse` decision.)
     public var maySurface: Bool { decision.maySurface }
 
-    /// Deterministic, order-independent fingerprint of normalized evidence.
+    /// Deterministic, order-independent fingerprint of normalized evidence — a SHA-256 over
+    /// a canonical, length-prefixed encoding. Length prefixes + an explicit nil marker make
+    /// it unambiguous: nil ≠ literal "-", keys containing `|`/`;` can't collide, reordering
+    /// is normalized by sorting, and duplicates are preserved as distinct items.
     public nonisolated static func fingerprint(_ evidence: [AssertabilityEvidence]) -> String {
-        evidence
-            .map { "\($0.objectID.uuidString)|\($0.blockID?.uuidString ?? "-")|\($0.independenceKey ?? "-")" }
-            .sorted()
-            .joined(separator: ";")
+        func field(_ s: String?) -> Data {
+            var d = Data()
+            guard let s else { d.append(contentsOf: [0xFF, 0xFF, 0xFF, 0xFF]); return d }   // nil marker
+            let b = Data(s.utf8)
+            withUnsafeBytes(of: UInt32(b.count).bigEndian) { d.append(contentsOf: $0) }
+            d.append(b)
+            return d
+        }
+        let items = evidence
+            .map { (obj: $0.objectID.uuidString, blk: $0.blockID?.uuidString, key: $0.independenceKey) }
+            .sorted { ($0.obj, $0.blk ?? "\u{FFFF}", $0.key ?? "\u{FFFF}") < ($1.obj, $1.blk ?? "\u{FFFF}", $1.key ?? "\u{FFFF}") }
+        var data = Data()
+        withUnsafeBytes(of: UInt32(items.count).bigEndian) { data.append(contentsOf: $0) }
+        for it in items { data.append(field(it.obj)); data.append(field(it.blk)); data.append(field(it.key)) }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }

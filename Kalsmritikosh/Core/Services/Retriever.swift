@@ -75,6 +75,28 @@ public struct RetrievalResult: Codable, Sendable {
         self.claimEvaluations = claimEvaluations
         self.authorityObjectIDs = authorityObjectIDs
     }
+
+    // Backward-compatible Codable: pre-C2 payloads have no `claimEvaluations` key (and older
+    // ones may lack walkSteps/genericFacts/authorityObjectIDs) — decode those as empty rather
+    // than failing the whole result. (S0.5 item 2 C2.1)
+    private enum CodingKeys: String, CodingKey {
+        case chunks, events, entities, relationships, summaries, layersUsed
+        case shortCircuitedAt, walkSteps, genericFacts, claimEvaluations, authorityObjectIDs
+    }
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.chunks = try c.decodeIfPresent([RetrievedChunk].self, forKey: .chunks) ?? []
+        self.events = try c.decodeIfPresent([Event].self, forKey: .events) ?? []
+        self.entities = try c.decodeIfPresent([Entity].self, forKey: .entities) ?? []
+        self.relationships = try c.decodeIfPresent([Relationship].self, forKey: .relationships) ?? []
+        self.summaries = try c.decodeIfPresent([Summary].self, forKey: .summaries) ?? []
+        self.layersUsed = try c.decodeIfPresent([RetrievalLayer].self, forKey: .layersUsed) ?? []
+        self.shortCircuitedAt = try c.decodeIfPresent(RetrievalLayer.self, forKey: .shortCircuitedAt)
+        self.walkSteps = try c.decodeIfPresent([WalkStep].self, forKey: .walkSteps) ?? []
+        self.genericFacts = try c.decodeIfPresent([GenericFact].self, forKey: .genericFacts) ?? []
+        self.claimEvaluations = try c.decodeIfPresent([ClaimEvaluation].self, forKey: .claimEvaluations) ?? []
+        self.authorityObjectIDs = try c.decodeIfPresent([KnowledgeObject.ID].self, forKey: .authorityObjectIDs) ?? []
+    }
 }
 
 public struct RetrievedChunk: Codable, Sendable, Hashable {
