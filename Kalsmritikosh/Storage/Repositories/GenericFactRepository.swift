@@ -20,17 +20,24 @@ public actor GenericFactRepository {
 
     public func upsert(_ fact: GenericFact) async throws {
         let blocksJSON = String(data: try Self.encoder.encode(fact.sourceBlockIDs), encoding: .utf8) ?? "[]"
+        // Dual-write (S0.5 item 2, Commit B): keep the legacy `status` column AND populate
+        // the five separated dimensions, derived deterministically from the status until
+        // the model carries an EvidenceAssessment directly (Commit C).
+        let a = LegacyEvidenceStatusAdapter.decode(fact.status)
         try await database.exec("""
         INSERT OR REPLACE INTO generic_facts
-            (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
+             evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(fact.id),
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
             .text(fact.subjectLabel), .text(fact.field), .text(fact.value),
             fact.unit.map { SQLValue.text($0) } ?? .null,
             .text(fact.status.rawValue), .real(fact.confidence),
-            .text(blocksJSON), .real(Date().timeIntervalSince1970)
+            .text(blocksJSON), .real(Date().timeIntervalSince1970),
+            .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
+            .text(a.availability.rawValue), .text(a.conflict.rawValue), .text(fact.status.rawValue)
         ])
     }
 

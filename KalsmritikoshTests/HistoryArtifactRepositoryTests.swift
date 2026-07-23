@@ -49,8 +49,8 @@ struct HistoryArtifactRepositoryTests {
     @Test("Migration reaches v61 (history_artifacts exists)")
     func migration() async throws {
         let db = try await freshDB()
-        #expect(try await db.currentUserVersion() == 61)
-        #expect(SchemaMigrations.latestVersion == 61)
+        #expect(try await db.currentUserVersion() >= 61)   // v61 table present; schema may be newer
+        #expect(SchemaMigrations.latestVersion >= 61)
         let t = try await db.query("SELECT name FROM sqlite_master WHERE type='table' AND name='history_artifacts';", [])
         #expect(!t.isEmpty)
     }

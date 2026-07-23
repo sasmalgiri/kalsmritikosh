@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 61
+    public static let latestVersion = 62
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -76,12 +76,11 @@ public enum SchemaMigrations {
     /// ordered and append-only, the newest marker's presence implies every
     /// earlier object exists too. UPDATE THIS SENTINEL whenever a new migration
     /// is added, to the newest object it creates (a table or, as here, a column).
-    /// v61 adds the `history_artifacts` table — check it exists (newest object).
+    /// v62 adds `generic_facts.evidence_basis` (among other columns) — the newest
+    /// object is a COLUMN, so probe it via PRAGMA table_info rather than sqlite_master.
     private static func isSchemaFullyApplied(_ database: Database) async throws -> Bool {
-        let rows = try await database.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='history_artifacts';", []
-        )
-        return !rows.isEmpty
+        let rows = try await database.query("PRAGMA table_info(generic_facts);", [])
+        return rows.contains { $0.string(1) == "evidence_basis" }
     }
 
     /// Migrations indexed by their `user_version` number. Append-only.
@@ -146,7 +145,8 @@ public enum SchemaMigrations {
         (58, v58),
         (59, v59),
         (60, v60),
-        (61, v61)
+        (61, v61),
+        (62, v62)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2236,5 +2236,52 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_history_items_artifact ON history_items(artifact_id);
     CREATE INDEX IF NOT EXISTS idx_history_item_evidence_ko ON history_item_evidence(knowledge_object_id);
     CREATE INDEX IF NOT EXISTS idx_history_gaps_artifact ON history_gaps(artifact_id);
+    """
+
+    // S0.5 item 2, Commit B — separate the overloaded EvidenceStatus into five
+    // orthogonal dimensions (basis / review / origin / availability / conflict) as
+    // ADDITIVE, nullable columns. The legacy `status` column is preserved and keeps
+    // being written; `legacy_status` records the raw value that produced the split
+    // (see EvidenceAssessment + LegacyEvidenceStatusAdapter). Legacy rows leave the
+    // dimension columns NULL and are read back via read-time decode of `status`.
+    //
+    // history_items keeps its existing `review_status` (HistoryReviewStatus vocabulary)
+    // UNCHANGED and gains a SEPARATE `review_disposition` (ReviewDisposition vocabulary,
+    // which adds confirmed/disputed/needsReview). We backfill it deterministically from
+    // review_status without rewriting the old column. Conflict for history items stays
+    // DERIVED from contradiction_group_id + contradiction records — no column here.
+    //
+    // events / assertions / contradiction tables / review_decisions and the not-yet-
+    // existing work-product tables are deliberately untouched (Commit C adds read
+    // adapters for Events/Assertions).
+    private static let v62: String = """
+    ALTER TABLE generic_facts ADD COLUMN evidence_basis      TEXT;
+    ALTER TABLE generic_facts ADD COLUMN review_disposition  TEXT;
+    ALTER TABLE generic_facts ADD COLUMN proposal_origin     TEXT;
+    ALTER TABLE generic_facts ADD COLUMN availability_status TEXT;
+    ALTER TABLE generic_facts ADD COLUMN conflict_status     TEXT;
+    ALTER TABLE generic_facts ADD COLUMN legacy_status       TEXT;
+
+    ALTER TABLE temporal_claims ADD COLUMN evidence_basis      TEXT;
+    ALTER TABLE temporal_claims ADD COLUMN review_disposition  TEXT;
+    ALTER TABLE temporal_claims ADD COLUMN proposal_origin     TEXT;
+    ALTER TABLE temporal_claims ADD COLUMN availability_status TEXT;
+    ALTER TABLE temporal_claims ADD COLUMN conflict_status     TEXT;
+    ALTER TABLE temporal_claims ADD COLUMN legacy_status       TEXT;
+
+    ALTER TABLE history_items ADD COLUMN evidence_basis      TEXT;
+    ALTER TABLE history_items ADD COLUMN review_disposition  TEXT;
+    ALTER TABLE history_items ADD COLUMN proposal_origin     TEXT;
+    ALTER TABLE history_items ADD COLUMN availability_status TEXT;
+    ALTER TABLE history_items ADD COLUMN legacy_status       TEXT;
+
+    UPDATE history_items SET review_disposition = CASE
+        WHEN review_status IS NULL OR review_status = 'unreviewed' THEN 'unreviewed'
+        WHEN review_status = 'accepted'  THEN 'confirmed'
+        WHEN review_status = 'corrected' THEN 'corrected'
+        WHEN review_status = 'rejected'  THEN 'rejected'
+        ELSE 'needsReview'
+    END
+    WHERE review_disposition IS NULL;
     """
 }

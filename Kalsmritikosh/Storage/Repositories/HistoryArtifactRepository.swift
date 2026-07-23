@@ -69,11 +69,19 @@ public actor HistoryArtifactRepository {
         for item in outline.items {
             let temporal = Self.json(TemporalPair(start: item.start, end: item.end))
             let actors = Self.json(item.actors)
+            // Dual-write (S0.5 item 2, Commit B): keep legacy `status` + `review_status`,
+            // and populate the separated dimensions. review_disposition comes from the
+            // item's OWN review status (its vocabulary), NOT from the evidence status —
+            // the other dimensions come from decoding evidenceStatus. Conflict stays
+            // DERIVED (contradiction_group_id), so no conflict column here.
+            let a = LegacyEvidenceStatusAdapter.decode(item.evidenceStatus)
+            let reviewDisp = Self.reviewDisposition(from: item.reviewStatus)
             try await database.exec("""
             INSERT INTO history_items
                 (id, artifact_id, chapter_id, item_kind, title, description, temporal_json,
-                 actors_json, status, confidence, contradiction_group_id, alternative_account_id, review_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                 actors_json, status, confidence, contradiction_group_id, alternative_account_id, review_status,
+                 evidence_basis, review_disposition, proposal_origin, availability_status, legacy_status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(item.id), .uuid(artifactID),
                   chapterIDForItem[item.id].map { SQLValue.uuid($0) } ?? .null,
                   .text(item.kind.rawValue), .text(item.title),
@@ -81,7 +89,9 @@ public actor HistoryArtifactRepository {
                   .text(temporal), .text(actors), .text(item.evidenceStatus.rawValue), .real(item.confidence),
                   item.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
                   item.alternativeAccountID.map { SQLValue.uuid($0) } ?? .null,
-                  .text(item.reviewStatus.rawValue)])
+                  .text(item.reviewStatus.rawValue),
+                  .text(a.basis.rawValue), .text(reviewDisp.rawValue), .text(a.origin.rawValue),
+                  .text(a.availability.rawValue), .text(item.evidenceStatus.rawValue)])
             for ev in item.evidence {
                 try await database.exec("""
                 INSERT OR IGNORE INTO history_item_evidence
@@ -145,6 +155,17 @@ public actor HistoryArtifactRepository {
     private struct TemporalPair: Codable { let start: TemporalValue?; let end: TemporalValue? }
     private static func json<T: Encodable>(_ v: T) -> String {
         (try? String(data: encoder.encode(v), encoding: .utf8) ?? "{}") ?? "{}"
+    }
+
+    /// Map a history item's own review status → the shared ReviewDisposition vocabulary
+    /// (S0.5 item 2). Deterministic, matches the v62 SQL backfill of `review_disposition`.
+    nonisolated static func reviewDisposition(from s: HistoryReviewStatus) -> ReviewDisposition {
+        switch s {
+        case .unreviewed: return .unreviewed
+        case .accepted:   return .confirmed
+        case .corrected:  return .corrected
+        case .rejected:   return .rejected
+        }
     }
 
     private static let headerColumns = """

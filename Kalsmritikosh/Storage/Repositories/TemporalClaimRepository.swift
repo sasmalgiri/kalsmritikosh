@@ -23,13 +23,17 @@ public actor TemporalClaimRepository {
     }()
 
     public func insert(_ claim: TemporalClaim) async throws {
+        // Dual-write (S0.5 item 2, Commit B): legacy `status` + the five separated
+        // dimensions, derived from the status until the model carries an assessment (C).
+        let a = LegacyEvidenceStatusAdapter.decode(claim.status)
         try await database.exec("""
         INSERT OR REPLACE INTO temporal_claims
             (id, subject_id, predicate, object_json, valid_from_json, valid_to_json,
              observed_at_json, status, confidence, source_object_ids_json,
              source_block_ids_json, assertion_ids_json, generic_fact_ids_json,
-             extractor_id, extractor_version, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+             extractor_id, extractor_version, created_at,
+             evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
         """, [
             .uuid(claim.id), .uuid(claim.subjectID), .text(claim.predicate),
             .text(Self.encode(claim.object)),
@@ -38,7 +42,9 @@ public actor TemporalClaimRepository {
             .text(Self.encodeIDs(claim.sourceObjectIDs)), .text(Self.encodeIDs(claim.sourceBlockIDs)),
             .text(Self.encodeIDs(claim.assertionIDs)), .text(Self.encodeIDs(claim.genericFactIDs)),
             .text(claim.extractorID), .text(claim.extractorVersion),
-            .real(claim.createdAt.timeIntervalSince1970)
+            .real(claim.createdAt.timeIntervalSince1970),
+            .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
+            .text(a.availability.rawValue), .text(a.conflict.rawValue), .text(claim.status.rawValue)
         ])
     }
 
