@@ -20,50 +20,82 @@ public actor ClaimRepository {
     private let database: Database
     public init(database: Database) { self.database = database }
 
-    // MARK: - Save (claim + evidence + lineage, atomic per claim)
+    // MARK: - Save (claim + evidence + lineage, ATOMIC per claim)
 
-    /// Persist a claim and (idempotently) its evidence + lineage. `INSERT OR REPLACE` on the
-    /// claim row + full rewrite of the child rows makes re-saving the same claim id safe.
+    /// Test-only seam: force a throw at a point inside the SAVEPOINT so the atomicity test
+    /// can prove ROLLBACK leaves the prior claim + evidence + lineage unchanged.
+    enum SaveFailurePoint: Sendable { case afterEvidence, afterLineage }
+    struct InjectedSaveFailure: Error {}
+
+    /// Persist a claim and (idempotently) its evidence + lineage as ONE atomic unit. The
+    /// whole write runs inside a uniquely-named SAVEPOINT: on any failure it ROLLBACKs to
+    /// the savepoint (undoing the claim upsert AND the child-row rewrite) and rethrows, so a
+    /// partial claim can never be left behind.
     @discardableResult
     public func save(_ claim: Claim) async throws -> Claim.ID {
-        let a = claim.assessment
-        try await database.exec("""
-        INSERT OR REPLACE INTO claims
-            (id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
-             evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
-        """, [.uuid(claim.id),
-              claim.subjectID.map { SQLValue.uuid($0) } ?? .null,
-              .text(claim.subjectLabel), .text(claim.statement), .real(claim.confidence),
-              claim.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
-              .real(claim.createdAt.timeIntervalSince1970),
-              .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
-              .text(a.availability.rawValue), .text(a.conflict.rawValue),
-              a.legacyStatus.map { SQLValue.text($0.rawValue) } ?? .null])
-
-        try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id = ?;", [.uuid(claim.id)])
-        for ev in claim.evidence {
-            try await database.exec("""
-            INSERT OR IGNORE INTO claim_evidence_ref
-                (claim_id, knowledge_object_id, evidence_block_id, assertion_id,
-                 generic_fact_id, event_id, source_version_id, evidence_role)
-            VALUES (?,?,?,?,?,?,?,?);
-            """, [.uuid(claim.id), .uuid(ev.objectID),
-                  ev.blockID.map { SQLValue.uuid($0) } ?? .text(""),
-                  ev.assertionID.map { SQLValue.uuid($0) } ?? .null,
-                  ev.genericFactID.map { SQLValue.uuid($0) } ?? .null,
-                  ev.eventID.map { SQLValue.uuid($0) } ?? .null,
-                  ev.sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
-                  .text(ev.role.rawValue)])
-        }
-
-        try await database.exec("DELETE FROM claim_lineage WHERE claim_id = ?;", [.uuid(claim.id)])
-        for ref in claim.derivedFrom {
-            try await database.exec("""
-            INSERT OR IGNORE INTO claim_lineage (claim_id, source_kind, source_id) VALUES (?,?,?);
-            """, [.uuid(claim.id), .text(ref.kind.rawValue), .uuid(ref.id)])
-        }
+        try await performSave(claim, injectFailure: nil)
         return claim.id
+    }
+
+    /// Internal variant used only by the atomicity test.
+    func save(_ claim: Claim, injectFailureAt point: SaveFailurePoint) async throws {
+        try await performSave(claim, injectFailure: point)
+    }
+
+    private func performSave(_ claim: Claim, injectFailure: SaveFailurePoint?) async throws {
+        // A per-claim savepoint name (valid identifier: letters + hex, no dashes).
+        let savepoint = "claim_save_\(claim.id.uuidString.replacingOccurrences(of: "-", with: ""))"
+        do {
+            try await database.exec("SAVEPOINT \(savepoint);", [])
+
+            let a = claim.assessment
+            try await database.exec("""
+            INSERT OR REPLACE INTO claims
+                (id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
+                 evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(claim.id),
+                  claim.subjectID.map { SQLValue.uuid($0) } ?? .null,
+                  .text(claim.subjectLabel), .text(claim.statement), .real(claim.confidence),
+                  claim.contradictionGroupID.map { SQLValue.uuid($0) } ?? .null,
+                  .real(claim.createdAt.timeIntervalSince1970),
+                  .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
+                  .text(a.availability.rawValue), .text(a.conflict.rawValue),
+                  a.legacyStatus.map { SQLValue.text($0.rawValue) } ?? .null])
+
+            // Evidence: rewrite with a stable ordinal identity so distinct references that
+            // share object/block but differ in role or linked source ids all persist.
+            try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id = ?;", [.uuid(claim.id)])
+            for (ordinal, ev) in claim.evidence.enumerated() {
+                try await database.exec("""
+                INSERT INTO claim_evidence_ref
+                    (claim_id, ordinal, knowledge_object_id, evidence_block_id, assertion_id,
+                     generic_fact_id, event_id, source_version_id, evidence_role)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [.uuid(claim.id), .integer(Int64(ordinal)), .uuid(ev.objectID),
+                      ev.blockID.map { SQLValue.uuid($0) } ?? .null,
+                      ev.assertionID.map { SQLValue.uuid($0) } ?? .null,
+                      ev.genericFactID.map { SQLValue.uuid($0) } ?? .null,
+                      ev.eventID.map { SQLValue.uuid($0) } ?? .null,
+                      ev.sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
+                      .text(ev.role.rawValue)])
+            }
+            if injectFailure == .afterEvidence { throw InjectedSaveFailure() }
+
+            try await database.exec("DELETE FROM claim_lineage WHERE claim_id = ?;", [.uuid(claim.id)])
+            for ref in claim.derivedFrom {
+                try await database.exec("""
+                INSERT OR IGNORE INTO claim_lineage (claim_id, source_kind, source_id) VALUES (?,?,?);
+                """, [.uuid(claim.id), .text(ref.kind.rawValue), .uuid(ref.id)])
+            }
+            if injectFailure == .afterLineage { throw InjectedSaveFailure() }
+
+            try await database.exec("RELEASE SAVEPOINT \(savepoint);", [])
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);", [])
+            try? await database.exec("RELEASE SAVEPOINT \(savepoint);", [])
+            throw error
+        }
     }
 
     // MARK: - Load / query
@@ -122,14 +154,12 @@ public actor ClaimRepository {
         let rows = try await database.query("""
         SELECT knowledge_object_id, evidence_block_id, assertion_id, generic_fact_id,
                event_id, source_version_id, evidence_role
-        FROM claim_evidence_ref WHERE claim_id = ?;
+        FROM claim_evidence_ref WHERE claim_id = ? ORDER BY ordinal;
         """, [.uuid(claimID)])
         return rows.compactMap { r in
             guard let obj = r.uuid(0) else { return nil }
-            // An empty-string block id is the "no block" sentinel used to keep it in the PK.
-            let blk = (r.string(1)?.isEmpty == false) ? r.uuid(1) : nil
             let role = r.string(6).flatMap { EvidenceReference.Role(rawValue: $0) } ?? .supports
-            return EvidenceReference(objectID: obj, blockID: blk, assertionID: r.uuid(2),
+            return EvidenceReference(objectID: obj, blockID: r.uuid(1), assertionID: r.uuid(2),
                                      genericFactID: r.uuid(3), eventID: r.uuid(4),
                                      sourceVersionID: r.uuid(5), role: role)
         }
@@ -252,6 +282,50 @@ public actor ClaimReviewRepository {
         ORDER BY reviewed_at DESC, rowid DESC LIMIT 1;
         """, [.uuid(claimID)]))
             .first?.string(0).flatMap(ReviewDisposition.init(rawValue:)) ?? .unreviewed
+    }
+
+    /// The latest recorded review for a claim, or `nil` when the claim has never been
+    /// reviewed. Distinguishes "no review" from "reviewed as unreviewed" — the effective-
+    /// assessment resolver needs that distinction (never-reviewed keeps the stored review).
+    public func latestReview(claimID: Claim.ID) async throws -> ClaimReview? {
+        try await reviews(claimID: claimID).first
+    }
+}
+
+// MARK: - Effective (review-applied) claim resolution
+
+/// A claim paired with its EFFECTIVE assessment: the stored assessment with its `review`
+/// dimension replaced by the latest recorded `ClaimReview` disposition when one exists. All
+/// Claim policy evaluation (composers, export) must use `effectiveAssessment` — never the
+/// raw stored assessment — so a later rejection / correction / confirmation is honoured and
+/// a stale claim re-save cannot silently erase it.
+public struct ResolvedClaim: Sendable, Hashable {
+    public let claim: Claim
+    public let effectiveAssessment: EvidenceAssessment
+    public nonisolated init(claim: Claim, effectiveAssessment: EvidenceAssessment) {
+        self.claim = claim; self.effectiveAssessment = effectiveAssessment
+    }
+}
+
+public actor ClaimResolver {
+    private let claims: ClaimRepository
+    private let reviews: ClaimReviewRepository
+    public init(claims: ClaimRepository, reviews: ClaimReviewRepository) {
+        self.claims = claims; self.reviews = reviews
+    }
+
+    /// Resolve a loaded claim to its effective assessment. Human review is applied to the
+    /// `review` dimension ONLY — the evidence basis (and every other dimension) is preserved.
+    public func resolve(_ claim: Claim) async throws -> ResolvedClaim {
+        let latest = try await reviews.latestReview(claimID: claim.id)
+        let effective = latest.map { claim.assessment.with(review: $0.disposition) } ?? claim.assessment
+        return ResolvedClaim(claim: claim, effectiveAssessment: effective)
+    }
+
+    /// Load a claim by id and resolve it, or `nil` when the claim does not exist.
+    public func resolve(id: Claim.ID) async throws -> ResolvedClaim? {
+        guard let claim = try await claims.claim(id: id) else { return nil }
+        return try await resolve(claim)
     }
 }
 

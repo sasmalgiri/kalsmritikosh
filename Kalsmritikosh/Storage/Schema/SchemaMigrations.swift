@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 63
+    public static let latestVersion = 64
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -105,10 +105,12 @@ public enum SchemaMigrations {
                                  "availability_status", "conflict_status", "legacy_status"],
             "history_items":   ["evidence_basis", "review_disposition", "proposal_origin",
                                  "availability_status", "legacy_status"],
-            // v63 — the shared Claim engine's canonical table (newest object).
+            // v63 — the shared Claim engine's canonical table.
             "claims":          ["id", "subject_id", "statement", "evidence_basis",
                                  "review_disposition", "proposal_origin", "availability_status",
-                                 "conflict_status", "legacy_status", "created_at"]
+                                 "conflict_status", "legacy_status", "created_at"],
+            // v64 — evidence-ref rebuilt with an ordinal identity (newest shape).
+            "claim_evidence_ref": ["claim_id", "ordinal", "knowledge_object_id", "evidence_role"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -182,7 +184,8 @@ public enum SchemaMigrations {
         (60, v60),
         (61, v61),
         (62, v62),
-        (63, v63)
+        (63, v63),
+        (64, v64)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2399,5 +2402,42 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_claim_contradictions_cid ON claim_contradictions(contradiction_id);
     CREATE INDEX IF NOT EXISTS idx_claim_reviews_claim ON claim_reviews(claim_id, reviewed_at);
     CREATE INDEX IF NOT EXISTS idx_claim_usage_claim ON claim_usage(claim_id);
+    """
+
+    // PA-009.1 — rebuild claim_evidence_ref with an ORDINAL identity. The v63 PK
+    // (claim_id, knowledge_object_id, evidence_block_id) + empty-string block sentinel
+    // meant two distinct evidence references for the same claim/object/block but different
+    // assertion / fact / event / source-version / role COLLIDED, and INSERT OR IGNORE
+    // silently dropped one. The ordinal PK gives each reference on a claim its own identity
+    // and a stable load order; the empty-string sentinel becomes a real NULL. Existing rows
+    // migrate deterministically (ordinal assigned per claim by a stable ordering).
+    private static let v64: String = """
+    CREATE TABLE claim_evidence_ref_v2 (
+        claim_id            TEXT NOT NULL,
+        ordinal             INTEGER NOT NULL,
+        knowledge_object_id TEXT NOT NULL,
+        evidence_block_id   TEXT,
+        assertion_id        TEXT,
+        generic_fact_id     TEXT,
+        event_id            TEXT,
+        source_version_id   TEXT,
+        evidence_role       TEXT NOT NULL,
+        PRIMARY KEY (claim_id, ordinal)
+    );
+    INSERT INTO claim_evidence_ref_v2
+        (claim_id, ordinal, knowledge_object_id, evidence_block_id, assertion_id,
+         generic_fact_id, event_id, source_version_id, evidence_role)
+    SELECT claim_id,
+           ROW_NUMBER() OVER (PARTITION BY claim_id
+                              ORDER BY knowledge_object_id, evidence_block_id,
+                                       assertion_id, generic_fact_id, event_id, source_version_id) - 1,
+           knowledge_object_id,
+           NULLIF(evidence_block_id, ''),
+           assertion_id, generic_fact_id, event_id, source_version_id, evidence_role
+    FROM claim_evidence_ref;
+    DROP TABLE claim_evidence_ref;
+    ALTER TABLE claim_evidence_ref_v2 RENAME TO claim_evidence_ref;
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_claim ON claim_evidence_ref(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_object ON claim_evidence_ref(knowledge_object_id);
     """
 }

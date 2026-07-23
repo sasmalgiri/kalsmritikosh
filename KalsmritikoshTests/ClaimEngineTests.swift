@@ -43,12 +43,15 @@ struct ClaimEngineTests {
             contradictionGroupID: contradictionGroupID, createdAt: t0)
     }
 
-    @Test("Migration reaches v63 (claims table + links exist)")
+    @Test("Migration reaches v64 (claims table + links + ordinal evidence exist)")
     func migration() async throws {
         let db = try await freshDB()
         #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
-        #expect(SchemaMigrations.latestVersion == 63)
+        #expect(SchemaMigrations.latestVersion == 64)
         #expect(SchemaMigrations.migrationListIsConsistent)
+        // v64 rebuilt claim_evidence_ref with an ordinal identity column.
+        let cols = Set((try await db.query("PRAGMA table_info(claim_evidence_ref);", [])).compactMap { $0.string(1) })
+        #expect(cols.contains("ordinal"))
     }
 
     @Test("A claim round-trips with its assessment, evidence, and lineage intact")
@@ -202,5 +205,141 @@ struct ClaimEngineTests {
         let decision = AssertabilityPolicy.evaluate(infCtx)
         #expect(decision == .presentAsInference)
         #expect(decision.isAssertiveDecision == false)
+    }
+
+    // MARK: PA-009.1 — atomic save
+
+    @Test("A failed save rolls back atomically: prior claim, evidence, and lineage survive")
+    func saveIsAtomicOnFailure() async throws {
+        let repo = ClaimRepository(database: try await freshDB())
+        let id = UUID(), subject = UUID()
+        let v1 = Claim(id: id, subjectID: subject, subjectLabel: "A", statement: "v1 statement",
+                       assessment: EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction),
+                       confidence: 0.5,
+                       evidence: [EvidenceReference(objectID: UUID(), blockID: UUID())],
+                       derivedFrom: [DerivedReference(kind: .assertion, id: UUID())], createdAt: t0)
+        try await repo.save(v1)
+
+        // A poisoned re-save (same id) that throws AFTER rewriting evidence.
+        let v2 = Claim(id: id, subjectID: subject, subjectLabel: "A", statement: "v2 statement (must not persist)",
+                       assessment: EvidenceAssessment(basis: .inferred, origin: .modelProposed),
+                       confidence: 0.99,
+                       evidence: [EvidenceReference(objectID: UUID()), EvidenceReference(objectID: UUID())],
+                       derivedFrom: [DerivedReference(kind: .event, id: UUID())], createdAt: t0)
+        await #expect(throws: (any Error).self) {
+            try await repo.save(v2, injectFailureAt: .afterEvidence)
+        }
+
+        // Everything is still exactly v1 — the upsert AND the evidence rewrite rolled back.
+        let loaded = try #require(try await repo.claim(id: id))
+        #expect(loaded.statement == "v1 statement")
+        #expect(loaded.assessment == v1.assessment)
+        #expect(Set(loaded.evidence) == Set(v1.evidence))
+        #expect(Set(loaded.derivedFrom) == Set(v1.derivedFrom))
+    }
+
+    // MARK: PA-009.1 — evidence-reference identity
+
+    @Test("References sharing object+block but differing in role/linked ids all round-trip in order")
+    func evidenceReferencesHaveDistinctIdentity() async throws {
+        let repo = ClaimRepository(database: try await freshDB())
+        let obj = UUID(), blk = UUID()
+        // Three references, same claim + object + block, differing only in role / linked ids.
+        let refs = [
+            EvidenceReference(objectID: obj, blockID: blk, assertionID: UUID(), role: .supports),
+            EvidenceReference(objectID: obj, blockID: blk, genericFactID: UUID(), role: .contradicts),
+            EvidenceReference(objectID: obj, blockID: blk, eventID: UUID(), role: .context),
+        ]
+        let c = Claim(subjectID: UUID(), subjectLabel: "A", statement: "s",
+                      assessment: EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction),
+                      confidence: 0.5, evidence: refs, createdAt: t0)
+        try await repo.save(c)
+        let loaded = try #require(try await repo.claim(id: c.id))
+        #expect(loaded.evidence.count == 3)          // none collided / dropped
+        #expect(loaded.evidence == refs)             // preserved IN ORDER (by ordinal)
+    }
+
+    @Test("A missing evidence block is stored as real NULL and loads back as nil")
+    func missingBlockIsNull() async throws {
+        let repo = ClaimRepository(database: try await freshDB())
+        let c = Claim(subjectID: UUID(), subjectLabel: "A", statement: "s",
+                      assessment: EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction),
+                      confidence: 0.5, evidence: [EvidenceReference(objectID: UUID(), blockID: nil)], createdAt: t0)
+        try await repo.save(c)
+        #expect(try await repo.claim(id: c.id)?.evidence.first?.blockID == nil)
+    }
+
+    // MARK: PA-009.1 — effective (review-applied) assessment
+
+    private func resolver(_ db: Database) -> (ClaimRepository, ClaimReviewRepository, ClaimResolver) {
+        let claims = ClaimRepository(database: db)
+        let reviews = ClaimReviewRepository(database: db)
+        return (claims, reviews, ClaimResolver(claims: claims, reviews: reviews))
+    }
+
+    @Test("An unreviewed claim keeps its stored review in the effective assessment")
+    func effectiveUnreviewed() async throws {
+        let (claims, _, resolver) = resolver(try await freshDB())
+        let c = sampleClaim(subject: UUID(),
+                            assessment: EvidenceAssessment(basis: .sourceAsserted, review: .unreviewed,
+                                                           origin: .sourceExtraction))
+        try await claims.save(c)
+        let resolved = try await resolver.resolve(c)
+        #expect(resolved.effectiveAssessment == c.assessment)     // unchanged
+    }
+
+    @Test("A confirmed review produces a confirmed effective assessment")
+    func effectiveConfirmed() async throws {
+        let (claims, reviews, resolver) = resolver(try await freshDB())
+        let c = sampleClaim(subject: UUID())
+        try await claims.save(c)
+        try await reviews.record(ClaimReview(claimID: c.id, disposition: .confirmed, reviewer: "u", reviewedAt: t0))
+        let resolved = try await resolver.resolve(c)
+        #expect(resolved.effectiveAssessment.review == .confirmed)
+        #expect(resolved.effectiveAssessment.basis == c.assessment.basis)   // basis untouched
+    }
+
+    @Test("A rejected review makes AssertabilityPolicy refuse via the effective assessment")
+    func effectiveRejectedRefuses() async throws {
+        let (claims, reviews, resolver) = resolver(try await freshDB())
+        // Would otherwise assert as fact.
+        let c = sampleClaim(subject: UUID(),
+                            assessment: EvidenceAssessment(basis: .directlyObserved, origin: .sourceExtraction))
+        try await claims.save(c)
+        try await reviews.record(ClaimReview(claimID: c.id, disposition: .rejected, reviewer: "u",
+                                             reason: "not this subject", reviewedAt: t0))
+        let resolved = try await resolver.resolve(c)
+        let ctx = AssertabilityContext(assessment: resolved.effectiveAssessment,
+                                       exactEvidenceCount: 1, independentEvidenceGroupCount: 1,
+                                       hasExactLocator: true, hasReproducibleDerivation: false)
+        #expect(AssertabilityPolicy.evaluate(ctx) == .refuse)
+    }
+
+    @Test("A correction changes review disposition but never the evidence basis")
+    func effectiveCorrectionKeepsBasis() async throws {
+        let (claims, reviews, resolver) = resolver(try await freshDB())
+        let c = sampleClaim(subject: UUID(),
+                            assessment: EvidenceAssessment(basis: .directlyObserved, origin: .sourceExtraction))
+        try await claims.save(c)
+        try await reviews.record(ClaimReview(claimID: c.id, disposition: .corrected,
+                                             priorValue: "old", newValue: "new", reviewer: "u", reviewedAt: t0))
+        let resolved = try await resolver.resolve(c)
+        #expect(resolved.effectiveAssessment.review == .corrected)
+        #expect(resolved.effectiveAssessment.basis == .directlyObserved)     // basis never changes
+    }
+
+    @Test("A stale claim re-save cannot erase a later review decision")
+    func staleResaveCannotEraseReview() async throws {
+        let (claims, reviews, resolver) = resolver(try await freshDB())
+        let c = sampleClaim(subject: UUID(),
+                            assessment: EvidenceAssessment(basis: .sourceAsserted, review: .unreviewed,
+                                                           origin: .sourceExtraction))
+        try await claims.save(c)
+        try await reviews.record(ClaimReview(claimID: c.id, disposition: .rejected, reviewer: "u", reviewedAt: t0))
+        // A stale writer re-saves the ORIGINAL (unreviewed) claim row.
+        try await claims.save(c)
+        // The review lives in its own append-only table, so resolution still reflects it.
+        let resolved = try await resolver.resolve(try #require(try await claims.claim(id: c.id)))
+        #expect(resolved.effectiveAssessment.review == .rejected)
     }
 }
