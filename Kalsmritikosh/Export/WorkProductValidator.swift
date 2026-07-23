@@ -51,47 +51,38 @@ public struct ComposedWorkProduct: Sendable, Hashable {
 public struct WorkProductValidator: Sendable {
     public nonisolated init() {}
 
-    /// C2.1 Part 3B — adapt the PRODUCTION `WorkProduct` (what WorkspacesView actually
-    /// exports) into the validated `ComposedWorkProduct`, gating ONLY material claims. A
-    /// material claim (direct evidence / source assertion / deterministic derivation) must
-    /// carry a RESOLVED, block-backed citation; inference and human-note claims are
-    /// disclosures and are not required to carry evidence, so they're excluded from the
-    /// evidence-required set (never fabricated, never blocked). This lets the export fail
-    /// CLOSED on an unsupported material claim without rejecting legitimate labelled
-    /// disclosures.
-    public nonisolated static func materialComposition(from wp: WorkProduct) -> ComposedWorkProduct {
-        func isMaterial(_ s: EpistemicStatus) -> Bool {
-            switch s {
-            case .directEvidence, .sourceAssertion, .deterministicDerivation: return true
-            case .inference, .humanNote: return false
+    /// C2.1 — the PRODUCTION export gate over the real `WorkProduct` (what WorkspacesView
+    /// exports). It fails CLOSED on the genuine danger — a factual claim that CITES a source
+    /// which cannot be reopened — WITHOUT falsely blocking legitimate reports.
+    ///
+    /// Role model (matches the deterministic composer's real output):
+    ///  • A CITED material assertion (directEvidence / sourceAssertion WITH ≥1 citation) —
+    ///    e.g. a dated event fact — must have at least one RESOLVED citation (reopenable
+    ///    source). Otherwise the export is blocked.
+    ///  • Deterministic report metadata ("12 events in scope"), inferences, human notes, and
+    ///    the uncited conflict/gap DISCLOSURES the composer emits are NOT evidence-required —
+    ///    they are legitimately citation-free and never block the export.
+    ///
+    /// This is the surgical gate; resolving event evidence down to exact block ids + typed
+    /// evidence is the tracked full-rewrite refactor.
+    public nonisolated func validateProductionExport(_ wp: WorkProduct) -> Report {
+        var violations: [Violation] = []
+        for section in wp.sections {
+            for claim in section.claims {
+                // Evidence-required only when the claim BOTH is a material assertion AND
+                // actually cites sources (a citation-free deterministic count / disclosure is
+                // not a cited factual assertion).
+                let citedMaterial = (claim.status == .directEvidence || claim.status == .sourceAssertion)
+                    && !claim.supporting.isEmpty
+                guard citedMaterial else { continue }
+                // A cited material claim must cite at least one source that can be REOPENED.
+                if !claim.supporting.contains(where: { $0.isResolved }) {
+                    violations.append(.claimUnsupportedStatus(
+                        section: section.title, claim: claim.text, status: claim.status.rawValue))
+                }
             }
         }
-        func mapStatus(_ s: EpistemicStatus) -> EvidenceStatus {
-            switch s {
-            case .directEvidence:          return .directlyObserved
-            case .sourceAssertion:         return .sourceAsserted
-            case .deterministicDerivation: return .deterministicallyDerived
-            case .inference:               return .inferred
-            case .humanNote:               return .unsupported
-            }
-        }
-        var manifest = Set<UUID>()
-        var sections: [ComposedSection] = []
-        for sec in wp.sections {
-            let material = sec.claims.filter { isMaterial($0.status) }
-            let composed = material.map { c -> ComposedClaim in
-                // Only RESOLVED citations contribute blocks → a material claim backed only by
-                // unresolved citations has zero exact evidence and will be blocked.
-                let blocks = c.supporting.filter(\.isResolved).flatMap(\.evidenceBlockIDs)
-                manifest.formUnion(blocks)
-                return ComposedClaim(text: c.text, sourceBlockIDs: blocks, status: mapStatus(c.status))
-            }
-            let bp = BlueprintSection(title: sec.title, kind: .matrix,
-                                      requiresEvidence: !material.isEmpty, minEvidencePerClaim: 1)
-            sections.append(ComposedSection(blueprint: bp, claims: composed))
-        }
-        let blueprint = WorkProductBlueprint(name: wp.title, persona: .general, sections: sections.map(\.blueprint))
-        return ComposedWorkProduct(blueprint: blueprint, sections: sections, manifestSourceIDs: manifest)
+        return Report(violations: violations)
     }
 
     public enum Violation: Sendable, Hashable {

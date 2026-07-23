@@ -559,10 +559,10 @@ public struct WorkspacesView: View {
         // C2.1 Part 3B — evidence-integrity gate. Fail CLOSED: an unsupported material claim
         // (direct/source/derived with no resolved, block-backed citation) blocks the export
         // entirely — no file is written. Inference and human-note disclosures are allowed.
-        let integrity = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: wp))
+        let integrity = WorkProductValidator().validateProductionExport(wp)
         guard integrity.isValid else {
             KalsmritikoshLog.storage.error("Export blocked by evidence-integrity gate: \(String(describing: integrity.violations), privacy: .public)")
-            await MainActor.run { reportStatus = "Export blocked: \(integrity.violations.count) unsupported material claim(s) failed the evidence gate. Nothing was written." }
+            await MainActor.run { reportStatus = "Export blocked: \(integrity.violations.count) material claim(s) cite a source that cannot be reopened. Nothing was written." }
             return
         }
         let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
@@ -611,10 +611,10 @@ public struct WorkspacesView: View {
 
         // C2.1 Part 3B — same evidence-integrity gate on the receipt path. Fail CLOSED: do
         // not seal or write a receipt for a work product with an unsupported material claim.
-        let integrity = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: wp))
+        let integrity = WorkProductValidator().validateProductionExport(wp)
         guard integrity.isValid else {
             KalsmritikoshLog.storage.error("Receipt blocked by evidence-integrity gate: \(String(describing: integrity.violations), privacy: .public)")
-            await MainActor.run { reportStatus = "Receipt blocked: \(integrity.violations.count) unsupported material claim(s) failed the evidence gate. Nothing was sealed." }
+            await MainActor.run { reportStatus = "Receipt blocked: \(integrity.violations.count) material claim(s) cite a source that cannot be reopened. Nothing was sealed." }
             return
         }
 

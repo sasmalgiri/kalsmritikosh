@@ -2,63 +2,76 @@
 //  EvidenceExportGateTests.swift
 //  Kalsmritikosh Tests
 //
-//  S0.5 item 2, C2.1 Part 3B — the production export evidence-integrity gate. The
-//  user-facing report/receipt export now validates WorkProductValidator.materialComposition
-//  and fails CLOSED: a material claim (direct/source/derived) with no resolved, block-backed
-//  citation blocks the export; inference and human-note disclosures are allowed.
+//  S0.5 item 2, C2.1 — the production export evidence gate. The user-facing report/receipt
+//  export runs WorkProductValidator.validateProductionExport on the REAL WorkProduct and
+//  fails CLOSED when a CITED material claim cites a source that cannot be reopened. It must
+//  NOT falsely block legitimate reports: deterministic counts, inference/gap/conflict
+//  disclosures, and uncited claims are allowed. These tests compose real WorkProducts via
+//  WorkProductComposer.compose (not hand-built) for all four templates.
 //
 
 import Foundation
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("C2.1 Part 3B — production export integrity gate")
+@Suite("C2.1 — production export integrity gate")
 struct EvidenceExportGateTests {
 
-    private func resolvedCite(_ block: UUID) -> CitationRecord {
-        CitationRecord(sourceVersionID: UUID(), evidenceBlockIDs: [block], displayLabel: "[1]", sourceTitle: "doc")
-    }
-    private func unresolvedCite() -> CitationRecord {
-        CitationRecord(sourceVersionID: nil, evidenceBlockIDs: [], displayLabel: "[?]", sourceTitle: "unresolved")
-    }
-    private func wp(_ claims: [WorkProductClaim]) -> WorkProduct {
-        WorkProduct(template: .generalSummary, title: "T",
-                    sections: [WorkProductSection(title: "Facts", claims: claims)])
+    private func event(_ title: String, _ obj: UUID = UUID()) -> WorkProductComposer.EventInput {
+        WorkProductComposer.EventInput(
+            event: Event(kind: .other, date: Date(timeIntervalSince1970: 1_100_000_000),
+                         title: title, entityIDs: [], sourceObjectID: obj, datePrecision: .day),
+            filename: "\(title).pdf")
     }
 
-    @Test("A material claim backed by a resolved, block-backed citation passes the gate")
-    func backedMaterialPasses() {
-        let product = wp([WorkProductClaim(text: "Employer: Orchid", status: .directEvidence,
-                                           supporting: [resolvedCite(UUID())])])
-        let report = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: product))
-        #expect(report.isValid)
+    @Test("All four real report templates export cleanly (no false blocks)")
+    func allFourTemplatesExportClean() {
+        let events = [event("Contract"), event("Invoice")]
+        for template in WorkProductTemplate.allCases {
+            let wp = WorkProductComposer.compose(
+                template: template, title: "T", scopeNote: "scope",
+                events: events, contradictions: [], gaps: [], disclaimer: "d")
+            let report = WorkProductValidator().validateProductionExport(wp)
+            #expect(report.isValid, "\(template.rawValue) should export cleanly")
+        }
     }
 
-    @Test("A material claim with NO resolved evidence blocks the export (fail closed)")
-    func unsupportedMaterialBlocks() {
-        let product = wp([WorkProductClaim(text: "Employer: Orchid", status: .sourceAssertion,
-                                           supporting: [unresolvedCite()])])
-        let report = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: product))
-        #expect(!report.isValid)                                  // export must be blocked
+    @Test("Deterministic counts and inference/gap disclosures do not block export")
+    func countsAndDisclosuresAllowed() {
+        // general-summary emits count claims (deterministicDerivation, uncited) + a gap
+        // inference — none of which are cited material assertions.
+        let wp = WorkProductComposer.compose(
+            template: .generalSummary, title: "T", scopeNote: "scope",
+            events: [event("E1")], contradictions: [], gaps: [], disclaimer: nil)
+        let hasCount = wp.sections.flatMap(\.claims).contains {
+            $0.status == .deterministicDerivation && $0.supporting.isEmpty
+        }
+        #expect(hasCount)                                            // a real uncited count exists
+        #expect(WorkProductValidator().validateProductionExport(wp).isValid)   // yet export is allowed
     }
 
-    @Test("Inference and human-note disclosures are allowed (not required to carry evidence)")
-    func disclosuresAllowed() {
-        let product = wp([
-            WorkProductClaim(text: "Possibly related", status: .inference),
-            WorkProductClaim(text: "Analyst note", status: .humanNote)
+    @Test("A cited material claim whose citation cannot be reopened is blocked (fail closed)")
+    func unsupportedCitedMaterialBlocked() {
+        let unresolved = CitationRecord(sourceVersionID: nil, evidenceBlockIDs: [],
+                                        displayLabel: "[?]", sourceTitle: "unresolved")
+        let wp = WorkProduct(template: .factMemo, title: "T", sections: [
+            WorkProductSection(title: "Facts", claims: [
+                WorkProductClaim(text: "Employer: Orchid", status: .sourceAssertion, supporting: [unresolved])
+            ])
         ])
-        let report = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: product))
-        #expect(report.isValid)                                   // disclosures don't block
+        let report = WorkProductValidator().validateProductionExport(wp)
+        #expect(!report.isValid)                                     // blocked
     }
 
-    @Test("A backed material claim alongside disclosures still passes")
-    func mixedPasses() {
-        let product = wp([
-            WorkProductClaim(text: "Employer: Orchid", status: .directEvidence, supporting: [resolvedCite(UUID())]),
-            WorkProductClaim(text: "Possibly related", status: .inference)
+    @Test("A cited material claim with a reopenable citation passes")
+    func resolvedCitedMaterialPasses() {
+        let resolved = CitationRecord(sourceVersionID: UUID(), evidenceBlockIDs: [UUID()],
+                                      displayLabel: "[1]", sourceTitle: "doc")
+        let wp = WorkProduct(template: .factMemo, title: "T", sections: [
+            WorkProductSection(title: "Facts", claims: [
+                WorkProductClaim(text: "Employer: Orchid", status: .directEvidence, supporting: [resolved])
+            ])
         ])
-        let report = WorkProductValidator().validate(WorkProductValidator.materialComposition(from: product))
-        #expect(report.isValid)
+        #expect(WorkProductValidator().validateProductionExport(wp).isValid)
     }
 }
