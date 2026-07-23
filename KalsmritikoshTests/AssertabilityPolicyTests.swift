@@ -71,9 +71,30 @@ struct AssertabilityPolicyTests {
     @Test("Human-confirmed with unknown basis is user-attributed, NEVER a fact")
     func humanConfirmedUnknownBasis() {
         let d = decide(ctx(basis: .unknownLegacy, review: .confirmed, origin: .importedLegacy,
-                           legacy: .humanConfirmed, groups: 3, locator: true))
+                           legacy: .humanConfirmed, evidence: 3, groups: 3, locator: true))
         #expect(d == .assertWithUserAttribution)
         #expect(d != .assertAsFact)                            // the core guarantee
+    }
+
+    @Test("A human workflow action over unknown basis requires evidence; corrected is handled like confirmed")
+    func humanActionRequiresEvidence() {
+        // C1.1 defect fix: user-attribution must NOT precede the evidence guard.
+        #expect(decide(ctx(basis: .unknownLegacy, review: .confirmed, origin: .importedLegacy,
+                           legacy: .humanConfirmed, evidence: 0)) == .refuse)
+        // Corrected + evidence → user-attributed (not generic attribution).
+        #expect(decide(ctx(basis: .unknownLegacy, review: .corrected, origin: .userCreated,
+                           legacy: .humanCorrected, evidence: 1)) == .assertWithUserAttribution)
+        // Corrected + zero evidence → refuse.
+        #expect(decide(ctx(basis: .unknownLegacy, review: .corrected, origin: .userCreated,
+                           legacy: .humanCorrected, evidence: 0)) == .refuse)
+    }
+
+    @Test("Malformed corroboration counts cannot fabricate corroboration")
+    func malformedCorroborationCounts() {
+        // One exact citation but two claimed groups → NOT corroborated (groups clamped to citations).
+        #expect(decide(ctx(basis: .sourceAsserted, evidence: 1, groups: 2)) == .assertWithAttribution)
+        // Two citations + two independent groups → corroborated.
+        #expect(decide(ctx(basis: .sourceAsserted, evidence: 2, groups: 2)) == .assertAsCorroborated)
     }
 
     @Test("Human confirmation over a KNOWN basis still stands on that basis, not the confirmation")
@@ -82,12 +103,27 @@ struct AssertabilityPolicyTests {
         #expect(decide(ctx(basis: .directlyObserved, review: .confirmed, locator: true)) == .assertAsFact)
     }
 
-    @Test("Only assertions are material; inference/conflict/refuse are not")
-    func materiality() {
-        #expect(AssertabilityDecision.assertAsFact.isMaterialAssertion)
-        #expect(AssertabilityDecision.assertWithUserAttribution.isMaterialAssertion)
-        #expect(!AssertabilityDecision.presentAsInference.isMaterialAssertion)
-        #expect(!AssertabilityDecision.presentAsConflict.isMaterialAssertion)
-        #expect(!AssertabilityDecision.refuse.isMaterialAssertion)
+    @Test("Visibility (maySurface) is separate from assertion (isAssertiveDecision)")
+    func surfaceVsAssert() {
+        // Inference and conflict MUST remain visible (labelled), only refuse is hidden.
+        #expect(AssertabilityDecision.presentAsInference.maySurface)
+        #expect(AssertabilityDecision.presentAsConflict.maySurface)
+        #expect(!AssertabilityDecision.refuse.maySurface)
+        #expect(AssertabilityDecision.assertAsFact.maySurface)
+
+        // But inference/conflict are NOT assertive decisions.
+        #expect(AssertabilityDecision.assertAsFact.isAssertiveDecision)
+        #expect(AssertabilityDecision.assertWithUserAttribution.isAssertiveDecision)
+        #expect(!AssertabilityDecision.presentAsInference.isAssertiveDecision)
+        #expect(!AssertabilityDecision.presentAsConflict.isAssertiveDecision)
+        #expect(!AssertabilityDecision.refuse.isAssertiveDecision)
+
+        // Framing is forced for attributed / user-attributed / inference / conflict.
+        #expect(AssertabilityDecision.assertWithAttribution.requiresExplicitFraming)
+        #expect(AssertabilityDecision.assertWithUserAttribution.requiresExplicitFraming)
+        #expect(AssertabilityDecision.presentAsInference.requiresExplicitFraming)
+        #expect(AssertabilityDecision.presentAsConflict.requiresExplicitFraming)
+        #expect(!AssertabilityDecision.assertAsFact.requiresExplicitFraming)
+        #expect(!AssertabilityDecision.assertAsCorroborated.requiresExplicitFraming)
     }
 }

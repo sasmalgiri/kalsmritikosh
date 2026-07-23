@@ -53,10 +53,15 @@ public enum AssertabilityDecision: String, Sendable, Hashable {
     case presentAsConflict
     case refuse
 
-    /// True for the decisions that may appear as a MATERIAL claim in a final answer or
-    /// export (with the appropriate framing). `presentAsInference`/`presentAsConflict`
-    /// are surfaced but LABELLED; `refuse` is withheld.
-    public var isMaterialAssertion: Bool {
+    /// May this item appear in output AT ALL? Everything except `refuse` may surface —
+    /// inferences and conflicts must remain VISIBLE (with explicit labels), never silently
+    /// filtered. Use this for visibility gates, NOT `isAssertiveDecision`.
+    public var maySurface: Bool { self != .refuse }
+
+    /// Does this decision ASSERT a material claim (as fact / attributed / corroborated /
+    /// derivation / user-attributed)? Inference and conflict are surfaced but NOT asserted.
+    /// Use this for assertion gates.
+    public var isAssertiveDecision: Bool {
         switch self {
         case .assertAsFact, .assertWithAttribution, .assertAsCorroborated,
              .assertAsDerivation, .assertWithUserAttribution:
@@ -65,6 +70,24 @@ public enum AssertabilityDecision: String, Sendable, Hashable {
             return false
         }
     }
+
+    /// Must the surface force an explicit frame (attribution / user-attribution /
+    /// inference / conflict label)? A bare fact / corroboration / derivation does not.
+    public var requiresExplicitFraming: Bool {
+        switch self {
+        case .assertWithAttribution, .assertWithUserAttribution,
+             .presentAsInference, .presentAsConflict:
+            return true
+        case .assertAsFact, .assertAsCorroborated, .assertAsDerivation, .refuse:
+            return false
+        }
+    }
+
+    /// Deprecated alias — split into `maySurface` (visibility) and `isAssertiveDecision`
+    /// (assertion). Kept briefly so no caller silently changes meaning; do not use for
+    /// visibility (it would hide labelled inference/conflict).
+    @available(*, deprecated, message: "Use isAssertiveDecision for assertion gates or maySurface for visibility")
+    public var isMaterialAssertion: Bool { isAssertiveDecision }
 }
 
 public enum AssertabilityPolicy {
@@ -72,6 +95,10 @@ public enum AssertabilityPolicy {
     /// Evaluate in a safety-first priority order. Earlier rules dominate later ones.
     public nonisolated static func evaluate(_ c: AssertabilityContext) -> AssertabilityDecision {
         let a = c.assessment
+        // Sanitise counts: never trust more independent groups than exact citations, and
+        // clamp negatives. A malformed "1 citation but 2 groups" must NOT corroborate.
+        let exactCount = max(0, c.exactEvidenceCount)
+        let independentGroups = min(max(0, c.independentEvidenceGroupCount), exactCount)
 
         // 1. Human rejection is absolute — never in ordinary output (kept in audit).
         if a.review == .rejected { return .refuse }
@@ -85,27 +112,31 @@ public enum AssertabilityPolicy {
         if a.origin == .modelProposed && a.review != .confirmed && a.review != .corrected {
             return .presentAsInference
         }
-        // 6. Human confirmation with an unrecoverable basis is USER-attributed — never a
-        //    fact. Confirmation is not itself an evidentiary basis.
-        if a.review == .confirmed && a.basis == .unknownLegacy { return .assertWithUserAttribution }
+        // 6. A human workflow action (confirmed OR corrected) over an unrecoverable basis
+        //    is USER-attributed — never a bare fact, and only when it still cites evidence.
+        //    Confirmation/correction is not itself an evidentiary basis.
+        if a.basis == .unknownLegacy, a.review == .confirmed || a.review == .corrected {
+            return exactCount >= 1 ? .assertWithUserAttribution : .refuse
+        }
 
         // Any material assertion below needs at least one exact citation.
-        guard c.exactEvidenceCount >= 1 else { return .refuse }
+        guard exactCount >= 1 else { return .refuse }
 
         switch a.basis {
         case .directlyObserved:
             // A fact only when it's exactly located; otherwise attribute it.
             return c.hasExactLocator ? .assertAsFact : .assertWithAttribution
         case .sourceAsserted:
-            // Corroboration requires ≥2 INDEPENDENT groups (duplicates don't count).
-            return c.independentEvidenceGroupCount >= 2 ? .assertAsCorroborated : .assertWithAttribution
+            // Corroboration requires ≥2 EXACT citations AND ≥2 INDEPENDENT groups
+            // (duplicates / forwarded copies collapse to one group and don't count).
+            return (exactCount >= 2 && independentGroups >= 2) ? .assertAsCorroborated : .assertWithAttribution
         case .deterministicallyDerived:
             // Only a derivation when the inputs reproduce it; else it's an inference.
             return c.hasReproducibleDerivation ? .assertAsDerivation : .presentAsInference
         case .inferred:
             return .presentAsInference          // defensive (handled at rule 4)
         case .unknownLegacy:
-            // Unknown basis, not human-confirmed (handled at rule 6): attribute conservatively.
+            // Unknown basis, no human action (handled at rule 6): attribute conservatively.
             return .assertWithAttribution
         }
     }
