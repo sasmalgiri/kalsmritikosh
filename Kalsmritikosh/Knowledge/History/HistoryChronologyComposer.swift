@@ -50,3 +50,26 @@ public struct HistoryChronologyComposer: Sendable {
         return ChronologySection(subjectName: outline.subject.displayName, rows: rows)
     }
 }
+
+// MARK: - ResolvedClaim-native section composer (PA-002/004)
+
+extension HistoryChronologyComposer: WorkProductSectionComposer {
+    public var id: WorkProductComposerID { WorkProductComposerID("history.chronology") }
+    public var sectionKind: BlueprintSection.Kind { .chronology }
+
+    /// The first GENUINE section composer on the shared protocol. It renders a chronology
+    /// SECTION from the already-selected, review-resolved claims in `context` — ONLY those
+    /// claims, in the order supplied (temporal ordering is applied upstream by the selector
+    /// that holds the dates). Each claim is turned into a cited row via the canonical
+    /// AssertabilityPolicy on its EFFECTIVE assessment (latest review applied); a claim the
+    /// policy refuses is dropped (fail-closed). It does NOT query repositories and does NOT
+    /// reuse the legacy `compose(outline:)` path or the legacy composer's inputs.
+    public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
+        let claims = context.claims.compactMap(ResolvedClaimRenderer.renderedClaim)
+        let section = WorkProductSection(
+            title: "Chronology",
+            preamble: ["Chronology for \(context.subjectLabel). Rows appear in the selected order; each material row cites a reopenable source."],
+            claims: claims)
+        return [section]
+    }
+}
