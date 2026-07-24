@@ -191,32 +191,88 @@ public actor ClaimSelectionService {
     private func temporalAnchor(for claim: Claim,
                                 tcIndex: [UUID: TemporalClaim],
                                 evIndex: [UUID: Event]) -> (ClaimTemporalAnchor?, Bool) {
-        // Tier 1 — temporal claims.
+        // Tier 1 — temporal claims. Sources with `.unknown` precision cannot establish a
+        // dated anchor and are skipped (so the tier can fall through to events if that is all
+        // it had).
         let tcAnchors = claim.derivedFrom.filter { $0.kind == .temporalClaim }.compactMap { ref -> ClaimTemporalAnchor? in
-            guard let tc = tcIndex[ref.id], let vf = tc.validFrom, let start = vf.start else { return nil }
+            guard let tc = tcIndex[ref.id], let vf = tc.validFrom, let start = vf.start,
+                  vf.precision != .unknown else { return nil }
             return ClaimTemporalAnchor(start: start, end: tc.validTo?.start, precision: vf.precision, source: ref)
         }
-        if !tcAnchors.isEmpty { return finalize(tcAnchors) }
+        if !tcAnchors.isEmpty { return Self.reconcile(tcAnchors) }
 
         // Tier 2 — events.
         let evAnchors = claim.derivedFrom.filter { $0.kind == .event }.compactMap { ref -> ClaimTemporalAnchor? in
-            guard let e = evIndex[ref.id] else { return nil }
+            guard let e = evIndex[ref.id], e.datePrecision != .unknown else { return nil }
             return ClaimTemporalAnchor(start: e.date, end: e.endDate, precision: e.datePrecision, source: ref)
         }
-        if !evAnchors.isEmpty { return finalize(evAnchors) }
+        if !evAnchors.isEmpty { return Self.reconcile(evAnchors) }
 
         // Tier 3 — HistoryItem: no repository load-by-id exists, so no anchor is derived here
         // (deferred, never fabricated).
         return (nil, false)
     }
 
-    /// Reconcile the anchors from one lineage tier. All agree on a start date → anchor at the
-    /// deterministically-chosen source; they disagree → ambiguous (undated, flagged).
-    private func finalize(_ anchors: [ClaimTemporalAnchor]) -> (ClaimTemporalAnchor?, Bool) {
-        let distinctStarts = Set(anchors.map(\.start))
-        guard distinctStarts.count == 1 else { return (nil, true) }   // conflicting → ambiguous
-        let chosen = anchors.sorted { $0.source.id.uuidString < $1.source.id.uuidString }.first!
+    /// Reconcile the anchors from one lineage tier by their PRECISION-SUPPORTED intervals, not
+    /// by raw start dates. Two anchors are compatible when their supported intervals overlap;
+    /// the whole set is compatible when a common intersection exists. Compatible → anchor at
+    /// the FINEST compatible source (stable source-id tie-break). A disjoint set (no common
+    /// intersection) → ambiguous (undated, flagged), never guessed.
+    nonisolated static func reconcile(_ anchors: [ClaimTemporalAnchor]) -> (ClaimTemporalAnchor?, Bool) {
+        let extents = anchors.compactMap { a in normalizedExtent(a).map { (a, $0) } }
+        guard !extents.isEmpty else { return (nil, false) }          // all unknown → undated
+        let maxLower = extents.map { $0.1.lowerBound }.max()!
+        let minUpper = extents.map { $0.1.upperBound }.min()!
+        guard maxLower <= minUpper else { return (nil, true) }       // disjoint → ambiguous
+        let chosen = extents.map { $0.0 }.sorted { a, b in
+            a.precision.rawValue != b.precision.rawValue
+                ? a.precision.rawValue > b.precision.rawValue        // finer precision first
+                : a.source.id.uuidString < b.source.id.uuidString    // stable tie-break
+        }.first!
         return (chosen, false)
+    }
+
+    /// A UTC calendar so interval math is deterministic and time-zone independent.
+    private nonisolated static let utcCalendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
+
+    /// The calendar interval a precision-tagged anchor SUPPORTS. `.unknown` supports nothing.
+    /// An explicit end date extends the upper bound; otherwise the containing unit is used.
+    nonisolated static func normalizedExtent(_ a: ClaimTemporalAnchor) -> NormalizedTemporalExtent? {
+        guard a.precision != .unknown else { return nil }
+        let cal = utcCalendar
+        let lower: Date
+        let unitUpper: Date
+        func unit(_ comp: Calendar.Component) -> (Date, Date) {
+            guard let iv = cal.dateInterval(of: comp, for: a.start) else { return (a.start, a.start) }
+            return (iv.start, iv.end.addingTimeInterval(-1))         // closed, non-touching upper
+        }
+        switch a.precision {
+        case .instant:                 lower = a.start; unitUpper = a.start
+        case .minute:                  (lower, unitUpper) = unit(.minute)
+        case .day:                     (lower, unitUpper) = unit(.day)
+        case .month:                   (lower, unitUpper) = unit(.month)
+        case .year:                    (lower, unitUpper) = unit(.year)
+        case .quarter:
+            // Calendar's .quarter is unreliable; derive the 3-month block explicitly.
+            let comps = cal.dateComponents([.year, .month], from: a.start)
+            let qStartMonth = ((comps.month! - 1) / 3) * 3 + 1
+            let start = cal.date(from: DateComponents(year: comps.year, month: qStartMonth, day: 1))!
+            let end = cal.date(byAdding: DateComponents(month: 3, second: -1), to: start)!
+            (lower, unitUpper) = (start, end)
+        case .decade:
+            let year = cal.component(.year, from: a.start)
+            let decadeStartYear = year - (year % 10)
+            let start = cal.date(from: DateComponents(year: decadeStartYear, month: 1, day: 1))!
+            let end = cal.date(byAdding: DateComponents(year: 10, second: -1), to: start)!
+            (lower, unitUpper) = (start, end)
+        case .unknown:                 return nil
+        }
+        let upper = a.end ?? unitUpper
+        return NormalizedTemporalExtent(lowerBound: lower, upperBound: max(lower, upper))
     }
 
     // MARK: - Deterministic ordering

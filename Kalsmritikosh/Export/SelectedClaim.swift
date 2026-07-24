@@ -25,6 +25,17 @@ public struct ClaimTemporalAnchor: Sendable, Hashable {
     }
 }
 
+/// A precision-supported temporal interval used to reconcile lineage anchors by OVERLAP
+/// rather than raw start equality (so same-month anchors agree and a year that contains a
+/// day agrees with it, while disjoint periods conflict). Closed bounds.
+public struct NormalizedTemporalExtent: Sendable, Hashable {
+    public let lowerBound: Date
+    public let upperBound: Date
+    public nonisolated init(lowerBound: Date, upperBound: Date) {
+        self.lowerBound = lowerBound; self.upperBound = upperBound
+    }
+}
+
 /// Why a claim entered the selection (mirrors the requested scope).
 public enum ClaimSelectionReason: Sendable, Hashable {
     case subjectScope(Entity.ID)
