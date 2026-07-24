@@ -84,10 +84,11 @@ struct ClaimSelectionServiceTests {
     func workspaceIsolation() async throws {
         let r = try await rig()
         let a = UUID(), b = UUID(), ws = UUID()
-        try await saveClaim(r.claims, subject: a, statement: "A1")
+        let objA = UUID()
+        try await saveClaim(r.claims, subject: a, statement: "A1", evidenceObjectID: objA)
         try await saveClaim(r.claims, subject: b, statement: "B1")
         let ctx = try await r.service.buildContext(
-            scope: .workspace(id: ws, memberSubjectIDs: [a]), subjectLabel: "WS")
+            scope: .workspace(id: ws, memberSubjectIDs: [a], allowedObjectIDs: [objA]), subjectLabel: "WS")
         #expect(ctx.selectedClaims.map { $0.resolved.claim.statement } == ["A1"])
         #expect(ctx.workspaceID == ws)
     }
@@ -100,8 +101,51 @@ struct ClaimSelectionServiceTests {
         let emptySubject = try await r.service.buildContext(scope: .subject(UUID()), subjectLabel: "?")
         #expect(emptySubject.selectedClaims.isEmpty)
         let emptyWorkspace = try await r.service.buildContext(
-            scope: .workspace(id: UUID(), memberSubjectIDs: []), subjectLabel: "?")
+            scope: .workspace(id: UUID(), memberSubjectIDs: [], allowedObjectIDs: []), subjectLabel: "?")
         #expect(emptyWorkspace.selectedClaims.isEmpty)          // NOT all claims
+    }
+
+    // MARK: B4 — workspace evidence-source boundary
+
+    @Test("Workspace scope: same subject, only the claim backed by an in-scope source renders")
+    func sourceBoundaryExcludesOutsideEvidence() async throws {
+        let r = try await rig()
+        let s = UUID(), ws = UUID()
+        let inside = UUID(), outside = UUID()
+        try await saveClaim(r.claims, subject: s, statement: "inside", evidenceObjectID: inside)
+        try await saveClaim(r.claims, subject: s, statement: "outside", evidenceObjectID: outside)
+        let ctx = try await r.service.buildContext(
+            scope: .workspace(id: ws, memberSubjectIDs: [s], allowedObjectIDs: [inside]), subjectLabel: "WS")
+        #expect(ctx.selectedClaims.map { $0.resolved.claim.statement } == ["inside"])
+    }
+
+    @Test("Workspace scope: a claim citing a mix of in- and out-of-scope sources is excluded whole")
+    func sourceBoundaryExcludesMixedEvidence() async throws {
+        let r = try await rig()
+        let s = UUID(), ws = UUID()
+        let inside = UUID(), outside = UUID()
+        // Two evidence refs — one inside, one outside → conservative all-in-scope excludes it whole
+        // (canonical evidence is NOT trimmed; the whole claim is dropped rather than partly rendered).
+        let mixed = Claim(subjectID: s, subjectLabel: "S", statement: "mixed",
+                          assessment: EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction),
+                          confidence: 0.8,
+                          evidence: [EvidenceReference(objectID: inside, blockID: UUID(), sourceVersionID: UUID()),
+                                     EvidenceReference(objectID: outside, blockID: UUID(), sourceVersionID: UUID())],
+                          createdAt: t0)
+        try await r.claims.save(mixed)
+        let ctx = try await r.service.buildContext(
+            scope: .workspace(id: ws, memberSubjectIDs: [s], allowedObjectIDs: [inside]), subjectLabel: "WS")
+        #expect(ctx.selectedClaims.isEmpty)
+    }
+
+    @Test("Workspace scope: a member whose only claim is out-of-scope yields no material rows")
+    func memberWithoutWorkspaceBackedClaim() async throws {
+        let r = try await rig()
+        let s = UUID(), ws = UUID()
+        try await saveClaim(r.claims, subject: s, statement: "only-outside", evidenceObjectID: UUID())
+        let ctx = try await r.service.buildContext(
+            scope: .workspace(id: ws, memberSubjectIDs: [s], allowedObjectIDs: [UUID()]), subjectLabel: "WS")
+        #expect(ctx.selectedClaims.isEmpty)
     }
 
     @Test("Explicit-id scope selects exactly the requested claims")

@@ -19,12 +19,18 @@ struct WorkProductAssemblyServiceTests {
 
     private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
+    /// Tracks each member subject's in-workspace KnowledgeObject so a claim saved for that subject
+    /// is evidence-backed inside the workspace by default (PA-PROD B4 source boundary). Test-only,
+    /// single-task use.
+    final class KOStore: @unchecked Sendable { var koBySubject: [UUID: UUID] = [:] }
+
     private struct Rig {
         let db: Database
         let claims: ClaimRepository
         let reviews: ClaimReviewRepository
         let workspaces: WorkspaceRepository
         let service: WorkProductAssemblyService
+        let kos = KOStore()
     }
 
     private func rig() async throws -> Rig {
@@ -41,28 +47,63 @@ struct WorkProductAssemblyServiceTests {
         return Rig(db: db, claims: claims, reviews: reviews, workspaces: workspaces, service: service)
     }
 
-    /// Satisfy the workspace_entities FK chain (file → knowledge_object → entity) and add the
-    /// subject as a workspace member.
-    private func addMember(_ r: Rig, subject: UUID, workspace: UUID) async throws {
+    /// Satisfy the workspace_entities FK chain (file → knowledge_object → entity), add the subject
+    /// as a workspace member, AND register the file as a workspace source so the subject's claims
+    /// are inside the B4 evidence-source boundary. Records the subject's KO for `saveClaim`.
+    @discardableResult
+    private func addMember(_ r: Rig, subject: UUID, workspace: UUID) async throws -> UUID {
         let fileID = UUID(), koID = UUID()
         try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);",
-                            [.uuid(fileID), .text("file://x"), .text("txt")])
+                            [.uuid(fileID), .text("file://\(fileID)"), .text("txt")])
         try await r.db.exec("""
         INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
         VALUES (?,?,?,?,?,?);
         """, [.uuid(koID), .uuid(fileID), .text("txt"), .text("c"), .real(0), .real(0)])
         try await r.db.exec("INSERT INTO entities (id, kind, value, normalized, source_object_id) VALUES (?,?,?,?,?);",
-                            [.uuid(subject), .text("person"), .text("S"), .text("s"), .uuid(koID)])
+                            [.uuid(subject), .text("person"), .text("S"), .text(subject.uuidString.lowercased()), .uuid(koID)])
         try await r.workspaces.upsert(Workspace(id: workspace, title: "WS", template: .general))
         try await r.workspaces.addEntity(subject, to: workspace)
+        try await r.workspaces.addSource(fileID, to: workspace)          // B4 — file is a workspace source
+        r.kos.koBySubject[subject] = koID
+        return koID
+    }
+
+    /// A KnowledgeObject whose file IS a workspace source (in-scope), but not tied to any subject.
+    @discardableResult
+    private func addSourceObject(_ r: Rig, workspace: UUID) async throws -> UUID {
+        let fileID = UUID(), koID = UUID()
+        try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);",
+                            [.uuid(fileID), .text("file://\(fileID)"), .text("txt")])
+        try await r.db.exec("""
+        INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
+        VALUES (?,?,?,?,?,?);
+        """, [.uuid(koID), .uuid(fileID), .text("txt"), .text("c"), .real(0), .real(0)])
+        try await r.workspaces.addSource(fileID, to: workspace)
+        return koID
+    }
+
+    /// A KnowledgeObject whose file is NOT a workspace source (OUT of scope for B4).
+    @discardableResult
+    private func addBareObject(_ r: Rig) async throws -> UUID {
+        let fileID = UUID(), koID = UUID()
+        try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);",
+                            [.uuid(fileID), .text("file://\(fileID)"), .text("txt")])
+        try await r.db.exec("""
+        INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
+        VALUES (?,?,?,?,?,?);
+        """, [.uuid(koID), .uuid(fileID), .text("txt"), .text("c"), .real(0), .real(0)])
+        return koID
     }
 
     @discardableResult
     private func saveClaim(_ r: Rig, subject: UUID, statement: String,
                            basis: EvidenceBasis = .directlyObserved, review: ReviewDisposition = .unreviewed,
-                           resolvedCitation: Bool = true, evidenceObject: UUID = UUID(),
+                           resolvedCitation: Bool = true, evidenceObject: UUID? = nil,
                            id: UUID = UUID()) async throws -> UUID {
-        let ev = EvidenceReference(objectID: evidenceObject, blockID: UUID(),
+        // Default the evidence object to the subject's in-workspace KO so member claims are inside
+        // the B4 source boundary; tests that want an out-of-scope claim pass an explicit object.
+        let obj = evidenceObject ?? r.kos.koBySubject[subject] ?? UUID()
+        let ev = EvidenceReference(objectID: obj, blockID: UUID(),
                                    sourceVersionID: resolvedCitation ? UUID() : nil)
         try await r.claims.save(Claim(id: id, subjectID: subject, subjectLabel: "S", statement: statement,
                                       assessment: EvidenceAssessment(basis: basis, review: review, origin: .sourceExtraction),
@@ -175,6 +216,7 @@ struct WorkProductAssemblyServiceTests {
         let service = WorkProductAssemblyService(
             events: EventsRepository(database: db), contradictions: contradictions,
             gaps: gaps, workspaces: WorkspaceRepository(database: db),
+            knowledgeObjects: KnowledgeObjectRepository(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
         await #expect(throws: WorkProductAssemblyError.missingComposer("history.chronology")) {
             try await service.compose(workspace: ws(UUID()), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)
@@ -308,9 +350,13 @@ struct WorkProductAssemblyServiceTests {
         let subject = UUID(), workspace = UUID()
         try await addMember(r, subject: subject, workspace: workspace)
         // An INFERENCE claim (not material → won't block) with two evidence refs sharing the
-        // subject label as citation title: one resolved, one not.
-        let ev1 = EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID())      // resolved
-        let ev2 = EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: nil)         // unresolved
+        // subject label as citation title: one resolved, one not. Both objects are IN the
+        // workspace source set so the B4 boundary admits the claim (the point under test is the
+        // manifest resolution, not scoping).
+        let obj1 = try await addSourceObject(r, workspace: workspace)
+        let obj2 = try await addSourceObject(r, workspace: workspace)
+        let ev1 = EvidenceReference(objectID: obj1, blockID: UUID(), sourceVersionID: UUID())         // resolved
+        let ev2 = EvidenceReference(objectID: obj2, blockID: UUID(), sourceVersionID: nil)            // unresolved
         try await r.claims.save(Claim(subjectID: subject, subjectLabel: "S", statement: "guess",
                                       assessment: EvidenceAssessment(basis: .inferred, origin: .modelProposed),
                                       confidence: 0.5, evidence: [ev1, ev2], createdAt: t0))
@@ -321,6 +367,30 @@ struct WorkProductAssemblyServiceTests {
         let entry = assembled.manifest.citationMap.first { $0.label == "S" }
         #expect(entry != nil)
         #expect(entry?.resolved == false)
+    }
+
+    // MARK: B4 — workspace evidence-source boundary (assembly level)
+
+    @Test("An out-of-scope sentinel claim never appears in any section or the manifest")
+    func outOfScopeSentinelNeverSurfaces() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        // In-scope claim (backed by the subject's workspace KO) → must render.
+        try await saveClaim(r, subject: subject, statement: "IN SCOPE — must appear")
+        // Same member subject, but the claim is backed ONLY by a file that is NOT a workspace
+        // source. Under B4 it must be excluded everywhere.
+        let outsideKO = try await addBareObject(r)
+        try await saveClaim(r, subject: subject, statement: "OUT-OF-SCOPE SENTINEL — MUST NOT APPEAR",
+                            evidenceObject: outsideKO)
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let allText = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
+        #expect(allText.contains { $0.hasSuffix("must appear") })
+        #expect(!allText.contains { $0.contains("SENTINEL") })                 // summary/chronology/conflicts/gaps
+        // Manifest is derived from the composed product, so a leak there is impossible if the
+        // sections are clean — but assert it explicitly (finding count = the one in-scope claim).
+        #expect(assembled.manifest.selectedFindingCount == 1)
     }
 
     @Test("Duplicate composer registration cannot be silently ignored")

@@ -49,6 +49,7 @@ public actor WorkProductAssemblyService {
     private let contradictions: ContradictionsRepository
     private let gaps: GapNodeRepository
     private let workspaces: WorkspaceRepository
+    private let knowledgeObjects: KnowledgeObjectRepository
     private let selection: ClaimSelectionService
     private let disclosures: DisclosureSelectionService
     private let registry: WorkProductComposerRegistry
@@ -71,17 +72,20 @@ public actor WorkProductAssemblyService {
         // Built-in composers are registered via the throwing factory — a duplicate/misconfigured
         // built-in fails construction here rather than being silently dropped.
         self.init(events: events, contradictions: contradictions, gaps: gaps,
-                  workspaces: workspaces, selection: selection, disclosures: disclosures,
+                  workspaces: workspaces, knowledgeObjects: KnowledgeObjectRepository(database: database),
+                  selection: selection, disclosures: disclosures,
                   registry: try WorkProductComposerRegistry.makeDefault())
     }
 
     /// Designated init — also the seam tests use to inject a registry (e.g. empty, to prove
     /// the registry branch never falls back to the legacy composer).
     init(events: EventsRepository, contradictions: ContradictionsRepository, gaps: GapNodeRepository,
-         workspaces: WorkspaceRepository, selection: ClaimSelectionService,
+         workspaces: WorkspaceRepository, knowledgeObjects: KnowledgeObjectRepository,
+         selection: ClaimSelectionService,
          disclosures: DisclosureSelectionService, registry: WorkProductComposerRegistry) {
         self.events = events; self.contradictions = contradictions; self.gaps = gaps
-        self.workspaces = workspaces; self.selection = selection
+        self.workspaces = workspaces; self.knowledgeObjects = knowledgeObjects
+        self.selection = selection
         self.disclosures = disclosures; self.registry = registry
     }
 
@@ -136,8 +140,14 @@ public actor WorkProductAssemblyService {
         // Workspace membership is resolved here (outside the Claim model). Claim selection runs
         // ONCE; disclosure selection runs ONCE over the same selected claims. No global fallback.
         let members = Set(try await workspaces.entityIDs(in: workspace.id))
+        // PA-PROD B4 — the workspace's evidence-SOURCE boundary: its source files' KnowledgeObject
+        // ids. A claim is selected only when its subject is a member AND all of its evidence lives
+        // inside this set, so a member's claim backed only by an out-of-workspace source can never
+        // leak into the export.
+        let sourceFileIDs = try await workspaces.sourceIDs(in: workspace.id)
+        let allowedObjectIDs = try await knowledgeObjects.objectIDs(inFileIDs: sourceFileIDs)
         var context = try await selection.buildContext(
-            scope: .workspace(id: workspace.id, memberSubjectIDs: members),
+            scope: .workspace(id: workspace.id, memberSubjectIDs: members, allowedObjectIDs: allowedObjectIDs),
             subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
         if plan.requiresDisclosures {
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)

@@ -188,6 +188,24 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// PA-PROD B4 — the KnowledgeObject ids whose source file is one of `fileIDs`. This is a
+    /// workspace's evidence-SOURCE boundary set, resolved from the same identity chain membership
+    /// uses:  workspace_sources.file_id → knowledge_objects.file_id → knowledge_objects.id.
+    /// Chunked ≤500 ids so a large workspace never exceeds SQLite's bind-variable limit; deduped.
+    public func objectIDs(inFileIDs fileIDs: [UUID]) async throws -> Set<KnowledgeObject.ID> {
+        let unique = Array(Set(fileIDs))
+        guard !unique.isEmpty else { return [] }
+        var out: Set<KnowledgeObject.ID> = []
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT id FROM knowledge_objects WHERE file_id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+        }
+        return out
+    }
+
     /// G3 BondBackfill — enumerate all KO ids in the ledger, paged so
     /// a million-KO archive doesn't blow up memory. Caller iterates
     /// (offset += pageSize) until the returned array is shorter than

@@ -31,8 +31,10 @@ public actor ClaimSelectionService {
         case subject(Entity.ID)
         /// Workspace membership is resolved UPSTREAM (WorkspaceRepository.entityIDs) and
         /// handed in as member subject ids — the selector never reads a claim↔workspace table
-        /// (there is none) and never falls back to global.
-        case workspace(id: Workspace.ID, memberSubjectIDs: Set<Entity.ID>)
+        /// (there is none) and never falls back to global. `allowedObjectIDs` is the workspace's
+        /// evidence-SOURCE boundary (its sources' KnowledgeObject ids); a claim is in scope only
+        /// when it is a member subject's AND all of its evidence lives inside that set (PA-PROD B4).
+        case workspace(id: Workspace.ID, memberSubjectIDs: Set<Entity.ID>, allowedObjectIDs: Set<KnowledgeObject.ID>)
         case explicitClaimIDs([Claim.ID])
     }
 
@@ -98,7 +100,7 @@ public actor ClaimSelectionService {
         switch scope {
         case .subject(let s):
             return try await claims.claims(subjectID: s)
-        case .workspace(_, let members):
+        case .workspace(_, let members, _):
             var acc: [Claim] = []
             for m in members.sorted(by: { $0.uuidString < $1.uuidString }) {
                 acc += try await claims.claims(subjectID: m)
@@ -115,8 +117,17 @@ public actor ClaimSelectionService {
         switch scope {
         case .subject(let s):
             return cs.filter { $0.subjectID == s }
-        case .workspace(_, let members):
-            return cs.filter { $0.subjectID.map(members.contains) ?? false }
+        case .workspace(_, let members, let allowedObjectIDs):
+            // Two conjunctive gates (PA-PROD B4): the subject must be a member AND every evidence
+            // reference must resolve to a KnowledgeObject inside the workspace's source set.
+            // Conservative all-evidence-in-scope: a claim with NO evidence, or with ANY reference
+            // outside the set, is EXCLUDED — never partially rendered. Canonical evidence is left
+            // intact (nothing trimmed); the boundary is applied to whole-claim selection only.
+            return cs.filter { c in
+                guard c.subjectID.map(members.contains) ?? false else { return false }
+                guard !c.evidence.isEmpty else { return false }
+                return c.evidence.allSatisfy { allowedObjectIDs.contains($0.objectID) }
+            }
         case .explicitClaimIDs:
             return cs   // requested by id; no subject constraint to apply
         }
@@ -124,14 +135,14 @@ public actor ClaimSelectionService {
 
     private func selectionReason(for scope: Scope) -> ClaimSelectionReason {
         switch scope {
-        case .subject(let s):        return .subjectScope(s)
-        case .workspace(let id, _):  return .workspaceScope(id)
-        case .explicitClaimIDs:      return .explicitlyRequested
+        case .subject(let s):          return .subjectScope(s)
+        case .workspace(let id, _, _): return .workspaceScope(id)
+        case .explicitClaimIDs:        return .explicitlyRequested
         }
     }
 
     private func workspaceID(for scope: Scope) -> UUID? {
-        if case .workspace(let id, _) = scope { return id }
+        if case .workspace(let id, _, _) = scope { return id }
         return nil
     }
 
