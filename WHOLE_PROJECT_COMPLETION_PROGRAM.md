@@ -107,6 +107,10 @@ before its foundation gate is green.
 - **OPS-005** Explicit email participant roles (`sender`/`to`/`cc`/`bcc`/`reply-to`) so
   directional phrasing is enabled only when the role is explicitly persisted (PA-EXT refused to
   infer from array order — this closes that follow-up).
+- **OPS-006** Shared Source Assessment — ONE `SourceReliabilityAssessment` object shared by the
+  Investigator, Researcher and Journalist jobs (and available to any persona). Not three
+  persona-specific copies. Stores a reliability/independence assessment referencing canonical
+  source-version IDs; never a fork of the evidence assessment.
 - **Gate:** tests prove persona objects don't duplicate Claims; deleting workflow state never
   deletes evidence; deadlines stay candidate until confirmed; SensitiveScope blocks screen,
   prompt AND export consistently; prior work-product runs reopen identically; email direction is
@@ -134,7 +138,14 @@ Persistent, evidence-linked working objects (NOT LLM prompts): `ProfessionalMeth
 slice): Brainstorming, 5W1H, Hypothesis Matrix, Evidence Collection Plan, Five Whys,
 Fishbone/Ishikawa, Root-Cause Assessment, CAPA, Effectiveness Review, Contradiction Matrix, Gap
 Analysis, Timeline Analysis, Relationship Analysis, Transaction Flow, Risk Matrix, Decision
-Matrix. See `PROFESSIONAL_METHOD_CATALOG.csv`. Truth rules: brainstorming items are typed and
+Matrix. See `PROFESSIONAL_METHOD_CATALOG.csv`. **Method-node states are NOT a new evidence enum.** The
+catalog's `AllowedMethodNodeStates` column (`proposal`, `rule-supported`, `gap`, `disputed`,
+`human-rejected`, …) are working states of a method node in the proposal layer; they map onto the
+existing `EvidenceAssessment` dimensions + review vocabulary when (and only when) a node is
+promoted to a canonical Claim (`proposal`→not-yet-a-Claim; `rule-supported`→`DETERMINISTICALLY_
+DERIVED`/`INFERRED`; `disputed`→`CONTRADICTED`; `gap`→`MISSING_EVIDENCE`; `human-confirmed`/
+`human-rejected`→the review dispositions). No task introduces a second evidence enum. Truth rules:
+brainstorming items are typed and
 only `known Claim` points to canonical; Five Whys nodes carry status/evidence/assumptions/review
 and must stop early when evidence runs out; Fishbone bones are candidate causes; a Root Cause is
 confirmed ONLY by a recorded human decision; CAPA actions link to the cause they address.
