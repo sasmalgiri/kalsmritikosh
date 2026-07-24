@@ -41,7 +41,7 @@ public actor DisclosureSelectionService {
             }
         }
         guard !linkers.isEmpty else { return [] }            // no linked conflicts → none
-        return (await contradictions.findByIDs(Array(linkers.keys))).compactMap { c -> SelectedConflict? in
+        return (try await contradictions.findByIDs(Array(linkers.keys))).compactMap { c -> SelectedConflict? in
             guard c.status == .open else { return nil }                  // resolved/dismissed excluded
             guard !c.claimA.isEmpty, !c.claimB.isEmpty else { return nil } // both sides represented
             let evidence = [

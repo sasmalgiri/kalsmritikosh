@@ -202,13 +202,14 @@ public enum ResolvedClaimRenderer {
         let contradicting = zip(citations, claim.evidence).filter { $0.1.role == .contradicts }.map(\.0)
 
         let wp = WorkProductClaim(
-            id: claim.id,                                // preserve the canonical Claim identity
-            text: claim.statement,
+            text: claim.statement,                       // id defaults per output occurrence
             status: epistemicStatus(for: presentation),
             supporting: supporting,
             contradicting: contradicting,
             confidence: claim.confidence,
-            reviewState: selected.resolved.effectiveAssessment.review.rawValue)
+            reviewState: selected.resolved.effectiveAssessment.review.rawValue,
+            sourceClaimID: claim.id,                     // canonical Claim identity carried here
+            assertabilityDecision: decision)             // exact decision → decision-aware validation
         return RenderedSelectedClaim(selectedClaim: selected, workProductClaim: wp,
                                      decision: decision, presentation: presentation)
     }

@@ -109,6 +109,32 @@ struct WorkProductComposerTests {
         #expect(sections[0].claims.map(\.text) == ["Undated — Kept"])   // rejected one dropped
     }
 
+    @Test("Chronology preserves a verified reproducible derivation (not downgraded to inference)")
+    func chronologyReproducibleDerivation() {
+        let base = EvidenceAssessment(basis: .deterministicallyDerived, origin: .deterministicRule)
+        let claim = Claim(subjectID: UUID(), subjectLabel: "S", statement: "derived",
+                          assessment: base, confidence: 0.8,
+                          evidence: [EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID())],
+                          createdAt: t0)
+        let sel = SelectedClaim(resolved: ResolvedClaim(claim: claim, effectiveAssessment: base),
+                                selectionReason: .explicitlyRequested, hasReproducibleDerivation: true)
+        let section = HistoryChronologyComposer().compose(WorkProductContext(selectedClaims: [sel], subjectLabel: "S"))[0]
+        #expect(section.claims.first?.status == .deterministicDerivation)
+    }
+
+    @Test("Chronology keeps an unverified deterministic basis as inference")
+    func chronologyUnverifiedDeterministic() {
+        let base = EvidenceAssessment(basis: .deterministicallyDerived, origin: .deterministicRule)
+        let claim = Claim(subjectID: UUID(), subjectLabel: "S", statement: "maybe-derived",
+                          assessment: base, confidence: 0.8,
+                          evidence: [EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID())],
+                          createdAt: t0)
+        let sel = SelectedClaim(resolved: ResolvedClaim(claim: claim, effectiveAssessment: base),
+                                selectionReason: .explicitlyRequested, hasReproducibleDerivation: false)
+        let section = HistoryChronologyComposer().compose(WorkProductContext(selectedClaims: [sel], subjectLabel: "S"))[0]
+        #expect(section.claims.first?.status == .inference)
+    }
+
     @Test("Citations are built from the claim's own evidence; contradicting role is kept separate")
     func citationsFromEvidence() {
         let support = EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID(), role: .supports)

@@ -74,4 +74,51 @@ struct EvidenceExportGateTests {
         ])
         #expect(WorkProductValidator().validateProductionExport(wp).isValid)
     }
+
+    // MARK: Decision-aware gate (covers the full materiality set, not just direct/source)
+
+    private func claim(_ decision: AssertabilityDecision, status: EpistemicStatus, resolved: Bool) -> WorkProductClaim {
+        let cite = CitationRecord(sourceVersionID: resolved ? UUID() : nil,
+                                  evidenceBlockIDs: resolved ? [UUID()] : [],
+                                  displayLabel: "[1]", sourceTitle: "doc")
+        return WorkProductClaim(text: "x", status: status, supporting: [cite], assertabilityDecision: decision)
+    }
+    private func wp(_ c: WorkProductClaim) -> WorkProduct {
+        WorkProduct(template: .generalSummary, title: "T", sections: [WorkProductSection(title: "S", claims: [c])])
+    }
+
+    @Test("An unresolved assertive DERIVATION is blocked (missed by the coarse-status gate)")
+    func derivationUnresolvedBlocked() {
+        // status .deterministicDerivation is NOT direct/source — the legacy gate would pass it.
+        let report = WorkProductValidator().validateProductionExport(
+            wp(claim(.assertAsDerivation, status: .deterministicDerivation, resolved: false)))
+        #expect(!report.isValid)
+    }
+
+    @Test("A resolved assertive derivation passes")
+    func derivationResolvedPasses() {
+        #expect(WorkProductValidator().validateProductionExport(
+            wp(claim(.assertAsDerivation, status: .deterministicDerivation, resolved: true))).isValid)
+    }
+
+    @Test("An unresolved USER-ATTRIBUTED assertion is blocked (also missed by the coarse gate)")
+    func userAttributedUnresolvedBlocked() {
+        let report = WorkProductValidator().validateProductionExport(
+            wp(claim(.assertWithUserAttribution, status: .humanNote, resolved: false)))
+        #expect(!report.isValid)
+    }
+
+    @Test("Inference and conflict disclosures are allowed even with unresolved citations")
+    func disclosuresAllowedDecisionAware() {
+        #expect(WorkProductValidator().validateProductionExport(
+            wp(claim(.presentAsInference, status: .inference, resolved: false))).isValid)
+        #expect(WorkProductValidator().validateProductionExport(
+            wp(claim(.presentAsConflict, status: .inference, resolved: false))).isValid)
+    }
+
+    @Test("A carried refuse decision is a violation")
+    func refuseDecisionBlocked() {
+        #expect(!WorkProductValidator().validateProductionExport(
+            wp(claim(.refuse, status: .inference, resolved: true))).isValid)
+    }
 }

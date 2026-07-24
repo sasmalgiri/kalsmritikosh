@@ -66,12 +66,13 @@ extension HistoryChronologyComposer: WorkProductSectionComposer {
     /// reuse the legacy `compose(outline:)` path or the legacy composer's inputs.
     public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
         let claims: [WorkProductClaim] = context.selectedClaims.compactMap { selected in
-            guard var rendered = ResolvedClaimRenderer.renderedClaim(
-                selected.resolved, independenceKeys: selected.independenceKeys) else { return nil }
+            // Full render (not the compat wrapper) so hasReproducibleDerivation is honoured —
+            // a verified derivation stays a derivation instead of being downgraded.
+            guard var claim = ResolvedClaimRenderer.render(selected)?.workProductClaim else { return nil }
             // Prefix the row with its LINEAGE-resolved date phrase, or an explicit "Undated"
             // label — never an invented date. Conflicting lineage dates are called out.
-            rendered.text = "\(Self.datePhrase(for: selected)) — \(rendered.text)"
-            return rendered
+            claim.text = "\(Self.datePhrase(for: selected)) — \(claim.text)"
+            return claim
         }
         let section = WorkProductSection(
             title: "Chronology",

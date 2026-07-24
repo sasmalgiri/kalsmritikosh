@@ -51,6 +51,9 @@ public enum WorkProductTemplate: String, Sendable, CaseIterable, Codable {
 
 public struct WorkProductClaim: Sendable, Identifiable, Hashable {
     public typealias ID = UUID
+    /// Output-occurrence identity: distinct per rendered row. The SAME canonical Claim can
+    /// appear as more than one occurrence (e.g. in both the summary and the chronology), so
+    /// this is NOT the canonical Claim id — `sourceClaimID` carries that.
     public let id: ID
     public var text: String
     public var status: EpistemicStatus
@@ -58,6 +61,13 @@ public struct WorkProductClaim: Sendable, Identifiable, Hashable {
     public var contradicting: [CitationRecord]
     public var confidence: Double?
     public var reviewState: String?
+    /// The canonical Claim this row was rendered from, when it came through the claim engine.
+    /// nil for legacy-composed claims.
+    public var sourceClaimID: Claim.ID?
+    /// The exact AssertabilityPolicy decision that produced this row, when rendered from a
+    /// claim. Lets the production validator gate on the FULL materiality set (derivation and
+    /// user-attributed assertions, not just direct/source) rather than the coarse status.
+    public var assertabilityDecision: AssertabilityDecision?
 
     public nonisolated init(
         id: ID = UUID(),
@@ -66,7 +76,9 @@ public struct WorkProductClaim: Sendable, Identifiable, Hashable {
         supporting: [CitationRecord] = [],
         contradicting: [CitationRecord] = [],
         confidence: Double? = nil,
-        reviewState: String? = nil
+        reviewState: String? = nil,
+        sourceClaimID: Claim.ID? = nil,
+        assertabilityDecision: AssertabilityDecision? = nil
     ) {
         self.id = id
         self.text = text
@@ -75,6 +87,8 @@ public struct WorkProductClaim: Sendable, Identifiable, Hashable {
         self.contradicting = contradicting
         self.confidence = confidence
         self.reviewState = reviewState
+        self.sourceClaimID = sourceClaimID
+        self.assertabilityDecision = assertabilityDecision
     }
 }
 

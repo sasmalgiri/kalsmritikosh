@@ -36,12 +36,21 @@ public enum WorkProductAssemblyError: Error, Equatable {
     case missingComposer(String)
 }
 
+/// An explicit, ordered plan for a registry-backed template: which composers run and in what
+/// output order, and whether disclosures must be prepared. The composer order IS the report's
+/// section order — never `registry.all` (alphabetical id order is not report-semantic order).
+public struct WorkProductTemplatePlan: Sendable {
+    public let composerIDs: [WorkProductComposerID]
+    public let requiresDisclosures: Bool
+}
+
 public actor WorkProductAssemblyService {
     private let events: EventsRepository
     private let contradictions: ContradictionsRepository
     private let gaps: GapNodeRepository
     private let workspaces: WorkspaceRepository
     private let selection: ClaimSelectionService
+    private let disclosures: DisclosureSelectionService
     private let registry: WorkProductComposerRegistry
 
     public init(database: Database,
@@ -56,28 +65,47 @@ public actor WorkProductAssemblyService {
             claims: claims, resolver: resolver,
             temporalClaims: TemporalClaimRepository(database: database),
             events: events, independenceKeyProvider: independenceKeyProvider)
+        let disclosures = DisclosureSelectionService(
+            contradictions: contradictions,
+            claimContradictions: ClaimContradictionRepository(database: database), gaps: gaps)
         // Built-in composers are registered via the throwing factory — a duplicate/misconfigured
         // built-in fails construction here rather than being silently dropped.
         self.init(events: events, contradictions: contradictions, gaps: gaps,
-                  workspaces: workspaces, selection: selection,
+                  workspaces: workspaces, selection: selection, disclosures: disclosures,
                   registry: try WorkProductComposerRegistry.makeDefault())
     }
 
     /// Designated init — also the seam tests use to inject a registry (e.g. empty, to prove
     /// the registry branch never falls back to the legacy composer).
     init(events: EventsRepository, contradictions: ContradictionsRepository, gaps: GapNodeRepository,
-         workspaces: WorkspaceRepository, selection: ClaimSelectionService, registry: WorkProductComposerRegistry) {
+         workspaces: WorkspaceRepository, selection: ClaimSelectionService,
+         disclosures: DisclosureSelectionService, registry: WorkProductComposerRegistry) {
         self.events = events; self.contradictions = contradictions; self.gaps = gaps
-        self.workspaces = workspaces; self.selection = selection; self.registry = registry
+        self.workspaces = workspaces; self.selection = selection
+        self.disclosures = disclosures; self.registry = registry
     }
 
-    /// The route table: which templates the registry pipeline fully supports today. Explicit
-    /// and testable — this is the migration's source of truth, not a hidden flag.
-    public nonisolated static func isRegistryBacked(_ template: WorkProductTemplate) -> Bool {
+    /// The registry plan for a template, or nil when the template is still legacy-backed. This
+    /// explicit table (not a hidden flag) is the migration's source of truth AND the report's
+    /// section order.
+    public nonisolated static func plan(for template: WorkProductTemplate) -> WorkProductTemplatePlan? {
         switch template {
-        case .chronology:                                       return true
-        case .generalSummary, .investigationFindings, .factMemo: return false
+        case .chronology:
+            return WorkProductTemplatePlan(composerIDs: [WorkProductComposerID("history.chronology")],
+                                           requiresDisclosures: false)
+        case .generalSummary:
+            return WorkProductTemplatePlan(
+                composerIDs: [WorkProductComposerID("claims.sourced-summary"),
+                              WorkProductComposerID("history.chronology"),
+                              WorkProductComposerID("evidence.gaps-conflicts")],
+                requiresDisclosures: true)
+        case .investigationFindings, .factMemo:
+            return nil
         }
+    }
+
+    public nonisolated static func isRegistryBacked(_ template: WorkProductTemplate) -> Bool {
+        plan(for: template) != nil
     }
 
     // MARK: - Compose
@@ -85,12 +113,11 @@ public actor WorkProductAssemblyService {
     public func compose(workspace: Workspace, template: WorkProductTemplate,
                         subjectLabel: String, corpusSnapshotID: UUID?) async throws -> AssembledWorkProduct {
         let wp: WorkProduct
-        switch template {
-        case .chronology:
+        if let plan = Self.plan(for: template) {
             // Registry arm. A failure here THROWS — it must never invoke the legacy composer.
-            wp = try await composeThroughRegistry(workspace: workspace, template: template,
+            wp = try await composeThroughRegistry(plan: plan, workspace: workspace, template: template,
                                                   subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
-        case .generalSummary, .investigationFindings, .factMemo:
+        } else {
             wp = try await composeThroughLegacy(workspace: workspace, template: template)
         }
         // Fail-closed gate on both arms (single point → report and receipt share the verdict).
@@ -103,22 +130,35 @@ public actor WorkProductAssemblyService {
 
     // MARK: - Registry arm
 
-    private func composeThroughRegistry(workspace: Workspace, template: WorkProductTemplate,
+    private func composeThroughRegistry(plan: WorkProductTemplatePlan, workspace: Workspace,
+                                        template: WorkProductTemplate,
                                         subjectLabel: String, corpusSnapshotID: UUID?) async throws -> WorkProduct {
-        // Workspace membership is resolved here (outside the Claim model) and handed to the
-        // selector as the scope; there is no corpus-global fallback.
+        // Workspace membership is resolved here (outside the Claim model). Claim selection runs
+        // ONCE; disclosure selection runs ONCE over the same selected claims. No global fallback.
         let members = Set(try await workspaces.entityIDs(in: workspace.id))
-        let context = try await selection.buildContext(
+        var context = try await selection.buildContext(
             scope: .workspace(id: workspace.id, memberSubjectIDs: members),
             subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
-        guard let composer = registry.composer(for: WorkProductComposerID("history.chronology")) else {
-            throw WorkProductAssemblyError.missingComposer("history.chronology")
+        if plan.requiresDisclosures {
+            let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)
+            let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
+            context = WorkProductContext(
+                selectedClaims: context.selectedClaims, selectedConflicts: conflicts, selectedGaps: scopedGaps,
+                subjectLabel: subjectLabel, workspaceID: workspace.id, corpusSnapshotID: corpusSnapshotID)
+        }
+        // Run composers in PLAN ORDER and flatten — that order is the report's section order.
+        var sections: [WorkProductSection] = []
+        for composerID in plan.composerIDs {
+            guard let composer = registry.composer(for: composerID) else {
+                throw WorkProductAssemblyError.missingComposer(composerID.rawValue)
+            }
+            sections += composer.compose(context)
         }
         return WorkProduct(
             template: template,
             title: "\(workspace.title) — \(template.displayName)",
             subtitle: "Work product for the \"\(workspace.title)\" workspace (\(workspace.template.displayName)).",
-            sections: composer.compose(context),
+            sections: sections,
             disclaimer: PersonaTemplateCatalog.disclaimer(for: workspace.template))
     }
 
@@ -146,7 +186,14 @@ public actor WorkProductAssemblyService {
         // resolved citation must not mask an unresolved one sharing the same title.
         var resolvedByLabel: [String: Bool] = [:]
         for c in wp.allCitations { resolvedByLabel[c.sourceTitle] = (resolvedByLabel[c.sourceTitle] ?? true) && c.isResolved }
-        let findingCount = wp.sections.reduce(0) { $0 + $1.claims.count }
+        // A canonical claim rendered in several sections (summary + chronology) counts ONCE by
+        // its sourceClaimID; output-only rows (gap/conflict disclosures) count by occurrence.
+        var canonicalClaimIDs = Set<UUID>()
+        var outputOnlyCount = 0
+        for claim in wp.sections.flatMap(\.claims) {
+            if let cid = claim.sourceClaimID { canonicalClaimIDs.insert(cid) } else { outputOnlyCount += 1 }
+        }
+        let findingCount = canonicalClaimIDs.count + outputOnlyCount
         return ExportManifest(
             exportedAt: Date(),
             appVersion: appVersion,

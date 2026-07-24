@@ -63,17 +63,23 @@ public actor ContradictionsRepository {
         return rows.compactMap(decode)
     }
 
-    /// Fetch exactly the requested contradictions by id (no row ceiling). Used by disclosure
-    /// selection, which already knows the precise linked ids — avoids a bounded `all()` scan
-    /// silently dropping a valid linked conflict past the limit.
-    public func findByIDs(_ ids: [Contradiction.ID]) async -> [Contradiction] {
-        guard !ids.isEmpty else { return [] }
-        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
-        let rows = (try? await database.query("""
-        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind
-        FROM contradictions WHERE id IN (\(placeholders));
-        """, ids.map { .uuid($0) })) ?? []
-        return rows.compactMap(decode)
+    /// Fetch exactly the requested contradictions by id (no row ceiling). Genuinely unbounded:
+    /// ids are de-duplicated and queried in deterministic chunks of ≤500 so a large linked set
+    /// never exceeds SQLite's bind-variable limit. Throws on a database failure rather than
+    /// silently returning an empty result.
+    public func findByIDs(_ ids: [Contradiction.ID]) async throws -> [Contradiction] {
+        let unique = Array(Set(ids)).sorted { $0.uuidString < $1.uuidString }
+        guard !unique.isEmpty else { return [] }
+        var out: [Contradiction] = []
+        for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind
+            FROM contradictions WHERE id IN (\(placeholders));
+            """, chunk.map { .uuid($0) })
+            out += rows.compactMap(decode)
+        }
+        return out
     }
 
     public func setStatus(_ id: UUID, _ status: Contradiction.Status) async {

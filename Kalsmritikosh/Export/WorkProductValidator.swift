@@ -69,16 +69,31 @@ public struct WorkProductValidator: Sendable {
         var violations: [Violation] = []
         for section in wp.sections {
             for claim in section.claims {
-                // Evidence-required only when the claim BOTH is a material assertion AND
-                // actually cites sources (a citation-free deterministic count / disclosure is
-                // not a cited factual assertion).
-                let citedMaterial = (claim.status == .directEvidence || claim.status == .sourceAssertion)
-                    && !claim.supporting.isEmpty
-                guard citedMaterial else { continue }
-                // A cited material claim must cite at least one source that can be REOPENED.
-                if !claim.supporting.contains(where: { $0.isResolved }) {
-                    violations.append(.claimUnsupportedStatus(
-                        section: section.title, claim: claim.text, status: claim.status.rawValue))
+                if let decision = claim.assertabilityDecision {
+                    // Decision-aware gate (claims rendered through the claim engine). Covers the
+                    // FULL materiality set — fact / attributed / corroborated / derivation /
+                    // user-attributed — not just direct/source.
+                    if decision == .refuse {
+                        violations.append(.claimUnsupportedStatus(
+                            section: section.title, claim: claim.text, status: "refuse"))
+                    } else if decision.isAssertiveDecision {
+                        // Every assertive claim must cite at least one REOPENABLE source.
+                        if !claim.supporting.contains(where: { $0.isResolved }) {
+                            violations.append(.claimUnsupportedStatus(
+                                section: section.title, claim: claim.text, status: decision.rawValue))
+                        }
+                    }
+                    // presentAsInference / presentAsConflict → disclosure, allowed.
+                } else {
+                    // Legacy compatibility gate (legacy-composed claims carry no decision):
+                    // a cited direct/source assertion must cite a reopenable source.
+                    let citedMaterial = (claim.status == .directEvidence || claim.status == .sourceAssertion)
+                        && !claim.supporting.isEmpty
+                    guard citedMaterial else { continue }
+                    if !claim.supporting.contains(where: { $0.isResolved }) {
+                        violations.append(.claimUnsupportedStatus(
+                            section: section.title, claim: claim.text, status: claim.status.rawValue))
+                    }
                 }
             }
         }

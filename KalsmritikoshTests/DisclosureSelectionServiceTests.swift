@@ -98,24 +98,20 @@ struct DisclosureSelectionServiceTests {
         #expect(sel.evidence.first { $0.role == .contradicts }?.objectID == objB)
     }
 
-    @Test("Exact-id contradiction loading returns a linked conflict past the former 5,000 ceiling")
-    func findByIDsBeyondRowCeiling() async throws {
+    @Test("Exact-id contradiction loading handles more than 1,000 ids (chunked past the bind limit)")
+    func findByIDsBeyondBindLimit() async throws {
         let r = try await rig()
-        // Insert 5,001 conflicts; the linked one is the OLDEST, so a bounded all(limit:5000)
-        // ordered by detected_at DESC would have dropped it. findByIDs fetches it regardless.
-        let linkedID = UUID()
-        let base = Date(timeIntervalSince1970: 1_000_000)
-        var bulk: [Contradiction] = [Contradiction(id: linkedID, description: "old", claimA: "A", claimB: "B",
-                                                    status: .open, detectedAt: base)]  // oldest
-        for i in 1...5000 {
-            bulk.append(Contradiction(description: "c\(i)", claimA: "A", claimB: "B", status: .open,
-                                      detectedAt: base.addingTimeInterval(Double(i))))
+        // >999 ids would exceed SQLite's default bind-variable limit in a single IN(...) —
+        // findByIDs must chunk and return them all.
+        var ids: [UUID] = []
+        var bulk: [Contradiction] = []
+        for i in 0..<1_100 {
+            let id = UUID(); ids.append(id)
+            bulk.append(Contradiction(id: id, description: "c\(i)", claimA: "A", claimB: "B", status: .open))
         }
         await r.contradictions.insertMany(bulk)
-        let claimID = UUID()
-        try await r.links.link(claimID: claimID, contradictionID: linkedID)
-        let out = try await r.service.conflicts(forSelectedClaims: [selectedClaim(id: claimID)])
-        #expect(out.map(\.id) == [linkedID])
+        let out = try await r.contradictions.findByIDs(ids)
+        #expect(out.count == 1_100)
     }
 
     // MARK: Gaps

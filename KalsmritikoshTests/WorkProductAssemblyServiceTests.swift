@@ -59,12 +59,13 @@ struct WorkProductAssemblyServiceTests {
 
     @discardableResult
     private func saveClaim(_ r: Rig, subject: UUID, statement: String,
-                           basis: EvidenceBasis = .directlyObserved,
-                           resolvedCitation: Bool = true, id: UUID = UUID()) async throws -> UUID {
-        let ev = EvidenceReference(objectID: UUID(), blockID: UUID(),
+                           basis: EvidenceBasis = .directlyObserved, review: ReviewDisposition = .unreviewed,
+                           resolvedCitation: Bool = true, evidenceObject: UUID = UUID(),
+                           id: UUID = UUID()) async throws -> UUID {
+        let ev = EvidenceReference(objectID: evidenceObject, blockID: UUID(),
                                    sourceVersionID: resolvedCitation ? UUID() : nil)
         try await r.claims.save(Claim(id: id, subjectID: subject, subjectLabel: "S", statement: statement,
-                                      assessment: EvidenceAssessment(basis: basis, origin: .sourceExtraction),
+                                      assessment: EvidenceAssessment(basis: basis, review: review, origin: .sourceExtraction),
                                       confidence: 0.8, evidence: [ev], createdAt: t0))
         return id
     }
@@ -73,10 +74,10 @@ struct WorkProductAssemblyServiceTests {
 
     // MARK: Route table
 
-    @Test("The route table marks only chronology as registry-backed today")
+    @Test("The route table marks chronology and general summary as registry-backed")
     func routeTable() {
         #expect(WorkProductAssemblyService.isRegistryBacked(.chronology) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.generalSummary) == false)
+        #expect(WorkProductAssemblyService.isRegistryBacked(.generalSummary) == true)
         #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == false)
         #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == false)
     }
@@ -167,10 +168,14 @@ struct WorkProductAssemblyServiceTests {
                                               temporalClaims: TemporalClaimRepository(database: db),
                                               events: EventsRepository(database: db))
         // EMPTY registry → the chronology composer is missing → the arm must throw, not fall back.
+        let contradictions = ContradictionsRepository(database: db)
+        let gaps = GapNodeRepository(database: db)
+        let disclosures = DisclosureSelectionService(contradictions: contradictions,
+                                                     claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
         let service = WorkProductAssemblyService(
-            events: EventsRepository(database: db), contradictions: ContradictionsRepository(database: db),
-            gaps: GapNodeRepository(database: db), workspaces: WorkspaceRepository(database: db),
-            selection: selection, registry: WorkProductComposerRegistry())
+            events: EventsRepository(database: db), contradictions: contradictions,
+            gaps: gaps, workspaces: WorkspaceRepository(database: db),
+            selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
         await #expect(throws: WorkProductAssemblyError.missingComposer("history.chronology")) {
             try await service.compose(workspace: ws(UUID()), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)
         }
@@ -178,14 +183,119 @@ struct WorkProductAssemblyServiceTests {
 
     // MARK: Legacy arm intact
 
-    @Test("The non-chronology templates still assemble through the legacy composer")
+    @Test("Investigation and fact memo remain legacy-backed")
     func legacyTemplatesUnchanged() async throws {
         let r = try await rig()
-        for template in [WorkProductTemplate.generalSummary, .investigationFindings, .factMemo] {
+        for template in [WorkProductTemplate.investigationFindings, .factMemo] {
+            #expect(WorkProductAssemblyService.isRegistryBacked(template) == false)
             let assembled = try await r.service.compose(workspace: ws(UUID()), template: template,
                                                         subjectLabel: "WS", corpusSnapshotID: nil)
             #expect(assembled.workProduct.template == template)     // produced via legacy, no throw
         }
+    }
+
+    // MARK: General-summary migration (registry, multi-composer)
+
+    private let generalSummaryOrder = ["Sourced summary", "Qualified observations", "Claim-level conflicts",
+                                       "Chronology", "Conflicts", "Gaps"]
+
+    @Test("General summary assembles in plan section order across all composers")
+    func generalSummarySectionOrder() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        try await saveClaim(r, subject: subject, statement: "A fact")
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        #expect(assembled.workProduct.sections.map(\.title) == generalSummaryOrder)
+    }
+
+    @Test("Inference and conflict claims are allowed and land in their disclosure sections")
+    func generalSummaryDisclosuresAllowed() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        try await saveClaim(r, subject: subject, statement: "inferred", basis: .inferred, resolvedCitation: false)
+        // Does not throw (inference is a disclosure, not a blocked material assertion).
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let qualified = assembled.workProduct.sections.first { $0.title == "Qualified observations" }
+        #expect(qualified?.claims.contains { $0.text.hasSuffix("inferred") } == true)
+    }
+
+    @Test("The same canonical claim keeps its sourceClaimID across summary and chronology, with distinct occurrence ids")
+    func sameClaimAcrossSections() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        let claimID = try await saveClaim(r, subject: subject, statement: "shared fact")
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let occurrences = assembled.workProduct.sections.flatMap(\.claims).filter { $0.sourceClaimID == claimID }
+        #expect(occurrences.count >= 2)                                  // summary + chronology
+        #expect(Set(occurrences.map(\.id)).count == occurrences.count)   // distinct occurrence ids
+        #expect(occurrences.allSatisfy { $0.sourceClaimID == claimID })  // same canonical id
+    }
+
+    @Test("Workspace scope is preserved across every section")
+    func workspaceScopePreservedAllSections() async throws {
+        let r = try await rig()
+        let a = UUID(), b = UUID(), workspace = UUID()
+        try await addMember(r, subject: a, workspace: workspace)
+        try await saveClaim(r, subject: a, statement: "member")
+        try await saveClaim(r, subject: b, statement: "outsider")       // not a member
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
+        #expect(texts.contains { $0.hasSuffix("member") })
+        #expect(!texts.contains { $0.hasSuffix("outsider") })
+    }
+
+    @Test("A rejected claim neither renders nor lets its linked conflict surface")
+    func rejectedNeitherRendersNorScopes() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        let rid = try await saveClaim(r, subject: subject, statement: "rejected")
+        try await r.reviews.record(ClaimReview(claimID: rid, disposition: .rejected, reviewer: "u", reviewedAt: t0))
+        // Link a contradiction to the rejected claim.
+        let cont = Contradiction(id: UUID(), description: "d", claimA: "sideA", claimB: "sideB", status: .open)
+        await ContradictionsRepository(database: r.db).insert(cont)
+        try await ClaimContradictionRepository(database: r.db).link(claimID: rid, contradictionID: cont.id)
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
+        #expect(!texts.contains { $0.hasSuffix("rejected") })            // claim not rendered
+        #expect(!texts.contains { $0.contains("sideA") })                // its conflict did not surface
+    }
+
+    @Test("Decision-aware validation blocks an unresolved user-attributed material claim")
+    func decisionAwareBlocksUserAttributed() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        // unknownLegacy + confirmed + UNRESOLVED citation → assertWithUserAttribution (assertive,
+        // status .humanNote). The legacy gate would miss it; the decision-aware gate blocks it.
+        try await saveClaim(r, subject: subject, statement: "u", basis: .unknownLegacy,
+                            review: .confirmed, resolvedCitation: false)
+        await #expect(throws: WorkProductAssemblyError.self) {
+            try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
+                                        subjectLabel: "WS", corpusSnapshotID: nil)
+        }
+    }
+
+    @Test("A report and its general-summary receipt are the identical assembled product")
+    func generalSummaryReportReceiptIdentical() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        try await saveClaim(r, subject: subject, statement: "one")
+        try await saveClaim(r, subject: subject, statement: "two")
+        let a = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+        let b = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+        let ax = a.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
+        let bx = b.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
+        #expect(ax == bx)
     }
 
     // MARK: Corrections folded into this commit
