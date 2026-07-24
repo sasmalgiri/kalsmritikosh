@@ -95,14 +95,22 @@ public actor ClaimProjectionBackfill {
     /// replacement), so repeats and overlaps are safe. NEVER throws: a projection failure must
     /// never fail the ingest that triggered it — it is logged and swallowed.
     public func projectSource(fileID: UUID, at now: Date) async {
+        // Fire-and-forget ingestion hook: failures are logged and swallowed so a projection error
+        // never fails the ingest that triggered it.
+        do { try await projectSourceForUserAction(fileID: fileID, at: now) }
+        catch { KalsmritikoshLog.storage.error("Incremental claim projection failed for one source: \(String(describing: error), privacy: .public)") }
+    }
+
+    /// PA-UI-001 — the SAME per-source projection as `projectSource`, but for an explicit USER
+    /// action (adding a source to a workspace): it PROPAGATES errors so the UI can surface an
+    /// actionable failure instead of silently doing nothing. Runs on the shared actor (awaits any
+    /// active full pass first), produces the source's affected subjects' Claims, and reconciles
+    /// derived membership for the workspaces that hold the source.
+    public func projectSourceForUserAction(fileID: UUID, at now: Date) async throws {
         if let active { await active.value }   // don't interleave a scan with a full pass
-        do {
-            let subjects = try await membership.subjects(inFiles: [fileID])
-            for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now) }
-            _ = try await membership.reconcileWorkspaces(forSource: fileID, at: now)
-        } catch {
-            KalsmritikoshLog.storage.error("Incremental claim projection failed for one source: \(String(describing: error), privacy: .public)")
-        }
+        let subjects = try await membership.subjects(inFiles: [fileID])
+        for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now) }
+        _ = try await membership.reconcileWorkspaces(forSource: fileID, at: now)
     }
 
     private struct Item { let id: UUID; let project: () async throws -> ClaimProjectionOutcome }

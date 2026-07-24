@@ -38,6 +38,17 @@ public struct WorkspacesView: View {
     @State private var newTagName = ""
     @State private var newViewTitle = ""
 
+    // PA-UI-001 — source management.
+    @State private var sources: [WorkspaceSourceCandidate] = []
+    @State private var showingAddSources = false
+    @State private var candidates: [WorkspaceSourceCandidate] = []
+    @State private var candidateSelection: Set<UUID> = []
+    @State private var candidateSearch = ""
+    @State private var loadingCandidates = false
+    @State private var applyingSources = false
+    @State private var sourceError: String?
+    @State private var confirmRemoveLast: WorkspaceSourceCandidate?
+
     // Report composer (F4).
     @State private var reportTemplate: WorkProductTemplate = .generalSummary
     @State private var reportFormat: ExportFormat = .markdown
@@ -66,6 +77,180 @@ public struct WorkspacesView: View {
                     .environment(appState)
             }
         }
+        .sheet(isPresented: $showingAddSources) {
+            if let ws = workspaces.first(where: { $0.id == selectedID }) { addSourcesSheet(ws) }
+        }
+        .confirmationDialog("Remove the last source?",
+                            isPresented: Binding(get: { confirmRemoveLast != nil },
+                                                 set: { if !$0 { confirmRemoveLast = nil } }),
+                            titleVisibility: .visible) {
+            Button("Remove source", role: .destructive) {
+                if let c = confirmRemoveLast, let ws = workspaces.first(where: { $0.id == selectedID }) {
+                    confirmRemoveLast = nil
+                    Task { await removeSource(c, from: ws) }
+                }
+            }
+            Button("Cancel", role: .cancel) { confirmRemoveLast = nil }
+        } message: {
+            Text("Removing this source will leave the workspace empty. The source and its evidence will remain in the archive.")
+        }
+    }
+
+    // MARK: - Sources section (PA-UI-001)
+
+    private func sourcesSection(_ ws: Workspace) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Sources", systemImage: "doc.on.doc").font(.headline)
+                Spacer()
+                Button {
+                    Task { await openAddSources(ws) }
+                } label: {
+                    Label("Add sources…", systemImage: "plus.circle")
+                }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+            }
+            Text("The files this workspace may use. Reports draw only on these sources.")
+                .font(.caption).foregroundStyle(.secondary)
+            if sources.isEmpty {
+                Text("No sources have been added. Add files from your archive to define what this workspace may use.")
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+            } else {
+                ForEach(sources) { src in
+                    HStack(spacing: 10) {
+                        Image(systemName: "doc.text").foregroundStyle(.tint).frame(width: 18)
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 6) {
+                                Text(src.filename).font(.callout.weight(.medium)).lineLimit(1)
+                                availabilityBadge(src.availability)
+                            }
+                            Text(src.parentPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                            if let d = src.ingestedAt {
+                                Text("\(src.sourceType.rawValue.uppercased()) · ingested \(d.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                            } else {
+                                Text(src.sourceType.rawValue.uppercased())
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        Button(role: .destructive) {
+                            if sources.count == 1 { confirmRemoveLast = src }
+                            else { Task { await removeSource(src, from: ws) } }
+                        } label: { Image(systemName: "minus.circle") }
+                        .buttonStyle(.borderless).controlSize(.small)
+                        .help("Remove from workspace (keeps the file and its evidence)")
+                    }
+                    .padding(.vertical, 3)
+                }
+            }
+            if let err = sourceError {
+                Text(err).font(.caption2).foregroundStyle(.red)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .cardSurface(cornerRadius: 12)
+    }
+
+    @ViewBuilder
+    private func availabilityBadge(_ a: FileAvailability) -> some View {
+        let (text, color): (String, Color) = {
+            switch a {
+            case .available:   return ("available", .green)
+            case .offlineRoot: return ("offline", .orange)
+            case .missing:     return ("missing", .red)
+            }
+        }()
+        Text(text).font(.caption2)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color.opacity(0.15), in: .capsule)
+            .foregroundStyle(color)
+    }
+
+    // MARK: - Add-sources sheet (PA-UI-001)
+
+    private func addSourcesSheet(_ ws: Workspace) -> some View {
+        let visible = candidates.filter {
+            candidateSearch.isEmpty
+                || $0.filename.localizedCaseInsensitiveContains(candidateSearch)
+                || $0.parentPath.localizedCaseInsensitiveContains(candidateSearch)
+        }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Add sources to \(ws.title)").font(.title2.weight(.semibold))
+            Text("Choose files already ingested into your archive. Adding a source lets this workspace's reports use it.")
+                .font(.caption).foregroundStyle(.secondary)
+            TextField("Search filename or path", text: $candidateSearch)
+                .textFieldStyle(.roundedBorder)
+
+            if loadingCandidates {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 160)
+            } else if candidates.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "tray").font(.system(size: 26)).foregroundStyle(.secondary)
+                    Text("No eligible files").font(.callout.weight(.medium))
+                    Text("Every ingested file is already in this workspace, or nothing has been ingested yet. Add files to your archive from the Sources tab first.")
+                        .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, minHeight: 160)
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(visible) { c in
+                            Button {
+                                if candidateSelection.contains(c.fileID) { candidateSelection.remove(c.fileID) }
+                                else { candidateSelection.insert(c.fileID) }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: candidateSelection.contains(c.fileID) ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(candidateSelection.contains(c.fileID) ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        HStack(spacing: 6) {
+                                            Text(c.filename).font(.callout).lineLimit(1)
+                                            availabilityBadge(c.availability)
+                                        }
+                                        Text(c.parentPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .contentShape(Rectangle())
+                                .padding(.vertical, 3)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(minHeight: 200, maxHeight: 320)
+                HStack(spacing: 12) {
+                    Text("\(candidateSelection.count) selected").font(.caption).foregroundStyle(.secondary)
+                    Button("Select All Visible") { candidateSelection.formUnion(visible.map(\.fileID)) }
+                        .controlSize(.small)
+                    Button("Clear Selection") { candidateSelection.removeAll() }
+                        .controlSize(.small).disabled(candidateSelection.isEmpty)
+                }
+            }
+
+            if let err = sourceError { Text(err).font(.caption2).foregroundStyle(.red) }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { showingAddSources = false }
+                    .keyboardShortcut(.cancelAction)
+                Button {
+                    Task { await applyAddSources(ws) }
+                } label: {
+                    if applyingSources { ProgressView().controlSize(.small) }
+                    else { Text("Add Sources") }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(candidateSelection.isEmpty || applyingSources)
+            }
+        }
+        .padding(20)
+        .frame(width: 560)
     }
 
     private func screeningSection(_ ws: Workspace) -> some View {
@@ -174,6 +359,7 @@ public struct WorkspacesView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     detailHeader(ws)
                     membershipStrip
+                    sourcesSection(ws)
                     templateSection(ws)
                     tagsSection(ws)
                     savedViewsSection(ws)
@@ -373,19 +559,23 @@ public struct WorkspacesView: View {
                     if composing { ProgressView().controlSize(.small) }
                     else { Label("Compose & Export…", systemImage: "square.and.arrow.up") }
                 }
-                .disabled(composing)
+                .disabled(composing || sourceCount == 0)
                 Button {
                     Task { await exportReceipt(ws) }
                 } label: {
                     Label("Verifiable receipt…", systemImage: "checkmark.seal")
                 }
-                .disabled(composing)
+                .disabled(composing || sourceCount == 0)
                 .help("Export a tamper-evident receipt: each claim pinned to its cited source + custody hash, re-checkable offline.")
+            }
+            if sourceCount == 0 {
+                Text("Add at least one source before creating a report.")
+                    .font(.caption2).foregroundStyle(.orange)
             }
             if let status = reportStatus {
                 Text(status).font(.caption2).foregroundStyle(.secondary)
             }
-            Text("Scope note: this v1 composer draws on the whole archive; per-workspace source scoping lands with the retrieval-authority rewrite.")
+            Text("Scope: this report uses only sources added to this workspace. Claims with evidence outside the workspace are excluded.")
                 .font(.caption2).foregroundStyle(.tertiary).italic()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -444,15 +634,67 @@ public struct WorkspacesView: View {
         guard let id = selectedID,
               let wsRepo = appState.workspaces,
               let reviewRepo = appState.review else { return }
-        let sources = (try? await wsRepo.sourceCount(in: id)) ?? 0
+        let sourceList = (try? await appState.workspaceSourceCoordinator?.currentSources(in: id)) ?? []
+        let sources = (try? await wsRepo.sourceCount(in: id)) ?? sourceList.count
         let entities = ((try? await wsRepo.entityIDs(in: id)) ?? []).count
         let tagList = (try? await reviewRepo.tags(inWorkspace: id)) ?? []
         let viewList = (try? await reviewRepo.views(inWorkspace: id)) ?? []
         await MainActor.run {
+            self.sources = sourceList
             self.sourceCount = sources
             self.entityCount = entities
             self.tags = tagList
             self.savedViews = viewList
+        }
+    }
+
+    // MARK: - Source actions (PA-UI-001)
+
+    private func openAddSources(_ ws: Workspace) async {
+        await MainActor.run {
+            sourceError = nil; candidateSelection = []; candidateSearch = ""
+            candidates = []; loadingCandidates = true; showingAddSources = true
+        }
+        guard let coord = appState.workspaceSourceCoordinator else {
+            await MainActor.run { loadingCandidates = false; sourceError = "Source service is not ready." }
+            return
+        }
+        do {
+            let list = try await coord.candidates(for: ws.id)
+            await MainActor.run { candidates = list; loadingCandidates = false }
+        } catch {
+            await MainActor.run { loadingCandidates = false; sourceError = "Couldn't load files: \(error.localizedDescription)" }
+        }
+    }
+
+    private func applyAddSources(_ ws: Workspace) async {
+        guard let coord = appState.workspaceSourceCoordinator else {
+            await MainActor.run { sourceError = "Source service is not ready." }; return
+        }
+        let selection = candidateSelection
+        await MainActor.run { applyingSources = true; sourceError = nil }
+        do {
+            try await coord.addSources(selection, to: ws.id, at: Date())
+            await MainActor.run { applyingSources = false; showingAddSources = false }
+            await reloadDetail()
+            await reloadWorkspaces()               // updated_at changed → list re-orders
+        } catch {
+            // Keep the sheet open and show an actionable error — never close silently.
+            await MainActor.run { applyingSources = false; sourceError = "Couldn't add sources: \(error.localizedDescription)" }
+        }
+    }
+
+    private func removeSource(_ src: WorkspaceSourceCandidate, from ws: Workspace) async {
+        guard let coord = appState.workspaceSourceCoordinator else {
+            await MainActor.run { sourceError = "Source service is not ready." }; return
+        }
+        do {
+            try await coord.removeSource(src.fileID, from: ws.id, at: Date())
+            await MainActor.run { sourceError = nil }
+            await reloadDetail()
+            await reloadWorkspaces()
+        } catch {
+            await MainActor.run { sourceError = "Couldn't remove source: \(error.localizedDescription)" }
         }
     }
 

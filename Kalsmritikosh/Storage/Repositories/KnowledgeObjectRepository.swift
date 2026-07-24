@@ -206,6 +206,14 @@ public actor KnowledgeObjectRepository {
         return out
     }
 
+    /// PA-UI-001 — the set of file ids that own at least one KnowledgeObject, i.e. files whose
+    /// ingestion produced content. Used by the workspace source picker to offer only genuinely
+    /// ingested (queryable) files, never a bare/failed file row.
+    public func fileIDsWithObjects() async throws -> Set<UUID> {
+        let rows = try await database.query("SELECT DISTINCT file_id FROM knowledge_objects;")
+        return Set(rows.compactMap { $0.uuid(0) })
+    }
+
     /// G3 BondBackfill — enumerate all KO ids in the ledger, paged so
     /// a million-KO archive doesn't blow up memory. Caller iterates
     /// (offset += pageSize) until the returned array is shorter than

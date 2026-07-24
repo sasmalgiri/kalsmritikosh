@@ -597,6 +597,9 @@ public final class AppState {
     /// The detached, cancellable boot-backfill task. Held so a re-boot cancels the prior pass
     /// (the backfill is single-flight + resumable, so cancellation loses nothing).
     private var claimProjectionBackfillTask: Task<Void, Never>?
+    /// PA-UI-001 — the service the Workspaces UI uses to add/remove ingested sources to a
+    /// workspace (candidate listing, membership writes, projection + reconciliation).
+    public private(set) var workspaceSourceCoordinator: WorkspaceSourceCoordinator?
     /// Persona features Epic 1 (F2) — shared review model: tags, the
     /// append-only review-decision ledger, and saved views.
     public private(set) var review: ReviewRepository?
@@ -1233,6 +1236,10 @@ public final class AppState {
             claimProjectionBackfillTask?.cancel()
             if let previousProjection = self.claimProjection { await previousProjection.cancel() }
             self.claimProjection = claimProjectionBackfill
+            // PA-UI-001 — the workspace source-management service, over the same repos.
+            self.workspaceSourceCoordinator = WorkspaceSourceCoordinator(
+                files: files, objects: objects, workspaces: workspacesRepo,
+                membership: membershipDeriver, projection: claimProjectionBackfill)
 
             let ingest = IngestCoordinator(
                 loaders: .standard(),

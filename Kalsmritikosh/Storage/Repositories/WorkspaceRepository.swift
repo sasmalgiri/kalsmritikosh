@@ -102,6 +102,37 @@ public actor WorkspaceRepository {
         """, [.uuid(workspaceID), .uuid(fileID), .real(when.timeIntervalSince1970)])
     }
 
+    /// PA-UI-001 — atomically add several sources and bump the workspace's `updated_at`, so a
+    /// multi-select add is one all-or-nothing membership change.
+    public func addSources(_ fileIDs: [UUID], to workspaceID: Workspace.ID, at when: Date = Date()) async throws {
+        guard !fileIDs.isEmpty else { return }
+        let sp = "wsaddsrc_\(workspaceID.uuidString.replacingOccurrences(of: "-", with: ""))"
+        do {
+            try await database.exec("SAVEPOINT \(sp);", [])
+            for fileID in fileIDs {
+                try await database.exec("""
+                INSERT INTO workspace_sources (workspace_id, file_id, added_at)
+                VALUES (?, ?, ?) ON CONFLICT(workspace_id, file_id) DO NOTHING;
+                """, [.uuid(workspaceID), .uuid(fileID), .real(when.timeIntervalSince1970)])
+            }
+            try await database.exec(
+                "UPDATE workspaces SET updated_at = ? WHERE id = ?;",
+                [.real(when.timeIntervalSince1970), .uuid(workspaceID)])
+            try await database.exec("RELEASE SAVEPOINT \(sp);", [])
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);", [])
+            try? await database.exec("RELEASE SAVEPOINT \(sp);", [])
+            throw error
+        }
+    }
+
+    /// Bump `updated_at` without any other change (e.g. after a membership edit).
+    public func touch(_ id: Workspace.ID, at when: Date = Date()) async throws {
+        try await database.exec(
+            "UPDATE workspaces SET updated_at = ? WHERE id = ?;",
+            [.real(when.timeIntervalSince1970), .uuid(id)])
+    }
+
     /// Removes membership only — the file + its extracted evidence remain.
     public func removeSource(_ fileID: UUID, from workspaceID: Workspace.ID) async throws {
         try await database.exec(
