@@ -115,12 +115,15 @@ struct WorkProductAssemblyServiceTests {
 
     // MARK: Route table
 
-    @Test("The route table marks chronology and general summary as registry-backed")
+    @Test("The route table maps each template to its explicit composer sequence")
     func routeTable() {
-        #expect(WorkProductAssemblyService.isRegistryBacked(.chronology) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.generalSummary) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == true)
+        func ids(_ t: WorkProductTemplate) -> [String] {
+            WorkProductAssemblyService.plan(for: t).composerIDs.map(\.rawValue)
+        }
+        #expect(ids(.chronology) == ["history.chronology"])
+        #expect(ids(.generalSummary) == ["claims.sourced-summary", "history.chronology", "evidence.gaps-conflicts"])
+        #expect(ids(.investigationFindings) == ["investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
+        #expect(ids(.factMemo) == ["fact-memo.core"])
     }
 
     // MARK: Chronology registry arm
@@ -214,8 +217,7 @@ struct WorkProductAssemblyServiceTests {
         let disclosures = DisclosureSelectionService(contradictions: contradictions,
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
         let service = WorkProductAssemblyService(
-            events: EventsRepository(database: db), contradictions: contradictions,
-            gaps: gaps, workspaces: WorkspaceRepository(database: db),
+            workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
@@ -224,12 +226,15 @@ struct WorkProductAssemblyServiceTests {
         }
     }
 
-    // MARK: All templates registry-backed (legacy arm no longer routed)
+    // MARK: Architectural guard — no template routes the (removed) legacy arm
 
-    @Test("Every template is registry-backed after the investigation + fact-memo cutover")
-    func allTemplatesRegistryBacked() {
-        for template in [WorkProductTemplate.chronology, .generalSummary, .investigationFindings, .factMemo] {
-            #expect(WorkProductAssemblyService.isRegistryBacked(template) == true)
+    @Test("Every WorkProductTemplate has a non-empty registry plan (no legacy route remains)")
+    func noTemplateRoutesLegacy() {
+        // Iterates ALL cases (CaseIterable), so a template added later without a registry plan
+        // fails here rather than silently falling back to a legacy route (which no longer exists).
+        for template in WorkProductTemplate.allCases {
+            let plan = WorkProductAssemblyService.plan(for: template)
+            #expect(!plan.composerIDs.isEmpty, "\(template) has no registry composers")
         }
     }
 

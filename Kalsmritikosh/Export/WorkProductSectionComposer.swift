@@ -14,8 +14,9 @@
 //   • WorkProductComposerRegistry — deterministic lookup keyed by a stable composer id;
 //     rejects duplicate registrations.
 //
-//  The legacy `WorkProductComposer.compose` remains operational OUTSIDE this registry during
-//  migration; sections move onto this protocol one composer at a time.
+//  Every production work-product template now assembles through this registry (see
+//  WorkProductAssemblyService.plan). The legacy `WorkProductComposer.compose` is no longer on any
+//  production route; it survives only as a WorkProduct factory in the export-gate unit tests.
 //
 
 import Foundation

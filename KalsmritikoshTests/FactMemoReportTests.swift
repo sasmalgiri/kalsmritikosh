@@ -148,9 +148,10 @@ struct FactMemoReportTests {
 
     // MARK: - Route + structure
 
-    @Test("The fact-memo template is registry-backed after the cutover")
+    @Test("The fact-memo template routes through the fact-memo registry composer")
     func templateIsRegistryBacked() {
-        #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == true)
+        let ids = WorkProductAssemblyService.plan(for: .factMemo).composerIDs.map(\.rawValue)
+        #expect(ids == ["fact-memo.core"])
     }
 
     @Test("The fact memo assembles in the exact six-section order")
@@ -315,8 +316,7 @@ struct FactMemoReportTests {
         let disclosures = DisclosureSelectionService(contradictions: contradictions,
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
         let service = WorkProductAssemblyService(
-            events: EventsRepository(database: db), contradictions: contradictions,
-            gaps: gaps, workspaces: WorkspaceRepository(database: db),
+            workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())

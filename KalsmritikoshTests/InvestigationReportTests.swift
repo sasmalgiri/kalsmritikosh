@@ -155,9 +155,10 @@ struct InvestigationReportTests {
 
     // MARK: - Route + structure
 
-    @Test("The investigation template is registry-backed after the cutover")
+    @Test("The investigation template routes through the investigation registry composers")
     func templateIsRegistryBacked() {
-        #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == true)
+        let ids = WorkProductAssemblyService.plan(for: .investigationFindings).composerIDs.map(\.rawValue)
+        #expect(ids == ["investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
     }
 
     @Test("The investigation report assembles in the exact plan section order")
@@ -375,8 +376,7 @@ struct InvestigationReportTests {
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
         // EMPTY registry → investigation.findings missing → the arm must throw, not fall back.
         let service = WorkProductAssemblyService(
-            events: EventsRepository(database: db), contradictions: contradictions,
-            gaps: gaps, workspaces: WorkspaceRepository(database: db),
+            workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())

@@ -7,16 +7,15 @@
 //  report export and the receipt export call the SAME `compose(...)` method (so a report and
 //  its receipt are always the identical assembled product).
 //
-//  Cutover strategy: EXPLICIT per-template capability routing, not a runtime flag.
-//   • Templates whose required sections have a genuine registry composer go through the new
-//     ClaimSelectionService → WorkProductContext → registered composer → WorkProduct pipeline.
-//   • The remaining templates use the legacy WorkProductComposer, unchanged.
-//   • The registry branch NEVER silently falls back to legacy on failure — an error propagates.
-//   • As each template reaches parity it moves from the legacy arm to the registry arm; when
-//     all four are registry-backed the legacy production branch is removed.
+//  Routing: EXPLICIT per-template capability routing, not a runtime flag. ALL four templates are
+//  now registry-backed — each goes through the ClaimSelectionService → WorkProductContext →
+//  registered composer → WorkProduct pipeline via an explicit `plan(for:)` route table (the
+//  composer order IS the report's section order). There is NO legacy production route: the
+//  registry branch is the only branch, and it NEVER silently falls back — a missing composer
+//  throws.
 //
-//  A fail-closed evidence-integrity gate runs on BOTH arms: an unsupported material claim
-//  blocks the export (and therefore the receipt) — nothing is written.
+//  A fail-closed evidence-integrity gate runs on the composed product: an unsupported material
+//  claim blocks the export (and therefore the receipt) — nothing is written.
 //
 
 import Foundation
@@ -45,9 +44,6 @@ public struct WorkProductTemplatePlan: Sendable {
 }
 
 public actor WorkProductAssemblyService {
-    private let events: EventsRepository
-    private let contradictions: ContradictionsRepository
-    private let gaps: GapNodeRepository
     private let workspaces: WorkspaceRepository
     private let knowledgeObjects: KnowledgeObjectRepository
     private let evidence: EvidenceStore
@@ -63,6 +59,8 @@ public actor WorkProductAssemblyService {
                 independenceKeyProvider: (any SourceIndependenceKeyProvider)? = nil) throws {
         let claims = ClaimRepository(database: database)
         let resolver = ClaimResolver(claims: claims, reviews: ClaimReviewRepository(database: database))
+        // `events` feeds the selector's temporal lineage; `contradictions`/`gaps` feed the
+        // scoped disclosure selector. Neither is used for any whole-archive production route.
         let selection = ClaimSelectionService(
             claims: claims, resolver: resolver,
             temporalClaims: TemporalClaimRepository(database: database),
@@ -72,31 +70,27 @@ public actor WorkProductAssemblyService {
             claimContradictions: ClaimContradictionRepository(database: database), gaps: gaps)
         // Built-in composers are registered via the throwing factory — a duplicate/misconfigured
         // built-in fails construction here rather than being silently dropped.
-        self.init(events: events, contradictions: contradictions, gaps: gaps,
-                  workspaces: workspaces, knowledgeObjects: KnowledgeObjectRepository(database: database),
+        self.init(workspaces: workspaces, knowledgeObjects: KnowledgeObjectRepository(database: database),
                   evidence: EvidenceStore(database: database),
                   selection: selection, disclosures: disclosures,
                   registry: try WorkProductComposerRegistry.makeDefault())
     }
 
     /// Designated init — also the seam tests use to inject a registry (e.g. empty, to prove
-    /// the registry branch never falls back to the legacy composer).
-    init(events: EventsRepository, contradictions: ContradictionsRepository, gaps: GapNodeRepository,
-         workspaces: WorkspaceRepository, knowledgeObjects: KnowledgeObjectRepository,
+    /// the registry branch throws rather than falling back).
+    init(workspaces: WorkspaceRepository, knowledgeObjects: KnowledgeObjectRepository,
          evidence: EvidenceStore,
          selection: ClaimSelectionService,
          disclosures: DisclosureSelectionService, registry: WorkProductComposerRegistry) {
-        self.events = events; self.contradictions = contradictions; self.gaps = gaps
         self.workspaces = workspaces; self.knowledgeObjects = knowledgeObjects
         self.evidence = evidence
         self.selection = selection
         self.disclosures = disclosures; self.registry = registry
     }
 
-    /// The registry plan for a template, or nil when the template is still legacy-backed. This
-    /// explicit table (not a hidden flag) is the migration's source of truth AND the report's
-    /// section order.
-    public nonisolated static func plan(for template: WorkProductTemplate) -> WorkProductTemplatePlan? {
+    /// The registry plan for a template. TOTAL — every template is registry-backed (there is no
+    /// legacy route). This explicit table (not a hidden flag) is the report's section order.
+    public nonisolated static func plan(for template: WorkProductTemplate) -> WorkProductTemplatePlan {
         switch template {
         case .chronology:
             return WorkProductTemplatePlan(composerIDs: [WorkProductComposerID("history.chronology")],
@@ -120,22 +114,15 @@ public actor WorkProductAssemblyService {
         }
     }
 
-    public nonisolated static func isRegistryBacked(_ template: WorkProductTemplate) -> Bool {
-        plan(for: template) != nil
-    }
-
     // MARK: - Compose
 
     public func compose(workspace: Workspace, template: WorkProductTemplate,
                         subjectLabel: String, corpusSnapshotID: UUID?) async throws -> AssembledWorkProduct {
-        let composed: WorkProduct
-        if let plan = Self.plan(for: template) {
-            // Registry arm. A failure here THROWS — it must never invoke the legacy composer.
-            composed = try await composeThroughRegistry(plan: plan, workspace: workspace, template: template,
-                                                        subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
-        } else {
-            composed = try await composeThroughLegacy(workspace: workspace, template: template)
-        }
+        // Registry arm ONLY — every template is registry-backed. A failure here THROWS; there is
+        // no legacy fallback.
+        let composed = try await composeThroughRegistry(
+            plan: Self.plan(for: template), workspace: workspace, template: template,
+            subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
         // PA-REC-001 — enrich every citation with its EXACT source-version custody hash ONCE, here,
         // so both the report and its receipt consume the identical hash-pinned product.
         let wp = try await enrichCustodyHashes(composed)
@@ -184,22 +171,6 @@ public actor WorkProductAssemblyService {
             title: "\(workspace.title) — \(template.displayName)",
             subtitle: "Work product for the \"\(workspace.title)\" workspace (\(workspace.template.displayName)).",
             sections: sections,
-            disclaimer: PersonaTemplateCatalog.disclaimer(for: workspace.template))
-    }
-
-    // MARK: - Legacy arm (unchanged behaviour; removed per-template as parity is reached)
-
-    private func composeThroughLegacy(workspace: Workspace, template: WorkProductTemplate) async throws -> WorkProduct {
-        let eventRows = (try? await events.recent(limit: 500)) ?? []
-        let filenames = (try? await events.sourceFilenames(forEventIDs: eventRows.map(\.id))) ?? [:]
-        let inputs = eventRows.map { WorkProductComposer.EventInput(event: $0, filename: filenames[$0.id]) }
-        let cx = await contradictions.all()
-        let gp = await gaps.all(includeDismissed: false)
-        return WorkProductComposer.compose(
-            template: template,
-            title: "\(workspace.title) — \(template.displayName)",
-            scopeNote: "Work product for the \"\(workspace.title)\" workspace (\(workspace.template.displayName)).",
-            events: inputs, contradictions: cx, gaps: gp,
             disclaimer: PersonaTemplateCatalog.disclaimer(for: workspace.template))
     }
 
