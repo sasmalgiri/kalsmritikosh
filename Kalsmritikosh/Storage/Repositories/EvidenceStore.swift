@@ -11,6 +11,27 @@
 
 import Foundation
 
+/// PA-PROD B6 — a block resolved to its CANONICAL KnowledgeObject owner and a reopenable source
+/// version. Unlike `ResolvedEvidenceReference` (which historically carried `logical_source_id` in
+/// the objectID slot), `knowledgeObjectID` is a real `knowledge_objects` row.
+public struct ResolvedEvidenceBlock: Sendable, Equatable {
+    public let blockID: EvidenceBlock.ID
+    public let knowledgeObjectID: KnowledgeObject.ID
+    public let sourceVersionID: UUID
+    public init(blockID: EvidenceBlock.ID, knowledgeObjectID: KnowledgeObject.ID, sourceVersionID: UUID) {
+        self.blockID = blockID; self.knowledgeObjectID = knowledgeObjectID; self.sourceVersionID = sourceVersionID
+    }
+}
+
+/// The outcome of resolving one block for canonical Claim evidence. Ambiguity (multiple distinct
+/// KnowledgeObject owners) and absence (missing block, no owner, or no reopenable version) are
+/// EXPLICIT — the producer must never guess a KnowledgeObject id or substitute `logical_source_id`.
+public enum CanonicalBlockResolution: Sendable, Equatable {
+    case resolved(ResolvedEvidenceBlock)
+    case unresolved(blockID: EvidenceBlock.ID)
+    case ambiguous(blockID: EvidenceBlock.ID)
+}
+
 public actor EvidenceStore: EvidenceBlockResolving {
     private let database: Database
 
@@ -147,6 +168,70 @@ public actor EvidenceStore: EvidenceBlockResolving {
             .integer(Int64(doc.warnings.count)),
             .null
         ])
+    }
+
+    // MARK: - B6 — canonical block → KnowledgeObject ownership
+
+    /// Record that each of `blockIDs` belongs to KnowledgeObject `koID` (PA-PROD B6). Idempotent
+    /// (INSERT OR IGNORE on the composite PK). Called by ingest once the structural blocks and the
+    /// KnowledgeObject both exist, so canonical Claim evidence can resolve a real object id.
+    public func linkBlocks(_ blockIDs: [EvidenceBlock.ID], toObject koID: KnowledgeObject.ID, at when: Date) async throws {
+        guard !blockIDs.isEmpty else { return }
+        let now = when.timeIntervalSince1970
+        for blockID in blockIDs {
+            try await database.exec("""
+            INSERT OR IGNORE INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at)
+            VALUES (?, ?, ?);
+            """, [.uuid(blockID), .uuid(koID), .real(now)])
+        }
+    }
+
+    /// Resolve blocks to their canonical KnowledgeObject owner + reopenable source version. A block
+    /// is `.resolved` only when it exists, has exactly ONE persisted KnowledgeObject owner, and its
+    /// source version (its own, or its document's current) exists. Zero owners → `.unresolved`;
+    /// more than one distinct owner → `.ambiguous`. Never falls back to `logical_source_id`.
+    public func resolveCanonicalBlocks(_ blockIDs: [EvidenceBlock.ID]) async throws -> [CanonicalBlockResolution] {
+        var out: [CanonicalBlockResolution] = []
+        for blockID in blockIDs {
+            let rows = try await database.query("""
+            SELECT ebo.knowledge_object_id, COALESCE(sv.id, cur.id) AS version_id
+            FROM evidence_blocks b
+            JOIN evidence_block_objects ebo ON ebo.evidence_block_id = b.id
+            LEFT JOIN source_versions sv  ON sv.id = b.source_version_id
+            LEFT JOIN source_versions cur ON cur.document_id = b.document_id AND cur.is_current = 1
+            WHERE b.id = ?;
+            """, [.uuid(blockID)])
+            let owners = Set(rows.compactMap { $0.uuid(0) })
+            if owners.isEmpty { out.append(.unresolved(blockID: blockID)); continue }
+            if owners.count > 1 { out.append(.ambiguous(blockID: blockID)); continue }
+            guard let version = rows.compactMap({ $0.uuid(1) }).first else {
+                out.append(.unresolved(blockID: blockID)); continue
+            }
+            out.append(.resolved(ResolvedEvidenceBlock(
+                blockID: blockID, knowledgeObjectID: owners.first!, sourceVersionID: version)))
+        }
+        return out
+    }
+
+    /// Whether a `knowledge_objects` row exists — so object-only evidence can verify its object id
+    /// is a REAL KnowledgeObject before it is stored on an EvidenceReference.
+    public func knowledgeObjectExists(_ id: KnowledgeObject.ID) async throws -> Bool {
+        let rows = try await database.query("SELECT 1 FROM knowledge_objects WHERE id = ? LIMIT 1;", [.uuid(id)])
+        return !rows.isEmpty
+    }
+
+    /// The current, reopenable source version for a KnowledgeObject, resolved through the file it
+    /// belongs to:  knowledge_objects.file_id → source_versions.logical_source_id (is_current). Used
+    /// for object-only evidence — NEVER by passing a KnowledgeObject id to a file-keyed lookup.
+    public func currentVersionID(forObject koID: KnowledgeObject.ID) async throws -> UUID? {
+        let rows = try await database.query("""
+        SELECT sv.id
+        FROM knowledge_objects ko
+        JOIN source_versions sv ON sv.logical_source_id = ko.file_id AND sv.is_current = 1
+        WHERE ko.id = ?
+        ORDER BY sv.created_at DESC LIMIT 1;
+        """, [.uuid(koID)])
+        return rows.first?.uuid(0)
     }
 
     // MARK: - Read

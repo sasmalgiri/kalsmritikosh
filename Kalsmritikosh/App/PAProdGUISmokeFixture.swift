@@ -81,9 +81,10 @@ enum PAProdGUISmokeFixture {
                                   content: "Contract signed by Alex Rivera on 2025-03-01.")
         try await insertEntityWithMention(db, entity: subject, ko: ko, value: "Alex Rivera", normalized: "alex rivera")
 
-        // A reopenable source: persist a source version whose logical_source_id IS the KO id, so
-        // the block resolves to that KnowledgeObject (inside the workspace) with a non-nil version.
-        let inScopeBlock = try await persistBlock(store, logicalSource: ko, filename: "valid-contract.txt",
+        // A reopenable source persisted the SAME way production does: source version keyed at the
+        // FILE (logical-source) level, plus an explicit block→KnowledgeObject ownership link (B6).
+        // The block therefore resolves to its real KnowledgeObject (inside the workspace).
+        let inScopeBlock = try await persistBlock(store, file: file, ko: ko, filename: "valid-contract.txt",
                                                   text: "Contract signed by Alex Rivera on 2025-03-01.")
         try await facts.upsert(GenericFact(
             subjectID: subject, subjectLabel: "Alex Rivera",
@@ -96,7 +97,7 @@ enum PAProdGUISmokeFixture {
         let outFile = UUID(), outKO = UUID()
         try await insertFileAndKO(db, file: outFile, ko: outKO, filename: "unrelated.txt",
                                   content: "Unrelated material.")
-        let outBlock = try await persistBlock(store, logicalSource: outKO, filename: "unrelated.txt",
+        let outBlock = try await persistBlock(store, file: outFile, ko: outKO, filename: "unrelated.txt",
                                               text: "OUT-OF-SCOPE SENTINEL — MUST NOT APPEAR")
         try await facts.upsert(GenericFact(
             subjectID: subject, subjectLabel: "Alex Rivera",
@@ -162,17 +163,18 @@ enum PAProdGUISmokeFixture {
               .text(normalized), .uuid(ko), .real(1.0)])
     }
 
-    /// Persist a one-block source version whose `logical_source_id` is the given KnowledgeObject id,
-    /// so `resolveEvidenceBlocks` returns that object with a non-nil (reopenable) version. Returns
-    /// the block id to cite from a GenericFact.
-    private static func persistBlock(_ store: EvidenceStore, logicalSource ko: UUID,
+    /// Persist a one-block source version the SAME way production ingest does — the source version's
+    /// `logical_source_id` is the FILE id — then record the canonical block→KnowledgeObject ownership
+    /// link (B6). The block therefore resolves through the exact production path. Returns the block id.
+    private static func persistBlock(_ store: EvidenceStore, file: UUID, ko: UUID,
                                      filename: String, text: String) async throws -> UUID {
         let docID = UUID(), versionID = UUID(), blockID = UUID()
         let block = EvidenceBlock(id: blockID, documentID: docID, ordinal: 0, kind: .paragraph, rawText: text)
-        let doc = ParsedDocument(id: docID, logicalSourceID: ko, sourceVersionID: versionID,
+        let doc = ParsedDocument(id: docID, logicalSourceID: file, sourceVersionID: versionID,
                                  filename: filename, detectedType: .txt, contentHash: "pa-prod-\(blockID.uuidString)",
                                  blocks: [block])
         try await store.persist(doc, parser: "pa-prod-gui-fixture", parserVersion: "1", startedAt: Date())
+        try await store.linkBlocks([blockID], toObject: ko, at: Date())   // B6 canonical ownership
         return blockID
     }
 

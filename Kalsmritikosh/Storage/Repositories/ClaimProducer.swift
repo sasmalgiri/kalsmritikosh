@@ -188,25 +188,30 @@ public actor ClaimProducer {
 
     // MARK: - Reopenable evidence resolution
 
-    /// Build EvidenceReferences that can REOPEN their exact source. Blocks resolve via
-    /// EvidenceStore (objectID + sourceVersionID + locator); object-only sources resolve to the
-    /// current source version. Any reference without a source-version id is DROPPED.
+    /// Build EvidenceReferences that can REOPEN their exact source, each carrying a CANONICAL
+    /// KnowledgeObject id (PA-PROD B6). Block-derived refs resolve the block's real KnowledgeObject
+    /// owner + reopenable version via EvidenceStore; unresolved/ambiguous blocks are dropped.
+    /// Object-only refs are accepted only when the object id is a REAL `knowledge_objects` row whose
+    /// current source version resolves. A `logical_source_id` (file id) is NEVER stored as objectID.
     private func reopenableRefs(blockIDs: [EvidenceBlock.ID], objectIDs: [KnowledgeObject.ID],
                                 assertionID: Assertion.ID? = nil, genericFactID: GenericFact.ID? = nil,
                                 eventID: Event.ID? = nil) async throws -> [EvidenceReference] {
         var refs: [EvidenceReference] = []
         var coveredObjects: Set<KnowledgeObject.ID> = []
         if !blockIDs.isEmpty {
-            for r in try await evidence.resolveEvidenceBlocks(blockIDs) {
-                guard let sv = r.sourceVersionID else { continue }        // must reopen
-                refs.append(EvidenceReference(objectID: r.objectID, blockID: r.blockID,
+            for resolution in try await evidence.resolveCanonicalBlocks(blockIDs) {
+                guard case .resolved(let rb) = resolution else { continue }  // drop unresolved/ambiguous
+                refs.append(EvidenceReference(objectID: rb.knowledgeObjectID, blockID: rb.blockID,
                                               assertionID: assertionID, genericFactID: genericFactID,
-                                              eventID: eventID, sourceVersionID: sv, role: .supports))
-                coveredObjects.insert(r.objectID)
+                                              eventID: eventID, sourceVersionID: rb.sourceVersionID, role: .supports))
+                coveredObjects.insert(rb.knowledgeObjectID)
             }
         }
         for obj in objectIDs where !coveredObjects.contains(obj) {
-            guard let sv = try await evidence.currentVersionID(forLogicalSource: obj) else { continue }
+            // The object id must be a genuine KnowledgeObject AND resolve to a reopenable version
+            // via its file — otherwise skip conservatively (never store a file id).
+            guard try await evidence.knowledgeObjectExists(obj),
+                  let sv = try await evidence.currentVersionID(forObject: obj) else { continue }
             refs.append(EvidenceReference(objectID: obj, blockID: nil, assertionID: assertionID,
                                           genericFactID: genericFactID, eventID: eventID,
                                           sourceVersionID: sv, role: .supports))

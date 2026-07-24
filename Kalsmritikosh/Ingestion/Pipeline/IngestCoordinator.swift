@@ -881,6 +881,10 @@ public actor IngestCoordinator {
         var totalEvents = 0
         var allInvalidations: [SubjectInvalidation.Subject] = []
         var lastObject: KnowledgeObject = perFileKOs[0]
+        // PA-PROD B6 — collect each KnowledgeObject's OWN structural blocks so canonical Claim
+        // evidence can resolve a real object id. For a multi-KO source (mbox) each message KO gets
+        // only its message's blocks (Self.blocks matches by messageIndex — never cross-linked).
+        var blockOwnership: [(ko: KnowledgeObject.ID, blockIDs: [EvidenceBlock.ID])] = []
 
         for rawKO in perFileKOs {
             do {
@@ -896,6 +900,7 @@ public actor IngestCoordinator {
                 totalEvents += processed.eventCount
                 allInvalidations.append(contentsOf: processed.invalidations)
                 lastObject = processed.object
+                if !koBlocks.isEmpty { blockOwnership.append((rawKO.id, koBlocks.map(\.id))) }
 
                 // T13.7 — if this KO staged any attachments, ingest them
                 // recursively as their own files. T7's hash-first dedup
@@ -980,6 +985,13 @@ public actor IngestCoordinator {
         // IDs referenced by events resolve here. Gated on a real ingest.
         if let structural, let evidenceStore, totalChunks > 0 {
             await persistStructuralDoc(structural, url: url, store: evidenceStore)
+            // PA-PROD B6 — now the structural EvidenceBlocks AND the KnowledgeObjects both exist,
+            // record block→object ownership (before incremental Claim projection is scheduled in
+            // `ingest`). Best-effort: a failure here never fails the ingest.
+            for link in blockOwnership {
+                do { try await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date()) }
+                catch { KalsmritikoshLog.ingestion.error("Block→object ownership link failed for \(link.ko.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)") }
+            }
         }
 
         return Result(

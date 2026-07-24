@@ -65,18 +65,23 @@ struct ClaimProducerTests {
         return (fileID, koID)
     }
 
-    /// A reopenable evidence block: current source_version(logical=ko) + block(source_version=sv).
+    /// A reopenable evidence block, seeded the PRODUCTION way (PA-PROD B6): the source version is
+    /// keyed at the FILE (logical-source) level, and a canonical `evidence_block_objects` link
+    /// records that the block belongs to the KnowledgeObject `ko`.
     @discardableResult
-    private func seedReopenableBlock(_ r: Rig, ko: UUID) async throws -> UUID {
+    private func seedReopenableBlock(_ r: Rig, file: UUID, ko: UUID) async throws -> UUID {
         let sv = UUID(), block = UUID(), doc = UUID()
         try await r.db.exec("""
         INSERT INTO source_versions (id, logical_source_id, document_id, content_hash, valid_from, is_current, created_at)
         VALUES (?,?,?,?,?,1,?);
-        """, [.uuid(sv), .uuid(ko), .uuid(doc), .text("h"), .real(0), .real(0)])
+        """, [.uuid(sv), .uuid(file), .uuid(doc), .text("h"), .real(0), .real(0)])
         try await r.db.exec("""
         INSERT INTO evidence_blocks (id, document_id, source_version_id, ordinal, kind, raw_text, normalized_text, extraction_method, extraction_confidence)
         VALUES (?,?,?,?,?,?,?,?,?);
         """, [.uuid(block), .uuid(doc), .uuid(sv), .integer(0), .text("text"), .text("t"), .text("t"), .text("test"), .real(1.0)])
+        try await r.db.exec("""
+        INSERT INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?,?,?);
+        """, [.uuid(block), .uuid(ko), .real(0)])
         return block
     }
 
@@ -106,8 +111,8 @@ struct ClaimProducerTests {
     func genericFactReopenable() async throws {
         let r = try await rig()
         let subject = UUID()
-        let (_, ko) = try await seedSubject(r, subject: subject)
-        let block = try await seedReopenableBlock(r, ko: ko)
+        let (file, ko) = try await seedSubject(r, subject: subject)
+        let block = try await seedReopenableBlock(r, file: file, ko: ko)
         try await fact(r, subject: subject, field: "employer", value: "Orchid", blocks: [block])
         #expect(try await r.producer.backfill(at: t0) == 1)
         let produced = try await r.claims.claims(subjectID: subject)
@@ -138,8 +143,8 @@ struct ClaimProducerTests {
     func idempotentReproduce() async throws {
         let r = try await rig()
         let subject = UUID()
-        let (_, ko) = try await seedSubject(r, subject: subject)
-        let block = try await seedReopenableBlock(r, ko: ko)
+        let (file, ko) = try await seedSubject(r, subject: subject)
+        let block = try await seedReopenableBlock(r, file: file, ko: ko)
         try await fact(r, subject: subject, field: "employer", value: "Orchid", blocks: [block])
         _ = try await r.producer.backfill(at: t0)
         _ = try await r.producer.backfill(at: t0.addingTimeInterval(1000))   // re-run
@@ -213,8 +218,8 @@ struct ClaimProducerTests {
     func reproductionPreservesEverything() async throws {
         let r = try await rig()
         let subject = UUID()
-        let (_, ko) = try await seedSubject(r, subject: subject)
-        let block = try await seedReopenableBlock(r, ko: ko)
+        let (file, ko) = try await seedSubject(r, subject: subject)
+        let block = try await seedReopenableBlock(r, file: file, ko: ko)
         try await fact(r, subject: subject, field: "employer", value: "Orchid", blocks: [block])
         _ = try await r.producer.backfill(at: t0)
         let id = try #require(try await r.claims.claims(subjectID: subject).first).id
@@ -276,7 +281,7 @@ struct ClaimProducerTests {
         let r = try await rig()
         let subject = UUID()
         let (file, ko) = try await seedSubject(r, subject: subject)
-        let block = try await seedReopenableBlock(r, ko: ko)
+        let block = try await seedReopenableBlock(r, file: file, ko: ko)
         try await fact(r, subject: subject, field: "employer", value: "Orchid Labs", blocks: [block])
         let wsID = UUID()
         try await r.workspaces.upsert(Workspace(id: wsID, title: "Matter", template: .general))

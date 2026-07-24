@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 65
+    public static let latestVersion = 66
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -111,8 +111,10 @@ public enum SchemaMigrations {
                                  "conflict_status", "legacy_status", "created_at"],
             // v64 — evidence-ref rebuilt with an ordinal identity.
             "claim_evidence_ref": ["claim_id", "ordinal", "knowledge_object_id", "evidence_role"],
-            // v65 — durable claim-projection progress (newest object).
-            "claim_projection_progress": ["producer_version", "source_kind", "last_source_id", "complete"]
+            // v65 — durable claim-projection progress.
+            "claim_projection_progress": ["producer_version", "source_kind", "last_source_id", "complete"],
+            // v66 — canonical EvidenceBlock → KnowledgeObject ownership (newest object).
+            "evidence_block_objects": ["evidence_block_id", "knowledge_object_id", "linked_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -188,7 +190,8 @@ public enum SchemaMigrations {
         (62, v62),
         (63, v63),
         (64, v64),
-        (65, v65)
+        (65, v65),
+        (66, v66)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2467,5 +2470,25 @@ public enum SchemaMigrations {
         PRIMARY KEY (workspace_id, entity_id)
     );
     CREATE INDEX IF NOT EXISTS idx_workspace_derived_ws ON workspace_derived_entities(workspace_id);
+    """
+
+    // PA-PROD Commit B6 — canonical EvidenceBlock → KnowledgeObject ownership.
+    //  A parsed source's structural blocks belong to a specific KnowledgeObject (for a multi-KO
+    //  source like MBOX, each message block belongs to ITS message KO). `source_versions
+    //  .logical_source_id` stays at the file/logical-source level and must never be overloaded as
+    //  a KnowledgeObject id; this table carries the real block→object identity so canonical Claim
+    //  evidence resolves to a genuine `knowledge_objects` row. ON DELETE CASCADE on the object
+    //  keeps links consistent with the KO cascade (re-ingest deletes the KO, its links follow).
+    private static let v66: String = """
+    CREATE TABLE IF NOT EXISTS evidence_block_objects (
+        evidence_block_id   TEXT NOT NULL,
+        knowledge_object_id TEXT NOT NULL,
+        linked_at           REAL NOT NULL,
+        PRIMARY KEY (evidence_block_id, knowledge_object_id),
+        FOREIGN KEY (evidence_block_id)   REFERENCES evidence_blocks(id)   ON DELETE CASCADE,
+        FOREIGN KEY (knowledge_object_id) REFERENCES knowledge_objects(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ebo_block  ON evidence_block_objects(evidence_block_id);
+    CREATE INDEX IF NOT EXISTS idx_ebo_object ON evidence_block_objects(knowledge_object_id);
     """
 }
