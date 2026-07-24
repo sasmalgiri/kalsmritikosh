@@ -20,11 +20,13 @@ struct ClaimMatrixComposerTests {
 
     private func selected(_ statement: String, _ assessment: EvidenceAssessment,
                           evidence: [EvidenceReference], keys: [UUID: String] = [:],
-                          effective: EvidenceAssessment? = nil, id: UUID = UUID()) -> SelectedClaim {
+                          effective: EvidenceAssessment? = nil, reproducible: Bool = false,
+                          id: UUID = UUID()) -> SelectedClaim {
         let claim = Claim(id: id, subjectID: UUID(), subjectLabel: "S", statement: statement,
                           assessment: assessment, confidence: 0.8, evidence: evidence, createdAt: t0)
         return SelectedClaim(resolved: ResolvedClaim(claim: claim, effectiveAssessment: effective ?? assessment),
-                             selectionReason: .explicitlyRequested, independenceKeys: keys)
+                             selectionReason: .explicitlyRequested, independenceKeys: keys,
+                             hasReproducibleDerivation: reproducible)
     }
     private func ref(_ obj: UUID = UUID(), block: UUID? = UUID(), role: EvidenceReference.Role = .supports) -> EvidenceReference {
         EvidenceReference(objectID: obj, blockID: block, sourceVersionID: UUID(), role: role)
@@ -72,6 +74,22 @@ struct ClaimMatrixComposerTests {
                       "User-confirmed", "Inference", "Conflicting accounts"] {
             #expect(texts.contains { $0.hasPrefix(label + ":") }, "missing category: \(label)")
         }
+    }
+
+    @Test("A verified reproducible derivation renders as derived")
+    func reproducibleDerivationRendersAsDerived() {
+        let sel = selected("d", EvidenceAssessment(basis: .deterministicallyDerived, origin: .deterministicRule),
+                           evidence: [ref()], reproducible: true)
+        let r = try! #require(ResolvedClaimRenderer.render(sel))
+        #expect(r.presentation == .derivation)
+    }
+
+    @Test("An unproven deterministic basis stays conservatively framed as inference")
+    func unprovenDeterministicIsInference() {
+        let sel = selected("d", EvidenceAssessment(basis: .deterministicallyDerived, origin: .deterministicRule),
+                           evidence: [ref()], reproducible: false)     // not verified
+        let r = try! #require(ResolvedClaimRenderer.render(sel))
+        #expect(r.presentation == .inference)
     }
 
     @Test("Two reliable independence keys yield corroborated")

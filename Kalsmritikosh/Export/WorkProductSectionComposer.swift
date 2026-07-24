@@ -135,7 +135,8 @@ public enum ResolvedClaimRenderer {
                                   independenceKey: selected.independenceKeys[$0.objectID])
         }
         let decision = AssertabilityContextBuilder()
-            .decision(assessment: selected.resolved.effectiveAssessment, evidence: evidence).decision
+            .decision(assessment: selected.resolved.effectiveAssessment, evidence: evidence,
+                      hasReproducibleDerivation: selected.hasReproducibleDerivation).decision
         guard let presentation = ClaimPresentation(decision: decision) else { return nil }  // refuse
 
         let citations = claim.evidence.enumerated().map { (i, ev) in

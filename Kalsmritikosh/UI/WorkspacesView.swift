@@ -520,55 +520,43 @@ public struct WorkspacesView: View {
 
     /// F4 — deterministically compose a work product from the ledger and write
     /// it to disk in the chosen format (with its citation list + manifest).
+    /// Build the single assembly service from the app's data store. The view itself no longer
+    /// loads claims / events / reviews / evidence — the service owns selection + composition.
+    private func makeAssemblyService() -> WorkProductAssemblyService? {
+        guard let db = appState.database, let ev = appState.events,
+              let cx = appState.contradictions, let gp = appState.gapNodes,
+              let wsRepo = appState.workspaces else { return nil }
+        return WorkProductAssemblyService(database: db, events: ev, contradictions: cx, gaps: gp, workspaces: wsRepo)
+    }
+
     private func composeAndExport(_ ws: Workspace) async {
         await MainActor.run { composing = true; reportStatus = nil }
         defer { Task { @MainActor in composing = false } }
 
-        let eventRows = (try? await appState.events?.recent(limit: 500)) ?? []
-        let filenames = (try? await appState.events?.sourceFilenames(forEventIDs: eventRows.map(\.id))) ?? [:]
-        let inputs = eventRows.map { WorkProductComposer.EventInput(event: $0, filename: filenames[$0.id]) }
-        let contradictions = await appState.contradictions?.all() ?? []
-        let gaps = await appState.gapNodes?.all(includeDismissed: false) ?? []
-
-        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
-        let citationLabels = Set(inputs.compactMap { $0.filename })
-        let manifest = ExportManifest(
-            exportedAt: Date(),
-            appVersion: appVersion,
-            schemaVersion: SchemaMigrations.latestVersion,
-            workspaceTitle: ws.title,
-            workspaceTemplate: ws.template.displayName,
-            selectedFindingCount: inputs.count,
-            citationMap: citationLabels.sorted().map { CitationMapEntry(label: $0, resolved: true) },
-            reviewStatusSummary: "\(contradictions.count) contradictions, \(gaps.count) gaps in scope",
-            knownLimitations: [
-                "Deterministic composition — no generative model was used.",
-                "Whole-archive scope; per-workspace source scoping lands with retrieval authority (P5.1).",
-                PersonaTemplateCatalog.disclaimer(for: ws.template)
-            ]
-        )
-        let wp = WorkProductComposer.compose(
-            template: reportTemplate,
-            title: "\(ws.title) — \(reportTemplate.displayName)",
-            scopeNote: "Work product for the \"\(ws.title)\" workspace (\(ws.template.displayName)).",
-            events: inputs,
-            contradictions: contradictions,
-            gaps: gaps,
-            disclaimer: PersonaTemplateCatalog.disclaimer(for: ws.template)
-        )
-        // C2.1 Part 3B — evidence-integrity gate. Fail CLOSED: an unsupported material claim
-        // (direct/source/derived with no resolved, block-backed citation) blocks the export
-        // entirely — no file is written. Inference and human-note disclosures are allowed.
-        let integrity = WorkProductValidator().validateProductionExport(wp)
-        guard integrity.isValid else {
-            KalsmritikoshLog.storage.error("Export blocked by evidence-integrity gate: \(String(describing: integrity.violations), privacy: .public)")
-            await MainActor.run { reportStatus = "Export blocked: \(integrity.violations.count) material claim(s) cite a source that cannot be reopened. Nothing was written." }
+        guard let assembly = makeAssemblyService() else {
+            await MainActor.run { reportStatus = "Export unavailable — the data store is not ready." }
             return
         }
+        let assembled: AssembledWorkProduct
+        do {
+            assembled = try await assembly.compose(workspace: ws, template: reportTemplate,
+                                                   subjectLabel: ws.title, corpusSnapshotID: nil)
+        } catch let WorkProductAssemblyError.evidenceIntegrity(count) {
+            // Fail CLOSED — an unsupported material claim blocks the export; nothing written.
+            KalsmritikoshLog.storage.error("Export blocked by evidence-integrity gate: \(count, privacy: .public) violation(s)")
+            await MainActor.run { reportStatus = "Export blocked: \(count) material claim(s) cite a source that cannot be reopened. Nothing was written." }
+            return
+        } catch {
+            await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
+            return
+        }
+
+        let wp = assembled.workProduct
         let style: CitationStyle = ws.template == .researchReview ? .plainBibliography
             : (ws.template == .legalMatter ? .legalExhibit : .footnote)
-        let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: manifest)
+        let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
         let text = WorkProductExporter.render(doc, as: reportFormat)
+        let findingCount = wp.sections.reduce(0) { $0 + $1.claims.count }
 
         #if canImport(AppKit)
         let panel = NSSavePanel()
@@ -580,7 +568,7 @@ public struct WorkspacesView: View {
         }
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
-            await MainActor.run { reportStatus = "Exported \(inputs.count) events + \(contradictions.count) conflicts to \(url.lastPathComponent)." }
+            await MainActor.run { reportStatus = "Exported \(findingCount) finding(s) to \(url.lastPathComponent)." }
         } catch {
             await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
         }
@@ -596,27 +584,25 @@ public struct WorkspacesView: View {
         await MainActor.run { composing = true; reportStatus = nil }
         defer { Task { @MainActor in composing = false } }
 
-        let eventRows = (try? await appState.events?.recent(limit: 500)) ?? []
-        let filenames = (try? await appState.events?.sourceFilenames(forEventIDs: eventRows.map(\.id))) ?? [:]
-        let inputs = eventRows.map { WorkProductComposer.EventInput(event: $0, filename: filenames[$0.id]) }
-        let contradictions = await appState.contradictions?.all() ?? []
-        let gaps = await appState.gapNodes?.all(includeDismissed: false) ?? []
-        let wp = WorkProductComposer.compose(
-            template: reportTemplate,
-            title: "\(ws.title) — \(reportTemplate.displayName)",
-            scopeNote: "Work product for the \"\(ws.title)\" workspace (\(ws.template.displayName)).",
-            events: inputs, contradictions: contradictions, gaps: gaps,
-            disclaimer: PersonaTemplateCatalog.disclaimer(for: ws.template)
-        )
-
-        // C2.1 Part 3B — same evidence-integrity gate on the receipt path. Fail CLOSED: do
-        // not seal or write a receipt for a work product with an unsupported material claim.
-        let integrity = WorkProductValidator().validateProductionExport(wp)
-        guard integrity.isValid else {
-            KalsmritikoshLog.storage.error("Receipt blocked by evidence-integrity gate: \(String(describing: integrity.violations), privacy: .public)")
-            await MainActor.run { reportStatus = "Receipt blocked: \(integrity.violations.count) material claim(s) cite a source that cannot be reopened. Nothing was sealed." }
+        guard let assembly = makeAssemblyService() else {
+            await MainActor.run { reportStatus = "Receipt unavailable — the data store is not ready." }
             return
         }
+        // SAME assembly method as the report export — a receipt is sealed over the identical
+        // assembled work product, and shares its fail-closed evidence-integrity verdict.
+        let assembled: AssembledWorkProduct
+        do {
+            assembled = try await assembly.compose(workspace: ws, template: reportTemplate,
+                                                   subjectLabel: ws.title, corpusSnapshotID: nil)
+        } catch let WorkProductAssemblyError.evidenceIntegrity(count) {
+            KalsmritikoshLog.storage.error("Receipt blocked by evidence-integrity gate: \(count, privacy: .public) violation(s)")
+            await MainActor.run { reportStatus = "Receipt blocked: \(count) material claim(s) cite a source that cannot be reopened. Nothing was sealed." }
+            return
+        } catch {
+            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
+            return
+        }
+        let wp = assembled.workProduct
 
         // Each claim → a sealed entry pinned to its cited source(s) + custody hash.
         var drafts: [ReceiptDraft] = []

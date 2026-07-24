@@ -56,16 +56,23 @@ public struct SelectedClaim: Sendable, Hashable {
     /// Independence keys (object id → key) resolved during selection, so the renderer can
     /// recognise corroboration instead of permanently evaluating evidence as unkeyed.
     public let independenceKeys: [KnowledgeObject.ID: String]
+    /// True ONLY when the selector verified a persisted deterministic lineage / derivation
+    /// record whose input references are present and reopenable — NEVER inferred merely from
+    /// `basis == .deterministicallyDerived`. When false, a deterministic claim is surfaced
+    /// conservatively as an inference rather than as an asserted derivation.
+    public let hasReproducibleDerivation: Bool
 
     public nonisolated init(resolved: ResolvedClaim,
                             temporalAnchor: ClaimTemporalAnchor? = nil,
                             isTemporallyAmbiguous: Bool = false,
                             selectionReason: ClaimSelectionReason,
-                            independenceKeys: [KnowledgeObject.ID: String] = [:]) {
+                            independenceKeys: [KnowledgeObject.ID: String] = [:],
+                            hasReproducibleDerivation: Bool = false) {
         self.resolved = resolved
         self.temporalAnchor = temporalAnchor
         self.isTemporallyAmbiguous = isTemporallyAmbiguous
         self.selectionReason = selectionReason
         self.independenceKeys = independenceKeys
+        self.hasReproducibleDerivation = hasReproducibleDerivation
     }
 }
