@@ -526,7 +526,12 @@ public struct WorkspacesView: View {
         guard let db = appState.database, let ev = appState.events,
               let cx = appState.contradictions, let gp = appState.gapNodes,
               let wsRepo = appState.workspaces else { return nil }
-        return WorkProductAssemblyService(database: db, events: ev, contradictions: cx, gaps: gp, workspaces: wsRepo)
+        do {
+            return try WorkProductAssemblyService(database: db, events: ev, contradictions: cx, gaps: gp, workspaces: wsRepo)
+        } catch {
+            KalsmritikoshLog.storage.error("Assembly service construction failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     private func composeAndExport(_ ws: Workspace) async {

@@ -49,18 +49,18 @@ public actor WorkProductAssemblyService {
                 contradictions: ContradictionsRepository,
                 gaps: GapNodeRepository,
                 workspaces: WorkspaceRepository,
-                independenceKeyProvider: (any SourceIndependenceKeyProvider)? = nil) {
+                independenceKeyProvider: (any SourceIndependenceKeyProvider)? = nil) throws {
         let claims = ClaimRepository(database: database)
         let resolver = ClaimResolver(claims: claims, reviews: ClaimReviewRepository(database: database))
         let selection = ClaimSelectionService(
             claims: claims, resolver: resolver,
             temporalClaims: TemporalClaimRepository(database: database),
             events: events, independenceKeyProvider: independenceKeyProvider)
-        var registry = WorkProductComposerRegistry()
-        try? registry.register(HistoryChronologyComposer())
-        try? registry.register(ClaimMatrixComposer())
+        // Built-in composers are registered via the throwing factory — a duplicate/misconfigured
+        // built-in fails construction here rather than being silently dropped.
         self.init(events: events, contradictions: contradictions, gaps: gaps,
-                  workspaces: workspaces, selection: selection, registry: registry)
+                  workspaces: workspaces, selection: selection,
+                  registry: try WorkProductComposerRegistry.makeDefault())
     }
 
     /// Designated init — also the seam tests use to inject a registry (e.g. empty, to prove
@@ -142,8 +142,10 @@ public actor WorkProductAssemblyService {
 
     private func manifest(for wp: WorkProduct, workspace: Workspace) -> ExportManifest {
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+        // A label is resolved ONLY when EVERY citation grouped under it is resolved — one
+        // resolved citation must not mask an unresolved one sharing the same title.
         var resolvedByLabel: [String: Bool] = [:]
-        for c in wp.allCitations { resolvedByLabel[c.sourceTitle] = (resolvedByLabel[c.sourceTitle] ?? false) || c.isResolved }
+        for c in wp.allCitations { resolvedByLabel[c.sourceTitle] = (resolvedByLabel[c.sourceTitle] ?? true) && c.isResolved }
         let findingCount = wp.sections.reduce(0) { $0 + $1.claims.count }
         return ExportManifest(
             exportedAt: Date(),

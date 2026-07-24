@@ -25,6 +25,44 @@ public struct ClaimTemporalAnchor: Sendable, Hashable {
     }
 }
 
+/// A conflict prepared UPSTREAM for disclosure. It enters a context only because it is
+/// explicitly linked to selected claims (never because its text mentions the subject). Both
+/// sides are preserved verbatim; the composer renders it as a disclosure, never picking a
+/// winner or averaging.
+public struct SelectedConflict: Sendable, Hashable {
+    public let id: Contradiction.ID
+    public let description: String
+    public let sideA: String
+    public let sideB: String
+    public let supportingClaimIDs: [Claim.ID]
+    public let evidence: [EvidenceReference]
+    public let severity: Contradiction.Severity
+    public nonisolated init(id: Contradiction.ID, description: String, sideA: String, sideB: String,
+                            supportingClaimIDs: [Claim.ID], evidence: [EvidenceReference],
+                            severity: Contradiction.Severity) {
+        self.id = id; self.description = description; self.sideA = sideA; self.sideB = sideB
+        self.supportingClaimIDs = supportingClaimIDs; self.evidence = evidence; self.severity = severity
+    }
+}
+
+/// A gap prepared UPSTREAM for disclosure. It enters a context only when its persisted
+/// identity (exact evidence object / related event, matched against the selected claims)
+/// proves workspace membership — never by text match, never by global fallback. Rendered as
+/// an "absence is not proof" disclosure.
+public struct SelectedGap: Sendable, Hashable {
+    public let id: GapNode.ID
+    public let kind: GapKind
+    public let description: String
+    public let reason: String
+    public let confidence: Double
+    public let relatedClaimIDs: [Claim.ID]
+    public nonisolated init(id: GapNode.ID, kind: GapKind, description: String, reason: String,
+                            confidence: Double, relatedClaimIDs: [Claim.ID]) {
+        self.id = id; self.kind = kind; self.description = description; self.reason = reason
+        self.confidence = confidence; self.relatedClaimIDs = relatedClaimIDs
+    }
+}
+
 /// A precision-supported temporal interval used to reconcile lineage anchors by OVERLAP
 /// rather than raw start equality (so same-month anchors agree and a year that contains a
 /// day agrees with it, while disjoint periods conflict). Closed bounds.

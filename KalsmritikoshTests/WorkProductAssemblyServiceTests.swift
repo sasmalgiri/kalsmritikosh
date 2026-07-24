@@ -34,7 +34,7 @@ struct WorkProductAssemblyServiceTests {
         let claims = ClaimRepository(database: db)
         let reviews = ClaimReviewRepository(database: db)
         let workspaces = WorkspaceRepository(database: db)
-        let service = WorkProductAssemblyService(
+        let service = try WorkProductAssemblyService(
             database: db, events: EventsRepository(database: db),
             contradictions: ContradictionsRepository(database: db),
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
@@ -185,6 +185,37 @@ struct WorkProductAssemblyServiceTests {
             let assembled = try await r.service.compose(workspace: ws(UUID()), template: template,
                                                         subjectLabel: "WS", corpusSnapshotID: nil)
             #expect(assembled.workProduct.template == template)     // produced via legacy, no throw
+        }
+    }
+
+    // MARK: Corrections folded into this commit
+
+    @Test("The manifest does not hide an unresolved citation behind a same-title resolved one")
+    func manifestSameTitleNotMasked() async throws {
+        let r = try await rig()
+        let subject = UUID(), workspace = UUID()
+        try await addMember(r, subject: subject, workspace: workspace)
+        // An INFERENCE claim (not material → won't block) with two evidence refs sharing the
+        // subject label as citation title: one resolved, one not.
+        let ev1 = EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID())      // resolved
+        let ev2 = EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: nil)         // unresolved
+        try await r.claims.save(Claim(subjectID: subject, subjectLabel: "S", statement: "guess",
+                                      assessment: EvidenceAssessment(basis: .inferred, origin: .modelProposed),
+                                      confidence: 0.5, evidence: [ev1, ev2], createdAt: t0))
+        let assembled = try await r.service.compose(workspace: ws(workspace), template: .chronology,
+                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        // The composer titles both citations with the claim's subjectLabel ("S"); the label
+        // must be reported UNRESOLVED because one of its citations is unresolved.
+        let entry = assembled.manifest.citationMap.first { $0.label == "S" }
+        #expect(entry != nil)
+        #expect(entry?.resolved == false)
+    }
+
+    @Test("Duplicate composer registration cannot be silently ignored")
+    func duplicateRegistrationThrows() throws {
+        var reg = try WorkProductComposerRegistry.makeDefault()   // built-ins register cleanly
+        #expect(throws: WorkProductComposerRegistry.RegistrationError.duplicate(WorkProductComposerID("history.chronology"))) {
+            try reg.register(HistoryChronologyComposer())         // a duplicate must throw
         }
     }
 }

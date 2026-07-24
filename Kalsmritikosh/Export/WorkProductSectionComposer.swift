@@ -36,6 +36,10 @@ public struct WorkProductContext: Sendable {
     /// The already-selected, review-resolved, temporally-anchored, ORDERED claims. Selection,
     /// scoping, temporal placement, and ordering all happen upstream (ClaimSelectionService).
     public let selectedClaims: [SelectedClaim]
+    /// Conflicts prepared upstream (explicitly linked to selected claims). Empty by default.
+    public let selectedConflicts: [SelectedConflict]
+    /// Gaps prepared upstream (scoped by persisted identity). Empty by default.
+    public let selectedGaps: [SelectedGap]
     /// Display label for the subject of the output (titling only).
     public let subjectLabel: String
     /// The workspace this output belongs to, when scoped to one.
@@ -46,9 +50,15 @@ public struct WorkProductContext: Sendable {
     /// Compatibility view: the resolved claims without their selection metadata, in order.
     public var claims: [ResolvedClaim] { selectedClaims.map(\.resolved) }
 
-    public nonisolated init(selectedClaims: [SelectedClaim], subjectLabel: String,
+    public nonisolated init(selectedClaims: [SelectedClaim],
+                            selectedConflicts: [SelectedConflict] = [],
+                            selectedGaps: [SelectedGap] = [],
+                            subjectLabel: String,
                             workspaceID: UUID? = nil, corpusSnapshotID: UUID? = nil) {
-        self.selectedClaims = selectedClaims; self.subjectLabel = subjectLabel
+        self.selectedClaims = selectedClaims
+        self.selectedConflicts = selectedConflicts
+        self.selectedGaps = selectedGaps
+        self.subjectLabel = subjectLabel
         self.workspaceID = workspaceID; self.corpusSnapshotID = corpusSnapshotID
     }
 
@@ -99,6 +109,17 @@ public struct WorkProductComposerRegistry: Sendable {
     /// All registered composers in a deterministic order (by id).
     public var all: [any WorkProductSectionComposer] {
         byID.keys.sorted().compactMap { byID[$0] }
+    }
+
+    /// The built-in composers, registered in a locked order. THROWS on a duplicate id so a
+    /// misconfigured build fails at construction rather than silently dropping a composer
+    /// (never `try?` this — a duplicate built-in is a programming error to be caught).
+    public static func makeDefault() throws -> WorkProductComposerRegistry {
+        var reg = WorkProductComposerRegistry()
+        try reg.register(HistoryChronologyComposer())
+        try reg.register(ClaimMatrixComposer())
+        try reg.register(GapsAndConflictsComposer())
+        return reg
     }
 }
 
