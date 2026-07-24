@@ -73,9 +73,19 @@ create workspace → add real sources → complete primary workflow → inspect 
 | AS10 | Early-access wording | (copy) | PENDING |
 | AS11 | Final capability matrix | SUPPORTED_FORMATS / matrix | PENDING |
 
+## G. CI evidence (CI-001A)
+| Item | Evidence | State |
+|---|---|---|
+| Named GitHub checks on HEAD | `build-and-test` + `architecture-guards` (workflow "Build + Guards") | PASS |
+| First green hosted run | run **30107577371**, conclusion **success**, SHA `fbd124358f5cf01583800b91a4a6ac1486e0eb1a`, 2026-07-24 | PASS |
+| Full test target executed (from .xcresult) | verifier: `result=Passed total=781 passed=781 failed=0 (floor=781)` | PASS |
+| Runner / toolchain | macOS 26.4, Xcode 26.6; test run `MACOSX_DEPLOYMENT_TARGET=26.4` (labelled compatibility override, within macOS 26 floor — NOT proof the pinned 26.5 point release passed) | RECORDED |
+| Architecture guards green | `ci/guards/run-all.sh` on ubuntu-latest | PASS |
+| Branch protection ruleset for `main` | OWNER repo-settings step — require `build-and-test` + `architecture-guards`, up-to-date, conversations resolved, no force-push/deletion | PENDING (owner) |
+
 ---
 
-**Note on current CI evidence.** As of MASTER-001 the latest `main` commit records **781/781
-local tests green** but has **no attached GitHub status check**. Per Stage 1 (CI-001), local
-counts are no longer the final merge gate — F-series and CI gates stay below `PASS` until an
-actual green GitHub check exists.
+**Note on current CI evidence.** The latest `main` records **781/781 tests green on a real
+hosted GitHub run** (see §G) — local counts are no longer the sole gate. Remaining F-series
+gates stay below `PASS` until their specific jobs exist (CI-001B) and the branch ruleset is
+configured + recorded here.
