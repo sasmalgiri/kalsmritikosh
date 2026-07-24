@@ -59,6 +59,15 @@ public actor TemporalClaimRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// Deterministic paged enumeration of ALL temporal claims (Claim-producer backfill).
+    public func allClaims(offset: Int = 0, pageSize: Int = 500) async throws -> [TemporalClaim] {
+        let rows = try await database.query("""
+        \(Self.selectColumns)
+        FROM temporal_claims ORDER BY id ASC LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap(Self.decode)
+    }
+
     /// Subject + predicate query, deterministic.
     public func claims(subjectID: Entity.ID, predicate: String) async throws -> [TemporalClaim] {
         let rows = try await database.query("""

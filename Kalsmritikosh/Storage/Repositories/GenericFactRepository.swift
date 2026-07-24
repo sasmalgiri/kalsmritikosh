@@ -97,6 +97,16 @@ public actor GenericFactRepository {
         Int((try await database.query("SELECT COUNT(*) FROM generic_facts;", [])).first?.int(0) ?? 0)
     }
 
+    /// Deterministic paged enumeration of ALL facts (for the Claim-producer backfill).
+    public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [GenericFact] {
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+        FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
+        """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
+        return rows.compactMap(Self.decode)
+    }
+
     private nonisolated static func decode(_ r: SQLRow) -> GenericFact? {
         // A row is only dropped when its IDENTITY/content is unusable — never because one
         // evidence DIMENSION is malformed (the decoder falls back per field).
