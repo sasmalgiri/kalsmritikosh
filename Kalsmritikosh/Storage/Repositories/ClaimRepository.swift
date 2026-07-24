@@ -51,11 +51,19 @@ public actor ClaimRepository {
             let a = claim.assessment
             // True UPSERT: re-production UPDATES the row in place and PRESERVES created_at (the
             // original projection time), never rewriting it to the latest backfill time.
+            let (scopeKind, scopeID): (SQLValue, SQLValue) = {
+                switch claim.scope {
+                case .entity(let e):          return (.text("entity"), .uuid(e))
+                case .knowledgeObject(let k): return (.text("knowledgeObject"), .uuid(k))
+                case nil:                     return (.null, .null)
+                }
+            }()
             try await database.exec("""
             INSERT INTO claims
                 (id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
-                 evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+                 scope_kind, scope_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
                 subject_id             = excluded.subject_id,
                 subject_label          = excluded.subject_label,
@@ -67,7 +75,9 @@ public actor ClaimRepository {
                 proposal_origin        = excluded.proposal_origin,
                 availability_status    = excluded.availability_status,
                 conflict_status        = excluded.conflict_status,
-                legacy_status          = excluded.legacy_status;
+                legacy_status          = excluded.legacy_status,
+                scope_kind             = excluded.scope_kind,
+                scope_id               = excluded.scope_id;
             """, [.uuid(claim.id),
                   claim.subjectID.map { SQLValue.uuid($0) } ?? .null,
                   .text(claim.subjectLabel), .text(claim.statement), .real(claim.confidence),
@@ -75,7 +85,8 @@ public actor ClaimRepository {
                   .real(claim.createdAt.timeIntervalSince1970),
                   .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
                   .text(a.availability.rawValue), .text(a.conflict.rawValue),
-                  a.legacyStatus.map { SQLValue.text($0.rawValue) } ?? .null])
+                  a.legacyStatus.map { SQLValue.text($0.rawValue) } ?? .null,
+                  scopeKind, scopeID])
 
             // Evidence: rewrite with a stable ordinal identity so distinct references that
             // share object/block but differ in role or linked source ids all persist.
@@ -128,6 +139,31 @@ public actor ClaimRepository {
         return try await hydrateAll(rows)
     }
 
+    /// PA-DOC-001 — source-scoped claims whose scope KnowledgeObject is one of `objectIDs`
+    /// (a workspace's allowed source objects). Chunked ≤500. Newest first.
+    public func claims(inKnowledgeObjectScopes objectIDs: Set<UUID>) async throws -> [Claim] {
+        guard !objectIDs.isEmpty else { return [] }
+        var out: [Claim] = []
+        let all = Array(objectIDs)
+        for chunk in stride(from: 0, to: all.count, by: 500).map({ Array(all[$0..<min($0 + 500, all.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "\(Self.claimColumns) WHERE scope_kind = 'knowledgeObject' AND scope_id IN (\(placeholders)) ORDER BY created_at DESC;",
+                chunk.map { SQLValue.uuid($0) })
+            out += try await hydrateAll(rows)
+        }
+        return out
+    }
+
+    /// PA-DOC-001 — delete a claim and its evidence/lineage rows (used to SUPERSEDE a
+    /// source-scoped fallback when the same source fact later gains an entity subject, so two
+    /// versions of the fact are never active at once).
+    public func deleteClaim(id: Claim.ID) async throws {
+        try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id = ?;", [.uuid(id)])
+        try await database.exec("DELETE FROM claim_lineage WHERE claim_id = ?;", [.uuid(id)])
+        try await database.exec("DELETE FROM claims WHERE id = ?;", [.uuid(id)])
+    }
+
     public func claims(inContradictionGroup groupID: UUID) async throws -> [Claim] {
         let rows = try await database.query(
             "\(Self.claimColumns) WHERE contradiction_group_id = ? ORDER BY created_at DESC;", [.uuid(groupID)])
@@ -161,7 +197,7 @@ public actor ClaimRepository {
               statement: base.statement, assessment: base.assessment, confidence: base.confidence,
               evidence: try await evidence(claimID: base.id),
               derivedFrom: try await lineage(claimID: base.id),
-              contradictionGroupID: base.contradictionGroupID, createdAt: base.createdAt)
+              contradictionGroupID: base.contradictionGroupID, scope: base.scope, createdAt: base.createdAt)
     }
 
     private func evidence(claimID: Claim.ID) async throws -> [EvidenceReference] {
@@ -194,12 +230,13 @@ public actor ClaimRepository {
     private struct ClaimBase {
         let id: UUID; let subjectID: UUID?; let subjectLabel: String; let statement: String
         let assessment: EvidenceAssessment; let confidence: Double
-        let contradictionGroupID: UUID?; let createdAt: Date
+        let contradictionGroupID: UUID?; let scope: ClaimScope?; let createdAt: Date
     }
 
     private static let claimColumns = """
     SELECT id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
-           evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+           evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+           scope_kind, scope_id
     FROM claims
     """
 
@@ -214,9 +251,17 @@ public actor ClaimRepository {
         let legacy = r.string(12).flatMap(EvidenceStatus.init(rawValue:))
         let assessment = EvidenceAssessment(basis: basis, review: review, origin: origin,
                                             availability: availability, conflict: conflict, legacyStatus: legacy)
+        let scope: ClaimScope? = {
+            guard let kind = r.string(13), let sid = r.uuid(14) else { return nil }
+            switch kind {
+            case "entity":          return .entity(sid)
+            case "knowledgeObject": return .knowledgeObject(sid)
+            default:                return nil
+            }
+        }()
         return ClaimBase(id: id, subjectID: r.uuid(1), subjectLabel: label, statement: statement,
                          assessment: assessment, confidence: r.double(4) ?? 0,
-                         contradictionGroupID: r.uuid(5),
+                         contradictionGroupID: r.uuid(5), scope: scope,
                          createdAt: Date(timeIntervalSince1970: r.double(6) ?? 0))
     }
 }

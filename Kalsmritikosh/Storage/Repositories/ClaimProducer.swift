@@ -40,7 +40,11 @@ public enum ClaimProjectionOutcome: Sendable, Equatable {
 }
 
 public actor ClaimProducer {
-    public nonisolated static let producerVersion = "claim-producer-1"
+    // v2 (PA-DOC-001): claims now carry an explicit scope (entity | knowledgeObject) and a
+    // source-scoped fallback is produced for subject-less facts. Bumping the version makes the
+    // durable backfill run a fresh pass that re-saves every claim with its scope populated
+    // (same fingerprint id → UPSERT in place; reviews/usage preserved).
+    public nonisolated static let producerVersion = "claim-producer-2"
 
     private let genericFacts: GenericFactRepository
     private let assertions: AssertionsRepository
@@ -65,18 +69,18 @@ public actor ClaimProducer {
     public func backfill(at now: Date) async throws -> Int {
         var produced = 0
         produced += try await pageThrough { try await self.genericFacts.all(offset: $0, pageSize: 500) } each: { f in
-            await self.persist { try await self.claim(from: f, at: now) }
+            await self.persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
         }
         produced += try await pageThrough { try await self.temporalClaims.allClaims(offset: $0, pageSize: 500) } each: { t in
-            await self.persist { try await self.claim(from: t, at: now) }
+            await self.persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) }
         }
         produced += try await pageThrough { try await self.assertions.all(offset: $0, pageSize: 500) } each: { a in
-            await self.persist { try await self.claim(from: a, at: now) }
+            await self.persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) }
         }
         produced += try await pageThrough { try await self.events.allWithParticipants(offset: $0, pageSize: 500) } each: { pair in
             var n = 0
             let built = (try? await self.claims(from: pair.0, participants: pair.1, at: now)) ?? []
-            for c in built { n += await self.persist { c } }
+            for c in built { n += await self.persist(kind: "event", sourceID: pair.0.id) { c } }
             return n
         }
         return produced
@@ -88,20 +92,20 @@ public actor ClaimProducer {
     public func produce(forSubjectID subjectID: Entity.ID, at now: Date) async throws -> Int {
         var produced = 0
         for f in try await genericFacts.facts(subjectID: subjectID) {
-            produced += await persist { try await self.claim(from: f, at: now) }
+            produced += await persist(kind: "genericFact", sourceID: f.id) { try await self.claim(from: f, at: now) }
         }
         var off = 0
         while true {
             let batch = try await temporalClaims.claims(subjectID: subjectID, offset: off, pageSize: 500)
             if batch.isEmpty { break }
-            for t in batch { produced += await persist { try await self.claim(from: t, at: now) } }
+            for t in batch { produced += await persist(kind: "temporalClaim", sourceID: t.id) { try await self.claim(from: t, at: now) } }
             if batch.count < 500 { break }; off += 500
         }
         off = 0
         while true {
             let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, offset: off, pageSize: 500)
             if batch.isEmpty { break }
-            for a in batch { produced += await persist { try await self.claim(from: a, at: now) } }
+            for a in batch { produced += await persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) } }
             if batch.count < 500 { break }; off += 500
         }
         off = 0
@@ -110,7 +114,7 @@ public actor ClaimProducer {
             if batch.isEmpty { break }
             for e in batch {
                 let built = (try? await self.claims(from: e, participants: [subjectID], at: now)) ?? []
-                for c in built { produced += await persist { c } }
+                for c in built { produced += await persist(kind: "event", sourceID: e.id) { c } }
             }
             if batch.count < 500 { break }; off += 500
         }
@@ -122,19 +126,23 @@ public actor ClaimProducer {
     public func project(genericFact f: GenericFact, at now: Date) async throws -> ClaimProjectionOutcome {
         guard !f.field.isEmpty, !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return .skipped(.malformedSource) }
-        try await claims.save(try await claim(from: f, at: now))
+        // A subject-less fact with no single owning source is skipped conservatively (no scope).
+        guard let c = try await claim(from: f, at: now) else { return .skipped(.unsupportedSource) }
+        try await store(c, kind: "genericFact", sourceID: f.id)
         return .produced(1)
     }
 
     public func project(temporalClaim tc: TemporalClaim, at now: Date) async throws -> ClaimProjectionOutcome {
         guard !tc.predicate.isEmpty else { return .skipped(.malformedSource) }
-        try await claims.save(try await claim(from: tc, at: now))
+        guard let c = try await claim(from: tc, at: now) else { return .skipped(.unsupportedSource) }
+        try await store(c, kind: "temporalClaim", sourceID: tc.id)
         return .produced(1)
     }
 
     public func project(assertion a: Assertion, at now: Date) async throws -> ClaimProjectionOutcome {
         guard !a.predicate.isEmpty else { return .skipped(.malformedSource) }
-        try await claims.save(try await claim(from: a, at: now))
+        guard let c = try await claim(from: a, at: now) else { return .skipped(.unsupportedSource) }
+        try await store(c, kind: "assertion", sourceID: a.id)
         return .produced(1)
     }
 
@@ -142,7 +150,8 @@ public actor ClaimProducer {
     public func project(event e: Event, participants: [Entity.ID], at now: Date) async throws -> ClaimProjectionOutcome {
         guard !e.title.isEmpty else { return .skipped(.malformedSource) }
         let built = try await claims(from: e, participants: participants, at: now)
-        for c in built { try await claims.save(c) }
+        guard !built.isEmpty else { return .skipped(.unsupportedSource) }
+        for c in built { try await store(c, kind: "event", sourceID: e.id) }
         return .produced(built.count)
     }
 
@@ -163,11 +172,22 @@ public actor ClaimProducer {
         return produced
     }
 
-    /// Save one Claim, isolating any per-object failure (logged, skipped).
-    private func persist(_ make: () async throws -> Claim?) async -> Int {
+    /// Save a claim and, when it is ENTITY-scoped, SUPERSEDE any source-scoped fallback for the
+    /// SAME source object (the (kind, sourceID, nil-subject) fingerprint) so a fact that later
+    /// gains an entity subject never leaves both a source-scoped and an entity-scoped copy active.
+    private func store(_ claim: Claim, kind: String, sourceID: UUID) async throws {
+        try await claims.save(claim)
+        if case .entity = claim.scope {
+            let sibling = Self.claimID(kind: kind, sourceID: sourceID, subjectID: nil)
+            if sibling != claim.id { try await claims.deleteClaim(id: sibling) }
+        }
+    }
+
+    /// Save one Claim (with supersede), isolating any per-object failure (logged, skipped).
+    private func persist(kind: String, sourceID: UUID, _ make: () async throws -> Claim?) async -> Int {
         do {
             guard let claim = try await make() else { return 0 }
-            try await claims.save(claim)
+            try await store(claim, kind: kind, sourceID: sourceID)
             return 1
         } catch {
             KalsmritikoshLog.storage.error("Claim production skipped one source object: \(String(describing: error), privacy: .public)")
@@ -219,30 +239,47 @@ public actor ClaimProducer {
         return refs
     }
 
+    // MARK: - Scope (PA-DOC-001)
+
+    /// The explicit scope for a projected claim: entity when a persisted subject exists; otherwise
+    /// the SOURCE-scoped fallback anchored to the single owning KnowledgeObject of its evidence.
+    /// A subject-less fact backed by zero or MORE-THAN-ONE distinct objects has no unambiguous
+    /// source anchor → `nil` (the caller skips it conservatively; nothing is guessed).
+    private nonisolated static func scope(subjectID: Entity.ID?, evidence refs: [EvidenceReference]) -> ClaimScope? {
+        if let s = subjectID { return .entity(s) }
+        let objects = Set(refs.map(\.objectID))
+        return objects.count == 1 ? .knowledgeObject(objects.first!) : nil
+    }
+
     // MARK: - Source projections
 
-    private func claim(from fact: GenericFact, at now: Date) async throws -> Claim {
+    private func claim(from fact: GenericFact, at now: Date) async throws -> Claim? {
         let refs = try await reopenableRefs(blockIDs: fact.sourceBlockIDs, objectIDs: [], genericFactID: fact.id)
+        guard let scope = Self.scope(subjectID: fact.subjectID, evidence: refs) else { return nil }
         let statement = fact.unit.map { "\(fact.field): \(fact.value) \($0)" } ?? "\(fact.field): \(fact.value)"
         return Claim(id: Self.claimID(kind: "genericFact", sourceID: fact.id, subjectID: fact.subjectID),
                      subjectID: fact.subjectID, subjectLabel: fact.subjectLabel, statement: statement,
                      assessment: fact.assessment, confidence: fact.confidence, evidence: refs,
-                     derivedFrom: [DerivedReference(kind: .genericFact, id: fact.id)], createdAt: now)
+                     derivedFrom: [DerivedReference(kind: .genericFact, id: fact.id)], scope: scope, createdAt: now)
     }
 
-    private func claim(from tc: TemporalClaim, at now: Date) async throws -> Claim {
+    private func claim(from tc: TemporalClaim, at now: Date) async throws -> Claim? {
         let refs = try await reopenableRefs(blockIDs: tc.sourceBlockIDs, objectIDs: tc.sourceObjectIDs)
+        // TemporalClaims are always subject-scoped (subjectID is non-optional) → .entity.
+        guard let scope = Self.scope(subjectID: tc.subjectID, evidence: refs) else { return nil }
         let statement = "\(tc.predicate.replacingOccurrences(of: "_", with: " ")) \(tc.object.displayText)"
         return Claim(id: Self.claimID(kind: "temporalClaim", sourceID: tc.id, subjectID: tc.subjectID),
                      subjectID: tc.subjectID, subjectLabel: tc.subjectID.uuidString, statement: statement,
                      assessment: tc.assessment, confidence: tc.confidence, evidence: refs,
-                     derivedFrom: [DerivedReference(kind: .temporalClaim, id: tc.id)], createdAt: now)
+                     derivedFrom: [DerivedReference(kind: .temporalClaim, id: tc.id)], scope: scope, createdAt: now)
     }
 
-    private func claim(from a: Assertion, at now: Date) async throws -> Claim {
-        // Only entity-subject assertions are subject-scoped; event/claim-subject ones stay corpus-level.
+    private func claim(from a: Assertion, at now: Date) async throws -> Claim? {
+        // Entity-subject assertions are entity-scoped; event/claim-subject ones fall back to a
+        // single owning source object (or are skipped when the anchor is ambiguous).
         let subject: Entity.ID? = a.subjectKind == .entity ? a.subjectID : nil
         let refs = try await reopenableRefs(blockIDs: a.evidenceBlockIDs, objectIDs: a.evidenceObjectIDs, assertionID: a.id)
+        guard let scope = Self.scope(subjectID: subject, evidence: refs) else { return nil }
         let objText: String
         switch a.object {
         case .literal(let s): objText = s
@@ -254,19 +291,21 @@ public actor ClaimProducer {
                      subjectID: subject, subjectLabel: subject?.uuidString ?? a.predicate, statement: statement,
                      assessment: Self.assessment(forProvenance: a.provenance, agent: a.agent),
                      confidence: a.confidence, evidence: refs,
-                     derivedFrom: [DerivedReference(kind: .assertion, id: a.id)], createdAt: now)
+                     derivedFrom: [DerivedReference(kind: .assertion, id: a.id)], scope: scope, createdAt: now)
     }
 
     private func claims(from event: Event, participants: [Entity.ID], at now: Date) async throws -> [Claim] {
         let refs = try await reopenableRefs(blockIDs: [], objectIDs: [event.sourceObjectID], eventID: event.id)
         let assessment = Self.assessment(forEventStatus: event.status)
-        // One claim per participant (distinct subjects, never duplicates); none → corpus-level.
+        // One claim per participant (entity-scoped); none → a single source-scoped claim anchored
+        // to the event's owning object, or nothing when that object doesn't resolve.
         let subjects: [Entity.ID?] = participants.isEmpty ? [nil] : participants.map { $0 }
-        return subjects.map { subject in
-            Claim(id: Self.claimID(kind: "event", sourceID: event.id, subjectID: subject),
-                  subjectID: subject, subjectLabel: event.title, statement: event.title,
-                  assessment: assessment, confidence: event.confidence.value, evidence: refs,
-                  derivedFrom: [DerivedReference(kind: .event, id: event.id)], createdAt: now)
+        return subjects.compactMap { subject -> Claim? in
+            guard let scope = Self.scope(subjectID: subject, evidence: refs) else { return nil }
+            return Claim(id: Self.claimID(kind: "event", sourceID: event.id, subjectID: subject),
+                         subjectID: subject, subjectLabel: event.title, statement: event.title,
+                         assessment: assessment, confidence: event.confidence.value, evidence: refs,
+                         derivedFrom: [DerivedReference(kind: .event, id: event.id)], scope: scope, createdAt: now)
         }
     }
 

@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 66
+    public static let latestVersion = 67
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -105,15 +105,16 @@ public enum SchemaMigrations {
                                  "availability_status", "conflict_status", "legacy_status"],
             "history_items":   ["evidence_basis", "review_disposition", "proposal_origin",
                                  "availability_status", "legacy_status"],
-            // v63 — the shared Claim engine's canonical table.
+            // v63 — the shared Claim engine's canonical table (+ v67 explicit scope columns).
             "claims":          ["id", "subject_id", "statement", "evidence_basis",
                                  "review_disposition", "proposal_origin", "availability_status",
-                                 "conflict_status", "legacy_status", "created_at"],
+                                 "conflict_status", "legacy_status", "created_at",
+                                 "scope_kind", "scope_id"],
             // v64 — evidence-ref rebuilt with an ordinal identity.
             "claim_evidence_ref": ["claim_id", "ordinal", "knowledge_object_id", "evidence_role"],
             // v65 — durable claim-projection progress.
             "claim_projection_progress": ["producer_version", "source_kind", "last_source_id", "complete"],
-            // v66 — canonical EvidenceBlock → KnowledgeObject ownership (newest object).
+            // v66 — canonical EvidenceBlock → KnowledgeObject ownership.
             "evidence_block_objects": ["evidence_block_id", "knowledge_object_id", "linked_at"]
         ]
         for (table, expected) in required {
@@ -191,7 +192,8 @@ public enum SchemaMigrations {
         (63, v63),
         (64, v64),
         (65, v65),
-        (66, v66)
+        (66, v66),
+        (67, v67)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2490,5 +2492,15 @@ public enum SchemaMigrations {
     );
     CREATE INDEX IF NOT EXISTS idx_ebo_block  ON evidence_block_objects(evidence_block_id);
     CREATE INDEX IF NOT EXISTS idx_ebo_object ON evidence_block_objects(knowledge_object_id);
+    """
+
+    // PA-DOC-001 — explicit Claim scope. `scope_kind` is 'entity' | 'knowledgeObject'; `scope_id`
+    // is the anchoring Entity or KnowledgeObject id. Additive + nullable so existing claim rows
+    // are untouched (they read back as scope == nil until reprojected under the new producer
+    // version). The index serves source-scoped workspace selection (scope_id IN workspace KOs).
+    private static let v67: String = """
+    ALTER TABLE claims ADD COLUMN scope_kind TEXT;
+    ALTER TABLE claims ADD COLUMN scope_id   TEXT;
+    CREATE INDEX IF NOT EXISTS idx_claims_scope ON claims(scope_kind, scope_id);
     """
 }

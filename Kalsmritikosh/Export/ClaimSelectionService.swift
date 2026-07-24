@@ -100,11 +100,14 @@ public actor ClaimSelectionService {
         switch scope {
         case .subject(let s):
             return try await claims.claims(subjectID: s)
-        case .workspace(_, let members, _):
+        case .workspace(_, let members, let allowedObjectIDs):
+            // The UNION of entity-scoped claims about member subjects and source-scoped claims
+            // anchored to one of the workspace's own source objects. Deduped downstream by id.
             var acc: [Claim] = []
             for m in members.sorted(by: { $0.uuidString < $1.uuidString }) {
                 acc += try await claims.claims(subjectID: m)
             }
+            acc += try await claims.claims(inKnowledgeObjectScopes: allowedObjectIDs)
             return acc
         case .explicitClaimIDs(let ids):
             var acc: [Claim] = []
@@ -118,15 +121,20 @@ public actor ClaimSelectionService {
         case .subject(let s):
             return cs.filter { $0.subjectID == s }
         case .workspace(_, let members, let allowedObjectIDs):
-            // Two conjunctive gates (PA-PROD B4): the subject must be a member AND every evidence
-            // reference must resolve to a KnowledgeObject inside the workspace's source set.
-            // Conservative all-evidence-in-scope: a claim with NO evidence, or with ANY reference
-            // outside the set, is EXCLUDED — never partially rendered. Canonical evidence is left
-            // intact (nothing trimmed); the boundary is applied to whole-claim selection only.
+            // Every selected claim must have evidence, and ALL of it must live inside the
+            // workspace's source objects (PA-PROD B4 boundary — conservative all-in-scope, never
+            // partial). On top of that, the claim must be in scope for THIS workspace (PA-DOC-001):
+            //   • entity-scoped      → its subject is a workspace member;
+            //   • knowledgeObject    → its anchor object is a workspace source object;
+            //   • legacy (no scope)  → fall back to subject membership.
             return cs.filter { c in
-                guard c.subjectID.map(members.contains) ?? false else { return false }
-                guard !c.evidence.isEmpty else { return false }
-                return c.evidence.allSatisfy { allowedObjectIDs.contains($0.objectID) }
+                guard !c.evidence.isEmpty,
+                      c.evidence.allSatisfy({ allowedObjectIDs.contains($0.objectID) }) else { return false }
+                switch c.scope {
+                case .entity(let s):          return members.contains(s)
+                case .knowledgeObject(let k): return allowedObjectIDs.contains(k)
+                case nil:                     return c.subjectID.map(members.contains) ?? false
+                }
             }
         case .explicitClaimIDs:
             return cs   // requested by id; no subject constraint to apply

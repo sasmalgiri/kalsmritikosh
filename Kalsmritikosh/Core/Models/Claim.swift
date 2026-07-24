@@ -20,12 +20,27 @@
 
 import Foundation
 
+/// PA-DOC-001 — the EXPLICIT scope a Claim is anchored to for workspace selection. Entity-scoped
+/// claims are about a canonical subject; source-scoped claims (the conservative fallback for a
+/// ledger fact with NO entity subject but exact reopenable evidence) are anchored to the
+/// KnowledgeObject they came from. This is never a persona/workspace field — it is an intrinsic
+/// property of the claim, so a source-scoped claim can only surface in a workspace whose sources
+/// include that KnowledgeObject.
+public enum ClaimScope: Sendable, Codable, Hashable {
+    case entity(Entity.ID)
+    case knowledgeObject(KnowledgeObject.ID)
+}
+
 public struct Claim: Sendable, Codable, Identifiable, Hashable {
     public let id: UUID
     /// The canonical subject (an `Entity.ID`) this claim is about, when subject-scoped.
     /// `nil` for corpus-level claims not tied to a single subject. Scoping is by subject —
     /// a Claim carries no persona/workspace ownership, so it cannot leak across personas.
     public let subjectID: Entity.ID?
+    /// PA-DOC-001 — the explicit selection scope. `.entity` when a persisted subject exists;
+    /// `.knowledgeObject` for a source-scoped fallback claim. `nil` only for legacy rows produced
+    /// before scope was recorded (selection then falls back to `subjectID`).
+    public let scope: ClaimScope?
     public let subjectLabel: String
     /// The atomic, persona-NEUTRAL statement. Deliberately no persona field: one claim
     /// serves every persona (§4.2 invariance).
@@ -52,12 +67,12 @@ public struct Claim: Sendable, Codable, Identifiable, Hashable {
         id: UUID = UUID(), subjectID: Entity.ID? = nil, subjectLabel: String,
         statement: String, assessment: EvidenceAssessment, confidence: Double,
         evidence: [EvidenceReference] = [], derivedFrom: [DerivedReference] = [],
-        contradictionGroupID: UUID? = nil, createdAt: Date
+        contradictionGroupID: UUID? = nil, scope: ClaimScope? = nil, createdAt: Date
     ) {
         self.id = id; self.subjectID = subjectID; self.subjectLabel = subjectLabel
         self.statement = statement; self.assessment = assessment; self.confidence = confidence
         self.evidence = evidence; self.derivedFrom = derivedFrom
-        self.contradictionGroupID = contradictionGroupID; self.createdAt = createdAt
+        self.contradictionGroupID = contradictionGroupID; self.scope = scope; self.createdAt = createdAt
     }
 }
 
