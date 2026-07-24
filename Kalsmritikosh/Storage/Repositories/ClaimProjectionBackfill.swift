@@ -34,6 +34,9 @@ public actor ClaimProjectionBackfill {
     /// independent progress set (a fresh pass); defaults to the current producer version.
     private let version: String
     private var active: Task<Void, Never>?
+    /// Test seam (internal, not public API): awaited once before each source is projected, so a
+    /// test can deterministically interleave cancellation mid-page. nil in production.
+    var beforeEachProject: (@Sendable () async -> Void)?
 
     public init(producer: ClaimProducer, progress: ClaimProjectionProgressRepository,
                 membership: WorkspaceMembershipDeriver,
@@ -56,8 +59,30 @@ public actor ClaimProjectionBackfill {
         active = nil
     }
 
+    /// Cancel the in-flight pass (if any) and AWAIT its cooperative wind-down. Because the loops
+    /// check `Task.isCancelled` before every kind, page, source, completion mark, and membership
+    /// reconciliation, cancellation stops promptly and NEVER marks unfinished work complete — the
+    /// durable cursor is left at the last successfully-projected source, so the next run resumes
+    /// there. AppState calls this on the OLD projection actor before replacing it on a re-boot.
+    public func cancel() async {
+        active?.cancel()
+        await active?.value
+        active = nil
+    }
+
+    /// Cancel the active task WITHOUT awaiting it — safe to call from inside the pass itself
+    /// (e.g. a test seam). Awaiting from within would deadlock on the running task.
+    func requestCancel() { active?.cancel() }
+
+    /// Test seam (internal): install the before-each-project hook.
+    func setBeforeEachProject(_ hook: @escaping @Sendable () async -> Void) { beforeEachProject = hook }
+
     private func runPass(at now: Date) async {
-        for kind in Kind.allCases { await runKind(kind, at: now) }
+        for kind in Kind.allCases {
+            if Task.isCancelled { return }                       // before every source kind
+            await runKind(kind, at: now)
+        }
+        if Task.isCancelled { return }                           // before membership reconciliation
         do { _ = try await membership.deriveAll(at: now) }
         catch { KalsmritikoshLog.storage.error("Claim membership reconciliation failed: \(String(describing: error), privacy: .public)") }
     }
@@ -87,16 +112,22 @@ public actor ClaimProjectionBackfill {
             if try await progress.cursor(version: version, kind: kind.rawValue).complete { return }
             var after = try await progress.cursor(version: version, kind: kind.rawValue).lastSourceID
             while true {
+                if Task.isCancelled { return }            // before every fetched page
                 let page = try await fetch(kind, afterID: after, at: now)
                 if page.isEmpty {
+                    if Task.isCancelled { return }         // never mark complete once cancelled
                     try await progress.markComplete(version: version, kind: kind.rawValue, at: now); break
                 }
                 for item in page {
+                    if Task.isCancelled { return }         // before projecting each source
+                    await beforeEachProject?()
+                    if Task.isCancelled { return }         // the hook may have requested cancellation
                     _ = try await item.project()          // infra failure THROWS → cursor not advanced
                     after = item.id
                     try await progress.advance(version: version, kind: kind.rawValue, lastSourceID: item.id, at: now)
                 }
                 if page.count < pageSize {
+                    if Task.isCancelled { return }         // never mark complete once cancelled
                     try await progress.markComplete(version: version, kind: kind.rawValue, at: now); break
                 }
             }

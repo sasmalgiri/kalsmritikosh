@@ -178,6 +178,35 @@ struct ClaimProjectionBackfillTests {
         #expect(try await r.claims.count() == 2)
     }
 
+    // MARK: - Cancellation
+
+    private actor Counter { var n = 0; func next() -> Int { n += 1; return n } }
+
+    @Test("Cancellation mid-page halts the pass, leaves the cursor at the last completed source, and resumes safely")
+    func cancelMidPageResumes() async throws {
+        let r = try await rig()
+        let subject = UUID()
+        _ = try await seedSubject(r, subject: subject)
+        let ids = [UUID(), UUID(), UUID()].sorted { $0.uuidString < $1.uuidString }
+        for (i, id) in ids.enumerated() { try await saveFact(r, id: id, subject: subject, value: "v\(i)") }
+        let coord = r.coordinator(pageSize: 10)             // all three fit in one page
+        let counter = Counter()
+        // Request cancellation right BEFORE the second source is projected → exactly one projected.
+        await coord.setBeforeEachProject {
+            if await counter.next() == 2 { await coord.requestCancel() }
+        }
+        await coord.run(at: t0)
+        // Only ids[0] was projected; the cursor sits at it and the kind is NOT complete.
+        #expect(try await r.claims.count() == 1)
+        let cur = try await r.progress.cursor(version: ClaimProducer.producerVersion, kind: "genericFact")
+        #expect(cur.lastSourceID == ids[0])
+        #expect(cur.complete == false)
+        // Resume: a fresh pass finishes the remaining sources from the cursor and completes.
+        await coord.run(at: t0.addingTimeInterval(10))
+        #expect(try await r.claims.count() == 3)
+        #expect(try await r.progress.cursor(version: ClaimProducer.producerVersion, kind: "genericFact").complete)
+    }
+
     // MARK: - Progress repository semantics
 
     @Test("Progress cursor defaults to start, advances, completes, and isolates by version")

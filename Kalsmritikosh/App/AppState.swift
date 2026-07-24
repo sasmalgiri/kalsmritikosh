@@ -1227,6 +1227,11 @@ public final class AppState {
                 membership: membershipDeriver,
                 genericFacts: genericFactsRepo, temporalClaims: temporalClaimsRepo,
                 assertions: assertionsRepo, events: events)
+            // Clean cancellation across re-boots: stop any prior projection actor's in-flight scan
+            // (and its internal task) BEFORE replacing it, so a stale pass can't keep writing under
+            // the old system. cancel() awaits wind-down and never marks unfinished work complete.
+            claimProjectionBackfillTask?.cancel()
+            if let previousProjection = self.claimProjection { await previousProjection.cancel() }
             self.claimProjection = claimProjectionBackfill
 
             let ingest = IngestCoordinator(
