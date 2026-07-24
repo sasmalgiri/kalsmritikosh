@@ -24,15 +24,17 @@ public actor WorkspaceMembershipDeriver {
         self.workspaces = workspaces
     }
 
-    /// Derive + persist subject membership for one workspace. Returns the number of member
-    /// subjects. Idempotent (addEntity ignores duplicates).
+    /// RECONCILE the derived subject membership for one workspace: compute the expected set
+    /// from current sources and replace the derived set (add missing, drop obsolete) inside one
+    /// savepoint — manually-curated members are never touched. Returns the derived-member count.
+    /// Idempotent. A workspace with no sources ends up with an empty derived set (obsolete
+    /// derived rows removed).
     @discardableResult
     public func deriveMembership(for workspaceID: Workspace.ID, at when: Date = Date()) async throws -> Int {
         let fileIDs = try await workspaces.sourceIDs(in: workspaceID)
-        guard !fileIDs.isEmpty else { return 0 }
-        let entityIDs = try await entities(inFiles: fileIDs)
-        for e in entityIDs { try await workspaces.addEntity(e, to: workspaceID, at: when) }
-        return entityIDs.count
+        let expected = fileIDs.isEmpty ? [] : try await entities(inFiles: fileIDs)
+        try await workspaces.replaceDerivedEntities(Set(expected), in: workspaceID, at: when)
+        return expected.count
     }
 
     /// Derive membership for every active workspace. Returns total memberships added.

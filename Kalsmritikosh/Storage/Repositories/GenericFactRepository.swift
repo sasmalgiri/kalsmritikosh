@@ -107,6 +107,23 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// Keyset page (`id > afterID ORDER BY id`) for the resumable projection backfill.
+    public func page(afterID: UUID?, pageSize: Int) async throws -> [GenericFact] {
+        let cols = """
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+        FROM generic_facts
+        """
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("\(cols) WHERE id > ? ORDER BY id ASC LIMIT ?;",
+                                            [.uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) ORDER BY id ASC LIMIT ?;", [.integer(Int64(pageSize))])
+        }
+        return rows.compactMap(Self.decode)
+    }
+
     private nonisolated static func decode(_ r: SQLRow) -> GenericFact? {
         // A row is only dropped when its IDENTITY/content is unusable — never because one
         // evidence DIMENSION is malformed (the decoder falls back per field).

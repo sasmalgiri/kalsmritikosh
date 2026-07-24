@@ -43,11 +43,11 @@ struct ClaimEngineTests {
             contradictionGroupID: contradictionGroupID, createdAt: t0)
     }
 
-    @Test("Migration reaches v64 (claims table + links + ordinal evidence exist)")
+    @Test("Migration reaches the latest version (claims table + links + ordinal evidence exist)")
     func migration() async throws {
         let db = try await freshDB()
         #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
-        #expect(SchemaMigrations.latestVersion == 64)
+        #expect(SchemaMigrations.latestVersion >= 64)
         #expect(SchemaMigrations.migrationListIsConsistent)
         // v64 rebuilt claim_evidence_ref with an ordinal identity column.
         let cols = Set((try await db.query("PRAGMA table_info(claim_evidence_ref);", [])).compactMap { $0.string(1) })

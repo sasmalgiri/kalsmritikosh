@@ -68,6 +68,21 @@ public actor TemporalClaimRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// Keyset page (`id > afterID ORDER BY id`) for the resumable projection backfill.
+    public func page(afterID: UUID?, pageSize: Int) async throws -> [TemporalClaim] {
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("""
+            \(Self.selectColumns) FROM temporal_claims WHERE id > ? ORDER BY id ASC LIMIT ?;
+            """, [.uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("""
+            \(Self.selectColumns) FROM temporal_claims ORDER BY id ASC LIMIT ?;
+            """, [.integer(Int64(pageSize))])
+        }
+        return rows.compactMap(Self.decode)
+    }
+
     /// Subject + predicate query, deterministic.
     public func claims(subjectID: Entity.ID, predicate: String) async throws -> [TemporalClaim] {
         let rows = try await database.query("""

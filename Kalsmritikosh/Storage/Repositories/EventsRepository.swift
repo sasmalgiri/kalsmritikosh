@@ -305,6 +305,29 @@ public actor EventsRepository {
         return out
     }
 
+    /// Keyset page (`id > afterID ORDER BY id`) of events + participants (resumable backfill).
+    public func pageWithParticipants(afterID: UUID?, pageSize: Int) async throws -> [(Event, [Entity.ID])] {
+        let cols = """
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status
+        FROM events
+        """
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("\(cols) WHERE id > ? ORDER BY id ASC LIMIT ?;",
+                                            [.uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) ORDER BY id ASC LIMIT ?;", [.integer(Int64(pageSize))])
+        }
+        var out: [(Event, [Entity.ID])] = []
+        for row in rows {
+            guard let event = decode(row) else { continue }
+            let participants = try await database.query(
+                "SELECT entity_id FROM event_entities WHERE event_id = ?;", [.uuid(event.id)])
+            out.append((event, participants.compactMap { $0.uuid(0) }))
+        }
+        return out
+    }
+
     /// InMemoryBondGraph warm-up — paged enumeration of every event's
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (event_id, fact_type_raw) tuples.

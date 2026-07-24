@@ -136,6 +136,28 @@ public actor AssertionsRepository {
         return rows.compactMap(decodeRow)
     }
 
+    /// Keyset page (`id > afterID ORDER BY id`) of non-retracted assertions (resumable backfill).
+    public func page(afterID: UUID?, pageSize: Int) async throws -> [Assertion] {
+        let cols = """
+        SELECT id, subject_kind, subject_id, predicate,
+               object_kind, object_value, object_entity_id, object_event_id,
+               confidence, evidence_object_ids_json, agent, reason,
+               recorded_at, retracted_at,
+               evidence_block_ids_json, direct_quote, asserting_source_id,
+               provenance, extractor_version
+        FROM assertions
+        """
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("\(cols) WHERE retracted_at IS NULL AND id > ? ORDER BY id ASC LIMIT ?;",
+                                            [.uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) WHERE retracted_at IS NULL ORDER BY id ASC LIMIT ?;",
+                                            [.integer(Int64(pageSize))])
+        }
+        return rows.compactMap(decodeRow)
+    }
+
     /// Deterministic paged enumeration of ALL non-retracted assertions (Claim-producer backfill).
     public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [Assertion] {
         let rows = try await database.query("""

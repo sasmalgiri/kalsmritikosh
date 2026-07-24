@@ -11,7 +11,7 @@ import Foundation
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 64
+    public static let latestVersion = 65
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -109,8 +109,10 @@ public enum SchemaMigrations {
             "claims":          ["id", "subject_id", "statement", "evidence_basis",
                                  "review_disposition", "proposal_origin", "availability_status",
                                  "conflict_status", "legacy_status", "created_at"],
-            // v64 — evidence-ref rebuilt with an ordinal identity (newest shape).
-            "claim_evidence_ref": ["claim_id", "ordinal", "knowledge_object_id", "evidence_role"]
+            // v64 — evidence-ref rebuilt with an ordinal identity.
+            "claim_evidence_ref": ["claim_id", "ordinal", "knowledge_object_id", "evidence_role"],
+            // v65 — durable claim-projection progress (newest object).
+            "claim_projection_progress": ["producer_version", "source_kind", "last_source_id", "complete"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -185,7 +187,8 @@ public enum SchemaMigrations {
         (61, v61),
         (62, v62),
         (63, v63),
-        (64, v64)
+        (64, v64),
+        (65, v65)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2439,5 +2442,30 @@ public enum SchemaMigrations {
     ALTER TABLE claim_evidence_ref_v2 RENAME TO claim_evidence_ref;
     CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_claim ON claim_evidence_ref(claim_id);
     CREATE INDEX IF NOT EXISTS idx_claim_evidence_ref_object ON claim_evidence_ref(knowledge_object_id);
+    """
+
+    // PA-PROD Commit B2 — durable, resumable Claim-projection substrate.
+    //  • claim_projection_progress: per (producer_version, source_kind) keyset cursor +
+    //    completion, so a background backfill resumes exactly where it stopped and a new
+    //    producer version starts a fresh, independent pass (old completed rows untouched).
+    //  • workspace_derived_entities: AUTOMATICALLY-derived workspace subjects, kept separate
+    //    from user-curated workspace_entities so reconciliation can replace the derived set
+    //    (add/remove as sources change) without ever deleting a manually-added member.
+    private static let v65: String = """
+    CREATE TABLE IF NOT EXISTS claim_projection_progress (
+        producer_version TEXT NOT NULL,
+        source_kind      TEXT NOT NULL,
+        last_source_id   TEXT,
+        complete         INTEGER NOT NULL DEFAULT 0,
+        updated_at       REAL NOT NULL,
+        PRIMARY KEY (producer_version, source_kind)
+    );
+    CREATE TABLE IF NOT EXISTS workspace_derived_entities (
+        workspace_id TEXT NOT NULL,
+        entity_id    TEXT NOT NULL,
+        derived_at   REAL NOT NULL,
+        PRIMARY KEY (workspace_id, entity_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_workspace_derived_ws ON workspace_derived_entities(workspace_id);
     """
 }

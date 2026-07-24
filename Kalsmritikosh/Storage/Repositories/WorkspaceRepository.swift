@@ -152,12 +152,50 @@ public actor WorkspaceRepository {
         )
     }
 
+    /// Workspace subjects = the UNION of manually-curated (`workspace_entities`) and
+    /// automatically-derived (`workspace_derived_entities`) membership. A subject that is both
+    /// manual and derived appears once.
     public func entityIDs(in workspaceID: Workspace.ID) async throws -> [UUID] {
-        let rows = try await database.query(
-            "SELECT entity_id FROM workspace_entities WHERE workspace_id = ? ORDER BY added_at DESC;",
-            [.uuid(workspaceID)]
-        )
+        let rows = try await database.query("""
+        SELECT entity_id FROM workspace_entities         WHERE workspace_id = ?
+        UNION
+        SELECT entity_id FROM workspace_derived_entities WHERE workspace_id = ?
+        ORDER BY entity_id ASC;
+        """, [.uuid(workspaceID), .uuid(workspaceID)])
         return rows.compactMap { $0.uuid(0) }
+    }
+
+    /// Only the automatically-derived subjects (for reconciliation).
+    public func derivedEntityIDs(in workspaceID: Workspace.ID) async throws -> [UUID] {
+        (try await database.query(
+            "SELECT entity_id FROM workspace_derived_entities WHERE workspace_id = ? ORDER BY entity_id ASC;",
+            [.uuid(workspaceID)])).compactMap { $0.uuid(0) }
+    }
+
+    /// Replace the DERIVED membership set for a workspace atomically — add missing, drop
+    /// obsolete — while leaving manually-added `workspace_entities` untouched.
+    public func replaceDerivedEntities(_ expected: Set<UUID>, in workspaceID: Workspace.ID, at when: Date = Date()) async throws {
+        let sp = "wsderiv_\(workspaceID.uuidString.replacingOccurrences(of: "-", with: ""))"
+        do {
+            try await database.exec("SAVEPOINT \(sp);", [])
+            let existing = Set(try await derivedEntityIDs(in: workspaceID))
+            for obsolete in existing.subtracting(expected) {
+                try await database.exec(
+                    "DELETE FROM workspace_derived_entities WHERE workspace_id = ? AND entity_id = ?;",
+                    [.uuid(workspaceID), .uuid(obsolete)])
+            }
+            for add in expected.subtracting(existing) {
+                try await database.exec("""
+                INSERT INTO workspace_derived_entities (workspace_id, entity_id, derived_at)
+                VALUES (?,?,?) ON CONFLICT(workspace_id, entity_id) DO NOTHING;
+                """, [.uuid(workspaceID), .uuid(add), .real(when.timeIntervalSince1970)])
+            }
+            try await database.exec("RELEASE SAVEPOINT \(sp);", [])
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);", [])
+            try? await database.exec("RELEASE SAVEPOINT \(sp);", [])
+            throw error
+        }
     }
 
     // MARK: - Decode

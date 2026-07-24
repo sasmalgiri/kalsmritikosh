@@ -24,6 +24,21 @@ import Foundation
 import CryptoKit
 import os
 
+/// Why a single source object was skipped (vs an infrastructure failure, which THROWS).
+public enum ClaimProjectionSkipReason: String, Sendable, Equatable {
+    case malformedSource      // the source cannot form a usable claim (e.g. empty field/value)
+    case unsupportedSource    // a source kind the producer does not (yet) project
+}
+
+/// The explicit result boundary the durable coordinator needs: `produced`/`skipped` are safe
+/// to advance the cursor past; an INFRASTRUCTURE failure (db / evidence-store / query) is a
+/// thrown error instead — the coordinator must NOT advance on a throw, or it could mark a
+/// source complete without persisting its Claims.
+public enum ClaimProjectionOutcome: Sendable, Equatable {
+    case produced(Int)
+    case skipped(ClaimProjectionSkipReason)
+}
+
 public actor ClaimProducer {
     public nonisolated static let producerVersion = "claim-producer-1"
 
@@ -100,6 +115,35 @@ public actor ClaimProducer {
             if batch.count < 500 { break }; off += 500
         }
         return produced
+    }
+
+    // MARK: - Durable-projection boundary (one source → produced / skipped; infra errors THROW)
+
+    public func project(genericFact f: GenericFact, at now: Date) async throws -> ClaimProjectionOutcome {
+        guard !f.field.isEmpty, !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return .skipped(.malformedSource) }
+        try await claims.save(try await claim(from: f, at: now))
+        return .produced(1)
+    }
+
+    public func project(temporalClaim tc: TemporalClaim, at now: Date) async throws -> ClaimProjectionOutcome {
+        guard !tc.predicate.isEmpty else { return .skipped(.malformedSource) }
+        try await claims.save(try await claim(from: tc, at: now))
+        return .produced(1)
+    }
+
+    public func project(assertion a: Assertion, at now: Date) async throws -> ClaimProjectionOutcome {
+        guard !a.predicate.isEmpty else { return .skipped(.malformedSource) }
+        try await claims.save(try await claim(from: a, at: now))
+        return .produced(1)
+    }
+
+    /// Advance the event cursor only after EVERY participant claim has been persisted.
+    public func project(event e: Event, participants: [Entity.ID], at now: Date) async throws -> ClaimProjectionOutcome {
+        guard !e.title.isEmpty else { return .skipped(.malformedSource) }
+        let built = try await claims(from: e, participants: participants, at: now)
+        for c in built { try await claims.save(c) }
+        return .produced(built.count)
     }
 
     // MARK: - Paging + failure isolation
