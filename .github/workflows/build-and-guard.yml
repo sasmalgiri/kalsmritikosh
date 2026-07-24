@@ -5,12 +5,49 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: kalsmritikosh-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: macos-15
-    timeout-minutes: 30
+  # ── Architecture guards ────────────────────────────────────────────────────
+  # Grep-only invariants; no Xcode needed, so they run fast on Linux as their own
+  # named status check. Logic lives in versioned scripts (ci/guards/) so the exact
+  # same guards run locally: `bash ci/guards/run-all.sh`.
+  architecture-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Run architecture guards
+        run: bash ci/guards/run-all.sh 2>&1 | tee guards.log
+      - name: Upload guard logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-logs
+          path: guards.log
+          retention-days: 14
+          if-no-files-found: ignore
 
+  # ── Build + full test target ───────────────────────────────────────────────
+  # Runs on macos-26 to match the LOCKED macOS 26 release contract (SHIP_DECISIONS.md):
+  # the SDK builds the app's 26.x deployment target natively, so there is NO
+  # deployment-target downgrade. The full KalsmritikoshTests target MUST execute
+  # (it is wired into the shared scheme's Test action); a build-only or zero-test
+  # run is a hard failure, proven from the .xcresult by ci/verify-xcresult-tests.sh.
+  #
+  # NOTE: if a future hosted runner lacks the macOS 26 SDK, a MACOSX_DEPLOYMENT_TARGET
+  # override may be reintroduced ONLY as a clearly-labelled compatibility-CI override —
+  # it would NOT be evidence that the locked macOS 26 contract passed.
+  build-and-test:
+    runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,11 +56,7 @@ jobs:
 
       - name: Select Xcode (newest available on the runner)
         run: |
-          # The default Xcode's SDK (15.5.99) is older than the project's local
-          # toolchain (15.6 SDK), which surfaces toolchain-only errors (stricter
-          # concurrency, Charts result-builder availability). Pick the NEWEST
-          # Xcode the runner has so CI matches the build that's green locally.
-          echo "Available Xcodes:"; ls -d /Applications/Xcode*.app 2>/dev/null
+          echo "Available Xcodes:"; ls -d /Applications/Xcode*.app 2>/dev/null || true
           NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
           if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
           xcodebuild -version
@@ -34,15 +67,7 @@ jobs:
         env:
           NSUnbufferedIO: YES
         run: |
-          # pipefail so xcodebuild's real exit status propagates through tee —
-          # no `grep || true` masking the failure (A0.5 / spec §5.3).
           set -o pipefail
-          # MACOSX_DEPLOYMENT_TARGET override: the pbxproj targets 15.6 but the
-          # runner's SDK maxes at 15.5.99, which breaks the availability checker
-          # (Charts result builders, etc.). Override to 15.0 for the CI build
-          # only — no pbxproj edit; the proper fix is C0 (correct the pbxproj
-          # deployment target with Xcode closed). The app needs macOS 15 for
-          # FoundationModels; newer APIs are behind #available guards.
           xcodebuild \
             -project Kalsmritikosh.xcodeproj \
             -scheme Kalsmritikosh \
@@ -50,124 +75,42 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath build/derived \
             -skipMacroValidation \
-            MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
             build 2>&1 | tee build.log
 
-      - name: Unit tests
+      - name: Test (full KalsmritikoshTests target)
         env:
           NSUnbufferedIO: YES
         run: |
           set -o pipefail
-          # Run tests only once a test action is wired into the scheme (A0.6 is
-          # an Xcode/pbxproj step). Until then, report clearly instead of a
-          # false green — do NOT claim tests passed when none ran.
-          if xcodebuild -project Kalsmritikosh.xcodeproj -scheme Kalsmritikosh -showBuildSettings -json 2>/dev/null >/dev/null \
-             && xcodebuild -project Kalsmritikosh.xcodeproj -list 2>/dev/null | grep -q "KalsmritikoshTests"; then
-            xcodebuild \
-              -project Kalsmritikosh.xcodeproj \
-              -scheme Kalsmritikosh \
-              -configuration Debug \
-              -destination 'platform=macOS' \
-              -derivedDataPath build/derived \
-              -skipMacroValidation \
-              MACOSX_DEPLOYMENT_TARGET=15.0 \
-              CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_ALLOWED=NO \
-              test 2>&1 | tee test.log
-          else
-            echo "::warning::No KalsmritikoshTests target wired yet — tests NOT run (A0.6, Xcode step). This check is not a test pass."
-          fi
+          rm -rf build/TestResults.xcresult
+          xcodebuild \
+            -project Kalsmritikosh.xcodeproj \
+            -scheme Kalsmritikosh \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/derived \
+            -resultBundlePath build/TestResults.xcresult \
+            -skipMacroValidation \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            test 2>&1 | tee test.log
 
-      - name: Capability-discipline grep guard
-        run: |
-          # No model names may appear in Experts / Brain / Knowledge /
-          # Retrieval / Ingestion. Routing/Providers + ModelManifest +
-          # AppState + SettingsView are the ONLY allowed namers.
-          set +e
-          # The violation is model names in CODE, not in explanatory comments
-          # (docstrings referencing ChatGPT/Mistral/qwen for context are fine).
-          # Drop comment-only lines: after the `file:line:` prefix, optional
-          # whitespace then a comment marker (// /// * /*). A real code leak
-          # (e.g. `let m = "qwen"`) does not start with a comment marker and is
-          # still caught.
-          MATCHES=$(grep -rniE "qwen|gemma|deepseek|llama|mistral|nomic|gpt" \
-            Kalsmritikosh/Experts/ \
-            Kalsmritikosh/Brain/ \
-            Kalsmritikosh/Knowledge/ \
-            Kalsmritikosh/Retrieval/ \
-            Kalsmritikosh/Ingestion/ \
-            2>/dev/null | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-          if [ -n "$MATCHES" ]; then
-            echo "::error::Grep guard failed — model names leaked into capability-discipline layers"
-            echo "$MATCHES"
-            exit 1
-          fi
-          echo "Grep guard clean."
+      - name: Verify tests actually executed (from .xcresult, not console text)
+        run: bash ci/verify-xcresult-tests.sh build/TestResults.xcresult ci/test-baseline.json 2>&1 | tee verify.log
 
-      - name: No try! / fatalError outside UI
-        run: |
-          set +e
-          # Exclude UI and comment-only lines (docstrings that mention "try!"
-          # for explanation, e.g. "keeps the codebase free of `try!`", are not
-          # actual uses). A real try!/fatalError( in code doesn't start with a
-          # comment marker and is still caught.
-          MATCHES=$(grep -rnE "try!|fatalError\(" Kalsmritikosh/ \
-            --include="*.swift" \
-            2>/dev/null | grep -vE "^Kalsmritikosh/UI/" \
-            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-          if [ -n "$MATCHES" ]; then
-            echo "::error::try! or fatalError() found in non-UI code"
-            echo "$MATCHES"
-            exit 1
-          fi
-          echo "No try! / fatalError() in non-UI code."
-
-      - name: No network in the evidence/answer layers (privacy invariant)
-        run: |
-          set +e
-          # Network may live ONLY in the networking boundary: Routing/ (providers +
-          # ModelDownloader) and Ingestion/ASR/ (the optional, release-gated cloud
-          # transcriber). The core evidence/answer layers — Brain, Knowledge, Retrieval,
-          # Storage, Experts, Export, UI, Core — must NEVER touch the network. Comment-only
-          # lines excluded. (ASR cloud transcription must itself be release-gated — P8.1.)
-          MATCHES=$(grep -rnE "URLSession|URLRequest|\.dataTask" \
-            Kalsmritikosh/ --include="*.swift" 2>/dev/null \
-            | grep -vE "^Kalsmritikosh/Routing/" \
-            | grep -vE "^Kalsmritikosh/Ingestion/ASR/" \
-            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-          if [ -n "$MATCHES" ]; then
-            echo "::error::Network call found in an evidence/answer layer — privacy contract violation"
-            echo "$MATCHES"
-            exit 1
-          fi
-          echo "No network calls in the evidence/answer layers."
-
-      - name: No synthetic-question types in release path (PI.4)
-        run: |
-          set +e
-          # Synthetic questions are a DEBUG-only diagnostic. A release build must not
-          # reference the generator/queue outside a #if DEBUG. Heuristic guard: flag any
-          # non-comment reference in Brain/ (the answer path) — synthetic Qs belong to
-          # Ingestion/Knowledge diagnostics only.
-          MATCHES=$(grep -rnE "SyntheticQuestion(Generator|Queue)" \
-            Kalsmritikosh/Brain/ --include="*.swift" 2>/dev/null \
-            | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)' || true)
-          if [ -n "$MATCHES" ]; then
-            echo "::error::Synthetic-question type referenced in the answer path (Brain/)"
-            echo "$MATCHES"
-            exit 1
-          fi
-          echo "No synthetic-question types in the answer path."
-
-      - name: Upload logs on failure
+      - name: Upload logs + result bundle on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs
+          name: build-and-test-logs
           path: |
             build.log
             test.log
-          retention-days: 7
+            verify.log
+            build/TestResults.xcresult
+          retention-days: 14
           if-no-files-found: ignore

@@ -1,0 +1,5 @@
+{
+  "minimumExecutedTests": 781,
+  "baselineCommit": "6fe28dc385605e86bdd4e064dfb03757662087c8",
+  "note": "Floor, not an equality requirement. New tests raise this number; the CI verifier fails when fewer than minimumExecutedTests execute or any test fails. Read from build/TestResults.xcresult via xcresulttool — never from console text."
+}
