@@ -34,6 +34,15 @@ struct KalsmritikoshApp: App {
                 .environment(appState)
                 .preferredColorScheme(.light)   // light UI across all phases
                 .task {
+                    #if DEBUG
+                    // PA-PROD B5 — DEBUG-only manual GUI checkpoint. When launched with
+                    // `--pa-prod-gui-smoke`, boot against a disposable database and seed the
+                    // VALID/BLOCKED workspaces instead of the normal path. Absent from release.
+                    if PAProdGUISmokeFixture.isRequested {
+                        await PAProdGUISmokeFixture.bootAndSeed(appState)
+                        return
+                    }
+                    #endif
                     // First run: wait for the user to pick a system mode so
                     // the engine boots in the chosen mode. Returns at once on
                     // later launches.
