@@ -85,6 +85,14 @@ jobs:
           NSUnbufferedIO: YES
         run: |
           set -o pipefail
+          # Compatibility-CI override (labelled, honest): the hosted macOS 26 runner can be a
+          # POINT RELEASE below the test target's pinned deployment target (e.g. runner 26.4 vs
+          # pinned 26.5), which blocks test EXECUTION ("host's macOS doesn't match deployment
+          # target"). Lower the deployment target to the runner's own OS for the CI test run
+          # ONLY. This stays within the LOCKED macOS 26 contract floor — it is NOT evidence that
+          # the pinned 26.5 point release passed; it proves the suite on the macOS 26 baseline.
+          DEPLOY="$(sw_vers -productVersion | cut -d. -f1-2)"
+          echo "Runner macOS: $(sw_vers -productVersion) — using MACOSX_DEPLOYMENT_TARGET=$DEPLOY for the test run"
           rm -rf build/TestResults.xcresult
           xcodebuild \
             -project Kalsmritikosh.xcodeproj \
@@ -94,6 +102,7 @@ jobs:
             -derivedDataPath build/derived \
             -resultBundlePath build/TestResults.xcresult \
             -skipMacroValidation \
+            MACOSX_DEPLOYMENT_TARGET="$DEPLOY" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \
