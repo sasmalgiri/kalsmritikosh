@@ -161,8 +161,10 @@ public actor ClaimProjectionBackfill {
                 Item(id: a.id) { try await self.producer.project(assertion: a, at: now) }
             }
         case .event:
-            return (try await events.pageWithParticipants(afterID: afterID, pageSize: pageSize)).map { pair in
-                Item(id: pair.0.id) { try await self.producer.project(event: pair.0, participants: pair.1, at: now) }
+            // PA-EXT-001 — hydrate attributes + narrative slots + participant labels (batched) so
+            // the producer renders rich statements; keyset cursor still keys on the event id.
+            return (try await events.pageForClaimProjection(afterID: afterID, pageSize: pageSize)).map { source in
+                Item(id: source.event.id) { try await self.producer.project(source: source, at: now) }
             }
         }
     }

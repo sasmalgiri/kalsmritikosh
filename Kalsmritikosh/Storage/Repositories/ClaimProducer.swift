@@ -40,11 +40,13 @@ public enum ClaimProjectionOutcome: Sendable, Equatable {
 }
 
 public actor ClaimProducer {
-    // v2 (PA-DOC-001): claims now carry an explicit scope (entity | knowledgeObject) and a
-    // source-scoped fallback is produced for subject-less facts. Bumping the version makes the
-    // durable backfill run a fresh pass that re-saves every claim with its scope populated
-    // (same fingerprint id → UPSERT in place; reviews/usage preserved).
-    public nonisolated static let producerVersion = "claim-producer-2"
+    // v3 (PA-EXT-001): Event Claims now carry a rich, evidence-derived statement rendered from the
+    // event's narrative slots + attributes (was the bare `event.title`), and prefer exact Event
+    // block evidence over object-level. Bumping the version makes the durable backfill run a fresh
+    // pass that re-saves every Event claim with its richer statement + evidence (same fingerprint
+    // id → UPSERT in place; reviews/usage/links/createdAt/scope preserved). GenericFact,
+    // TemporalClaim and Assertion projections are unchanged.
+    public nonisolated static let producerVersion = "claim-producer-3"
 
     private let genericFacts: GenericFactRepository
     private let assertions: AssertionsRepository
@@ -77,11 +79,18 @@ public actor ClaimProducer {
         produced += try await pageThrough { try await self.assertions.all(offset: $0, pageSize: 500) } each: { a in
             await self.persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) }
         }
-        produced += try await pageThrough { try await self.events.allWithParticipants(offset: $0, pageSize: 500) } each: { pair in
-            var n = 0
-            let built = (try? await self.claims(from: pair.0, participants: pair.1, at: now)) ?? []
-            for c in built { n += await self.persist(kind: "event", sourceID: pair.0.id) { c } }
-            return n
+        // PA-EXT-001 — events project through the rich claim-projection source (attributes +
+        // narrative slots + participant labels), keyset-paged so the batched hydration applies.
+        var afterEventID: UUID?
+        while true {
+            let sources = try await events.pageForClaimProjection(afterID: afterEventID, pageSize: 500)
+            if sources.isEmpty { break }
+            for source in sources {
+                let built = (try? await self.claims(from: source, at: now)) ?? []
+                for c in built { produced += await self.persist(kind: "event", sourceID: source.event.id) { c } }
+            }
+            afterEventID = sources.last?.event.id
+            if sources.count < 500 { break }
         }
         return produced
     }
@@ -108,15 +117,18 @@ public actor ClaimProducer {
             for a in batch { produced += await persist(kind: "assertion", sourceID: a.id) { try await self.claim(from: a, at: now) } }
             if batch.count < 500 { break }; off += 500
         }
-        off = 0
+        var afterEventID: UUID?
         while true {
-            let batch = try await events.allForEntity(subjectID, offset: off, pageSize: 500)
-            if batch.isEmpty { break }
-            for e in batch {
-                let built = (try? await self.claims(from: e, participants: [subjectID], at: now)) ?? []
-                for c in built { produced += await persist(kind: "event", sourceID: e.id) { c } }
+            // Rich per-source projection scoped to this subject's events; each source still carries
+            // the event's FULL participant cast so the renderer can name everyone involved.
+            let sources = try await events.claimProjectionSources(forEntityID: subjectID, afterID: afterEventID, pageSize: 500)
+            if sources.isEmpty { break }
+            for source in sources {
+                let built = (try? await self.claims(from: source, at: now)) ?? []
+                for c in built { produced += await persist(kind: "event", sourceID: source.event.id) { c } }
             }
-            if batch.count < 500 { break }; off += 500
+            afterEventID = sources.last?.event.id
+            if sources.count < 500 { break }
         }
         return produced
     }
@@ -146,12 +158,13 @@ public actor ClaimProducer {
         return .produced(1)
     }
 
-    /// Advance the event cursor only after EVERY participant claim has been persisted.
-    public func project(event e: Event, participants: [Entity.ID], at now: Date) async throws -> ClaimProjectionOutcome {
-        guard !e.title.isEmpty else { return .skipped(.malformedSource) }
-        let built = try await claims(from: e, participants: participants, at: now)
+    /// Advance the event cursor only after EVERY participant claim has been persisted. Consumes the
+    /// rich claim-projection source (attributes + narrative slots + participant labels).
+    public func project(source: EventClaimProjectionSource, at now: Date) async throws -> ClaimProjectionOutcome {
+        guard !source.event.title.isEmpty else { return .skipped(.malformedSource) }
+        let built = try await claims(from: source, at: now)
         guard !built.isEmpty else { return .skipped(.unsupportedSource) }
-        for c in built { try await store(c, kind: "event", sourceID: e.id) }
+        for c in built { try await store(c, kind: "event", sourceID: source.event.id) }
         return .produced(built.count)
     }
 
@@ -294,19 +307,31 @@ public actor ClaimProducer {
                      derivedFrom: [DerivedReference(kind: .assertion, id: a.id)], scope: scope, createdAt: now)
     }
 
-    private func claims(from event: Event, participants: [Entity.ID], at now: Date) async throws -> [Claim] {
-        let refs = try await reopenableRefs(blockIDs: [], objectIDs: [event.sourceObjectID], eventID: event.id)
+    private func claims(from source: EventClaimProjectionSource, at now: Date) async throws -> [Claim] {
+        let event = source.event
         let assessment = Self.assessment(forEventStatus: event.status)
-        // One claim per participant (entity-scoped); none → a single source-scoped claim anchored
-        // to the event's owning object, or nothing when that object doesn't resolve.
-        let subjects: [Entity.ID?] = participants.isEmpty ? [nil] : participants.map { $0 }
-        return subjects.compactMap { subject -> Claim? in
-            guard let scope = Self.scope(subjectID: subject, evidence: refs) else { return nil }
-            return Claim(id: Self.claimID(kind: "event", sourceID: event.id, subjectID: subject),
-                         subjectID: subject, subjectLabel: event.title, statement: event.title,
-                         assessment: assessment, confidence: event.confidence.value, evidence: refs,
-                         derivedFrom: [DerivedReference(kind: .event, id: event.id)], scope: scope, createdAt: now)
+        // One claim per participant (entity-scoped, subjectLabel = participant's canonical label);
+        // none → a single source-scoped claim anchored to the event's owning object.
+        let subjects: [EventClaimParticipant?] = source.participants.isEmpty ? [nil] : source.participants.map { $0 }
+        var out: [Claim] = []
+        for participant in subjects {
+            // Rich, evidence-derived statement from the event's narrative slots + attributes.
+            let statement = EventClaimStatementRenderer.render(
+                event: event, narrativeSlots: source.narrativeSlots, participant: participant)
+            // Prefer EXACT Event block evidence; fall back to object-level ONLY when no exact block
+            // resolves — never discard block evidence just because the object can also reopen.
+            var refs = try await reopenableRefs(blockIDs: statement.preferredBlockIDs, objectIDs: [], eventID: event.id)
+            if refs.isEmpty {
+                refs = try await reopenableRefs(blockIDs: [], objectIDs: [event.sourceObjectID], eventID: event.id)
+            }
+            guard let scope = Self.scope(subjectID: participant?.entityID, evidence: refs) else { continue }
+            out.append(Claim(
+                id: Self.claimID(kind: "event", sourceID: event.id, subjectID: participant?.entityID),
+                subjectID: participant?.entityID, subjectLabel: statement.subjectLabel, statement: statement.text,
+                assessment: assessment, confidence: event.confidence.value, evidence: refs,
+                derivedFrom: [DerivedReference(kind: .event, id: event.id)], scope: scope, createdAt: now))
         }
+        return out
     }
 
     // MARK: - Deterministic assessment mappings (no LLM)

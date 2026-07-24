@@ -328,6 +328,109 @@ public actor EventsRepository {
         return out
     }
 
+    // MARK: - PA-EXT-001 — Claim-projection sources
+
+    /// Keyset page of events prepared for Claim projection: each event hydrated WITH its
+    /// `attributes_json` and `narrative_slots_json`, plus its participants' canonical display
+    /// labels. Batched participant + label reads (one query each) — never a per-event N+1.
+    public func pageForClaimProjection(afterID: UUID?, pageSize: Int) async throws -> [EventClaimProjectionSource] {
+        let cols = """
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status, attributes_json, narrative_slots_json
+        FROM events
+        """
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("\(cols) WHERE id > ? ORDER BY id ASC LIMIT ?;",
+                                            [.uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) ORDER BY id ASC LIMIT ?;", [.integer(Int64(pageSize))])
+        }
+        return try await assembleClaimProjectionSources(from: rows)
+    }
+
+    /// Subject-scoped variant: the claim-projection sources for every event a given entity
+    /// participates in (keyset by event id). Each source still carries ALL of its event's
+    /// participants (not just the queried entity) so the renderer can name the full cast.
+    public func claimProjectionSources(forEntityID entityID: Entity.ID, afterID: UUID?, pageSize: Int) async throws -> [EventClaimProjectionSource] {
+        let cols = """
+        SELECT e.id, e.kind, e.date, e.end_date, e.title, e.summary, e.source_object_id, e.confidence, e.date_confidence, e.quality_tier, e.date_precision, e.status, e.attributes_json, e.narrative_slots_json
+        FROM events e
+        JOIN event_entities ee ON ee.event_id = e.id
+        WHERE ee.entity_id = ?
+        """
+        let rows: [SQLRow]
+        if let afterID {
+            rows = try await database.query("\(cols) AND e.id > ? ORDER BY e.id ASC LIMIT ?;",
+                                            [.uuid(entityID), .uuid(afterID), .integer(Int64(pageSize))])
+        } else {
+            rows = try await database.query("\(cols) ORDER BY e.id ASC LIMIT ?;",
+                                            [.uuid(entityID), .integer(Int64(pageSize))])
+        }
+        return try await assembleClaimProjectionSources(from: rows)
+    }
+
+    /// Hydrate decoded events into projection sources: batch participants, batch labels, assemble
+    /// with a deterministic participant order (by label, then id).
+    private func assembleClaimProjectionSources(from rows: [SQLRow]) async throws -> [EventClaimProjectionSource] {
+        guard !rows.isEmpty else { return [] }
+        var decoded: [(event: Event, slots: EventNarrativeSlots)] = []
+        for row in rows {
+            if let d = decodeForClaimProjection(row) { decoded.append(d) }
+        }
+        guard !decoded.isEmpty else { return [] }
+        let eventIDs = decoded.map(\.event.id)
+
+        // Batch participants: event_id → [entity_id]. One query for the whole page.
+        let ph = eventIDs.map { _ in "?" }.joined(separator: ",")
+        let peRows = try await database.query(
+            "SELECT event_id, entity_id FROM event_entities WHERE event_id IN (\(ph));",
+            eventIDs.map { .uuid($0) })
+        var participantIDsByEvent: [Event.ID: [Entity.ID]] = [:]
+        var allEntityIDs = Set<Entity.ID>()
+        for r in peRows {
+            guard let ev = r.uuid(0), let ent = r.uuid(1) else { continue }
+            participantIDsByEvent[ev, default: []].append(ent)
+            allEntityIDs.insert(ent)
+        }
+
+        // Batch canonical labels + kinds for every participating entity. One query.
+        var labels: [Entity.ID: (label: String, kind: Entity.Kind)] = [:]
+        if !allEntityIDs.isEmpty {
+            let ids = Array(allEntityIDs)
+            let lph = ids.map { _ in "?" }.joined(separator: ",")
+            let lrows = try await database.query(
+                "SELECT id, kind, value FROM entities WHERE id IN (\(lph));", ids.map { .uuid($0) })
+            for r in lrows {
+                guard let id = r.uuid(0), let value = r.string(2) else { continue }
+                let kind = r.string(1).flatMap(Entity.Kind.init(rawValue:)) ?? .person
+                labels[id] = (value, kind)
+            }
+        }
+
+        return decoded.map { pair in
+            let participants = (participantIDsByEvent[pair.event.id] ?? []).map { id -> EventClaimParticipant in
+                let l = labels[id]
+                return EventClaimParticipant(entityID: id, displayLabel: l?.label ?? id.uuidString, kind: l?.kind ?? .person)
+            }.sorted {
+                ($0.displayLabel.lowercased(), $0.entityID.uuidString) < ($1.displayLabel.lowercased(), $1.entityID.uuidString)
+            }
+            return EventClaimProjectionSource(event: pair.event, participants: participants, narrativeSlots: pair.slots)
+        }
+    }
+
+    /// Decode a projection row (the shared 0..11 event columns + attributes_json at 12 +
+    /// narrative_slots_json at 13). Unlike `decode`, this hydrates the Event's attributes.
+    private func decodeForClaimProjection(_ row: SQLRow) -> (event: Event, slots: EventNarrativeSlots)? {
+        guard let base = decode(row) else { return nil }
+        var attributes: [String: AnyCodable] = [:]
+        if let json = row.string(12), let data = json.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode([String: AnyCodable].self, from: data) {
+            attributes = parsed
+        }
+        let slots = EventNarrativeSlots.decoded(from: row.string(13) ?? "{}")
+        return (base.addingAttributes(attributes), slots)
+    }
+
     /// InMemoryBondGraph warm-up — paged enumeration of every event's
     /// classified fact_type. Skips NULL and the `_unclassified`
     /// sentinel. Returns (event_id, fact_type_raw) tuples.
