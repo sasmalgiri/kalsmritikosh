@@ -82,8 +82,12 @@ public actor ClaimProducer {
             for t in batch { produced += await persist { try await self.claim(from: t, at: now) } }
             if batch.count < 500 { break }; off += 500
         }
-        for a in try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, limit: 1000) {
-            produced += await persist { try await self.claim(from: a, at: now) }
+        off = 0
+        while true {
+            let batch = try await assertions.assertions(subjectKind: .entity, subjectID: subjectID, offset: off, pageSize: 500)
+            if batch.isEmpty { break }
+            for a in batch { produced += await persist { try await self.claim(from: a, at: now) } }
+            if batch.count < 500 { break }; off += 500
         }
         off = 0
         while true {

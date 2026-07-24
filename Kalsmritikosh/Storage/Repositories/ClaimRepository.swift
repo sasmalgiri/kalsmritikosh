@@ -49,11 +49,25 @@ public actor ClaimRepository {
             try await database.exec("SAVEPOINT \(savepoint);", [])
 
             let a = claim.assessment
+            // True UPSERT: re-production UPDATES the row in place and PRESERVES created_at (the
+            // original projection time), never rewriting it to the latest backfill time.
             try await database.exec("""
-            INSERT OR REPLACE INTO claims
+            INSERT INTO claims
                 (id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
                  evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                subject_id             = excluded.subject_id,
+                subject_label          = excluded.subject_label,
+                statement              = excluded.statement,
+                confidence             = excluded.confidence,
+                contradiction_group_id = excluded.contradiction_group_id,
+                evidence_basis         = excluded.evidence_basis,
+                review_disposition     = excluded.review_disposition,
+                proposal_origin        = excluded.proposal_origin,
+                availability_status    = excluded.availability_status,
+                conflict_status        = excluded.conflict_status,
+                legacy_status          = excluded.legacy_status;
             """, [.uuid(claim.id),
                   claim.subjectID.map { SQLValue.uuid($0) } ?? .null,
                   .text(claim.subjectLabel), .text(claim.statement), .real(claim.confidence),

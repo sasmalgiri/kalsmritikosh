@@ -45,20 +45,34 @@ public actor WorkspaceMembershipDeriver {
         return total
     }
 
-    /// The entities anchored (via their source knowledge object) to any of the given files.
-    /// Chunked ≤500 file ids so a large workspace never exceeds SQLite's bind-variable limit.
+    /// The entities that OCCUR in any of the given files. Membership follows every occurrence
+    /// via `entity_mentions` (a canonical entity mentioned in file B is a member of a workspace
+    /// containing file B, even if it first originated in file A). `entities.source_object_id`
+    /// is used ONLY as a fallback for legacy entities that have no mention row at all. Chunked
+    /// ≤500 file ids so a large workspace never exceeds SQLite's bind-variable limit.
     private func entities(inFiles fileIDs: [UUID]) async throws -> [Entity.ID] {
         let unique = Array(Set(fileIDs))
         var out: Set<Entity.ID> = []
         for chunk in stride(from: 0, to: unique.count, by: 500).map({ Array(unique[$0..<min($0 + 500, unique.count)]) }) {
             let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
-            let rows = try await database.query("""
+            let binds = chunk.map { SQLValue.uuid($0) }
+            // Primary: every occurrence via entity_mentions.
+            let mentionRows = try await database.query("""
+            SELECT DISTINCT em.entity_id
+            FROM entity_mentions em
+            JOIN knowledge_objects ko ON ko.id = em.source_object_id
+            WHERE ko.file_id IN (\(placeholders));
+            """, binds)
+            for r in mentionRows { if let id = r.uuid(0) { out.insert(id) } }
+            // Fallback: entities with NO mention row at all, anchored by source_object_id.
+            let fallbackRows = try await database.query("""
             SELECT DISTINCT e.id
             FROM entities e
             JOIN knowledge_objects ko ON ko.id = e.source_object_id
-            WHERE ko.file_id IN (\(placeholders));
-            """, chunk.map { .uuid($0) })
-            for r in rows { if let id = r.uuid(0) { out.insert(id) } }
+            WHERE ko.file_id IN (\(placeholders))
+              AND NOT EXISTS (SELECT 1 FROM entity_mentions em WHERE em.entity_id = e.id);
+            """, binds)
+            for r in fallbackRows { if let id = r.uuid(0) { out.insert(id) } }
         }
         return out.sorted { $0.uuidString < $1.uuidString }
     }

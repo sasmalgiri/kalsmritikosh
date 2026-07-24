@@ -80,6 +80,18 @@ struct ClaimProducerTests {
         return block
     }
 
+    /// A bare file + knowledge object (no entity), for mention-occurrence tests.
+    private func seedFileKO(_ r: Rig) async throws -> (file: UUID, ko: UUID) {
+        let f = UUID(), ko = UUID()
+        try await r.db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);",
+                            [.uuid(f), .text("file://\(f)"), .text("txt")])
+        try await r.db.exec("""
+        INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
+        VALUES (?,?,?,?,?,?);
+        """, [.uuid(ko), .uuid(f), .text("txt"), .text("c"), .real(0), .real(0)])
+        return (f, ko)
+    }
+
     private func fact(_ r: Rig, subject: UUID?, field: String, value: String, blocks: [UUID],
                       basis: EvidenceBasis = .directlyObserved, review: ReviewDisposition = .unreviewed) async throws {
         try await r.genericFacts.upsert(GenericFact(
@@ -193,6 +205,68 @@ struct ClaimProducerTests {
         #expect(added == 1)
         let members = try await r.workspaces.entityIDs(in: wsID)
         #expect(members == [member])                            // outsider excluded
+    }
+
+    // MARK: - Hardening corrections
+
+    @Test("Re-production is a true UPSERT: createdAt, reviews, usage, and contradiction links survive")
+    func reproductionPreservesEverything() async throws {
+        let r = try await rig()
+        let subject = UUID()
+        let (_, ko) = try await seedSubject(r, subject: subject)
+        let block = try await seedReopenableBlock(r, ko: ko)
+        try await fact(r, subject: subject, field: "employer", value: "Orchid", blocks: [block])
+        _ = try await r.producer.backfill(at: t0)
+        let id = try #require(try await r.claims.claims(subjectID: subject).first).id
+
+        let reviews = ClaimReviewRepository(database: r.db)
+        let usage = ClaimUsageRepository(database: r.db)
+        let links = ClaimContradictionRepository(database: r.db)
+        try await reviews.record(ClaimReview(claimID: id, disposition: .confirmed, reviewer: "u", reviewedAt: t0))
+        try await usage.record(ClaimUsage(claimID: id, context: .workProduct, usedAt: t0))
+        let cont = UUID(); try await links.link(claimID: id, contradictionID: cont)
+
+        _ = try await r.producer.backfill(at: t0.addingTimeInterval(9_999))   // re-produce later
+        let after = try #require(try await r.claims.claim(id: id))
+        #expect(after.createdAt == t0)                                        // NOT rewritten
+        #expect(try await reviews.currentDisposition(claimID: id) == .confirmed)
+        #expect(try await usage.usageCount(claimID: id) == 1)
+        #expect(try await links.contradictionIDs(claimID: id) == [cont])
+        #expect(after.evidence.first?.sourceVersionID != nil)                 // evidence intact
+        #expect(after.derivedFrom.first?.kind == .genericFact)                // lineage intact
+        #expect(try await r.claims.count() == 1)                              // no duplicate
+    }
+
+    @Test("Membership follows a non-representative entity_mention occurrence in another file")
+    func membershipViaMention() async throws {
+        let r = try await rig()
+        let entity = UUID()
+        _ = try await seedSubject(r, subject: entity)               // entity ORIGINATES in file A
+        let (fileB, koB) = try await seedFileKO(r)                  // mentioned in file B
+        try await r.db.exec("""
+        INSERT INTO entity_mentions (id, entity_id, kind, surface, normalized, source_object_id, confidence)
+        VALUES (?,?,?,?,?,?,?);
+        """, [.uuid(UUID()), .uuid(entity), .text("person"), .text("S"),
+              .text(entity.uuidString.lowercased() + "-m"), .uuid(koB), .real(1.0)])
+        let wsID = UUID()
+        try await r.workspaces.upsert(Workspace(id: wsID, title: "WS", template: .general))
+        try await r.workspaces.addSource(fileB, to: wsID)          // workspace has ONLY file B
+        try await r.membership.deriveMembership(for: wsID)
+        #expect(try await r.workspaces.entityIDs(in: wsID) == [entity])
+    }
+
+    @Test("Incremental production projects more than 1,000 subject assertions (no ceiling)")
+    func moreThan1000Assertions() async throws {
+        let r = try await rig()
+        let subject = UUID()
+        _ = try await seedSubject(r, subject: subject)
+        for i in 0..<1_001 {
+            try await r.assertions.insert(Assertion(subjectKind: .entity, subjectID: subject,
+                                                    predicate: "p\(i)", object: .literal("v\(i)"),
+                                                    provenance: .sourceAsserted))
+        }
+        _ = try await r.producer.produce(forSubjectID: subject, at: t0)
+        #expect(try await r.claims.claims(subjectID: subject).count == 1_001)
     }
 
     // MARK: - End-to-end: live generalSummary from produced Claims + derived membership
