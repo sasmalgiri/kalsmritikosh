@@ -19,32 +19,17 @@ public struct SourcedSummaryComposer: WorkProductSectionComposer {
     public var sectionKind: BlueprintSection.Kind { .summary }
 
     public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
-        var sourced: [WorkProductClaim] = []       // assertive decisions
-        var qualified: [WorkProductClaim] = []     // presentAsInference
-        var conflicts: [WorkProductClaim] = []     // presentAsConflict
-
-        for selected in context.selectedClaims {
-            guard let rendered = ResolvedClaimRenderer.render(selected) else { continue }  // refuse excluded
-            var wp = rendered.workProductClaim
-            wp.text = "\(rendered.categoryLabel): \(wp.text)"     // exact category label (corrected-aware)
-            switch rendered.presentation {
-            case .fact, .attributed, .corroborated, .derivation, .userAttributed:
-                sourced.append(wp)                 // stable input order preserved within the bucket
-            case .inference:
-                qualified.append(wp)
-            case .conflict:
-                conflicts.append(wp)
-            }
-        }
-
+        // Shared bucketing rule (same one the fact memo uses): render each surfaceable claim once
+        // and split by how it is grounded. Stable input order is preserved within each bucket.
+        let bucketed = WorkProductClaimBucketing.bucket(context.selectedClaims)
         return [
-            section("Sourced summary", sourced,
+            section("Sourced summary", bucketed.supported,
                     nonEmpty: "sourced fact(s), each labelled by how it is grounded and citing a reopenable source.",
                     empty: "No sourced facts in scope."),
-            section("Qualified observations", qualified,
+            section("Qualified observations", bucketed.qualified,
                     nonEmpty: "observation(s) offered as inference — not asserted as fact.",
                     empty: "No qualified observations in scope."),
-            section("Claim-level conflicts", conflicts,
+            section("Claim-level conflicts", bucketed.claimLevelConflicts,
                     nonEmpty: "conflicting claim(s) — both accounts remain; neither is chosen or averaged.",
                     empty: "No claim-level conflicts in scope."),
         ]

@@ -122,6 +122,7 @@ public struct WorkProductComposerRegistry: Sendable {
         try reg.register(SourcedSummaryComposer())
         try reg.register(InvestigationFindingsComposer())
         try reg.register(InvestigationLimitationsComposer())
+        try reg.register(FactMemoComposer())
         return reg
     }
 }
@@ -252,5 +253,86 @@ public enum ResolvedClaimRenderer {
         case .userAttributed:          return .humanNote
         case .inference, .conflict:    return .inference
         }
+    }
+}
+
+// MARK: - Shared claim bucketing (sourced summary, fact memo)
+
+/// The surfaceable selected claims split by how they are grounded — the single bucketing rule
+/// shared by the summary-style composers. Each claim is rendered ONCE through the canonical
+/// ResolvedClaimRenderer (refused dropped) and prefixed with its corrected-aware category label;
+/// assertive grounding → `supported`, `.inference` → `qualified`, `.conflict` → `claimLevelConflicts`.
+/// Stable input order is preserved within each bucket.
+public struct BucketedSelectedClaims: Sendable {
+    public let supported: [WorkProductClaim]
+    public let qualified: [WorkProductClaim]
+    public let claimLevelConflicts: [WorkProductClaim]
+}
+
+public enum WorkProductClaimBucketing {
+    public nonisolated static func bucket(_ selectedClaims: [SelectedClaim]) -> BucketedSelectedClaims {
+        var supported: [WorkProductClaim] = []
+        var qualified: [WorkProductClaim] = []
+        var conflicts: [WorkProductClaim] = []
+        for selected in selectedClaims {
+            guard let rendered = ResolvedClaimRenderer.render(selected) else { continue }   // refuse excluded
+            var wp = rendered.workProductClaim
+            wp.text = "\(rendered.categoryLabel): \(wp.text)"    // exact category label (corrected-aware)
+            switch rendered.presentation {
+            case .fact, .attributed, .corroborated, .derivation, .userAttributed:
+                supported.append(wp)
+            case .inference:
+                qualified.append(wp)
+            case .conflict:
+                conflicts.append(wp)
+            }
+        }
+        return BucketedSelectedClaims(supported: supported, qualified: qualified, claimLevelConflicts: conflicts)
+    }
+}
+
+// MARK: - Shared disclosure rendering (gaps/conflicts composer, fact memo)
+
+/// The workspace-scoped CONFLICTS and GAPS prepared upstream, rendered into disclosure claims by
+/// the single shared rule. A conflict shows both sides without choosing or averaging (two
+/// separate citation lists); a gap is inference-framed and citation-free (absence is not proof).
+/// Both are `.inference` status, so they never count as material assertions or trip the
+/// fail-closed export gate. Deterministic ordering (severity then id; kind then confidence then id).
+public enum WorkProductDisclosureRendering {
+
+    public nonisolated static func conflictClaims(_ conflicts: [SelectedConflict]) -> [WorkProductClaim] {
+        conflicts.sorted { a, b in
+            severityRank(a.severity) != severityRank(b.severity)
+                ? severityRank(a.severity) < severityRank(b.severity)       // high first
+                : a.id.uuidString < b.id.uuidString
+        }.map { c in
+            let cites = c.evidence.enumerated().map { (i, ev) in
+                CitationRecord(sourceVersionID: ev.sourceVersionID,
+                               evidenceBlockIDs: ev.blockID.map { [$0] } ?? [],
+                               displayLabel: "[\(i + 1)]", sourceTitle: c.description)
+            }
+            let supporting = zip(cites, c.evidence).filter { $0.1.role != .contradicts }.map(\.0)
+            let contradicting = zip(cites, c.evidence).filter { $0.1.role == .contradicts }.map(\.0)
+            return WorkProductClaim(
+                text: "Conflicting accounts:\nA: \(c.sideA)\nB: \(c.sideB)",
+                status: .inference,                          // a disclosure, not a source assertion
+                supporting: supporting, contradicting: contradicting)
+        }
+    }
+
+    public nonisolated static func gapClaims(_ gaps: [SelectedGap]) -> [WorkProductClaim] {
+        gaps.sorted { a, b in
+            if a.kind.rawValue != b.kind.rawValue { return a.kind.rawValue < b.kind.rawValue }
+            if a.confidence != b.confidence { return a.confidence > b.confidence }   // higher confidence first
+            return a.id.uuidString < b.id.uuidString
+        }.map { g in
+            WorkProductClaim(
+                text: "Missing evidence: \(g.description)\nReason: \(g.reason)\nThe expected material may exist outside the indexed archive.",
+                status: .inference, supporting: [], contradicting: [])
+        }
+    }
+
+    private nonisolated static func severityRank(_ s: Contradiction.Severity) -> Int {
+        switch s { case .high: return 0; case .medium: return 1; case .low: return 2 }
     }
 }

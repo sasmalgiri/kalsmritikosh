@@ -120,7 +120,7 @@ struct WorkProductAssemblyServiceTests {
         #expect(WorkProductAssemblyService.isRegistryBacked(.chronology) == true)
         #expect(WorkProductAssemblyService.isRegistryBacked(.generalSummary) == true)
         #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == false)
+        #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == true)
     }
 
     // MARK: Chronology registry arm
@@ -224,16 +224,12 @@ struct WorkProductAssemblyServiceTests {
         }
     }
 
-    // MARK: Legacy arm intact
+    // MARK: All templates registry-backed (legacy arm no longer routed)
 
-    @Test("Fact memo remains legacy-backed (investigation migrated to the registry)")
-    func legacyTemplatesUnchanged() async throws {
-        let r = try await rig()
-        for template in [WorkProductTemplate.factMemo] {
-            #expect(WorkProductAssemblyService.isRegistryBacked(template) == false)
-            let assembled = try await r.service.compose(workspace: ws(UUID()), template: template,
-                                                        subjectLabel: "WS", corpusSnapshotID: nil)
-            #expect(assembled.workProduct.template == template)     // produced via legacy, no throw
+    @Test("Every template is registry-backed after the investigation + fact-memo cutover")
+    func allTemplatesRegistryBacked() {
+        for template in [WorkProductTemplate.chronology, .generalSummary, .investigationFindings, .factMemo] {
+            #expect(WorkProductAssemblyService.isRegistryBacked(template) == true)
         }
     }
 

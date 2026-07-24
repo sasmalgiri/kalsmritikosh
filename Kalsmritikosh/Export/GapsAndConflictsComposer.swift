@@ -30,51 +30,21 @@ public struct GapsAndConflictsComposer: WorkProductSectionComposer {
     // MARK: - Conflicts
 
     private func conflictsSection(_ conflicts: [SelectedConflict]) -> WorkProductSection {
-        let ordered = conflicts.sorted { a, b in
-            Self.severityRank(a.severity) != Self.severityRank(b.severity)
-                ? Self.severityRank(a.severity) < Self.severityRank(b.severity)   // high first
-                : a.id.uuidString < b.id.uuidString
-        }
-        let claims = ordered.map { c -> WorkProductClaim in
-            // Two opposing sides → two SEPARATE citation lists (side A supporting, side B
-            // contradicting). Never merged, never scored.
-            let cites = c.evidence.enumerated().map { (i, ev) in
-                CitationRecord(sourceVersionID: ev.sourceVersionID,
-                               evidenceBlockIDs: ev.blockID.map { [$0] } ?? [],
-                               displayLabel: "[\(i + 1)]", sourceTitle: c.description)
-            }
-            let supporting = zip(cites, c.evidence).filter { $0.1.role != .contradicts }.map(\.0)
-            let contradicting = zip(cites, c.evidence).filter { $0.1.role == .contradicts }.map(\.0)
-            return WorkProductClaim(
-                text: "Conflicting accounts:\nA: \(c.sideA)\nB: \(c.sideB)",
-                status: .inference,                          // a disclosure, not a source assertion
-                supporting: supporting, contradicting: contradicting)
-        }
+        // Shared disclosure rendering (same rule the fact memo's Disputed-facts section uses):
+        // both sides preserved, two separate citation lists, never merged or scored.
+        let claims = WorkProductDisclosureRendering.conflictClaims(conflicts)
         let preamble = claims.isEmpty
             ? ["No conflicting accounts found in scope."]
             : ["Conflicting accounts are shown with both sides preserved; neither side is chosen or averaged."]
         return WorkProductSection(title: "Conflicts", preamble: preamble, claims: claims)
     }
 
-    private static func severityRank(_ s: Contradiction.Severity) -> Int {
-        switch s { case .high: return 0; case .medium: return 1; case .low: return 2 }
-    }
-
     // MARK: - Gaps
 
     private func gapsSection(_ gaps: [SelectedGap]) -> WorkProductSection {
-        let ordered = gaps.sorted { a, b in
-            if a.kind.rawValue != b.kind.rawValue { return a.kind.rawValue < b.kind.rawValue }
-            if a.confidence != b.confidence { return a.confidence > b.confidence }   // higher confidence first
-            return a.id.uuidString < b.id.uuidString
-        }
-        let claims = ordered.map { g -> WorkProductClaim in
-            // A gap is inference-framed and CITATION-FREE — no fabricated citation to make the
-            // row look supported. Absence is explicitly not proof.
-            WorkProductClaim(
-                text: "Missing evidence: \(g.description)\nReason: \(g.reason)\nThe expected material may exist outside the indexed archive.",
-                status: .inference, supporting: [], contradicting: [])
-        }
+        // Shared disclosure rendering (same rule the fact memo's Missing-proof section uses):
+        // inference-framed, citation-free — absence is explicitly not proof.
+        let claims = WorkProductDisclosureRendering.gapClaims(gaps)
         let preamble = claims.isEmpty
             ? ["No missing-evidence gaps found in scope."]
             : ["Each gap is a reasoned observation of ABSENCE — the expected material may exist outside the indexed archive; absence is not proof."]

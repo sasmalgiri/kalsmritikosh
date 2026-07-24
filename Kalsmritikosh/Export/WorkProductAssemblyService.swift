@@ -114,7 +114,9 @@ public actor WorkProductAssemblyService {
                               WorkProductComposerID("investigation.limitations")],
                 requiresDisclosures: true)
         case .factMemo:
-            return nil
+            return WorkProductTemplatePlan(
+                composerIDs: [WorkProductComposerID("fact-memo.core")],
+                requiresDisclosures: true)
         }
     }
 
