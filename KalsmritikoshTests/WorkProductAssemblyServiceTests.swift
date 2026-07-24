@@ -217,6 +217,7 @@ struct WorkProductAssemblyServiceTests {
             events: EventsRepository(database: db), contradictions: contradictions,
             gaps: gaps, workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
+            evidence: EvidenceStore(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
         await #expect(throws: WorkProductAssemblyError.missingComposer("history.chronology")) {
             try await service.compose(workspace: ws(UUID()), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)

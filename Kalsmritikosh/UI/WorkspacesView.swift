@@ -851,30 +851,22 @@ public struct WorkspacesView: View {
             await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
             return
         }
-        let wp = assembled.workProduct
-
-        // Each claim → a sealed entry pinned to its cited source(s) + custody hash.
-        var drafts: [ReceiptDraft] = []
-        for section in wp.sections {
-            for claim in section.claims {
-                let cites = claim.supporting
-                let source = cites.first.map {
-                    $0.effectiveLocator.isEmpty ? $0.sourceTitle : "\($0.sourceTitle) — \($0.effectiveLocator)"
-                } ?? "(no source)"
-                let pinned = cites.map { c -> String in
-                    let loc = c.effectiveLocator.isEmpty ? "" : " \(c.effectiveLocator)"
-                    let h = c.sourceHash.map { " sha256:\($0)" } ?? " (unresolved)"
-                    return "\(c.sourceTitle)\(loc)\(h)"
-                }.joined(separator: "; ")
-                let passage = "[\(claim.status.displayName)] " + (pinned.isEmpty ? "no citation" : pinned)
-                drafts.append(ReceiptDraft(claim: claim.text, source: source, date: cites.first?.date, passage: passage))
-            }
+        // Build the receipt from the assembled + custody-hash-enriched product. Fails CLOSED
+        // when a material cited claim has no recorded source-version hash — before any panel.
+        let sealed: SealedReceipt
+        do {
+            sealed = try WorkProductReceiptBuilder().build(from: assembled)
+        } catch let WorkProductReceiptError.missingCustodyHashes(count) {
+            await MainActor.run { reportStatus = "Receipt blocked: \(count) cited source version(s) have no recorded custody hash. Nothing was sealed." }
+            return
+        } catch {
+            await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
+            return
         }
-        guard !drafts.isEmpty else {
+        guard !sealed.entries.isEmpty else {
             await MainActor.run { reportStatus = "Nothing to receipt yet — compose finds no claims in scope." }
             return
         }
-        let sealed = VerifiableReceipt.seal(title: "\(ws.title) — \(reportTemplate.displayName)", drafts: drafts)
         let json = VerifiableReceipt.json(sealed)
 
         #if canImport(AppKit)
@@ -888,7 +880,7 @@ public struct WorkspacesView: View {
         }
         do {
             try json.write(to: url, atomically: true, encoding: .utf8)
-            await MainActor.run { reportStatus = "Sealed \(drafts.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
+            await MainActor.run { reportStatus = "Sealed \(sealed.entries.count) claim(s) into \(url.lastPathComponent) — verify it anytime in Verify Receipt." }
         } catch {
             await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
         }

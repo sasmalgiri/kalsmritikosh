@@ -50,6 +50,7 @@ public actor WorkProductAssemblyService {
     private let gaps: GapNodeRepository
     private let workspaces: WorkspaceRepository
     private let knowledgeObjects: KnowledgeObjectRepository
+    private let evidence: EvidenceStore
     private let selection: ClaimSelectionService
     private let disclosures: DisclosureSelectionService
     private let registry: WorkProductComposerRegistry
@@ -73,6 +74,7 @@ public actor WorkProductAssemblyService {
         // built-in fails construction here rather than being silently dropped.
         self.init(events: events, contradictions: contradictions, gaps: gaps,
                   workspaces: workspaces, knowledgeObjects: KnowledgeObjectRepository(database: database),
+                  evidence: EvidenceStore(database: database),
                   selection: selection, disclosures: disclosures,
                   registry: try WorkProductComposerRegistry.makeDefault())
     }
@@ -81,10 +83,12 @@ public actor WorkProductAssemblyService {
     /// the registry branch never falls back to the legacy composer).
     init(events: EventsRepository, contradictions: ContradictionsRepository, gaps: GapNodeRepository,
          workspaces: WorkspaceRepository, knowledgeObjects: KnowledgeObjectRepository,
+         evidence: EvidenceStore,
          selection: ClaimSelectionService,
          disclosures: DisclosureSelectionService, registry: WorkProductComposerRegistry) {
         self.events = events; self.contradictions = contradictions; self.gaps = gaps
         self.workspaces = workspaces; self.knowledgeObjects = knowledgeObjects
+        self.evidence = evidence
         self.selection = selection
         self.disclosures = disclosures; self.registry = registry
     }
@@ -116,14 +120,17 @@ public actor WorkProductAssemblyService {
 
     public func compose(workspace: Workspace, template: WorkProductTemplate,
                         subjectLabel: String, corpusSnapshotID: UUID?) async throws -> AssembledWorkProduct {
-        let wp: WorkProduct
+        let composed: WorkProduct
         if let plan = Self.plan(for: template) {
             // Registry arm. A failure here THROWS — it must never invoke the legacy composer.
-            wp = try await composeThroughRegistry(plan: plan, workspace: workspace, template: template,
-                                                  subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
+            composed = try await composeThroughRegistry(plan: plan, workspace: workspace, template: template,
+                                                        subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
         } else {
-            wp = try await composeThroughLegacy(workspace: workspace, template: template)
+            composed = try await composeThroughLegacy(workspace: workspace, template: template)
         }
+        // PA-REC-001 — enrich every citation with its EXACT source-version custody hash ONCE, here,
+        // so both the report and its receipt consume the identical hash-pinned product.
+        let wp = try await enrichCustodyHashes(composed)
         // Fail-closed gate on both arms (single point → report and receipt share the verdict).
         let integrity = WorkProductValidator().validateProductionExport(wp)
         guard integrity.isValid else {
@@ -188,6 +195,42 @@ public actor WorkProductAssemblyService {
             disclaimer: PersonaTemplateCatalog.disclaimer(for: workspace.template))
     }
 
+    // MARK: - PA-REC-001 custody-hash enrichment
+
+    /// Populate each citation's `sourceHash` from its EXACT cited source version's content hash.
+    /// Preserves every other field (ids, order, roles, locators, sourceClaimID, occurrence
+    /// identity); only fills a nil `sourceHash`. Never substitutes the current file hash, and never
+    /// overwrites a hash already present.
+    private func enrichCustodyHashes(_ wp: WorkProduct) async throws -> WorkProduct {
+        var versionIDs = Set<UUID>()
+        for section in wp.sections {
+            for claim in section.claims {
+                for c in claim.supporting + claim.contradicting {
+                    if let v = c.sourceVersionID { versionIDs.insert(v) }
+                }
+            }
+        }
+        guard !versionIDs.isEmpty else { return wp }
+        let hashes = try await evidence.contentHashes(forSourceVersionIDs: versionIDs)
+        guard !hashes.isEmpty else { return wp }
+        func enrich(_ c: CitationRecord) -> CitationRecord {
+            guard c.sourceHash == nil, let v = c.sourceVersionID, let h = hashes[v] else { return c }
+            var copy = c; copy.sourceHash = h; return copy
+        }
+        var out = wp
+        out.sections = wp.sections.map { section in
+            var s = section
+            s.claims = section.claims.map { claim in
+                var k = claim
+                k.supporting = claim.supporting.map(enrich)
+                k.contradicting = claim.contradicting.map(enrich)
+                return k
+            }
+            return s
+        }
+        return out
+    }
+
     // MARK: - Manifest (derived from the composed product, not raw ledger loads)
 
     private func manifest(for wp: WorkProduct, workspace: Workspace) -> ExportManifest {
@@ -204,12 +247,26 @@ public actor WorkProductAssemblyService {
             if let cid = claim.sourceClaimID { canonicalClaimIDs.insert(cid) } else { outputOnlyCount += 1 }
         }
         let findingCount = canonicalClaimIDs.count + outputOnlyCount
+        // PA-REC-001 — the cited source VERSIONS and their custody hashes, one hash per version
+        // (unique (sourceVersionID, sourceHash)), so a claim rendered in both summary and
+        // chronology contributes a single recorded hash — not one per rendered occurrence.
+        var hashByVersion: [UUID: String] = [:]
+        var versionSet = Set<UUID>()
+        for c in wp.allCitations {
+            guard let v = c.sourceVersionID else { continue }
+            versionSet.insert(v)
+            if let h = c.sourceHash, hashByVersion[v] == nil { hashByVersion[v] = h }
+        }
+        let sourceVersionIDs = versionSet.map(\.uuidString).sorted()
+        let sourceHashes = hashByVersion.keys.sorted(by: { $0.uuidString < $1.uuidString }).map { hashByVersion[$0]! }
         return ExportManifest(
             exportedAt: Date(),
             appVersion: appVersion,
             schemaVersion: SchemaMigrations.latestVersion,
             workspaceTitle: workspace.title,
             workspaceTemplate: workspace.template.displayName,
+            sourceVersionIDs: sourceVersionIDs,
+            sourceHashes: sourceHashes,
             selectedFindingCount: findingCount,
             citationMap: resolvedByLabel.keys.sorted().map { CitationMapEntry(label: $0, resolved: resolvedByLabel[$0] ?? false) },
             reviewStatusSummary: "\(findingCount) claim(s) in scope",

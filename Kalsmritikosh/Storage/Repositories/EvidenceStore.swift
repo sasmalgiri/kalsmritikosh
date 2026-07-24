@@ -245,6 +245,37 @@ public actor EvidenceStore: EvidenceBlockResolving {
         return rows.compactMap(decodeBlock)
     }
 
+    /// PA-REC-001 — the EXACT custody hash of each given source VERSION (never the current file
+    /// hash). This is the canonical authority for work-product receipts: a receipt citing an older
+    /// source version must pin that version's bytes, not whatever the file now holds. Chunked ≤500;
+    /// blank/malformed hashes are ignored; a returned value is always a normalized 64-char
+    /// lowercase SHA-256. Database failures propagate.
+    public func contentHashes(forSourceVersionIDs ids: Set<UUID>) async throws -> [UUID: String] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [UUID: String] = [:]
+        let all = Array(ids)
+        for chunk in stride(from: 0, to: all.count, by: 500).map({ Array(all[$0..<min($0 + 500, all.count)]) }) {
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query(
+                "SELECT id, content_hash FROM source_versions WHERE id IN (\(placeholders));",
+                chunk.map { SQLValue.uuid($0) })
+            for r in rows {
+                guard let id = r.uuid(0), let raw = r.string(1),
+                      let norm = Self.normalizedSHA256(raw) else { continue }
+                out[id] = norm
+            }
+        }
+        return out
+    }
+
+    /// A content hash is accepted only as a 64-char hex SHA-256 (case/space-insensitive input),
+    /// returned lowercase. Anything else → nil (treated as "no recorded hash").
+    nonisolated static func normalizedSHA256(_ raw: String) -> String? {
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard t.count == 64, t.allSatisfy({ $0.isHexDigit }) else { return nil }
+        return t
+    }
+
     /// The current version ID for a logical source, if any.
     public func currentVersionID(forLogicalSource logicalID: UUID) async throws -> UUID? {
         let rows = try await database.query("""
