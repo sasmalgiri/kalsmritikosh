@@ -120,7 +120,26 @@ public struct WorkProductComposerRegistry: Sendable {
         try reg.register(ClaimMatrixComposer())
         try reg.register(GapsAndConflictsComposer())
         try reg.register(SourcedSummaryComposer())
+        try reg.register(InvestigationFindingsComposer())
+        try reg.register(InvestigationLimitationsComposer())
         return reg
+    }
+}
+
+// MARK: - Shared precision-honest date phrasing
+
+/// The single precision-honest date phrase for a selected claim, shared by every composer that
+/// dates a row (chronology, investigation findings). A claim with a lineage-resolved anchor is
+/// phrased by that anchor's precision; a claim with conflicting lineage dates is labelled
+/// explicitly as conflicting; anything else is plainly "Undated". A date is NEVER guessed.
+public enum SelectedClaimDatePhrase {
+    public nonisolated static func phrase(for selected: SelectedClaim) -> String {
+        if let anchor = selected.temporalAnchor {
+            let tv = TemporalValue(start: anchor.start, end: anchor.end,
+                                   precision: anchor.precision, confidence: 1.0)
+            return HistoryNarrativeRenderer.datePhrase(tv) ?? "Undated"
+        }
+        return selected.isTemporallyAmbiguous ? "Undated (conflicting source dates)" : "Undated"
     }
 }
 

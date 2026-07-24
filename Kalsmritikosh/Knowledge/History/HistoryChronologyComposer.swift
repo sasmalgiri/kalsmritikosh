@@ -71,7 +71,7 @@ extension HistoryChronologyComposer: WorkProductSectionComposer {
             guard var claim = ResolvedClaimRenderer.render(selected)?.workProductClaim else { return nil }
             // Prefix the row with its LINEAGE-resolved date phrase, or an explicit "Undated"
             // label — never an invented date. Conflicting lineage dates are called out.
-            claim.text = "\(Self.datePhrase(for: selected)) — \(claim.text)"
+            claim.text = "\(SelectedClaimDatePhrase.phrase(for: selected)) — \(claim.text)"
             return claim
         }
         let section = WorkProductSection(
@@ -79,16 +79,5 @@ extension HistoryChronologyComposer: WorkProductSectionComposer {
             preamble: ["Chronology for \(context.subjectLabel). Rows are ordered by their lineage-resolved dates (undated rows last); each material row cites a reopenable source."],
             claims: claims)
         return [section]
-    }
-
-    /// The precision-honest date phrase for a selected claim, or an explicit undated label.
-    /// A claim with conflicting lineage dates is labelled as such, never given a guessed date.
-    private static func datePhrase(for selected: SelectedClaim) -> String {
-        if let anchor = selected.temporalAnchor {
-            let tv = TemporalValue(start: anchor.start, end: anchor.end,
-                                   precision: anchor.precision, confidence: 1.0)
-            return HistoryNarrativeRenderer.datePhrase(tv) ?? "Undated"
-        }
-        return selected.isTemporallyAmbiguous ? "Undated (conflicting source dates)" : "Undated"
     }
 }

@@ -119,7 +119,7 @@ struct WorkProductAssemblyServiceTests {
     func routeTable() {
         #expect(WorkProductAssemblyService.isRegistryBacked(.chronology) == true)
         #expect(WorkProductAssemblyService.isRegistryBacked(.generalSummary) == true)
-        #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == false)
+        #expect(WorkProductAssemblyService.isRegistryBacked(.investigationFindings) == true)
         #expect(WorkProductAssemblyService.isRegistryBacked(.factMemo) == false)
     }
 
@@ -226,10 +226,10 @@ struct WorkProductAssemblyServiceTests {
 
     // MARK: Legacy arm intact
 
-    @Test("Investigation and fact memo remain legacy-backed")
+    @Test("Fact memo remains legacy-backed (investigation migrated to the registry)")
     func legacyTemplatesUnchanged() async throws {
         let r = try await rig()
-        for template in [WorkProductTemplate.investigationFindings, .factMemo] {
+        for template in [WorkProductTemplate.factMemo] {
             #expect(WorkProductAssemblyService.isRegistryBacked(template) == false)
             let assembled = try await r.service.compose(workspace: ws(UUID()), template: template,
                                                         subjectLabel: "WS", corpusSnapshotID: nil)

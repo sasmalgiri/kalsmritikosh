@@ -107,7 +107,13 @@ public actor WorkProductAssemblyService {
                               WorkProductComposerID("history.chronology"),
                               WorkProductComposerID("evidence.gaps-conflicts")],
                 requiresDisclosures: true)
-        case .investigationFindings, .factMemo:
+        case .investigationFindings:
+            return WorkProductTemplatePlan(
+                composerIDs: [WorkProductComposerID("investigation.findings"),
+                              WorkProductComposerID("evidence.gaps-conflicts"),
+                              WorkProductComposerID("investigation.limitations")],
+                requiresDisclosures: true)
+        case .factMemo:
             return nil
         }
     }
