@@ -31,11 +31,11 @@ public struct WorkProductComposerID: Sendable, Hashable, Comparable, RawRepresen
 
 /// Everything a composer needs, resolved and scoped upstream. A composer must render ONLY
 /// these claims; it may not load more. Workspace / authority scope lives HERE (or in the
-/// membership layer that produced `claims`), never on the canonical Claim.
+/// membership layer that produced the selection), never on the canonical Claim.
 public struct WorkProductContext: Sendable {
-    /// The already-selected, review-resolved claims, in the order the composer should render
-    /// them (upstream selection defines both membership and order).
-    public let claims: [ResolvedClaim]
+    /// The already-selected, review-resolved, temporally-anchored, ORDERED claims. Selection,
+    /// scoping, temporal placement, and ordering all happen upstream (ClaimSelectionService).
+    public let selectedClaims: [SelectedClaim]
     /// Display label for the subject of the output (titling only).
     public let subjectLabel: String
     /// The workspace this output belongs to, when scoped to one.
@@ -43,10 +43,22 @@ public struct WorkProductContext: Sendable {
     /// The corpus snapshot the claim selection was taken against (provenance).
     public let corpusSnapshotID: UUID?
 
+    /// Compatibility view: the resolved claims without their selection metadata, in order.
+    public var claims: [ResolvedClaim] { selectedClaims.map(\.resolved) }
+
+    public nonisolated init(selectedClaims: [SelectedClaim], subjectLabel: String,
+                            workspaceID: UUID? = nil, corpusSnapshotID: UUID? = nil) {
+        self.selectedClaims = selectedClaims; self.subjectLabel = subjectLabel
+        self.workspaceID = workspaceID; self.corpusSnapshotID = corpusSnapshotID
+    }
+
+    /// Compatibility initializer: wrap bare resolved claims as explicitly-requested, undated
+    /// selections (used by tests/callers that assemble a context without the selector).
     public nonisolated init(claims: [ResolvedClaim], subjectLabel: String,
                             workspaceID: UUID? = nil, corpusSnapshotID: UUID? = nil) {
-        self.claims = claims; self.subjectLabel = subjectLabel
-        self.workspaceID = workspaceID; self.corpusSnapshotID = corpusSnapshotID
+        self.init(selectedClaims: claims.map {
+            SelectedClaim(resolved: $0, selectionReason: .explicitlyRequested)
+        }, subjectLabel: subjectLabel, workspaceID: workspaceID, corpusSnapshotID: corpusSnapshotID)
     }
 }
 
@@ -97,10 +109,12 @@ public struct WorkProductComposerRegistry: Sendable {
 /// the EFFECTIVE assessment — never a parallel trust rule. Returns nil for a claim the policy
 /// refuses (fail-closed: a refused claim is never rendered as a material row).
 public enum ResolvedClaimRenderer {
-    public nonisolated static func renderedClaim(_ resolved: ResolvedClaim) -> WorkProductClaim? {
+    public nonisolated static func renderedClaim(_ resolved: ResolvedClaim,
+                                                 independenceKeys: [KnowledgeObject.ID: String] = [:]) -> WorkProductClaim? {
         let claim = resolved.claim
         let evidence = claim.evidence.map {
-            AssertabilityEvidence(objectID: $0.objectID, blockID: $0.blockID, independenceKey: nil)
+            AssertabilityEvidence(objectID: $0.objectID, blockID: $0.blockID,
+                                  independenceKey: independenceKeys[$0.objectID])
         }
         let decision = AssertabilityContextBuilder()
             .decision(assessment: resolved.effectiveAssessment, evidence: evidence).decision

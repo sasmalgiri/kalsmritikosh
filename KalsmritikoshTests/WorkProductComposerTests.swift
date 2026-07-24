@@ -76,7 +76,8 @@ struct WorkProductComposerTests {
         let ctx = WorkProductContext(claims: [a, b], subjectLabel: "Subject A")
         let sections = HistoryChronologyComposer().compose(ctx)
         #expect(sections.count == 1)
-        #expect(sections[0].claims.map(\.text) == ["First", "Second"])   // order preserved
+        // Compat contexts are undated → rows are explicitly labelled, order preserved.
+        #expect(sections[0].claims.map(\.text) == ["Undated — First", "Undated — Second"])
     }
 
     @Test("Status comes from the canonical policy: observed+locator → direct evidence; inferred → inference")
@@ -88,8 +89,8 @@ struct WorkProductComposerTests {
         let sections = HistoryChronologyComposer().compose(
             WorkProductContext(claims: [observed, inferred], subjectLabel: "S"))
         let byText = Dictionary(uniqueKeysWithValues: sections[0].claims.map { ($0.text, $0.status) })
-        #expect(byText["Observed"] == .directEvidence)
-        #expect(byText["Inferred"] == .inference)
+        #expect(byText["Undated — Observed"] == .directEvidence)
+        #expect(byText["Undated — Inferred"] == .inference)
     }
 
     @Test("A claim the policy refuses (rejected review) is dropped — fail closed on the effective assessment")
@@ -105,7 +106,7 @@ struct WorkProductComposerTests {
                           evidence: [EvidenceReference(objectID: UUID(), blockID: UUID(), sourceVersionID: UUID())])
         let sections = HistoryChronologyComposer().compose(
             WorkProductContext(claims: [rejected, ok], subjectLabel: "S"))
-        #expect(sections[0].claims.map(\.text) == ["Kept"])          // rejected one dropped
+        #expect(sections[0].claims.map(\.text) == ["Undated — Kept"])   // rejected one dropped
     }
 
     @Test("Citations are built from the claim's own evidence; contradicting role is kept separate")

@@ -1,0 +1,60 @@
+//
+//  SelectedClaim.swift
+//  Kalsmritikosh
+//
+//  PA-SEL (persona-v2 Stage 1). The selection-layer wrapper around a canonical Claim. A
+//  Claim is deliberately date-free — it can be non-temporal, derived from several dated
+//  sources, valid over an interval, associated with conflicting dates, or reused in
+//  non-chronological products. Putting one date on the Claim would collapse those. Instead
+//  the SELECTOR attaches a temporal anchor (resolved from lineage, never from statement
+//  text, never fabricated) and the independence keys the renderer needs to recognise
+//  corroboration. Pure value types.
+//
+
+import Foundation
+
+/// A temporal placement for a claim, resolved from its LINEAGE (a dated source), never from
+/// the statement text and never invented. `source` records which lineage reference supplied it.
+public struct ClaimTemporalAnchor: Sendable, Hashable {
+    public let start: Date
+    public let end: Date?
+    public let precision: DatePrecision
+    public let source: DerivedReference
+    public nonisolated init(start: Date, end: Date? = nil, precision: DatePrecision, source: DerivedReference) {
+        self.start = start; self.end = end; self.precision = precision; self.source = source
+    }
+}
+
+/// Why a claim entered the selection (mirrors the requested scope).
+public enum ClaimSelectionReason: Sendable, Hashable {
+    case subjectScope(Entity.ID)
+    case workspaceScope(Workspace.ID)
+    case explicitlyRequested
+}
+
+/// A canonical claim resolved (effective review applied), placed, and scoped for a work
+/// product. `temporalAnchor == nil` means the claim is not placed on a timeline: either it
+/// has no dated lineage (`isTemporallyAmbiguous == false`, plainly undated) or its lineage
+/// carried CONFLICTING dates (`isTemporallyAmbiguous == true`) — in which case it is kept
+/// explicitly undated rather than guessed.
+public struct SelectedClaim: Sendable, Hashable {
+    public let resolved: ResolvedClaim
+    public let temporalAnchor: ClaimTemporalAnchor?
+    public let isTemporallyAmbiguous: Bool
+    public let selectionReason: ClaimSelectionReason
+    /// Independence keys (object id → key) resolved during selection, so the renderer can
+    /// recognise corroboration instead of permanently evaluating evidence as unkeyed.
+    public let independenceKeys: [KnowledgeObject.ID: String]
+
+    public nonisolated init(resolved: ResolvedClaim,
+                            temporalAnchor: ClaimTemporalAnchor? = nil,
+                            isTemporallyAmbiguous: Bool = false,
+                            selectionReason: ClaimSelectionReason,
+                            independenceKeys: [KnowledgeObject.ID: String] = [:]) {
+        self.resolved = resolved
+        self.temporalAnchor = temporalAnchor
+        self.isTemporallyAmbiguous = isTemporallyAmbiguous
+        self.selectionReason = selectionReason
+        self.independenceKeys = independenceKeys
+    }
+}

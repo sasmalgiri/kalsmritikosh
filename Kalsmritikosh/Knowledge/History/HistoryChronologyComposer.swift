@@ -65,11 +65,29 @@ extension HistoryChronologyComposer: WorkProductSectionComposer {
     /// policy refuses is dropped (fail-closed). It does NOT query repositories and does NOT
     /// reuse the legacy `compose(outline:)` path or the legacy composer's inputs.
     public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
-        let claims = context.claims.compactMap(ResolvedClaimRenderer.renderedClaim)
+        let claims: [WorkProductClaim] = context.selectedClaims.compactMap { selected in
+            guard var rendered = ResolvedClaimRenderer.renderedClaim(
+                selected.resolved, independenceKeys: selected.independenceKeys) else { return nil }
+            // Prefix the row with its LINEAGE-resolved date phrase, or an explicit "Undated"
+            // label — never an invented date. Conflicting lineage dates are called out.
+            rendered.text = "\(Self.datePhrase(for: selected)) — \(rendered.text)"
+            return rendered
+        }
         let section = WorkProductSection(
             title: "Chronology",
-            preamble: ["Chronology for \(context.subjectLabel). Rows appear in the selected order; each material row cites a reopenable source."],
+            preamble: ["Chronology for \(context.subjectLabel). Rows are ordered by their lineage-resolved dates (undated rows last); each material row cites a reopenable source."],
             claims: claims)
         return [section]
+    }
+
+    /// The precision-honest date phrase for a selected claim, or an explicit undated label.
+    /// A claim with conflicting lineage dates is labelled as such, never given a guessed date.
+    private static func datePhrase(for selected: SelectedClaim) -> String {
+        if let anchor = selected.temporalAnchor {
+            let tv = TemporalValue(start: anchor.start, end: anchor.end,
+                                   precision: anchor.precision, confidence: 1.0)
+            return HistoryNarrativeRenderer.datePhrase(tv) ?? "Undated"
+        }
+        return selected.isTemporallyAmbiguous ? "Undated (conflicting source dates)" : "Undated"
     }
 }
