@@ -590,6 +590,13 @@ public final class AppState {
     /// Persona features Epic 1 (F1) — bounded workspaces (filtered views over
     /// the one ledger) + their source/entity membership.
     public private(set) var workspaces: WorkspaceRepository?
+    /// PA-PROD B3 — the shared, single-flight projection actor. Boot runs a resumable full
+    /// backfill; the ingest hook fires incremental per-source projections on this SAME instance
+    /// (so a full pass and an incremental refresh never scan concurrently).
+    public private(set) var claimProjection: ClaimProjectionBackfill?
+    /// The detached, cancellable boot-backfill task. Held so a re-boot cancels the prior pass
+    /// (the backfill is single-flight + resumable, so cancellation loses nothing).
+    private var claimProjectionBackfillTask: Task<Void, Never>?
     /// Persona features Epic 1 (F2) — shared review model: tags, the
     /// append-only review-decision ledger, and saved views.
     public private(set) var review: ReviewRepository?
@@ -1202,6 +1209,26 @@ public final class AppState {
             // be passed in; LiveMetrics polls it once it starts.
             let pipelineMetricsActor = PipelineMetrics()
 
+            // PA-PROD B3 — the shared Claim-projection substrate, built ONCE here so the boot
+            // backfill and the ingest hook drive the SAME single-flight actor. Deterministic +
+            // LLM-free: it only projects existing ledger rows into canonical Claims and
+            // reconciles derived workspace membership; nothing here talks to a model.
+            let workspacesRepo = WorkspaceRepository(database: db)
+            let claimsRepo = ClaimRepository(database: db)
+            let temporalClaimsRepo = TemporalClaimRepository(database: db)
+            let claimProducer = ClaimProducer(
+                genericFacts: genericFactsRepo, assertions: assertionsRepo,
+                temporalClaims: temporalClaimsRepo, events: events,
+                claims: claimsRepo, evidence: evidenceStoreRepo)
+            let membershipDeriver = WorkspaceMembershipDeriver(database: db, workspaces: workspacesRepo)
+            let claimProjectionBackfill = ClaimProjectionBackfill(
+                producer: claimProducer,
+                progress: ClaimProjectionProgressRepository(database: db),
+                membership: membershipDeriver,
+                genericFacts: genericFactsRepo, temporalClaims: temporalClaimsRepo,
+                assertions: assertionsRepo, events: events)
+            self.claimProjection = claimProjectionBackfill
+
             let ingest = IngestCoordinator(
                 loaders: .standard(),
                 chunker: dynamicChunker,
@@ -1266,7 +1293,8 @@ public final class AppState {
                 sourceRelations: sourceRelationsRepo,
                 genericFacts: genericFactsRepo,
                 evidenceVault: evidenceVault,   // EV-005 — copies only when managed mode on
-                priorityGate: priorityGate      // ING-006 — drain yields to interactive queries
+                priorityGate: priorityGate,     // ING-006 — drain yields to interactive queries
+                claimProjection: claimProjectionBackfill  // PA-PROD B3 — incremental projection hook
             )
 
             // PERF.1 — resume the resumable background embedding drain as soon
@@ -1697,7 +1725,7 @@ public final class AppState {
                 links: eventLinksRepo
             )
             self.savedQueries = SavedQueriesRepository(database: db)
-            self.workspaces = WorkspaceRepository(database: db)
+            self.workspaces = workspacesRepo
             self.review = ReviewRepository(database: db)
             self.screening = ScreeningRepository(database: db)
             self.transcripts = TranscriptRepository(database: db)
@@ -1817,6 +1845,17 @@ public final class AppState {
             // user's persisted bookmarks pulled in (that cascade was
             // the v6/v7/v8 memory-drift timeout root cause).
             if !suppressAutoReingest {
+                // PA-PROD B3 — resumable full Claim-projection backfill. Boot is already
+                // `.ready`; this runs detached at utility priority and never flips readiness.
+                // Single-flight + durable keyset cursor → an interrupted pass resumes where it
+                // left off, and the ingest hook drives the SAME actor, so a live incremental
+                // projection never scans concurrently with this pass. run() logs its own
+                // failures and never throws. Cancelled + restarted cleanly on a re-boot.
+                claimProjectionBackfillTask?.cancel()
+                claimProjectionBackfillTask = Task.detached(priority: .utility) { [weak self] in
+                    guard let backfill = await self?.claimProjection else { return }
+                    await backfill.run(at: Date())
+                }
                 // Detached so the bulk re-ingest pass runs on the
                 // cooperative pool, not on MainActor. Pairs with the
                 // watcherTask fix above — both are long-running ingest

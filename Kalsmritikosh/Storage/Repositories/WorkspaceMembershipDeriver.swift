@@ -47,6 +47,24 @@ public actor WorkspaceMembershipDeriver {
         return total
     }
 
+    /// The subjects (canonical entities) that OCCUR in the given files — the incremental
+    /// ingest hook's "affected subjects" set. Deduped, occurrence-based via `entity_mentions`.
+    public func subjects(inFiles fileIDs: [UUID]) async throws -> [Entity.ID] {
+        try await entities(inFiles: fileIDs)
+    }
+
+    /// Reconcile derived membership for exactly the workspaces that include `fileID` (the
+    /// incremental ingest hook — a newly-committed source only affects the workspaces that
+    /// hold it). Returns the total derived-member count across those workspaces. Idempotent.
+    @discardableResult
+    public func reconcileWorkspaces(forSource fileID: UUID, at when: Date = Date()) async throws -> Int {
+        var total = 0
+        for ws in try await workspaces.workspaceIDs(forSource: fileID) {
+            total += try await deriveMembership(for: ws, at: when)
+        }
+        return total
+    }
+
     /// The entities that OCCUR in any of the given files. Membership follows every occurrence
     /// via `entity_mentions` (a canonical entity mentioned in file B is a member of a workspace
     /// containing file B, even if it first originated in file A). `entities.source_object_id`

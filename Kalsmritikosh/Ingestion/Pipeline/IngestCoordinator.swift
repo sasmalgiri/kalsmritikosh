@@ -88,6 +88,12 @@ public actor IngestCoordinator {
     /// ING-006 — when wired, the background embedding drain yields to interactive queries
     /// via this gate (checked between batches). nil = no priority gating (drain runs freely).
     private let priorityGate: QueryPriorityGate?
+    /// PA-PROD B3 — when wired, a successful real ingest fires an incremental Claim projection
+    /// for the committed source (its affected subjects → Claims, plus derived-membership refresh
+    /// for the workspaces that hold it). The SAME actor instance as the boot backfill, so the
+    /// two never scan concurrently. Fire-and-forget + failure-isolated: never fails the ingest.
+    /// nil = no incremental projection (the boot backfill still covers everything).
+    private let claimProjection: ClaimProjectionBackfill?
     /// A2 §7.3/§7.7 — durable per-file ingest outcome (best-effort). nil = not
     /// recorded (behaviour otherwise unchanged).
     private let ingestAttempts: IngestAttemptsRepository?
@@ -158,7 +164,8 @@ public actor IngestCoordinator {
         sourceRelations: SourceRelationsRepository? = nil,
         genericFacts: GenericFactRepository? = nil,
         evidenceVault: EvidenceVault? = nil,
-        priorityGate: QueryPriorityGate? = nil
+        priorityGate: QueryPriorityGate? = nil,
+        claimProjection: ClaimProjectionBackfill? = nil
     ) {
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
@@ -166,6 +173,7 @@ public actor IngestCoordinator {
         self.genericFacts = genericFacts
         self.evidenceVault = evidenceVault
         self.priorityGate = priorityGate
+        self.claimProjection = claimProjection
         self.ingestAttempts = ingestAttempts
         self.sourceRelations = sourceRelations
         self.custody = custody
@@ -363,6 +371,14 @@ public actor IngestCoordinator {
                 status: result.chunkCount > 0 ? .queryable : .unchanged,
                 contentHash: result.fileRecord.contentHash
             )
+            // PA-PROD B3 — a real ingest (new chunks committed) refreshes this source's
+            // Claims + derived workspace membership. Skips/aliases/moves (chunkCount == 0)
+            // change no content, so they don't fire. Fire-and-forget on the shared projection
+            // actor — never blocks or fails the ingest; the actor coalesces + isolates errors.
+            if result.chunkCount > 0, let claimProjection {
+                let fileID = result.fileRecord.id
+                Task(priority: .utility) { await claimProjection.projectSource(fileID: fileID, at: Date()) }
+            }
             await writeCostProfileFile()   // PERF.0 — durable stage-cost profile
             return result
         } catch {

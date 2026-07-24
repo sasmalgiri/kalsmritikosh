@@ -62,6 +62,24 @@ public actor ClaimProjectionBackfill {
         catch { KalsmritikoshLog.storage.error("Claim membership reconciliation failed: \(String(describing: error), privacy: .public)") }
     }
 
+    /// Incremental post-ingest projection for ONE freshly-committed source file — the
+    /// IngestCoordinator hook. Runs on the SAME actor as the full backfill, so it never scans
+    /// concurrently with a full pass (it first awaits any active pass to completion). Projects
+    /// the file's affected subjects into Claims and reconciles derived membership for only the
+    /// workspaces that hold this source. Fully idempotent (fingerprint Claim ids + derived-set
+    /// replacement), so repeats and overlaps are safe. NEVER throws: a projection failure must
+    /// never fail the ingest that triggered it — it is logged and swallowed.
+    public func projectSource(fileID: UUID, at now: Date) async {
+        if let active { await active.value }   // don't interleave a scan with a full pass
+        do {
+            let subjects = try await membership.subjects(inFiles: [fileID])
+            for subject in subjects { _ = try await producer.produce(forSubjectID: subject, at: now) }
+            _ = try await membership.reconcileWorkspaces(forSource: fileID, at: now)
+        } catch {
+            KalsmritikoshLog.storage.error("Incremental claim projection failed for one source: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     private struct Item { let id: UUID; let project: () async throws -> ClaimProjectionOutcome }
 
     private func runKind(_ kind: Kind, at now: Date) async {
