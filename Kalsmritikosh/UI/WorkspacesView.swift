@@ -561,7 +561,9 @@ public struct WorkspacesView: View {
             : (ws.template == .legalMatter ? .legalExhibit : .footnote)
         let doc = WorkProductComposer.exportable(wp, citationStyle: style, manifest: assembled.manifest)
         let text = WorkProductExporter.render(doc, as: reportFormat)
-        let findingCount = wp.sections.reduce(0) { $0 + $1.claims.count }
+        // Use the manifest's deduplicated finding count — a claim rendered in both the summary
+        // and the chronology is ONE finding, not two.
+        let findingCount = assembled.manifest.selectedFindingCount
 
         #if canImport(AppKit)
         let panel = NSSavePanel()

@@ -235,6 +235,8 @@ struct WorkProductAssemblyServiceTests {
         #expect(occurrences.count >= 2)                                  // summary + chronology
         #expect(Set(occurrences.map(\.id)).count == occurrences.count)   // distinct occurrence ids
         #expect(occurrences.allSatisfy { $0.sourceClaimID == claimID })  // same canonical id
+        // …but the manifest (and the UI success message) counts it as ONE finding, not two.
+        #expect(assembled.manifest.selectedFindingCount == 1)
     }
 
     @Test("Workspace scope is preserved across every section")
