@@ -201,6 +201,25 @@ public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
                     to: .what
                 )
             }
+            // PA-EXT-001B — when there is NO meaningful structured subject, recover a topic from
+            // the first meaningful body sentence (rule-based provenance). Never overwrites a
+            // structured subject; leaves the WHAT slot empty when nothing safe qualifies.
+            let hasStructuredSubjectWhat = slots.what.contains { $0.provenance == .structuredHeader }
+            if !hasStructuredSubjectWhat,
+               let topic = EmailTopicExtractor.topic(
+                    subject: Self.stringValue(object.metadata["subject"]),
+                    cleanedContent: object.content),
+               topic.origin == .bodySentence {
+                slots.add(
+                    NarrativeSlotValue(
+                        text: topic.text,
+                        confidence: 0.7,
+                        provenance: .ruleBased,
+                        sourceObjectIDs: src
+                    ),
+                    to: .what
+                )
+            }
         } else {
             // Non-email WHO: the entities that participate in this
             // event. We pull person + organization mentions and
