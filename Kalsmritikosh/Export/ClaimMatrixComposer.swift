@@ -39,17 +39,8 @@ public struct ClaimMatrixComposer: WorkProductSectionComposer {
             claims: claims)]
     }
 
-    /// The exact, human-facing label for each canonical presentation category. Complete over
-    /// all seven surfaced presentations (refuse is excluded before this point).
-    nonisolated static func categoryLabel(_ p: ClaimPresentation) -> String {
-        switch p {
-        case .fact:          return "Observed fact"
-        case .attributed:    return "Source-reported"
-        case .corroborated:  return "Independently corroborated"
-        case .derivation:    return "Deterministically derived"
-        case .userAttributed: return "User-confirmed"
-        case .inference:     return "Inference"
-        case .conflict:      return "Conflicting accounts"
-        }
-    }
+    /// The exact, human-facing label for each canonical presentation category — the one shared
+    /// mapping (`ClaimPresentation.displayLabel`). Complete over all seven surfaced
+    /// presentations (refuse is excluded before this point).
+    nonisolated static func categoryLabel(_ p: ClaimPresentation) -> String { p.displayLabel }
 }

@@ -63,6 +63,19 @@ public actor ContradictionsRepository {
         return rows.compactMap(decode)
     }
 
+    /// Fetch exactly the requested contradictions by id (no row ceiling). Used by disclosure
+    /// selection, which already knows the precise linked ids — avoids a bounded `all()` scan
+    /// silently dropping a valid linked conflict past the limit.
+    public func findByIDs(_ ids: [Contradiction.ID]) async -> [Contradiction] {
+        guard !ids.isEmpty else { return [] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        let rows = (try? await database.query("""
+        SELECT id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind
+        FROM contradictions WHERE id IN (\(placeholders));
+        """, ids.map { .uuid($0) })) ?? []
+        return rows.compactMap(decode)
+    }
+
     public func setStatus(_ id: UUID, _ status: Contradiction.Status) async {
         try? await database.exec(
             "UPDATE contradictions SET status = ? WHERE id = ?;",

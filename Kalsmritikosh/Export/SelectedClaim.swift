@@ -25,6 +25,24 @@ public struct ClaimTemporalAnchor: Sendable, Hashable {
     }
 }
 
+public extension SelectedClaim {
+    /// The canonical AssertabilityPolicy decision for this selected claim, computed with its
+    /// own independence keys and reproducible-derivation flag — the single source of truth for
+    /// whether the claim may surface. Used both by renderers and by disclosure scoping (a
+    /// refused claim must not link a conflict or a gap into an output).
+    var assertabilityDecision: AssertabilityDecision {
+        let evidence = resolved.claim.evidence.map {
+            AssertabilityEvidence(objectID: $0.objectID, blockID: $0.blockID,
+                                  independenceKey: independenceKeys[$0.objectID])
+        }
+        return AssertabilityContextBuilder()
+            .decision(assessment: resolved.effectiveAssessment, evidence: evidence,
+                      hasReproducibleDerivation: hasReproducibleDerivation).decision
+    }
+    /// False when the policy refuses the claim (rejected review, missing/unsupported evidence).
+    var maySurface: Bool { assertabilityDecision.maySurface }
+}
+
 /// A conflict prepared UPSTREAM for disclosure. It enters a context only because it is
 /// explicitly linked to selected claims (never because its text mentions the subject). Both
 /// sides are preserved verbatim; the composer renders it as a disclosure, never picking a

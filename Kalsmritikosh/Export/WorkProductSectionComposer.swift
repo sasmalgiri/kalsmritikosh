@@ -119,6 +119,7 @@ public struct WorkProductComposerRegistry: Sendable {
         try reg.register(HistoryChronologyComposer())
         try reg.register(ClaimMatrixComposer())
         try reg.register(GapsAndConflictsComposer())
+        try reg.register(SourcedSummaryComposer())
         return reg
     }
 }
@@ -138,6 +139,36 @@ public struct RenderedSelectedClaim: Sendable, Hashable {
                             decision: AssertabilityDecision, presentation: ClaimPresentation) {
         self.selectedClaim = selectedClaim; self.workProductClaim = workProductClaim
         self.decision = decision; self.presentation = presentation
+    }
+}
+
+public extension ClaimPresentation {
+    /// The one shared human-facing label per canonical presentation category. `.userAttributed`
+    /// defaults to "User-confirmed"; the corrected variant is resolved with review context via
+    /// `RenderedSelectedClaim.categoryLabel`.
+    var displayLabel: String {
+        switch self {
+        case .fact:          return "Observed fact"
+        case .attributed:    return "Source-reported"
+        case .corroborated:  return "Independently corroborated"
+        case .derivation:    return "Deterministically derived"
+        case .userAttributed: return "User-confirmed"
+        case .inference:     return "Inference"
+        case .conflict:      return "Conflicting accounts"
+        }
+    }
+}
+
+public extension RenderedSelectedClaim {
+    /// The presentation label, refined for a corrected user-attributed claim (User-corrected
+    /// vs User-confirmed) using the effective review disposition. A corrected claim is never
+    /// mislabelled as merely confirmed.
+    var categoryLabel: String {
+        if presentation == .userAttributed,
+           selectedClaim.resolved.effectiveAssessment.review == .corrected {
+            return "User-corrected"
+        }
+        return presentation.displayLabel
     }
 }
 
@@ -171,6 +202,7 @@ public enum ResolvedClaimRenderer {
         let contradicting = zip(citations, claim.evidence).filter { $0.1.role == .contradicts }.map(\.0)
 
         let wp = WorkProductClaim(
+            id: claim.id,                                // preserve the canonical Claim identity
             text: claim.statement,
             status: epistemicStatus(for: presentation),
             supporting: supporting,
