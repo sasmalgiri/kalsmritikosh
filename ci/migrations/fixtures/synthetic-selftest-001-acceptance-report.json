@@ -1,0 +1,29 @@
+{
+  "counts" : {
+    "chunks" : 0,
+    "claim_evidence_ref" : 1,
+    "claim_reviews" : 1,
+    "claim_usage" : 1,
+    "claims" : 1,
+    "entities" : 0,
+    "events" : 0,
+    "evidence_blocks" : 1,
+    "files" : 2,
+    "knowledge_objects" : 2,
+    "source_versions" : 1,
+    "workspace_entities" : 0,
+    "workspace_sources" : 1,
+    "workspaces" : 1
+  },
+  "endVersion" : 67,
+  "fixtureID" : "synthetic-selftest-001",
+  "foreignKeyViolations" : 0,
+  "freshReopenOK" : true,
+  "integrityOK" : true,
+  "representativeReopened" : "sourceVersion DB63B2BA-8AD3-43FD-909D-BB1D3C6C6BD5",
+  "secondMigrationNoOp" : true,
+  "stableIDSampleSize" : 5,
+  "startVersion" : 66,
+  "workingCopyHashAfterMigration" : "f389d9754be1ec05551086f11712146e2153e8c97ed6b7510835820b3787a832",
+  "workingCopyHashBeforeMigration" : "d2cfe9cc2f43527aaa6a9150060bb1c3053f5cf0ee806756c586caafc29a2481"
+}

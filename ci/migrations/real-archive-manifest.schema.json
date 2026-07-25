@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kalsmritikosh sanitized real-archive manifest (MIG-001C)",
+  "description": "Describes an owner-supplied SANITIZED archive for migration acceptance. The archive must contain no private user data; the manifest carries only counts, versions, ids and hashes. Consumed by ci/migrations/verify-real-archive.sh and OwnerArchiveMigrationAcceptanceTests.",
+  "type": "object",
+  "required": [
+    "fixtureID",
+    "originalSchemaVersion",
+    "sanitizerVersion",
+    "containsPersonalData",
+    "sourceDatabaseSHA256",
+    "expectedEndVersion",
+    "expectedCounts",
+    "representative"
+  ],
+  "properties": {
+    "fixtureID": { "type": "string", "minLength": 1 },
+    "originalSchemaVersion": {
+      "type": "integer", "minimum": 0,
+      "description": "The archive's PRAGMA user_version. 0 = unknown (the test records the actual value instead of enforcing it)."
+    },
+    "sanitizerVersion": { "type": "string", "minLength": 1 },
+    "containsPersonalData": {
+      "type": "boolean", "const": false,
+      "description": "MUST be false. A fixture flagged true is refused by both the script and the test."
+    },
+    "sourceDatabaseSHA256": {
+      "type": "string", "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "SHA-256 of the archive's main database file (checkpointed; WAL folded in)."
+    },
+    "expectedEndVersion": { "type": "integer", "minimum": 1 },
+    "expectedCounts": {
+      "type": "object",
+      "description": "table name → expected row count. At minimum files and knowledge_objects.",
+      "required": ["files", "knowledge_objects"],
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "representative": {
+      "type": "object",
+      "description": "At least one exact reopening anchor: a source version + its content hash (preferred), or a file id. The acceptance test fails when neither verifies.",
+      "properties": {
+        "sourceVersionID": { "type": ["string", "null"] },
+        "contentHash": { "type": ["string", "null"], "pattern": "^[0-9a-fA-F]{64}$" },
+        "fileID": { "type": ["string", "null"] }
+      },
+      "anyOf": [
+        { "required": ["sourceVersionID", "contentHash"] },
+        { "required": ["fileID"] }
+      ]
+    }
+  }
+}

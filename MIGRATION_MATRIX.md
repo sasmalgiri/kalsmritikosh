@@ -84,6 +84,35 @@ A sanitized REAL owner archive is **not committed** (no private data). Running t
 against such a fixture is an owner step (`ci/migrations/verify-real-archive.sh`, which SKIPS when
 no fixture is present) and is marked **Planned / Real-data verified only after that run**.
 
+## MIG-001C — external-archive acceptance capability (delivered)
+
+The repository can now FULLY validate an owner-supplied sanitized archive (previously the script
+only copied/hashed and the tests only used synthetic archives):
+
+- `OwnerArchiveMigrationAcceptanceTests.ownerArchiveMigrationAcceptance` — env-gated
+  (`KALS_OWNER_ARCHIVE` / `_MANIFEST` / `_REPORT`; SKIPPED in normal/CI runs — a skip is never
+  verification). Runs the REAL `SchemaMigrations.migrate` on the working copy and verifies:
+  manifest hash pins the exact bytes; start/end versions; `integrity_check ok` +
+  `foreign_key_check` empty; pre==post counts for all known tables + manifest expectedCounts;
+  stable-ID samples survive; Claim evidence/reviews/usage counts; workspace membership; at least
+  one exact reopening (source version + content hash via EvidenceStore, or file); second
+  migration no-op; fresh-instance reopen; and writes a non-sensitive acceptance report
+  (counts/versions/hashes only). The after-hash is checkpointed so it reflects the migrated file.
+- `generateSyntheticArchive` — env-gated self-test generator producing an owner-like v66 archive
+  + a schema-conformant manifest (documents the exact format an owner must supply).
+- `ci/migrations/real-archive-manifest.schema.json` — the manifest contract
+  (containsPersonalData MUST be false; SHA-256 pin; expectedCounts; representative anchor).
+- `ci/migrations/verify-real-archive.sh` — validate manifest → preserve original hash →
+  disposable working copy (+wal/shm) → run the acceptance test via `TEST_RUNNER_` env forwarding
+  (single worker) → prove the .xcresult EXECUTED and passed (≥1 passed, 0 failed — a skip fails
+  the script) → original hash unchanged → retain the acceptance report.
+
+**End-to-end self-test PASSED** (2026-07-25) against a generated synthetic owner-like archive:
+v66→v67, counts + 5 stable IDs preserved, representative source version reopened with its exact
+content hash, second-migration no-op, fresh reopen, original untouched; report at
+`ci/migrations/fixtures/synthetic-selftest-001-acceptance-report.json`. The REAL owner archive
+run remains an owner step (Planned).
+
 ## Documented gaps / follow-ups (honest)
 
 - **Ahead-of-schema `user_version`** is not auto-detected by `migrate()` (MP2). Candidate: a

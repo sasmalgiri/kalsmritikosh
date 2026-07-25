@@ -85,7 +85,8 @@ create workspace → add real sources → complete primary workflow → inspect 
 | Migration matrix (MIG-001A) | 10 milestone fixtures → v67, preservation + integrity + fk, reopen | Integration verified |
 | Migration fault atomicity (MIG-001B) | boundary faults A/B/E/F, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas fail-closed | Integration verified |
 | Real-archive migration | synthetic v66→v67 archive, correct hash semantics + preservation | Integration verified (synthetic) |
-| Sanitized REAL owner archive | `ci/migrations/verify-real-archive.sh` (skips w/o fixture) | PENDING (owner run) |
+| Sanitized REAL owner archive — CAPABILITY | MIG-001C: `OwnerArchiveMigrationAcceptanceTests` + manifest schema + rewritten `verify-real-archive.sh` run the REAL migration path on an external archive; end-to-end self-test PASSED on a synthetic owner-like archive (report: `ci/migrations/fixtures/synthetic-selftest-001-acceptance-report.json`) | Integration verified |
+| Sanitized REAL owner archive — RUN | owner supplies sanitized archive + manifest per `ci/migrations/real-archive-manifest.schema.json`; then `ci/migrations/verify-real-archive.sh <archive> <manifest>` | PENDING (owner run) |
 | **CI-001B five named checks (all green)** | run **30144232341**, success, SHA `806325933ba9c7034488f80cd9ee1bcb23d1d6d2`, 2026-07-25: `architecture-guards` ✓ · `build-and-test` ✓ (794 executed, 0 failed, floor 794) · `migration-matrix` ✓ (23 tests, 4 suites) · `parser-fixtures` ✓ (78 tests, 20 suites) · `report-receipt-integrity` ✓ (68 tests, 6 suites). Group manifests: `ci/test-groups/*.json` @ this SHA. | PASS |
 | parser-fixtures status rule | Green proves the CURRENTLY REGISTERED fixtures only — release gate F1 (complete advertised-format matrix) remains PENDING | RECORDED |
 | sensitive-export job | NOT created — OPS-003 SensitiveScope unimplemented; a green placeholder would mislead | PENDING (depends OPS-003) |
