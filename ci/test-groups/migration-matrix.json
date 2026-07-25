@@ -1,0 +1,17 @@
+{
+  "group": "migration-matrix",
+  "selectors": [
+    "KalsmritikoshTests/MigrationMatrixTests",
+    "KalsmritikoshTests/MigrationFaultInjectionTests",
+    "KalsmritikoshTests/RealArchiveMigrationTests",
+    "KalsmritikoshTests/EvidenceDimensionMigrationTests"
+  ],
+  "requiredSuites": [
+    "MigrationMatrixTests",
+    "MigrationFaultInjectionTests",
+    "RealArchiveMigrationTests",
+    "EvidenceDimensionMigrationTests"
+  ],
+  "minimumExecutedTests": 23,
+  "note": "Milestone migration matrix (v0/1/36/54/61..67 → v67), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, and the existing genuine v61→v62 preservation + rollback/retry. Counts by xcresulttool (parameterized function = 1). Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh)."
+}

@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: false
       - name: Run architecture guards
@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: false
 
@@ -125,5 +125,96 @@ jobs:
             test.log
             verify.log
             build/TestResults.xcresult
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ── Specialized gates (CI-001B) ────────────────────────────────────────────
+  # Independently-enforceable named checks over versioned test groups
+  # (ci/test-groups/*.json). Each runs in isolated build paths and verifies its own
+  # .xcresult (required suites ran, count >= floor, 0 failures) via ci/verify-xcresult-group.sh.
+  # These are IN ADDITION to build-and-test (the overall regression gate), not a replacement.
+  # NOTE: sensitive-export is intentionally absent — OPS-003 SensitiveScope is not implemented,
+  # and a green placeholder would be misleading (record: sensitive-export PENDING, depends OPS-003).
+  migration-matrix:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: false
+      - name: Select Xcode (newest available on the runner)
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
+          xcodebuild -version
+      - name: Run migration-matrix group
+        env:
+          NSUnbufferedIO: YES
+        run: bash ci/run-xcode-test-group.sh ci/test-groups/migration-matrix.json
+      - name: "Report: synthetic vs owner archive"
+        run: |
+          echo "Synthetic migration tests: PASS (RealArchiveMigrationTests uses a synthetic on-disk archive)."
+          echo "Sanitized owner archive: NOT RUN (owner step — ci/migrations/verify-real-archive.sh). Never counted as real-data verification."
+      - name: Upload logs + result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-matrix-logs
+          path: build/migration-matrix
+          retention-days: 14
+          if-no-files-found: ignore
+
+  parser-fixtures:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: false
+      - name: Select Xcode (newest available on the runner)
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
+          xcodebuild -version
+      - name: Run parser-fixtures group
+        env:
+          NSUnbufferedIO: YES
+        run: bash ci/run-xcode-test-group.sh ci/test-groups/parser-fixtures.json
+      - name: "Status note"
+        run: echo "A green parser-fixtures job proves the CURRENTLY REGISTERED parser fixtures; it does NOT close release gate F1 (complete advertised-format matrix)."
+      - name: Upload logs + result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-fixtures-logs
+          path: build/parser-fixtures
+          retention-days: 14
+          if-no-files-found: ignore
+
+  report-receipt-integrity:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: false
+      - name: Select Xcode (newest available on the runner)
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
+          xcodebuild -version
+      - name: Run report-receipt-integrity group
+        env:
+          NSUnbufferedIO: YES
+        run: bash ci/run-xcode-test-group.sh ci/test-groups/report-receipt-integrity.json
+      - name: Upload logs + result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-receipt-integrity-logs
+          path: build/report-receipt-integrity
           retention-days: 14
           if-no-files-found: ignore
