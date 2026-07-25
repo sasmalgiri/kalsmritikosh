@@ -81,6 +81,11 @@ create workspace → add real sources → complete primary workflow → inspect 
 | Full test target executed (from .xcresult) | verifier: `result=Passed total=781 passed=781 failed=0 (floor=781)` | PASS |
 | Runner / toolchain | macOS 26.4, Xcode 26.6; test run `MACOSX_DEPLOYMENT_TARGET=26.4` (labelled compatibility override, within macOS 26 floor — NOT proof the pinned 26.5 point release passed) | RECORDED |
 | Architecture guards green | `ci/guards/run-all.sh` on ubuntu-latest | PASS |
+| Latest green hosted run | run **30140696084**, success, SHA `b0f33428332ff41cf5b88bd2bcd6fd3b55fe1f4a` (MIG-001B), verifier `total=794 failed=0 (floor=794)` | PASS |
+| Migration matrix (MIG-001A) | 10 milestone fixtures → v67, preservation + integrity + fk, reopen | Integration verified |
+| Migration fault atomicity (MIG-001B) | boundary faults A/B/E/F, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas fail-closed | Integration verified |
+| Real-archive migration | synthetic v66→v67 archive, correct hash semantics + preservation | Integration verified (synthetic) |
+| Sanitized REAL owner archive | `ci/migrations/verify-real-archive.sh` (skips w/o fixture) | PENDING (owner run) |
 | Branch protection ruleset for `main` | OWNER repo-settings step — require `build-and-test` + `architecture-guards`, up-to-date, conversations resolved, no force-push/deletion | PENDING (owner) |
 
 ---
