@@ -63,7 +63,7 @@ Evidence-state vocabulary (an item may hold several):
 | Evidence and Claim engine | Near complete | Tests + hosted CI + real fixtures | Quality-depth items (QUALITY-001…009) |
 | Work-product / export engine | Complete for the four templates | Tests + GUI witness | Work-product run persistence (OPS-004) |
 | Stage 1 production verification | In progress | CI-001A green (run 30107577371) | STATUS (this), migrations, specialized CI jobs, branch ruleset |
-| Shared professional objects | In progress | OPS-001 run 30148706330; OPS-002 impl. run 30156183281 (acceptance pending OPS-002.1) | OPS-002.1, OPS-003…006 |
+| Shared professional objects | In progress (2 of 6) | OPS-001 run 30148706330; OPS-002 runs 30156183281 + 30160395578 (OPS-002.1 accepted) | OPS-003…006 |
 | Persona Job Engine | Pending | — | Stage 3 |
 | Professional Method Engine | Pending | — | 16-method first pack |
 | Evidence Workbench | Pending | — | LAB-001…006 |
@@ -124,7 +124,7 @@ The following prior statements are **obsolete** and are corrected here:
 
 ---
 
-## 6. Formal stage state (2026-07-25, after the OPS-002 reviewer NO-GO)
+## 6. Formal stage state (2026-07-25, after OPS-002.1)
 
 ```
 Stage 1 implementation:    complete   (CI-001A/A.1/A.2/B, STATUS-001, MIG-001A/B/B.1/C —
@@ -134,16 +134,16 @@ Stage 1 owner acceptance:  pending    (main branch ruleset requiring all five ch
                                        sanitized owner-archive run via
                                        ci/migrations/verify-real-archive.sh)
 Stage 2 engineering:       in progress (OPS-001 Issue Engine complete, run 30148706330;
-                                       OPS-002 implementation hosted-green, run 30156183281;
-                                       OPS-002 ACCEPTANCE PENDING OPS-002.1 — reviewer found
-                                       four semantic gaps: exact-evidence rule confirmation,
-                                       cross-workspace primary Issue, deadline-on-nonoperational-
-                                       task, discarded rule identity → schema v70)
+                                       OPS-002 Task/Deadline Engine complete — implementation
+                                       run 30156183281 + OPS-002.1 provenance hardening
+                                       run 30160395578 (schema v70) closing the reviewer's
+                                       four-gap NO-GO; next OPS-003 SensitiveScope)
 ```
 
-CORRECTION: the OPS-002 evidence commit (`db59e12`) was pushed before the reviewer's NO-GO
-arrived and recorded OPS-002 as complete. That record was premature — acceptance is pending
-OPS-002.1. History is not rewritten; this section and the evidence index carry the correction.
+RECORD OF CORRECTION (retained): the OPS-002 evidence commit (`db59e12`) was pushed before the
+reviewer's NO-GO arrived and prematurely recorded OPS-002 as complete. OPS-002.1 (`b84b11f`,
+run 30160395578, all five checks green) corrected the four semantic gaps and closes OPS-002
+acceptance. History was not rewritten.
 
 Stage 1 is NOT marked PASS/Closed until both owner items are recorded here and in
 `RELEASE_EVIDENCE_INDEX.md`. The two items are genuinely owner-only and do not affect Stage 2
