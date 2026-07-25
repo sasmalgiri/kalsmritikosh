@@ -124,12 +124,18 @@ The following prior statements are **obsolete** and are corrected here:
 
 ---
 
-## 6. Next tasks (Stage 1 close, then Stage 2)
+## 6. Formal stage state (2026-07-25, after MIG-001C)
 
 ```
-MIG-001A  migration inventory + fixtures + MigrationMatrixTests
-→ MIG-001B interruption / rollback / real-archive proof
-→ CI-001B  specialized named jobs (migration-matrix, parser-fixtures, report-receipt-integrity)
-→ close Stage 1 (all named checks green + fresh/upgraded/real-archive DBs pass + ruleset recorded)
-→ OPS-001 Issue engine
+Stage 1 implementation:    complete   (CI-001A/A.1/A.2/B, STATUS-001, MIG-001A/B/B.1/C —
+                                       five named hosted checks green on SHA 7f64972,
+                                       run 30147726825)
+Stage 1 owner acceptance:  pending    (main branch ruleset requiring all five checks;
+                                       sanitized owner-archive run via
+                                       ci/migrations/verify-real-archive.sh)
+Stage 2 engineering:       started provisionally (OPS-001 Issue Engine in progress)
 ```
+
+Stage 1 is NOT marked PASS/Closed until both owner items are recorded here and in
+`RELEASE_EVIDENCE_INDEX.md`. The two items are genuinely owner-only and do not affect Stage 2
+design, so the codebase does not idle on them.
