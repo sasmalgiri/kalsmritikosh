@@ -49,9 +49,9 @@ struct MigrationFaultInjectionTests {
         #expect(try await MigrationFaultHarness.integrityOK(db))
         #expect((try await snap.failures(in: db)).isEmpty)
 
-        // Second launch migrates cleanly.
+        // Second launch migrates cleanly (all the way to the current latest).
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 67)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await hasScope(db) == true)
         #expect((try await snap.failures(in: db)).isEmpty)
     }
@@ -65,14 +65,14 @@ struct MigrationFaultInjectionTests {
         let uv0 = try await db.currentUserVersion()
 
         await #expect(throws: (any Error).self) {
-            try await SchemaMigrations.applyOne(db, version: 68, sql: MigrationFaultHarness.ddlFaultBatch)
+            try await SchemaMigrations.applyOne(db, version: 99, sql: MigrationFaultHarness.ddlFaultBatch)
         }
         #expect(try await MigrationFixtureBuilder.tableExists(db, "mig_fault_probe") == false)
         #expect(try await db.currentUserVersion() == uv0)
         #expect((try await snap.failures(in: db)).isEmpty)
         #expect(try await MigrationFaultHarness.integrityOK(db))
 
-        try await SchemaMigrations.applyOne(db, version: 68, sql: MigrationFaultHarness.ddlValidBatch)
+        try await SchemaMigrations.applyOne(db, version: 99, sql: MigrationFaultHarness.ddlValidBatch)   // synthetic version 99: never collides with a real migration
         #expect(try await MigrationFixtureBuilder.tableExists(db, "mig_fault_probe") == true)
     }
 
@@ -86,14 +86,14 @@ struct MigrationFaultInjectionTests {
         #expect(original != nil)
 
         await #expect(throws: (any Error).self) {
-            try await SchemaMigrations.applyOne(db, version: 68, sql: MigrationFaultHarness.backfillFaultBatch(newURL: "mutated://x"))
+            try await SchemaMigrations.applyOne(db, version: 99, sql: MigrationFaultHarness.backfillFaultBatch(newURL: "mutated://x"))
         }
         // Updated value rolled back; no partial backfill survives.
         #expect(try await db.query("SELECT url FROM files LIMIT 1;", []).first?.string(0) == original)
         #expect(Int(try await db.query("SELECT COUNT(*) FROM files WHERE url='mutated://x';", []).first?.int(0) ?? -1) == 0)
         #expect(try await db.currentUserVersion() == 67)
 
-        try await SchemaMigrations.applyOne(db, version: 68, sql: MigrationFaultHarness.backfillValidBatch(newURL: "done://y"))
+        try await SchemaMigrations.applyOne(db, version: 99, sql: MigrationFaultHarness.backfillValidBatch(newURL: "done://y"))
         #expect(Int(try await db.query("SELECT COUNT(*) FROM files WHERE url='done://y';", []).first?.int(0) ?? -1) == 1)
     }
 
@@ -110,7 +110,7 @@ struct MigrationFaultInjectionTests {
         try await db.exec("PRAGMA max_page_count = \(cap);")
 
         await #expect(throws: (any Error).self) {
-            try await SchemaMigrations.applyOne(db, version: 68,
+            try await SchemaMigrations.applyOne(db, version: 99,
                 sql: "CREATE TABLE big_blob (x BLOB); INSERT INTO big_blob (x) VALUES (zeroblob(8000000));")
         }
         #expect(try await MigrationFixtureBuilder.tableExists(db, "big_blob") == false)
@@ -120,7 +120,7 @@ struct MigrationFaultInjectionTests {
 
         // Lift the limit and retry a normal (small) migration.
         try await db.exec("PRAGMA max_page_count = 2147483646;")
-        try await SchemaMigrations.applyOne(db, version: 68, sql: "CREATE TABLE big_blob (x BLOB);")
+        try await SchemaMigrations.applyOne(db, version: 99, sql: "CREATE TABLE big_blob (x BLOB);")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "big_blob") == true)
     }
 
@@ -157,21 +157,24 @@ struct MigrationFaultInjectionTests {
         #expect((try await snap.failures(in: db)).isEmpty)
     }
 
-    @Test("A user_version AHEAD of the physical schema is a no-op that never deletes data (documented limitation)")
+    @Test("A user_version AHEAD of the physical schema never deletes data (documented limitation)")
     func versionAheadOfSchemaIsNonDestructive() async throws {
         // KNOWN LIMITATION (MIGRATION_MATRIX.md): migrate() trusts user_version and does not detect
-        // a counter that is AHEAD of the physical schema. It must at least never corrupt or delete
-        // data; detection/repair of this state is a documented follow-up (a startup schema-shape
-        // verifier). This test pins the SAFE part of that behaviour.
+        // a counter AHEAD of the physical schema. With later real migrations registered (v68+),
+        // the pending ones APPLY while the skipped one (here v67) never runs — the counter advances
+        // to latest but the skipped DDL stays missing. It must at least never corrupt or delete
+        // data; detection/repair remains a documented follow-up (a startup schema-shape verifier).
+        // This test pins the SAFE part of that behaviour.
         let db = try await MigrationFixtureBuilder.database(atVersion: 66)
         let snap = try await MigrationFixtureBuilder.seedPreservationRows(into: db, forVersion: 66)
         #expect(try await hasScope(db) == false)
         try await db.setUserVersion(67)              // counter ahead of the real (v66) schema
 
-        try await SchemaMigrations.migrate(db)       // no-op — does not throw, does not repair
+        try await SchemaMigrations.migrate(db)       // applies v68+; v67 is silently skipped
 
-        #expect(try await db.currentUserVersion() == 67)
-        #expect(try await hasScope(db) == false, "migrate silently invented columns")   // not repaired
-        #expect((try await snap.failures(in: db)).isEmpty)                              // not deleted
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
+        #expect(try await hasScope(db) == false, "migrate silently invented the skipped columns")  // not repaired
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "professional_issues"))          // v68 applied
+        #expect((try await snap.failures(in: db)).isEmpty)                                         // not deleted
     }
 }

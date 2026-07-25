@@ -1,31 +1,342 @@
 {
-  "schemaHead": 67,
+  "schemaHead": 68,
   "note": "Fixture DEFINITIONS. Synthetic historical databases are reproduced at test time from the committed migration list (SchemaMigrations.migrate(_:through:)); no opaque binaries are committed for these. Committed binaries are reserved for a sanitized real archive (MIG-001B).",
   "builder": "KalsmritikoshTests/Support/MigrationFixtureBuilder.swift",
   "suite": "KalsmritikoshTests/MigrationMatrixTests.swift",
   "seedIsColumnAware": true,
   "fixtures": [
-    { "id": "FRESH-0", "startVersion": 0, "construct": "fresh, unmigrated", "seeds": [], "expectedEndVersion": 67, "assertions": ["listGapFree", "userVersion67", "v67Markers", "integrityOk", "fkCheckZero"], "test": "freshDatabaseReachesLatest", "state": "unit-verified" },
-    { "id": "MS-1",  "startVersion": 1,  "construct": "migrate through 1",  "seeds": ["files"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[1]",  "state": "unit-verified" },
-    { "id": "MS-36", "startVersion": 36, "construct": "migrate through 36", "seeds": ["files"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[36]", "state": "unit-verified" },
-    { "id": "MS-54", "startVersion": 54, "construct": "migrate through 54", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[54]", "state": "unit-verified" },
-    { "id": "MS-61", "startVersion": 61, "construct": "migrate through 61", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[61]", "state": "unit-verified" },
-    { "id": "MS-62", "startVersion": 62, "construct": "migrate through 62", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[62]", "state": "unit-verified" },
-    { "id": "MS-63", "startVersion": 63, "construct": "migrate through 63", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero", "survivesV64Rebuild"], "test": "milestoneMigratesToLatest[63]", "state": "unit-verified" },
-    { "id": "MS-64", "startVersion": 64, "construct": "migrate through 64", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[64]", "state": "unit-verified" },
-    { "id": "MS-65", "startVersion": 65, "construct": "migrate through 65", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage", "claim_projection_progress"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[65]", "state": "unit-verified" },
-    { "id": "MS-66", "startVersion": 66, "construct": "migrate through 66", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage", "claim_projection_progress"], "expectedEndVersion": 67, "assertions": ["preservedRows", "reopen", "integrityOk", "fkCheckZero", "scopeAddedNull"], "test": "milestoneMigratesToLatest[66] + v66ToV67AddsNullScope", "state": "unit-verified" },
-    { "id": "MS-67", "startVersion": 67, "construct": "migrate through 67 (reopen)", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage", "claim_projection_progress"], "expectedEndVersion": 67, "assertions": ["idempotentReopen", "preservedRows", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[67]", "state": "unit-verified" },
-    { "id": "REPEAT-67", "startVersion": 67, "construct": "reopen+migrate x3", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["noDuplication", "noRegression", "noLoss"], "test": "repeatedMigrationIsStable", "state": "unit-verified" },
-    { "id": "STALE-67", "startVersion": 67, "construct": "full schema, user_version lowered to 2", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["selfHealsTo67", "rowsRetained", "noDestructiveReplay"], "test": "staleUserVersionSelfHeals", "state": "unit-verified" },
-    { "id": "REAL-ARCHIVE-SYNTHETIC", "startVersion": 66, "construct": "genuine on-disk v66 archive from migration history", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["originalHashUnchanged", "copyEqualsOriginalBefore", "copyDiffersAfter", "countsPreserved", "integrityOk", "fkCheckZero", "repeatNoOp", "reopen"], "test": "RealArchiveMigrationTests.archiveMigrationPreservesAndRehashes", "state": "integration-verified" },
-    { "id": "REAL-ARCHIVE-SANITIZED", "startVersion": "real", "construct": "sanitized owner archive copy (NOT committed; no private data); manifest per ci/migrations/real-archive-manifest.schema.json", "seeds": ["realCorpus"], "expectedEndVersion": 67, "assertions": ["manifestHashPin", "originalHashUnchanged", "countsPreserved", "stableIDs", "representativeReopening", "integrityOk", "fkCheckZero", "repeatNoOp", "freshReopen", "nonSensitiveReport"], "script": "ci/migrations/verify-real-archive.sh", "test": "OwnerArchiveMigrationAcceptanceTests.ownerArchiveMigrationAcceptance (env-gated)", "capabilitySelfTest": "PASSED 2026-07-25 on synthetic-selftest-001 (see synthetic-selftest-001-acceptance-report.json)", "state": "capability-integration-verified; owner run pending" }
+    {
+      "id": "FRESH-0",
+      "startVersion": 0,
+      "construct": "fresh, unmigrated",
+      "seeds": [],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "listGapFree",
+        "userVersion67",
+        "v67Markers",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "freshDatabaseReachesLatest",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-1",
+      "startVersion": 1,
+      "construct": "migrate through 1",
+      "seeds": [
+        "files"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[1]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-36",
+      "startVersion": 36,
+      "construct": "migrate through 36",
+      "seeds": [
+        "files"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[36]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-54",
+      "startVersion": 54,
+      "construct": "migrate through 54",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[54]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-61",
+      "startVersion": 61,
+      "construct": "migrate through 61",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[61]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-62",
+      "startVersion": 62,
+      "construct": "migrate through 62",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[62]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-63",
+      "startVersion": 63,
+      "construct": "migrate through 63",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero",
+        "survivesV64Rebuild"
+      ],
+      "test": "milestoneMigratesToLatest[63]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-64",
+      "startVersion": 64,
+      "construct": "migrate through 64",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[64]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-65",
+      "startVersion": 65,
+      "construct": "migrate through 65",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage",
+        "claim_projection_progress"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[65]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-66",
+      "startVersion": 66,
+      "construct": "migrate through 66",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage",
+        "claim_projection_progress"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero",
+        "scopeAddedNull"
+      ],
+      "test": "milestoneMigratesToLatest[66] + v66ToV67AddsNullScope",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-67",
+      "startVersion": 67,
+      "construct": "migrate through 67 (reopen)",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage",
+        "claim_projection_progress"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "idempotentReopen",
+        "preservedRows",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[67]",
+      "state": "unit-verified"
+    },
+    {
+      "id": "REPEAT-67",
+      "startVersion": 67,
+      "construct": "reopen+migrate x3",
+      "seeds": [
+        "fullSet"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "noDuplication",
+        "noRegression",
+        "noLoss"
+      ],
+      "test": "repeatedMigrationIsStable",
+      "state": "unit-verified"
+    },
+    {
+      "id": "STALE-67",
+      "startVersion": 67,
+      "construct": "full schema, user_version lowered to 2",
+      "seeds": [
+        "fullSet"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "selfHealsTo67",
+        "rowsRetained",
+        "noDestructiveReplay"
+      ],
+      "test": "staleUserVersionSelfHeals",
+      "state": "unit-verified"
+    },
+    {
+      "id": "REAL-ARCHIVE-SYNTHETIC",
+      "startVersion": 66,
+      "construct": "genuine on-disk v66 archive from migration history",
+      "seeds": [
+        "fullSet"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "originalHashUnchanged",
+        "copyEqualsOriginalBefore",
+        "copyDiffersAfter",
+        "countsPreserved",
+        "integrityOk",
+        "fkCheckZero",
+        "repeatNoOp",
+        "reopen"
+      ],
+      "test": "RealArchiveMigrationTests.archiveMigrationPreservesAndRehashes",
+      "state": "integration-verified"
+    },
+    {
+      "id": "REAL-ARCHIVE-SANITIZED",
+      "startVersion": "real",
+      "construct": "sanitized owner archive copy (NOT committed; no private data); manifest per ci/migrations/real-archive-manifest.schema.json",
+      "seeds": [
+        "realCorpus"
+      ],
+      "expectedEndVersion": 68,
+      "assertions": [
+        "manifestHashPin",
+        "originalHashUnchanged",
+        "countsPreserved",
+        "stableIDs",
+        "representativeReopening",
+        "integrityOk",
+        "fkCheckZero",
+        "repeatNoOp",
+        "freshReopen",
+        "nonSensitiveReport"
+      ],
+      "script": "ci/migrations/verify-real-archive.sh",
+      "test": "OwnerArchiveMigrationAcceptanceTests.ownerArchiveMigrationAcceptance (env-gated)",
+      "capabilitySelfTest": "PASSED 2026-07-25 on synthetic-selftest-001 (see synthetic-selftest-001-acceptance-report.json)",
+      "state": "capability-integration-verified; owner run pending"
+    }
   ],
   "mig001bFaultCases": {
     "note": "Failure atomicity via a test-only hook threaded into SchemaMigrations.migrate(_:through:fault:); production passes nil. See KalsmritikoshTests/MigrationFaultInjectionTests.swift.",
-    "boundaryFaults": ["beforeSavepoint", "afterSavepoint", "afterSQLBeforeVersionStamp", "afterVersionStampBeforeRelease"],
-    "genuineSQLiteFailures": ["ddlFailure", "backfillFailure", "writeSpaceFailure(SQLITE_FULL via max_page_count)"],
-    "malformedPartialSchemas": ["partialV67FailsClosed", "selfHealRejectsMissingMarker", "versionAheadOfSchema(documented-limitation)"],
+    "boundaryFaults": [
+      "beforeSavepoint",
+      "afterSavepoint",
+      "afterSQLBeforeVersionStamp",
+      "afterVersionStampBeforeRelease"
+    ],
+    "genuineSQLiteFailures": [
+      "ddlFailure",
+      "backfillFailure",
+      "writeSpaceFailure(SQLITE_FULL via max_page_count)"
+    ],
+    "malformedPartialSchemas": [
+      "partialV67FailsClosed",
+      "selfHealRejectsMissingMarker",
+      "versionAheadOfSchema(documented-limitation)"
+    ],
     "state": "unit-verified (hosted-CI pending this commit)"
   }
 }

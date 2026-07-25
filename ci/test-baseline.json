@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 794,
-  "baselineCommit": "b0f33428332ff41cf5b88bd2bcd6fd3b55fe1f4a",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount`, which counts a parameterized test FUNCTION as 1 (not per-iteration). So this number is lower than the IDE's per-iteration count (794 by xcresulttool vs 806 in-IDE as of MIG-001B). Raised 786 → 794 at MIG-001B. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "minimumExecutedTests": 810,
+  "baselineCommit": "OPS-001 (updated to the exact SHA in the follow-up evidence commit)",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 810 = 808 passed + 2 skipped as of OPS-001 (raised 794 → 810). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }

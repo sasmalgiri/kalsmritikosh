@@ -21,8 +21,9 @@ import Testing
 @Suite("MIG-001A — migration matrix")
 struct MigrationMatrixTests {
 
-    /// Material schema boundaries (not all 67 versions — these are the migration milestones).
-    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67]
+    /// Material schema boundaries (not every version — these are the migration milestones).
+    /// 67 = immediately previous schema; 68 = current schema reopened (OPS-001 Issue Engine).
+    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68]
 
     // MARK: - Assertions shared across cases
 
@@ -37,7 +38,7 @@ struct MigrationMatrixTests {
         try await db.query("PRAGMA foreign_key_check;", []).count
     }
 
-    /// The distinguishing markers of the fully-applied v67 schema.
+    /// The distinguishing markers of the fully-applied latest schema.
     private func assertLatestSchemaMarkers(_ db: Database) async throws {
         let claimsCols = try await MigrationFixtureBuilder.columns(db, "claims")
         #expect(claimsCols.isSuperset(of: ["scope_kind", "scope_id"]), "v67 claims scope columns missing")
@@ -45,6 +46,7 @@ struct MigrationMatrixTests {
         #expect(try await MigrationFixtureBuilder.tableExists(db, "claim_projection_progress"), "v65 progress table missing")
         let refCols = try await MigrationFixtureBuilder.columns(db, "claim_evidence_ref")
         #expect(refCols.contains("ordinal"), "v64 ordinal evidence identity missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "professional_issues"), "v68 issue table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -59,7 +61,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 67)
+        #expect(SchemaMigrations.latestVersion == 68)           // v68 = OPS-001 Issue Engine
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

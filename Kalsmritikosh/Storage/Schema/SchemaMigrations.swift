@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 67
+    public static let latestVersion = 68
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -145,7 +145,12 @@ public enum SchemaMigrations {
             // v65 — durable claim-projection progress.
             "claim_projection_progress": ["producer_version", "source_kind", "last_source_id", "complete"],
             // v66 — canonical EvidenceBlock → KnowledgeObject ownership.
-            "evidence_block_objects": ["evidence_block_id", "knowledge_object_id", "linked_at"]
+            "evidence_block_objects": ["evidence_block_id", "knowledge_object_id", "linked_at"],
+            // v68 — shared professional Issue Engine (OPS-001).
+            "professional_issues": ["id", "workspace_id", "title", "issue_type", "status",
+                                     "priority", "created_at", "updated_at"],
+            "professional_issue_links": ["id", "issue_id", "target_kind", "target_id", "link_role"],
+            "professional_issue_reviews": ["id", "issue_id", "action", "reviewer", "reviewed_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -223,7 +228,8 @@ public enum SchemaMigrations {
         (64, v64),
         (65, v65),
         (66, v66),
-        (67, v67)
+        (67, v67),
+        (68, v68)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2532,5 +2538,57 @@ public enum SchemaMigrations {
     ALTER TABLE claims ADD COLUMN scope_kind TEXT;
     ALTER TABLE claims ADD COLUMN scope_id   TEXT;
     CREATE INDEX IF NOT EXISTS idx_claims_scope ON claims(scope_kind, scope_id);
+    """
+
+    // OPS-001 — shared professional Issue Engine. An Issue is persona-neutral WORKFLOW state
+    // (question / evidence concern / contradiction review / missing-evidence issue / lead / risk /
+    // scope concern / decision required / finding candidate). It REFERENCES canonical objects by
+    // id via professional_issue_links and never copies or mutates them; every status transition is
+    // recorded in the append-only professional_issue_reviews ledger. Workspace deletion cascades
+    // the Issue working state (issues → links + reviews) while canonical evidence is untouched.
+    // No Issue columns are added to claims / contradictions / gap_nodes / events.
+    private static let v68: String = """
+    CREATE TABLE professional_issues (
+        id           TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        detail       TEXT,
+        issue_type   TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        priority     TEXT NOT NULL,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL,
+        closed_at    REAL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_professional_issues_workspace ON professional_issues(workspace_id);
+    CREATE INDEX idx_professional_issues_status    ON professional_issues(workspace_id, status);
+    CREATE INDEX idx_professional_issues_type      ON professional_issues(workspace_id, issue_type);
+
+    CREATE TABLE professional_issue_links (
+        id          TEXT PRIMARY KEY NOT NULL,
+        issue_id    TEXT NOT NULL,
+        target_kind TEXT NOT NULL,
+        target_id   TEXT NOT NULL,
+        link_role   TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY (issue_id) REFERENCES professional_issues(id) ON DELETE CASCADE,
+        UNIQUE(issue_id, target_kind, target_id, link_role)
+    );
+    CREATE INDEX idx_professional_issue_links_issue  ON professional_issue_links(issue_id);
+    CREATE INDEX idx_professional_issue_links_target ON professional_issue_links(target_kind, target_id);
+
+    CREATE TABLE professional_issue_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        issue_id     TEXT NOT NULL,
+        action       TEXT NOT NULL,
+        prior_status TEXT,
+        new_status   TEXT,
+        reviewer     TEXT NOT NULL,
+        reason       TEXT,
+        reviewed_at  REAL NOT NULL,
+        FOREIGN KEY (issue_id) REFERENCES professional_issues(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_professional_issue_reviews_issue ON professional_issue_reviews(issue_id, reviewed_at);
     """
 }

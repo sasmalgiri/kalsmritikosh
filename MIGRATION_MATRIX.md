@@ -3,8 +3,10 @@
 **Status: CURRENT.** MIG-001A (2026-07-25). Inventory of the representative schema-migration
 fixtures and the invariants each proves. Authority: `WHOLE_PROJECT_COMPLETION_PROGRAM.md` Stage 1.
 
-Schema head is **v67** (`SchemaMigrations.latestVersion`); v67 adds nullable `scope_kind` /
-`scope_id` to `claims`. Migrations are append-only, each applied inside a per-version SAVEPOINT
+Schema head is **v68** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
+`scope_id` to `claims`; **v68 (OPS-001)** adds the professional Issue Engine tables
+(`professional_issues`, `professional_issue_links`, `professional_issue_reviews`). Every fixture
+row's "Expected end" means the CURRENT latest (now 68). Migrations are append-only, each applied inside a per-version SAVEPOINT
 (`applyOne`), with a stale-`user_version` self-heal on the full-migrate path.
 
 ## How the fixtures are built (no committed binaries)
