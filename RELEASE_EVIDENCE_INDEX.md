@@ -86,7 +86,10 @@ create workspace → add real sources → complete primary workflow → inspect 
 | Migration fault atomicity (MIG-001B) | boundary faults A/B/E/F, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas fail-closed | Integration verified |
 | Real-archive migration | synthetic v66→v67 archive, correct hash semantics + preservation | Integration verified (synthetic) |
 | Sanitized REAL owner archive | `ci/migrations/verify-real-archive.sh` (skips w/o fixture) | PENDING (owner run) |
-| Branch protection ruleset for `main` | OWNER repo-settings step — require `build-and-test` + `architecture-guards`, up-to-date, conversations resolved, no force-push/deletion | PENDING (owner) |
+| **CI-001B five named checks (all green)** | run **30144232341**, success, SHA `806325933ba9c7034488f80cd9ee1bcb23d1d6d2`, 2026-07-25: `architecture-guards` ✓ · `build-and-test` ✓ (794 executed, 0 failed, floor 794) · `migration-matrix` ✓ (23 tests, 4 suites) · `parser-fixtures` ✓ (78 tests, 20 suites) · `report-receipt-integrity` ✓ (68 tests, 6 suites). Group manifests: `ci/test-groups/*.json` @ this SHA. | PASS |
+| parser-fixtures status rule | Green proves the CURRENTLY REGISTERED fixtures only — release gate F1 (complete advertised-format matrix) remains PENDING | RECORDED |
+| sensitive-export job | NOT created — OPS-003 SensitiveScope unimplemented; a green placeholder would mislead | PENDING (depends OPS-003) |
+| Branch protection ruleset for `main` | OWNER repo-settings step — now require ALL FIVE checks: `build-and-test`, `architecture-guards`, `migration-matrix`, `parser-fixtures`, `report-receipt-integrity`; branch up-to-date; conversations resolved; no force-push/deletion | PENDING (owner) |
 
 ---
 
