@@ -90,6 +90,7 @@ create workspace → add real sources → complete primary workflow → inspect 
 | **CI-001B five named checks (all green)** | run **30144232341**, success, SHA `806325933ba9c7034488f80cd9ee1bcb23d1d6d2`, 2026-07-25: `architecture-guards` ✓ · `build-and-test` ✓ (794 executed, 0 failed, floor 794) · `migration-matrix` ✓ (23 tests, 4 suites) · `parser-fixtures` ✓ (78 tests, 20 suites) · `report-receipt-integrity` ✓ (68 tests, 6 suites). Group manifests: `ci/test-groups/*.json` @ this SHA. | PASS |
 | parser-fixtures status rule | Green proves the CURRENTLY REGISTERED fixtures only — release gate F1 (complete advertised-format matrix) remains PENDING | RECORDED |
 | sensitive-export job | NOT created — OPS-003 SensitiveScope unimplemented; a green placeholder would mislead | PENDING (depends OPS-003) |
+| OPS-001 Issue Engine (schema v68) hosted-green | run **30148706330**, success, SHA `1673900ffb04907ac26130a4400794e61cf4f8a9`, 2026-07-25: build-and-test 810 total / 808 passed / 2 skipped (env-gated) / 0 failed, floor 810; migration-matrix 23/4 suites; parser-fixtures 78/20; report-receipt-integrity 68/6; guards ✓ | PASS |
 | Branch protection ruleset for `main` | OWNER repo-settings step — now require ALL FIVE checks: `build-and-test`, `architecture-guards`, `migration-matrix`, `parser-fixtures`, `report-receipt-integrity`; branch up-to-date; conversations resolved; no force-push/deletion | PENDING (owner) |
 
 ---

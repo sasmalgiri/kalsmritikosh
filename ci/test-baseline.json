@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 810,
-  "baselineCommit": "OPS-001 (updated to the exact SHA in the follow-up evidence commit)",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 810 = 808 passed + 2 skipped as of OPS-001 (raised 794 → 810). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "baselineCommit": "1673900ffb04907ac26130a4400794e61cf4f8a9",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 810 = 808 passed + 2 skipped as of OPS-001 (raised 794 \u2192 810). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
 }
