@@ -109,7 +109,11 @@ jobs:
             test 2>&1 | tee test.log
 
       - name: Verify tests actually executed (from .xcresult, not console text)
-        run: bash ci/verify-xcresult-tests.sh build/TestResults.xcresult ci/test-baseline.json 2>&1 | tee verify.log
+        run: |
+          # pipefail so the verifier's exit code propagates through `tee` — without it the
+          # pipeline returns tee's 0 and the gate could never fail the job.
+          set -o pipefail
+          bash ci/verify-xcresult-tests.sh build/TestResults.xcresult ci/test-baseline.json 2>&1 | tee verify.log
 
       - name: Upload logs + result bundle on failure
         if: failure()
