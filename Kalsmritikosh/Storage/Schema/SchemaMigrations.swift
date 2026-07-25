@@ -14,16 +14,17 @@ import Foundation
 /// semantics (SAVEPOINT → SQL → stamp → RELEASE, rollback on failure) are identical whether or not
 /// a hook is present. A test supplies a hook via the internal `fault:` overloads to prove
 /// atomicity at each boundary (MIG-001B).
-public enum MigrationFaultPoint: Sendable, Equatable {
+enum MigrationFaultPoint: Sendable, Equatable {
     case beforeSavepoint(version: Int)
     case afterSavepoint(version: Int)
     case afterSQLBeforeVersionStamp(version: Int)
     case afterVersionStampBeforeRelease(version: Int)
 }
 
-/// Injected per-migration hook. Passed explicitly (never a global/static), so concurrent tests
-/// cannot affect one another. Production passes `nil`.
-public typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> Void
+/// Injected per-migration hook. INTERNAL (not shipping API) — tests reach it via `@testable
+/// import`. Passed explicitly (never a global/static), so concurrent tests cannot affect one
+/// another. Production passes `nil`.
+typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> Void
 
 public enum SchemaMigrations {
 
