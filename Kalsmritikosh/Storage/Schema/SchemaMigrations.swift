@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 69
+    public static let latestVersion = 70
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -157,7 +157,10 @@ public enum SchemaMigrations {
             "deadline_candidates": ["id", "task_id", "due_date", "precision", "time_zone",
                                      "deadline_kind", "origin", "status", "created_at"],
             "deadlines": ["id", "task_id", "due_date", "precision", "time_zone", "deadline_kind",
-                           "status", "confirmation_kind", "confirmed_by", "confirmed_at", "created_at"]
+                           "status", "confirmation_kind", "confirmed_by", "confirmed_at", "created_at"],
+            // v70 — structured confirmation authority on the task review ledger (OPS-002.1).
+            "professional_task_reviews": ["id", "task_id", "action", "reviewer", "reviewed_at",
+                                           "authority_kind", "rule_id", "rule_version"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -237,7 +240,8 @@ public enum SchemaMigrations {
         (66, v66),
         (67, v67),
         (68, v68),
-        (69, v69)
+        (69, v69),
+        (70, v70)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2736,5 +2740,17 @@ public enum SchemaMigrations {
         FOREIGN KEY (deadline_id) REFERENCES deadlines(id) ON DELETE CASCADE
     );
     CREATE INDEX idx_deadline_reviews_deadline ON deadline_reviews(deadline_id, reviewed_at);
+    """
+
+    // OPS-002.1 — structured confirmation authority on the task review ledger. v69 validated a
+    // deterministic rule's identity (ruleID + version) and then DISCARDED it: only origin + actor
+    // name were persisted, so after reopening the database the application could not prove WHICH
+    // rule and version confirmed a Task. Additive nullable columns (v69 already ran in
+    // development and hosted CI — never rewrite a shipped migration); rows predating v70 keep
+    // NULL authority, which is honest: their structured provenance was never recorded.
+    private static let v70: String = """
+    ALTER TABLE professional_task_reviews ADD COLUMN authority_kind TEXT;
+    ALTER TABLE professional_task_reviews ADD COLUMN rule_id TEXT;
+    ALTER TABLE professional_task_reviews ADD COLUMN rule_version TEXT;
     """
 }

@@ -3,14 +3,16 @@
 **Status: CURRENT.** MIG-001A (2026-07-25). Inventory of the representative schema-migration
 fixtures and the invariants each proves. Authority: `WHOLE_PROJECT_COMPLETION_PROGRAM.md` Stage 1.
 
-Schema head is **v69** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
+Schema head is **v70** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
 `scope_id` to `claims`; **v68 (OPS-001)** adds the professional Issue Engine tables
 (`professional_issues`, `professional_issue_links`, `professional_issue_reviews`); **v69
 (OPS-002)** adds the Task and Deadline Engine tables (`professional_tasks`,
 `professional_task_dependencies`, `deadline_candidates`, `deadlines`,
 `professional_task_evidence_links` + three review ledgers) — with `deadline_candidates ≠
-deadlines` enforced by `UNIQUE(source_candidate_id)`. Every fixture
-row's "Expected end" means the CURRENT latest (now 69). Migrations are append-only, each applied inside a per-version SAVEPOINT
+deadlines` enforced by `UNIQUE(source_candidate_id)`; **v70 (OPS-002.1)** adds nullable
+structured confirmation-authority columns (`authority_kind`, `rule_id`, `rule_version`) to
+`professional_task_reviews` — pre-v70 rows keep NULL authority (nothing invented). Every fixture
+row's "Expected end" means the CURRENT latest (now 70). Migrations are append-only, each applied inside a per-version SAVEPOINT
 (`applyOne`), with a stale-`user_version` self-heal on the full-migrate path.
 
 ## How the fixtures are built (no committed binaries)
@@ -40,6 +42,8 @@ sanitized real archive (MIG-001B) and anything not reproducible from history.
 | MS-67 | 67 | migrate through 67 (reopened) | full claims-era set | 67 | idempotent reopen; rows survive | ok / 0 | `milestoneMigratesToLatest[67]` | Unit verified | — |
 | MS-68 | 68 | migrate through 68 | full set + a live professional_issues row | latest | Issue rows + reviews survive v69; only new tables added; canonical gains no task/deadline column | ok / 0 | `milestoneMigratesToLatest[68]` + `ProfessionalTaskMigrationTests.v68ToV69Preserves` | Unit verified | — |
 | MS-69 | 69 | migrate through 69 (reopened) | full set | latest | idempotent reopen; rows survive | ok / 0 | `milestoneMigratesToLatest[69]` | Unit verified | — |
+| MS-69-70 | 69 | migrate through 69 + live v69-era Task/Deadline/Issue rows | full set + workflow rows | latest | workflow rows survive v70; authority columns added NULL; nothing invented | ok / 0 | `ProfessionalTaskMigrationTests.v69ToV70Preserves` | Unit verified | — |
+| MS-70 | 70 | migrate through 70 (reopened) | full set | latest | idempotent reopen; rows survive | ok / 0 | `milestoneMigratesToLatest[70]` | Unit verified | — |
 | REPEAT-67 | 67 | reopen+migrate ×3 | full set | 67 | no dup / no regression / no loss | ok / 0 | `repeatedMigrationIsStable` | Unit verified | — |
 | STALE-67 | 67 (counter→2) | full schema, lowered user_version | full set | 67 | self-heals to 67; rows retained; no destructive replay | markers present | `staleUserVersionSelfHeals` | Unit verified | — |
 | REAL-ARCHIVE | real | sanitized owner archive copy | real corpus | 67 | count + reopenability preserved; original untouched | ok / 0 | (MIG-001B) | Planned | deferred to MIG-001B |

@@ -1,5 +1,5 @@
 {
-  "schemaHead": 69,
+  "schemaHead": 70,
   "note": "Fixture DEFINITIONS. Synthetic historical databases are reproduced at test time from the committed migration list (SchemaMigrations.migrate(_:through:)); no opaque binaries are committed for these. Committed binaries are reserved for a sanitized real archive (MIG-001B).",
   "builder": "KalsmritikoshTests/Support/MigrationFixtureBuilder.swift",
   "suite": "KalsmritikoshTests/MigrationMatrixTests.swift",
@@ -10,7 +10,7 @@
       "startVersion": 0,
       "construct": "fresh, unmigrated",
       "seeds": [],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "listGapFree",
         "userVersion67",
@@ -28,7 +28,7 @@
       "seeds": [
         "files"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -45,7 +45,7 @@
       "seeds": [
         "files"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -65,7 +65,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -85,7 +85,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -105,7 +105,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -129,7 +129,7 @@
         "claim_reviews",
         "claim_usage"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -154,7 +154,7 @@
         "claim_reviews",
         "claim_usage"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -179,7 +179,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -204,7 +204,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -230,7 +230,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "idempotentReopen",
         "preservedRows",
@@ -255,7 +255,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -273,7 +273,7 @@
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "idempotentReopen",
         "preservedRows",
@@ -284,13 +284,54 @@
       "state": "unit-verified"
     },
     {
+      "id": "MS-69-70",
+      "startVersion": 69,
+      "construct": "migrate through 69, seed live Task/Deadline/Issue rows with the v69 column set, migrate to 70",
+      "seeds": [
+        "fullSet",
+        "professional_issues",
+        "professional_tasks",
+        "professional_task_reviews",
+        "deadline_candidates",
+        "deadlines"
+      ],
+      "expectedEndVersion": 70,
+      "assertions": [
+        "preservedRows",
+        "workflowRowsPreserved",
+        "authorityColumnsAdded",
+        "noInventedAuthority",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "ProfessionalTaskMigrationTests.v69ToV70Preserves",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-70",
+      "startVersion": 70,
+      "construct": "migrate through 70 (reopen; OPS-002.1 confirmation authority)",
+      "seeds": [
+        "fullSet"
+      ],
+      "expectedEndVersion": 70,
+      "assertions": [
+        "idempotentReopen",
+        "preservedRows",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[70]",
+      "state": "unit-verified"
+    },
+    {
       "id": "REPEAT-67",
       "startVersion": 67,
       "construct": "reopen+migrate x3",
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "noDuplication",
         "noRegression",
@@ -306,7 +347,7 @@
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "selfHealsTo67",
         "rowsRetained",
@@ -322,7 +363,7 @@
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "originalHashUnchanged",
         "copyEqualsOriginalBefore",
@@ -343,7 +384,7 @@
       "seeds": [
         "realCorpus"
       ],
-      "expectedEndVersion": 69,
+      "expectedEndVersion": 70,
       "assertions": [
         "manifestHashPin",
         "originalHashUnchanged",

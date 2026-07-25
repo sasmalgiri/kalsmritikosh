@@ -372,6 +372,13 @@ public enum ProfessionalTaskReviewAction: String, Codable, Sendable, CaseIterabl
     case corrected
 }
 
+/// The kind of authority behind a confirmation review row (v70). Persisted so the ledger can
+/// PROVE which authority opened a task — never just the actor's display name.
+public enum TaskAuthorityKind: String, Codable, Sendable, CaseIterable {
+    case user
+    case deterministicRule
+}
+
 public nonisolated struct ProfessionalTaskReview: Identifiable, Sendable, Equatable {
     public let id: UUID
     public let taskID: UUID
@@ -381,13 +388,21 @@ public nonisolated struct ProfessionalTaskReview: Identifiable, Sendable, Equata
     public let reviewer: String
     public let reason: String?
     public let reviewedAt: Date
+    /// Structured confirmation provenance (v70). Set on `created` (createConfirmed) and
+    /// `candidateConfirmed` rows; nil on other actions and on rows predating v70.
+    public let authorityKind: TaskAuthorityKind?
+    public let ruleID: String?
+    public let ruleVersion: String?
 
     public nonisolated init(id: UUID, taskID: UUID, action: ProfessionalTaskReviewAction,
                             priorStatus: ProfessionalTaskStatus?, newStatus: ProfessionalTaskStatus?,
-                            reviewer: String, reason: String?, reviewedAt: Date) {
+                            reviewer: String, reason: String?, reviewedAt: Date,
+                            authorityKind: TaskAuthorityKind? = nil,
+                            ruleID: String? = nil, ruleVersion: String? = nil) {
         self.id = id; self.taskID = taskID; self.action = action
         self.priorStatus = priorStatus; self.newStatus = newStatus
         self.reviewer = reviewer; self.reason = reason; self.reviewedAt = reviewedAt
+        self.authorityKind = authorityKind; self.ruleID = ruleID; self.ruleVersion = ruleVersion
     }
 }
 

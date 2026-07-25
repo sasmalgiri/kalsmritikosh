@@ -18,6 +18,7 @@ import Foundation
 
 public enum DeadlineError: Error, Equatable {
     case taskNotFound(UUID)
+    case taskNotOperational(ProfessionalTaskStatus)
     case candidateNotFound(UUID)
     case deadlineNotFound(UUID)
     case invalidCandidatePrecision(DatePrecision)
@@ -161,17 +162,17 @@ public actor DeadlineRepository {
                                  at date: Date) async throws -> Deadline {
         guard let c = try await candidate(id: id) else { throw DeadlineError.candidateNotFound(id) }
         guard c.status == .pending else { throw DeadlineError.candidateNotPending(c.status) }   // re-confirm fails
+        // A candidate may be PROPOSED against a candidate task, but it can only become an
+        // OPERATIONAL Deadline once the task itself is confirmed and still live.
+        try await requireOperationalTask(c.taskID)
         try validateAuthority(confirmation)
         guard DeadlineValue.confirmablePrecisions.contains(c.value.precision) else {
             throw DeadlineError.unpromotablePrecision(c.value.precision)   // refine via correction first
         }
         if confirmation.kind == .deterministicRule {
-            // A rule confirmation must cite at least one exact evidence link on the candidate.
-            let n = Int(try await database.query("""
-            SELECT COUNT(*) FROM professional_task_evidence_links
-            WHERE scope_kind = 'deadlineCandidate' AND scope_id = ?;
-            """, [.text(id.uuidString)]).first?.int(0) ?? 0)
-            guard n >= 1 else { throw DeadlineError.ruleEvidenceRequired }
+            guard try await hasExactRuleEvidence(candidateID: id) else {
+                throw DeadlineError.ruleEvidenceRequired
+            }
         }
 
         let d = Deadline(id: UUID(), taskID: c.taskID, sourceCandidateID: c.id, value: c.value,
@@ -211,6 +212,7 @@ public actor DeadlineRepository {
         guard try await rowExists("professional_tasks", id: taskID) else {
             throw DeadlineError.taskNotFound(taskID)
         }
+        try await requireOperationalTask(taskID)
         guard DeadlineValue.confirmablePrecisions.contains(value.precision) else {
             throw DeadlineError.unpromotablePrecision(value.precision)
         }
@@ -301,6 +303,44 @@ public actor DeadlineRepository {
     }
 
     // MARK: - Internals
+
+    /// A confirmed, live task: open / inProgress / blocked. Candidate tasks have not been
+    /// confirmed by any authority; completed / cancelled / archived tasks are closed — none of
+    /// them may carry an ACTIVE operational deadline.
+    private func requireOperationalTask(_ taskID: UUID) async throws {
+        let rows = try await database.query("SELECT status FROM professional_tasks WHERE id = ?;", [.uuid(taskID)])
+        guard let status = rows.first?.string(0).flatMap(ProfessionalTaskStatus.init(rawValue:)) else {
+            throw DeadlineError.taskNotFound(taskID)
+        }
+        guard [.open, .inProgress, .blocked].contains(status) else {
+            throw DeadlineError.taskNotOperational(status)
+        }
+    }
+
+    /// EXACT evidence for deterministic-rule confirmation: a link that is (a) scoped to THIS
+    /// candidate, (b) role `deadlineBasis`, and (c) resolves to exact cited evidence — either an
+    /// EvidenceBlock tied to a resolvable source version, or a Claim with at least one evidence
+    /// reference carrying both an exact EvidenceBlock and a source version. Entity / Event / Gap /
+    /// Contradiction / bare-KnowledgeObject targets and context-role links never qualify.
+    private func hasExactRuleEvidence(candidateID: UUID) async throws -> Bool {
+        let blockLinks = Int(try await database.query("""
+        SELECT COUNT(*) FROM professional_task_evidence_links l
+        JOIN evidence_blocks b   ON b.id  = l.target_id
+        JOIN source_versions sv  ON sv.id = b.source_version_id
+        WHERE l.scope_kind = 'deadlineCandidate' AND l.scope_id = ?
+          AND l.link_role = 'deadlineBasis' AND l.target_kind = 'evidenceBlock';
+        """, [.text(candidateID.uuidString)]).first?.int(0) ?? 0)
+        if blockLinks >= 1 { return true }
+        let claimLinks = Int(try await database.query("""
+        SELECT COUNT(*) FROM professional_task_evidence_links l
+        JOIN claim_evidence_ref r ON r.claim_id = l.target_id
+        JOIN evidence_blocks b    ON b.id  = r.evidence_block_id
+        JOIN source_versions sv   ON sv.id = r.source_version_id
+        WHERE l.scope_kind = 'deadlineCandidate' AND l.scope_id = ?
+          AND l.link_role = 'deadlineBasis' AND l.target_kind = 'claim';
+        """, [.text(candidateID.uuidString)]).first?.int(0) ?? 0)
+        return claimLinks >= 1
+    }
 
     private func validateAuthority(_ confirmation: DeadlineConfirmation) throws {
         guard !confirmation.confirmedBy.trimmingCharacters(in: .whitespaces).isEmpty else {

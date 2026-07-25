@@ -30,7 +30,9 @@ struct ProfessionalTaskMigrationTests {
     @Test("A fresh database reaches v69 with all eight Task/Deadline tables and clean integrity")
     func freshV69() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)
-        try await SchemaMigrations.migrate(db)
+        // Pinned `through: 69` — this locks the v69 step; head coverage lives in
+        // MigrationMatrixTests and the v69→v70 test below.
+        try await SchemaMigrations.migrate(db, through: 69)
         #expect(try await db.currentUserVersion() == 69)
         for t in taskTables {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t), "\(t) missing")
@@ -64,7 +66,7 @@ struct ProfessionalTaskMigrationTests {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t) == false, "\(t) already present at v68")
         }
 
-        try await SchemaMigrations.migrate(db)      // 68 → 69
+        try await SchemaMigrations.migrate(db, through: 69)      // 68 → 69 (pinned step)
 
         #expect(try await db.currentUserVersion() == 69)
         for t in taskTables {
@@ -88,6 +90,71 @@ struct ProfessionalTaskMigrationTests {
             #expect(!cols.contains { $0.lowercased().contains(forbidden) },
                     "\(table) gained a \(forbidden) column")
         }
+    }
+
+    // MARK: - OPS-002.1: genuine v69→v70 (additive authority columns; nothing invented)
+
+    @Test("A genuine v69→v70 migration preserves Task/Deadline/Issue/canonical rows and adds NULL authority")
+    func v69ToV70Preserves() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: 69)
+        #expect(try await db.currentUserVersion() == 69)
+        let snap = try await MigrationFixtureBuilder.seedPreservationRows(into: db, forVersion: 69)
+        // Live v69-era workflow rows seeded with the v69 column set (NO authority columns —
+        // the repository can't be used here; it now writes v70 columns).
+        let ws = UUID(), issue = UUID(), task = UUID(), candidate = UUID(), deadline = UUID(), review = UUID()
+        try await db.exec("INSERT INTO workspaces (id, title, template_type, created_at, updated_at) VALUES (?,?,?,?,?);",
+                          [.uuid(ws), .text("WS-69"), .text("general"), .real(0), .real(0)])
+        try await db.exec("""
+        INSERT INTO professional_issues (id, workspace_id, title, issue_type, status, priority, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?);
+        """, [.uuid(issue), .uuid(ws), .text("I"), .text("question"), .text("open"), .text("normal"), .real(0), .real(0)])
+        try await db.exec("""
+        INSERT INTO professional_tasks (id, workspace_id, primary_issue_id, title, task_type, status, priority, origin, created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?);
+        """, [.uuid(task), .uuid(ws), .uuid(issue), .text("T"), .text("action"), .text("open"),
+              .text("normal"), .text("userCreated"), .real(0), .real(0)])
+        try await db.exec("""
+        INSERT INTO professional_task_reviews (id, task_id, action, prior_status, new_status, reviewer, reason, reviewed_at)
+        VALUES (?,?,?,?,?,?,?,?);
+        """, [.uuid(review), .uuid(task), .text("created"), .null, .text("open"), .text("u"), .null, .real(0)])
+        try await db.exec("""
+        INSERT INTO deadline_candidates (id, task_id, due_date, precision, time_zone, deadline_kind,
+                                         origin, proposed_by, status, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?);
+        """, [.uuid(candidate), .uuid(task), .real(0), .integer(5), .text("UTC"), .text("due"),
+              .text("sourceExtraction"), .text("x"), .text("promoted"), .real(0)])
+        try await db.exec("""
+        INSERT INTO deadlines (id, task_id, source_candidate_id, due_date, precision, time_zone,
+                               deadline_kind, status, confirmation_kind, confirmed_by, confirmed_at,
+                               created_at, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+        """, [.uuid(deadline), .uuid(task), .uuid(candidate), .real(0), .integer(5), .text("UTC"),
+              .text("due"), .text("active"), .text("user"), .text("u"), .real(0), .real(0), .real(0)])
+        #expect(try await MigrationFixtureBuilder.columns(db, "professional_task_reviews")
+            .isDisjoint(with: ["authority_kind", "rule_id", "rule_version"]))
+
+        try await SchemaMigrations.migrate(db)      // 69 → 70
+
+        #expect(try await db.currentUserVersion() == 70)
+        let failures = try await snap.failures(in: db)
+        #expect(failures.isEmpty, "v69→v70 lost canonical rows: \(failures)")
+        for (table, id) in [("professional_issues", issue), ("professional_tasks", task),
+                            ("deadline_candidates", candidate), ("deadlines", deadline),
+                            ("professional_task_reviews", review)] {
+            let n = Int(try await db.query("SELECT COUNT(*) FROM \(table) WHERE id = ?;", [.uuid(id)]).first?.int(0) ?? 0)
+            #expect(n == 1, "\(table) row lost in v69→v70")
+        }
+        // New columns exist AND the pre-v70 review's authority is NULL — the migration invents
+        // no provenance for rows whose structured authority was never recorded.
+        #expect(try await MigrationFixtureBuilder.columns(db, "professional_task_reviews")
+            .isSuperset(of: ["authority_kind", "rule_id", "rule_version"]))
+        let invented = try await db.query("""
+        SELECT COUNT(*) FROM professional_task_reviews
+        WHERE authority_kind IS NOT NULL OR rule_id IS NOT NULL OR rule_version IS NOT NULL;
+        """, [])
+        #expect(Int(invented.first?.int(0) ?? -1) == 0, "migration invented authority provenance")
+        #expect(try await MigrationFaultHarness.integrityOK(db))
+        #expect(try await MigrationFaultHarness.foreignKeyViolationCount(db) == 0)
     }
 
     // MARK: - Truth-rule constraints at the DATABASE layer

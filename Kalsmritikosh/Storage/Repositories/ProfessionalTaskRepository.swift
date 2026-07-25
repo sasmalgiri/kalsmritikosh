@@ -24,6 +24,7 @@ public enum ProfessionalTaskError: Error, Equatable {
     case blankAuthority
     case workspaceNotFound(UUID)
     case issueNotFound(UUID)
+    case crossWorkspacePrimaryIssue(UUID)
     case taskNotFound(UUID)
     case invalidCandidateOrigin(ProfessionalTaskOrigin)
     case invalidTransition(from: ProfessionalTaskStatus, to: ProfessionalTaskStatus)
@@ -59,6 +60,22 @@ public enum TaskCreationAuthority: Sendable, Equatable {
         switch self {
         case .user: return .userCreated
         case .deterministicRule: return .deterministicRule
+        }
+    }
+
+    nonisolated var authorityKind: TaskAuthorityKind {
+        switch self {
+        case .user: return .user
+        case .deterministicRule: return .deterministicRule
+        }
+    }
+
+    /// The rule identity to PERSIST on the review row (v70) — validating it and then discarding
+    /// it would leave the ledger unable to prove which rule confirmed the task.
+    nonisolated var ruleIdentity: (id: String, version: String)? {
+        switch self {
+        case .user: return nil
+        case .deterministicRule(let ruleID, let version, _): return (ruleID, version)
         }
     }
 
@@ -108,7 +125,7 @@ public actor ProfessionalTaskRepository {
         return try await insertTask(workspaceID: workspaceID, primaryIssueID: primaryIssueID,
                                     title: title, detail: detail, type: type, priority: priority,
                                     owner: owner, origin: origin, status: .candidate,
-                                    reviewer: proposedBy, at: date)
+                                    reviewer: proposedBy, authority: nil, at: date)
     }
 
     /// A user- or rule-authored task — starts `.open`. Authority is mandatory and validated.
@@ -121,7 +138,7 @@ public actor ProfessionalTaskRepository {
         return try await insertTask(workspaceID: workspaceID, primaryIssueID: primaryIssueID,
                                     title: title, detail: detail, type: type, priority: priority,
                                     owner: owner, origin: authority.origin, status: .open,
-                                    reviewer: authority.actorName, at: date)
+                                    reviewer: authority.actorName, authority: authority, at: date)
     }
 
     /// Move a candidate task to `.open` — only a user or identified deterministic rule may.
@@ -134,7 +151,8 @@ public actor ProfessionalTaskRepository {
             throw ProfessionalTaskError.invalidTransition(from: t.status, to: .open)
         }
         return try await applyStatusChange(t, to: .open, action: .candidateConfirmed,
-                                           reviewer: authority.actorName, reason: reason, at: date)
+                                           reviewer: authority.actorName, reason: reason,
+                                           authority: authority, at: date)
     }
 
     // MARK: - Reads
@@ -215,7 +233,8 @@ public actor ProfessionalTaskRepository {
 
     public func reviews(taskID: UUID) async throws -> [ProfessionalTaskReview] {
         let rows = try await database.query("""
-        SELECT id, task_id, action, prior_status, new_status, reviewer, reason, reviewed_at
+        SELECT id, task_id, action, prior_status, new_status, reviewer, reason, reviewed_at,
+               authority_kind, rule_id, rule_version
         FROM professional_task_reviews WHERE task_id = ? ORDER BY reviewed_at ASC, id ASC;
         """, [.uuid(taskID)])
         return rows.compactMap { r in
@@ -225,7 +244,9 @@ public actor ProfessionalTaskRepository {
             return ProfessionalTaskReview(id: id, taskID: tid, action: action,
                                           priorStatus: r.string(3).flatMap(ProfessionalTaskStatus.init(rawValue:)),
                                           newStatus: r.string(4).flatMap(ProfessionalTaskStatus.init(rawValue:)),
-                                          reviewer: reviewer, reason: r.string(6), reviewedAt: at)
+                                          reviewer: reviewer, reason: r.string(6), reviewedAt: at,
+                                          authorityKind: r.string(8).flatMap(TaskAuthorityKind.init(rawValue:)),
+                                          ruleID: r.string(9), ruleVersion: r.string(10))
         }
     }
 
@@ -379,6 +400,7 @@ public actor ProfessionalTaskRepository {
                             type: ProfessionalTaskType, priority: ProfessionalTaskPriority,
                             owner: String?, origin: ProfessionalTaskOrigin,
                             status: ProfessionalTaskStatus, reviewer: String,
+                            authority: TaskCreationAuthority?,
                             at date: Date) async throws -> ProfessionalTask {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw ProfessionalTaskError.blankTitle }
@@ -386,8 +408,15 @@ public actor ProfessionalTaskRepository {
             throw ProfessionalTaskError.workspaceNotFound(workspaceID)
         }
         if let issue = primaryIssueID {
-            guard try await rowExists("professional_issues", id: issue) else {
+            // The Issue must exist AND live in the SAME workspace — a task must never anchor to
+            // another workspace's issue.
+            let rows = try await database.query(
+                "SELECT workspace_id FROM professional_issues WHERE id = ?;", [.uuid(issue)])
+            guard let issueWorkspace = rows.first?.uuid(0) else {
                 throw ProfessionalTaskError.issueNotFound(issue)
+            }
+            guard issueWorkspace == workspaceID else {
+                throw ProfessionalTaskError.crossWorkspacePrimaryIssue(issue)
             }
         }
         let t = ProfessionalTask(id: UUID(), workspaceID: workspaceID, primaryIssueID: primaryIssueID,
@@ -406,7 +435,7 @@ public actor ProfessionalTaskRepository {
                   .text(priority.rawValue), .optionalText(owner), .text(origin.rawValue),
                   .date(date), .date(date)])
             try await insertReview(taskID: t.id, action: .created, prior: nil, new: status,
-                                   reviewer: reviewer, reason: nil, at: date)
+                                   reviewer: reviewer, reason: nil, authority: authority, at: date)
             try await database.exec("RELEASE SAVEPOINT \(savepoint);")
         } catch {
             try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
@@ -418,7 +447,8 @@ public actor ProfessionalTaskRepository {
 
     private func applyStatusChange(_ t: ProfessionalTask, to status: ProfessionalTaskStatus,
                                    action: ProfessionalTaskReviewAction, reviewer: String,
-                                   reason: String?, at date: Date) async throws -> ProfessionalTask {
+                                   reason: String?, authority: TaskCreationAuthority? = nil,
+                                   at date: Date) async throws -> ProfessionalTask {
         var updated = t
         updated.status = status
         updated.updatedAt = date
@@ -434,7 +464,7 @@ public actor ProfessionalTaskRepository {
                   updated.archivedAt.map { SQLValue.date($0) } ?? .null, .uuid(t.id)])
             if injectFailure == .beforeReviewInsert { throw InjectedTaskFailure() }
             try await insertReview(taskID: t.id, action: action, prior: t.status, new: status,
-                                   reviewer: reviewer, reason: reason, at: date)
+                                   reviewer: reviewer, reason: reason, authority: authority, at: date)
             try await database.exec("RELEASE SAVEPOINT \(savepoint);")
         } catch {
             try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
@@ -480,13 +510,18 @@ public actor ProfessionalTaskRepository {
 
     private func insertReview(taskID: UUID, action: ProfessionalTaskReviewAction,
                               prior: ProfessionalTaskStatus?, new: ProfessionalTaskStatus?,
-                              reviewer: String, reason: String?, at date: Date) async throws {
+                              reviewer: String, reason: String?,
+                              authority: TaskCreationAuthority?, at date: Date) async throws {
         try await database.exec("""
-        INSERT INTO professional_task_reviews (id, task_id, action, prior_status, new_status, reviewer, reason, reviewed_at)
-        VALUES (?,?,?,?,?,?,?,?);
+        INSERT INTO professional_task_reviews (id, task_id, action, prior_status, new_status, reviewer, reason,
+                                               reviewed_at, authority_kind, rule_id, rule_version)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?);
         """, [.uuid(UUID()), .uuid(taskID), .text(action.rawValue),
               .optionalText(prior?.rawValue), .optionalText(new?.rawValue),
-              .text(reviewer), .optionalText(reason), .date(date)])
+              .text(reviewer), .optionalText(reason), .date(date),
+              .optionalText(authority?.authorityKind.rawValue),
+              .optionalText(authority?.ruleIdentity?.id),
+              .optionalText(authority?.ruleIdentity?.version)])
     }
 
     private func rowExists(_ table: String, id: UUID) async throws -> Bool {

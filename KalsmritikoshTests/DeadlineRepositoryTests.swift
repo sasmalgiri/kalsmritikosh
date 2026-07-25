@@ -29,9 +29,13 @@ struct DeadlineRepositoryTests {
         let workspaceID: UUID
         let taskID: UUID
         let claimID: UUID
+        let sourceVersionID: UUID
+        let evidenceBlockID: UUID
     }
 
-    /// Latest-schema DB + workspace + one open task + one workspace-bound claim (rule evidence).
+    /// Latest-schema DB + workspace + one open task + one workspace-bound claim (KO-only
+    /// evidence refs — NOT exact) + a resolvable source version and evidence block for
+    /// upgrading evidence to exact.
     private func rig() async throws -> Rig {
         let url = MigrationFixtureBuilder.newTemporaryURL()
         let db = try await MigrationFixtureBuilder.database(atVersion: 0, at: url)
@@ -39,7 +43,7 @@ struct DeadlineRepositoryTests {
         let ws = UUID()
         try await db.exec("INSERT INTO workspaces (id, title, template_type, created_at, updated_at) VALUES (?,?,?,?,?);",
                           [.uuid(ws), .text("WS"), .text("general"), .real(0), .real(0)])
-        let f = UUID(), ko = UUID(), claim = UUID()
+        let f = UUID(), ko = UUID(), claim = UUID(), doc = UUID(), sv = UUID(), block = UUID()
         try await db.exec("INSERT INTO files (id, url, source_type) VALUES (?,?,?);",
                           [.uuid(f), .text("file://\(f)"), .text("txt")])
         try await db.exec("""
@@ -47,6 +51,17 @@ struct DeadlineRepositoryTests {
         """, [.uuid(ko), .uuid(f), .text("txt"), .text("c"), .real(0), .real(0)])
         try await db.exec("INSERT INTO workspace_sources (workspace_id, file_id, added_at) VALUES (?,?,?);",
                           [.uuid(ws), .uuid(f), .real(0)])
+        try await db.exec("""
+        INSERT INTO source_versions (id, logical_source_id, document_id, content_hash, valid_from, is_current, created_at)
+        VALUES (?,?,?,?,?,1,?);
+        """, [.uuid(sv), .uuid(f), .uuid(doc), .text(String(repeating: "ab", count: 32)), .real(0), .real(0)])
+        try await db.exec("""
+        INSERT INTO evidence_blocks (id, document_id, source_version_id, ordinal, kind, raw_text, normalized_text, extraction_method, extraction_confidence)
+        VALUES (?,?,?,?,?,?,?,?,?);
+        """, [.uuid(block), .uuid(doc), .uuid(sv), .integer(0), .text("paragraph"),
+              .text("respond within 30 days"), .text("respond within 30 days"), .text("native"), .real(1.0)])
+        try await db.exec("INSERT INTO evidence_block_objects (evidence_block_id, knowledge_object_id, linked_at) VALUES (?,?,?);",
+                          [.uuid(block), .uuid(ko), .real(0)])
         try await db.exec("""
         INSERT INTO claims (id, subject_id, subject_label, statement, confidence, created_at,
                             evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status)
@@ -63,7 +78,8 @@ struct DeadlineRepositoryTests {
                                                    priority: .high, owner: nil,
                                                    authority: .user(actor: "u"), at: t0)
         return Rig(db: db, url: url, tasks: tasks, repo: DeadlineRepository(database: db),
-                   workspaceID: ws, taskID: task.id, claimID: claim)
+                   workspaceID: ws, taskID: task.id, claimID: claim,
+                   sourceVersionID: sv, evidenceBlockID: block)
     }
 
     private func dayValue(_ tz: String = "UTC") -> DeadlineValue {
@@ -154,7 +170,7 @@ struct DeadlineRepositoryTests {
 
     // MARK: - Case 14: rule confirmation requires rule identity + exact evidence
 
-    @Test("Rule confirmation requires nonblank rule ID/version and at least one exact evidence link")
+    @Test("Rule confirmation requires nonblank rule ID/version and at least one EXACT evidence link")
     func ruleConfirmationRequiresEvidence() async throws {
         let r = try await rig()
         let c = try await extractedCandidate(r)
@@ -174,12 +190,21 @@ struct DeadlineRepositoryTests {
         await #expect(throws: DeadlineError.ruleEvidenceRequired) {
             _ = try await r.repo.confirmCandidate(id: c.id, confirmation: ruleConfirmation, at: self.t0.addingTimeInterval(5))
         }
+        // A candidate-scoped deadlineBasis link to a Claim whose evidence refs are KO-ONLY (no
+        // exact EvidenceBlock + source version) is NOT exact evidence → still refused.
+        _ = try await r.tasks.addEvidenceLink(taskID: r.taskID, scope: .deadlineCandidate(c.id),
+                                              target: .claim(r.claimID), role: .deadlineBasis, at: t0)
+        await #expect(throws: DeadlineError.ruleEvidenceRequired) {
+            _ = try await r.repo.confirmCandidate(id: c.id, confirmation: ruleConfirmation, at: self.t0.addingTimeInterval(5))
+        }
         // The candidate is untouched by the refusals.
         #expect(try #require(try await r.repo.candidate(id: c.id)).status == .pending)
         #expect(try await r.repo.deadlines(taskID: r.taskID).isEmpty)
-        // With an EXACT evidence link scoped to this candidate, the rule may confirm.
-        _ = try await r.tasks.addEvidenceLink(taskID: r.taskID, scope: .deadlineCandidate(c.id),
-                                              target: .claim(r.claimID), role: .deadlineBasis, at: t0)
+        // Upgrade the Claim's evidence reference to EXACT (cites the block + source version) —
+        // now the same link satisfies rule confirmation.
+        try await r.db.exec("""
+        UPDATE claim_evidence_ref SET evidence_block_id = ?, source_version_id = ? WHERE claim_id = ?;
+        """, [.uuid(r.evidenceBlockID), .uuid(r.sourceVersionID), .uuid(r.claimID)])
         let d = try await r.repo.confirmCandidate(id: c.id, confirmation: ruleConfirmation, at: t0.addingTimeInterval(6))
         #expect(d.confirmation.kind == .deterministicRule)
         #expect(d.confirmation.ruleID == "resp-30d")
