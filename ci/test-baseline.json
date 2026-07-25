@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 786,
-  "baselineCommit": "6fe28dc385605e86bdd4e064dfb03757662087c8",
+  "baselineCommit": "dd5783085342019eacdbc69f17a4639dba4d7f14",
   "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount`, which counts a parameterized test FUNCTION as 1 (not per-iteration). So this number is lower than the IDE's per-iteration count (e.g. 786 here vs 795 in-IDE with a 10-arg parameterized test). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }
