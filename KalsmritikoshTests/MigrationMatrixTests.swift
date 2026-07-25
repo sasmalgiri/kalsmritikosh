@@ -22,8 +22,8 @@ import Testing
 struct MigrationMatrixTests {
 
     /// Material schema boundaries (not every version — these are the migration milestones).
-    /// 67 = immediately previous schema; 68 = current schema reopened (OPS-001 Issue Engine).
-    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68]
+    /// 68 = OPS-001 Issue Engine; 69 = current schema reopened (OPS-002 Task/Deadline Engine).
+    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69]
 
     // MARK: - Assertions shared across cases
 
@@ -47,6 +47,7 @@ struct MigrationMatrixTests {
         let refCols = try await MigrationFixtureBuilder.columns(db, "claim_evidence_ref")
         #expect(refCols.contains("ordinal"), "v64 ordinal evidence identity missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "professional_issues"), "v68 issue table missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "professional_tasks"), "v69 task table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -61,7 +62,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 68)           // v68 = OPS-001 Issue Engine
+        #expect(SchemaMigrations.latestVersion == 69)           // v69 = OPS-002 Task/Deadline Engine
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

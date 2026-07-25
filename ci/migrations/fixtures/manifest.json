@@ -1,5 +1,5 @@
 {
-  "schemaHead": 68,
+  "schemaHead": 69,
   "note": "Fixture DEFINITIONS. Synthetic historical databases are reproduced at test time from the committed migration list (SchemaMigrations.migrate(_:through:)); no opaque binaries are committed for these. Committed binaries are reserved for a sanitized real archive (MIG-001B).",
   "builder": "KalsmritikoshTests/Support/MigrationFixtureBuilder.swift",
   "suite": "KalsmritikoshTests/MigrationMatrixTests.swift",
@@ -10,7 +10,7 @@
       "startVersion": 0,
       "construct": "fresh, unmigrated",
       "seeds": [],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "listGapFree",
         "userVersion67",
@@ -28,7 +28,7 @@
       "seeds": [
         "files"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -45,7 +45,7 @@
       "seeds": [
         "files"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -65,7 +65,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -85,7 +85,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -105,7 +105,7 @@
         "workspaces",
         "workspace_sources"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -129,7 +129,7 @@
         "claim_reviews",
         "claim_usage"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -154,7 +154,7 @@
         "claim_reviews",
         "claim_usage"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -179,7 +179,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -204,7 +204,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "preservedRows",
         "reopen",
@@ -230,7 +230,7 @@
         "claim_usage",
         "claim_projection_progress"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "idempotentReopen",
         "preservedRows",
@@ -241,13 +241,56 @@
       "state": "unit-verified"
     },
     {
+      "id": "MS-68",
+      "startVersion": 68,
+      "construct": "migrate through 68 (OPS-001 Issue Engine era)",
+      "seeds": [
+        "files",
+        "knowledge_objects",
+        "workspaces",
+        "workspace_sources",
+        "claims",
+        "claim_evidence_ref",
+        "claim_reviews",
+        "claim_usage",
+        "claim_projection_progress"
+      ],
+      "expectedEndVersion": 69,
+      "assertions": [
+        "preservedRows",
+        "reopen",
+        "integrityOk",
+        "fkCheckZero",
+        "issueRowsPreserved"
+      ],
+      "test": "milestoneMigratesToLatest[68] + ProfessionalTaskMigrationTests.v68ToV69Preserves",
+      "state": "unit-verified"
+    },
+    {
+      "id": "MS-69",
+      "startVersion": 69,
+      "construct": "migrate through 69 (reopen; OPS-002 Task/Deadline Engine)",
+      "seeds": [
+        "fullSet"
+      ],
+      "expectedEndVersion": 69,
+      "assertions": [
+        "idempotentReopen",
+        "preservedRows",
+        "integrityOk",
+        "fkCheckZero"
+      ],
+      "test": "milestoneMigratesToLatest[69]",
+      "state": "unit-verified"
+    },
+    {
       "id": "REPEAT-67",
       "startVersion": 67,
       "construct": "reopen+migrate x3",
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "noDuplication",
         "noRegression",
@@ -263,7 +306,7 @@
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "selfHealsTo67",
         "rowsRetained",
@@ -279,7 +322,7 @@
       "seeds": [
         "fullSet"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "originalHashUnchanged",
         "copyEqualsOriginalBefore",
@@ -300,7 +343,7 @@
       "seeds": [
         "realCorpus"
       ],
-      "expectedEndVersion": 68,
+      "expectedEndVersion": 69,
       "assertions": [
         "manifestHashPin",
         "originalHashUnchanged",

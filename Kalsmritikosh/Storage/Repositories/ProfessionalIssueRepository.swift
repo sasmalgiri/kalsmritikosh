@@ -241,73 +241,21 @@ public actor ProfessionalIssueRepository {
         }
     }
 
-    // MARK: - Link-target validation (fail-closed)
+    // MARK: - Link-target validation (fail-closed, shared)
 
-    /// A target must EXIST in its canonical table; when its workspace/source boundary is
-    /// determinable, it must not belong EXCLUSIVELY outside the Issue's workspace. Targets with no
-    /// determinable boundary (a claim with no evidence, a file in no workspace, contradictions and
-    /// gaps, an entity in no workspace) are accepted on existence alone.
+    /// Delegates to the SHARED WorkflowTargetValidator (same rules as Task evidence links) and
+    /// maps the shared failures onto this repository's error vocabulary.
     private func validate(target: IssueLinkTarget, issueWorkspace: UUID) async throws {
-        let table: String
-        switch target {
-        case .claim:           table = "claims"
-        case .event:           table = "events"
-        case .entity:          table = "entities"
-        case .evidenceBlock:   table = "evidence_blocks"
-        case .knowledgeObject: table = "knowledge_objects"
-        case .sourceVersion:   table = "source_versions"
-        case .contradiction:   table = "contradictions"
-        case .gap:             table = "gap_nodes"
-        }
-        guard try await rowExists(table, id: target.targetID) else {
-            throw ProfessionalIssueError.targetNotFound(kind: target.kind, id: target.targetID)
-        }
-
-        // Boundary derivation → the set of FILE ids anchoring the target (empty = indeterminable).
-        var fileIDs: [UUID] = []
-        switch target {
-        case .claim(let id):
-            fileIDs = try await queryUUIDs("""
-            SELECT DISTINCT k.file_id FROM claim_evidence_ref r
-            JOIN knowledge_objects k ON k.id = r.knowledge_object_id
-            WHERE r.claim_id = ?;
-            """, [.uuid(id)])
-        case .event(let id):
-            fileIDs = try await queryUUIDs("""
-            SELECT DISTINCT k.file_id FROM events e
-            JOIN knowledge_objects k ON k.id = e.source_object_id
-            WHERE e.id = ?;
-            """, [.uuid(id)])
-        case .evidenceBlock(let id):
-            fileIDs = try await queryUUIDs("""
-            SELECT DISTINCT k.file_id FROM evidence_block_objects o
-            JOIN knowledge_objects k ON k.id = o.knowledge_object_id
-            WHERE o.evidence_block_id = ?;
-            """, [.uuid(id)])
-        case .knowledgeObject(let id):
-            fileIDs = try await queryUUIDs("SELECT file_id FROM knowledge_objects WHERE id = ?;", [.uuid(id)])
-        case .sourceVersion(let id):
-            fileIDs = try await queryUUIDs("SELECT logical_source_id FROM source_versions WHERE id = ?;", [.uuid(id)])
-        case .entity(let id):
-            // Entities bound by workspace MEMBERSHIP (manual ∪ derived), not files.
-            let workspaces = try await queryUUIDs("""
-            SELECT workspace_id FROM workspace_entities WHERE entity_id = ?
-            UNION SELECT workspace_id FROM workspace_derived_entities WHERE entity_id = ?;
-            """, [.uuid(id), .uuid(id)])
-            if !workspaces.isEmpty, !workspaces.contains(issueWorkspace) {
-                throw ProfessionalIssueError.crossWorkspaceLink(kind: target.kind, id: target.targetID)
+        do {
+            try await WorkflowTargetValidator.validate(kind: target.kind, targetID: target.targetID,
+                                                       workspaceID: issueWorkspace, database: database)
+        } catch let e as WorkflowTargetValidationError {
+            switch e {
+            case .targetNotFound(let kind, let id):
+                throw ProfessionalIssueError.targetNotFound(kind: kind, id: id)
+            case .crossWorkspace(let kind, let id):
+                throw ProfessionalIssueError.crossWorkspaceLink(kind: kind, id: id)
             }
-            return
-        case .contradiction, .gap:
-            return   // global objects — no determinable per-workspace boundary
-        }
-        guard !fileIDs.isEmpty else { return }   // indeterminable boundary → existence is enough
-        let ph = fileIDs.map { _ in "?" }.joined(separator: ",")
-        let holders = try await queryUUIDs(
-            "SELECT DISTINCT workspace_id FROM workspace_sources WHERE file_id IN (\(ph));",
-            fileIDs.map { .uuid($0) })
-        if !holders.isEmpty, !holders.contains(issueWorkspace) {
-            throw ProfessionalIssueError.crossWorkspaceLink(kind: target.kind, id: target.targetID)
         }
     }
 
@@ -342,9 +290,5 @@ public actor ProfessionalIssueRepository {
     private func rowExists(_ table: String, id: UUID) async throws -> Bool {
         let rows = try await database.query("SELECT COUNT(*) FROM \(table) WHERE id = ?;", [.uuid(id)])
         return Int(rows.first?.int(0) ?? 0) > 0
-    }
-
-    private func queryUUIDs(_ sql: String, _ params: [SQLValue]) async throws -> [UUID] {
-        (try await database.query(sql, params)).compactMap { $0.uuid(0) }
     }
 }

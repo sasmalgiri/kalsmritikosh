@@ -3,10 +3,14 @@
 **Status: CURRENT.** MIG-001A (2026-07-25). Inventory of the representative schema-migration
 fixtures and the invariants each proves. Authority: `WHOLE_PROJECT_COMPLETION_PROGRAM.md` Stage 1.
 
-Schema head is **v68** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
+Schema head is **v69** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
 `scope_id` to `claims`; **v68 (OPS-001)** adds the professional Issue Engine tables
-(`professional_issues`, `professional_issue_links`, `professional_issue_reviews`). Every fixture
-row's "Expected end" means the CURRENT latest (now 68). Migrations are append-only, each applied inside a per-version SAVEPOINT
+(`professional_issues`, `professional_issue_links`, `professional_issue_reviews`); **v69
+(OPS-002)** adds the Task and Deadline Engine tables (`professional_tasks`,
+`professional_task_dependencies`, `deadline_candidates`, `deadlines`,
+`professional_task_evidence_links` + three review ledgers) — with `deadline_candidates ≠
+deadlines` enforced by `UNIQUE(source_candidate_id)`. Every fixture
+row's "Expected end" means the CURRENT latest (now 69). Migrations are append-only, each applied inside a per-version SAVEPOINT
 (`applyOne`), with a stale-`user_version` self-heal on the full-migrate path.
 
 ## How the fixtures are built (no committed binaries)
@@ -34,6 +38,8 @@ sanitized real archive (MIG-001B) and anything not reproducible from history.
 | MS-65 | 65 | migrate through 65 | + claim_projection_progress | 67 | seeded rows survive; reopen | ok / 0 | `milestoneMigratesToLatest[65]` | Unit verified | before block→KO ownership |
 | MS-66 | 66 | migrate through 66 | claims era, no scope columns | 67 | claim/evidence/review/usage survive; scope added NULL | ok / 0 | `milestoneMigratesToLatest[66]` + `v66ToV67AddsNullScope` | Unit verified | — |
 | MS-67 | 67 | migrate through 67 (reopened) | full claims-era set | 67 | idempotent reopen; rows survive | ok / 0 | `milestoneMigratesToLatest[67]` | Unit verified | — |
+| MS-68 | 68 | migrate through 68 | full set + a live professional_issues row | latest | Issue rows + reviews survive v69; only new tables added; canonical gains no task/deadline column | ok / 0 | `milestoneMigratesToLatest[68]` + `ProfessionalTaskMigrationTests.v68ToV69Preserves` | Unit verified | — |
+| MS-69 | 69 | migrate through 69 (reopened) | full set | latest | idempotent reopen; rows survive | ok / 0 | `milestoneMigratesToLatest[69]` | Unit verified | — |
 | REPEAT-67 | 67 | reopen+migrate ×3 | full set | 67 | no dup / no regression / no loss | ok / 0 | `repeatedMigrationIsStable` | Unit verified | — |
 | STALE-67 | 67 (counter→2) | full schema, lowered user_version | full set | 67 | self-heals to 67; rows retained; no destructive replay | markers present | `staleUserVersionSelfHeals` | Unit verified | — |
 | REAL-ARCHIVE | real | sanitized owner archive copy | real corpus | 67 | count + reopenability preserved; original untouched | ok / 0 | (MIG-001B) | Planned | deferred to MIG-001B |

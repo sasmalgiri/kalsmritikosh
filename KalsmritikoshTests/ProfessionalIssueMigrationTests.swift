@@ -21,7 +21,9 @@ struct ProfessionalIssueMigrationTests {
     @Test("A fresh database reaches v68 with the three issue tables and clean integrity")
     func freshV68() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)
-        try await SchemaMigrations.migrate(db)
+        // Pinned `through: 68` — this suite locks the v68 step; head coverage lives in
+        // MigrationMatrixTests + ProfessionalTaskMigrationTests.
+        try await SchemaMigrations.migrate(db, through: 68)
         #expect(try await db.currentUserVersion() == 68)
         for t in issueTables {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t), "\(t) missing")
@@ -39,7 +41,7 @@ struct ProfessionalIssueMigrationTests {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t) == false, "\(t) already present at v67")
         }
 
-        try await SchemaMigrations.migrate(db)      // 67 → 68
+        try await SchemaMigrations.migrate(db, through: 68)      // 67 → 68 (pinned step)
 
         #expect(try await db.currentUserVersion() == 68)
         for t in issueTables {

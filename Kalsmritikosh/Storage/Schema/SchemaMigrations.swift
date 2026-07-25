@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 68
+    public static let latestVersion = 69
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -150,7 +150,14 @@ public enum SchemaMigrations {
             "professional_issues": ["id", "workspace_id", "title", "issue_type", "status",
                                      "priority", "created_at", "updated_at"],
             "professional_issue_links": ["id", "issue_id", "target_kind", "target_id", "link_role"],
-            "professional_issue_reviews": ["id", "issue_id", "action", "reviewer", "reviewed_at"]
+            "professional_issue_reviews": ["id", "issue_id", "action", "reviewer", "reviewed_at"],
+            // v69 — shared Task and Deadline Engine (OPS-002).
+            "professional_tasks": ["id", "workspace_id", "title", "task_type", "status",
+                                    "priority", "origin", "created_at", "updated_at"],
+            "deadline_candidates": ["id", "task_id", "due_date", "precision", "time_zone",
+                                     "deadline_kind", "origin", "status", "created_at"],
+            "deadlines": ["id", "task_id", "due_date", "precision", "time_zone", "deadline_kind",
+                           "status", "confirmation_kind", "confirmed_by", "confirmed_at", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -229,7 +236,8 @@ public enum SchemaMigrations {
         (65, v65),
         (66, v66),
         (67, v67),
-        (68, v68)
+        (68, v68),
+        (69, v69)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2590,5 +2598,143 @@ public enum SchemaMigrations {
         FOREIGN KEY (issue_id) REFERENCES professional_issues(id) ON DELETE CASCADE
     );
     CREATE INDEX idx_professional_issue_reviews_issue ON professional_issue_reviews(issue_id, reviewed_at);
+    """
+
+    // OPS-002 — shared Task and Deadline Engine. THE truth rule: deadline_candidates (proposal
+    // layer) ≠ deadlines (confirmed). Confirmation inserts a NEW deadlines row (UNIQUE on
+    // source_candidate_id → one candidate promotes at most once) and preserves the candidate.
+    // Overdue is never a stored status. Workflow state cascades from its workspace / parent task;
+    // canonical evidence never cascades from these tables. No canonical table is modified.
+    private static let v69: String = """
+    CREATE TABLE professional_tasks (
+        id               TEXT PRIMARY KEY NOT NULL,
+        workspace_id     TEXT NOT NULL,
+        primary_issue_id TEXT,
+        title            TEXT NOT NULL,
+        detail           TEXT,
+        task_type        TEXT NOT NULL,
+        status           TEXT NOT NULL,
+        priority         TEXT NOT NULL,
+        owner            TEXT,
+        origin           TEXT NOT NULL,
+        created_at       REAL NOT NULL,
+        updated_at       REAL NOT NULL,
+        completed_at     REAL,
+        archived_at      REAL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        FOREIGN KEY (primary_issue_id) REFERENCES professional_issues(id) ON DELETE SET NULL
+    );
+    CREATE INDEX idx_professional_tasks_workspace ON professional_tasks(workspace_id);
+    CREATE INDEX idx_professional_tasks_status    ON professional_tasks(workspace_id, status);
+    CREATE INDEX idx_professional_tasks_type      ON professional_tasks(workspace_id, task_type);
+
+    CREATE TABLE professional_task_dependencies (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        task_id            TEXT NOT NULL,
+        depends_on_task_id TEXT NOT NULL,
+        dependency_kind    TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        FOREIGN KEY (task_id)            REFERENCES professional_tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (depends_on_task_id) REFERENCES professional_tasks(id) ON DELETE CASCADE,
+        UNIQUE(task_id, depends_on_task_id, dependency_kind),
+        CHECK(task_id != depends_on_task_id)
+    );
+    CREATE INDEX idx_task_dependencies_task ON professional_task_dependencies(task_id);
+    CREATE INDEX idx_task_dependencies_on   ON professional_task_dependencies(depends_on_task_id);
+
+    CREATE TABLE deadline_candidates (
+        id            TEXT PRIMARY KEY NOT NULL,
+        task_id       TEXT NOT NULL,
+        due_date      REAL NOT NULL,
+        precision     INTEGER NOT NULL,
+        time_zone     TEXT NOT NULL,
+        deadline_kind TEXT NOT NULL,
+        origin        TEXT NOT NULL,
+        confidence    REAL,
+        proposed_by   TEXT NOT NULL,
+        rule_id       TEXT,
+        rule_version  TEXT,
+        status        TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        reviewed_at   REAL,
+        FOREIGN KEY (task_id) REFERENCES professional_tasks(id) ON DELETE CASCADE,
+        CHECK(confidence IS NULL OR confidence BETWEEN 0 AND 1)
+    );
+    CREATE INDEX idx_deadline_candidates_task ON deadline_candidates(task_id, status);
+
+    CREATE TABLE deadlines (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        task_id             TEXT NOT NULL,
+        source_candidate_id TEXT,
+        due_date            REAL NOT NULL,
+        precision           INTEGER NOT NULL,
+        time_zone           TEXT NOT NULL,
+        deadline_kind       TEXT NOT NULL,
+        status              TEXT NOT NULL,
+        confirmation_kind   TEXT NOT NULL,
+        confirmed_by        TEXT NOT NULL,
+        confirmed_at        REAL NOT NULL,
+        confirm_reason      TEXT,
+        rule_id             TEXT,
+        rule_version        TEXT,
+        created_at          REAL NOT NULL,
+        updated_at          REAL NOT NULL,
+        satisfied_at        REAL,
+        archived_at         REAL,
+        FOREIGN KEY (task_id)             REFERENCES professional_tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (source_candidate_id) REFERENCES deadline_candidates(id) ON DELETE SET NULL,
+        UNIQUE(source_candidate_id)
+    );
+    CREATE INDEX idx_deadlines_task ON deadlines(task_id, status);
+
+    CREATE TABLE professional_task_evidence_links (
+        id          TEXT PRIMARY KEY NOT NULL,
+        task_id     TEXT NOT NULL,
+        scope_kind  TEXT NOT NULL,
+        scope_id    TEXT NOT NULL DEFAULT '',
+        target_kind TEXT NOT NULL,
+        target_id   TEXT NOT NULL,
+        link_role   TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES professional_tasks(id) ON DELETE CASCADE,
+        UNIQUE(task_id, scope_kind, scope_id, target_kind, target_id, link_role)
+    );
+    CREATE INDEX idx_task_evidence_links_task   ON professional_task_evidence_links(task_id);
+    CREATE INDEX idx_task_evidence_links_target ON professional_task_evidence_links(target_kind, target_id);
+
+    CREATE TABLE professional_task_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        task_id      TEXT NOT NULL,
+        action       TEXT NOT NULL,
+        prior_status TEXT,
+        new_status   TEXT,
+        reviewer     TEXT NOT NULL,
+        reason       TEXT,
+        reviewed_at  REAL NOT NULL,
+        FOREIGN KEY (task_id) REFERENCES professional_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_task_reviews_task ON professional_task_reviews(task_id, reviewed_at);
+
+    CREATE TABLE deadline_candidate_reviews (
+        id           TEXT PRIMARY KEY NOT NULL,
+        candidate_id TEXT NOT NULL,
+        action       TEXT NOT NULL,
+        reviewer     TEXT NOT NULL,
+        reason       TEXT,
+        reviewed_at  REAL NOT NULL,
+        FOREIGN KEY (candidate_id) REFERENCES deadline_candidates(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_candidate_reviews_candidate ON deadline_candidate_reviews(candidate_id, reviewed_at);
+
+    CREATE TABLE deadline_reviews (
+        id          TEXT PRIMARY KEY NOT NULL,
+        deadline_id TEXT NOT NULL,
+        action      TEXT NOT NULL,
+        reviewer    TEXT NOT NULL,
+        reason      TEXT,
+        reviewed_at REAL NOT NULL,
+        FOREIGN KEY (deadline_id) REFERENCES deadlines(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_deadline_reviews_deadline ON deadline_reviews(deadline_id, reviewed_at);
     """
 }
