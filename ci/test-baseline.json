@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 786,
+  "minimumExecutedTests": 794,
   "baselineCommit": "dd5783085342019eacdbc69f17a4639dba4d7f14",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount`, which counts a parameterized test FUNCTION as 1 (not per-iteration). So this number is lower than the IDE's per-iteration count (e.g. 786 here vs 795 in-IDE with a 10-arg parameterized test). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount`, which counts a parameterized test FUNCTION as 1 (not per-iteration). So this number is lower than the IDE's per-iteration count (794 by xcresulttool vs 806 in-IDE as of MIG-001B). Raised 786 → 794 at MIG-001B. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }

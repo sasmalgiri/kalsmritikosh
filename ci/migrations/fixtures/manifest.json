@@ -18,6 +18,14 @@
     { "id": "MS-67", "startVersion": 67, "construct": "migrate through 67 (reopen)", "seeds": ["files", "knowledge_objects", "workspaces", "workspace_sources", "claims", "claim_evidence_ref", "claim_reviews", "claim_usage", "claim_projection_progress"], "expectedEndVersion": 67, "assertions": ["idempotentReopen", "preservedRows", "integrityOk", "fkCheckZero"], "test": "milestoneMigratesToLatest[67]", "state": "unit-verified" },
     { "id": "REPEAT-67", "startVersion": 67, "construct": "reopen+migrate x3", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["noDuplication", "noRegression", "noLoss"], "test": "repeatedMigrationIsStable", "state": "unit-verified" },
     { "id": "STALE-67", "startVersion": 67, "construct": "full schema, user_version lowered to 2", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["selfHealsTo67", "rowsRetained", "noDestructiveReplay"], "test": "staleUserVersionSelfHeals", "state": "unit-verified" },
-    { "id": "REAL-ARCHIVE", "startVersion": "real", "construct": "sanitized owner archive copy", "seeds": ["realCorpus"], "expectedEndVersion": 67, "assertions": ["countsPreserved", "reopenability", "originalUntouched"], "test": "(MIG-001B)", "state": "planned" }
-  ]
+    { "id": "REAL-ARCHIVE-SYNTHETIC", "startVersion": 66, "construct": "genuine on-disk v66 archive from migration history", "seeds": ["fullSet"], "expectedEndVersion": 67, "assertions": ["originalHashUnchanged", "copyEqualsOriginalBefore", "copyDiffersAfter", "countsPreserved", "integrityOk", "fkCheckZero", "repeatNoOp", "reopen"], "test": "RealArchiveMigrationTests.archiveMigrationPreservesAndRehashes", "state": "integration-verified" },
+    { "id": "REAL-ARCHIVE-SANITIZED", "startVersion": "real", "construct": "sanitized owner archive copy (NOT committed; no private data)", "seeds": ["realCorpus"], "expectedEndVersion": 67, "assertions": ["originalHashUnchanged", "countsPreserved", "reopenability", "integrityOk", "fkCheckZero"], "script": "ci/migrations/verify-real-archive.sh", "state": "planned-owner-run" }
+  ],
+  "mig001bFaultCases": {
+    "note": "Failure atomicity via a test-only hook threaded into SchemaMigrations.migrate(_:through:fault:); production passes nil. See KalsmritikoshTests/MigrationFaultInjectionTests.swift.",
+    "boundaryFaults": ["beforeSavepoint", "afterSavepoint", "afterSQLBeforeVersionStamp", "afterVersionStampBeforeRelease"],
+    "genuineSQLiteFailures": ["ddlFailure", "backfillFailure", "writeSpaceFailure(SQLITE_FULL via max_page_count)"],
+    "malformedPartialSchemas": ["partialV67FailsClosed", "selfHealRejectsMissingMarker", "versionAheadOfSchema(documented-limitation)"],
+    "state": "unit-verified (hosted-CI pending this commit)"
+  }
 }

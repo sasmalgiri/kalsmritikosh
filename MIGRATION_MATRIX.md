@@ -42,9 +42,53 @@ sanitized real archive (MIG-001B) and anything not reproducible from history.
   evidence, interrupted v62 SAVEPOINT rollback, and successful retry after the injected failure.
   MIG-001A adds generalized milestone coverage and does not re-implement these.
 
-## Deferred to MIG-001B (documented, NOT claimed complete here)
+## MIG-001B — fault atomicity (delivered)
 
-low-disk / write-failure; failure before transaction; failure during DDL; failure during
-backfill; failure before the version stamp; failure after writes but before commit; malformed
-partial schemas; migration of a real archived user database; hash comparison of the original vs
-migrated archive copy (on a disposable copy, original retained).
+Failure injection uses a test-only hook threaded explicitly into
+`SchemaMigrations.migrate(_:through:fault:)` / `applyOne(_:version:sql:fault:)` (production passes
+`nil`; no shipping behaviour change). Genuine SQLite failures (missing-table query, `SQLITE_FULL`)
+are used where possible instead of injected throws.
+
+| Case | Scenario | Invariant proven | Test |
+|---|---|---|---|
+| A | fault before SAVEPOINT | no schema/data change; version unchanged; second launch recovers | `faultAtBoundaryRollsBack[.beforeSavepoint]` |
+| B | fault after SAVEPOINT | rollback; version unchanged; recover | `[.afterSavepoint]` |
+| E | fault after SQL, before version stamp | DDL rolled back; version unchanged; recover | `[.afterSQLBeforeVersionStamp]` |
+| F | fault after version stamp, before RELEASE | **version stamp AND DDL roll back together** (they share the SAVEPOINT — confirmed: SQLite rolls `PRAGMA user_version` back); recover | `[.afterVersionStampBeforeRelease]` |
+| C | genuine failure during DDL (valid DDL + trailing invalid statement) | earlier table+index rolled back; version unchanged; retry succeeds | `ddlFailureRollsBack` |
+| D | genuine failure during backfill (UPDATE + trailing invalid statement) | updated values roll back to originals; no partial backfill; retry applies once | `backfillFailureRollsBack` |
+| WRITE | genuine `SQLITE_FULL` via `max_page_count` (DELETE journal) | no partial schema; old version + rows retained; integrity ok; retry after lifting the cap succeeds | `writeSpaceFailureRollsBack` |
+
+## MIG-001B — malformed partial schemas (fail-closed)
+
+Expected behaviour: never falsely stamp latest; never delete user data; fail with an explicit
+error; retain a diagnosable state.
+
+| Case | Malformation | Behaviour | Test |
+|---|---|---|---|
+| MP1 | partial v67 (one scope column dropped) | migrate fails closed (duplicate-column on v67 re-run); not stamped 67; columns/rows retained | `partialV67FailsClosed` |
+| MP3 | required v66 table (`evidence_block_objects`) missing, counter behind | self-heal correctly returns false (does NOT stamp 67); pending v67 fails closed; rows retained | `selfHealRejectsMissingMarker` |
+| MP2 | `user_version` AHEAD of the physical schema | **KNOWN LIMITATION:** migrate() trusts the counter → no-op; it never corrupts or deletes data, but does NOT detect/repair the mismatch. Detection is a documented follow-up (a startup schema-shape verifier). Test pins the safe part. | `versionAheadOfSchemaIsNonDestructive` |
+
+## MIG-001B — real-archive methodology (delivered synthetic; sanitized real archive Planned)
+
+Correct hash semantics (a real migration REWRITES the file, so original ≠ migrated):
+- original hash before == after (original never touched);
+- working copy == original before migration;
+- working copy ≠ original after migration;
+plus count/stable-id preservation, `integrity_check ok`, `foreign_key_check` empty, no-op repeat,
+fresh-instance reopen. Proven on a genuine v66→v67 on-disk archive by
+`RealArchiveMigrationTests.archiveMigrationPreservesAndRehashes`.
+
+A sanitized REAL owner archive is **not committed** (no private data). Running this methodology
+against such a fixture is an owner step (`ci/migrations/verify-real-archive.sh`, which SKIPS when
+no fixture is present) and is marked **Planned / Real-data verified only after that run**.
+
+## Documented gaps / follow-ups (honest)
+
+- **Ahead-of-schema `user_version`** is not auto-detected by `migrate()` (MP2). Candidate: a
+  startup schema-shape verifier that compares `user_version` against the physical shape and
+  fails closed on mismatch.
+- IF-NOT-EXISTS masking of a same-named conflicting table on a far-behind counter is not
+  exercised here (re-running early non-idempotent migrations like v64 on a v67 DB is itself
+  unsafe); the realistic malformed cases above use a counter one step behind so only v67 re-runs.

@@ -9,6 +9,22 @@
 
 import Foundation
 
+/// A test-only injection point inside the migration transaction. Production migration ALWAYS
+/// passes a nil hook, so these points have no effect on shipping behaviour; the migration
+/// semantics (SAVEPOINT → SQL → stamp → RELEASE, rollback on failure) are identical whether or not
+/// a hook is present. A test supplies a hook via the internal `fault:` overloads to prove
+/// atomicity at each boundary (MIG-001B).
+public enum MigrationFaultPoint: Sendable, Equatable {
+    case beforeSavepoint(version: Int)
+    case afterSavepoint(version: Int)
+    case afterSQLBeforeVersionStamp(version: Int)
+    case afterVersionStampBeforeRelease(version: Int)
+}
+
+/// Injected per-migration hook. Passed explicitly (never a global/static), so concurrent tests
+/// cannot affect one another. Production passes `nil`.
+public typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> Void
+
 public enum SchemaMigrations {
 
     public static let latestVersion = 67
@@ -36,7 +52,8 @@ public enum SchemaMigrations {
     /// Only a full migration to `latestVersion` performs the stale-counter self-heal /
     /// final stamp — a targeted partial migration leaves the counter exactly where its
     /// last applied migration put it.
-    static func migrate(_ database: Database, through targetVersion: Int) async throws {
+    static func migrate(_ database: Database, through targetVersion: Int,
+                        fault: MigrationFaultHook? = nil) async throws {
         let current = try await database.currentUserVersion()
         // Self-heal a stale counter. Observed in the field: some databases carry
         // a fully-applied latest schema while `user_version` is stuck at an early
@@ -50,7 +67,7 @@ public enum SchemaMigrations {
             return
         }
         for (version, sql) in all where version > current && version <= targetVersion {
-            try await applyOne(database, version: version, sql: sql)
+            try await applyOne(database, version: version, sql: sql, fault: fault)
         }
         // Belt-and-suspenders: after a fully-successful migration pass, stamp the
         // final version ONCE outside any SAVEPOINT (some WAL configs were observed
@@ -66,12 +83,24 @@ public enum SchemaMigrations {
     /// whole statement batch back (SQLite DDL is transactional) and leaves the schema +
     /// `user_version` at the previous version. Internal so a test can drive a
     /// deliberately-failing migration and assert clean rollback.
-    static func applyOne(_ database: Database, version: Int, sql: String) async throws {
+    static func applyOne(_ database: Database, version: Int, sql: String,
+                         fault: MigrationFaultHook? = nil) async throws {
         let savepoint = "kalsmritikosh_mig_v\(version)"
+        // `beforeSavepoint`: nothing has been opened yet, so a fault here just fails the migration
+        // with no schema/data change and nothing to roll back. Production hook is nil (no-op).
+        if let fault {
+            do { try await fault(.beforeSavepoint(version: version)) }
+            catch { throw DatabaseError.migrationFailed(version: version, message: "\(error)") }
+        }
         do {
             try await database.exec("SAVEPOINT \(savepoint);")
+            if let fault { try await fault(.afterSavepoint(version: version)) }
             try await database.exec(sql)
+            if let fault { try await fault(.afterSQLBeforeVersionStamp(version: version)) }
             try await database.setUserVersion(version)
+            // `afterVersionStampBeforeRelease`: proves the version stamp shares the SAVEPOINT with
+            // the DDL — a fault here must roll BOTH back, leaving the previous version.
+            if let fault { try await fault(.afterVersionStampBeforeRelease(version: version)) }
             try await database.exec("RELEASE SAVEPOINT \(savepoint);")
         } catch {
             try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);")
