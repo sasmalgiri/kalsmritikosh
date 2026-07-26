@@ -6,7 +6,8 @@
     "KalsmritikoshTests/FactMemoReportTests",
     "KalsmritikoshTests/WorkProductAssemblyServiceTests",
     "KalsmritikoshTests/EvidenceExportGateTests",
-    "KalsmritikoshTests/EmailTopicExtractorTests"
+    "KalsmritikoshTests/EmailTopicExtractorTests",
+    "KalsmritikoshTests/WorkProductScopeEnforcementTests"
   ],
   "requiredSuites": [
     "WorkProductReceiptCustodyTests",
@@ -14,8 +15,9 @@
     "FactMemoReportTests",
     "WorkProductAssemblyServiceTests",
     "EvidenceExportGateTests",
-    "EmailTopicExtractorTests"
+    "EmailTopicExtractorTests",
+    "WorkProductScopeEnforcementTests"
   ],
-  "minimumExecutedTests": 68,
-  "note": "All four current templates represented: WorkProductAssemblyServiceTests (General Summary, Chronology, registry routing, no legacy fallback, B4 boundary, report==receipt) + InvestigationReportTests + FactMemoReportTests; WorkProductReceiptCustodyTests (exact cited-version hashes, old-version preservation, manifest dedup, tamper failure, missing-hash blocking); EvidenceExportGateTests (fail-closed material-Claim validation across all four templates); EmailTopicExtractorTests (report==receipt richer text). Fail-closed validation lives here, but this is NOT equivalent to full SensitiveScope screen/prompt/report/export enforcement (OPS-003, PENDING)."
+  "minimumExecutedTests": 73,
+  "note": "All four current templates represented: WorkProductAssemblyServiceTests (General Summary, Chronology, registry routing, no legacy fallback, B4 boundary, report==receipt) + InvestigationReportTests + FactMemoReportTests; WorkProductReceiptCustodyTests (exact cited-version hashes, old-version preservation, manifest dedup, tamper failure, missing-hash blocking); EvidenceExportGateTests (fail-closed material-Claim validation across all four templates); EmailTopicExtractorTests (report==receipt richer text); WorkProductScopeEnforcementTests (OPS-003C: nil-repo throws, privileged KO blocked, non-privileged KO permitted, sensitivity ceiling blocks, no-access bypasses filter). Floor raised 68→73."
 }

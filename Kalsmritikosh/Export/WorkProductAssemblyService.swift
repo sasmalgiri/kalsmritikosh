@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import OSLog
 
 public struct AssembledWorkProduct: Sendable {
     public let workProduct: WorkProduct
@@ -33,6 +34,8 @@ public enum WorkProductAssemblyError: Error, Equatable {
     case evidenceIntegrity(violationCount: Int)
     /// A registry-backed template has no registered composer for its central section.
     case missingComposer(String)
+    /// SensitiveScope enforcement blocked the export (repo error or no scope repo wired).
+    case scopedAccessDenied
 }
 
 /// An explicit, ordered plan for a registry-backed template: which composers run and in what
@@ -47,6 +50,7 @@ public actor WorkProductAssemblyService {
     private let workspaces: WorkspaceRepository
     private let knowledgeObjects: KnowledgeObjectRepository
     private let evidence: EvidenceStore
+    private let sensitiveScopes: SensitiveScopeRepository?
     private let selection: ClaimSelectionService
     private let disclosures: DisclosureSelectionService
     private let registry: WorkProductComposerRegistry
@@ -72,18 +76,22 @@ public actor WorkProductAssemblyService {
         // built-in fails construction here rather than being silently dropped.
         self.init(workspaces: workspaces, knowledgeObjects: KnowledgeObjectRepository(database: database),
                   evidence: EvidenceStore(database: database),
+                  sensitiveScopes: SensitiveScopeRepository(database: database),
                   selection: selection, disclosures: disclosures,
                   registry: try WorkProductComposerRegistry.makeDefault())
     }
 
     /// Designated init — also the seam tests use to inject a registry (e.g. empty, to prove
-    /// the registry branch throws rather than falling back).
+    /// the registry branch throws rather than falling back). `sensitiveScopes` defaults to nil
+    /// so existing test callers compile unchanged; scope filtering is skipped when nil.
     init(workspaces: WorkspaceRepository, knowledgeObjects: KnowledgeObjectRepository,
          evidence: EvidenceStore,
+         sensitiveScopes: SensitiveScopeRepository? = nil,
          selection: ClaimSelectionService,
          disclosures: DisclosureSelectionService, registry: WorkProductComposerRegistry) {
         self.workspaces = workspaces; self.knowledgeObjects = knowledgeObjects
         self.evidence = evidence
+        self.sensitiveScopes = sensitiveScopes
         self.selection = selection
         self.disclosures = disclosures; self.registry = registry
     }
@@ -117,12 +125,13 @@ public actor WorkProductAssemblyService {
     // MARK: - Compose
 
     public func compose(workspace: Workspace, template: WorkProductTemplate,
-                        subjectLabel: String, corpusSnapshotID: UUID?) async throws -> AssembledWorkProduct {
+                        subjectLabel: String, corpusSnapshotID: UUID?,
+                        access: SensitiveAccessContext? = nil) async throws -> AssembledWorkProduct {
         // Registry arm ONLY — every template is registry-backed. A failure here THROWS; there is
         // no legacy fallback.
         let composed = try await composeThroughRegistry(
             plan: Self.plan(for: template), workspace: workspace, template: template,
-            subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
+            subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID, access: access)
         // PA-REC-001 — enrich every citation with its EXACT source-version custody hash ONCE, here,
         // so both the report and its receipt consume the identical hash-pinned product.
         let wp = try await enrichCustodyHashes(composed)
@@ -138,7 +147,8 @@ public actor WorkProductAssemblyService {
 
     private func composeThroughRegistry(plan: WorkProductTemplatePlan, workspace: Workspace,
                                         template: WorkProductTemplate,
-                                        subjectLabel: String, corpusSnapshotID: UUID?) async throws -> WorkProduct {
+                                        subjectLabel: String, corpusSnapshotID: UUID?,
+                                        access: SensitiveAccessContext?) async throws -> WorkProduct {
         // Workspace membership is resolved here (outside the Claim model). Claim selection runs
         // ONCE; disclosure selection runs ONCE over the same selected claims. No global fallback.
         let members = Set(try await workspaces.entityIDs(in: workspace.id))
@@ -151,6 +161,11 @@ public actor WorkProductAssemblyService {
         var context = try await selection.buildContext(
             scope: .workspace(id: workspace.id, memberSubjectIDs: members, allowedObjectIDs: allowedObjectIDs),
             subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
+        // OPS-003C: sensitivity scope filter — runs before ANY composer sees the context so
+        // blocked claims cannot reach text, IDs, hashes, or the manifest.
+        if let access = access {
+            context = try await scopeFilter(context, access: access)
+        }
         if plan.requiresDisclosures {
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
@@ -172,6 +187,64 @@ public actor WorkProductAssemblyService {
             subtitle: "Work product for the \"\(workspace.title)\" workspace (\(workspace.template.displayName)).",
             sections: sections,
             disclaimer: PersonaTemplateCatalog.disclaimer(for: workspace.template))
+    }
+
+    // MARK: - OPS-003C sensitivity scope filter
+
+    /// Remove claims whose evidence KOs exceed the access scope, before ANY composer renders.
+    /// Mirrors the permitted() logic in SensitiveRetrievalPolicy exactly.
+    /// Fails CLOSED: if the scope repository errors, throws scopedAccessDenied (nothing exported).
+    private func scopeFilter(_ ctx: WorkProductContext,
+                             access: SensitiveAccessContext) async throws -> WorkProductContext {
+        guard let repository = sensitiveScopes else {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: scopeFilter invoked but SensitiveScopeRepository not wired — denying all.")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
+        let claims = ctx.selectedClaims
+        guard !claims.isEmpty else { return ctx }
+
+        // Collect all evidence KO IDs from all selected claims.
+        var koIDs: Set<UUID> = []
+        for sc in claims {
+            for ref in sc.resolved.claim.evidence { koIDs.insert(ref.objectID) }
+        }
+
+        let targets = koIDs.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
+        let resolutions: [SensitiveScopeTarget: ProtectionResolution]
+        do {
+            resolutions = try await repository.batchResolution(targets)
+        } catch {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: scope batchResolution failed — denying all. \(error, privacy: .public)")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
+
+        func permitted(_ koID: UUID) -> Bool {
+            let t = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+            switch resolutions[t] {
+            case .resolved(let label): return access.scope.permits(label)
+            case .brokenLineage:       return false
+            case nil:
+                return access.scope.permits(ProtectionLabel(sensitivity: .internalLevel, privileged: false))
+            }
+        }
+
+        // A claim is withheld when ANY of its evidence KOs is blocked.
+        let filtered = claims.filter { sc in
+            sc.resolved.claim.evidence.allSatisfy { permitted($0.objectID) }
+        }
+        if filtered.count < claims.count {
+            KalsmritikoshLog.storage.notice(
+                "WorkProductAssemblyService: scope filter withheld \(claims.count - filtered.count, privacy: .public) claim(s) with blocked evidence KOs.")
+        }
+        return WorkProductContext(
+            selectedClaims:   filtered,
+            selectedConflicts: ctx.selectedConflicts,
+            selectedGaps:     ctx.selectedGaps,
+            subjectLabel:     ctx.subjectLabel,
+            workspaceID:      ctx.workspaceID,
+            corpusSnapshotID: ctx.corpusSnapshotID)
     }
 
     // MARK: - PA-REC-001 custody-hash enrichment

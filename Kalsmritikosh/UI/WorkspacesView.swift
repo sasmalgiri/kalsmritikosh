@@ -786,12 +786,21 @@ public struct WorkspacesView: View {
         }
         let assembled: AssembledWorkProduct
         do {
-            assembled = try await assembly.compose(workspace: ws, template: reportTemplate,
-                                                   subjectLabel: ws.title, corpusSnapshotID: nil)
+            assembled = try await assembly.compose(
+                workspace: ws, template: reportTemplate,
+                subjectLabel: ws.title, corpusSnapshotID: nil,
+                access: SensitiveAccessContext(scope: SensitiveScope(
+                    workspaceID: ws.id,
+                    maximumSensitivity: .restricted,
+                    permitsPrivilegedMaterial: false,
+                    purpose: .export)))
         } catch let WorkProductAssemblyError.evidenceIntegrity(count) {
             // Fail CLOSED — an unsupported material claim blocks the export; nothing written.
             KalsmritikoshLog.storage.error("Export blocked by evidence-integrity gate: \(count, privacy: .public) violation(s)")
             await MainActor.run { reportStatus = "Export blocked: \(count) material claim(s) cite a source that cannot be reopened. Nothing was written." }
+            return
+        } catch WorkProductAssemblyError.scopedAccessDenied {
+            await MainActor.run { reportStatus = "Export blocked: a sensitivity scope error prevented access. Nothing was written." }
             return
         } catch {
             await MainActor.run { reportStatus = "Export failed: \(error.localizedDescription)" }
@@ -841,11 +850,20 @@ public struct WorkspacesView: View {
         // assembled work product, and shares its fail-closed evidence-integrity verdict.
         let assembled: AssembledWorkProduct
         do {
-            assembled = try await assembly.compose(workspace: ws, template: reportTemplate,
-                                                   subjectLabel: ws.title, corpusSnapshotID: nil)
+            assembled = try await assembly.compose(
+                workspace: ws, template: reportTemplate,
+                subjectLabel: ws.title, corpusSnapshotID: nil,
+                access: SensitiveAccessContext(scope: SensitiveScope(
+                    workspaceID: ws.id,
+                    maximumSensitivity: .restricted,
+                    permitsPrivilegedMaterial: false,
+                    purpose: .export)))
         } catch let WorkProductAssemblyError.evidenceIntegrity(count) {
             KalsmritikoshLog.storage.error("Receipt blocked by evidence-integrity gate: \(count, privacy: .public) violation(s)")
             await MainActor.run { reportStatus = "Receipt blocked: \(count) material claim(s) cite a source that cannot be reopened. Nothing was sealed." }
+            return
+        } catch WorkProductAssemblyError.scopedAccessDenied {
+            await MainActor.run { reportStatus = "Receipt blocked: a sensitivity scope error prevented access. Nothing was sealed." }
             return
         } catch {
             await MainActor.run { reportStatus = "Receipt export failed: \(error.localizedDescription)" }
