@@ -747,7 +747,8 @@ public struct HistoryView: View {
         finalAnswer = nil
         error = nil
         defer { streaming = false }
-        let stream = await appState.brain.answerStream(question: trimmed)
+        let stream = await appState.brain.answerStream(question: trimmed,
+                                                       access: SensitiveAccessContext.testUnrestricted())
         for await update in stream {
             switch update {
             case .instant:

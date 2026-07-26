@@ -15,6 +15,27 @@ public protocol Retriever: Sendable {
         for intent: UserIntent,
         layers: [RetrievalLayer]
     ) async throws -> RetrievalResult
+
+    /// OPS-003B — scope-aware retrieve. Filters the result through the
+    /// SensitiveRetrievalPolicy before returning. The default extension
+    /// wraps the unfiltered result with zero withheld counts; HybridRetriever
+    /// overrides this with real policy filtering.
+    func retrieve(
+        for intent: UserIntent,
+        layers: [RetrievalLayer],
+        access: SensitiveAccessContext
+    ) async throws -> AuthorizedRetrievalResult
+}
+
+public extension Retriever {
+    func retrieve(
+        for intent: UserIntent,
+        layers: [RetrievalLayer],
+        access: SensitiveAccessContext
+    ) async throws -> AuthorizedRetrievalResult {
+        let result = try await retrieve(for: intent, layers: layers)
+        return AuthorizedRetrievalResult(result: result, accessContext: access)
+    }
 }
 
 public struct RetrievalResult: Codable, Sendable {

@@ -125,7 +125,7 @@ public enum PromptTemplates {
 
     // MARK: - Email
 
-    public static func emailAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func emailAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         let events = retrieval.events.filter {
             $0.kind == .emailSent || $0.kind == .emailReceived
         }.prefix(20)
@@ -174,7 +174,7 @@ public enum PromptTemplates {
 
     // MARK: - Financial
 
-    public static func financialAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func financialAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         let events = retrieval.events.filter {
             $0.kind == .invoiceIssued || $0.kind == .invoicePaid
         }.prefix(20)
@@ -209,7 +209,7 @@ public enum PromptTemplates {
 
     // MARK: - Legal
 
-    public static func legalAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func legalAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         let events = retrieval.events.filter {
             $0.kind == .contractSigned || $0.kind == .contractModified
         }.prefix(10)
@@ -258,7 +258,7 @@ public enum PromptTemplates {
 
     // MARK: - Project
 
-    public static func projectAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func projectAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         let events = retrieval.events.prefix(20)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
@@ -303,7 +303,7 @@ public enum PromptTemplates {
     /// Builds a prompt that asks the LLM to extract claim-shaped facts
     /// from OCR'd image text. The caller (OCRExpert) pre-filters the
     /// retrieval result to chunks whose source KO is image-typed.
-    public static func ocrAnalysis(
+    private static func ocrAnalysis(
         intent: UserIntent,
         retrieval: RetrievalResult,
         imageChunks: [RetrievedChunk]
@@ -337,7 +337,7 @@ public enum PromptTemplates {
 
     // MARK: - Timeline
 
-    public static func timelineAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func timelineAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         let events = retrieval.events.prefix(25)
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
@@ -364,7 +364,7 @@ public enum PromptTemplates {
 
     // MARK: - Research
 
-    public static func researchAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func researchAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
         var index = 1
@@ -418,7 +418,7 @@ public enum PromptTemplates {
     /// snippets, entities, AND events together — rather than one domain.
     /// This is the "connect the dots" expert that broadens the panel toward
     /// large-model breadth on grounded questions.
-    public static func reasoningAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
+    private static func reasoningAnalysis(intent: UserIntent, retrieval: RetrievalResult) -> PromptFrame {
         var lines: [String] = []
         var map: [String: EvidenceCitation] = [:]
         var index = 1
@@ -451,6 +451,50 @@ public enum PromptTemplates {
         \(jsonContract)
         """
         return PromptFrame(prompt: prompt, evidenceMap: map)
+    }
+
+    // MARK: - OPS-003B canonical overloads (PromptAuthorizedRetrieval)
+    //
+    // These are the production-path overloads. They accept a PromptAuthorizedRetrieval
+    // (which proves SensitiveRetrievalPolicy was applied) and delegate to the
+    // existing RetrievalResult overloads. The raw-RetrievalResult overloads above
+    // remain for test-harness use but are @_disfavoredOverload so call sites that
+    // import only the authorized type naturally use these.
+
+    public static func emailAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        emailAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func financialAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        financialAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func legalAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        legalAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func projectAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        projectAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func ocrAnalysis(
+        intent: UserIntent,
+        retrieval: PromptAuthorizedRetrieval,
+        imageChunks: [RetrievedChunk]
+    ) -> PromptFrame {
+        ocrAnalysis(intent: intent, retrieval: retrieval.retrieval, imageChunks: imageChunks)
+    }
+
+    public static func timelineAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        timelineAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func researchAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        researchAnalysis(intent: intent, retrieval: retrieval.retrieval)
+    }
+
+    public static func reasoningAnalysis(intent: UserIntent, retrieval: PromptAuthorizedRetrieval) -> PromptFrame {
+        reasoningAnalysis(intent: intent, retrieval: retrieval.retrieval)
     }
 }
 

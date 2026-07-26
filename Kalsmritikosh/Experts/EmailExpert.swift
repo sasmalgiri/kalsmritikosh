@@ -21,15 +21,17 @@ public struct EmailExpert: Expert {
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
         // G2-0 — use shared retrieval when MasterBrain pre-fetched it;
         // otherwise fall back to a fresh call with the expert's layers.
-        let result = try await context.retrieve(
+        let authorized = try await context.retrieveAuthorized(
             for: intent,
             layers: [.memory, .entity, .timeline, .metadata]
         )
+        let result = authorized.result
         let emailEvents = result.events.filter {
             $0.kind == .emailSent || $0.kind == .emailReceived
         }
 
-        let frame = PromptTemplates.emailAnalysis(intent: intent, retrieval: result)
+        let frame = PromptTemplates.emailAnalysis(intent: intent,
+                                                  retrieval: await context.promptAuthorizer.authorize(authorized))
         let llm = await tryLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(

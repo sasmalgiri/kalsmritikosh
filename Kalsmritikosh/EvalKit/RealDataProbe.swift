@@ -80,7 +80,7 @@ public enum RealDataProbe {
             // request ID (immune to background generation), plus its class
             // ceiling and the actual purposes spent (§14).
             let t0 = Date()
-            let diag = await brain.answerWithDiagnostics(question: q)
+            let diag = await brain.answerWithDiagnostics(question: q, access: SensitiveAccessContext.testUnrestricted())
             let elapsed = Date().timeIntervalSince(t0)
             let answer = diag.answer
             let calls = diag.llmCalls

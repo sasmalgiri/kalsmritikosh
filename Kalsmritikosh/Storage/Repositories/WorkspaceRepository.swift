@@ -166,6 +166,37 @@ public actor WorkspaceRepository {
         return rows.compactMap { $0.uuid(0) }
     }
 
+    /// Returns the subset of `objectIDs` (KnowledgeObject IDs) that belong to
+    /// `workspaceID` via the knowledge_objects.file_id → workspace_sources link.
+    /// Used by SensitiveRetrievalPolicy for cross-workspace enforcement.
+    /// Returns an empty set when `objectIDs` is empty.
+    public func koIDsInWorkspace(_ objectIDs: [UUID], workspaceID: UUID) async throws -> Set<UUID> {
+        guard !objectIDs.isEmpty else { return [] }
+        let placeholders = objectIDs.map { _ in "?" }.joined(separator: ", ")
+        let rows = try await database.query("""
+            SELECT ko.id FROM knowledge_objects ko
+            INNER JOIN workspace_sources ws ON ws.file_id = ko.file_id
+            WHERE ko.id IN (\(placeholders)) AND ws.workspace_id = ?;
+            """,
+            objectIDs.map { .uuid($0) } + [.uuid(workspaceID)]
+        )
+        return Set(rows.compactMap { $0.uuid(0) })
+    }
+
+    /// Returns the subset of `entityIDs` that are members of `workspaceID`
+    /// (direct assignments in workspace_entities). Used by SensitiveRetrievalPolicy.
+    public func entityIDsInWorkspace(_ entityIDs: [UUID], workspaceID: UUID) async throws -> Set<UUID> {
+        guard !entityIDs.isEmpty else { return [] }
+        let placeholders = entityIDs.map { _ in "?" }.joined(separator: ", ")
+        let rows = try await database.query("""
+            SELECT entity_id FROM workspace_entities
+            WHERE workspace_id = ? AND entity_id IN (\(placeholders));
+            """,
+            [.uuid(workspaceID)] + entityIDs.map { .uuid($0) }
+        )
+        return Set(rows.compactMap { $0.uuid(0) })
+    }
+
     // MARK: - Entity membership
 
     public func addEntity(_ entityID: UUID, to workspaceID: Workspace.ID, at when: Date = Date()) async throws {

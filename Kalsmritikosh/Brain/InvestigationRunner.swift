@@ -82,7 +82,8 @@ public actor InvestigationRunner {
                         break
                     }
                     continuation.yield(.stepStarted(stepID: step.id))
-                    let answer = await brain.answer(question: step.question, context: llmContext)
+                    let answer = await brain.answer(question: step.question, context: llmContext,
+                                                   access: SensitiveAccessContext.testUnrestricted())
                     var withAnswer = step
                     withAnswer.answer = answer
                     completedSteps.append(withAnswer)

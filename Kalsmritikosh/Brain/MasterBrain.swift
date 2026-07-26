@@ -76,6 +76,11 @@ public actor MasterBrain {
     /// (block→KO id bridge pending), so the fast-path is disabled whenever ANY
     /// material is privileged, falling through to the privilege-filtered path.
     private let objects: KnowledgeObjectRepository?
+    /// OPS-003B — optional SensitiveScope enforcement actor. When wired,
+    /// `sensitivePolicy` is forwarded into `HybridRetriever.retrieve(for:layers:access:)`
+    /// so every retrieval respects the caller's SensitiveScope. nil = no enforcement
+    /// (existing retrieve path, backward compatible).
+    private let sensitivePolicy: SensitiveRetrievalPolicy?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -98,7 +103,8 @@ public actor MasterBrain {
         answerLedger: AnswerLedgerRepository? = nil,
         evidenceStore: EvidenceStore? = nil,
         objects: KnowledgeObjectRepository? = nil,
-        priorityGate: QueryPriorityGate? = nil
+        priorityGate: QueryPriorityGate? = nil,
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -118,6 +124,7 @@ public actor MasterBrain {
         self.evidenceStore = evidenceStore
         self.objects = objects
         self.priorityGate = priorityGate
+        self.sensitivePolicy = sensitivePolicy
     }
 
     /// ING-006 — held for the duration of an answer so the background embedding/enrichment
@@ -146,62 +153,11 @@ public actor MasterBrain {
         }
     }
 
-    /// A6.4 — answer a table-aggregate question EXACTLY from persisted
-    /// spreadsheet cells, with no LLM. Returns nil (→ normal path) unless the
-    /// question resolves to a numeric aggregate over a spreadsheet source.
-    private func tableFastPath(question: String, intent: UserIntent) async -> VerifiedAnswer? {
-        guard let evidenceStore else { return nil }
-        // A6.7 — the fast-path reads blocks directly and can't yet check
-        // per-source privilege (block→KO bridge pending). If ANY material is
-        // privileged, skip it and fall through to the privilege-filtered path
-        // so a privileged spreadsheet's values can never leak here.
-        if let objects, (try? await objects.privilegedCount()) ?? 0 > 0 { return nil }
-        let engine = TableQueryEngine()
-        // Find a spreadsheet source relevant to the question via block FTS.
-        guard let hits = try? await evidenceStore.searchBlocks(question, limit: 20),
-              let sheetHit = hits.first(where: { $0.kind == .spreadsheetSheet || $0.kind == .spreadsheetRow }),
-              let versionID = sheetHit.sourceVersionID,
-              let blocks = try? await evidenceStore.blocks(forVersion: versionID), !blocks.isEmpty
-        else { return nil }
-
-        let headers = TableQueryEngine.headers(blocks)
-        guard let (aggregate, column) = engine.parseQuestion(question, headers: headers),
-              let result = engine.evaluate(aggregate, column: column, blocks: blocks)
-        else { return nil }
-
-        let sheetName = blocks.first(where: { $0.kind == .spreadsheetSheet })?.locator.sheet ?? "the table"
-        let value = result.value == result.value.rounded()
-            ? String(format: "%.0f", result.value)
-            : String(format: "%.2f", result.value)
-        let colPhrase = result.column.map { " of \"\($0)\"" } ?? ""
-        var md = "**\(value)**\n\n"
-        md += "Computed deterministically as the \(result.aggregate.rawValue)\(colPhrase) across \(result.rowsConsidered) row\(result.rowsConsidered == 1 ? "" : "s") of \"\(sheetName)\" — read directly from the persisted spreadsheet cells (no model)."
-
-        // Citation anchors to the sheet's source document/version.
-        let citation = VerifiedAnswer.Citation(
-            objectID: sheetHit.documentID,
-            snippet: blocks.first(where: { $0.kind == .spreadsheetSheet })?.rawText ?? sheetName
-        )
-        let trace = ReasoningTrace(
-            pathTaken: "deterministic.table",
-            intent: intent.kind.rawValue,
-            queryCategory: QueryCategoryClassifier().classify(question: question, intent: intent).rawValue,
-            retrievalLayers: [],
-            shortCircuitedAt: nil,
-            expertIDs: [],
-            llmPurposes: [],
-            retrievalCounts: ReasoningTrace.RetrievalCounts(
-                events: 0, entities: 0, chunks: 0, relationships: 0, summaries: 0, walkSteps: 0
-            ),
-            assumptions: ["Computed from persisted spreadsheet cells (A6.4) — no LLM."],
-            uncertainties: []
-        )
-        return VerifiedAnswer(
-            body: md, answerText: md, intentKind: intent.kind.rawValue,
-            citations: [citation], confidence: Confidence(0.9),
-            contradictions: [], refused: false, refusalReason: nil, report: nil,
-            walkSteps: [], source: .historical, reasoningTrace: trace
-        )
+    /// A6.4 — table fast-path. Always nil: the evidence-block store has no block→KO
+    /// lineage bridge, so workspace membership cannot be proven for any cell.
+    /// Fail closed — no spreadsheet value is returned when access is mandatory (OPS-003B).
+    private func tableFastPath(question: String, intent: UserIntent, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        return nil
     }
 
     /// A5.9 — fire-and-forget: persist the shipped answer as a first-class
@@ -251,7 +207,11 @@ public actor MasterBrain {
     /// Today's stream therefore yields exactly one `.verified` event;
     /// shipping the API surface now keeps future phase additions from
     /// breaking callers.
-    public func answerStream(question: String, context: LLMRequestContext? = nil) -> AsyncStream<AnswerUpdate> {
+    public func answerStream(
+        question: String,
+        context: LLMRequestContext? = nil,
+        access: SensitiveAccessContext
+    ) -> AsyncStream<AnswerUpdate> {
         AsyncStream { continuation in
             Task { [weak self] in
                 guard let self else { continuation.finish(); return }
@@ -266,7 +226,7 @@ public actor MasterBrain {
                 // and NEVER treat it as a verified answer (trust contract,
                 // GATE2_ROADMAP §G2-PROGRESSIVE). The pipeline continues
                 // regardless; Phase 4 is the locked answer.
-                if let instant = await self.phase1Instant(question: question) {
+                if let instant = await self.phase1Instant(question: question, access: access) {
                     continuation.yield(instant)
                 }
 
@@ -279,14 +239,15 @@ public actor MasterBrain {
                 if let reconstructed = await self.tryReconstructHistoryStreaming(
                     question: question,
                     yield: { continuation.yield($0) },
-                    externalContext: context
+                    externalContext: context,
+                    access: access
                 ) {
                     continuation.yield(.verified(reconstructed))
                     continuation.finish()
                     return
                 }
 
-                let final = await self.computeVerified(question: question, externalContext: context)
+                let final = await self.computeVerified(question: question, externalContext: context, access: access)
                 continuation.yield(.verified(final))
                 continuation.finish()
             }
@@ -300,7 +261,8 @@ public actor MasterBrain {
     private func tryReconstructHistoryStreaming(
         question: String,
         yield: @Sendable (AnswerUpdate) -> Void,
-        externalContext: LLMRequestContext? = nil
+        externalContext: LLMRequestContext? = nil,
+        access: SensitiveAccessContext
     ) async -> VerifiedAnswer? {
         guard let narrativeComposer,
               let eventsRepo,
@@ -343,10 +305,7 @@ public actor MasterBrain {
             rationale: "Reconstructive intent — narrative path"
         )
 
-        let retrieval = (try? await retriever.retrieve(
-            for: intent,
-            layers: decision.retrievalLayers
-        )) ?? RetrievalResult()
+        let retrieval = (try? await retriever.retrieve(for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
 
         // Hydrate 5W+H slot bundles for the composer's input.
         let slotBundles = (try? await eventsRepo.narrativeSlots(
@@ -1037,7 +996,7 @@ public actor MasterBrain {
     ///   3. A MemoryObject for that subject exists AND its narrative
     ///      shares at least one entity hint with the question (a weak
     ///      relevance gate so stale memory doesn't pollute Phase 1)
-    private func phase1Instant(question: String) async -> AnswerUpdate? {
+    private func phase1Instant(question: String, access: SensitiveAccessContext) async -> AnswerUpdate? {
         guard let memoryRepo, let intentDetector else { return nil }
         guard let intent = try? await intentDetector.detect(question: question) else {
             return nil
@@ -1053,6 +1012,19 @@ public actor MasterBrain {
               let memory = try? await memoryRepo.current(forSubject: kind, identifier: identifier),
               !memory.narrative.isEmpty
         else { return nil }
+
+        // OPS-003B §5 — memory provenance enforcement.
+        // No keyEventIDs = no provenance to check = withheld.
+        guard !memory.keyEventIDs.isEmpty else { return nil }
+        // On the scoped path: every contributing event must be accessible.
+        // If any event is denied, the narrative is tainted — withhold it all.
+        if let policy = sensitivePolicy, !access.scope.isTestSentinel,
+           let eventsRepo {
+            let hydrated = (try? await eventsRepo.findByIDs(memory.keyEventIDs)) ?? []
+            let stub = RetrievalResult(events: hydrated, layersUsed: [])
+            let authorized = await policy.filter(result: stub, access: access)
+            guard authorized.result.events.count == hydrated.count else { return nil }
+        }
 
         // Cache-match gate: require at least one entity-hint overlap
         // (case-insensitive) so a stale narrative doesn't pollute Phase 1.
@@ -1082,7 +1054,10 @@ public actor MasterBrain {
         public let purposes: [String]
     }
 
-    public func answerWithDiagnostics(question: String) async -> AnswerDiagnostics {
+    public func answerWithDiagnostics(
+        question: String,
+        access: SensitiveAccessContext
+    ) async -> AnswerDiagnostics {
         // Classify to size a natural budget; the answer path shares it via
         // child(), so calls record THIS request's root ID and the ceiling is
         // the question's real class limit.
@@ -1093,7 +1068,7 @@ public actor MasterBrain {
             budget: LLMCallBudget(limit: queryClass.callLimit),
             queryClass: queryClass
         )
-        let answer = await self.answer(question: question, context: context)
+        let answer = await self.answer(question: question, context: context, access: access)
         let calls = await LLMCallCounters.shared.count(requestID: context.rootRequestID)
         let purposes = await LLMCallCounters.shared.purposes(requestID: context.rootRequestID)
         return AnswerDiagnostics(
@@ -1106,8 +1081,12 @@ public actor MasterBrain {
         )
     }
 
-    public func answer(question: String, context: LLMRequestContext? = nil) async -> VerifiedAnswer {
-        for await update in answerStream(question: question, context: context) {
+    public func answer(
+        question: String,
+        context: LLMRequestContext? = nil,
+        access: SensitiveAccessContext
+    ) async -> VerifiedAnswer {
+        for await update in answerStream(question: question, context: context, access: access) {
             if case .verified(let answer) = update {
                 return answer
             }
@@ -1125,7 +1104,11 @@ public actor MasterBrain {
     /// G2-PROGRESSIVE — the previous body of `answer(question:)`, now
     /// shared between the stream wrapper and any future per-phase
     /// emitter. Returns the terminal `VerifiedAnswer`.
-    private func computeVerified(question: String, externalContext: LLMRequestContext? = nil) async -> VerifiedAnswer {
+    private func computeVerified(
+        question: String,
+        externalContext: LLMRequestContext? = nil,
+        access: SensitiveAccessContext
+    ) async -> VerifiedAnswer {
         guard
             let intentDetector,
             let router,
@@ -1160,7 +1143,7 @@ public actor MasterBrain {
         // a spreadsheet source is answered EXACTLY from the persisted cells,
         // before any LLM/expert work. Returns nil (falls through to the normal
         // path) unless it produces a confident numeric result.
-        if let table = await tableFastPath(question: question, intent: intent) {
+        if let table = await tableFastPath(question: question, intent: intent, access: access) {
             return table
         }
 
@@ -1244,10 +1227,9 @@ public actor MasterBrain {
         // SQL + vector traffic. Wall-clock saving is N retrieval round
         // trips per question; for `factualLookup` (which routes to all
         // experts) that's ~7× fewer retrieval passes per question.
+        // OPS-003B: always use scope-aware retrieve (access is now mandatory).
         let firstRetrieval = (try? await retriever.retrieve(
-            for: intent,
-            layers: decision.retrievalLayers
-        )) ?? RetrievalResult()
+            for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
 
         // RET-007 — bounded corrective retrieval. If the first pass didn't cover the
         // fields the question asked for, run ONE focused second pass biased at the
@@ -1255,16 +1237,22 @@ public actor MasterBrain {
         // preserved). Deterministic, no LLM; capped at one pass. When nothing is
         // missing / no budget / nothing specific to target, this is a no-op and the
         // first result is used verbatim.
+        // OPS-003B: corrective pass also goes through the scoped path.
         let sharedRetrieval = await Self.applyCorrectiveRetrieval(
             first: firstRetrieval, intent: intent, layers: decision.retrievalLayers,
-            retrieve: { focused in (try? await retriever.retrieve(for: focused, layers: decision.retrievalLayers)) ?? RetrievalResult() }
+            retrieve: { focused in
+                (try? await retriever.retrieve(for: focused, layers: decision.retrievalLayers, access: access))?.result
+                    ?? RetrievalResult()
+            }
         )
 
         let context = ExpertContext(
             retriever: retriever,
             capabilities: capabilities,
             sharedRetrieval: sharedRetrieval,
-            llmContext: llmContext
+            llmContext: llmContext,
+            access: access,
+            sensitivePolicy: sensitivePolicy
         )
         let findings = await executor.execute(
             intent: intent,

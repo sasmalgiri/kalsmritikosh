@@ -13,15 +13,17 @@ public struct LegalExpert: Expert {
     public init() {}
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retrieve(
+        let authorized = try await context.retrieveAuthorized(
             for: intent,
             layers: [.memory, .metadata, .entity, .timeline]
         )
+        let result = authorized.result
         let contractEvents = result.events.filter {
             $0.kind == .contractSigned || $0.kind == .contractModified
         }
 
-        let frame = PromptTemplates.legalAnalysis(intent: intent, retrieval: result)
+        let frame = PromptTemplates.legalAnalysis(intent: intent,
+                                                  retrieval: await context.promptAuthorizer.authorize(authorized))
         let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(

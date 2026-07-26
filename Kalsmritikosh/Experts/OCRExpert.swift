@@ -30,10 +30,11 @@ public struct OCRExpert: Expert {
     }
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retrieve(
+        let authorized = try await context.retrieveAuthorized(
             for: intent,
             layers: [.memory, .metadata, .entity, .summary, .vector]
         )
+        let result = authorized.result
 
         // Find chunks whose source KO is image-typed. The image
         // loader emits content like "[image: no text recognized]" for
@@ -55,7 +56,9 @@ public struct OCRExpert: Expert {
             )
         }
 
-        let frame = PromptTemplates.ocrAnalysis(intent: intent, retrieval: result, imageChunks: Array(signal.prefix(6)))
+        let frame = PromptTemplates.ocrAnalysis(intent: intent,
+                                                retrieval: await context.promptAuthorizer.authorize(authorized),
+                                                imageChunks: Array(signal.prefix(6)))
         let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(

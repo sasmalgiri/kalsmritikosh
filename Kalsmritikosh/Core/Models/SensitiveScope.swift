@@ -135,6 +135,13 @@ public nonisolated struct SensitiveScope: Sendable, Equatable {
         label.sensitivity <= maximumSensitivity
             && (!label.privileged || permitsPrivilegedMaterial)
     }
+
+    /// True when this scope was created by `SensitiveAccessContext.testUnrestricted()`
+    /// and workspace membership enforcement should be skipped. Internal use only —
+    /// never expose this to production code paths.
+    var isTestSentinel: Bool {
+        workspaceID == UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+    }
 }
 
 /// A single protection assignment on one ledger object. Append-only — revocation sets

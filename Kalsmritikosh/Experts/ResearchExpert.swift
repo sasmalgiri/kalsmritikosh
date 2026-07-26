@@ -19,12 +19,14 @@ public struct ResearchExpert: Expert {
         // list), so chunks would never reach the LLM and the expert
         // would silently produce zero claims. .vector ensures the
         // semantic-ranked chunks (including contract.md) reach the prompt.
-        let result = try await context.retrieve(
+        let authorized = try await context.retrieveAuthorized(
             for: intent,
             layers: [.memory, .metadata, .summary, .entity, .vector]
         )
+        let result = authorized.result
 
-        let frame = PromptTemplates.researchAnalysis(intent: intent, retrieval: result)
+        let frame = PromptTemplates.researchAnalysis(intent: intent,
+                                                     retrieval: await context.promptAuthorizer.authorize(authorized))
         let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             return ExpertFindings(

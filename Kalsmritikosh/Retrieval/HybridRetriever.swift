@@ -88,6 +88,11 @@ public actor HybridRetriever: Retriever {
     /// C2.1 — resolves reliable independence keys for corroboration. nil ⇒ conservative
     /// (unkeyed evidence never corroborates). Called at most once per retrieval.
     private let independenceProvider: SourceIndependenceKeyProvider?
+    /// OPS-003B — optional SensitiveScope enforcement actor. When wired, the
+    /// scope-aware retrieve(for:layers:access:) override applies this policy
+    /// after the base retrieval + legacy privilege filter. nil = default
+    /// extension (wraps result with zero withheld counts, no enforcement).
+    private let sensitivePolicy: SensitiveRetrievalPolicy?
 
     public init(
         memory: MemoryRepository,
@@ -110,11 +115,13 @@ public actor HybridRetriever: Retriever {
         bondWalkChunkLimit: Int = 10,
         objects: KnowledgeObjectRepository? = nil,
         genericFacts: GenericFactRepository? = nil,
-        independenceProvider: SourceIndependenceKeyProvider? = nil
+        independenceProvider: SourceIndependenceKeyProvider? = nil,
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil
     ) {
         self.objects = objects
         self.genericFacts = genericFacts
         self.independenceProvider = independenceProvider
+        self.sensitivePolicy = sensitivePolicy
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -138,6 +145,27 @@ public actor HybridRetriever: Retriever {
     public func retrieve(
         for intent: UserIntent,
         layers: [RetrievalLayer]
+    ) async throws -> RetrievalResult {
+        try await retrieveInternal(for: intent, layers: layers, applyPrivilegeFilter: true,
+                                   policy: nil, access: nil)
+    }
+
+    // Core implementation shared by both paths. When `applyPrivilegeFilter` is true
+    // the legacy knowledge_objects.privileged filter runs (unscoped path). When false
+    // it is skipped and the caller's SensitiveRetrievalPolicy is the sole authority
+    // (scoped path) — combining both would cause over-denial on privileged KOs that
+    // the scope explicitly permits.
+    //
+    // When `policy` and `access` are non-nil (scoped path), a pre-enrichment filter
+    // runs BEFORE the entity→density seeding loop and authority-KO injection so that
+    // blocked entities and blocked KOs cannot pollute DocumentFitness scoring,
+    // authority ranking, or the authority-chunk injection path (OPS-003B §3).
+    private func retrieveInternal(
+        for intent: UserIntent,
+        layers: [RetrievalLayer],
+        applyPrivilegeFilter: Bool,
+        policy: SensitiveRetrievalPolicy?,
+        access: SensitiveAccessContext?
     ) async throws -> RetrievalResult {
         let ordering = layers.isEmpty ? RetrievalLayer.priorityOrder : layers
 
@@ -225,6 +253,16 @@ public actor HybridRetriever: Retriever {
         var authorityKOs: Set<KnowledgeObject.ID> = []
         var authorityRanking: [KnowledgeObject.ID] = []   // best→worst by fitness
         var mentionCounts: [KnowledgeObject.ID: Int] = [:]
+
+        // OPS-003B pre-enrichment filter: blocked entities must not seed the authority
+        // density loop (mention counts → densityKOs → DocumentFitness candidates).
+        // Run policy on an entities-only stub before any mention lookups occur.
+        if let policy, let access {
+            let stub = RetrievalResult(entities: collectedEntities, layersUsed: [])
+            let authorized = await policy.filter(result: stub, access: access)
+            collectedEntities = authorized.result.entities
+        }
+
         for e in collectedEntities.prefix(4) {
             let rows = (try? await entities.mentions(forEntityID: e.id, limit: 500)) ?? []
             for r in rows { mentionCounts[r.objectID, default: 0] += 1 }
@@ -289,6 +327,17 @@ public actor HybridRetriever: Retriever {
             authorityKOs = densityKOs   // fallback: prior density-only authority
         }
 
+        // OPS-003B pre-enrichment filter: blocked authority KOs must not contribute
+        // chunks via the injection path below. Filter using the same policy so
+        // sensitivity + workspace are both enforced before any chunk loading occurs.
+        if let policy, let access, !authorityKOs.isEmpty {
+            let stub = RetrievalResult(layersUsed: [], authorityObjectIDs: Array(authorityKOs))
+            let authorized = await policy.filter(result: stub, access: access)
+            let permittedAuthority = Set(authorized.result.authorityObjectIDs)
+            authorityKOs = authorityKOs.intersection(permittedAuthority)
+            authorityRanking = authorityRanking.filter { permittedAuthority.contains($0) }
+        }
+
         if !authorityKOs.isEmpty {
             // RET-004 — inject the chunks of an authoritative doc that actually MATCH the
             // question (by query-term overlap), not just its first N (no prefix-only injection).
@@ -328,35 +377,46 @@ public actor HybridRetriever: Retriever {
             hints: intent.entityHints
         )
 
-        // T18/P6.4 (§21) — withhold EVERYTHING sourced from a privileged
-        // KnowledgeObject before the result is assembled: chunks, events,
-        // entities, and relationships all carry `sourceObjectID`, so all four
-        // layers are filtered (was: chunks only). No-op unless something is
-        // actually privileged.
-        let privileged = await privilegedObjectIDSet()
-        let visibleChunks = privileged.isEmpty ? collectedChunks
-            : collectedChunks.filter { !privileged.contains($0.chunk.objectID) }
-        let visibleEvents = privileged.isEmpty ? boostedEvents
-            : boostedEvents.filter { !privileged.contains($0.sourceObjectID) }
-        let visibleEntities = privileged.isEmpty ? collectedEntities
-            : collectedEntities.filter { !privileged.contains($0.sourceObjectID) }
-        let visibleRelationships = privileged.isEmpty ? collectedRelationships
-            : collectedRelationships.filter { !privileged.contains($0.sourceObjectID) }
-        if !privileged.isEmpty {
-            let withheld = (collectedChunks.count - visibleChunks.count)
-                + (boostedEvents.count - visibleEvents.count)
-                + (collectedEntities.count - visibleEntities.count)
-                + (collectedRelationships.count - visibleRelationships.count)
-            if withheld > 0 {
-                KalsmritikoshLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) item(s) across chunks/events/entities/relations (§21).")
+        // T18/P6.4 (§21) — on the unscoped path, withhold everything sourced from a
+        // privileged KnowledgeObject before assembly. On the scoped path this is
+        // intentionally skipped: SensitiveRetrievalPolicy is the sole authority so
+        // two independent filters cannot produce conflicting denials (e.g. a privileged
+        // KO that the scope explicitly permits would be wrongly withheld by this filter).
+        let resultChunks: [RetrievedChunk]
+        let resultEvents: [Event]
+        let resultEntities: [Entity]
+        let resultRelationships: [Relationship]
+        if applyPrivilegeFilter {
+            let privileged = await privilegedObjectIDSet()
+            resultChunks = privileged.isEmpty ? collectedChunks
+                : collectedChunks.filter { !privileged.contains($0.chunk.objectID) }
+            resultEvents = privileged.isEmpty ? boostedEvents
+                : boostedEvents.filter { !privileged.contains($0.sourceObjectID) }
+            resultEntities = privileged.isEmpty ? collectedEntities
+                : collectedEntities.filter { !privileged.contains($0.sourceObjectID) }
+            resultRelationships = privileged.isEmpty ? collectedRelationships
+                : collectedRelationships.filter { !privileged.contains($0.sourceObjectID) }
+            if !privileged.isEmpty {
+                let withheld = (collectedChunks.count - resultChunks.count)
+                    + (boostedEvents.count - resultEvents.count)
+                    + (collectedEntities.count - resultEntities.count)
+                    + (collectedRelationships.count - resultRelationships.count)
+                if withheld > 0 {
+                    KalsmritikoshLog.storage.notice("Privilege filter: withheld \(withheld, privacy: .public) item(s) across chunks/events/entities/relations (§21).")
+                }
             }
+        } else {
+            resultChunks = collectedChunks
+            resultEvents = boostedEvents
+            resultEntities = collectedEntities
+            resultRelationships = collectedRelationships
         }
 
         let result = assemble(
-            chunks: visibleChunks,
-            events: visibleEvents,
-            entities: visibleEntities,
-            relationships: visibleRelationships,
+            chunks: resultChunks,
+            events: resultEvents,
+            entities: resultEntities,
+            relationships: resultRelationships,
             summaries: collectedSummaries,
             layers: usedLayers,
             shortCircuit: nil,
@@ -365,6 +425,24 @@ public actor HybridRetriever: Retriever {
             authorityRanking: authorityRanking
         )
         return await attachGenericFacts(to: result)
+    }
+
+    /// OPS-003B — scope-aware path. Passes the policy + access to retrieveInternal
+    /// for pre-enrichment filtering (entity density seeding, authority KO injection),
+    /// then applies the same policy again as post-assembly sole authority.
+    /// Falls back to a no-withheld result when no policy is wired.
+    public func retrieve(
+        for intent: UserIntent,
+        layers: [RetrievalLayer],
+        access: SensitiveAccessContext
+    ) async throws -> AuthorizedRetrievalResult {
+        let base = try await retrieveInternal(for: intent, layers: layers,
+                                              applyPrivilegeFilter: false,
+                                              policy: sensitivePolicy, access: access)
+        if let policy = sensitivePolicy {
+            return await policy.filter(result: base, access: access)
+        }
+        return AuthorizedRetrievalResult(result: base, accessContext: access)
     }
 
     /// SEM (option A) — attach the ASSERTABLE domain-pack facts derived from the

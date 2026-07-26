@@ -155,7 +155,8 @@ public nonisolated enum NarrativeEvalKit {
         for question in questions {
             var chapters: [NarrativeChapter] = []
             var verified: VerifiedAnswer?
-            for await update in await brain.answerStream(question: question.text) {
+            for await update in await brain.answerStream(question: question.text,
+                                                         access: SensitiveAccessContext.testUnrestricted()) {
                 switch update {
                 case .chapterReady(let chapter): chapters.append(chapter)
                 case .verified(let answer): verified = answer

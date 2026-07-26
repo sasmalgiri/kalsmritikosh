@@ -80,29 +80,44 @@ public struct ExpertContext: Sendable {
     /// call reserves from the one allowance every operation in the request
     /// shares. nil = unscoped (background / legacy) — no budget enforced.
     public let llmContext: LLMRequestContext?
+    /// OPS-003B — the per-request sensitivity scope. When present, fresh
+    /// retriever calls (i.e. not from sharedRetrieval) use the
+    /// scope-aware retrieve(for:layers:access:) path so experts never
+    /// bypass the SensitiveRetrievalPolicy. nil = legacy unscoped path.
+    public let access: SensitiveAccessContext?
+    /// OPS-003B — the policy actor injected by MasterBrain. Used by
+    /// `promptAuthorizer` to re-filter at authorization time.
+    public let sensitivePolicy: SensitiveRetrievalPolicy?
 
     public nonisolated init(
         retriever: Retriever,
         capabilities: CapabilityRegistry,
         sharedRetrieval: RetrievalResult? = nil,
         llmContext: LLMRequestContext? = nil,
+        access: SensitiveAccessContext? = nil,
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil,
         now: Date = .init()
     ) {
         self.retriever = retriever
         self.capabilities = capabilities
         self.sharedRetrieval = sharedRetrieval
         self.llmContext = llmContext
+        self.access = access
+        self.sensitivePolicy = sensitivePolicy
         self.now = now
+    }
+
+    /// OPS-003B — authorizer that re-runs SensitiveRetrievalPolicy at
+    /// prompt construction time so assignment changes since retrieval are caught.
+    public var promptAuthorizer: PromptContextAuthorizer {
+        PromptContextAuthorizer(policy: sensitivePolicy)
     }
 
     /// Returns the shared retrieval if MasterBrain pre-fetched it
     /// (G2-0); otherwise falls back to a fresh retriever call with the
-    /// expert's requested layers. Either way the expert sees the same
-    /// `RetrievalResult` shape — it can keep filtering chunks/events
-    /// to its domain without caring whether the result was shared. The
-    /// shared result always covers the union of layers any expert
-    /// might want (the priority order), so per-expert layer filtering
-    /// happens on the consumer side, not at retrieval time.
+    /// expert's requested layers. When an access context is present the
+    /// call goes through the scope-aware retrieve(for:layers:access:) path
+    /// so the SensitiveRetrievalPolicy is never bypassed on a fresh call.
     public func retrieve(
         for intent: UserIntent,
         layers: [RetrievalLayer]
@@ -110,7 +125,28 @@ public struct ExpertContext: Sendable {
         if let cached = sharedRetrieval {
             return cached
         }
+        if let access {
+            let authorized = try await retriever.retrieve(for: intent, layers: layers, access: access)
+            return authorized.result
+        }
         return try await retriever.retrieve(for: intent, layers: layers)
+    }
+
+    /// OPS-003B — scope-aware retrieval that returns the full
+    /// AuthorizedRetrievalResult so the caller can pass it directly to
+    /// `promptAuthorizer.authorize(_:)`. Throws `SensitiveRetrievalError.unscopedRetrieval`
+    /// when no access context is present — fail-closed, no globalPermissive bypass.
+    public func retrieveAuthorized(
+        for intent: UserIntent,
+        layers: [RetrievalLayer]
+    ) async throws -> AuthorizedRetrievalResult {
+        guard let access else {
+            throw SensitiveRetrievalError.unscopedRetrieval
+        }
+        if let cached = sharedRetrieval {
+            return AuthorizedRetrievalResult(result: cached, accessContext: access)
+        }
+        return try await retriever.retrieve(for: intent, layers: layers, access: access)
     }
 }
 

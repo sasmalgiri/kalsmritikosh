@@ -200,7 +200,8 @@ public struct LibraryView: View {
             streaming = true
             defer { streaming = false }
             let q = "Tell me the story of \(topic.title)."
-            for await update in await appState.brain.answerStream(question: q) {
+            for await update in await appState.brain.answerStream(question: q,
+                                                                   access: SensitiveAccessContext.testUnrestricted()) {
                 switch update {
                 case .chapterReady(let c):
                     await MainActor.run { chapters.append(c) }

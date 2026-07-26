@@ -22,17 +22,19 @@ public struct ReasoningExpert: Expert {
     public init() {}
 
     public func analyze(intent: UserIntent, context: ExpertContext) async throws -> ExpertFindings {
-        let result = try await context.retrieve(
+        let authorized = try await context.retrieveAuthorized(
             for: intent,
             layers: [.memory, .timeline, .entity, .metadata, .summary, .vector]
         )
+        let result = authorized.result
 
         // SEM — the deterministically-extracted domain facts that ride this
         // retrieval are ground truth (not model output), so they LEAD the
         // expert's claims on both paths, cited to their backing document.
         let factClaims = Self.factClaims(from: result)
 
-        let frame = PromptTemplates.reasoningAnalysis(intent: intent, retrieval: result)
+        let frame = PromptTemplates.reasoningAnalysis(intent: intent,
+                                                      retrieval: await context.promptAuthorizer.authorize(authorized))
         let llm = await runLLM(frame: frame, capabilities: context.capabilities, context: context.llmContext)
         if !llm.claims.isEmpty {
             let claims = factClaims + llm.claims

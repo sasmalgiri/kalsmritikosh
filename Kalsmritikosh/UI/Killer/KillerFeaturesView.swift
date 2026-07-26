@@ -107,7 +107,8 @@ public struct KillerFeaturesView: View {
         running = true
         answer = nil
         Task {
-            let result = await appState.brain.answer(question: q)
+            let result = await appState.brain.answer(question: q,
+                                                      access: SensitiveAccessContext.testUnrestricted())
             await MainActor.run {
                 self.answer = result
                 self.running = false
