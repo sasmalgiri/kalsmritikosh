@@ -17,6 +17,16 @@
 //  • decodeAssignment() throws on malformed rows instead of silently dropping them.
 //  • reviews(forAssignmentID:) exposes the audit ledger.
 //
+//  OPS-003A.2 hardening:
+//  • Whitespace-only actors rejected (trim before isEmpty check) in assign() and revoke().
+//  • assign() propagates knowledge_objects.privileged = 1 to ALL child KOs when the target
+//    is a file and authority is privileged — not just direct KO targets.
+//  • revoke() clears knowledge_objects.privileged on child KOs of a file target when no
+//    other active privileged assignment (direct KO or remaining file) covers each KO.
+//  • Claim lineage gains a 7th UNION ALL branch: Claim → EB (via claim_evidence_ref)
+//    → evidence_block_objects → KnowledgeObject → File, so a restricted File protects
+//    Claims that cite only an EvidenceBlock (no direct KO reference in the ref row).
+//
 
 import Foundation
 import OSLog
@@ -45,7 +55,7 @@ public actor SensitiveScopeRepository {
         reason: String?,
         at: Date = Date()
     ) async throws -> SensitiveScopeAssignment {
-        guard !authority.actorString.isEmpty else {
+        guard !authority.actorString.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw SensitiveScopeError.nonblankActorRequired
         }
         let assignmentID = UUID()
@@ -76,6 +86,13 @@ public actor SensitiveScopeRepository {
                     "UPDATE knowledge_objects SET privileged = 1 WHERE id = ?;",
                     [.uuid(target.id)])
             }
+            if target.kind == .file && authority.isPrivileged {
+                // Propagate privilege to ALL child KOs of this file — legacy retrieval
+                // reads knowledge_objects.privileged directly until OPS-003B replaces it.
+                try db.exec(
+                    "UPDATE knowledge_objects SET privileged = 1 WHERE file_id = ?;",
+                    [.uuid(target.id)])
+            }
         }
         return assignment
     }
@@ -91,7 +108,7 @@ public actor SensitiveScopeRepository {
         reason: String?,
         at: Date = Date()
     ) async throws {
-        guard !revokedBy.isEmpty else {
+        guard !revokedBy.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw SensitiveScopeError.nonblankActorRequired
         }
         let reviewID = UUID()
@@ -115,21 +132,52 @@ public actor SensitiveScopeRepository {
             try Self.insertReview(db, id: reviewID, assignmentID: assignmentID,
                                   action: .revoked, actorNote: reason, at: at)
             // Legacy sync: clear knowledge_objects.privileged when the last active
-            // privileged assignment on a knowledgeObject target has been revoked.
+            // privileged assignment covering a KO has been revoked.
             let wasPrivileged = (first.int(3) ?? 0) != 0
             let targetKindStr = first.string(1) ?? ""
-            if wasPrivileged,
-               targetKindStr == SensitiveScopeTargetKind.knowledgeObject.rawValue,
-               let targetIDStr = first.string(2) {
-                let remaining = try db.query("""
-                SELECT COUNT(*) FROM sensitive_scope_assignments
-                 WHERE target_kind = ? AND target_id = ?
-                   AND revoked_at IS NULL AND privileged = 1;
-                """, [.text(targetKindStr), .text(targetIDStr)])
-                if (remaining.first?.int(0) ?? 0) == 0 {
-                    try db.exec(
-                        "UPDATE knowledge_objects SET privileged = 0 WHERE id = ?;",
+            if wasPrivileged, let targetIDStr = first.string(2) {
+                if targetKindStr == SensitiveScopeTargetKind.knowledgeObject.rawValue {
+                    // Direct KO target: clear if no remaining active privileged assignment
+                    // on this KO or its owning file.
+                    let remaining = try db.query("""
+                    SELECT COUNT(*) FROM sensitive_scope_assignments ssa
+                      JOIN knowledge_objects ko ON ko.id = ?
+                     WHERE ssa.revoked_at IS NULL AND ssa.privileged = 1
+                       AND (
+                         (ssa.target_kind = 'knowledgeObject' AND ssa.target_id = ?)
+                         OR
+                         (ssa.target_kind = 'file' AND ssa.target_id = ko.file_id)
+                       );
+                    """, [.text(targetIDStr), .text(targetIDStr)])
+                    if (remaining.first?.int(0) ?? 0) == 0 {
+                        try db.exec(
+                            "UPDATE knowledge_objects SET privileged = 0 WHERE id = ?;",
+                            [.text(targetIDStr)])
+                    }
+                } else if targetKindStr == SensitiveScopeTargetKind.file.rawValue {
+                    // File target: for each child KO, clear privileged when no remaining
+                    // active privileged coverage exists (direct KO assignment or another
+                    // active privileged file assignment on the same file).
+                    let childKOs = try db.query(
+                        "SELECT id FROM knowledge_objects WHERE file_id = ?;",
                         [.text(targetIDStr)])
+                    for koRow in childKOs {
+                        guard let koIDStr = koRow.string(0) else { continue }
+                        let remaining = try db.query("""
+                        SELECT COUNT(*) FROM sensitive_scope_assignments
+                         WHERE revoked_at IS NULL AND privileged = 1
+                           AND (
+                             (target_kind = 'knowledgeObject' AND target_id = ?)
+                             OR
+                             (target_kind = 'file' AND target_id = ?)
+                           );
+                        """, [.text(koIDStr), .text(targetIDStr)])
+                        if (remaining.first?.int(0) ?? 0) == 0 {
+                            try db.exec(
+                                "UPDATE knowledge_objects SET privileged = 0 WHERE id = ?;",
+                                [.text(koIDStr)])
+                        }
+                    }
                 }
             }
         }
@@ -309,6 +357,7 @@ public actor SensitiveScopeRepository {
     ///   event → knowledgeObject → file   (via events.source_object_id)
     ///   evidenceBlock → sourceVersion + KOs (via EBO) + files (via KOs)
     ///   claim → cited KOs + cited EBs + cited SVs + KOs-via-EB + files-via-KO
+    ///            + files-via-EB→EBO→KO (7th branch: EB-only claim_evidence_ref rows)
     private nonisolated static func lineageQuery(
         for target: SensitiveScopeTarget
     ) -> (sql: String, bindings: [SQLValue]) {
@@ -458,7 +507,15 @@ public actor SensitiveScopeRepository {
               JOIN claim_evidence_ref cer ON cer.knowledge_object_id = ko.id
              WHERE ssa.target_kind = 'file'
                AND cer.claim_id = ? AND ssa.revoked_at IS NULL
-            """, [.uuid(id), .uuid(id), .uuid(id), .uuid(id), .uuid(id), .uuid(id)])
+            UNION ALL
+            SELECT ssa.sensitivity, ssa.privileged
+              FROM sensitive_scope_assignments ssa
+              JOIN knowledge_objects ko ON ko.file_id = ssa.target_id
+              JOIN evidence_block_objects ebo ON ebo.knowledge_object_id = ko.id
+              JOIN claim_evidence_ref cer ON cer.evidence_block_id = ebo.evidence_block_id
+             WHERE ssa.target_kind = 'file'
+               AND cer.claim_id = ? AND cer.evidence_block_id IS NOT NULL AND ssa.revoked_at IS NULL
+            """, [.uuid(id), .uuid(id), .uuid(id), .uuid(id), .uuid(id), .uuid(id), .uuid(id)])
         }
     }
 

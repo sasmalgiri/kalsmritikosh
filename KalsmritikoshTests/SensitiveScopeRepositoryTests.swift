@@ -2,9 +2,10 @@
 //  SensitiveScopeRepositoryTests.swift
 //  KalsmritikoshTests
 //
-//  OPS-003A.1 — protection assignment CRUD, scope-decision matrix, lineage inheritance,
-//  authority enforcement, legacy KO sync, batch key safety, rollback atomicity,
-//  review readability, broken-lineage denial, and malformed-row rejection.
+//  OPS-003A.1/A.2 — protection assignment CRUD, scope-decision matrix, lineage inheritance,
+//  authority enforcement (userConfirmed identity + whitespace rejection), legacy KO sync
+//  (file→KO propagation), 7th Claim lineage branch (EB→EBO→KO→File), batch key safety,
+//  rollback atomicity, review readability, broken-lineage denial, and malformed-row rejection.
 //
 
 import Testing
@@ -139,7 +140,7 @@ struct SensitiveScopeRepositoryTests {
         let a = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: true),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
         #expect(a.isActive)
         #expect(a.targetID == koID)
@@ -172,7 +173,7 @@ struct SensitiveScopeRepositoryTests {
         let a = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .confidential,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         try await repo.revoke(assignmentID: a.id, revokedBy: "u", reason: "cleared",
@@ -204,7 +205,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .publicLevel,
-            authority: .userDirect(privileged: true),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -235,7 +236,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: restrictedID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let batch = try await repo.batchResolution([
@@ -272,12 +273,12 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .confidential,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0.addingTimeInterval(1))
 
         let resolution = try await repo.effectiveLabel(
@@ -295,10 +296,10 @@ struct SensitiveScopeRepositoryTests {
         let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
 
         let a1 = try await repo.assign(target: target, sensitivity: .confidential,
-                                        authority: .userDirect(privileged: false),
+                                        authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                         reason: nil, at: t0)
         _ = try await repo.assign(target: target, sensitivity: .restricted,
-                                   authority: .userDirect(privileged: false),
+                                   authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                    reason: nil, at: t0.addingTimeInterval(1))
 
         try await repo.revoke(assignmentID: a1.id, revokedBy: "u", reason: nil,
@@ -349,9 +350,9 @@ struct SensitiveScopeRepositoryTests {
         #expect(!migRule.privileged, "migration must never produce a privileged assignment")
         #expect(migRule.origin == "migration:v71-backfill")
 
-        // Only userDirect can produce a privileged assignment.
+        // Only userConfirmed can produce a privileged assignment.
         let userPriv = try await repo.assign(target: target, sensitivity: .restricted,
-                                              authority: .userDirect(privileged: true),
+                                              authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
                                               reason: nil, at: t0.addingTimeInterval(2))
         #expect(userPriv.privileged)
     }
@@ -379,7 +380,7 @@ struct SensitiveScopeRepositoryTests {
 
         // Create a valid assignment so we can test revoke's blank-actor check.
         let a = try await repo.assign(target: target, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: false),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                        reason: nil, at: t0)
         await #expect(throws: (any Error).self) {
             try await repo.revoke(assignmentID: a.id, revokedBy: "", reason: nil,
@@ -395,7 +396,7 @@ struct SensitiveScopeRepositoryTests {
         let ghost = SensitiveScopeTarget(kind: .knowledgeObject, id: UUID())
         await #expect(throws: (any Error).self) {
             _ = try await repo.assign(target: ghost, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: false),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                        reason: nil, at: t0)
         }
     }
@@ -411,7 +412,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .file, id: fileID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -432,7 +433,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .sourceVersion, id: svID),
             sensitivity: .confidential,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -453,7 +454,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -474,7 +475,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .confidential,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -495,7 +496,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -517,7 +518,7 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
         let resolution = try await repo.effectiveLabel(
@@ -541,12 +542,12 @@ struct SensitiveScopeRepositoryTests {
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: ko1ID),
             sensitivity: .confidential,
-            authority: .userDirect(privileged: false),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: ko2ID),
             sensitivity: .restricted,
-            authority: .userDirect(privileged: true),
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0.addingTimeInterval(1))
 
         let resolution = try await repo.effectiveLabel(
@@ -568,10 +569,10 @@ struct SensitiveScopeRepositoryTests {
         let fileTarget = SensitiveScopeTarget(kind: .file, id: fileID)
 
         _ = try await repo.assign(target: fileTarget, sensitivity: .restricted,
-                                   authority: .userDirect(privileged: false),
+                                   authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                    reason: nil, at: t0)
         let direct = try await repo.assign(target: koTarget, sensitivity: .confidential,
-                                            authority: .userDirect(privileged: false),
+                                            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                             reason: nil, at: t0.addingTimeInterval(1))
 
         try await repo.revoke(assignmentID: direct.id, revokedBy: "u", reason: nil,
@@ -610,10 +611,10 @@ struct SensitiveScopeRepositoryTests {
         let claimTarget = SensitiveScopeTarget(kind: .claim, id: sameID)
 
         _ = try await repo.assign(target: eventTarget, sensitivity: .restricted,
-                                   authority: .userDirect(privileged: false),
+                                   authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                    reason: nil, at: t0)
         _ = try await repo.assign(target: claimTarget, sensitivity: .confidential,
-                                   authority: .userDirect(privileged: false),
+                                   authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                    reason: nil, at: t0.addingTimeInterval(1))
 
         let batch = try await repo.batchResolution([eventTarget, claimTarget])
@@ -636,7 +637,7 @@ struct SensitiveScopeRepositoryTests {
         #expect(before.first?.int(0) == 0, "privileged should start at 0")
 
         let a = try await repo.assign(target: target, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: true),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
                                        reason: nil, at: t0)
 
         let after = try await db.query(
@@ -661,7 +662,7 @@ struct SensitiveScopeRepositoryTests {
         let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
 
         let a = try await repo.assign(target: target, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: false),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                        reason: nil, at: t0)
         try await repo.revoke(assignmentID: a.id, revokedBy: "u", reason: "done",
                               at: t0.addingTimeInterval(1))
@@ -686,7 +687,7 @@ struct SensitiveScopeRepositoryTests {
 
         await #expect(throws: (any Error).self) {
             _ = try await repo.assign(target: target, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: false),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                        reason: nil, at: t0)
         }
 
@@ -707,7 +708,7 @@ struct SensitiveScopeRepositoryTests {
         let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
 
         let a = try await repo.assign(target: target, sensitivity: .restricted,
-                                       authority: .userDirect(privileged: false),
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
                                        reason: nil, at: t0)
 
         // Sabotage the review ledger after a successful assign.
@@ -723,6 +724,193 @@ struct SensitiveScopeRepositoryTests {
         """, [.uuid(a.id)])
         #expect(rows.first?.isNull(0) == true,
                 "Savepoint must have rolled back the revoke UPDATE — assignment must still be active")
+    }
+
+    // MARK: - 26: userConfirmed actor and origin stored correctly (OPS-003A.2)
+
+    @Test("userConfirmed actorID is stored as assigned_by; origin embeds the confirmationID")
+    func confirmedActorAndOriginStoredCorrectly() async throws {
+        let (db, repo) = try await rig()
+        let (_, koID) = try await seedFileAndKO(db)
+        let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+        let cid = UUID()
+
+        let a = try await repo.assign(
+            target: target,
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "carol", confirmationID: cid, privileged: true),
+            reason: nil, at: t0)
+
+        #expect(a.assignedBy == "carol", "actorID must be stored verbatim as assigned_by")
+        #expect(a.origin == "user_confirmed:\(cid.uuidString)",
+                "origin must embed the confirmationID UUID")
+        #expect(a.privileged)
+    }
+
+    // MARK: - 27: Whitespace-only actorID is rejected (OPS-003A.2)
+
+    @Test("userConfirmed with a whitespace-only actorID throws nonblankActorRequired")
+    func whitespaceOnlyActorIDRejected() async throws {
+        let (db, repo) = try await rig()
+        let (_, koID) = try await seedFileAndKO(db)
+        let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+
+        await #expect(throws: (any Error).self,
+                      "whitespace-only actorID must be refused before touching the database") {
+            _ = try await repo.assign(
+                target: target, sensitivity: .restricted,
+                authority: .userConfirmed(actorID: "   ", confirmationID: UUID(), privileged: false),
+                reason: nil, at: t0)
+        }
+        // No assignment must have been inserted.
+        let rows = try await db.query("""
+        SELECT COUNT(*) FROM sensitive_scope_assignments
+         WHERE target_kind = ? AND target_id = ?;
+        """, [.text("knowledgeObject"), .uuid(koID)])
+        #expect(Int(rows.first?.int(0) ?? -1) == 0)
+    }
+
+    // MARK: - 28: Whitespace-only revokedBy is rejected (OPS-003A.2)
+
+    @Test("revoke() with a whitespace-only revokedBy throws nonblankActorRequired")
+    func whitespaceOnlyRevokedByRejected() async throws {
+        let (db, repo) = try await rig()
+        let (_, koID) = try await seedFileAndKO(db)
+        let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+
+        let a = try await repo.assign(target: target, sensitivity: .restricted,
+                                       authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
+                                       reason: nil, at: t0)
+        await #expect(throws: (any Error).self,
+                      "whitespace-only revokedBy must be refused") {
+            try await repo.revoke(assignmentID: a.id, revokedBy: "  ", reason: nil,
+                                  at: t0.addingTimeInterval(1))
+        }
+        // Assignment must still be active.
+        let rows = try await db.query("""
+        SELECT revoked_at FROM sensitive_scope_assignments WHERE id = ?;
+        """, [.uuid(a.id)])
+        #expect(rows.first?.isNull(0) == true, "assignment must remain active after whitespace revoke failure")
+    }
+
+    // MARK: - 29: Lineage — claim via EB→EBO→KO→File even when direct KO ref is public (OPS-003A.2 7th branch)
+
+    @Test("A restricted File is reached via Claim→EB→EBO→KO→File even when the direct KO in the ref row is public")
+    func lineage_claimViaEBThroughEBOToProtectedFile() async throws {
+        let (db, repo) = try await rig()
+        // koA and fileA are public (no assignment).
+        let (_, koAID) = try await seedFileAndKO(db)
+        // koB's file will be restricted — the EB links to koB via EBO.
+        let (fileBID, koBID) = try await seedFileAndKO(db)
+        let ebID = try await seedEvidenceBlock(db, svID: nil)
+        // EB is linked to koBID through evidence_block_objects (NOT koA).
+        try await seedEBOLink(db, ebID: ebID, koID: koBID)
+        let claimID = try await seedClaim(db)
+        // claim_evidence_ref: knowledge_object_id = koA (required NOT NULL, but public),
+        // evidence_block_id = ebID (leads to restricted koB/fileB via 7th branch).
+        try await db.exec("""
+        INSERT INTO claim_evidence_ref (claim_id, ordinal, knowledge_object_id, evidence_block_id, evidence_role)
+        VALUES (?,?,?,?,?);
+        """, [.uuid(claimID), .integer(0), .uuid(koAID), .uuid(ebID), .text("supporting")])
+
+        // Assign restricted only to fileB (koA/fileA carry no assignment).
+        _ = try await repo.assign(
+            target: SensitiveScopeTarget(kind: .file, id: fileBID),
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
+            reason: nil, at: t0)
+
+        let resolution = try await repo.effectiveLabel(
+            for: SensitiveScopeTarget(kind: .claim, id: claimID))
+        let label = try #require(resolution.label)
+        #expect(label.sensitivity == .restricted,
+                "7th branch must propagate restricted from fileB via Claim→EB→EBO→koBID→fileBID")
+    }
+
+    // MARK: - 30: Legacy sync — file assignment propagates privileged to child KOs (OPS-003A.2)
+
+    @Test("A privileged File assignment sets knowledge_objects.privileged = 1 on all child KOs")
+    func legacySyncFilePropagatesPrivilegedToChildKOs() async throws {
+        let (db, repo) = try await rig()
+        let (fileID, ko1ID) = try await seedFileAndKO(db)
+        // Seed a second KO under the same file.
+        let ko2ID = UUID()
+        try await db.exec("""
+        INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
+        VALUES (?,?,?,?,?,?);
+        """, [.uuid(ko2ID), .uuid(fileID), .text("text"), .text("body2"), .real(0), .real(0)])
+
+        let before1 = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(ko1ID)])
+        let before2 = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(ko2ID)])
+        #expect(before1.first?.int(0) == 0)
+        #expect(before2.first?.int(0) == 0)
+
+        _ = try await repo.assign(
+            target: SensitiveScopeTarget(kind: .file, id: fileID),
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+
+        let after1 = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(ko1ID)])
+        let after2 = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(ko2ID)])
+        #expect(after1.first?.int(0) == 1, "child KO 1 must be set to privileged=1")
+        #expect(after2.first?.int(0) == 1, "child KO 2 must be set to privileged=1")
+    }
+
+    // MARK: - 31: Legacy sync — file revoke clears child KOs when no other coverage (OPS-003A.2)
+
+    @Test("Revoking the only privileged File assignment clears knowledge_objects.privileged on child KOs")
+    func legacySyncFileRevokeRemovesKOPrivilegedWhenNoCoverage() async throws {
+        let (db, repo) = try await rig()
+        let (fileID, koID) = try await seedFileAndKO(db)
+
+        let a = try await repo.assign(
+            target: SensitiveScopeTarget(kind: .file, id: fileID),
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+
+        let synced = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(koID)])
+        #expect(synced.first?.int(0) == 1, "privileged must be 1 after file assignment")
+
+        try await repo.revoke(assignmentID: a.id, revokedBy: "u", reason: nil,
+                              at: t0.addingTimeInterval(1))
+
+        let cleared = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(koID)])
+        #expect(cleared.first?.int(0) == 0,
+                "privileged must revert to 0 when the only covering file assignment is revoked")
+    }
+
+    // MARK: - 32: Legacy sync — file revoke preserves KO.privileged when direct KO assignment remains (OPS-003A.2)
+
+    @Test("Revoking a File assignment does not clear privileged on a KO that still has a direct privileged assignment")
+    func legacySyncFileRevokePreservesKOPrivilegedWithDirectAssignment() async throws {
+        let (db, repo) = try await rig()
+        let (fileID, koID) = try await seedFileAndKO(db)
+        let koTarget   = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+        let fileTarget = SensitiveScopeTarget(kind: .file, id: fileID)
+
+        let fileAssign = try await repo.assign(target: fileTarget, sensitivity: .restricted,
+                                                authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
+                                                reason: nil, at: t0)
+        // Direct KO privileged assignment — this keeps it covered after the file assign is revoked.
+        _ = try await repo.assign(target: koTarget, sensitivity: .confidential,
+                                   authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: true),
+                                   reason: nil, at: t0.addingTimeInterval(1))
+
+        try await repo.revoke(assignmentID: fileAssign.id, revokedBy: "u", reason: nil,
+                              at: t0.addingTimeInterval(2))
+
+        let after = try await db.query(
+            "SELECT privileged FROM knowledge_objects WHERE id = ?;", [.uuid(koID)])
+        #expect(after.first?.int(0) == 1,
+                "privileged must stay 1: direct KO assignment still covers it even after file revoke")
     }
 
     // MARK: - 25: Malformed sensitivity throws (NEW)

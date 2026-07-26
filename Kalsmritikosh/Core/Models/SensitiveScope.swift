@@ -12,6 +12,11 @@
 //  (structural enforcement preventing automation from setting privileged=true),
 //  ProtectionResolution (explicit brokenLineage vs. resolved), new SensitiveScopeError cases.
 //
+//  OPS-003A.2 hardens: userDirect renamed to userConfirmed (requires actorID + confirmationID
+//  — forgery now requires the caller to supply an auditable identity + event UUID); whitespace-
+//  only actorID rejected; Claim lineage gains 7th branch (EB→EBO→KO→File); File privileged
+//  assignments propagate to child KOs in the legacy column.
+//
 
 import Foundation
 
@@ -57,11 +62,16 @@ public nonisolated struct SensitiveScopeTarget: Hashable, Equatable, Sendable {
 /// Structured authority for creating a protection assignment.
 ///
 /// The enum structure makes it impossible for automation to autonomously set
-/// `privileged = true`: only `.userDirect` carries a privilege flag; `.migration` and
-/// `.systemRule` are structurally non-privileged.
+/// `privileged = true`: only `.userConfirmed` carries a privilege flag; `.migration` and
+/// `.systemRule` are structurally non-privileged. The `actorID` and `confirmationID` fields
+/// prove that a specific human identity confirmed the privilege classification.
 public enum AssignmentAuthority: Sendable {
-    /// A human-initiated direct assignment. Only this case may carry `privileged: true`.
-    case userDirect(privileged: Bool)
+    /// A human-confirmed assignment. `actorID` identifies the confirming actor and is stored
+    /// as `assigned_by` (must be non-blank after whitespace trimming). `confirmationID` is a
+    /// caller-supplied UUID that uniquely identifies this confirmation event; it is embedded
+    /// in the stored `origin` string so the human-confirmed provenance is auditable without a
+    /// schema change. Only this case may carry `privileged: true`.
+    case userConfirmed(actorID: String, confirmationID: UUID, privileged: Bool)
     /// A migration or backfill script. Always non-privileged.
     case migration(tag: String)
     /// A deterministic rule or automated system. Always non-privileged.
@@ -69,26 +79,27 @@ public enum AssignmentAuthority: Sendable {
 
     /// Whether this authority carries a privilege flag.
     public nonisolated var isPrivileged: Bool {
-        guard case .userDirect(let p) = self else { return false }
+        guard case .userConfirmed(_, _, let p) = self else { return false }
         return p
     }
 
     /// Stable string stored in `sensitive_scope_assignments.origin`.
+    /// For userConfirmed: `"user_confirmed:<confirmationID.uuidString>"`.
     public nonisolated var originString: String {
         switch self {
-        case .userDirect:        return "user_direct"
-        case .migration(let t):  return "migration:\(t)"
-        case .systemRule(let t): return "system_rule:\(t)"
+        case .userConfirmed(_, let cid, _): return "user_confirmed:\(cid.uuidString)"
+        case .migration(let t):             return "migration:\(t)"
+        case .systemRule(let t):            return "system_rule:\(t)"
         }
     }
 
-    /// Non-blank string stored in `sensitive_scope_assignments.assigned_by`.
-    /// Returns the tag for migration/systemRule, or "user" for userDirect.
+    /// Non-blank (after trimming) string stored in `sensitive_scope_assignments.assigned_by`.
+    /// For userConfirmed: `actorID`. For migration/systemRule: the tag.
     public nonisolated var actorString: String {
         switch self {
-        case .userDirect:        return "user"
-        case .migration(let t):  return t
-        case .systemRule(let t): return t
+        case .userConfirmed(let aid, _, _): return aid
+        case .migration(let t):             return t
+        case .systemRule(let t):            return t
         }
     }
 }
