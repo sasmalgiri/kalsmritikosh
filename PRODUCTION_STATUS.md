@@ -124,7 +124,7 @@ The following prior statements are **obsolete** and are corrected here:
 
 ---
 
-## 6. Formal stage state (2026-07-25, after OPS-002.1)
+## 6. Formal stage state (2026-07-26, after OPS-002.2)
 
 ```
 Stage 1 implementation:    complete   (CI-001A/A.1/A.2/B, STATUS-001, MIG-001A/B/B.1/C —
@@ -134,16 +134,17 @@ Stage 1 owner acceptance:  pending    (main branch ruleset requiring all five ch
                                        sanitized owner-archive run via
                                        ci/migrations/verify-real-archive.sh)
 Stage 2 engineering:       in progress (OPS-001 Issue Engine complete, run 30148706330;
-                                       OPS-002 Task/Deadline Engine complete — implementation
-                                       run 30156183281 + OPS-002.1 provenance hardening
-                                       run 30160395578 (schema v70) closing the reviewer's
-                                       four-gap NO-GO; next OPS-003 SensitiveScope)
+                                       OPS-002 Task/Deadline Engine complete — final
+                                       acceptance closed by OPS-002.2 run 30182173679
+                                       (SHA 58e9f36a, schema v70, 845 total / 843 passed /
+                                       2 skipped / 0 failed); next OPS-003 SensitiveScope)
 ```
 
 RECORD OF CORRECTION (retained): the OPS-002 evidence commit (`db59e12`) was pushed before the
 reviewer's NO-GO arrived and prematurely recorded OPS-002 as complete. OPS-002.1 (`b84b11f`,
-run 30160395578, all five checks green) corrected the four semantic gaps and closes OPS-002
-acceptance. History was not rewritten.
+run 30160395578) corrected the four semantic gaps. OPS-002.2 (`58e9f36`, run 30182173679)
+corrected two further gaps (evidence-pair binding + confirmation race). OPS-002 acceptance is
+now fully closed. History was not rewritten.
 
 Stage 1 is NOT marked PASS/Closed until both owner items are recorded here and in
 `RELEASE_EVIDENCE_INDEX.md`. The two items are genuinely owner-only and do not affect Stage 2
