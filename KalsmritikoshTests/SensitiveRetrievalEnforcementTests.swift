@@ -91,8 +91,10 @@ struct SensitiveRetrievalEnforcementTests {
 
     @Test("Internal scope permits items with default internal label (no SSA)")
     func internalScopePermitsDefaultInternalLabel() async throws {
-        let (_, _, policy) = try await rig()
-        let koID = UUID()   // nil resolution → default internalLevel
+        let (db, _, policy) = try await rig()
+        // KO must exist in knowledge_objects so effectiveLabel returns .resolved(internalLevel)
+        // rather than .brokenLineage (which would deny it). No SSA assignment → default label.
+        let (_, koID) = try await seedFileAndKO(db)
         let result = RetrievalResult(chunks: [chunk(koID: koID)])
         let access = SensitiveAccessContext(scope: scope(max: .internalLevel))
         let authorized = await policy.filter(result: result, access: access)
@@ -264,7 +266,9 @@ struct SensitiveRetrievalEnforcementTests {
     func allFiveWithheldCountsAccurate() async throws {
         let (db, repo, policy) = try await rig()
         let (_, blockedKO) = try await seedFileAndKO(db)
-        let permittedKO = UUID()   // no SSA → internalLevel → permitted by internalLevel scope
+        // permittedKO must exist in knowledge_objects so effectiveLabel returns .resolved(internalLevel).
+        // An unseeded UUID returns .brokenLineage (denied). No SSA assignment → default label.
+        let (_, permittedKO) = try await seedFileAndKO(db)
         _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: blockedKO),
             sensitivity: .restricted,
@@ -343,7 +347,10 @@ struct SensitiveRetrievalEnforcementTests {
             authority: .userConfirmed(actorID: "alice", confirmationID: UUID(), privileged: false),
             reason: nil, at: t0)
 
-        let permittedKO = UUID()   // no SSA → internalLevel → permitted by internalLevel scope
+        // permittedKO must be seeded: after the policy fix, walk-step KOs enter the batch
+        // and effectiveLabel returns .brokenLineage for unseeded KOs (deny). Seeding without
+        // an SSA gives .resolved(internalLevel) — allowed by the internalLevel scope ceiling.
+        let (_, permittedKO) = try await seedFileAndKO(db)
         let step = WalkStep(
             fromFact: .person,
             bond: "knows",
@@ -358,8 +365,12 @@ struct SensitiveRetrievalEnforcementTests {
 
     @Test("WalkStep permitted when all evidence KOs are within scope")
     func walkStepPermittedWhenAllEvidenceKOsPermitted() async throws {
-        let (_, _, policy) = try await rig()
-        let ko1 = UUID(); let ko2 = UUID()   // no SSA → internalLevel → permitted
+        let (db, _, policy) = try await rig()
+        // Both KOs must be seeded: walk-step KOs now enter the batch and effectiveLabel
+        // returns .brokenLineage for unseeded UUIDs. Seeding without an SSA gives
+        // .resolved(internalLevel) → permitted by the internalLevel scope ceiling.
+        let (_, ko1) = try await seedFileAndKO(db)
+        let (_, ko2) = try await seedFileAndKO(db)
         let step = WalkStep(
             fromFact: .person,
             bond: "knows",
@@ -582,7 +593,10 @@ struct SensitiveRetrievalEnforcementTests {
     @Test("batchResolution error causes total denial (fail-closed)")
     func repoErrorCausesTotalDenial() async throws {
         let (db, _, policy) = try await rig()
-        let koID = UUID()
+        // KO must be seeded so effectiveLabel returns .resolved(internalLevel) before DB close,
+        // proving the pre-close filter actually passes the chunk. An unseeded UUID returns
+        // .brokenLineage (deny), which would make the "before" assertion fail.
+        let (_, koID) = try await seedFileAndKO(db)
         let result = RetrievalResult(
             chunks: [chunk(koID: koID)],
             events: [event(koID: koID)]

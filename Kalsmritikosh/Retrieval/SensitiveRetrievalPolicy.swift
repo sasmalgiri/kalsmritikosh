@@ -74,6 +74,7 @@ public actor SensitiveRetrievalPolicy {
             if case .document(let koID) = s.scope { koIDs.insert(koID) }
         }
         for koID in result.authorityObjectIDs { koIDs.insert(koID) }
+        for w in result.walkSteps { for koID in w.evidenceObjectIDs { koIDs.insert(koID) } }
 
         let targets = koIDs.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
         let resolutions: [SensitiveScopeTarget: ProtectionResolution]
