@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 842,
-  "baselineCommit": "b84b11f9b8d6d26499764ceedc01728919a20421",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 842 = 840 passed + 2 skipped as of OPS-002.1 (raised 837 \u2192 842: +4 ProfessionalTaskProvenanceTests, +1 ProfessionalTaskMigrationTests.v69ToV70Preserves). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
+  "minimumExecutedTests": 845,
+  "baselineCommit": "PENDING \u2014 set to the OPS-002.2 commit SHA in its evidence-correction commit",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 845 = 843 passed + 2 skipped as of OPS-002.2 (raised 842 \u2192 845: +3 ProfessionalTaskProvenanceTests \u2014 mismatched evidence pair, stale-validation refusals, concurrent-confirmation race). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
 }

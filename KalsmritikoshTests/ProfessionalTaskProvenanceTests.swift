@@ -254,6 +254,125 @@ struct ProfessionalTaskProvenanceTests {
         #expect(try await r.deadlines.deadlines(taskID: r.taskID).count == 3)
     }
 
+    // MARK: - OPS-002.2: exact evidence PAIRS (mismatched block/version never qualifies)
+
+    @Test("A Claim reference pairing a real block with a DIFFERENT real source version is refused; the matching pair succeeds")
+    func mismatchedEvidencePairRefused() async throws {
+        let r = try await rig()
+        // A second, unrelated REAL source version (different document) in the same workspace.
+        let svB = UUID(), docB = UUID()
+        try await r.db.exec("""
+        INSERT INTO source_versions (id, logical_source_id, document_id, content_hash, valid_from, is_current, created_at)
+        VALUES (?,?,?,?,?,1,?);
+        """, [.uuid(svB), .uuid(UUID()), .uuid(docB), .text(String(repeating: "ef", count: 32)), .real(0), .real(0)])
+        // A claim whose evidence reference cites the rig's REAL block but version B — both IDs
+        // resolve individually, yet the block does NOT belong to that source version.
+        let claim = UUID()
+        try await r.db.exec("""
+        INSERT INTO claims (id, subject_id, subject_label, statement, confidence, created_at,
+                            evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?);
+        """, [.uuid(claim), .uuid(UUID()), .text("S"), .text("due on the 17th"), .real(0.9), .real(1000),
+              .text("directlyObserved"), .text("unreviewed"), .text("sourceExtraction"),
+              .text("available"), .text("none")])
+        try await r.db.exec("""
+        INSERT INTO claim_evidence_ref (claim_id, ordinal, knowledge_object_id, evidence_block_id, source_version_id, evidence_role)
+        VALUES (?,?,?,?,?,?);
+        """, [.uuid(claim), .integer(0), .uuid(r.koID), .uuid(r.evidenceBlockID), .uuid(svB), .text("supports")])
+
+        let c = try await pendingCandidate(r)
+        _ = try await r.tasks.addEvidenceLink(taskID: r.taskID, scope: .deadlineCandidate(c.id),
+                                              target: .claim(claim), role: .deadlineBasis, at: t0)
+        await #expect(throws: DeadlineError.ruleEvidenceRequired) {
+            _ = try await r.deadlines.confirmCandidate(id: c.id, confirmation: self.ruleConfirmation(at: self.t0), at: self.t0)
+        }
+        #expect(try await r.deadlines.deadlines(taskID: r.taskID).isEmpty)
+        // Correct the reference to the block's OWN source version — now the pair binds exactly.
+        let svA = try #require(try await r.db.query(
+            "SELECT source_version_id FROM evidence_blocks WHERE id = ?;", [.uuid(r.evidenceBlockID)]).first?.uuid(0))
+        try await r.db.exec("UPDATE claim_evidence_ref SET source_version_id = ? WHERE claim_id = ?;",
+                            [.uuid(svA), .uuid(claim)])
+        let d = try await r.deadlines.confirmCandidate(id: c.id, confirmation: ruleConfirmation(at: t0.addingTimeInterval(1)),
+                                                       at: t0.addingTimeInterval(1))
+        #expect(d.sourceCandidateID == c.id)
+    }
+
+    // MARK: - OPS-002.2: validation executes inside the non-interleavable savepoint
+
+    @Test("State mutated after the candidate was read cannot produce a Deadline; refusals change nothing")
+    func staleValidationCannotCreateDeadline() async throws {
+        let r = try await rig()
+        // (3) The candidate is read/created while its task is open; the task completes BEFORE the
+        // confirmation transaction — the in-transaction validation must see `completed`.
+        let doomedTask = try await r.tasks.createConfirmed(workspaceID: r.workspaceID, primaryIssueID: nil,
+                                                           title: "Will complete", detail: nil, type: .action,
+                                                           priority: .normal, owner: nil,
+                                                           authority: .user(actor: "u"), at: t0)
+        let stale = try await pendingCandidate(r, task: doomedTask.id)
+        _ = try await r.tasks.complete(taskID: doomedTask.id, reviewer: "u", reason: nil, at: t0.addingTimeInterval(1))
+        await #expect(throws: DeadlineError.taskNotOperational(.completed)) {
+            _ = try await r.deadlines.confirmCandidate(id: stale.id, confirmation: self.userConfirmation(at: self.t0), at: self.t0)
+        }
+        // (7) The refused transaction changed NOTHING: candidate still pending, only its
+        // `created` review, no deadline rows, no deadline reviews.
+        #expect(try #require(try await r.deadlines.candidate(id: stale.id)).status == .pending)
+        #expect(try await r.deadlines.candidateReviews(candidateID: stale.id).map(\.action) == [.created])
+        #expect(try await r.deadlines.deadlines(taskID: doomedTask.id).isEmpty)
+        #expect(Int(try await r.db.query("SELECT COUNT(*) FROM deadline_reviews;", []).first?.int(0) ?? -1) == 0)
+
+        // (4) Direct creation against a task archived before the transaction.
+        let archived = try await r.tasks.createConfirmed(workspaceID: r.workspaceID, primaryIssueID: nil,
+                                                         title: "Will archive", detail: nil, type: .action,
+                                                         priority: .normal, owner: nil,
+                                                         authority: .user(actor: "u"), at: t0)
+        try await r.tasks.archive(taskID: archived.id, reviewer: "u", reason: nil, at: t0.addingTimeInterval(2))
+        await #expect(throws: DeadlineError.taskNotOperational(.archived)) {
+            _ = try await r.deadlines.createConfirmedDeadline(taskID: archived.id, value: self.dayValue(),
+                                                              kind: .due, confirmation: self.userConfirmation(at: self.t0), at: self.t0)
+        }
+        #expect(try await r.deadlines.deadlines(taskID: archived.id).isEmpty)
+
+        // (5) A candidate rejected before the transaction cannot confirm.
+        let rejected = try await pendingCandidate(r, at: t0.addingTimeInterval(3))
+        try await r.deadlines.rejectCandidate(id: rejected.id, reviewer: "u", reason: "noise", at: t0.addingTimeInterval(4))
+        await #expect(throws: DeadlineError.candidateNotPending(.rejected)) {
+            _ = try await r.deadlines.confirmCandidate(id: rejected.id, confirmation: self.userConfirmation(at: self.t0), at: self.t0)
+        }
+
+        // (6) A rule-confirmable candidate whose exact evidence link is REMOVED before the
+        // transaction — the in-transaction evidence check must see the removal.
+        let ruleCandidate = try await pendingCandidate(r, at: t0.addingTimeInterval(5))
+        let link = try await r.tasks.addEvidenceLink(taskID: r.taskID, scope: .deadlineCandidate(ruleCandidate.id),
+                                                     target: .evidenceBlock(r.evidenceBlockID), role: .deadlineBasis, at: t0)
+        try await r.tasks.removeEvidenceLink(id: link.id)
+        await #expect(throws: DeadlineError.ruleEvidenceRequired) {
+            _ = try await r.deadlines.confirmCandidate(id: ruleCandidate.id, confirmation: self.ruleConfirmation(at: self.t0), at: self.t0)
+        }
+        #expect(try #require(try await r.deadlines.candidate(id: ruleCandidate.id)).status == .pending)
+        #expect(try await r.deadlines.deadlines(taskID: r.taskID).isEmpty)
+    }
+
+    @Test("Two concurrent confirmations of one candidate yield exactly one Deadline")
+    func concurrentConfirmationsYieldOneDeadline() async throws {
+        let r = try await rig()
+        let c = try await pendingCandidate(r)
+        // Both confirmations race through the SAME repository/database. The transactional
+        // validate-and-write means exactly one sees `pending` and wins; the other must fail
+        // with candidateNotPending — never a second row (UNIQUE(source_candidate_id) backstops).
+        async let first = r.deadlines.confirmCandidate(id: c.id, confirmation: userConfirmation(at: t0.addingTimeInterval(1)),
+                                                       at: t0.addingTimeInterval(1))
+        async let second = r.deadlines.confirmCandidate(id: c.id, confirmation: userConfirmation(at: t0.addingTimeInterval(1)),
+                                                        at: t0.addingTimeInterval(1))
+        var successes = 0
+        do { _ = try await first; successes += 1 } catch { }
+        do { _ = try await second; successes += 1 } catch { }
+        #expect(successes == 1, "expected exactly one winning confirmation")
+        let rows = Int(try await r.db.query(
+            "SELECT COUNT(*) FROM deadlines WHERE source_candidate_id = ?;", [.uuid(c.id)]).first?.int(0) ?? -1)
+        #expect(rows == 1)
+        #expect(try #require(try await r.deadlines.candidate(id: c.id)).status == .promoted)
+    }
+
     // MARK: - Correction 4: persisted rule identity (test 6)
 
     @Test("Task confirmation authority — including rule ID and version — survives database reopening")

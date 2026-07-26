@@ -129,6 +129,30 @@ public actor Database {
         }
     }
 
+    /// Run `body` inside a named SAVEPOINT as ONE non-interleavable actor operation
+    /// (OPS-002.2). The closure is SYNCHRONOUS and receives this database as an `isolated`
+    /// parameter, so it can call the isolated `exec`/`query` helpers directly with NO
+    /// suspension points — no other work on this connection can execute between the
+    /// closure's validations and its writes. This is the required shape for
+    /// validate-then-write invariants (e.g. deadline confirmation): an ordinary
+    /// query-before-SAVEPOINT can be invalidated by an interleaved writer; a synchronous
+    /// isolated closure cannot. Any throw rolls the entire savepoint back.
+    public func withSavepoint<T: Sendable>(
+        _ name: String,
+        _ body: @Sendable (isolated Database) throws -> T
+    ) throws -> T {
+        try execRaw("SAVEPOINT \(name);")
+        do {
+            let result = try body(self)
+            try execRaw("RELEASE SAVEPOINT \(name);")
+            return result
+        } catch {
+            try? execRaw("ROLLBACK TO SAVEPOINT \(name);")
+            try? execRaw("RELEASE SAVEPOINT \(name);")
+            throw error
+        }
+    }
+
     /// Acquire the transaction gate and start a SQLite transaction.
     /// Waits (suspending the caller, not blocking the actor) until any
     /// prior transaction has called `commitTransaction()` or
