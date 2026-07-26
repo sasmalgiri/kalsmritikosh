@@ -22,9 +22,9 @@ import Testing
 struct MigrationMatrixTests {
 
     /// Material schema boundaries (not every version — these are the migration milestones).
-    /// 68 = OPS-001 Issue Engine; 69 = OPS-002 Task/Deadline Engine; 70 = current schema
-    /// reopened (OPS-002.1 confirmation-authority columns).
-    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70]
+    /// 68 = OPS-001 Issue Engine; 69 = OPS-002 Task/Deadline Engine;
+    /// 70 = OPS-002.1 confirmation-authority columns; 71 = OPS-003A SensitiveScope ledger.
+    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71]
 
     // MARK: - Assertions shared across cases
 
@@ -52,6 +52,10 @@ struct MigrationMatrixTests {
         let reviewCols = try await MigrationFixtureBuilder.columns(db, "professional_task_reviews")
         #expect(reviewCols.isSuperset(of: ["authority_kind", "rule_id", "rule_version"]),
                 "v70 confirmation-authority columns missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "sensitive_scope_assignments"),
+                "v71 sensitive_scope_assignments table missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "sensitive_scope_reviews"),
+                "v71 sensitive_scope_reviews table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -66,7 +70,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 70)           // v70 = OPS-002.1 confirmation authority
+        #expect(SchemaMigrations.latestVersion == 71)           // v71 = OPS-003A SensitiveScope ledger
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

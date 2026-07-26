@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 70
+    public static let latestVersion = 71
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -160,7 +160,10 @@ public enum SchemaMigrations {
                            "status", "confirmation_kind", "confirmed_by", "confirmed_at", "created_at"],
             // v70 — structured confirmation authority on the task review ledger (OPS-002.1).
             "professional_task_reviews": ["id", "task_id", "action", "reviewer", "reviewed_at",
-                                           "authority_kind", "rule_id", "rule_version"]
+                                           "authority_kind", "rule_id", "rule_version"],
+            // v71 — shared SensitiveScope protection ledger (OPS-003A).
+            "sensitive_scope_assignments": ["id", "target_kind", "target_id", "sensitivity",
+                                             "privileged", "origin", "assigned_by", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -241,7 +244,8 @@ public enum SchemaMigrations {
         (67, v67),
         (68, v68),
         (69, v69),
-        (70, v70)
+        (70, v70),
+        (71, v71)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2752,5 +2756,60 @@ public enum SchemaMigrations {
     ALTER TABLE professional_task_reviews ADD COLUMN authority_kind TEXT;
     ALTER TABLE professional_task_reviews ADD COLUMN rule_id TEXT;
     ALTER TABLE professional_task_reviews ADD COLUMN rule_version TEXT;
+    """
+
+    // OPS-003A — shared SensitiveScope protection ledger. Two append-only tables:
+    // `sensitive_scope_assignments` holds active and revoked protection assignments;
+    // `sensitive_scope_reviews` is the audit ledger for every assign/revoke action.
+    // All six enforcement surfaces (screen/retrieval/prompt/report/receipt/export) read
+    // from these tables — no per-persona fork. The INSERT…SELECT backfills any legacy
+    // knowledge_objects.privileged=1 rows into active restricted+privileged assignments
+    // so existing privilege is preserved. The `legacy_privileged_column` origin is the
+    // canonical marker for backfilled rows.
+    private static let v71: String = """
+    CREATE TABLE sensitive_scope_assignments (
+        id             TEXT NOT NULL PRIMARY KEY,
+        target_kind    TEXT NOT NULL,
+        target_id      TEXT NOT NULL,
+        sensitivity    INTEGER NOT NULL,
+        privileged     INTEGER NOT NULL DEFAULT 0,
+        origin         TEXT NOT NULL,
+        reason         TEXT,
+        assigned_by    TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        revoked_at     REAL,
+        revoked_by     TEXT,
+        revoked_reason TEXT
+    );
+    CREATE INDEX idx_ssa_target ON sensitive_scope_assignments(target_kind, target_id);
+    CREATE INDEX idx_ssa_active ON sensitive_scope_assignments(target_kind, target_id, revoked_at);
+
+    CREATE TABLE sensitive_scope_reviews (
+        id             TEXT NOT NULL PRIMARY KEY,
+        assignment_id  TEXT NOT NULL REFERENCES sensitive_scope_assignments(id) ON DELETE CASCADE,
+        action         TEXT NOT NULL,
+        actor_note     TEXT,
+        created_at     REAL NOT NULL
+    );
+    CREATE INDEX idx_ssr_assignment ON sensitive_scope_reviews(assignment_id);
+
+    INSERT INTO sensitive_scope_assignments
+        (id, target_kind, target_id, sensitivity, privileged,
+         origin, reason, assigned_by, created_at)
+    SELECT
+        lower(hex(randomblob(4))) || '-' ||
+        lower(hex(randomblob(2))) || '-4' ||
+        substr(lower(hex(randomblob(2))), 2) || '-8' ||
+        substr(lower(hex(randomblob(2))), 2) || '-' ||
+        lower(hex(randomblob(6))),
+        'knowledgeObject',
+        id,
+        3,
+        1,
+        'legacy_privileged_column',
+        'Migrated from knowledge_objects.privileged flag',
+        'migration_v71',
+        created_at
+    FROM knowledge_objects WHERE privileged = 1;
     """
 }

@@ -6,7 +6,8 @@
     "KalsmritikoshTests/RealArchiveMigrationTests",
     "KalsmritikoshTests/EvidenceDimensionMigrationTests",
     "KalsmritikoshTests/ProfessionalIssueMigrationTests",
-    "KalsmritikoshTests/ProfessionalTaskMigrationTests"
+    "KalsmritikoshTests/ProfessionalTaskMigrationTests",
+    "KalsmritikoshTests/SensitiveScopeMigrationTests"
   ],
   "requiredSuites": [
     "MigrationMatrixTests",
@@ -14,8 +15,9 @@
     "RealArchiveMigrationTests",
     "EvidenceDimensionMigrationTests",
     "ProfessionalIssueMigrationTests",
-    "ProfessionalTaskMigrationTests"
+    "ProfessionalTaskMigrationTests",
+    "SensitiveScopeMigrationTests"
   ],
-  "minimumExecutedTests": 32,
-  "note": "Milestone migration matrix (v0/1/36/54/61..70 → v70), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the v68 (Issue Engine) and v69 (Task/Deadline Engine: fresh schema, v68→v69 preservation, UNIQUE(source_candidate_id), dependency CHECKs, confidence CHECK, primary_issue SET NULL) suites and the v69→v70 (OPS-002.1 confirmation-authority columns; NULL for pre-v70 rows) preservation test. Counts by xcresulttool (parameterized function = 1). Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh)."
+  "minimumExecutedTests": 37,
+  "note": "Milestone migration matrix (v0/1/36/54/61..71 → v71), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the v68 (Issue Engine), v69 (Task/Deadline Engine: fresh schema, v68→v69 preservation, UNIQUE(source_candidate_id), dependency CHECKs, confidence CHECK, primary_issue SET NULL), v69→v70 (OPS-002.1 confirmation-authority columns; NULL for pre-v70 rows), and v70→v71 (OPS-003A SensitiveScope ledger: both tables, legacy privileged KO backfill, non-privileged KO excluded) suites. Counts by xcresulttool (parameterized function = 1): milestoneMigratesToLatest and faultAtBoundaryRollsBack each count as 1. Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh)."
 }

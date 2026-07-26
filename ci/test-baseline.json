@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 845,
+  "minimumExecutedTests": 857,
   "baselineCommit": "58e9f36a963b3e799018d89e895c49f8f6f2fafc",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 845 = 843 passed + 2 skipped as of OPS-002.2 (raised 842 \u2192 845: +3 ProfessionalTaskProvenanceTests \u2014 mismatched evidence pair, stale-validation refusals, concurrent-confirmation race). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 857 = 845 + 12 new OPS-003A tests (7 SensitiveScopeRepositoryTests + 5 SensitiveScopeMigrationTests; the milestoneMigratesToLatest +1 param expansion is parameterized, so xcresulttool still counts it as 1 function). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
 }

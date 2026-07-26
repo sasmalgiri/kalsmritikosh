@@ -133,7 +133,7 @@ struct ProfessionalTaskMigrationTests {
         #expect(try await MigrationFixtureBuilder.columns(db, "professional_task_reviews")
             .isDisjoint(with: ["authority_kind", "rule_id", "rule_version"]))
 
-        try await SchemaMigrations.migrate(db)      // 69 → 70
+        try await SchemaMigrations.migrate(db, through: 70)      // 69 → 70 only
 
         #expect(try await db.currentUserVersion() == 70)
         let failures = try await snap.failures(in: db)
