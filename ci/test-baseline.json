@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 857,
-  "baselineCommit": "58e9f36a963b3e799018d89e895c49f8f6f2fafc",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 857 = 845 + 12 new OPS-003A tests (7 SensitiveScopeRepositoryTests + 5 SensitiveScopeMigrationTests; the milestoneMigratesToLatest +1 param expansion is parameterized, so xcresulttool still counts it as 1 function). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
+  "minimumExecutedTests": 875,
+  "baselineCommit": "44c4b3d",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 875 = 857 + 18 new OPS-003A.1 tests (SensitiveScopeRepositoryTests grew from 7 to 25: 7 existing tests updated for the new API + 18 new tests covering lineage inheritance, authority enforcement, batch key collision prevention, atomic rollback, review readability, broken-lineage denial, and malformed-row rejection; none are parameterized so xcresulttool counts each as 1). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult \u2014 never from console text."
 }

@@ -8,6 +8,10 @@
 //  SensitivityInheritance vocabulary from SensitivityInheritance.swift (SEC-001).
 //  Never introduces a second sensitivity or privilege enum.
 //
+//  OPS-003A.1 adds: SensitiveScopeTarget (polymorphic hashable key), AssignmentAuthority
+//  (structural enforcement preventing automation from setting privileged=true),
+//  ProtectionResolution (explicit brokenLineage vs. resolved), new SensitiveScopeError cases.
+//
 
 import Foundation
 
@@ -34,6 +38,59 @@ public enum SensitiveScopeTargetKind: String, Codable, Sendable, CaseIterable {
     case entity
     case event
     case claim
+}
+
+/// Polymorphic, hashable identity for any assignable ledger target.
+///
+/// `kind + id` is the canonical key — using UUID alone is ambiguous because two different
+/// target tables can coincidentally hold the same UUID.
+public nonisolated struct SensitiveScopeTarget: Hashable, Equatable, Sendable {
+    public let kind: SensitiveScopeTargetKind
+    public let id: UUID
+
+    public nonisolated init(kind: SensitiveScopeTargetKind, id: UUID) {
+        self.kind = kind
+        self.id = id
+    }
+}
+
+/// Structured authority for creating a protection assignment.
+///
+/// The enum structure makes it impossible for automation to autonomously set
+/// `privileged = true`: only `.userDirect` carries a privilege flag; `.migration` and
+/// `.systemRule` are structurally non-privileged.
+public enum AssignmentAuthority: Sendable {
+    /// A human-initiated direct assignment. Only this case may carry `privileged: true`.
+    case userDirect(privileged: Bool)
+    /// A migration or backfill script. Always non-privileged.
+    case migration(tag: String)
+    /// A deterministic rule or automated system. Always non-privileged.
+    case systemRule(tag: String)
+
+    /// Whether this authority carries a privilege flag.
+    public nonisolated var isPrivileged: Bool {
+        guard case .userDirect(let p) = self else { return false }
+        return p
+    }
+
+    /// Stable string stored in `sensitive_scope_assignments.origin`.
+    public nonisolated var originString: String {
+        switch self {
+        case .userDirect:        return "user_direct"
+        case .migration(let t):  return "migration:\(t)"
+        case .systemRule(let t): return "system_rule:\(t)"
+        }
+    }
+
+    /// Non-blank string stored in `sensitive_scope_assignments.assigned_by`.
+    /// Returns the tag for migration/systemRule, or "user" for userDirect.
+    public nonisolated var actorString: String {
+        switch self {
+        case .userDirect:        return "user"
+        case .migration(let t):  return t
+        case .systemRule(let t): return t
+        }
+    }
 }
 
 /// The ceiling for a given operation. Constructed per-operation, never stored — the
@@ -78,10 +135,8 @@ public nonisolated struct SensitiveScopeAssignment: Sendable {
     public let targetID: UUID
     public let sensitivity: SensitivityLevel
     public let privileged: Bool
-    /// Provenance: "user", "legacy_privileged_column", "deterministic_rule", etc.
     public let origin: String
     public let reason: String?
-    /// Actor who created the assignment (user ID, "migration_v71", rule ID, etc.).
     public let assignedBy: String
     public let createdAt: Date
     public let revokedAt: Date?
@@ -89,6 +144,11 @@ public nonisolated struct SensitiveScopeAssignment: Sendable {
     public let revokedReason: String?
 
     public nonisolated var isActive: Bool { revokedAt == nil }
+
+    /// Polymorphic identity for this assignment's target.
+    public nonisolated var target: SensitiveScopeTarget {
+        SensitiveScopeTarget(kind: targetKind, id: targetID)
+    }
 
     public nonisolated var protectionLabel: ProtectionLabel {
         ProtectionLabel(sensitivity: sensitivity, privileged: privileged)
@@ -110,8 +170,38 @@ public nonisolated struct SensitiveScopeReview: Sendable {
     public let createdAt: Date
 }
 
+/// Resolution outcome from the lineage-aware effective-label resolver.
+///
+/// Callers MUST treat `.brokenLineage` as a denial — it means the target UUID was not
+/// found in any known table and access cannot be granted.
+public enum ProtectionResolution: Sendable, Equatable {
+    /// The target exists. Label is the maximum of all direct and lineage-inherited active
+    /// assignments, or the fail-closed default (.internalLevel, not privileged) when no
+    /// active assignment exists anywhere in the lineage.
+    case resolved(ProtectionLabel)
+    /// The target UUID is not found in any known table. Access must be denied.
+    case brokenLineage
+
+    /// The computed label, or nil when lineage is broken.
+    public nonisolated var label: ProtectionLabel? {
+        guard case .resolved(let l) = self else { return nil }
+        return l
+    }
+
+    public nonisolated var isBroken: Bool {
+        if case .brokenLineage = self { return true }
+        return false
+    }
+}
+
 /// Errors surfaced by SensitiveScopeRepository.
 public enum SensitiveScopeError: Error, Sendable {
     case assignmentNotFound(UUID)
     case assignmentAlreadyRevoked(UUID)
+    /// The target UUID is not present in its canonical table — assignment refused.
+    case targetNotFound(SensitiveScopeTarget)
+    /// A row in sensitive_scope_assignments could not be decoded (invalid sensitivity or kind).
+    case malformedAssignmentRow(UUID)
+    /// The actor string for an assignment or revocation must not be blank.
+    case nonblankActorRequired
 }
