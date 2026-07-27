@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 73
+    public static let latestVersion = 74
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -168,7 +168,10 @@ public enum SchemaMigrations {
             "work_product_runs": ["id", "workspace_id", "template", "title",
                                    "subject_label", "schema_version", "app_version", "composed_at"],
             // v73 — email participant occurrence ledger (OPS-005).
-            "email_participant_occurrences": ["id", "source_ko_id", "entity_id", "role", "raw_address"]
+            "email_participant_occurrences": ["id", "source_ko_id", "entity_id", "role", "raw_address"],
+            // v74 — shared source reliability assessment ledger (OPS-006).
+            "source_reliability_assessments": ["id", "source_version_id", "reliability", "independence",
+                                                "assessed_at", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -252,7 +255,8 @@ public enum SchemaMigrations {
         (70, v70),
         (71, v71),
         (72, v72),
-        (73, v73)
+        (73, v73),
+        (74, v74)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2902,5 +2906,32 @@ public enum SchemaMigrations {
     CREATE INDEX idx_epo_entity      ON email_participant_occurrences(entity_id);
     CREATE INDEX idx_epo_entity_role ON email_participant_occurrences(entity_id, role);
     CREATE INDEX idx_epo_ko_role     ON email_participant_occurrences(source_ko_id, role);
+    """
+
+    // OPS-006 — shared source reliability assessment ledger. ONE assessment
+    // per source version, shared across all personas. Reassessments are
+    // append-only: the prior row's superseded_by_id is set to the new ID.
+    // CASCADE on source_version_id removes assessments when a source version
+    // is hard-deleted. superseded_by_id is a soft reference (no FK) to
+    // preserve the audit chain. Canonical claims/entities are never touched.
+    private static let v74: String = """
+    CREATE TABLE source_reliability_assessments (
+        id                TEXT PRIMARY KEY NOT NULL,
+        source_version_id TEXT NOT NULL
+            REFERENCES source_versions(id) ON DELETE CASCADE,
+        reliability       TEXT NOT NULL
+            CHECK(reliability IN ('high','medium','low','unknown')),
+        independence      TEXT NOT NULL
+            CHECK(independence IN ('independent','affiliated','potential_conflict','unknown')),
+        rationale         TEXT,
+        assessed_by       TEXT,
+        assessed_at       REAL NOT NULL,
+        created_at        REAL NOT NULL,
+        superseded_by_id  TEXT
+    );
+    CREATE INDEX idx_sra_source_version
+        ON source_reliability_assessments(source_version_id);
+    CREATE INDEX idx_sra_active
+        ON source_reliability_assessments(source_version_id, superseded_by_id);
     """
 }

@@ -24,8 +24,9 @@ struct MigrationMatrixTests {
     /// Material schema boundaries (not every version — these are the migration milestones).
     /// 68 = OPS-001 Issue Engine; 69 = OPS-002 Task/Deadline Engine;
     /// 70 = OPS-002.1 confirmation-authority columns; 71 = OPS-003A SensitiveScope ledger.
-    /// 72 = OPS-004 WorkProductRun persistence; 73 = OPS-005 email_participant_occurrences.
-    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72]
+    /// 72 = OPS-004 WorkProductRun persistence; 73 = OPS-005 email_participant_occurrences;
+    /// 74 = OPS-006 source_reliability_assessments.
+    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73]
 
     // MARK: - Assertions shared across cases
 
@@ -61,6 +62,8 @@ struct MigrationMatrixTests {
                 "v72 work_product_runs table missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "email_participant_occurrences"),
                 "v73 email_participant_occurrences table missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "source_reliability_assessments"),
+                "v74 source_reliability_assessments table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -75,7 +78,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 73)           // v73 = OPS-005 email_participant_occurrences
+        #expect(SchemaMigrations.latestVersion == 74)           // v74 = OPS-006 source_reliability_assessments
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

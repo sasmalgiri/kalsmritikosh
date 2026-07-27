@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 999,
+  "minimumExecutedTests": 1009,
   "baselineCommit": "7698deeff1c4d94e6a9a647307c55a9b315bff5c",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 999 = 981 (OPS-004 floor) + 18 (OPS-005: 8 EmailAddressListParserTests + 4 EmailParticipantMigrationTests + 6 EmailParticipantRepositoryTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit updated to OPS-005 hosted-green SHA (7698dee, run 30277305318, all 6 jobs green)."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1009 = 999 (OPS-005 floor) + 10 (OPS-006: 4 SourceReliabilityAssessmentMigrationTests + 6 SourceReliabilityAssessmentRepositoryTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit pinned to OPS-005 hosted-green SHA (7698dee, run 30277305318); will be updated to OPS-006 hosted-green SHA once CI passes."
 }
