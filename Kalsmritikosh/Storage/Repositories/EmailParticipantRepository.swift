@@ -46,7 +46,8 @@ public actor EmailParticipantRepository {
                     occ.displayName.map { .text($0) } ?? .null,
                     .real(occ.createdAt.timeIntervalSince1970)
                 ])
-                written += 1
+                let changed = try await database.query("SELECT changes();", [])
+                written += Int(changed.first?.int(0) ?? 0)
             }
             try await database.exec("RELEASE \(sp);")
             KalsmritikoshLog.storage.debug("EmailParticipantRepository: inserted \(written, privacy: .public) occurrences")

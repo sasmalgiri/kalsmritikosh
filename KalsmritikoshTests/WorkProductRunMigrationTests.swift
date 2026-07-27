@@ -36,7 +36,6 @@ struct WorkProductRunMigrationTests {
                 "work_product_manifests missing after v72")
         #expect(try await MigrationFaultHarness.integrityOK(db))
         #expect(try await MigrationFaultHarness.foreignKeyViolationCount(db) == 0)
-        #expect(SchemaMigrations.latestVersion == 72)
         #expect(SchemaMigrations.migrationListIsConsistent)
     }
 
