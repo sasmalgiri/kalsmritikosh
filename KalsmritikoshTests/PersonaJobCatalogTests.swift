@@ -205,8 +205,11 @@ struct PersonaJobCatalogTests {
             id: termID, version: 1, applicationID: appID))
         b.registerPackage(PersonaApplicationPackageDefinition(
             application: app, terminologyID: termID))
+        // Step 4b merges app.workflowIDs + tool.supportedWorkflowIDs and
+        // reports any missing lookup under the application's ownerID.
+        // Step 4c (tool-specific cross-check) never runs because 4b already throws.
         #expect(throws: PersonaRegistryError.missingWorkflow(
-            ownerID: toolID.rawValue, workflowID: ghostWF
+            ownerID: appID.rawValue, workflowID: ghostWF
         )) {
             _ = try b.build()
         }
