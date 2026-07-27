@@ -35,8 +35,7 @@ struct SensitiveScopeMigrationTests {
                 "sensitive_scope_reviews table missing after v71")
         #expect(try await MigrationFaultHarness.integrityOK(db))
         #expect(try await MigrationFaultHarness.foreignKeyViolationCount(db) == 0)
-        // SchemaMigrations.latestVersion must now be 71.
-        #expect(SchemaMigrations.latestVersion == 71)
+        // latestVersion pinned in MigrationMatrixTests; this test locks the v71 step only.
     }
 
     // MARK: - Case 2: v70→v71 preserves workflow rows, no SSA rows for non-privileged objects

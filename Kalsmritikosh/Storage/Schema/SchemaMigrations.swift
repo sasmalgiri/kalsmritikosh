@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 71
+    public static let latestVersion = 72
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -163,7 +163,10 @@ public enum SchemaMigrations {
                                            "authority_kind", "rule_id", "rule_version"],
             // v71 — shared SensitiveScope protection ledger (OPS-003A).
             "sensitive_scope_assignments": ["id", "target_kind", "target_id", "sensitivity",
-                                             "privileged", "origin", "assigned_by", "created_at"]
+                                             "privileged", "origin", "assigned_by", "created_at"],
+            // v72 — WorkProductRun persistence (OPS-004).
+            "work_product_runs": ["id", "workspace_id", "template", "title",
+                                   "subject_label", "schema_version", "app_version", "composed_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -245,7 +248,8 @@ public enum SchemaMigrations {
         (68, v68),
         (69, v69),
         (70, v70),
-        (71, v71)
+        (71, v71),
+        (72, v72)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2811,5 +2815,67 @@ public enum SchemaMigrations {
         'migration_v71',
         created_at
     FROM knowledge_objects WHERE privileged = 1;
+    """
+
+    // OPS-004 — WorkProductRun persistence. Four tables store immutable run records.
+    // Runs are FK-linked to workspaces (CASCADE on delete); section/claim/manifest rows
+    // CASCADE from their parent run. This migration adds no rows to canonical tables.
+    private static let v72: String = """
+    CREATE TABLE work_product_runs (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        workspace_id       TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        template           TEXT NOT NULL,
+        title              TEXT NOT NULL,
+        subtitle           TEXT,
+        subject_label      TEXT NOT NULL,
+        corpus_snapshot_id TEXT,
+        schema_version     INTEGER NOT NULL,
+        app_version        TEXT NOT NULL,
+        composed_at        REAL NOT NULL,
+        finding_count      INTEGER NOT NULL DEFAULT 0,
+        disclaimer         TEXT
+    );
+    CREATE INDEX idx_wpr_workspace ON work_product_runs(workspace_id, composed_at DESC);
+
+    CREATE TABLE work_product_sections (
+        id       TEXT PRIMARY KEY NOT NULL,
+        run_id   TEXT NOT NULL REFERENCES work_product_runs(id) ON DELETE CASCADE,
+        ordinal  INTEGER NOT NULL,
+        title    TEXT NOT NULL,
+        preamble TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX idx_wps_run ON work_product_sections(run_id, ordinal);
+
+    CREATE TABLE work_product_claim_occurrences (
+        id                    TEXT PRIMARY KEY NOT NULL,
+        section_id            TEXT NOT NULL REFERENCES work_product_sections(id) ON DELETE CASCADE,
+        run_id                TEXT NOT NULL,
+        ordinal               INTEGER NOT NULL,
+        text                  TEXT NOT NULL,
+        epistemic_status      TEXT NOT NULL,
+        confidence            REAL,
+        review_state          TEXT,
+        source_claim_id       TEXT,
+        assertability_decision TEXT,
+        supporting_json       TEXT NOT NULL DEFAULT '[]',
+        contradicting_json    TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE INDEX idx_wpco_section ON work_product_claim_occurrences(section_id, ordinal);
+    CREATE INDEX idx_wpco_run     ON work_product_claim_occurrences(run_id);
+
+    CREATE TABLE work_product_manifests (
+        run_id                  TEXT PRIMARY KEY NOT NULL
+                                REFERENCES work_product_runs(id) ON DELETE CASCADE,
+        exported_at             REAL NOT NULL,
+        workspace_title         TEXT,
+        workspace_template      TEXT,
+        source_version_ids      TEXT NOT NULL DEFAULT '[]',
+        source_hashes           TEXT NOT NULL DEFAULT '[]',
+        selected_finding_count  INTEGER NOT NULL DEFAULT 0,
+        citation_map_json       TEXT NOT NULL DEFAULT '[]',
+        applied_redactions_json TEXT NOT NULL DEFAULT '[]',
+        review_status_summary   TEXT,
+        known_limitations_json  TEXT NOT NULL DEFAULT '[]'
+    );
     """
 }

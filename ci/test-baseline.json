@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 967,
+  "minimumExecutedTests": 981,
   "baselineCommit": "68f3759da2213441593553e1b8e914ae5e1aff88",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 967 = 957 (OPS-003D.1.2.1 CI floor, run 30261625706) + 10 (CI-001C SensitiveScopeEndToEndTests — 10 cross-surface E2E tests). Tests are cumulative — security tests are never exchanged. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. Baseline SHA is the CI-001C hosted-green commit (run 30264550724, total=967)."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 981 = 967 (CI-001C hosted-green floor, run 30264550724) + 14 (OPS-004: 4 WorkProductRunMigrationTests + 10 WorkProductRunRepositoryTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit pinned to the CI-001C hosted-green SHA; will be updated to the OPS-004 hosted-green SHA in the evidence commit."
 }
