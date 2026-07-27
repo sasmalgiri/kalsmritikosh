@@ -124,7 +124,10 @@ struct PAProdGUIAcceptanceTests {
 
         let assembled = try await r.assembly.compose(
             workspace: Workspace(id: validWS, title: "PA-PROD GUI — VALID", template: .general),
-            template: .generalSummary, subjectLabel: "PA-PROD GUI — VALID", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "PA-PROD GUI — VALID", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: validWS, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
         #expect(assembled.manifest.selectedFindingCount >= 1)
         let allText = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(allText.isEmpty == false)
@@ -156,7 +159,10 @@ struct PAProdGUIAcceptanceTests {
         await #expect(throws: WorkProductAssemblyError.self) {
             try await r.assembly.compose(
                 workspace: Workspace(id: blockedWS, title: "PA-PROD GUI — BLOCKED", template: .general),
-                template: .generalSummary, subjectLabel: "PA-PROD GUI — BLOCKED", corpusSnapshotID: nil)
+                template: .generalSummary, subjectLabel: "PA-PROD GUI — BLOCKED", corpusSnapshotID: nil,
+                access: SensitiveAccessContext(scope: SensitiveScope(
+                    workspaceID: blockedWS, maximumSensitivity: .restricted,
+                    permitsPrivilegedMaterial: false, purpose: .export)))
         }
     }
 
@@ -234,7 +240,10 @@ struct PAProdGUIAcceptanceTests {
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Matter", template: .general),
-            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
 
         #expect(assembled.manifest.selectedFindingCount >= 1)
         #expect(assembled.workProduct.sections.flatMap(\.claims).isEmpty == false)

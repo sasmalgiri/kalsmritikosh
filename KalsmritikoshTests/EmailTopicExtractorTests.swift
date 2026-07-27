@@ -255,8 +255,11 @@ struct EmailTopicExtractorTests {
             database: r.db, events: r.events, contradictions: ContradictionsRepository(database: r.db),
             gaps: GapNodeRepository(database: r.db), workspaces: r.workspaces)
         let ws = Workspace(id: wsID, title: "Matter", template: .general)
-        let a = try await assembly.compose(workspace: ws, template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
-        let b = try await assembly.compose(workspace: ws, template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+        let exportCtx = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: wsID, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
+        let a = try await assembly.compose(workspace: ws, template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil, access: exportCtx)
+        let b = try await assembly.compose(workspace: ws, template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil, access: exportCtx)
 
         let ax = a.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(ax == b.workProduct.sections.flatMap(\.claims).map(\.text))     // report == receipt selection

@@ -6,12 +6,18 @@
 //  SensitiveScope before ANY composer sees the WorkProductContext, so blocked
 //  claims cannot leak through text, IDs, hashes, or the manifest.
 //
-//  Five tests:
+//  OPS-003C.2 adds: access is now mandatory; wrong purpose or mismatched workspace → denied;
+//  no-bypass test 5 removed; four architecture-guard + no-leak proofs added instead.
+//
+//  Eight tests:
 //  1. scopedAccessDeniedWhenRepoNotWired         — nil sensitiveScopes + access → throws
 //  2. privilegedEvidenceKOBlockedFromExport      — privileged KO → 0 findings
 //  3. nonPrivilegedEvidenceKOPermittedForExport  — no SSA → claim passes through
 //  4. sensitivityCeilingBlocksRestrictedClaim    — restricted KO + internal ceiling → 0 findings
-//  5. noAccessContextBypassesScopeFilter         — access: nil → privileged KO still appears
+//  5. exportWithWrongPurposeDenied               — .screen purpose → scopedAccessDenied
+//  6. exportWithMismatchedWorkspaceIDDenied      — wrong workspace ID → scopedAccessDenied
+//  7. blockedClaimProducesEmptyManifestAndHashes — privileged KO → 0 findings, no hashes
+//  8. privilegedTextAbsentFromAllSections        — privileged text never reaches any section
 //
 
 import Testing
@@ -227,27 +233,90 @@ struct WorkProductScopeEnforcementTests {
                 "KO at restricted sensitivity must be blocked when scope ceiling is internalLevel.")
     }
 
-    // MARK: - Test 5: no access context → scope filter skipped
+    // MARK: - OPS-003C.2: architecture guards and no-leak proofs
 
-    @Test("When access is nil the scope filter is skipped and all claims pass")
-    func noAccessContextBypassesScopeFilter() async throws {
+    @Test("compose throws scopedAccessDenied when access purpose is not .export")
+    func exportWithWrongPurposeDenied() async throws {
         let r = try await rig()
-        let (fileID, koID) = try await seedFact(r, value: "privileged but unchecked")
+        let (fileID, _) = try await seedFact(r, value: "any fact")
         let ws = try await makeWorkspace(r, fileID: fileID)
         _ = try await r.producer.backfill(at: t0)
 
-        // Mark as privileged — but since we do NOT pass access:, filter never runs.
+        // Wrong purpose: .screen instead of .export.
+        let wrongPurpose = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: ws.id, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .screen))
+        await #expect(throws: WorkProductAssemblyError.scopedAccessDenied) {
+            try await r.assembly.compose(workspace: ws, template: .chronology,
+                                         subjectLabel: ws.title, corpusSnapshotID: nil,
+                                         access: wrongPurpose)
+        }
+    }
+
+    @Test("compose throws scopedAccessDenied when access.workspaceID does not match workspace.id")
+    func exportWithMismatchedWorkspaceIDDenied() async throws {
+        let r = try await rig()
+        let (fileID, _) = try await seedFact(r, value: "any fact")
+        let ws = try await makeWorkspace(r, fileID: fileID)
+        _ = try await r.producer.backfill(at: t0)
+
+        // Access scoped to a DIFFERENT workspace.
+        let wrongWS = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: UUID(), maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
+        await #expect(throws: WorkProductAssemblyError.scopedAccessDenied) {
+            try await r.assembly.compose(workspace: ws, template: .chronology,
+                                         subjectLabel: ws.title, corpusSnapshotID: nil,
+                                         access: wrongWS)
+        }
+    }
+
+    @Test("Blocked claim produces zero findings and no source hashes in the manifest")
+    func blockedClaimProducesEmptyManifestAndHashes() async throws {
+        let r = try await rig()
+        let (fileID, koID) = try await seedFact(r, value: "privileged content")
+        let ws = try await makeWorkspace(r, fileID: fileID)
+        _ = try await r.producer.backfill(at: t0)
+
         try await r.scopes.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
 
-        // access: nil → no filter → all claims appear (backward-compat behaviour).
-        let withoutAccess = try await r.assembly.compose(
+        let result = try await r.assembly.compose(
             workspace: ws, template: .chronology,
-            subjectLabel: ws.title, corpusSnapshotID: nil)
-        #expect(withoutAccess.manifest.selectedFindingCount >= 1,
-                "Without an access context the scope filter is skipped — claims must not be withheld.")
+            subjectLabel: ws.title, corpusSnapshotID: nil,
+            access: exportScope(workspaceID: ws.id, privileged: false))
+        #expect(result.manifest.selectedFindingCount == 0,
+                "Blocked claim must produce zero findings in the manifest.")
+        #expect(result.manifest.sourceVersionIDs.isEmpty,
+                "Blocked claim must produce no source version IDs in the manifest.")
+        #expect(result.manifest.sourceHashes.isEmpty,
+                "Blocked claim must produce no source hashes in the manifest.")
+    }
+
+    @Test("Privileged claim text is absent from every work-product section")
+    func privilegedTextAbsentFromAllSections() async throws {
+        let r = try await rig()
+        let sentinelText = "PRIVILEGED-SENTINEL-\(UUID().uuidString)"
+        let (fileID, koID) = try await seedFact(r, value: sentinelText)
+        let ws = try await makeWorkspace(r, fileID: fileID)
+        _ = try await r.producer.backfill(at: t0)
+
+        try await r.scopes.assign(
+            target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+
+        let result = try await r.assembly.compose(
+            workspace: ws, template: .generalSummary,
+            subjectLabel: ws.title, corpusSnapshotID: nil,
+            access: exportScope(workspaceID: ws.id, privileged: false))
+        let allText = (result.workProduct.sections.flatMap(\.claims).map(\.text)
+            + result.workProduct.sections.flatMap(\.preamble)).joined(separator: "\n")
+        #expect(!allText.contains(sentinelText),
+                "Privileged claim sentinel text must not appear in any section of the work product.")
     }
 }

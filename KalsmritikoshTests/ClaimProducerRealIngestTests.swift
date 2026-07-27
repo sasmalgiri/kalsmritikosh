@@ -99,7 +99,10 @@ struct ClaimProducerRealIngestTests {
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Matter", template: .general),
-            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
 
         #expect(assembled.manifest.selectedFindingCount >= 1)                 // real data, not empty
         #expect(assembled.workProduct.sections.flatMap(\.claims).isEmpty == false)

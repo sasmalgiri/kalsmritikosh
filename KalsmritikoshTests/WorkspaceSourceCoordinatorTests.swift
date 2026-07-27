@@ -124,7 +124,10 @@ struct WorkspaceSourceCoordinatorTests {
     private func summaryFindingCount(_ r: Rig, _ wsID: Workspace.ID) async throws -> Int {
         let assembled = try await r.assembly.compose(
             workspace: Workspace(id: wsID, title: "WS", template: .general),
-            template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
         return assembled.manifest.selectedFindingCount
     }
 
@@ -322,7 +325,10 @@ struct WorkspaceSourceCoordinatorTests {
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Matter", template: .general),
-            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
         #expect(assembled.manifest.selectedFindingCount >= 1)
         #expect(WorkProductValidator().validateProductionExport(assembled.workProduct).isValid)
     }

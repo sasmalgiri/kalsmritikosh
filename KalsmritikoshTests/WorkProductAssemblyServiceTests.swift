@@ -113,6 +113,14 @@ struct WorkProductAssemblyServiceTests {
 
     private func ws(_ id: UUID) -> Workspace { Workspace(id: id, title: "WS", template: .general) }
 
+    private func exportAccess(_ workspaceID: UUID) -> SensitiveAccessContext {
+        SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspaceID,
+            maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false,
+            purpose: .export))
+    }
+
     // MARK: Route table
 
     @Test("The route table maps each template to its explicit composer sequence")
@@ -135,7 +143,8 @@ struct WorkProductAssemblyServiceTests {
         try await addMember(r, subject: subject, workspace: workspace)
         try await saveClaim(r, subject: subject, statement: "Signed the contract")
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .chronology,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         #expect(assembled.workProduct.template == .chronology)
         #expect(assembled.workProduct.sections.first?.title == "Chronology")
         #expect(assembled.workProduct.sections.flatMap(\.claims).contains { $0.text.hasSuffix("Signed the contract") })
@@ -149,7 +158,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: a, statement: "A fact")
         try await saveClaim(r, subject: b, statement: "B fact")       // B not in workspace
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .chronology,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(texts.contains { $0.hasSuffix("A fact") })
         #expect(!texts.contains { $0.hasSuffix("B fact") })
@@ -164,7 +174,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: subject, statement: "Kept")
         try await r.reviews.record(ClaimReview(claimID: rid, disposition: .rejected, reviewer: "u", reviewedAt: t0))
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .chronology,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(texts.contains { $0.hasSuffix("Kept") })
         #expect(!texts.contains { $0.hasSuffix("Rejected") })
@@ -177,8 +188,8 @@ struct WorkProductAssemblyServiceTests {
         try await addMember(r, subject: subject, workspace: workspace)
         try await saveClaim(r, subject: subject, statement: "Fact one")
         try await saveClaim(r, subject: subject, statement: "Fact two")
-        let report = try await r.service.compose(workspace: ws(workspace), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)
-        let receipt = try await r.service.compose(workspace: ws(workspace), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)
+        let report = try await r.service.compose(workspace: ws(workspace), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil, access: exportAccess(workspace))
+        let receipt = try await r.service.compose(workspace: ws(workspace), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil, access: exportAccess(workspace))
         let a = report.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
         let b = receipt.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
         #expect(a == b)
@@ -195,7 +206,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: subject, statement: "Unbacked", resolvedCitation: false)
         await #expect(throws: WorkProductAssemblyError.evidenceIntegrity(violationCount: 1)) {
             try await r.service.compose(workspace: ws(workspace), template: .chronology,
-                                        subjectLabel: "WS", corpusSnapshotID: nil)
+                                        subjectLabel: "WS", corpusSnapshotID: nil,
+                                        access: exportAccess(workspace))
         }
     }
 
@@ -212,17 +224,22 @@ struct WorkProductAssemblyServiceTests {
                                               temporalClaims: TemporalClaimRepository(database: db),
                                               events: EventsRepository(database: db))
         // EMPTY registry → the chronology composer is missing → the arm must throw, not fall back.
+        // Workspace has no claims, so scopeFilter returns early (claims-empty guard) and the
+        // empty registry is what causes the throw — not a scope-related denial.
         let contradictions = ContradictionsRepository(database: db)
         let gaps = GapNodeRepository(database: db)
         let disclosures = DisclosureSelectionService(contradictions: contradictions,
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
+        let wsID = UUID()
         let service = WorkProductAssemblyService(
             workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
+            sensitiveScopes: SensitiveScopeRepository(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
         await #expect(throws: WorkProductAssemblyError.missingComposer("history.chronology")) {
-            try await service.compose(workspace: ws(UUID()), template: .chronology, subjectLabel: "WS", corpusSnapshotID: nil)
+            try await service.compose(workspace: ws(wsID), template: .chronology, subjectLabel: "WS",
+                                      corpusSnapshotID: nil, access: exportAccess(wsID))
         }
     }
 
@@ -250,7 +267,8 @@ struct WorkProductAssemblyServiceTests {
         try await addMember(r, subject: subject, workspace: workspace)
         try await saveClaim(r, subject: subject, statement: "A fact")
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         #expect(assembled.workProduct.sections.map(\.title) == generalSummaryOrder)
     }
 
@@ -262,7 +280,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: subject, statement: "inferred", basis: .inferred, resolvedCitation: false)
         // Does not throw (inference is a disclosure, not a blocked material assertion).
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let qualified = assembled.workProduct.sections.first { $0.title == "Qualified observations" }
         #expect(qualified?.claims.contains { $0.text.hasSuffix("inferred") } == true)
     }
@@ -274,7 +293,8 @@ struct WorkProductAssemblyServiceTests {
         try await addMember(r, subject: subject, workspace: workspace)
         let claimID = try await saveClaim(r, subject: subject, statement: "shared fact")
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let occurrences = assembled.workProduct.sections.flatMap(\.claims).filter { $0.sourceClaimID == claimID }
         #expect(occurrences.count >= 2)                                  // summary + chronology
         #expect(Set(occurrences.map(\.id)).count == occurrences.count)   // distinct occurrence ids
@@ -291,7 +311,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: a, statement: "member")
         try await saveClaim(r, subject: b, statement: "outsider")       // not a member
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(texts.contains { $0.hasSuffix("member") })
         #expect(!texts.contains { $0.hasSuffix("outsider") })
@@ -309,7 +330,8 @@ struct WorkProductAssemblyServiceTests {
         await ContradictionsRepository(database: r.db).insert(cont)
         try await ClaimContradictionRepository(database: r.db).link(claimID: rid, contradictionID: cont.id)
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let texts = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(!texts.contains { $0.hasSuffix("rejected") })            // claim not rendered
         #expect(!texts.contains { $0.contains("sideA") })                // its conflict did not surface
@@ -326,7 +348,8 @@ struct WorkProductAssemblyServiceTests {
                             review: .confirmed, resolvedCitation: false)
         await #expect(throws: WorkProductAssemblyError.self) {
             try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                        subjectLabel: "WS", corpusSnapshotID: nil)
+                                        subjectLabel: "WS", corpusSnapshotID: nil,
+                                        access: exportAccess(workspace))
         }
     }
 
@@ -337,8 +360,8 @@ struct WorkProductAssemblyServiceTests {
         try await addMember(r, subject: subject, workspace: workspace)
         try await saveClaim(r, subject: subject, statement: "one")
         try await saveClaim(r, subject: subject, statement: "two")
-        let a = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
-        let b = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+        let a = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil, access: exportAccess(workspace))
+        let b = try await r.service.compose(workspace: ws(workspace), template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil, access: exportAccess(workspace))
         let ax = a.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
         let bx = b.workProduct.sections.flatMap(\.claims).map { [$0.text, $0.status.rawValue] }
         #expect(ax == bx)
@@ -363,7 +386,8 @@ struct WorkProductAssemblyServiceTests {
                                       assessment: EvidenceAssessment(basis: .inferred, origin: .modelProposed),
                                       confidence: 0.5, evidence: [ev1, ev2], createdAt: t0))
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .chronology,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         // The composer titles both citations with the claim's subjectLabel ("S"); the label
         // must be reported UNRESOLVED because one of its citations is unresolved.
         let entry = assembled.manifest.citationMap.first { $0.label == "S" }
@@ -386,7 +410,8 @@ struct WorkProductAssemblyServiceTests {
         try await saveClaim(r, subject: subject, statement: "OUT-OF-SCOPE SENTINEL — MUST NOT APPEAR",
                             evidenceObject: outsideKO)
         let assembled = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                    subjectLabel: "WS", corpusSnapshotID: nil)
+                                                    subjectLabel: "WS", corpusSnapshotID: nil,
+                                                    access: exportAccess(workspace))
         let allText = assembled.workProduct.sections.flatMap(\.claims).map(\.text)
         #expect(allText.contains { $0.hasSuffix("must appear") })
         #expect(!allText.contains { $0.contains("SENTINEL") })                 // summary/chronology/conflicts/gaps

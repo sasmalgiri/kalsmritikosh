@@ -102,7 +102,10 @@ struct WorkProductReceiptCustodyTests {
         _ = try await r.producer.backfill(at: t0)
         return try await r.assembly.compose(
             workspace: Workspace(id: ws, title: "WS", template: .general),
-            template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: ws, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
     }
 
     private func materialCitations(_ a: AssembledWorkProduct) -> [CitationRecord] {
@@ -243,7 +246,10 @@ struct WorkProductReceiptCustodyTests {
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Matter", template: .general),
-            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
 
         // Every material citation has a normalized 64-char hash equal to its source_versions row.
         let cited = assembled.workProduct.sections.flatMap(\.claims).flatMap(\.supporting).filter { $0.sourceVersionID != nil }

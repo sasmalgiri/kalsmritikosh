@@ -126,7 +126,24 @@ public actor WorkProductAssemblyService {
 
     public func compose(workspace: Workspace, template: WorkProductTemplate,
                         subjectLabel: String, corpusSnapshotID: UUID?,
-                        access: SensitiveAccessContext? = nil) async throws -> AssembledWorkProduct {
+                        access: SensitiveAccessContext) async throws -> AssembledWorkProduct {
+        // OPS-003C.2: three mandatory guards — purpose, workspace identity, repo availability.
+        // Any bypass here would allow unscoped reports; all three must hold before composition begins.
+        guard access.scope.purpose == .export else {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: compose called with purpose '\(access.scope.purpose.rawValue, privacy: .public)' — .export required; denying.")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
+        guard access.scope.workspaceID == workspace.id else {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: compose access.workspaceID does not match workspace.id — denying.")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
+        guard sensitiveScopes != nil else {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: SensitiveScopeRepository not wired — denying.")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
         // Registry arm ONLY — every template is registry-backed. A failure here THROWS; there is
         // no legacy fallback.
         let composed = try await composeThroughRegistry(
@@ -148,7 +165,7 @@ public actor WorkProductAssemblyService {
     private func composeThroughRegistry(plan: WorkProductTemplatePlan, workspace: Workspace,
                                         template: WorkProductTemplate,
                                         subjectLabel: String, corpusSnapshotID: UUID?,
-                                        access: SensitiveAccessContext?) async throws -> WorkProduct {
+                                        access: SensitiveAccessContext) async throws -> WorkProduct {
         // Workspace membership is resolved here (outside the Claim model). Claim selection runs
         // ONCE; disclosure selection runs ONCE over the same selected claims. No global fallback.
         let members = Set(try await workspaces.entityIDs(in: workspace.id))
@@ -161,11 +178,9 @@ public actor WorkProductAssemblyService {
         var context = try await selection.buildContext(
             scope: .workspace(id: workspace.id, memberSubjectIDs: members, allowedObjectIDs: allowedObjectIDs),
             subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID)
-        // OPS-003C: sensitivity scope filter — runs before ANY composer sees the context so
-        // blocked claims cannot reach text, IDs, hashes, or the manifest.
-        if let access = access {
-            context = try await scopeFilter(context, access: access)
-        }
+        // OPS-003C.2: sensitivity scope filter always enforced; repo availability was verified
+        // at compose() entry so scopeFilter will not throw on nil-repo here.
+        context = try await scopeFilter(context, access: access)
         if plan.requiresDisclosures {
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
@@ -196,13 +211,15 @@ public actor WorkProductAssemblyService {
     /// Fails CLOSED: if the scope repository errors, throws scopedAccessDenied (nothing exported).
     private func scopeFilter(_ ctx: WorkProductContext,
                              access: SensitiveAccessContext) async throws -> WorkProductContext {
-        guard let repository = sensitiveScopes else {
-            KalsmritikoshLog.storage.error(
-                "WorkProductAssemblyService: scopeFilter invoked but SensitiveScopeRepository not wired — denying all.")
-            throw WorkProductAssemblyError.scopedAccessDenied
-        }
+        // Early return for empty selection — nothing to filter. Avoids a repo round-trip for
+        // workspaces that have no claims in scope (e.g. new workspaces, failing registry tests).
         let claims = ctx.selectedClaims
         guard !claims.isEmpty else { return ctx }
+        guard let repository = sensitiveScopes else {
+            KalsmritikoshLog.storage.error(
+                "WorkProductAssemblyService: scopeFilter — SensitiveScopeRepository not wired — denying all.")
+            throw WorkProductAssemblyError.scopedAccessDenied
+        }
 
         // Collect all evidence KO IDs from all selected claims.
         var koIDs: Set<UUID> = []

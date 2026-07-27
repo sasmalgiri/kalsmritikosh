@@ -142,8 +142,11 @@ struct FactMemoReportTests {
     private func ws(_ id: UUID, label: String = "WS") -> Workspace { Workspace(id: id, title: label, template: .general) }
 
     private func compose(_ r: Rig, _ workspace: UUID, label: String = "WS") async throws -> AssembledWorkProduct {
-        try await r.service.compose(workspace: ws(workspace, label: label), template: .factMemo,
-                                    subjectLabel: label, corpusSnapshotID: nil)
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspace, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
+        return try await r.service.compose(workspace: ws(workspace, label: label), template: .factMemo,
+                                           subjectLabel: label, corpusSnapshotID: nil, access: access)
     }
 
     // MARK: - Route + structure
@@ -213,8 +216,11 @@ struct FactMemoReportTests {
         try await saveClaim(r, subject: subject, statement: "fact one")
         try await saveClaim(r, subject: subject, statement: "fact two")
         let memo = try await compose(r, workspace)
+        let summaryAccess = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspace, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
         let summary = try await r.service.compose(workspace: ws(workspace), template: .generalSummary,
-                                                  subjectLabel: "WS", corpusSnapshotID: nil)
+                                                  subjectLabel: "WS", corpusSnapshotID: nil, access: summaryAccess)
         let memoSupported = memo.workProduct.sections.first { $0.title == "Supported facts" }!.claims.map(\.text)
         let summarySourced = summary.workProduct.sections.first { $0.title == "Sourced summary" }!.claims.map(\.text)
         #expect(memoSupported == summarySourced)                            // shared bucketing → identical rows
@@ -315,14 +321,19 @@ struct FactMemoReportTests {
         let gaps = GapNodeRepository(database: db)
         let disclosures = DisclosureSelectionService(contradictions: contradictions,
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
+        let wsID = UUID()
         let service = WorkProductAssemblyService(
             workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
+            sensitiveScopes: SensitiveScopeRepository(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: wsID, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
         await #expect(throws: WorkProductAssemblyError.missingComposer("fact-memo.core")) {
-            try await service.compose(workspace: ws(UUID()), template: .factMemo,
-                                      subjectLabel: "WS", corpusSnapshotID: nil)
+            try await service.compose(workspace: ws(wsID), template: .factMemo,
+                                      subjectLabel: "WS", corpusSnapshotID: nil, access: access)
         }
     }
 }

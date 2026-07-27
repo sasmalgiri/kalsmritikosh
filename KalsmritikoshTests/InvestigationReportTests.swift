@@ -149,8 +149,11 @@ struct InvestigationReportTests {
     private func ws(_ id: UUID) -> Workspace { Workspace(id: id, title: "WS", template: .general) }
 
     private func compose(_ r: Rig, _ workspace: UUID) async throws -> AssembledWorkProduct {
-        try await r.service.compose(workspace: ws(workspace), template: .investigationFindings,
-                                    subjectLabel: "WS", corpusSnapshotID: nil)
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: workspace, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
+        return try await r.service.compose(workspace: ws(workspace), template: .investigationFindings,
+                                           subjectLabel: "WS", corpusSnapshotID: nil, access: access)
     }
 
     // MARK: - Route + structure
@@ -375,14 +378,21 @@ struct InvestigationReportTests {
         let disclosures = DisclosureSelectionService(contradictions: contradictions,
                                                      claimContradictions: ClaimContradictionRepository(database: db), gaps: gaps)
         // EMPTY registry → investigation.findings missing → the arm must throw, not fall back.
+        // Empty workspace means scopeFilter returns early (claims-empty guard); the registry throw is
+        // the expected error here, not a scope denial.
+        let wsID = UUID()
         let service = WorkProductAssemblyService(
             workspaces: WorkspaceRepository(database: db),
             knowledgeObjects: KnowledgeObjectRepository(database: db),
             evidence: EvidenceStore(database: db),
+            sensitiveScopes: SensitiveScopeRepository(database: db),
             selection: selection, disclosures: disclosures, registry: WorkProductComposerRegistry())
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: wsID, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
         await #expect(throws: WorkProductAssemblyError.missingComposer("investigation.findings")) {
-            try await service.compose(workspace: ws(UUID()), template: .investigationFindings,
-                                      subjectLabel: "WS", corpusSnapshotID: nil)
+            try await service.compose(workspace: ws(wsID), template: .investigationFindings,
+                                      subjectLabel: "WS", corpusSnapshotID: nil, access: access)
         }
     }
 }

@@ -100,8 +100,12 @@ struct SourceScopedClaimTests {
     }
 
     private func compose(_ r: Rig, _ ws: Workspace.ID) async throws -> AssembledWorkProduct {
-        try await r.assembly.compose(workspace: Workspace(id: ws, title: "WS", template: .general),
-                                     template: .generalSummary, subjectLabel: "WS", corpusSnapshotID: nil)
+        let access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: ws, maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: false, purpose: .export))
+        return try await r.assembly.compose(workspace: Workspace(id: ws, title: "WS", template: .general),
+                                            template: .generalSummary, subjectLabel: "WS",
+                                            corpusSnapshotID: nil, access: access)
     }
 
     // MARK: - Source-scoped production + selection
@@ -336,7 +340,10 @@ struct SourceScopedClaimTests {
             gaps: GapNodeRepository(database: db), workspaces: workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Docs", template: .general),
-            template: .generalSummary, subjectLabel: "Docs", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Docs", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
         #expect(assembled.manifest.selectedFindingCount >= 1)
         #expect(WorkProductValidator().validateProductionExport(assembled.workProduct).isValid)
     }

@@ -295,7 +295,10 @@ struct ClaimProducerTests {
             gaps: GapNodeRepository(database: r.db), workspaces: r.workspaces)
         let assembled = try await assembly.compose(
             workspace: Workspace(id: wsID, title: "Matter", template: .general),
-            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil)
+            template: .generalSummary, subjectLabel: "Matter", corpusSnapshotID: nil,
+            access: SensitiveAccessContext(scope: SensitiveScope(
+                workspaceID: wsID, maximumSensitivity: .restricted,
+                permitsPrivilegedMaterial: false, purpose: .export)))
 
         let sourced = assembled.workProduct.sections.first { $0.title == "Sourced summary" }
         #expect(sourced?.claims.contains { $0.text.hasSuffix("employer: Orchid Labs") } == true)
