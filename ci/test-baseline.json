@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 1025,
+  "minimumExecutedTests": 1073,
   "baselineCommit": "df3c819020e8ae6791e62790d0d66cc04b084036",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1025 = 1009 (OPS-006 floor) + 16 (PJE-001: 16 WorkflowDefinitionCompilerTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit pinned to PJE-001 hosted-green SHA (df3c819, run 30284826855)."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1073 = 1025 (PJE-001 floor) + 48 (PJE-002: 11 VersionedDefinitionRegistryTests + 7 WorkflowDefinitionRegistryTests + 19 PersonaJobCatalogTests + 11 PersonaRegistrySafetyTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit pinned to PJE-001 hosted-green SHA (df3c819, run 30284826855); will advance to PJE-002 hosted-green SHA after CI confirms."
 }
