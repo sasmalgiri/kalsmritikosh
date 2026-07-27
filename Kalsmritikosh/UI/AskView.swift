@@ -646,8 +646,10 @@ public struct AskView: View {
             //    user question straight to the model, unbudgeted and uncited —
             //    is removed. Ask consumes only the budgeted, evidence-grounded
             //    brain answer, so nothing ungrounded ever reaches the user.
+            // OPS-003D — production screen scope (not DEBUG-only testUnrestricted).
+            // Global Q&A: no workspace restriction, full sensitivity ceiling, privilege hidden.
             let answer = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext.testUnrestricted())
+                                                      access: SensitiveAccessContext(scope: .screen()))
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)

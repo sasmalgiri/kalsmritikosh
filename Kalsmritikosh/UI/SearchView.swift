@@ -144,10 +144,34 @@ public struct SearchView: View {
         searching = true
         Task {
             let results = (try? await chunks.searchFTS(q, limit: 40)) ?? []
+            // OPS-003D: filter chunks whose evidence KO is blocked by screen scope.
+            // Fail-open when scope repo is unavailable — missing repo means no assignments
+            // exist yet, so all results are shown (no false negatives at boot).
+            let filtered = await screenFilter(results, scopeRepo: appState.sensitiveScopes)
             await MainActor.run {
-                self.hits = results
+                self.hits = filtered
                 self.searching = false
             }
         }
+    }
+
+    /// Remove chunks whose backing KO is blocked by the global screen scope.
+    /// Returns the original list unchanged when `scopeRepo` is nil (fail-open).
+    private func screenFilter(_ chunks: [Chunk],
+                              scopeRepo: SensitiveScopeRepository?) async -> [Chunk] {
+        guard let repo = scopeRepo, !chunks.isEmpty else { return chunks }
+        let koIDs = Array(Set(chunks.map(\.objectID)))
+        let targets = koIDs.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
+        guard let resolutions = try? await repo.batchResolution(targets) else { return chunks }
+        let scope = SensitiveScope.screen()
+        let permitted: Set<UUID> = Set(koIDs.filter { koID in
+            let t = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
+            switch resolutions[t] {
+            case .resolved(let label): return scope.permits(label)
+            case .brokenLineage:       return false
+            case nil:                  return scope.permits(ProtectionLabel(sensitivity: .internalLevel, privileged: false))
+            }
+        })
+        return chunks.filter { permitted.contains($0.objectID) }
     }
 }

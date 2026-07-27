@@ -142,6 +142,21 @@ public nonisolated struct SensitiveScope: Sendable, Equatable {
     var isTestSentinel: Bool {
         workspaceID == UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
     }
+
+    /// OPS-003D — production screen-purpose scope for global (non-workspace) view layers.
+    /// Uses the workspace-unrestricted sentinel so HybridRetriever skips workspace-membership
+    /// enforcement — appropriate for the owner's global Q&A and source-list screens.
+    /// `permitsPrivilegedMaterial: false` by default: privileged items are hidden from
+    /// unprotected browse/search views; pass `true` for full-access Q&A contexts.
+    public nonisolated static func screen(
+        permitsPrivilegedMaterial: Bool = false
+    ) -> SensitiveScope {
+        SensitiveScope(
+            workspaceID: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            maximumSensitivity: .restricted,
+            permitsPrivilegedMaterial: permitsPrivilegedMaterial,
+            purpose: .screen)
+    }
 }
 
 /// A single protection assignment on one ledger object. Append-only — revocation sets

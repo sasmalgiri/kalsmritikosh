@@ -201,6 +201,8 @@ public final class AppState {
     public private(set) var files: FilesRepository?
     public private(set) var objects: KnowledgeObjectRepository?
     public private(set) var chunks: ChunksRepository?
+    /// OPS-003D — screen-level scope filter; resolves KO/chunk sensitivity for view layers.
+    public private(set) var sensitiveScopes: SensitiveScopeRepository?
     /// Exposed for the retrieval self-eval (recall@k on the user's own data).
     public private(set) var embedder: (any Embedder)?
     public private(set) var entities: EntitiesRepository?
@@ -695,6 +697,7 @@ public final class AppState {
             let contradictionsRepo = ContradictionsRepository(database: db)
             let factReviewsRepo = FactReviewsRepository(database: db)
             let custodyRepo = CustodyRepository(database: db)
+            let sensitiveScopesRepo = SensitiveScopeRepository(database: db)
             let derivedObjectsRepo = DerivedObjectsRepository(database: db)
             // A2 — structural evidence store + parser registry (canonical typed
             // blocks, populated additively during ingest).
@@ -1717,6 +1720,7 @@ public final class AppState {
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
+            self.sensitiveScopes = sensitiveScopesRepo
             self.derivedObjects = derivedObjectsRepo
             self.evidenceStore = evidenceStoreRepo
             self.factBonds = factBondsRepo
