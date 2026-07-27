@@ -23,6 +23,14 @@ import SwiftUI
 import AppKit
 #endif
 
+/// Revalidation key: combines the event UUID with the current policy revision so that
+/// `.task(id:)` re-fires whenever a scope assignment is created or revoked while the
+/// sheet is open — ensuring previously authorized content is hidden immediately.
+private struct AuthorizationTaskID: Equatable, Hashable {
+    let targetID: UUID
+    let policyRevision: Int
+}
+
 public struct EventDetailSheet: View {
     @Environment(AppState.self) private var appState
     let event: Event
@@ -62,7 +70,7 @@ public struct EventDetailSheet: View {
             Divider()
             if eventAuthorized == false {
                 restrictedEventPlaceholder
-            } else if loading {
+            } else if loading || eventAuthorized == nil {
                 HStack {
                     ProgressView().controlSize(.small)
                     Text("Loading event context…")
@@ -85,18 +93,33 @@ public struct EventDetailSheet: View {
         }
         .padding(20)
         .frame(width: 640)
-        .task {
-            // OPS-003D.1.1 — authorize the event itself BEFORE loading any context.
-            // Denied → restricted placeholder is shown; no repositories are touched.
+        .task(id: AuthorizationTaskID(targetID: event.id,
+                                      policyRevision: appState.sensitiveScopeRevision)) {
+            // OPS-003D.1.2 — revision-aware task so policy changes after the sheet
+            // opens re-run this check. Set eventAuthorized=nil first to enter the
+            // pending (ProgressView) state before any await.
+            eventAuthorized = nil
             let target = SensitiveScopeTarget(kind: .event, id: event.id)
             let allowed = await appState.screenAuthorizer?.authorize(
                 target: target, boundary: .globalOwner) ?? false
             guard allowed else {
+                // Clear all sensitive state before showing the restricted placeholder.
+                // loading is reset to true so that if access is later restored the
+                // data is reloaded from scratch.
+                sourceObject = nil
+                sourceURL = nil
+                entities = []
+                outgoing = []
+                incoming = []
+                assertions = []
+                versionCount = 0
+                sourceAuthorized = false
+                loading = true
                 eventAuthorized = false
                 return
             }
             eventAuthorized = true
-            await load()
+            if loading { await load() }
         }
     }
 

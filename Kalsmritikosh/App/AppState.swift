@@ -205,13 +205,16 @@ public final class AppState {
     public private(set) var sensitiveScopes: SensitiveScopeRepository?
     /// OPS-003D.1 — fail-closed screen gate for all view layers, wired once here.
     public private(set) var screenAuthorizer: ScreenScopeAuthorizer?
+    /// OPS-003D.1.2 — single production path for all SensitiveScope mutations.
+    /// Callers must use this service; the architecture guard enforces the contract.
+    public private(set) var mutationService: SensitiveScopeMutationService?
     /// OPS-003D.1.1 — bumped whenever a sensitive-scope assignment is created or revoked.
-    /// SourceViewer and EvidenceViewer include this in their .task(id:) identity so open
-    /// views revalidate immediately when policy changes.
+    /// SourceViewer, EvidenceViewer, and EventDetailSheet include this in their .task(id:)
+    /// identity so open views revalidate immediately when policy changes.
     public private(set) var sensitiveScopeRevision: Int = 0
 
-    /// Call from any code that creates or revokes a sensitive-scope assignment so that
-    /// SourceViewer and EvidenceViewer re-check authorization in their open .task(id:).
+    /// Called automatically by the policyChanges observer wired in setup(). Bumps
+    /// sensitiveScopeRevision so that AuthorizationTaskID-keyed tasks re-fire.
     public func notifyScopePolicyChanged() {
         sensitiveScopeRevision += 1
     }
@@ -1735,6 +1738,15 @@ public final class AppState {
             self.custody = custodyRepo
             self.sensitiveScopes = sensitiveScopesRepo
             self.screenAuthorizer = ScreenScopeAuthorizer(repository: sensitiveScopesRepo)
+            let svc = SensitiveScopeMutationService(repository: sensitiveScopesRepo)
+            self.mutationService = svc
+            // Observe policy mutations and bump sensitiveScopeRevision on the MainActor
+            // so SourceViewer / EvidenceViewer / EventDetailSheet .task(id:) re-fire.
+            Task { @MainActor [weak self] in
+                for await _ in svc.policyChanges {
+                    self?.notifyScopePolicyChanged()
+                }
+            }
             self.derivedObjects = derivedObjectsRepo
             self.evidenceStore = evidenceStoreRepo
             self.factBonds = factBondsRepo

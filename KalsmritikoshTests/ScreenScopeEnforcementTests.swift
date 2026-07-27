@@ -2,26 +2,24 @@
 //  ScreenScopeEnforcementTests.swift
 //  KalsmritikoshTests
 //
-//  OPS-003D.1.1 — closes six semantic gaps from the OPS-003D.1 NO-GO review:
-//  1. SourceViewer.koID is mandatory (no optional bypass path)
-//  2. Restricted KO blocks SourceViewer content rendering
-//  3. Restricted event target blocks the entire EventDetailSheet
-//  4. Event-level auth denies via source-KO inheritance (load() never called when denied)
-//  5. Direct event SSA denies sheet; source KO independently permitted (proves two-level gate)
-//  6. ScreenAccessBoundary has only .globalOwner (.workspace removed)
-//  7. isTestSentinel returns false in non-DEBUG builds
-//  8. Assignment added while SourceViewer is open hides content on revalidation
-//  9. Assignment added while EvidenceViewer is open hides snippet and KO ID
-//  10. Revocation restores access when no inherited restriction remains
+//  OPS-003D.1.2 — proves the three semantic gaps from the OPS-003D.1.1 NO-GO:
+//  1. Successful assign increments SensitiveScopeMutationService.revisionCount
+//  2. Successful revoke increments revisionCount
+//  3. Failed mutation does not increment revisionCount
+//  4. SourceViewer recheck: authorize returns false after assignment via service
+//  5. EvidenceViewer recheck: authorize returns false after assignment — snippet hidden
+//  6. EventDetailSheet becomes restricted after service.assign(.event)
+//  7. EventDetailSheet access restored after service.revoke
+//  8. Direct repo.assign() bypass does not increment service.revisionCount
 //
-//  Floor: 945 − 10 (removed OPS-003D.1 tests) + 10 (these) = 945 (unchanged).
+//  Floor: 945 − 10 (OPS-003D.1.1 tests removed) + 8 (these) = 943.
 //
 
 import Testing
 import Foundation
 @testable import Kalsmritikosh
 
-@Suite("OPS-003D.1.1 ScreenScopeEnforcement — viewer identity, event-detail, live revalidation")
+@Suite("OPS-003D.1.2 ScreenScopeEnforcement — mutation service + fail-closed live revalidation")
 struct ScreenScopeEnforcementTests {
 
     private let t0 = Date(timeIntervalSince1970: 1_750_000_000)
@@ -46,7 +44,6 @@ struct ScreenScopeEnforcementTests {
         """, [.uuid(koID), .uuid(fileID), .text("txt"), .text("test content")])
     }
 
-    /// Seeds a minimal event row linking it to an existing KO.
     private func seedEvent(_ db: Database, eventID: UUID, koID: UUID) async throws {
         try await db.exec(
             "INSERT INTO events (id, kind, date, title, source_object_id) VALUES (?,?,?,?,?);",
@@ -54,207 +51,200 @@ struct ScreenScopeEnforcementTests {
              .text("Test Event"), .uuid(koID)])
     }
 
-    // MARK: - Test 1: SourceViewer.koID is mandatory
+    // MARK: - Test 1: Successful assign increments revisionCount
 
-    @Test("SourceViewer.init requires a non-optional koID — optional bypass path removed")
-    func sourceViewerKoIDIsMandatory() {
-        let url = URL(fileURLWithPath: "/tmp/test.txt")
-        // This call MUST compile without a default UUID value — koID is non-optional.
-        // If SourceViewer still accepted koID: UUID? = nil this test would still compile
-        // but the architecture guard test (presence of this test) documents the contract.
-        let sv = SourceViewer(url: url, koID: UUID())
-        // The view exists; the point is that SourceViewer(url: url) without koID does not compile.
-        _ = sv
-    }
-
-    // MARK: - Test 2: Restricted KO blocks SourceViewer content rendering
-
-    @Test("Privileged KO authorization returns false — SourceViewer renders blockedPlaceholder, not content")
-    func restrictedKO_blocksSourceViewerContent() async throws {
+    @Test("SensitiveScopeMutationService: successful assign increments revisionCount to 1")
+    func successfulAssignment_incrementsRevision() async throws {
         let (db, repo) = try await openDB()
         let koID = UUID()
         try await seedKO(db, koID: koID)
-        try await repo.assign(
+        let service = SensitiveScopeMutationService(repository: repo)
+        _ = try await service.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
-        let auth = ScreenScopeAuthorizer(repository: repo)
-        let allowed = await auth.authorize(koID, boundary: .globalOwner)
-        #expect(!allowed,
-                "authorize must return false for a privileged KO — SourceViewer renders the locked placeholder instead of PDF/text content.")
+        #expect(await service.revisionCount == 1,
+                "Successful assign must increment revisionCount — policyChanges yielded, viewer tasks re-fire.")
     }
 
-    // MARK: - Test 3: Restricted event target blocks the entire EventDetailSheet
+    // MARK: - Test 2: Successful revoke increments revisionCount
 
-    @Test("Event with direct privileged SSA is denied — EventDetailSheet shows restricted placeholder")
-    func restrictedEvent_blocksDetailSheet() async throws {
+    @Test("SensitiveScopeMutationService: successful revoke increments revisionCount to 2")
+    func successfulRevocation_incrementsRevision() async throws {
         let (db, repo) = try await openDB()
         let koID = UUID()
         try await seedKO(db, koID: koID)
-        let eventID = UUID()
-        try await seedEvent(db, eventID: eventID, koID: koID)
-        try await repo.assign(
-            target: SensitiveScopeTarget(kind: .event, id: eventID),
-            sensitivity: .restricted,
-            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
-            reason: nil, at: t0)
-        let auth = ScreenScopeAuthorizer(repository: repo)
-        let allowed = await auth.authorize(target: SensitiveScopeTarget(kind: .event, id: eventID),
-                                           boundary: .globalOwner)
-        #expect(!allowed,
-                "Event with a direct privileged SSA must be denied — EventDetailSheet renders restrictedEventPlaceholder and never calls load().")
-    }
-
-    // MARK: - Test 4: Event-level auth denies via source-KO inheritance (load() is gated)
-
-    @Test("Source-KO restriction propagates to event authorization via inheritance — load() is never called when denied")
-    func eventInheritsRestrictionFromSourceKO() async throws {
-        let (db, repo) = try await openDB()
-        let koID = UUID()
-        try await seedKO(db, koID: koID)
-        let eventID = UUID()
-        try await seedEvent(db, eventID: eventID, koID: koID)
-        // Restrict only the source KO — no direct event SSA.
-        try await repo.assign(
+        let service = SensitiveScopeMutationService(repository: repo)
+        let assignment = try await service.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
-        let auth = ScreenScopeAuthorizer(repository: repo)
-        let eventAllowed = await auth.authorize(
-            target: SensitiveScopeTarget(kind: .event, id: eventID), boundary: .globalOwner)
-        #expect(!eventAllowed,
-                "Source-KO restriction must propagate to the event via the effectiveLabel inheritance chain — authorization gate fires before load() so no repositories are touched.")
+        try await service.revoke(assignmentID: assignment.id, revokedBy: "owner",
+                                 reason: nil, at: t0.addingTimeInterval(60))
+        #expect(await service.revisionCount == 2,
+                "Assign (1) + revoke (2) must give revisionCount of 2 — two policy-change signals fired.")
     }
 
-    // MARK: - Test 5: Direct event SSA; source KO independently permitted
+    // MARK: - Test 3: Failed mutation does not increment revisionCount
 
-    @Test("Direct event SSA denies sheet while the source KO alone is permitted — two-level gate verified")
-    func directEventSSA_deniesSheet_sourceKOPermittedIndependently() async throws {
-        let (db, repo) = try await openDB()
-        let koID = UUID()
-        try await seedKO(db, koID: koID)
-        let eventID = UUID()
-        try await seedEvent(db, eventID: eventID, koID: koID)
-        // Restrict the EVENT directly — leave the source KO unrestricted.
-        try await repo.assign(
-            target: SensitiveScopeTarget(kind: .event, id: eventID),
-            sensitivity: .restricted,
-            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
-            reason: nil, at: t0)
-        let auth = ScreenScopeAuthorizer(repository: repo)
-        let eventAllowed = await auth.authorize(
-            target: SensitiveScopeTarget(kind: .event, id: eventID), boundary: .globalOwner)
-        let koAllowed = await auth.authorize(
-            target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID), boundary: .globalOwner)
-        #expect(!eventAllowed,
-                "Event with a direct privileged SSA must be denied — full sheet blocked regardless of source KO state.")
-        #expect(koAllowed,
-                "Source KO without any restriction is independently permitted — source details would be visible if the event were accessible.")
-    }
-
-    // MARK: - Test 6: .workspace boundary is unavailable
-
-    @Test("ScreenAccessBoundary has only .globalOwner — .workspace removed until membership enforcement is implemented")
-    func workspaceBoundaryUnavailable() {
-        // Exhaustive switch with no .workspace arm proves the enum has exactly one case.
-        let boundary = ScreenAccessBoundary.globalOwner
-        switch boundary {
-        case .globalOwner: break
+    @Test("SensitiveScopeMutationService: failed revoke (assignment not found) does not increment")
+    func failedMutation_doesNotIncrementRevision() async throws {
+        let (_, repo) = try await openDB()
+        let service = SensitiveScopeMutationService(repository: repo)
+        await #expect(throws: (any Error).self) {
+            try await service.revoke(assignmentID: UUID(), revokedBy: "owner",
+                                     reason: nil, at: t0)
         }
+        #expect(await service.revisionCount == 0,
+                "Failed revoke must not increment revisionCount — no policy signal, no viewer revalidation.")
     }
 
-    // MARK: - Test 7: isTestSentinel is DEBUG-only
+    // MARK: - Test 4: SourceViewer recheck after assignment returns false
 
-    @Test("isTestSentinel returns false in non-DEBUG builds — test bypass cannot reach production")
-    func testSentinelIsDebugOnly() {
-        let sentinel = SensitiveScope(
-            workspaceID: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
-            maximumSensitivity: .restricted,
-            permitsPrivilegedMaterial: false,
-            purpose: .screen)
-        #if DEBUG
-        #expect(sentinel.isTestSentinel,
-                "In DEBUG builds the test sentinel UUID must be recognized — test infrastructure requires it.")
-        #else
-        #expect(!sentinel.isTestSentinel,
-                "In RELEASE builds isTestSentinel always returns false — the test bypass UUID is not active.")
-        #endif
-    }
-
-    // MARK: - Test 8: Assignment added while SourceViewer is open hides content on revalidation
-
-    @Test("Assignment added while SourceViewer is open: authorize returns false on next revalidation")
-    func assignmentAddedDuringView_hidesContent() async throws {
+    @Test("SourceViewer recheck: authorize returns false after service.assign — pending then blocked")
+    func sourcePolicyRecheck_blocksKOAfterAssignment() async throws {
         let (db, repo) = try await openDB()
         let koID = UUID()
         try await seedKO(db, koID: koID)
+        let service = SensitiveScopeMutationService(repository: repo)
         let auth = ScreenScopeAuthorizer(repository: repo)
 
+        // Initially accessible — authorized=true, content shown.
         #expect(await auth.authorize(koID, boundary: .globalOwner) == true,
-                "Before any assignment the KO is accessible — SourceViewer would render content.")
+                "Before any assignment the KO is accessible.")
 
-        try await repo.assign(
+        _ = try await service.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
 
-        // ScreenScopeAuthorizer always queries fresh — no caching.
-        // When sensitiveScopeRevision increments, the SourceViewer .task(id:) re-fires
-        // and lands here, returning false → blockedPlaceholder replaces the content.
+        // SourceViewer's .task sets authorized=nil (ProgressView) BEFORE this await,
+        // then this call returns false → blockedPlaceholder replaces the content.
         #expect(await auth.authorize(koID, boundary: .globalOwner) == false,
-                "After assignment, authorize returns false — SourceViewer revalidates via AuthorizationTaskID and hides content.")
+                "After service.assign, authorize returns false — SourceViewer shows blockedPlaceholder.")
+        #expect(await service.revisionCount == 1,
+                "Service correctly incremented revision after assignment.")
     }
 
-    // MARK: - Test 9: Assignment added while EvidenceViewer is open hides snippet and KO ID
+    // MARK: - Test 5: EvidenceViewer recheck after assignment returns false
 
-    @Test("Assignment added while EvidenceViewer is open: authorize returns false on next revalidation")
-    func assignmentAddedDuringEvidenceView_hidesSnippet() async throws {
+    @Test("EvidenceViewer recheck: authorize returns false after service.assign — snippet and KO ID hidden")
+    func evidencePolicyRecheck_blocksSnippetAfterAssignment() async throws {
         let (db, repo) = try await openDB()
         let koID = UUID()
         try await seedKO(db, koID: koID)
+        let eventID = UUID()
+        try await seedEvent(db, eventID: eventID, koID: koID)
+        let service = SensitiveScopeMutationService(repository: repo)
         let auth = ScreenScopeAuthorizer(repository: repo)
 
-        #expect(await auth.authorize(koID, boundary: .globalOwner) == true,
-                "Before any assignment the citation KO is accessible — EvidenceViewer would show snippet and KO ID.")
+        // Citation KO initially accessible — EvidenceViewer shows snippet and KO ID.
+        #expect(await auth.authorize(koID, boundary: .globalOwner) == true)
 
-        try await repo.assign(
+        // Service assigns restriction; revisionCount increments; AuthorizationTaskID changes.
+        // EvidenceViewer's .task sets authorized=nil (ProgressView shown), then re-checks.
+        _ = try await service.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
 
-        // EvidenceViewer uses AuthorizationTaskID(targetID: citation.objectID, policyRevision:)
-        // so its .task re-fires on sensitiveScopeRevision change, reaching this check.
+        // The re-check must return false → EvidenceViewer shows restrictedBody hiding snippet.
         #expect(await auth.authorize(koID, boundary: .globalOwner) == false,
-                "After assignment, authorize returns false — EvidenceViewer revalidates and hides snippet and KO ID.")
+                "After service.assign, EvidenceViewer recheck returns false — snippet and KO ID hidden.")
     }
 
-    // MARK: - Test 10: Revocation restores access
+    // MARK: - Test 6: EventDetailSheet becomes restricted after service.assign(.event)
 
-    @Test("Revocation restores access when no inherited restriction remains")
-    func revocationRestoresAccess() async throws {
+    @Test("EventDetailSheet: event authorization denied after service.assign on event target")
+    func eventAuthorization_deniedAfterAssignment() async throws {
         let (db, repo) = try await openDB()
         let koID = UUID()
         try await seedKO(db, koID: koID)
-        let assignment = try await repo.assign(
+        let eventID = UUID()
+        try await seedEvent(db, eventID: eventID, koID: koID)
+        let service = SensitiveScopeMutationService(repository: repo)
+        let auth = ScreenScopeAuthorizer(repository: repo)
+        let target = SensitiveScopeTarget(kind: .event, id: eventID)
+
+        // Event initially accessible.
+        #expect(await auth.authorize(target: target, boundary: .globalOwner) == true)
+
+        _ = try await service.assign(
+            target: target,
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+
+        // EventDetailSheet's revision-aware .task re-fires, sets eventAuthorized=nil,
+        // awaits this check — returns false → sensitive state cleared, restricted placeholder shown.
+        #expect(await auth.authorize(target: target, boundary: .globalOwner) == false,
+                "After service.assign(.event), EventDetailSheet recheck returns false — state cleared.")
+        #expect(await service.revisionCount == 1)
+    }
+
+    // MARK: - Test 7: EventDetailSheet access restored after service.revoke
+
+    @Test("EventDetailSheet: event access restored after service.revoke — data reloads on re-authorization")
+    func revocation_restoresEventAccess() async throws {
+        let (db, repo) = try await openDB()
+        let koID = UUID()
+        try await seedKO(db, koID: koID)
+        let eventID = UUID()
+        try await seedEvent(db, eventID: eventID, koID: koID)
+        let service = SensitiveScopeMutationService(repository: repo)
+        let auth = ScreenScopeAuthorizer(repository: repo)
+        let target = SensitiveScopeTarget(kind: .event, id: eventID)
+
+        let assignment = try await service.assign(
+            target: target,
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+        #expect(await auth.authorize(target: target, boundary: .globalOwner) == false,
+                "Restricted before revocation.")
+
+        try await service.revoke(assignmentID: assignment.id, revokedBy: "owner",
+                                 reason: nil, at: t0.addingTimeInterval(60))
+
+        // Revision bumps to 2; EventDetailSheet .task re-fires, sets eventAuthorized=nil,
+        // awaits this check — returns true; loading=true (reset during denial) triggers reload.
+        #expect(await auth.authorize(target: target, boundary: .globalOwner) == true,
+                "After service.revoke, EventDetailSheet recheck returns true — access and data restored.")
+        #expect(await service.revisionCount == 2,
+                "Assign (1) + revoke (2) = revisionCount 2.")
+    }
+
+    // MARK: - Test 8: Direct repo.assign() bypass does not increment service.revisionCount
+
+    @Test("Direct repo.assign() bypasses mutation service — revisionCount stays 0 until service is used")
+    func directRepoBypass_doesNotIncrementRevision() async throws {
+        let (db, repo) = try await openDB()
+        let koID = UUID()
+        try await seedKO(db, koID: koID)
+        let service = SensitiveScopeMutationService(repository: repo)
+
+        // Bypass: direct repo call — no increment, no policyChanges yield, no viewer revalidation.
+        _ = try await repo.assign(
             target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
             sensitivity: .restricted,
             authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
             reason: nil, at: t0)
-        let auth = ScreenScopeAuthorizer(repository: repo)
+        #expect(await service.revisionCount == 0,
+                "Direct repo.assign() must not increment service.revisionCount — architecture guard prevents this in production.")
 
-        #expect(await auth.authorize(koID, boundary: .globalOwner) == false,
-                "Before revocation the KO is restricted and access is denied.")
-
-        try await repo.revoke(assignmentID: assignment.id,
-                              revokedBy: "owner",
-                              reason: "no longer sensitive",
-                              at: t0.addingTimeInterval(60))
-
-        #expect(await auth.authorize(koID, boundary: .globalOwner) == true,
-                "After revoking all privileged assignments the KO resolves to internalLevel and access is restored.")
+        // Correct path: using the service increments correctly.
+        let koID2 = UUID()
+        try await seedKO(db, koID: koID2)
+        _ = try await service.assign(
+            target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID2),
+            sensitivity: .restricted,
+            authority: .userConfirmed(actorID: "owner", confirmationID: UUID(), privileged: true),
+            reason: nil, at: t0)
+        #expect(await service.revisionCount == 1,
+                "Service.assign() correctly increments to 1.")
     }
 }

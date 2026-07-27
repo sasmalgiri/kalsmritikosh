@@ -64,6 +64,7 @@ public struct SourceViewer: View {
         .frame(minWidth: 520, minHeight: 360)
         .task(id: AuthorizationTaskID(targetID: koID,
                                       policyRevision: appState.sensitiveScopeRevision)) {
+            authorized = nil   // enter pending (ProgressView) before the authorization check
             authorized = await appState.screenAuthorizer?.authorize(koID, boundary: .globalOwner)
         }
     }
@@ -346,6 +347,7 @@ public struct EvidenceViewer: View {
         }
         .task(id: AuthorizationTaskID(targetID: citation.objectID,
                                       policyRevision: appState.sensitiveScopeRevision)) {
+            authorized = nil   // enter pending (ProgressView) before the authorization check
             authorized = await appState.screenAuthorizer?.authorize(citation.objectID, boundary: .globalOwner)
         }
     }
