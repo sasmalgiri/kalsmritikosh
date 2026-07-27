@@ -243,7 +243,9 @@ public actor WorkProductAssemblyService {
             case .resolved(let label): return access.scope.permits(label)
             case .brokenLineage:       return false
             case nil:
-                return access.scope.permits(ProtectionLabel(sensitivity: .internalLevel, privileged: false))
+                // OPS-003C.2.1: fail-closed on any resolution gap — a target absent from
+                // the batch result is denied, not treated as default internalLevel.
+                return false
             }
         }
 

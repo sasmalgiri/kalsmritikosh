@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 938,
-  "baselineCommit": "HEAD",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 938 = 935 - 1 removed (noAccessContextBypassesScopeFilter) + 4 added OPS-003C.2 (exportWithWrongPurposeDenied, exportWithMismatchedWorkspaceIDDenied, blockedClaimProducesEmptyManifestAndHashes, privilegedTextAbsentFromAllSections). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "minimumExecutedTests": 939,
+  "baselineCommit": "3ac512d3449e474bba9e6051be207028312fef83",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 939 = 938 + 1 added OPS-003C.2.1 (missingResolutionFailClosedDeniesClaim). Baseline SHA pinned to the exact hosted-green implementation commit (not HEAD). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }

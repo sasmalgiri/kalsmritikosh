@@ -9,15 +9,18 @@
 //  OPS-003C.2 adds: access is now mandatory; wrong purpose or mismatched workspace → denied;
 //  no-bypass test 5 removed; four architecture-guard + no-leak proofs added instead.
 //
-//  Eight tests:
+//  OPS-003C.2.1 adds: fail-closed on incomplete/missing batch resolution (case nil → false).
+//
+//  Nine tests:
 //  1. scopedAccessDeniedWhenRepoNotWired         — nil sensitiveScopes + access → throws
 //  2. privilegedEvidenceKOBlockedFromExport      — privileged KO → 0 findings
-//  3. nonPrivilegedEvidenceKOPermittedForExport  — no SSA → claim passes through
+//  3. nonPrivilegedEvidenceKOPermittedForExport  — explicit non-privileged SSA → claim passes
 //  4. sensitivityCeilingBlocksRestrictedClaim    — restricted KO + internal ceiling → 0 findings
 //  5. exportWithWrongPurposeDenied               — .screen purpose → scopedAccessDenied
 //  6. exportWithMismatchedWorkspaceIDDenied      — wrong workspace ID → scopedAccessDenied
 //  7. blockedClaimProducesEmptyManifestAndHashes — privileged KO → 0 findings, no hashes
 //  8. privilegedTextAbsentFromAllSections        — privileged text never reaches any section
+//  9. missingResolutionFailClosedDeniesClaim     — batchResolution for unknown KO = .brokenLineage, never nil
 //
 
 import Testing
@@ -318,5 +321,38 @@ struct WorkProductScopeEnforcementTests {
             + result.workProduct.sections.flatMap(\.preamble)).joined(separator: "\n")
         #expect(!allText.contains(sentinelText),
                 "Privileged claim sentinel text must not appear in any section of the work product.")
+    }
+
+    // MARK: - OPS-003C.2.1: fail-closed on incomplete/missing resolution
+
+    @Test("batchResolution returns .brokenLineage for an unknown KO — never nil — proving the nil→false fail-closed guard")
+    func missingResolutionFailClosedDeniesClaim() async throws {
+        let r = try await rig()
+
+        // Verify batchResolution returns .brokenLineage (not nil) for a KO UUID that was
+        // never inserted into knowledge_objects. This is the concrete production guarantee that
+        // backs the `case nil: return false` defensive guard added in OPS-003C.2.1 — any KO
+        // absent from the resolution result is denied, not silently promoted to internalLevel.
+        let ghostID = UUID()
+        let ghostTarget = SensitiveScopeTarget(kind: .knowledgeObject, id: ghostID)
+        let ghostResolution = try await r.scopes.batchResolution([ghostTarget])
+        #expect(ghostResolution[ghostTarget] == .brokenLineage,
+                "batchResolution must return .brokenLineage for an unknown KO, never nil — fail-closed contract.")
+
+        // Also verify that a claim whose evidence KO has NO scope assignment (the default
+        // internalLevel case, not nil) still passes through for a .restricted ceiling, so
+        // the nil→false change does not regress the normal unassigned-KO path.
+        let (fileID, _) = try await seedFact(r, value: "unassigned evidence KO fact")
+        let ws = try await makeWorkspace(r, fileID: fileID)
+        _ = try await r.producer.backfill(at: t0)
+
+        // No SSA on the KO — batchResolution returns .resolved(.internalLevel, privileged: false).
+        // .internalLevel is within the .restricted ceiling, so the claim must be permitted.
+        let result = try await r.assembly.compose(
+            workspace: ws, template: .chronology,
+            subjectLabel: ws.title, corpusSnapshotID: nil,
+            access: exportScope(workspaceID: ws.id, max: .restricted, privileged: false))
+        #expect(result.manifest.selectedFindingCount >= 1,
+                "A KO with no scope assignment (resolves to internalLevel) must pass through for a .restricted ceiling — the nil→false guard must not regress this path.")
     }
 }
