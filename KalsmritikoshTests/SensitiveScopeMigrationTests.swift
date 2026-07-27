@@ -62,7 +62,7 @@ struct SensitiveScopeMigrationTests {
         """, [.uuid(koID), .uuid(fileID), .text("text"), .text("content"),
               .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970), .integer(0)])
 
-        try await SchemaMigrations.migrate(db)     // 70 → 71
+        try await SchemaMigrations.migrate(db, through: 71)  // 70 → 71 (pinned)
 
         #expect(try await db.currentUserVersion() == 71)
         let failures = try await snap.failures(in: db)
@@ -96,7 +96,7 @@ struct SensitiveScopeMigrationTests {
         """, [.uuid(koID), .uuid(fileID), .text("text"), .text("secret content"),
               .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970), .integer(1)])
 
-        try await SchemaMigrations.migrate(db)     // 70 → 71
+        try await SchemaMigrations.migrate(db, through: 71)  // 70 → 71 (pinned)
 
         #expect(try await db.currentUserVersion() == 71)
 
