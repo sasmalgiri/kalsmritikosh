@@ -128,13 +128,11 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # ── Specialized gates (CI-001B) ────────────────────────────────────────────
+  # ── Specialized gates (CI-001B / CI-001C) ─────────────────────────────────
   # Independently-enforceable named checks over versioned test groups
   # (ci/test-groups/*.json). Each runs in isolated build paths and verifies its own
   # .xcresult (required suites ran, count >= floor, 0 failures) via ci/verify-xcresult-group.sh.
   # These are IN ADDITION to build-and-test (the overall regression gate), not a replacement.
-  # NOTE: sensitive-export is intentionally absent — OPS-003 SensitiveScope is not implemented,
-  # and a green placeholder would be misleading (record: sensitive-export PENDING, depends OPS-003).
   migration-matrix:
     runs-on: macos-26
     timeout-minutes: 40
@@ -216,5 +214,34 @@ jobs:
         with:
           name: report-receipt-integrity-logs
           path: build/report-receipt-integrity
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ── CI-001C: SensitiveScope cross-surface enforcement gate ─────────────────
+  # Requires all OPS-003 suites AND the 10-test E2E cross-surface suite to pass.
+  # S2 moves from IMPLEMENTED → PASS after this job turns hosted-green.
+  sensitive-export:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: false
+      - name: Select Xcode (newest available on the runner)
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
+          xcodebuild -version
+      - name: Run sensitive-export group
+        env:
+          NSUnbufferedIO: YES
+        run: bash ci/run-xcode-test-group.sh ci/test-groups/sensitive-export.json
+      - name: Upload logs + result bundle on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sensitive-export-logs
+          path: build/sensitive-export
           retention-days: 14
           if-no-files-found: ignore

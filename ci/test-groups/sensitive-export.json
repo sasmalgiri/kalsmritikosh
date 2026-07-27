@@ -1,0 +1,23 @@
+{
+  "group": "sensitive-export",
+  "selectors": [
+    "KalsmritikoshTests/SensitiveScopeMigrationTests",
+    "KalsmritikoshTests/SensitiveScopeRepositoryTests",
+    "KalsmritikoshTests/SensitiveRetrievalEnforcementTests",
+    "KalsmritikoshTests/SensitivePromptEnforcementTests",
+    "KalsmritikoshTests/WorkProductScopeEnforcementTests",
+    "KalsmritikoshTests/ScreenScopeEnforcementTests",
+    "KalsmritikoshTests/SensitiveScopeEndToEndTests"
+  ],
+  "requiredSuites": [
+    "SensitiveScopeMigrationTests",
+    "SensitiveScopeRepositoryTests",
+    "SensitiveRetrievalEnforcementTests",
+    "SensitivePromptEnforcementTests",
+    "WorkProductScopeEnforcementTests",
+    "ScreenScopeEnforcementTests",
+    "SensitiveScopeEndToEndTests"
+  ],
+  "minimumExecutedTests": 122,
+  "note": "CI-001C gate: all OPS-003 SensitiveScope suites + the 10-test cross-surface E2E suite. Floor 122 = measured locally from xcresulttool totalTestCount after the CI-001C implementation commit (SensitiveScopeMigrationTests + SensitiveScopeRepositoryTests + SensitiveRetrievalEnforcementTests + SensitivePromptEnforcementTests + WorkProductScopeEnforcementTests + ScreenScopeEnforcementTests + SensitiveScopeEndToEndTests). A missing selector causes a suite not to run; verify-xcresult-group.sh catches that via requiredSuites."
+}
