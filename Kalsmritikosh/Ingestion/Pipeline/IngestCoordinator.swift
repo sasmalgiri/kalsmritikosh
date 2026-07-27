@@ -111,6 +111,10 @@ public actor IngestCoordinator {
     /// relationship write block. Nil = phase-3 bonds disabled
     /// (older boot paths, smoke tests).
     private let bondConstructor: BondConstructor?
+    /// OPS-005 — when wired, every email KO's role-separated participant
+    /// addresses are persisted into email_participant_occurrences.
+    /// nil = occurrence ledger not populated (no regression).
+    private let emailParticipantRepository: EmailParticipantRepository?
     /// G2-3 — per-chunk contextual retrieval. When wired, produces a
     /// one-sentence prefix for each chunk that describes the chunk's
     /// role in the parent document. Prepended ONLY at embed time so
@@ -154,6 +158,7 @@ public actor IngestCoordinator {
         qaPairs: QAPairsRepository? = nil,
         qaPairExtractor: (any QAPairExtractor)? = nil,
         bondConstructor: BondConstructor? = nil,
+        emailParticipantRepository: EmailParticipantRepository? = nil,
         contextPrefixGenerator: (any ContextPrefixGenerator)? = nil,
         pipelineMetrics: PipelineMetrics? = nil,
         custody: CustodyRepository? = nil,
@@ -202,6 +207,7 @@ public actor IngestCoordinator {
         self.qaPairs = qaPairs
         self.qaPairExtractor = qaPairExtractor ?? EmailThreadQAPairExtractor()
         self.bondConstructor = bondConstructor
+        self.emailParticipantRepository = emailParticipantRepository
         self.contextPrefixGenerator = contextPrefixGenerator
         self.pipelineMetrics = pipelineMetrics
 
@@ -1312,8 +1318,9 @@ public actor IngestCoordinator {
         if let narrativeSlotExtractor, let events, !extractedEvents.isEmpty {
             let participantsBridge: NarrativeSlotEmailParticipants? = resolvedParticipants.map {
                 NarrativeSlotEmailParticipants(
-                    senderID: $0.senderID,
-                    recipientIDs: $0.recipientIDs
+                    fromIDs: $0.fromIDs,
+                    toIDs:   $0.toIDs,
+                    ccIDs:   $0.ccIDs
                 )
             }
             for event in extractedEvents {
@@ -1435,45 +1442,97 @@ public actor IngestCoordinator {
         return from.uuidString <= to.uuidString ? (from, to) : (to, from)
     }
 
-    /// For email KOs, derive sender + recipient canonical entity ids from
-    /// the EmailLoader-populated "from" / "to" / "cc" headers and resolve
-    /// the sender's domain to an org canonical via the alias table.
+    /// For email KOs, derive role-separated canonical entity ids from
+    /// the EmailLoader-populated headers and resolve the sender's domain
+    /// to an org canonical via the alias table.
+    /// Also persists email_participant_occurrences rows when
+    /// `emailParticipantRepository` is wired (OPS-005). Best-effort;
+    /// persistence failure never fails the ingest.
     private func emailParticipants(
         for object: KnowledgeObject,
         extractedEntities: [Entity],
         mapping: [Entity.ID: Entity.ID]
     ) async -> Tier1RelationshipExtractor.EmailParticipants? {
         guard let entities,
-              [SourceType.eml, .appleMail, .mbox].contains(object.sourceType) else {
+              [SourceType.eml, .appleMail, .mbox, .msg, .nsf, .pst].contains(object.sourceType) else {
             return nil
         }
-        let fromHeader = headerValue(object.metadata, "from")
-        let toHeader = headerValue(object.metadata, "to")
-        let ccHeader = headerValue(object.metadata, "cc")
-        guard let senderAddr = firstEmailAddress(in: fromHeader) else { return nil }
-        let recipientAddrs = Set(
-            emailAddresses(in: toHeader) + emailAddresses(in: ccHeader)
-        ).filter { $0 != senderAddr }
-        guard let senderID = canonicalEmailAddressID(
-            address: senderAddr,
-            extractedEntities: extractedEntities,
-            mapping: mapping
-        ) else { return nil }
-        let recipientIDs: [Entity.ID] = recipientAddrs.compactMap { addr in
-            canonicalEmailAddressID(
-                address: addr,
-                extractedEntities: extractedEntities,
-                mapping: mapping
-            )
+
+        let headerRoles: [(EmailParticipantRole, String)] = [
+            (.from,    headerValue(object.metadata, "from")),
+            (.sender,  headerValue(object.metadata, "sender")),
+            (.replyTo, headerValue(object.metadata, "reply-to")),
+            (.to,      headerValue(object.metadata, "to")),
+            (.cc,      headerValue(object.metadata, "cc")),
+            (.bcc,     headerValue(object.metadata, "bcc"))
+        ]
+
+        var fromIDs:    [Entity.ID] = []
+        var senderIDs:  [Entity.ID] = []
+        var replyToIDs: [Entity.ID] = []
+        var toIDs:      [Entity.ID] = []
+        var ccIDs:      [Entity.ID] = []
+        var bccIDs:     [Entity.ID] = []
+        var occurrences: [EmailParticipantOccurrence] = []
+        let now = Date()
+
+        for (role, headerStr) in headerRoles {
+            guard !headerStr.isEmpty else { continue }
+            let parsed = EmailAddressListParser.parse(headerStr)
+            for entry in parsed {
+                guard let entityID = canonicalEmailAddressID(
+                    address: entry.address,
+                    extractedEntities: extractedEntities,
+                    mapping: mapping
+                ) else { continue }
+                switch role {
+                case .from:    fromIDs.append(entityID)
+                case .sender:  senderIDs.append(entityID)
+                case .replyTo: replyToIDs.append(entityID)
+                case .to:      toIDs.append(entityID)
+                case .cc:      ccIDs.append(entityID)
+                case .bcc:     bccIDs.append(entityID)
+                }
+                occurrences.append(EmailParticipantOccurrence(
+                    sourceObjectID: object.id,
+                    entityID:       entityID,
+                    role:           role,
+                    rawAddress:     entry.address,
+                    displayName:    entry.displayName,
+                    createdAt:      now
+                ))
+            }
         }
+
+        guard !fromIDs.isEmpty else { return nil }
+
+        // Resolve sender's domain to an org entity for affiliated_with bonds.
         var orgID: Entity.ID? = nil
-        if let at = senderAddr.firstIndex(of: "@") {
-            let domain = String(senderAddr[senderAddr.index(after: at)...]).lowercased()
+        let firstFromParsed = EmailAddressListParser.parse(headerValue(object.metadata, "from")).first
+        if let addr = firstFromParsed?.address,
+           let at = addr.firstIndex(of: "@") {
+            let domain = String(addr[addr.index(after: at)...]).lowercased()
             orgID = try? await entities.find(byValue: domain, limit: 1).first?.id
         }
+
+        // OPS-005 — persist occurrence rows into the structured ledger.
+        if let repo = emailParticipantRepository, !occurrences.isEmpty {
+            do {
+                try await repo.insertBatch(occurrences)
+            } catch {
+                KalsmritikoshLog.ingestion.error(
+                    "EmailParticipantOccurrence insert failed for KO \(object.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)"
+                )
+            }
+        }
+
         return Tier1RelationshipExtractor.EmailParticipants(
-            senderID: senderID,
-            recipientIDs: recipientIDs,
+            fromIDs:           fromIDs,
+            senderIDs:         senderIDs,
+            replyToIDs:        replyToIDs,
+            toIDs:             toIDs,
+            ccIDs:             ccIDs,
+            bccIDs:            bccIDs,
             senderDomainOrgID: orgID
         )
     }

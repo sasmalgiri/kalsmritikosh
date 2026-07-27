@@ -147,14 +147,19 @@ public struct Tier1RelationshipExtractor: Sendable {
             }
         }
 
-        // 3. Email participants — sender → recipients (emailed) and
-        // sender → sender-domain org (affiliated).
-        if let p = emailParticipants {
-            for recipient in p.recipientIDs where recipient != p.senderID {
-                out.append(Edge(kind: .emailed, from: p.senderID, to: recipient))
+        // 3. Email participants — From sender → all direct recipients
+        // (emailed) and sender → sender-domain org (affiliated).
+        // Uses the first From address as the canonical sender for the
+        // legacy untyped `emailed` edge; typed bonds in BondConstructor
+        // use the full role-separated struct.
+        if let p = emailParticipants, let senderID = p.fromIDs.first {
+            let allRecipients = (p.toIDs + p.ccIDs + p.bccIDs)
+                .filter { !p.fromIDs.contains($0) }
+            for recipient in allRecipients {
+                out.append(Edge(kind: .emailed, from: senderID, to: recipient))
             }
-            if let orgID = p.senderDomainOrgID, orgID != p.senderID {
-                out.append(Edge(kind: .affiliated, from: p.senderID, to: orgID))
+            if let orgID = p.senderDomainOrgID, orgID != senderID {
+                out.append(Edge(kind: .affiliated, from: senderID, to: orgID))
             }
         }
 
@@ -162,21 +167,39 @@ public struct Tier1RelationshipExtractor: Sendable {
         return out
     }
 
-    /// Optional inputs for email-typed edges. Caller is responsible for
-    /// resolving the canonical ids; if any of these are missing the
-    /// corresponding edges simply aren't produced.
+    /// Role-separated email participant ids. Caller resolves canonical ids;
+    /// missing roles simply produce no edges or bonds for that role.
     public struct EmailParticipants: Sendable {
-        public let senderID: Entity.ID
-        public let recipientIDs: [Entity.ID]
+        /// RFC 2822 From — author's mailboxes.
+        public let fromIDs: [Entity.ID]
+        /// RFC 2822 Sender — submitting agent (omit when equal to From).
+        public let senderIDs: [Entity.ID]
+        /// RFC 2822 Reply-To mailboxes.
+        public let replyToIDs: [Entity.ID]
+        /// RFC 2822 To — primary recipients.
+        public let toIDs: [Entity.ID]
+        /// RFC 2822 Cc — carbon-copy recipients.
+        public let ccIDs: [Entity.ID]
+        /// RFC 2822 Bcc — blind-carbon-copy recipients.
+        public let bccIDs: [Entity.ID]
+        /// Org entity derived from the first From address's domain.
         public let senderDomainOrgID: Entity.ID?
 
         public nonisolated init(
-            senderID: Entity.ID,
-            recipientIDs: [Entity.ID],
+            fromIDs: [Entity.ID],
+            senderIDs: [Entity.ID] = [],
+            replyToIDs: [Entity.ID] = [],
+            toIDs: [Entity.ID],
+            ccIDs: [Entity.ID] = [],
+            bccIDs: [Entity.ID] = [],
             senderDomainOrgID: Entity.ID? = nil
         ) {
-            self.senderID = senderID
-            self.recipientIDs = recipientIDs
+            self.fromIDs          = fromIDs
+            self.senderIDs        = senderIDs
+            self.replyToIDs       = replyToIDs
+            self.toIDs            = toIDs
+            self.ccIDs            = ccIDs
+            self.bccIDs           = bccIDs
             self.senderDomainOrgID = senderDomainOrgID
         }
     }

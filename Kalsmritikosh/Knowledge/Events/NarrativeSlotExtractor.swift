@@ -45,18 +45,25 @@ public protocol NarrativeSlotExtractor: Sendable {
 }
 
 /// Carries the canonical entity ids the IngestCoordinator has
-/// already resolved for the email's sender + recipients. The slot
+/// already resolved for the email's From/To/Cc participants. The slot
 /// extractor reads display labels straight from
 /// `object.metadata["from"|"to"|"cc"]` and zips them positionally
 /// with the IDs to build WHO entries with both a readable label and
 /// a click-through entity id.
+/// Bcc is intentionally excluded: Bcc display text must not enter
+/// chunk content or narrative prose.
 public nonisolated struct NarrativeSlotEmailParticipants: Sendable {
-    public let senderID: Entity.ID
-    public let recipientIDs: [Entity.ID]
+    /// Canonical entity IDs for RFC 2822 From addresses.
+    public let fromIDs: [Entity.ID]
+    /// Canonical entity IDs for RFC 2822 To addresses.
+    public let toIDs: [Entity.ID]
+    /// Canonical entity IDs for RFC 2822 Cc addresses.
+    public let ccIDs: [Entity.ID]
 
-    public init(senderID: Entity.ID, recipientIDs: [Entity.ID]) {
-        self.senderID = senderID
-        self.recipientIDs = recipientIDs
+    public init(fromIDs: [Entity.ID], toIDs: [Entity.ID], ccIDs: [Entity.ID] = []) {
+        self.fromIDs = fromIDs
+        self.toIDs   = toIDs
+        self.ccIDs   = ccIDs
     }
 }
 
@@ -146,7 +153,7 @@ public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
                         confidence: 0.95,
                         provenance: .structuredHeader,
                         sourceObjectIDs: src,
-                        entityID: emailParticipants?.senderID
+                        entityID: emailParticipants?.fromIDs.first
                     ),
                     to: .who
                 )
@@ -155,9 +162,9 @@ public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
             // and emit one WHO per address. If we have canonical IDs
             // for them, zip positionally — strict positional match
             // is good enough because the IngestCoordinator builds
-            // recipientIDs from the same split.
+            // toIDs/ccIDs from the same split.
             let recipientStrings: [String] = (Self.splitRecipients(toHeader) + Self.splitRecipients(ccHeader))
-            let recipientIDs = emailParticipants?.recipientIDs ?? []
+            let recipientIDs = emailParticipants.map { $0.toIDs + $0.ccIDs } ?? []
             for (idx, raw) in recipientStrings.enumerated() {
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }

@@ -8,7 +8,8 @@
     "KalsmritikoshTests/ProfessionalIssueMigrationTests",
     "KalsmritikoshTests/ProfessionalTaskMigrationTests",
     "KalsmritikoshTests/SensitiveScopeMigrationTests",
-    "KalsmritikoshTests/WorkProductRunMigrationTests"
+    "KalsmritikoshTests/WorkProductRunMigrationTests",
+    "KalsmritikoshTests/EmailParticipantMigrationTests"
   ],
   "requiredSuites": [
     "MigrationMatrixTests",
@@ -18,8 +19,9 @@
     "ProfessionalIssueMigrationTests",
     "ProfessionalTaskMigrationTests",
     "SensitiveScopeMigrationTests",
-    "WorkProductRunMigrationTests"
+    "WorkProductRunMigrationTests",
+    "EmailParticipantMigrationTests"
   ],
-  "minimumExecutedTests": 41,
-  "note": "Milestone migration matrix (v0/1/36/54/61..72 → v72), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the v68 (Issue Engine), v69 (Task/Deadline Engine: fresh schema, v68→v69 preservation, UNIQUE(source_candidate_id), dependency CHECKs, confidence CHECK, primary_issue SET NULL), v69→v70 (OPS-002.1 confirmation-authority columns; NULL for pre-v70 rows), v70→v71 (OPS-003A SensitiveScope ledger: both tables, legacy privileged KO backfill, non-privileged KO excluded), and v71→v72 (OPS-004 WorkProductRun persistence: all four tables, CASCADE delete, canonical isolation) suites. Counts by xcresulttool (parameterized function = 1): milestoneMigratesToLatest and faultAtBoundaryRollsBack each count as 1. Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh). Floor 41 = 37 (prior floor, run 30264550724) + 4 (WorkProductRunMigrationTests: freshV72, v71→v72 preservation, cascade delete, canonical isolation)."
+  "minimumExecutedTests": 45,
+  "note": "Milestone migration matrix (v0/1/36/54/61..73 → v73), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the v68 (Issue Engine), v69 (Task/Deadline Engine: fresh schema, v68→v69 preservation, UNIQUE(source_candidate_id), dependency CHECKs, confidence CHECK, primary_issue SET NULL), v69→v70 (OPS-002.1 confirmation-authority columns; NULL for pre-v70 rows), v70→v71 (OPS-003A SensitiveScope ledger: both tables, legacy privileged KO backfill, non-privileged KO excluded), v71→v72 (OPS-004 WorkProductRun persistence: all four tables, CASCADE delete, canonical isolation), and v72→v73 (OPS-005 email_participant_occurrences: table + 4 indexes, CASCADE delete from KO, canonical isolation) suites. Counts by xcresulttool (parameterized function = 1): milestoneMigratesToLatest and faultAtBoundaryRollsBack each count as 1. Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh). Floor 45 = 41 (prior floor) + 4 (EmailParticipantMigrationTests: freshV73, v72→v73 preservation, cascade delete, canonical isolation)."
 }

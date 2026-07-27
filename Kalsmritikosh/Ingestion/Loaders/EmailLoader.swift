@@ -593,6 +593,13 @@ public struct EmailLoader: Ingestor {
     /// piggyback on metadata instead of changing the schema.
     nonisolated static let structuredEntitiesMetaKey = "t13_structuredEntities"
 
+    /// OPS-005 — reserved metadata key for pre-parsed EmailParticipantSeed
+    /// JSON (role + rawAddress + displayName). Not written today because
+    /// IngestCoordinator reads raw header strings directly and calls
+    /// EmailAddressListParser itself; the key is declared here so future
+    /// code or tests can reference it without a magic string.
+    nonisolated static let emailParticipantSeedsMetaKey = "ops005_emailParticipantSeeds"
+
     /// Metadata key under which T13.7's attachment file URLs are
     /// surfaced — a JSON-encoded [String] of file:// paths. After the
     /// parent email KO finishes ingestion, IngestCoordinator recursively
@@ -844,8 +851,15 @@ public struct EmailLoader: Ingestor {
         }
 
         addEmailsAndNames(from: headers["from"])
+        addEmailsAndNames(from: headers["sender"])
+        addEmailsAndNames(from: headers["reply-to"])
         addEmailsAndNames(from: headers["to"])
         addEmailsAndNames(from: headers["cc"])
+        // OPS-005 — Bcc addresses enter the canonical entity table
+        // so occurrence rows can reference them by entity ID. They
+        // MUST NOT appear in chunk text or embeddings (enforced by
+        // the headerLines prepend logic that only includes from/to/cc).
+        addEmailsAndNames(from: headers["bcc"])
 
         // Date header → date entity (best-effort RFC 2822 / 5322 parsing).
         if let dateString = headers["date"], !dateString.isEmpty {

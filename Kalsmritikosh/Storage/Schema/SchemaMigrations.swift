@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 72
+    public static let latestVersion = 73
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -166,7 +166,9 @@ public enum SchemaMigrations {
                                              "privileged", "origin", "assigned_by", "created_at"],
             // v72 — WorkProductRun persistence (OPS-004).
             "work_product_runs": ["id", "workspace_id", "template", "title",
-                                   "subject_label", "schema_version", "app_version", "composed_at"]
+                                   "subject_label", "schema_version", "app_version", "composed_at"],
+            // v73 — email participant occurrence ledger (OPS-005).
+            "email_participant_occurrences": ["id", "source_ko_id", "entity_id", "role", "raw_address"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -249,7 +251,8 @@ public enum SchemaMigrations {
         (69, v69),
         (70, v70),
         (71, v71),
-        (72, v72)
+        (72, v72),
+        (73, v73)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2877,5 +2880,27 @@ public enum SchemaMigrations {
         review_status_summary   TEXT,
         known_limitations_json  TEXT NOT NULL DEFAULT '[]'
     );
+    """
+
+    // OPS-005 — email participant occurrence ledger. Each row records
+    // one address in one role header for one email KO. Bcc addresses
+    // are stored here but NEVER enter chunk text or embeddings
+    // (guaranteed by EmailLoader which omits Bcc from headerLines).
+    // CASCADE on source_ko_id removes occurrence rows when the KO is
+    // hard-deleted. Canonical entity rows are never touched.
+    private static let v73: String = """
+    CREATE TABLE email_participant_occurrences (
+        id           TEXT PRIMARY KEY NOT NULL,
+        source_ko_id TEXT NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+        entity_id    TEXT NOT NULL,
+        role         TEXT NOT NULL,
+        raw_address  TEXT NOT NULL,
+        display_name TEXT,
+        created_at   REAL NOT NULL
+    );
+    CREATE INDEX idx_epo_source_ko   ON email_participant_occurrences(source_ko_id);
+    CREATE INDEX idx_epo_entity      ON email_participant_occurrences(entity_id);
+    CREATE INDEX idx_epo_entity_role ON email_participant_occurrences(entity_id, role);
+    CREATE INDEX idx_epo_ko_role     ON email_participant_occurrences(source_ko_id, role);
     """
 }

@@ -115,17 +115,16 @@ public actor BondConstructor {
             }
         }
 
-        // 1. affiliated_with — sender Person → sender domain Org.
-        //    We treat the senderID (emailAddress entity) as standing in
-        //    for the Person fact (1:1 in the v1 ontology where Person
-        //    isn't reliably named in headers). Schema-aware retrieval
-        //    can still walk `affiliated_with` by bond name.
+        // 1. affiliated_with — first From sender → sender-domain Org.
+        //    We treat the From emailAddress entity as standing in for
+        //    the Person fact (1:1 in v1; Person naming arrives in v2).
         if let participants = context.emailParticipants,
+           let senderID = participants.fromIDs.first,
            let orgID = participants.senderDomainOrgID {
             bonds.append(.init(
                 bondName: "affiliated_with",
                 fromKind: .entity,
-                fromID: participants.senderID,
+                fromID: senderID,
                 toKind: .entity,
                 toID: orgID
             ))
@@ -142,21 +141,41 @@ public actor BondConstructor {
             switch eventType {
             case .email:
                 if let participants = context.emailParticipants {
-                    bonds.append(.init(
-                        bondName: "sent_by",
-                        fromKind: .event,
-                        fromID: event.id,
-                        toKind: .entity,
-                        toID: participants.senderID
-                    ))
-                    for recipientID in participants.recipientIDs {
-                        bonds.append(.init(
-                            bondName: "received_by",
-                            fromKind: .event,
-                            fromID: event.id,
-                            toKind: .entity,
-                            toID: recipientID
-                        ))
+                    // authored: From authors → event
+                    for id in participants.fromIDs {
+                        bonds.append(.init(bondName: "authored",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
+                    }
+                    // transmitted: Sender agents → event (only when distinct from From)
+                    for id in participants.senderIDs {
+                        bonds.append(.init(bondName: "transmitted",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
+                    }
+                    // sent_to: primary recipients
+                    for id in participants.toIDs {
+                        bonds.append(.init(bondName: "sent_to",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
+                    }
+                    // copied_to: Cc recipients
+                    for id in participants.ccIDs {
+                        bonds.append(.init(bondName: "copied_to",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
+                    }
+                    // blind_copied_to: Bcc recipients (structured ledger only)
+                    for id in participants.bccIDs {
+                        bonds.append(.init(bondName: "blind_copied_to",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
+                    }
+                    // reply_routed_to: Reply-To addresses
+                    for id in participants.replyToIDs {
+                        bonds.append(.init(bondName: "reply_routed_to",
+                            fromKind: .event, fromID: event.id,
+                            toKind: .entity, toID: id))
                     }
                 }
                 for projectID in projectEntityIDs(in: event, factTypes: entityFactTypes) {
