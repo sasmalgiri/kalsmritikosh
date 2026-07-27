@@ -113,8 +113,9 @@ struct WorkflowDefinitionCompilerTests {
         let result = try compiler.compile(workflow(
             step("a", kind: .intake, isEntry: true,
                  transitions: [to("b")]),
-            step("b", kind: .reviewEvidence, loopPolicy: .returnsToStep,
-                 transitions: [to("a", isReturn: true), to("c")]),
+            step("b", kind: .reviewEvidence,
+                 transitions: [to("a", isReturn: true), to("c")],
+                 loopPolicy: .returnsToStep),
             step("c", kind: .closure, isTerminal: true)
         ))
         #expect(result.entryStepID == sid("a"))
@@ -263,8 +264,9 @@ struct WorkflowDefinitionCompilerTests {
             id: "a1", label: "Output", workProductTemplateID: nil, isRequired: true)
         let definition = workflow(
             step("start", kind: .intake,          isEntry: true, transitions: [to("build")]),
-            step("build", kind: .workProductBuild, artifacts: [noTemplateArtifact],
-                 transitions: [to("end")]),
+            step("build", kind: .workProductBuild,
+                 transitions: [to("end")],
+                 artifacts: [noTemplateArtifact]),
             step("end",   kind: .closure,          isTerminal: true)
         )
         #expect(throws: WorkflowDefinitionError.workProductStepMissingTemplate(sid("build"))) {
@@ -301,8 +303,8 @@ struct WorkflowDefinitionCompilerTests {
         let result = try compiler.compile(workflow(
             step("start", kind: .intake, isEntry: true, transitions: [to("close")]),
             step("close", kind: .closure, isTerminal: true,
-                 validations: [blockingValidation],
-                 requirements: [passedRequirement])
+                 requirements: [passedRequirement],
+                 validations: [blockingValidation])
         ))
         #expect(result.terminalStepIDs.contains(sid("close")))
     }
