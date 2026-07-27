@@ -432,7 +432,7 @@ private struct EvidenceSheet: View {
                 } else {
                     List(objects) { ko in
                         NavigationLink {
-                            SourceViewer(url: ko.sourceFile)
+                            SourceViewer(url: ko.sourceFile, koID: ko.id)
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "doc.text")

@@ -41,6 +41,7 @@ public struct EventDetailSheet: View {
     /// v50 human-in-loop: whether this event is currently soft-excluded.
     @State private var isExcluded: Bool = false
     @State private var reviewBusy: Bool = false
+    @State private var sourceAuthorized: Bool = false
 
     public init(
         event: Event,
@@ -172,28 +173,34 @@ public struct EventDetailSheet: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             if let object = sourceObject {
-                let filename = object.sourceFile.lastPathComponent
-                HStack {
-                    Image(systemName: "doc")
-                        .foregroundStyle(.tint)
-                    Text(filename)
-                        .font(.callout.monospaced())
-                        .textSelection(.enabled)
-                    Spacer()
-                    if let url = sourceURL {
-                        Button {
-                            #if canImport(AppKit)
-                            NSWorkspace.shared.activateFileViewerSelecting([url])
-                            #endif
-                        } label: {
-                            Label("Reveal in Finder", systemImage: "arrow.up.right.square")
+                if sourceAuthorized {
+                    let filename = object.sourceFile.lastPathComponent
+                    HStack {
+                        Image(systemName: "doc")
+                            .foregroundStyle(.tint)
+                        Text(filename)
+                            .font(.callout.monospaced())
+                            .textSelection(.enabled)
+                        Spacer()
+                        if let url = sourceURL {
+                            Button {
+                                #if canImport(AppKit)
+                                NSWorkspace.shared.activateFileViewerSelecting([url])
+                                #endif
+                            } label: {
+                                Label("Reveal in Finder", systemImage: "arrow.up.right.square")
+                            }
+                            .buttonStyle(.borderless)
                         }
-                        .buttonStyle(.borderless)
                     }
+                    Text("KO id: \(object.id.uuidString.prefix(8))")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label("Source restricted", systemImage: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text("KO id: \(object.id.uuidString.prefix(8))")
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
             } else {
                 Text("No source KnowledgeObject linked.")
                     .font(.caption)
@@ -378,10 +385,17 @@ public struct EventDetailSheet: View {
         )
 
         let excluded = (try? await appState.events?.reviewStatus(forID: event.id)) == "rejected"
+        let sourceAuth: Bool
+        if let object = obj {
+            sourceAuth = await appState.screenAuthorizer?.authorize(object.id, boundary: .globalOwner) ?? false
+        } else {
+            sourceAuth = true
+        }
 
         await MainActor.run {
             self.sourceObject = obj
             self.sourceURL = url
+            self.sourceAuthorized = sourceAuth
             self.entities = ents
             self.outgoing = out
             self.incoming = inn

@@ -122,7 +122,8 @@ public actor SensitiveRetrievalPolicy {
         var enforcedWorkspaceKOs: Set<UUID>? = nil
 
         if let workspaceRepo = workspaceRepository,
-           !access.scope.isTestSentinel {
+           !access.scope.isTestSentinel,
+           !access.scope.isGlobalOwnerBypass {
 
             let workspaceID = access.scope.workspaceID
 

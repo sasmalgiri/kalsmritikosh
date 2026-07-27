@@ -203,6 +203,8 @@ public final class AppState {
     public private(set) var chunks: ChunksRepository?
     /// OPS-003D — screen-level scope filter; resolves KO/chunk sensitivity for view layers.
     public private(set) var sensitiveScopes: SensitiveScopeRepository?
+    /// OPS-003D.1 — fail-closed screen gate for all view layers, wired once here.
+    public private(set) var screenAuthorizer: ScreenScopeAuthorizer?
     /// Exposed for the retrieval self-eval (recall@k on the user's own data).
     public private(set) var embedder: (any Embedder)?
     public private(set) var entities: EntitiesRepository?
@@ -1721,6 +1723,7 @@ public final class AppState {
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
             self.sensitiveScopes = sensitiveScopesRepo
+            self.screenAuthorizer = ScreenScopeAuthorizer(repository: sensitiveScopesRepo)
             self.derivedObjects = derivedObjectsRepo
             self.evidenceStore = evidenceStoreRepo
             self.factBonds = factBondsRepo

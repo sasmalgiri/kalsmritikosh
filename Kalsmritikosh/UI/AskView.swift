@@ -649,7 +649,7 @@ public struct AskView: View {
             // OPS-003D — production screen scope (not DEBUG-only testUnrestricted).
             // Global Q&A: no workspace restriction, full sensitivity ceiling, privilege hidden.
             let answer = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext(scope: .screen()))
+                                                      access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
 
             // 4) Replace the bubble body with the verified, cited answer.
             let assistantBody = renderAnswer(answer)

@@ -143,19 +143,22 @@ public nonisolated struct SensitiveScope: Sendable, Equatable {
         workspaceID == UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
     }
 
-    /// OPS-003D — production screen-purpose scope for global (non-workspace) view layers.
-    /// Uses the workspace-unrestricted sentinel so HybridRetriever skips workspace-membership
-    /// enforcement — appropriate for the owner's global Q&A and source-list screens.
-    /// `permitsPrivilegedMaterial: false` by default: privileged items are hidden from
-    /// unprotected browse/search views; pass `true` for full-access Q&A contexts.
-    public nonisolated static func screen(
-        permitsPrivilegedMaterial: Bool = false
-    ) -> SensitiveScope {
+    /// True when this scope was created by `globalOwnerRetrieval()`.
+    /// `SensitiveRetrievalPolicy` skips workspace-membership enforcement for this scope so
+    /// the owner's global Q&A can query across all ingested content.
+    var isGlobalOwnerBypass: Bool {
+        workspaceID == UUID(uuidString: "00000002-0000-0000-0000-000000000000")!
+    }
+
+    /// OPS-003D.1 — retrieval context for global (non-workspace) owner Q&A.
+    /// Distinct from the screen-purpose sentinel (00000001-...) used by ScreenScopeAuthorizer.
+    /// SensitiveRetrievalPolicy skips workspace enforcement when `isGlobalOwnerBypass` is true.
+    public nonisolated static func globalOwnerRetrieval() -> SensitiveScope {
         SensitiveScope(
-            workspaceID: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!,
+            workspaceID: UUID(uuidString: "00000002-0000-0000-0000-000000000000")!,
             maximumSensitivity: .restricted,
-            permitsPrivilegedMaterial: permitsPrivilegedMaterial,
-            purpose: .screen)
+            permitsPrivilegedMaterial: false,
+            purpose: .retrieval)
     }
 }
 

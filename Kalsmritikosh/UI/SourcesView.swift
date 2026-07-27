@@ -240,28 +240,8 @@ public struct SourcesView: View {
         guard let files = appState.files, let objects = appState.objects else { return }
         fileCount = (try? await files.count()) ?? 0
         let all = (try? await objects.recent(limit: 25)) ?? []
-        // OPS-003D: filter KOs blocked by screen scope. Fail-open when scope repo unavailable.
-        recents = await screenFilter(all, scopeRepo: appState.sensitiveScopes)
+        recents = await appState.screenAuthorizer?.filterRows(all, boundary: .globalOwner) ?? []
         readiness = await appState.ingestProgress()   // UX-002 / ING-007
-    }
-
-    /// Remove KOs blocked by the global screen scope.
-    /// Returns the original list unchanged when `scopeRepo` is nil (fail-open).
-    private func screenFilter(_ rows: [KnowledgeObjectSummaryRow],
-                              scopeRepo: SensitiveScopeRepository?) async -> [KnowledgeObjectSummaryRow] {
-        guard let repo = scopeRepo, !rows.isEmpty else { return rows }
-        let koIDs = rows.map(\.id)
-        let targets = koIDs.map { SensitiveScopeTarget(kind: .knowledgeObject, id: $0) }
-        guard let resolutions = try? await repo.batchResolution(targets) else { return rows }
-        let scope = SensitiveScope.screen()
-        return rows.filter { row in
-            let t = SensitiveScopeTarget(kind: .knowledgeObject, id: row.id)
-            switch resolutions[t] {
-            case .resolved(let label): return scope.permits(label)
-            case .brokenLineage:       return false
-            case nil:                  return scope.permits(ProtectionLabel(sensitivity: .internalLevel, privileged: false))
-            }
-        }
     }
 
     private func runIngestion() async {

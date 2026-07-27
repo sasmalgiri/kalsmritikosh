@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 939,
-  "baselineCommit": "3ac512d3449e474bba9e6051be207028312fef83",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 939 = 938 + 1 added OPS-003C.2.1 (missingResolutionFailClosedDeniesClaim). Baseline SHA pinned to the exact hosted-green implementation commit (not HEAD). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "minimumExecutedTests": 945,
+  "baselineCommit": "2b4b3e10a72a561b8ab92e20df8824949465ddf9",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 945 = 939 - 4 (removed mirrored-logic ScreenScopeEnforcementTests) + 10 (new real-authorizer ScreenScopeEnforcementTests, OPS-003D.1). Baseline SHA is the OPS-003C.2.1 hosted-green commit (run 30230056889, total=939). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }

@@ -9,6 +9,11 @@
 //  view scrolls to + highlights the cited passage so the user can
 //  verify evidence without leaving the app.
 //
+//  OPS-003D.1: pass koID to enable the fail-closed screen-scope gate.
+//  Authorization is checked once per koID change; loading shows a
+//  spinner, denied shows a locked placeholder — no content renders
+//  before the check completes.
+//
 
 import SwiftUI
 
@@ -22,28 +27,74 @@ import PDFKit
 public struct SourceViewer: View {
     let url: URL
     let range: SourceRange?
+    let koID: UUID?
 
-    public init(url: URL, range: SourceRange? = nil) {
+    @Environment(AppState.self) private var appState
+    @State private var authorized: Bool? = nil
+
+    public init(url: URL, range: SourceRange? = nil, koID: UUID? = nil) {
         self.url = url
         self.range = range
+        self.koID = koID
     }
 
     public var body: some View {
         Group {
-            if url.pathExtension.lowercased() == "pdf" {
-                pdfBody
-            } else if isPlainTextLike {
-                textBody
+            if let _ = koID {
+                switch authorized {
+                case false:
+                    blockedPlaceholder
+                case nil:
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                default:
+                    contentGroup
+                }
             } else {
-                fallbackBody
+                contentGroup
             }
         }
         .frame(minWidth: 520, minHeight: 360)
+        .task(id: koID) {
+            guard let id = koID else { return }
+            authorized = await appState.screenAuthorizer?.authorize(id, boundary: .globalOwner)
+        }
+    }
+
+    // MARK: - Content group (only shown when authorized)
+
+    @ViewBuilder
+    private var contentGroup: some View {
+        if url.pathExtension.lowercased() == "pdf" {
+            pdfBody
+        } else if isPlainTextLike {
+            textBody
+        } else {
+            fallbackBody
+        }
     }
 
     private var isPlainTextLike: Bool {
         let ext = url.pathExtension.lowercased()
         return ["txt", "md", "markdown", "csv", "log", "json", "xml", "html", "eml"].contains(ext)
+    }
+
+    // MARK: - Blocked placeholder
+
+    private var blockedPlaceholder: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Source restricted")
+                .font(.headline)
+            Text("This content is not available at the current access level.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - PDF mode
@@ -268,9 +319,30 @@ private struct TextInlineView: NSViewRepresentable {
 
 public struct EvidenceViewer: View {
     let citation: VerifiedAnswer.Citation
+    @Environment(AppState.self) private var appState
+    @State private var authorized: Bool? = nil
+
     public init(citation: VerifiedAnswer.Citation) { self.citation = citation }
 
     public var body: some View {
+        Group {
+            switch authorized {
+            case false:
+                restrictedBody
+            case nil:
+                ProgressView()
+                    .padding()
+                    .frame(minWidth: 460, minHeight: 220)
+            default:
+                contentBody
+            }
+        }
+        .task(id: citation.objectID) {
+            authorized = await appState.screenAuthorizer?.authorize(citation.objectID, boundary: .globalOwner)
+        }
+    }
+
+    private var contentBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "quote.bubble")
@@ -283,6 +355,19 @@ public struct EvidenceViewer: View {
                 .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 8))
             Text("Source KO: \(citation.objectID.uuidString.prefix(8))")
                 .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .frame(minWidth: 460, minHeight: 220)
+    }
+
+    private var restrictedBody: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Evidence restricted")
+                .font(.headline)
                 .foregroundStyle(.secondary)
         }
         .padding()
