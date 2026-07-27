@@ -6,19 +6,25 @@
 # SensitiveScopeMutationService so that sensitiveScopeRevision increments
 # automatically and open viewers revalidate in real time.
 #
+# Uses syntax-resilient matching: '\.(assign|revoke)[[:space:]]*\(' catches both
+# same-line and multiline Swift call forms, i.e. it is not defeated by
+#     repository.assign(
+#         target: target,     ← argument on the next line
+#         ...
+#     )
+#
 # Exclusions:
 #   - Core/Security/SensitiveScopeMutationService.swift  (the allowed caller)
 #   - Storage/Repositories/SensitiveScopeRepository.swift (the implementation)
 #
-# Test files live under KalsmritikoshTests/ which is not under Kalsmritikosh/,
+# Test files live under KalsmritikoshTests/ which is outside Kalsmritikosh/,
 # so the grep scope automatically excludes them.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
-VIOLATIONS=$(grep -rn \
+VIOLATIONS=$(grep -rnE \
     --include="*.swift" \
-    -e "\.assign(target:" \
-    -e "\.revoke(assignmentID:" \
+    '\.(assign|revoke)[[:space:]]*\(' \
     "$ROOT/Kalsmritikosh/" \
     | grep -v "Core/Security/SensitiveScopeMutationService\.swift" \
     | grep -v "Storage/Repositories/SensitiveScopeRepository\.swift" \

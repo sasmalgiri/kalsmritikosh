@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 943,
+  "minimumExecutedTests": 957,
   "baselineCommit": "fa7f2d245e6edab48c548e1023917e3718e84131",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 943 = 945 (OPS-003D.1.1) - 10 (OPS-003D.1.1 ScreenScopeEnforcementTests removed) + 8 (OPS-003D.1.2 ScreenScopeEnforcementTests added) = 943. Baseline SHA is the OPS-003D.1.1 hosted-green commit (run 30257431207, total=945). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 957 = 943 (OPS-003D.1.2 floor) - 8 (OPS-003D.1.2 tests replaced) + 10 (OPS-003D.1.1 tests restored) + 8 (OPS-003D.1.2 tests kept) + 4 (policyChanges integration tests added) = 957. Tests are cumulative — security corrections are never exchanged. Baseline SHA is the OPS-003D.1.1 hosted-green commit (run 30257431207, total=945). New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }
