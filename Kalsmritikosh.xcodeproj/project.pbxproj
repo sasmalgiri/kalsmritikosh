@@ -17,6 +17,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B401769C3017B6870076A17B /* WorkflowDefinitionCompiler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowDefinitionCompiler.swift; sourceTree = "<group>"; };
 		B47CBE663010B2DF0079FE03 /* KalsmritikoshTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KalsmritikoshTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B4B18B3E2FD0E4B300840C82 /* Kalsmritikosh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kalsmritikosh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -65,12 +66,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B401769B3017B6680076A17B /* Workflow */ = {
+			isa = PBXGroup;
+			children = (
+				B401769C3017B6870076A17B /* WorkflowDefinitionCompiler.swift */,
+			);
+			path = Workflow;
+			sourceTree = "<group>";
+		};
 		B4B18B352FD0E4B300840C82 = {
 			isa = PBXGroup;
 			children = (
 				B4B18B402FD0E4B300840C82 /* Kalsmritikosh */,
 				B47CBE673010B2DF0079FE03 /* KalsmritikoshTests */,
 				B4B18B3F2FD0E4B300840C82 /* Products */,
+				B401769B3017B6680076A17B /* Workflow */,
 			);
 			sourceTree = "<group>";
 		};
