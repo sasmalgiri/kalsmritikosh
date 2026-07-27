@@ -139,8 +139,14 @@ public nonisolated struct SensitiveScope: Sendable, Equatable {
     /// True when this scope was created by `SensitiveAccessContext.testUnrestricted()`
     /// and workspace membership enforcement should be skipped. Internal use only —
     /// never expose this to production code paths.
+    /// OPS-003D.1.1: only recognized in DEBUG builds so the test bypass is not
+    /// available to a production binary.
     var isTestSentinel: Bool {
-        workspaceID == UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        #if DEBUG
+        return workspaceID == UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        #else
+        return false
+        #endif
     }
 
     /// True when this scope was created by `globalOwnerRetrieval()`.

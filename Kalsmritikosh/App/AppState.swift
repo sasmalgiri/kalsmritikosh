@@ -205,6 +205,17 @@ public final class AppState {
     public private(set) var sensitiveScopes: SensitiveScopeRepository?
     /// OPS-003D.1 — fail-closed screen gate for all view layers, wired once here.
     public private(set) var screenAuthorizer: ScreenScopeAuthorizer?
+    /// OPS-003D.1.1 — bumped whenever a sensitive-scope assignment is created or revoked.
+    /// SourceViewer and EvidenceViewer include this in their .task(id:) identity so open
+    /// views revalidate immediately when policy changes.
+    public private(set) var sensitiveScopeRevision: Int = 0
+
+    /// Call from any code that creates or revokes a sensitive-scope assignment so that
+    /// SourceViewer and EvidenceViewer re-check authorization in their open .task(id:).
+    public func notifyScopePolicyChanged() {
+        sensitiveScopeRevision += 1
+    }
+
     /// Exposed for the retrieval self-eval (recall@k on the user's own data).
     public private(set) var embedder: (any Embedder)?
     public private(set) var entities: EntitiesRepository?

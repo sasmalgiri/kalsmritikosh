@@ -24,40 +24,47 @@ import AppKit
 import PDFKit
 #endif
 
+/// Identifies a single authorization task for `.task(id:)`.
+/// Combining the target UUID with the policy revision means SwiftUI re-runs the
+/// authorization task whenever a scope assignment is created or revoked while the
+/// view is open — open viewers revalidate in real time.
+private struct AuthorizationTaskID: Equatable, Hashable {
+    let targetID: UUID
+    let policyRevision: Int
+}
+
 public struct SourceViewer: View {
     let url: URL
+    /// KO identity is mandatory — every source view requires an authorization check
+    /// before any content is rendered. OPS-003D.1.1: removed the optional bypass path.
+    let koID: UUID
     let range: SourceRange?
-    let koID: UUID?
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
 
-    public init(url: URL, range: SourceRange? = nil, koID: UUID? = nil) {
+    public init(url: URL, koID: UUID, range: SourceRange? = nil) {
         self.url = url
-        self.range = range
         self.koID = koID
+        self.range = range
     }
 
     public var body: some View {
         Group {
-            if let _ = koID {
-                switch authorized {
-                case false:
-                    blockedPlaceholder
-                case nil:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                default:
-                    contentGroup
-                }
-            } else {
+            switch authorized {
+            case false:
+                blockedPlaceholder
+            case nil:
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            default:
                 contentGroup
             }
         }
         .frame(minWidth: 520, minHeight: 360)
-        .task(id: koID) {
-            guard let id = koID else { return }
-            authorized = await appState.screenAuthorizer?.authorize(id, boundary: .globalOwner)
+        .task(id: AuthorizationTaskID(targetID: koID,
+                                      policyRevision: appState.sensitiveScopeRevision)) {
+            authorized = await appState.screenAuthorizer?.authorize(koID, boundary: .globalOwner)
         }
     }
 
@@ -337,7 +344,8 @@ public struct EvidenceViewer: View {
                 contentBody
             }
         }
-        .task(id: citation.objectID) {
+        .task(id: AuthorizationTaskID(targetID: citation.objectID,
+                                      policyRevision: appState.sensitiveScopeRevision)) {
             authorized = await appState.screenAuthorizer?.authorize(citation.objectID, boundary: .globalOwner)
         }
     }

@@ -38,6 +38,9 @@ public struct EventDetailSheet: View {
     @State private var assertions: [Assertion] = []
     @State private var versionCount: Int = 0
     @State private var loading: Bool = true
+    /// OPS-003D.1.1 — event-level authorization check runs before any load.
+    /// nil = pending, false = denied (restricted placeholder shown), true = permitted.
+    @State private var eventAuthorized: Bool? = nil
     /// v50 human-in-loop: whether this event is currently soft-excluded.
     @State private var isExcluded: Bool = false
     @State private var reviewBusy: Bool = false
@@ -57,7 +60,9 @@ public struct EventDetailSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             Divider()
-            if loading {
+            if eventAuthorized == false {
+                restrictedEventPlaceholder
+            } else if loading {
                 HStack {
                     ProgressView().controlSize(.small)
                     Text("Loading event context…")
@@ -80,7 +85,35 @@ public struct EventDetailSheet: View {
         }
         .padding(20)
         .frame(width: 640)
-        .task { await load() }
+        .task {
+            // OPS-003D.1.1 — authorize the event itself BEFORE loading any context.
+            // Denied → restricted placeholder is shown; no repositories are touched.
+            let target = SensitiveScopeTarget(kind: .event, id: event.id)
+            let allowed = await appState.screenAuthorizer?.authorize(
+                target: target, boundary: .globalOwner) ?? false
+            guard allowed else {
+                eventAuthorized = false
+                return
+            }
+            eventAuthorized = true
+            await load()
+        }
+    }
+
+    private var restrictedEventPlaceholder: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "lock.fill")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Event restricted")
+                .font(.headline)
+            Text("This event is not available at the current access level.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, minHeight: 360)
     }
 
     // MARK: - Header

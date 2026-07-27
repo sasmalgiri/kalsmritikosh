@@ -8,16 +8,22 @@
 //  Internal sentinel UUID 00000001-... is distinct from the test sentinel
 //  (00000000-...) and the global-owner retrieval bypass (00000002-...).
 //
+//  OPS-003D.1.1 changes:
+//  - Removed .workspace(UUID) from ScreenAccessBoundary (unimplemented membership
+//    enforcement removed rather than left as a false guarantee).
+//  - authorize(target:boundary:) generic form added; old authorize(_:boundary:) is a
+//    convenience wrapper calling the generic form.
+//
 
 import Foundation
 import OSLog
 
-/// Determines how a screen-level filter should bound its subject set.
+/// Determines the boundary for a screen-level filter.
+/// Only `.globalOwner` is available; a workspace-scoped boundary requires workspace
+/// membership enforcement that is not yet implemented.
 public enum ScreenAccessBoundary: Sendable {
     /// The global owner view — all KOs are in scope; only sensitivity is checked.
     case globalOwner
-    /// A workspace-scoped screen — only KOs belonging to this workspace.
-    case workspace(UUID)
 }
 
 /// Fail-closed screen-level scope gate for view layers.
@@ -51,7 +57,10 @@ public actor ScreenScopeAuthorizer {
             return []
         }
         let scope = makeScope(for: boundary)
-        let permitted = Set(koIDs.filter { check($0, resolutions: resolutions, scope: scope) })
+        let permitted = Set(koIDs.filter {
+            check(SensitiveScopeTarget(kind: .knowledgeObject, id: $0),
+                  resolutions: resolutions, scope: scope)
+        })
         return chunks.filter { permitted.contains($0.objectID) }
     }
 
@@ -69,14 +78,19 @@ public actor ScreenScopeAuthorizer {
             return []
         }
         let scope = makeScope(for: boundary)
-        return rows.filter { check($0.id, resolutions: resolutions, scope: scope) }
+        return rows.filter {
+            check(SensitiveScopeTarget(kind: .knowledgeObject, id: $0.id),
+                  resolutions: resolutions, scope: scope)
+        }
     }
+
+    // MARK: - Authorize (generic — accepts any SensitiveScopeTarget kind)
 
     /// Returns `false` when the repository is nil, the call throws, the resolution
     /// is brokenLineage, or the target key is absent from the batch result.
-    public func authorize(_ koID: UUID, boundary: ScreenAccessBoundary) async -> Bool {
+    public func authorize(target: SensitiveScopeTarget,
+                          boundary: ScreenAccessBoundary) async -> Bool {
         guard let repo = repository else { return false }
-        let target = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
         let resolutions: [SensitiveScopeTarget: ProtectionResolution]
         do {
             resolutions = try await repo.batchResolution([target])
@@ -86,7 +100,13 @@ public actor ScreenScopeAuthorizer {
             return false
         }
         let scope = makeScope(for: boundary)
-        return check(koID, resolutions: resolutions, scope: scope)
+        return check(target, resolutions: resolutions, scope: scope)
+    }
+
+    /// Convenience wrapper for KnowledgeObject targets.
+    public func authorize(_ koID: UUID, boundary: ScreenAccessBoundary) async -> Bool {
+        await authorize(target: SensitiveScopeTarget(kind: .knowledgeObject, id: koID),
+                        boundary: boundary)
     }
 
     // MARK: - Helpers
@@ -94,8 +114,7 @@ public actor ScreenScopeAuthorizer {
     private func makeScope(for boundary: ScreenAccessBoundary) -> SensitiveScope {
         let wsID: UUID
         switch boundary {
-        case .globalOwner:       wsID = Self.screenSentinel
-        case .workspace(let id): wsID = id
+        case .globalOwner: wsID = Self.screenSentinel
         }
         return SensitiveScope(
             workspaceID: wsID,
@@ -104,11 +123,10 @@ public actor ScreenScopeAuthorizer {
             purpose: .screen)
     }
 
-    private func check(_ koID: UUID,
+    private func check(_ target: SensitiveScopeTarget,
                        resolutions: [SensitiveScopeTarget: ProtectionResolution],
                        scope: SensitiveScope) -> Bool {
-        let t = SensitiveScopeTarget(kind: .knowledgeObject, id: koID)
-        switch resolutions[t] {
+        switch resolutions[target] {
         case .resolved(let label): return scope.permits(label)
         case .brokenLineage:       return false
         case nil:                  return false
