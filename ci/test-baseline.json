@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 1414,
-  "baselineCommit": "94ba85d",
-  "note": "Floor, not an equality requirement. 1414 = 1292 (PJE-005 floor) + 122 (PJE-006A: WorkflowStepExecutionTypes 11 + PayloadCodec 9 + RequirementFacts 8 + ExecutorProtocol 6 + ExecutorRegistry 11 + IntakeStepExecutor 10 + ScopeStepExecutor 8 + BrainstormStepExecutor 8 + FormStepExecutor 11 + TableStepExecutor 9 + MatrixStepExecutor 8 + ExecutionEngine 6). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "minimumExecutedTests": 1398,
+  "baselineCommit": "10ba703",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1398 = 1292 (PJE-005 floor) + 106 (PJE-006A: WorkflowStepExecutionEngineTests 6 + WorkflowStepExecutionTypesTests 11 + WorkflowStepExecutorProtocolTests 6 + WorkflowStepExecutorRegistryTests 11 + WorkflowStepPayloadCodecTests 9 + WorkflowStepRequirementFactsTests 9 + IntakeStepExecutorTests 10 + ScopeStepExecutorTests 8 + BrainstormStepExecutorTests 8 + FormStepExecutorTests 11 + TableStepExecutorTests 9 + MatrixStepExecutorTests 8). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }
