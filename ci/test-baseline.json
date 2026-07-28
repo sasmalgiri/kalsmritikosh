@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 1486,
-  "baselineCommit": "a10480f",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1486 = 1471 (PJE-006B floor) + 15 (PJE-006B.1: WorkflowStepStateHashContractTests 13 + WorkflowRunMigrationTests v76 additions 2). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit stays pinned to the PJE-006B hosted-green SHA (a10480f) until the PJE-006B.1 CI-green evidence commit."
+  "baselineCommit": "9b7eb34",
+  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1486 = 1471 (PJE-006B floor) + 15 (PJE-006B.1: WorkflowStepStateHashContractTests 13 + WorkflowRunMigrationTests v76 additions 2). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit = 9b7eb34 (PJE-006B.1 hosted-green SHA, CI run 30396876451, all 6 jobs green, 1486 executed / 1484 passed / 2 skipped / 0 failed)."
 }
