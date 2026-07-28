@@ -21,7 +21,12 @@ struct ExecutorTestRig {
 func makeExecutorTestRig(
     kind: WorkflowStepKind,
     reqs: [PersonaWorkflowRequirement] = [],
-    suffix: String = ""
+    suffix: String = "",
+    transitionLabels: [String] = ["next"],
+    decisionBranches: [String] = [],
+    approverRoles: [String] = [],
+    artifacts: [PersonaWorkflowArtifactDefinition] = [],
+    workProducts: [PersonaWorkProductDefinition] = []
 ) throws -> ExecutorTestRig {
     let sfx = suffix.isEmpty ? kind.rawValue : "\(kind.rawValue).\(suffix)"
     let entryID = StepDefinitionID(rawValue: "step.entry.\(sfx)")
@@ -29,8 +34,13 @@ func makeExecutorTestRig(
 
     let entry = PersonaWorkflowStepDefinition(
         id: entryID, kind: kind, label: "Entry", isEntry: true,
-        transitions: [WorkflowTransitionDefinition(label: "next", targetStepID: doneID)],
-        requirements: reqs)
+        transitions: transitionLabels.map {
+            WorkflowTransitionDefinition(label: $0, targetStepID: doneID)
+        },
+        requirements: reqs,
+        artifacts: artifacts,
+        decisionBranches: decisionBranches,
+        approverRoles: approverRoles)
     let done = PersonaWorkflowStepDefinition(
         id: doneID, kind: .closure, label: "Done", isTerminal: true)
 
@@ -51,7 +61,8 @@ func makeExecutorTestRig(
         terminologyKey: RegistryKey(id: termID, version: 1),
         terminology: term,
         objectSchemaKeys: [], objectSchemas: [],
-        workProductKeys: [], workProducts: [],
+        workProductKeys: workProducts.map { RegistryKey(id: $0.id, version: $0.version) },
+        workProducts: workProducts,
         validatorKeys: [], validators: [],
         automationKeys: [], automations: [])
     let contract = try WorkflowRunContractSnapshot(from: pkg, selectedWorkflowID: wfID)
@@ -85,7 +96,11 @@ func makeExecutionCtx(
     rig: ExecutorTestRig,
     stateJSON: String,
     priorStepStates: [(kind: WorkflowStepKind, stateJSON: String)] = [],
-    workspaceID: UUID = UUID()
+    workspaceID: UUID = UUID(),
+    actor: WorkflowLifecycleActor = .system,
+    decisions: [WorkflowDecision] = [],
+    artifacts: [WorkflowArtifact] = [],
+    attentionItems: [WorkflowAttentionItem] = []
 ) throws -> WorkflowStepExecutionContext {
     let t0       = Date(timeIntervalSince1970: 1_753_000_000)
     let runID    = UUID()
@@ -132,14 +147,25 @@ func makeExecutionCtx(
             enteredAt: t0, updatedAt: t0, completedAt: t0)
     }
 
+    // Decisions supplied by the caller are re-bound to THIS step run's identity so
+    // executor lookups by stepRunID find them.
+    let boundDecisions = decisions.map { d in
+        WorkflowDecision(
+            id: d.id, workflowRunID: runID, stepRunID: stepRunID,
+            decisionKey: d.decisionKey, kind: d.kind, selectedOption: d.selectedOption,
+            rationale: d.rationale, actorKind: d.actorKind, actorIdentifier: d.actorIdentifier,
+            supersedesDecisionID: d.supersedesDecisionID,
+            metadataJSON: d.metadataJSON, decidedAt: d.decidedAt)
+    }
+
     let aggregate = ReopenedWorkflowRun(
         run: run, contract: rig.contract,
-        stepRuns: prior + [stepRun], decisions: [],
-        artifacts: [], checkpoints: [], attentionItems: [], events: [])
+        stepRuns: prior + [stepRun], decisions: boundDecisions,
+        artifacts: artifacts, checkpoints: [], attentionItems: attentionItems, events: [])
 
     return try WorkflowStepExecutionContext(
         aggregate: aggregate, workflow: rig.validated,
-        step: step, stepRun: stepRun, actor: .system, executedAt: t0,
+        step: step, stepRun: stepRun, actor: actor, executedAt: t0,
         executorID: executor.executorID, executorVersion: executor.executorVersion)
 }
 

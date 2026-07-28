@@ -18,9 +18,9 @@
 //  Requirement kinds evaluated via the step-state requirement-facts adapter:
 //    formFieldCompleted    — facts produced by FormStepExecutor (PJE-006A)
 //    evidenceReviewed      — facts produced by ReviewEvidenceStepExecutor (PJE-006B)
+//    methodResultPresent   — facts produced by MethodStepExecutor (PJE-006C)
 //
-//  Requirement kinds still deferred:
-//    methodResultPresent   — deferred to the Method Engine (Stage 4)
+//  No requirement kind remains deferred because of Stage 3 executor absence.
 //
 
 import Foundation
@@ -252,7 +252,7 @@ public actor WorkflowRequirementsEngine {
         case .validationPassed:
             return evaluateValidationPassed(req, validationOutcomes: validationOutcomes)
         case .methodResultPresent:
-            return .skipped(requirementID: req.id, reason: "Method result check requires step executor context")
+            return await evaluateMethodResultPresent(req, aggregate: aggregate)
         }
     }
 
@@ -284,6 +284,34 @@ public actor WorkflowRequirementsEngine {
         }
         return .failed(requirementID: req.id, label: req.label, isBlocking: req.isBlocking,
                        detail: fact.detail ?? req.detail ?? "Selected evidence not fully reviewed")
+    }
+
+    /// PJE-006C: `.methodResultPresent` is evaluated from the requirement facts that
+    /// MethodStepExecutor embeds in the current step run's state envelope — the same
+    /// adapter path as `.formFieldCompleted` and `.evidenceReviewed`.
+    private func evaluateMethodResultPresent(
+        _ req: PersonaWorkflowRequirement,
+        aggregate: ReopenedWorkflowRun
+    ) async -> WorkflowRequirementOutcome {
+        guard let adapter = requirementFactsAdapter else {
+            return .skipped(requirementID: req.id,
+                            reason: "Method result evaluation requires step executor context (no adapter)")
+        }
+        guard
+            let stepRunID = aggregate.run.currentStepRunID,
+            let stepRun = aggregate.stepRuns.first(where: { $0.id == stepRunID })
+        else {
+            return .skipped(requirementID: req.id, reason: "No active step run")
+        }
+        let fact = await adapter.factForRequirement(req.id, in: stepRun)
+        guard let fact = fact else {
+            return .skipped(requirementID: req.id, reason: "No requirement fact found for '\(req.id)'")
+        }
+        if fact.isSatisfied {
+            return .satisfied(requirementID: req.id)
+        }
+        return .failed(requirementID: req.id, label: req.label, isBlocking: req.isBlocking,
+                       detail: fact.detail ?? req.detail ?? "No method result attached")
     }
 
     private func evaluateFormFieldCompleted(

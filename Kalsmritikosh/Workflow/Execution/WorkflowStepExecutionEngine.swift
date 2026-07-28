@@ -22,15 +22,18 @@ public actor WorkflowStepExecutionEngine {
     private let registry: WorkflowStepExecutorRegistry
     private let lifecycleEngine: WorkflowLifecycleEngine
     private let repository: WorkflowRunRepository
+    private let workProductCoordinator: WorkflowWorkProductBuildCoordinator?
 
     public init(
         registry: WorkflowStepExecutorRegistry,
         lifecycleEngine: WorkflowLifecycleEngine,
-        repository: WorkflowRunRepository
+        repository: WorkflowRunRepository,
+        workProductCoordinator: WorkflowWorkProductBuildCoordinator? = nil
     ) {
         self.registry = registry
         self.lifecycleEngine = lifecycleEngine
         self.repository = repository
+        self.workProductCoordinator = workProductCoordinator
     }
 
     // MARK: - Start a workflow run
@@ -199,25 +202,168 @@ public actor WorkflowStepExecutionEngine {
                 now: now
             )
 
-        case .completeTerminal:
-            guard let firstTransition = currentStep.transitions.first else {
-                throw WorkflowStepExecutionError.completionNotReady(
-                    kind: currentStep.kind, reason: "No terminal transition declared"
-                )
-            }
-            return try await routeAdvance(
+        case .chooseBranch(let branch, let rationale):
+            return try await routeChooseBranch(
                 aggregate: aggregate,
                 validated: validated,
                 currentStep: currentStep,
-                currentStepRun: currentStepRun,
-                selector: .label(firstTransition.label),
+                branch: branch,
+                rationale: rationale,
+                stateJSON: result.stateJSON,
+                outputJSON: result.outputJSON,
+                actor: actor,
+                now: now
+            )
+
+        case .requestHumanDecision, .requestHumanApproval:
+            // Persist the executor's state FIRST — a failure here prevents the
+            // lifecycle transition, so no waiting run ever has unsaved state.
+            let saved = try await saveCurrentProgress(
+                aggregate: aggregate,
+                stepRun: currentStepRun,
                 stateJSON: result.stateJSON,
                 stateSHA256: canonicalHash,
                 outputJSON: result.outputJSON,
                 actor: actor,
                 now: now
             )
+            return try await lifecycleEngine.requestHumanDecision(
+                runID: saved.run.id, actor: actor, now: now)
+
+        case .buildWorkProduct(let request):
+            // The engine persists nothing itself here — the coordinator's single
+            // SAVEPOINT owns the whole build. A missing coordinator fails closed.
+            guard let coordinator = workProductCoordinator else {
+                throw WorkflowStepExecutionError.unsupportedOperation(kind: currentStep.kind)
+            }
+            return try await coordinator.build(
+                runID: aggregate.run.id, request: request, actor: actor, now: now)
+
+        case .completeTerminal:
+            // Gated PJE-004 terminal completion — never bypasses PJE-005.
+            return try await lifecycleEngine.complete(
+                runID: aggregate.run.id,
+                completion: WorkflowStepCompletionPayload(
+                    stateJSON: result.stateJSON, outputJSON: result.outputJSON),
+                actor: actor,
+                now: now
+            )
         }
+    }
+
+    // MARK: - Human decision / approval submission (PJE-006C)
+
+    /// Record an identified human's decision on the current decision step.
+    /// The run must be waitingForHuman; the option must be a frozen decision branch.
+    /// Two-phase and relaunch-safe: the decision is persisted here; a later
+    /// applyRecordedDecision command follows the persisted branch deterministically.
+    @discardableResult
+    public func submitHumanDecision(
+        runID: UUID,
+        decisionKey: String,
+        selectedOption: String,
+        rationale: String?,
+        actor: WorkflowLifecycleActor,
+        at now: Date = Date()
+    ) async throws -> ReopenedWorkflowRun {
+        let aggregate = try await repository.fetchRun(runID)
+        let (_, currentStep, currentStepRun) = try resolveCurrentStep(aggregate)
+        guard currentStep.kind == .decision,
+              currentStepRun.executorID == "com.kalsmritikosh.step.decision" else {
+            throw WorkflowStepExecutionError.executorKindMismatch(
+                executor: WorkflowStepExecutorID(rawValue: currentStepRun.executorID ?? "unknown"),
+                expected: .decision, actual: currentStep.kind)
+        }
+        guard aggregate.run.status == .waitingForHuman else {
+            throw WorkflowStepExecutionError.unsupportedOperation(kind: currentStep.kind)
+        }
+        guard currentStep.decisionBranches.contains(selectedOption) else {
+            throw WorkflowStepExecutionError.validationFailed(
+                field: "selectedOption",
+                reason: "Option is not a declared decision branch")
+        }
+        // recordHumanDecision asserts a human actor with a nonblank identifier.
+        return try await lifecycleEngine.recordHumanDecision(
+            runID: runID, decisionKey: decisionKey,
+            selectedOption: selectedOption, rationale: rationale,
+            actor: actor, now: now)
+    }
+
+    /// Record an identified, role-authorized human's approval on the current
+    /// human-approval step. The run must be waitingForHuman; the actor's role
+    /// must appear in the frozen step definition's approverRoles.
+    @discardableResult
+    public func submitHumanApproval(
+        runID: UUID,
+        approved: Bool,
+        rationale: String?,
+        actor: WorkflowLifecycleActor,
+        at now: Date = Date()
+    ) async throws -> ReopenedWorkflowRun {
+        let aggregate = try await repository.fetchRun(runID)
+        let (_, currentStep, currentStepRun) = try resolveCurrentStep(aggregate)
+        guard currentStep.kind == .humanApproval,
+              currentStepRun.executorID == "com.kalsmritikosh.step.human-approval" else {
+            throw WorkflowStepExecutionError.executorKindMismatch(
+                executor: WorkflowStepExecutorID(rawValue: currentStepRun.executorID ?? "unknown"),
+                expected: .humanApproval, actual: currentStep.kind)
+        }
+        guard aggregate.run.status == .waitingForHuman else {
+            throw WorkflowStepExecutionError.unsupportedOperation(kind: currentStep.kind)
+        }
+        // recordHumanApproval asserts human actor + nonblank identifier + nonblank
+        // role that appears in the frozen approverRoles.
+        return try await lifecycleEngine.recordHumanApproval(
+            runID: runID, approved: approved, rationale: rationale,
+            actor: actor, now: now)
+    }
+
+    // MARK: - Private: route chooseBranch
+
+    private func routeChooseBranch(
+        aggregate: ReopenedWorkflowRun,
+        validated: ValidatedWorkflowDefinition,
+        currentStep: PersonaWorkflowStepDefinition,
+        branch: String,
+        rationale: String?,
+        stateJSON: String,
+        outputJSON: String?,
+        actor: WorkflowLifecycleActor,
+        now: Date
+    ) async throws -> ReopenedWorkflowRun {
+        // Resolve the branch's target so the next executor is prepared BEFORE
+        // the lifecycle mutation (terminal targets need no preparation).
+        guard let transition = currentStep.transitions.first(where: { $0.label == branch }) else {
+            throw WorkflowStepExecutionError.completionNotReady(
+                kind: currentStep.kind,
+                reason: "No transition for branch '\(branch)'")
+        }
+        let targetStepID = transition.targetStepID
+        let entryPayload: WorkflowStepEntryPayload
+        if validated.terminalStepIDs.contains(targetStepID) {
+            entryPayload = .empty
+        } else {
+            guard let targetStep = validated.definition.steps.first(where: { $0.id == targetStepID }) else {
+                throw WorkflowStepExecutionError.preparationFailed(
+                    kind: currentStep.kind,
+                    reason: "Branch target step definition not found: \(targetStepID.rawValue)")
+            }
+            entryPayload = try await prepareNextExecutor(
+                targetStep: targetStep,
+                validated: validated,
+                aggregate: aggregate,
+                actor: actor,
+                now: now)
+        }
+        return try await lifecycleEngine.chooseBranch(
+            runID: aggregate.run.id,
+            branch: branch,
+            rationale: rationale,
+            completion: WorkflowStepCompletionPayload(stateJSON: stateJSON, outputJSON: outputJSON),
+            entryPayload: entryPayload,
+            actor: actor,
+            now: now
+        )
     }
 
     // MARK: - Private: save current progress

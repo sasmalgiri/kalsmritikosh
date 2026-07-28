@@ -171,6 +171,8 @@ public nonisolated struct WorkflowStepPreparationResult: Sendable {
 // MARK: - Execution disposition
 
 /// How the executor wants to transition (or not) the workflow state after a command.
+/// Executors REQUEST operations; the engine performs them. Executors never perform
+/// lifecycle or persistence operations themselves.
 public enum WorkflowStepExecutionDisposition: Sendable, Equatable {
     /// Stay on the current step; persist updated state without advancing.
     case remainActive
@@ -178,8 +180,104 @@ public enum WorkflowStepExecutionDisposition: Sendable, Equatable {
     case advance(WorkflowTransitionSelector)
     /// Return to a prior step via the given return transition selector.
     case returnToPriorStep(WorkflowTransitionSelector)
-    /// Complete the workflow; current step's terminal transition is used.
+    /// Follow a declared decision branch (PJE-004 chooseBranch).
+    case chooseBranch(branch: String, rationale: String?)
+    /// Persist executor state, then place the run in waitingForHuman for a decision.
+    case requestHumanDecision
+    /// Persist executor state, then place the run in waitingForHuman for an approval.
+    case requestHumanApproval
+    /// Build a cited work product through the accepted assembly path (coordinator).
+    case buildWorkProduct(WorkflowWorkProductBuildRequest)
+    /// Complete the workflow terminally (gated PJE-004 completion).
     case completeTerminal
+}
+
+// MARK: - Work-product build request (PJE-006C)
+
+/// The executor-issued request to build a work product. Carries frozen-definition
+/// IDs and the caller's SensitiveAccessContext — never composer IDs (composer order
+/// comes from the accepted work-product assembly plan).
+public nonisolated struct WorkflowWorkProductBuildRequest: Codable, Hashable, Sendable {
+    public let artifactDefinitionID: String
+    public let workProductDefinitionID: String
+    public let subjectLabel: String
+    public let corpusSnapshotID: UUID?
+    public let access: SensitiveAccessContext
+
+    public nonisolated init(
+        artifactDefinitionID: String,
+        workProductDefinitionID: String,
+        subjectLabel: String,
+        corpusSnapshotID: UUID?,
+        access: SensitiveAccessContext
+    ) {
+        self.artifactDefinitionID = artifactDefinitionID
+        self.workProductDefinitionID = workProductDefinitionID
+        self.subjectLabel = subjectLabel
+        self.corpusSnapshotID = corpusSnapshotID
+        self.access = access
+    }
+
+    // SensitiveAccessContext/SensitiveScope are not Codable/Hashable — encode the
+    // scope's four fields explicitly so the request round-trips through command JSON.
+    private enum CodingKeys: String, CodingKey {
+        case artifactDefinitionID, workProductDefinitionID, subjectLabel, corpusSnapshotID
+        case scopeWorkspaceID, scopeMaximumSensitivity, scopePermitsPrivileged, scopePurpose
+    }
+
+    public nonisolated init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        artifactDefinitionID = try c.decode(String.self, forKey: .artifactDefinitionID)
+        workProductDefinitionID = try c.decode(String.self, forKey: .workProductDefinitionID)
+        subjectLabel = try c.decode(String.self, forKey: .subjectLabel)
+        corpusSnapshotID = try c.decodeIfPresent(UUID.self, forKey: .corpusSnapshotID)
+        let wsID = try c.decode(UUID.self, forKey: .scopeWorkspaceID)
+        let sensitivityRaw = try c.decode(Int.self, forKey: .scopeMaximumSensitivity)
+        guard let sensitivity = SensitivityLevel(rawValue: sensitivityRaw) else {
+            throw WorkflowStepExecutionError.malformedCommandJSON
+        }
+        let privileged = try c.decode(Bool.self, forKey: .scopePermitsPrivileged)
+        let purposeRaw = try c.decode(String.self, forKey: .scopePurpose)
+        guard let purpose = SensitiveUsePurpose(rawValue: purposeRaw) else {
+            throw WorkflowStepExecutionError.malformedCommandJSON
+        }
+        access = SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: wsID, maximumSensitivity: sensitivity,
+            permitsPrivilegedMaterial: privileged, purpose: purpose))
+    }
+
+    public nonisolated func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(artifactDefinitionID, forKey: .artifactDefinitionID)
+        try c.encode(workProductDefinitionID, forKey: .workProductDefinitionID)
+        try c.encode(subjectLabel, forKey: .subjectLabel)
+        if let corpusSnapshotID = corpusSnapshotID {
+            try c.encode(corpusSnapshotID, forKey: .corpusSnapshotID)
+        }
+        try c.encode(access.scope.workspaceID, forKey: .scopeWorkspaceID)
+        try c.encode(access.scope.maximumSensitivity.rawValue, forKey: .scopeMaximumSensitivity)
+        try c.encode(access.scope.permitsPrivilegedMaterial, forKey: .scopePermitsPrivileged)
+        try c.encode(access.scope.purpose.rawValue, forKey: .scopePurpose)
+    }
+
+    public nonisolated func hash(into hasher: inout Hasher) {
+        hasher.combine(artifactDefinitionID)
+        hasher.combine(workProductDefinitionID)
+        hasher.combine(subjectLabel)
+        hasher.combine(corpusSnapshotID)
+        hasher.combine(access.scope.workspaceID)
+        hasher.combine(access.scope.maximumSensitivity)
+        hasher.combine(access.scope.permitsPrivilegedMaterial)
+        hasher.combine(access.scope.purpose)
+    }
+
+    public nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.artifactDefinitionID == b.artifactDefinitionID
+            && a.workProductDefinitionID == b.workProductDefinitionID
+            && a.subjectLabel == b.subjectLabel
+            && a.corpusSnapshotID == b.corpusSnapshotID
+            && a.access == b.access
+    }
 }
 
 // MARK: - Execution result

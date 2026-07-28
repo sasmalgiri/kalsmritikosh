@@ -866,10 +866,15 @@ public actor WorkflowLifecycleEngine {
 
     // MARK: - Complete
 
+    /// PJE-006C: terminal completion applies the SAME PJE-005 gate as advance and
+    /// chooseBranch — blocking requirement/validation failures and open blocking
+    /// attention items prevent completion, and a durable completion checkpoint is
+    /// created inside the same plan. completeTerminal can never bypass PJE-005.
     @discardableResult
     public func complete(
         runID: UUID,
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
+        scope: SensitiveScope? = nil,
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -877,11 +882,43 @@ public actor WorkflowLifecycleEngine {
         try stateMachine.assertRunTransitionAllowed(from: aggregate.run.status, action: .complete)
 
         let opDef = try makeOpDef(aggregate)
-        let (_, currentStepRun) = try requireCurrentStep(aggregate, opDef: opDef)
+        let (currentStepDef, currentStepRun) = try requireCurrentStep(aggregate, opDef: opDef)
+
+        // 1–3. Evaluate current-step validations + requirements; throw on blocking failure.
+        var requirementsEval: WorkflowRequirementsEvaluation? = nil
+        if let reqEngine = requirementsEngine {
+            let eval = try await reqEngine.evaluate(
+                stepDefinition: currentStepDef,
+                aggregate: aggregate,
+                scope: scope
+            )
+            if eval.hasBlockingFailure {
+                if let outcome = eval.requirementOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let reqID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingRequirementNotMet(
+                        stepID: currentStepDef.id, requirementID: reqID, label: label)
+                }
+                if let outcome = eval.validationOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let valID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingValidationNotPassed(
+                        stepID: currentStepDef.id, validationID: valID, label: label)
+                }
+            }
+            requirementsEval = eval
+        }
+
+        // 4. Open blocking attention items prevent terminal completion.
+        if let openBlocking = aggregate.attentionItems.first(where: {
+            $0.status == .open && $0.severity == .blocking
+        }) {
+            throw WorkflowLifecycleError.blockingAttentionOpen(
+                itemID: openBlocking.id, title: openBlocking.title)
+        }
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
         let stateHash = try codec.stateSHA256(for: stateJSON)
 
+        // 5–6. Apply the terminal plan with a durable completion checkpoint.
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
                 newStatus: .completed,
@@ -904,13 +941,26 @@ public actor WorkflowLifecycleEngine {
                 completedAt: now
             )],
             decisionToInsert: nil,
-            checkpointReason: nil,
+            checkpointReason: .completion,
             eventType: .runStateChanged,
             actorKind: actor.kind,
             actorIdentifier: actor.identifier
         )
-        return try await repository.applyLifecyclePlan(
+        let result = try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
+
+        // 7. Advisory attention-item updates after successful completion (non-throwing).
+        if let eval = requirementsEval, let reqEngine = requirementsEngine {
+            await reqEngine.applyAttentionItems(
+                evaluation: eval,
+                runID: runID,
+                stepRunID: currentStepRun.id,
+                initialAggregate: result,
+                actor: actor,
+                now: now
+            )
+        }
+        return result
     }
 
     // MARK: - Cancel

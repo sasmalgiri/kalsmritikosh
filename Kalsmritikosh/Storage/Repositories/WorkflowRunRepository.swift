@@ -70,6 +70,137 @@ public actor WorkflowRunRepository {
         return WorkflowStepStateHashSemantics(rawValue: raw)
     }
 
+    // MARK: - Coordinated work-product build (PJE-006C)
+
+    /// Test-only fault points for the atomic work-product build (production passes nil).
+    internal enum WorkProductBuildFaultPoint: Sendable, Equatable {
+        case afterCAS
+        case afterWorkProductInsert
+        case afterArtifactInsert
+        case afterStepStateUpdate
+        case beforeEventInsert
+    }
+
+    /// ONE SAVEPOINT: workflow revision CAS -> current-step ownership check ->
+    /// immutable work-product run (+ children, via the SHARED writer) ->
+    /// workflow artifact link -> step-state update (storedUTF8BytesV1) ->
+    /// one .artifactRecorded event. Any failure rolls back EVERYTHING --
+    /// no orphaned work-product run, no artifact, no state update, no revision, no event.
+    @discardableResult
+    internal func applyWorkProductBuild(
+        workflowRunID: UUID,
+        stepRunID: UUID,
+        expectedRevision: Int,
+        assembled: AssembledWorkProduct,
+        workProductRunID: UUID,
+        artifactID: UUID,
+        artifactDefinitionID: String,
+        subjectLabel: String,
+        corpusSnapshotID: UUID?,
+        newStepStateJSON: String,
+        newStepStateSHA256: String,
+        actor: WorkflowLifecycleActor,
+        at now: Date,
+        fault: (@Sendable (WorkProductBuildFaultPoint) throws -> Void)? = nil
+    ) async throws -> ReopenedWorkflowRun {
+        let eventID = UUID()
+        let sp = "wfr_wpbuild_\(artifactID.uuidString.replacingOccurrences(of: "-", with: ""))"
+
+        try await database.withSavepoint(sp) { db in
+            // 1. Win the workflow revision CAS.
+            try db.exec("""
+                UPDATE workflow_runs
+                   SET revision = revision + 1, updated_at = ?
+                 WHERE id = ? AND revision = ?;
+                """, [.date(now), .uuid(workflowRunID), .integer(Int64(expectedRevision))])
+            let changes = try db.query("SELECT changes();", [])
+            guard Int(changes.first?.int(0) ?? 0) == 1 else {
+                throw WorkflowRunRepositoryError.revisionConflict(workflowRunID, expected: expectedRevision)
+            }
+            let newRevision = expectedRevision + 1
+            try fault?(.afterCAS)
+
+            // 2. Verify current-step ownership.
+            let ownerRows = try db.query(
+                "SELECT current_step_run_id, workspace_id FROM workflow_runs WHERE id = ?;",
+                [.uuid(workflowRunID)])
+            guard let ownerRow = ownerRows.first, let workspaceID = ownerRow.uuid(1) else {
+                throw WorkflowRunRepositoryError.runNotFound(workflowRunID)
+            }
+            guard ownerRow.uuid(0) == stepRunID else {
+                throw WorkflowRunRepositoryError.stepRunNotFound(stepRunID)
+            }
+
+            // 3. Insert the immutable work-product run + children via the SHARED writer.
+            _ = try WorkProductRunPersistenceWriter.insert(
+                assembled: assembled,
+                runID: workProductRunID,
+                workspaceID: workspaceID,
+                subjectLabel: subjectLabel,
+                corpusSnapshotID: corpusSnapshotID,
+                database: db)
+            try fault?(.afterWorkProductInsert)
+
+            // 4. Insert the workflow artifact link (kind .workProductRun).
+            try db.exec("""
+                INSERT INTO workflow_artifacts
+                    (id, run_id, step_run_id, artifact_definition_id, kind, label,
+                     work_product_run_id, target_kind, target_id, reference_uri,
+                     media_type, content_sha256, metadata_json,
+                     supersedes_artifact_id, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(artifactID), .uuid(workflowRunID), .uuid(stepRunID),
+                    .text(artifactDefinitionID),
+                    .text(WorkflowArtifactKind.workProductRun.rawValue),
+                    .text(assembled.workProduct.title),
+                    .uuid(workProductRunID),
+                    .null, .null, .null, .null, .null,
+                    .text("{}"), .null, .date(now)
+                ])
+            try fault?(.afterArtifactInsert)
+
+            // 5. Update current step state under the stored-byte hash contract.
+            let semantics = Self.hashSemantics(
+                stateJSON: newStepStateJSON, stateSHA256: newStepStateSHA256)
+            try db.exec("""
+                UPDATE workflow_step_runs
+                   SET state_json = ?, state_sha256 = ?, state_hash_semantics = ?, updated_at = ?
+                 WHERE id = ? AND run_id = ?;
+                """, [
+                    .text(newStepStateJSON), .text(newStepStateSHA256),
+                    .text(semantics.rawValue), .date(now),
+                    .uuid(stepRunID), .uuid(workflowRunID)
+                ])
+            let stepChanges = try db.query("SELECT changes();", [])
+            guard Int(stepChanges.first?.int(0) ?? 0) == 1 else {
+                throw WorkflowRunRepositoryError.stepRunNotFound(stepRunID)
+            }
+            try fault?(.afterStepStateUpdate)
+            try fault?(.beforeEventInsert)
+
+            // 6. Append exactly one event.
+            let evtSeqRows = try db.query(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
+                [.uuid(workflowRunID)])
+            let evtSeq = Int(evtSeqRows.first?.int(0) ?? 1)
+            try db.exec("""
+                INSERT INTO workflow_run_events
+                    (id, run_id, sequence, run_revision, type, actor_kind,
+                     actor_identifier, payload_json, occurred_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(eventID), .uuid(workflowRunID),
+                    .integer(Int64(evtSeq)), .integer(Int64(newRevision)),
+                    .text(WorkflowRunEventType.artifactRecorded.rawValue),
+                    .text(actor.kind.rawValue), .optionalText(actor.identifier),
+                    .text("{}"), .date(now)
+                ])
+        }
+
+        return try await reopen(workflowRunID)
+    }
+
     // MARK: - Create run
 
     /// Create a new workflow run record, inserting the frozen contract snapshot and first event.

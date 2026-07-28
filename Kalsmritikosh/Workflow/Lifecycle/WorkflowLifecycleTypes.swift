@@ -260,4 +260,6 @@ public enum WorkflowLifecycleError: Error, Equatable, Sendable {
     // PJE-005 requirement and validation gate
     case blockingRequirementNotMet(stepID: StepDefinitionID, requirementID: String, label: String)
     case blockingValidationNotPassed(stepID: StepDefinitionID, validationID: String, label: String)
+    // PJE-006C: terminal completion is blocked by an open blocking attention item.
+    case blockingAttentionOpen(itemID: UUID, title: String)
 }
