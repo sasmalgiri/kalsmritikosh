@@ -15,10 +15,12 @@
 //    artifactGenerated     — required artifacts present on current step run (from aggregate)
 //    validationPassed      — meta: all blocking validations passed (computed during eval)
 //
-//  Requirement kinds deferred (need executor or retrieval context):
-//    evidenceReviewed      — deferred (no review-decision accessor without retrieval context)
-//    formFieldCompleted    — deferred to PJE-006 step executors
-//    methodResultPresent   — deferred to PJE-006 step executors
+//  Requirement kinds evaluated via the step-state requirement-facts adapter:
+//    formFieldCompleted    — facts produced by FormStepExecutor (PJE-006A)
+//    evidenceReviewed      — facts produced by ReviewEvidenceStepExecutor (PJE-006B)
+//
+//  Requirement kinds still deferred:
+//    methodResultPresent   — deferred to the Method Engine (Stage 4)
 //
 
 import Foundation
@@ -238,7 +240,7 @@ public actor WorkflowRequirementsEngine {
         case .evidenceSelected:
             return try await evaluateEvidenceSelected(req, workspaceID: aggregate.run.workspaceID)
         case .evidenceReviewed:
-            return .skipped(requirementID: req.id, reason: "Evidence review check requires retrieval context")
+            return await evaluateEvidenceReviewed(req, aggregate: aggregate)
         case .humanDecisionRecorded:
             return evaluateHumanDecisionRecorded(req, aggregate: aggregate)
         case .sensitiveScopeSatisfied:
@@ -255,6 +257,34 @@ public actor WorkflowRequirementsEngine {
     }
 
     // MARK: - Private: individual requirement evaluators
+
+    /// PJE-006B: `.evidenceReviewed` is evaluated from the requirement facts that
+    /// ReviewEvidenceStepExecutor embeds in the current step run's state envelope —
+    /// the same adapter path as `.formFieldCompleted`.
+    private func evaluateEvidenceReviewed(
+        _ req: PersonaWorkflowRequirement,
+        aggregate: ReopenedWorkflowRun
+    ) async -> WorkflowRequirementOutcome {
+        guard let adapter = requirementFactsAdapter else {
+            return .skipped(requirementID: req.id,
+                            reason: "Evidence review evaluation requires step executor context (no adapter)")
+        }
+        guard
+            let stepRunID = aggregate.run.currentStepRunID,
+            let stepRun = aggregate.stepRuns.first(where: { $0.id == stepRunID })
+        else {
+            return .skipped(requirementID: req.id, reason: "No active step run")
+        }
+        let fact = await adapter.factForRequirement(req.id, in: stepRun)
+        guard let fact = fact else {
+            return .skipped(requirementID: req.id, reason: "No requirement fact found for '\(req.id)'")
+        }
+        if fact.isSatisfied {
+            return .satisfied(requirementID: req.id)
+        }
+        return .failed(requirementID: req.id, label: req.label, isBlocking: req.isBlocking,
+                       detail: fact.detail ?? req.detail ?? "Selected evidence not fully reviewed")
+    }
 
     private func evaluateFormFieldCompleted(
         _ req: PersonaWorkflowRequirement,

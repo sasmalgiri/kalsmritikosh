@@ -83,7 +83,9 @@ func makePreparationCtx(
 func makeExecutionCtx(
     executor: any WorkflowStepExecutor,
     rig: ExecutorTestRig,
-    stateJSON: String
+    stateJSON: String,
+    priorStepStates: [(kind: WorkflowStepKind, stateJSON: String)] = [],
+    workspaceID: UUID = UUID()
 ) throws -> WorkflowStepExecutionContext {
     let t0       = Date(timeIntervalSince1970: 1_753_000_000)
     let runID    = UUID()
@@ -91,7 +93,7 @@ func makeExecutionCtx(
     let step     = rig.entryStep
 
     let run = WorkflowRun(
-        id: runID, workspaceID: UUID(),
+        id: runID, workspaceID: workspaceID,
         applicationDefinitionID: ApplicationDefinitionID(rawValue: "com.pje006a.exec.test"),
         applicationDefinitionVersion: 1,
         workflowDefinitionID: WorkflowDefinitionID(rawValue: "com.pje006a.exec.wf"),
@@ -115,9 +117,24 @@ func makeExecutionCtx(
         outputJSON: nil, stateSHA256: "",
         enteredAt: t0, updatedAt: t0, completedAt: nil)
 
+    // Prior (completed) step runs, e.g. a selectEvidence selection that a
+    // reviewEvidence executor reads from the aggregate.
+    let prior = priorStepStates.enumerated().map { index, entry in
+        WorkflowStepRun(
+            id: UUID(), workflowRunID: runID,
+            stepDefinitionID: StepDefinitionID(rawValue: "step.prior.\(index)"),
+            stepKind: entry.kind,
+            attempt: 1, sequence: index + 1, status: .completed,
+            executorID: "com.kalsmritikosh.step.\(entry.kind.rawValue)",
+            executorVersion: "1.0",
+            inputJSON: "{}", stateJSON: entry.stateJSON,
+            outputJSON: nil, stateSHA256: "",
+            enteredAt: t0, updatedAt: t0, completedAt: t0)
+    }
+
     let aggregate = ReopenedWorkflowRun(
         run: run, contract: rig.contract,
-        stepRuns: [stepRun], decisions: [],
+        stepRuns: prior + [stepRun], decisions: [],
         artifacts: [], checkpoints: [], attentionItems: [], events: [])
 
     return try WorkflowStepExecutionContext(
@@ -130,6 +147,26 @@ func makeExecutionCtx(
 
 func decodeEnvelopeState<S: Codable & Sendable>(_ type: S.Type, from json: String) throws -> S {
     try WorkflowStepPayloadCodec.decode(WorkflowStepStateEnvelope<S>.self, from: json).state
+}
+
+// MARK: - Fixture evidence gate (PJE-006B)
+
+/// DB-free gate for executor unit tests. Permits everything except explicitly
+/// denied object IDs (or everything, when `denyAll` is set).
+struct FixtureEvidenceGate: WorkflowEvidenceReferenceGating {
+    var deniedIDs: Set<UUID> = []
+    var denyAll = false
+
+    func verdict(
+        kind: WorkflowEvidenceObjectKind,
+        canonicalObjectID: UUID,
+        workspaceID: UUID
+    ) async -> WorkflowEvidenceGateVerdict {
+        if denyAll || deniedIDs.contains(canonicalObjectID) {
+            return .denied(reason: "Fixture gate denial for \(kind.rawValue)")
+        }
+        return .permitted
+    }
 }
 
 // MARK: - Error
