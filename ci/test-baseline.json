@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 1292,
+  "minimumExecutedTests": 1414,
   "baselineCommit": "94ba85d",
-  "note": "Floor, not an equality requirement. 1292 = 1257 (PJE-004 floor) + 35 (PJE-005: WorkflowRequirementsEngineTests — 10 type-level + 8 pure evaluator + 5 validator protocol + 12 lifecycle integration). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
+  "note": "Floor, not an equality requirement. 1414 = 1292 (PJE-005 floor) + 122 (PJE-006A: WorkflowStepExecutionTypes 11 + PayloadCodec 9 + RequirementFacts 8 + ExecutorProtocol 6 + ExecutorRegistry 11 + IntakeStepExecutor 10 + ScopeStepExecutor 8 + BrainstormStepExecutor 8 + FormStepExecutor 11 + TableStepExecutor 9 + MatrixStepExecutor 8 + ExecutionEngine 6). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }

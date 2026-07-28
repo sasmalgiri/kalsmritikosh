@@ -28,14 +28,17 @@ public actor WorkflowRequirementsEngine {
 
     private let repository: WorkflowRunRepository
     private let workspaces: WorkspaceRepository?
+    private let requirementFactsAdapter: WorkflowStepRequirementFactsAdapter?
     private var executors: [String: any WorkflowValidatorExecuting] = [:]
 
     public init(
         repository: WorkflowRunRepository,
-        workspaces: WorkspaceRepository? = nil
+        workspaces: WorkspaceRepository? = nil,
+        requirementFactsAdapter: WorkflowStepRequirementFactsAdapter? = nil
     ) {
         self.repository = repository
         self.workspaces = workspaces
+        self.requirementFactsAdapter = requirementFactsAdapter
     }
 
     // MARK: - Executor registry
@@ -241,7 +244,7 @@ public actor WorkflowRequirementsEngine {
         case .sensitiveScopeSatisfied:
             return evaluateSensitiveScopeSatisfied(req, stepDefinition: stepDefinition, scope: scope)
         case .formFieldCompleted:
-            return .skipped(requirementID: req.id, reason: "Form field evaluation requires step executor context")
+            return await evaluateFormFieldCompleted(req, aggregate: aggregate)
         case .artifactGenerated:
             return evaluateArtifactGenerated(req, stepDefinition: stepDefinition, aggregate: aggregate)
         case .validationPassed:
@@ -252,6 +255,31 @@ public actor WorkflowRequirementsEngine {
     }
 
     // MARK: - Private: individual requirement evaluators
+
+    private func evaluateFormFieldCompleted(
+        _ req: PersonaWorkflowRequirement,
+        aggregate: ReopenedWorkflowRun
+    ) async -> WorkflowRequirementOutcome {
+        guard let adapter = requirementFactsAdapter else {
+            return .skipped(requirementID: req.id,
+                            reason: "Form field evaluation requires step executor context (no adapter)")
+        }
+        guard
+            let stepRunID = aggregate.run.currentStepRunID,
+            let stepRun = aggregate.stepRuns.first(where: { $0.id == stepRunID })
+        else {
+            return .skipped(requirementID: req.id, reason: "No active step run")
+        }
+        let fact = await adapter.factForRequirement(req.id, in: stepRun)
+        guard let fact = fact else {
+            return .skipped(requirementID: req.id, reason: "No requirement fact found for '\(req.id)'")
+        }
+        if fact.isSatisfied {
+            return .satisfied(requirementID: req.id)
+        }
+        return .failed(requirementID: req.id, label: req.label, isBlocking: req.isBlocking,
+                       detail: fact.detail ?? req.detail ?? "Form field '\(req.id)' not completed")
+    }
 
     private func evaluateCanonicalObjectLinked(
         _ req: PersonaWorkflowRequirement,
