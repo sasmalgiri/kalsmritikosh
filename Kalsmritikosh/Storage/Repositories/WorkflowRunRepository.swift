@@ -1567,61 +1567,8 @@ extension WorkflowRunRepository {
         let sp = "wfr_sup2_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))\(expectedRevision)"
 
         try await database.withSavepoint(sp) { db in
-            // 1. CAS the old run to superseded + set superseded_by_run_id
-            try db.exec("""
-                UPDATE workflow_runs
-                   SET revision = revision + 1,
-                       status = ?,
-                       superseded_by_run_id = ?,
-                       updated_at = ?
-                 WHERE id = ? AND revision = ? AND superseded_by_run_id IS NULL;
-                """, [
-                    .text(WorkflowRunStatus.superseded.rawValue),
-                    .uuid(newRunID),
-                    .date(now),
-                    .uuid(runID), .integer(Int64(expectedRevision))
-                ])
-            let changes = try db.query("SELECT changes();", [])
-            guard Int(changes.first?.int(0) ?? 0) == 1 else {
-                let revRows = try db.query(
-                    "SELECT revision FROM workflow_runs WHERE id = ?;", [.uuid(runID)])
-                if let rev = revRows.first?.int(0), Int(rev) != expectedRevision {
-                    throw WorkflowRunRepositoryError.revisionConflict(runID, expected: expectedRevision)
-                }
-                throw WorkflowRunRepositoryError.supersededRunLinkConflict(runID: runID)
-            }
-            let oldNewRevision = expectedRevision + 1
-
-            // 2. Mark current step run as superseded (if any)
-            try db.exec("""
-                UPDATE workflow_step_runs
-                   SET status = ?, updated_at = ?, completed_at = ?
-                 WHERE run_id = ? AND status NOT IN ('completed','cancelled','superseded');
-                """, [
-                    .text(WorkflowStepRunStatus.superseded.rawValue),
-                    .date(now), .date(now),
-                    .uuid(runID)
-                ])
-
-            // 3. Append event to old run
-            let oldEvtSeqRows = try db.query(
-                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
-                [.uuid(runID)])
-            let oldEvtSeq = Int(oldEvtSeqRows.first?.int(0) ?? 1)
-            try db.exec("""
-                INSERT INTO workflow_run_events
-                    (id, run_id, sequence, run_revision, type, actor_kind,
-                     actor_identifier, payload_json, occurred_at)
-                VALUES (?,?,?,?,?,?,?,?,?);
-                """, [
-                    .uuid(oldEventID), .uuid(runID),
-                    .integer(Int64(oldEvtSeq)), .integer(Int64(oldNewRevision)),
-                    .text(WorkflowRunEventType.runSupersessionLinked.rawValue),
-                    .text(actorKind.rawValue), .optionalText(actorIdentifier),
-                    .text("{}"), .date(now)
-                ])
-
-            // 4. Create the replacement run as draft
+            // 1. Create the replacement run as draft first so the FK on superseded_by_run_id
+            //    is satisfied when we update the old run in step 3 (PRAGMA foreign_keys=ON).
             try db.exec("""
                 INSERT INTO workflow_runs
                     (id, workspace_id, application_definition_id, application_definition_version,
@@ -1649,7 +1596,7 @@ extension WorkflowRunRepository {
                     .null, .null, .null, .null, .null
                 ])
 
-            // 5. Append runCreated event to new run
+            // 2. Append runCreated event to new run
             try db.exec("""
                 INSERT INTO workflow_run_events
                     (id, run_id, sequence, run_revision, type, actor_kind,
@@ -1659,6 +1606,60 @@ extension WorkflowRunRepository {
                     .uuid(newEventID), .uuid(newRunID),
                     .integer(1), .integer(1),
                     .text(WorkflowRunEventType.runCreated.rawValue),
+                    .text(actorKind.rawValue), .optionalText(actorIdentifier),
+                    .text("{}"), .date(now)
+                ])
+
+            // 3. CAS the old run to superseded + set superseded_by_run_id (FK now satisfied)
+            try db.exec("""
+                UPDATE workflow_runs
+                   SET revision = revision + 1,
+                       status = ?,
+                       superseded_by_run_id = ?,
+                       updated_at = ?
+                 WHERE id = ? AND revision = ? AND superseded_by_run_id IS NULL;
+                """, [
+                    .text(WorkflowRunStatus.superseded.rawValue),
+                    .uuid(newRunID),
+                    .date(now),
+                    .uuid(runID), .integer(Int64(expectedRevision))
+                ])
+            let changes = try db.query("SELECT changes();", [])
+            guard Int(changes.first?.int(0) ?? 0) == 1 else {
+                let revRows = try db.query(
+                    "SELECT revision FROM workflow_runs WHERE id = ?;", [.uuid(runID)])
+                if let rev = revRows.first?.int(0), Int(rev) != expectedRevision {
+                    throw WorkflowRunRepositoryError.revisionConflict(runID, expected: expectedRevision)
+                }
+                throw WorkflowRunRepositoryError.supersededRunLinkConflict(runID: runID)
+            }
+            let oldNewRevision = expectedRevision + 1
+
+            // 4. Mark current step run as superseded (if any)
+            try db.exec("""
+                UPDATE workflow_step_runs
+                   SET status = ?, updated_at = ?, completed_at = ?
+                 WHERE run_id = ? AND status NOT IN ('completed','cancelled','superseded');
+                """, [
+                    .text(WorkflowStepRunStatus.superseded.rawValue),
+                    .date(now), .date(now),
+                    .uuid(runID)
+                ])
+
+            // 5. Append event to old run
+            let oldEvtSeqRows = try db.query(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
+                [.uuid(runID)])
+            let oldEvtSeq = Int(oldEvtSeqRows.first?.int(0) ?? 1)
+            try db.exec("""
+                INSERT INTO workflow_run_events
+                    (id, run_id, sequence, run_revision, type, actor_kind,
+                     actor_identifier, payload_json, occurred_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(oldEventID), .uuid(runID),
+                    .integer(Int64(oldEvtSeq)), .integer(Int64(oldNewRevision)),
+                    .text(WorkflowRunEventType.runSupersessionLinked.rawValue),
                     .text(actorKind.rawValue), .optionalText(actorIdentifier),
                     .text("{}"), .date(now)
                 ])

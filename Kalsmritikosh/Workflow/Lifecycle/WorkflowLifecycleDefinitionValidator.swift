@@ -38,7 +38,7 @@ public struct WorkflowLifecycleDefinitionValidator: Sendable {
             }
 
             var seenLabels = Set<String>()
-            var seenTargets = Set<StepDefinitionID>()
+            var seenForwardTargets = Set<StepDefinitionID>()
             for t in step.transitions {
                 guard !t.label.trimmingCharacters(in: .whitespaces).isEmpty else {
                     throw WorkflowLifecycleError.blankTransitionLabel(stepID: step.id)
@@ -46,8 +46,13 @@ public struct WorkflowLifecycleDefinitionValidator: Sendable {
                 if !seenLabels.insert(t.label).inserted {
                     throw WorkflowLifecycleError.duplicateTransitionLabel(stepID: step.id, label: t.label)
                 }
-                if !seenTargets.insert(t.targetStepID).inserted {
-                    throw WorkflowLifecycleError.duplicateTransitionTarget(stepID: step.id, targetStepID: t.targetStepID)
+                // Decision steps allow multiple branches to the same target (e.g. yes/no → done).
+                // Return transitions may also share a target with a forward transition.
+                // Only check duplicate forward targets for non-return non-decision transitions.
+                if !t.isReturn && step.kind != .decision {
+                    if !seenForwardTargets.insert(t.targetStepID).inserted {
+                        throw WorkflowLifecycleError.duplicateTransitionTarget(stepID: step.id, targetStepID: t.targetStepID)
+                    }
                 }
             }
 

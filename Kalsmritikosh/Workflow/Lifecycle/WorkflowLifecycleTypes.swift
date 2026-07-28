@@ -53,6 +53,11 @@ public struct WorkflowLifecycleActor: Codable, Hashable, Sendable {
         guard !identifier.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw WorkflowLifecycleError.humanIdentifierRequired
         }
+        if let role = role {
+            guard !role.trimmingCharacters(in: .whitespaces).isEmpty else {
+                throw WorkflowLifecycleError.humanRoleRequired
+            }
+        }
         return WorkflowLifecycleActor(kind: .human, identifier: identifier, role: role)
     }
 

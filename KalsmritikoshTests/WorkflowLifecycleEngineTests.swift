@@ -521,7 +521,7 @@ struct WorkflowLifecycleEngineTests {
     func recordHumanDecisionWithHumanActor() async throws {
         let db = try await makeDB()
         let engine = makeEngine(db: db)
-        let (pkg, wfID) = try makeTwoStepPackage()
+        let (pkg, wfID) = try makeDecisionPackage()
         let created = try await createRun(db: db, pkg: pkg, wfID: wfID)
         _ = try await engine.start(runID: created.run.id, actor: .system, now: t0)
         _ = try await engine.requestHumanDecision(runID: created.run.id, actor: .system, now: t0)
