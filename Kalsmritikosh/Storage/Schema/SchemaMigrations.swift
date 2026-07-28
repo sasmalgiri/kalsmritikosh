@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 75
+    public static let latestVersion = 76
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -176,8 +176,11 @@ public enum SchemaMigrations {
             "workflow_runs": ["id", "workspace_id", "application_definition_id", "workflow_definition_id",
                                "status", "contract_snapshot_json", "contract_snapshot_sha256",
                                "snapshot_schema_version", "revision", "created_at", "updated_at"],
+            // v76 — state_hash_semantics is the NEWEST marker (PJE-006B.1); without it the
+            // self-heal path would stamp user_version=76 over a v75 schema missing the column.
             "workflow_step_runs": ["id", "run_id", "step_definition_id", "step_kind",
-                                    "attempt", "sequence", "status", "state_sha256", "entered_at"],
+                                    "attempt", "sequence", "status", "state_sha256",
+                                    "state_hash_semantics", "entered_at"],
             "workflow_decisions": ["id", "run_id", "step_run_id", "decision_key",
                                     "kind", "selected_option", "actor_kind", "decided_at"],
             "workflow_artifacts": ["id", "run_id", "artifact_definition_id", "kind", "label", "created_at"],
@@ -272,7 +275,8 @@ public enum SchemaMigrations {
         (72, v72),
         (73, v73),
         (74, v74),
-        (75, v75)
+        (75, v75),
+        (76, v76)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3121,5 +3125,18 @@ public enum SchemaMigrations {
     );
     CREATE INDEX idx_wfre_run ON workflow_run_events(run_id);
     CREATE INDEX idx_wfre_sequence ON workflow_run_events(run_id, sequence);
+    """
+
+    // MARK: - v76 — step-state hash semantics column (PJE-006B.1)
+
+    private static let v76: String = """
+    -- Records WHICH hash contract each step run's state_sha256 satisfies.
+    -- 'legacyCanonicalizedJSON': pre-PJE-006B.1 rows (mixed raw-byte and
+    --   canonicalized hash algorithms) — verified best-effort, never rewritten
+    --   by reopen, upgraded only on the next legitimate state mutation.
+    -- 'storedUTF8BytesV1': state_sha256 = SHA-256 of the exact UTF-8 bytes of
+    --   state_json — verified strictly on reopen.
+    ALTER TABLE workflow_step_runs
+        ADD COLUMN state_hash_semantics TEXT NOT NULL DEFAULT 'legacyCanonicalizedJSON';
     """
 }

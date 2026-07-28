@@ -19,7 +19,7 @@ struct WorkflowRequirementsEngineTests {
     // MARK: - DB / engine factories
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 75)
+        try await MigrationFixtureBuilder.database(atVersion: 76)
     }
 
     private func makeReqEngine(db: Database) -> WorkflowRequirementsEngine {

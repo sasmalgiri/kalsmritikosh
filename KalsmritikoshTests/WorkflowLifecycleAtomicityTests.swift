@@ -19,7 +19,7 @@ struct WorkflowLifecycleAtomicityTests {
     // MARK: - Helpers (duplicated from EngineTests to keep tests independent)
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 75)
+        try await MigrationFixtureBuilder.database(atVersion: 76)
     }
 
     private func makeEngine(db: Database) -> WorkflowLifecycleEngine {

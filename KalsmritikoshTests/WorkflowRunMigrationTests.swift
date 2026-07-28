@@ -113,10 +113,12 @@ struct WorkflowRunMigrationTests {
 
     // MARK: - 3: Migration list consistency
 
-    @Test("migrationListIsConsistent through v75")
+    @Test("migrationListIsConsistent and v75 ledger included")
     func migrationListIsConsistent() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)
-        #expect(SchemaMigrations.latestVersion == 75)
+        // Only MigrationMatrixTests.freshDatabaseReachesLatest owns the exact
+        // latest-version sentinel; here assert the v75 ledger is included.
+        #expect(SchemaMigrations.latestVersion >= 75)
     }
 
     // MARK: - 4: v74→v75 preservation
@@ -533,5 +535,45 @@ struct WorkflowRunMigrationTests {
         let after = try await db.query("SELECT COUNT(*) FROM claims;", [])
         #expect(Int(after.first?.int(0) ?? 0) == beforeCount,
                 "v75 must not add or remove canonical claims during migration")
+    }
+
+    // MARK: - PJE-006B.1: v76 step-state hash semantics column
+
+    @Test("A fresh v76 database has state_hash_semantics defaulting to legacyCanonicalizedJSON")
+    func freshV76HasSemanticsColumnWithDefault() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: 76)
+        #expect(try await db.currentUserVersion() == 76)
+        let cols = try await MigrationFixtureBuilder.columns(db, "workflow_step_runs")
+        #expect(cols.contains("state_hash_semantics"))
+
+        // An insert that omits the column gets the legacy default.
+        try await insertWorkspace(db, id: "ws-76")
+        try await insertMinimalRun(db, id: "run-76", workspaceID: "ws-76")
+        try await insertMinimalStepRun(db, id: "sr-76", runID: "run-76")
+        let rows = try await db.query(
+            "SELECT state_hash_semantics FROM workflow_step_runs WHERE id = 'sr-76';", [])
+        #expect(rows.first?.string(0) == "legacyCanonicalizedJSON")
+    }
+
+    @Test("v75→v76 preserves existing step runs and labels them legacyCanonicalizedJSON")
+    func v75ToV76PreservesStepRunsAsLegacy() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: 75)
+        try await insertWorkspace(db, id: "ws-up")
+        try await insertMinimalRun(db, id: "run-up", workspaceID: "ws-up")
+        try await insertMinimalStepRun(db, id: "sr-up", runID: "run-up")
+
+        try await SchemaMigrations.migrate(db, through: 76)
+        #expect(try await db.currentUserVersion() == 76)
+
+        let rows = try await db.query("""
+            SELECT state_json, state_sha256, state_hash_semantics
+              FROM workflow_step_runs WHERE id = 'sr-up';
+            """, [])
+        #expect(rows.count == 1)
+        #expect(rows.first?.string(0) == "{}")
+        #expect(rows.first?.string(1) == "abc")
+        #expect(rows.first?.string(2) == "legacyCanonicalizedJSON",
+                "Pre-existing rows must be labelled legacy — never silently reclassified")
+        #expect(try await MigrationFaultHarness.foreignKeyViolationCount(db) == 0)
     }
 }

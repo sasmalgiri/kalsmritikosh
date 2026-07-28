@@ -57,7 +57,7 @@ public actor WorkflowLifecycleEngine {
         }
 
         let stepRunID = UUID()
-        let stateHash = codec.stateSHA256(for: entryPayload.stateJSON)
+        let stateHash = try codec.stateSHA256(for: entryPayload.stateJSON)
 
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
@@ -155,7 +155,7 @@ public actor WorkflowLifecycleEngine {
 
         let currentStepRun = try requireCurrentStepRun(aggregate)
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(stepCompletion, current: currentStepRun)
-        let stateHash = codec.stateSHA256(for: stateJSON)
+        let stateHash = try codec.stateSHA256(for: stateJSON)
 
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
@@ -389,7 +389,7 @@ public actor WorkflowLifecycleEngine {
         }
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
-        let stateHash = codec.stateSHA256(for: stateJSON)
+        let stateHash = try codec.stateSHA256(for: stateJSON)
         try codec.validate(entryPayload)
 
         let nextStepID = transition.targetStepID
@@ -401,7 +401,7 @@ public actor WorkflowLifecycleEngine {
         let nextRunStatus: WorkflowRunStatus = isTerminal ? .completed : .active
         let nextStepRunStatus: WorkflowStepRunStatus = isTerminal ? .completed : .active
         let nextStepRunID = UUID()
-        let nextStateHash = codec.stateSHA256(for: entryPayload.stateJSON)
+        let nextStateHash = try codec.stateSHA256(for: entryPayload.stateJSON)
 
         let stepsToUpdate: [WorkflowLifecycleStepPatch] = [
             WorkflowLifecycleStepPatch(
@@ -524,7 +524,7 @@ public actor WorkflowLifecycleEngine {
         }
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
-        let stateHash = codec.stateSHA256(for: stateJSON)
+        let stateHash = try codec.stateSHA256(for: stateJSON)
         try codec.validate(entryPayload)
 
         let nextStepID = transition.targetStepID
@@ -534,7 +534,7 @@ public actor WorkflowLifecycleEngine {
         let isTerminal = opDef.validated.terminalStepIDs.contains(nextStepID)
         let nextStepRunID = UUID()
         let decisionID = UUID()
-        let nextStateHash = codec.stateSHA256(for: entryPayload.stateJSON)
+        let nextStateHash = try codec.stateSHA256(for: entryPayload.stateJSON)
 
         var stepsToInsert: [WorkflowLifecycleStepInsert] = []
         if !isTerminal {
@@ -806,7 +806,7 @@ public actor WorkflowLifecycleEngine {
             transition: transition, sourceStep: currentStepDef, opDef: opDef)
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
-        let stateHash = codec.stateSHA256(for: stateJSON)
+        let stateHash = try codec.stateSHA256(for: stateJSON)
         try codec.validate(entryPayload)
 
         let targetStepID = transition.targetStepID
@@ -818,7 +818,7 @@ public actor WorkflowLifecycleEngine {
         let priorAttempts = aggregate.stepRuns
             .filter { $0.stepDefinitionID == targetStepID }
             .map { $0.attempt }.max() ?? 0
-        let nextStateHash = codec.stateSHA256(for: entryPayload.stateJSON)
+        let nextStateHash = try codec.stateSHA256(for: entryPayload.stateJSON)
 
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
@@ -880,7 +880,7 @@ public actor WorkflowLifecycleEngine {
         let (_, currentStepRun) = try requireCurrentStep(aggregate, opDef: opDef)
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
-        let stateHash = codec.stateSHA256(for: stateJSON)
+        let stateHash = try codec.stateSHA256(for: stateJSON)
 
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(

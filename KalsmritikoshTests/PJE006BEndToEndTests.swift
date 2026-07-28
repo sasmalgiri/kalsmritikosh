@@ -175,7 +175,7 @@ struct PJE006BEndToEndTests {
     func fullFlowWithRelaunches() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("pje006b-e2e-\(UUID().uuidString).sqlite")
-        let db1 = try await MigrationFixtureBuilder.database(atVersion: 75, at: url)
+        let db1 = try await MigrationFixtureBuilder.database(atVersion: 76, at: url)
         let (ws, entityIDs, gapID) = try await seedWorkspaceEntityGap(db1)
         let countsBefore = try await canonicalCounts(db1)
 
@@ -308,15 +308,10 @@ struct PJE006BEndToEndTests {
         let final = try await rig.repo.fetchRun(runID)   // repository verifies hashes on reopen
         #expect(final.run.status == .completed)
 
-        // Every completed step run's stored hash matches an independent recomputation.
-        // Completion hashes are written by the PJE-004 lifecycle codec, which hashes the
-        // raw stateJSON bytes — verify with the SAME function (NOT the canonicalizing
-        // WorkflowStepPayloadCodec.hashJSON: JSONSerialization's .sortedKeys sorts keys
-        // NUMERICALLY, so canonical bytes differ from JSONEncoder output whenever
-        // dictionary keys contain digit runs, e.g. UUID keys).
-        let lifecycleCodec = WorkflowLifecyclePayloadCodec()
+        // Every completed step run's stored hash matches an independent recomputation
+        // under the unified PJE-006B.1 contract: SHA-256 of the exact stored UTF-8 bytes.
         for stepRun in final.stepRuns where !stepRun.stateJSON.isEmpty && stepRun.stateJSON != "{}" {
-            let recomputed = lifecycleCodec.stateSHA256(for: stepRun.stateJSON)
+            let recomputed = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: stepRun.stateJSON)
             #expect(stepRun.stateSHA256 == recomputed,
                     "Hash mismatch on step \(stepRun.stepDefinitionID.rawValue)")
         }
@@ -390,7 +385,7 @@ struct PJE006BEndToEndTests {
     func evidenceReviewedRequirementActivated() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("pje006b-req-\(UUID().uuidString).sqlite")
-        let db = try await MigrationFixtureBuilder.database(atVersion: 75, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 76, at: url)
         let (ws, entityIDs, _) = try await seedWorkspaceEntityGap(db)
         let rig = try makeRig(db: db)
         let (pkg, wfID) = try makePackage()

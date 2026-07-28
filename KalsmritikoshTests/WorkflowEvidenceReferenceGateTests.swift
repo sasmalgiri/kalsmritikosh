@@ -25,7 +25,7 @@ struct WorkflowEvidenceReferenceGateTests {
     }
 
     private func makeRig(scope: SensitiveScope? = nil) async throws -> Rig {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 75)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 76)
         let wsA = UUID(), wsB = UUID()
         for (ws, title) in [(wsA, "WS A"), (wsB, "WS B")] {
             try await db.exec("""

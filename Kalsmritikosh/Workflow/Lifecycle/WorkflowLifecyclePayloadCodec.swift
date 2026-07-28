@@ -41,8 +41,9 @@ public struct WorkflowLifecyclePayloadCodec: Sendable {
     }
 
     /// Compute the SHA-256 hex string of a state JSON string.
-    public nonisolated func stateSHA256(for stateJSON: String) -> String {
-        let data = stateJSON.data(using: .utf8) ?? Data()
-        return WorkflowRunSnapshotCodec.hashString(data)
+    /// PJE-006B.1: routes through the unified step-state hash contract —
+    /// SHA-256 of the exact UTF-8 bytes stored (storedUTF8BytesV1 semantics).
+    public nonisolated func stateSHA256(for stateJSON: String) throws -> String {
+        try WorkflowPersistedJSONIntegrity.sha256(storedJSON: stateJSON)
     }
 }

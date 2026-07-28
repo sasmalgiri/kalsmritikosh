@@ -8,7 +8,9 @@
 //  • SAVEPOINT-atomic: every mutation writes its CAS update + child row + event, or rolls back entirely.
 //  • Optimistic CAS: every mutation takes expectedRevision; a stale revision throws revisionConflict.
 //  • One event per mutation: each successful write increments revision exactly once and appends one event.
-//  • Reopen fail-closed: reopen verifies contract hash + revision==event-count + latest checkpoint hash.
+//  • Reopen fail-closed: reopen verifies contract hash + revision==event-count + latest checkpoint hash
+//    + (PJE-006B.1) step-state hashes per recorded semantics — storedUTF8BytesV1 rows strictly
+//    (SHA-256 of the exact stored UTF-8 bytes), legacyCanonicalizedJSON rows best-effort, never rewritten.
 //  • Canonical isolation: delete cascades to workflow tables only; never touches claims, entities, or events.
 //  • Non-ownership: workflow_artifacts.work_product_run_id is SET NULL on work_product_run delete.
 //
@@ -32,6 +34,7 @@ public enum WorkflowRunRepositoryError: Error, Equatable, Sendable {
     case checkpointHashMismatch(checkpointID: UUID, stored: String, computed: String)
     case revisionEventMismatch(runID: UUID, revision: Int, eventCount: Int)
     case reopenFailed(runID: UUID, reason: String)
+    case stepStateHashMismatch(stepRunID: UUID, stored: String, computed: String)
 }
 
 // MARK: - Repository
@@ -41,6 +44,31 @@ public actor WorkflowRunRepository {
     private let codec = WorkflowRunSnapshotCodec()
 
     public init(database: Database) { self.database = database }
+
+    // MARK: - Step-state hash semantics (PJE-006B.1)
+
+    /// Classifies which hash contract a (stateJSON, stateSHA256) pair satisfies at write time.
+    /// A row whose hash equals the SHA-256 of the exact stored UTF-8 bytes is recorded as
+    /// `storedUTF8BytesV1`; anything else keeps the `legacyCanonicalizedJSON` label so
+    /// verification never guesses which historical algorithm produced it.
+    private nonisolated static func hashSemantics(
+        stateJSON: String, stateSHA256: String
+    ) -> WorkflowStepStateHashSemantics {
+        stateSHA256 == WorkflowPersistedJSONIntegrity.rawSHA256(of: stateJSON)
+            ? .storedUTF8BytesV1
+            : .legacyCanonicalizedJSON
+    }
+
+    /// The recorded hash semantics for a step run (test/audit accessor).
+    public func stepStateHashSemantics(
+        stepRunID: UUID
+    ) async throws -> WorkflowStepStateHashSemantics? {
+        let rows = try await database.query(
+            "SELECT state_hash_semantics FROM workflow_step_runs WHERE id = ?;",
+            [.uuid(stepRunID)])
+        guard let raw = rows.first?.string(0) else { return nil }
+        return WorkflowStepStateHashSemantics(rawValue: raw)
+    }
 
     // MARK: - Create run
 
@@ -237,13 +265,14 @@ public actor WorkflowRunRepository {
                 [.uuid(runID)])
             let sequence = Int(seqRows.first?.int(0) ?? 1)
 
+            let semantics = Self.hashSemantics(stateJSON: stateJSON, stateSHA256: stateSHA256)
             try db.exec("""
                 INSERT INTO workflow_step_runs
                     (id, run_id, step_definition_id, step_kind, attempt, sequence,
                      status, executor_id, executor_version,
                      input_json, state_json, output_json, state_sha256,
-                     entered_at, updated_at, completed_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                     state_hash_semantics, entered_at, updated_at, completed_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [
                     .uuid(stepRunID), .uuid(runID),
                     .text(stepDefinitionID.rawValue), .text(stepKind.rawValue),
@@ -251,6 +280,7 @@ public actor WorkflowRunRepository {
                     .text(WorkflowStepRunStatus.ready.rawValue),
                     .optionalText(executorID), .optionalText(executorVersion),
                     .text(inputJSON), .text(stateJSON), .null, .text(stateSHA256),
+                    .text(semantics.rawValue),
                     .date(now), .date(now), .null
                 ])
 
@@ -309,13 +339,18 @@ public actor WorkflowRunRepository {
             let completedAt: SQLValue = (newStatus == .completed || newStatus == .cancelled || newStatus == .superseded)
                 ? .date(now) : .null
 
+            // PJE-006B.1: a legitimate state mutation records (or upgrades to) the
+            // semantics its hash actually satisfies.
+            let semantics = Self.hashSemantics(stateJSON: stateJSON, stateSHA256: stateSHA256)
             try db.exec("""
                 UPDATE workflow_step_runs
                    SET status = ?, state_json = ?, state_sha256 = ?,
+                       state_hash_semantics = ?,
                        output_json = ?, updated_at = ?, completed_at = ?
                  WHERE id = ? AND run_id = ?;
                 """, [
                     .text(newStatus.rawValue), .text(stateJSON), .text(stateSHA256),
+                    .text(semantics.rawValue),
                     outputJSON.map { SQLValue.text($0) } ?? .null,
                     .date(now), completedAt,
                     .uuid(stepRunID), .uuid(runID)
@@ -887,10 +922,33 @@ public actor WorkflowRunRepository {
         let stepRows = try await database.query("""
             SELECT id, run_id, step_definition_id, step_kind, attempt, sequence,
                    status, executor_id, executor_version, input_json, state_json,
-                   output_json, state_sha256, entered_at, updated_at, completed_at
+                   output_json, state_sha256, entered_at, updated_at, completed_at,
+                   state_hash_semantics
             FROM workflow_step_runs WHERE run_id = ? ORDER BY sequence ASC;
             """, [.uuid(runID)])
         let stepRuns = stepRows.compactMap { Self.decodeStepRun($0) }
+
+        // PJE-006B.1: verify step-state integrity per each row's RECORDED semantics.
+        // storedUTF8BytesV1 — strict: stored hash must equal SHA-256 of the exact stored bytes.
+        // legacyCanonicalizedJSON — best-effort only: legacy rows were written under mixed
+        //   historical algorithms and were never enforced at reopen; they are never mutated
+        //   here and upgrade only on the next legitimate state mutation.
+        for row in stepRows {
+            guard
+                let stepRunID = row.uuid(0),
+                let stateJSON = row.string(10),
+                let storedHash = row.string(12),
+                let semanticsRaw = row.string(16),
+                let semantics = WorkflowStepStateHashSemantics(rawValue: semanticsRaw)
+            else { continue }
+            if semantics == .storedUTF8BytesV1 {
+                let computed = WorkflowPersistedJSONIntegrity.rawSHA256(of: stateJSON)
+                guard computed == storedHash else {
+                    throw WorkflowRunRepositoryError.stepStateHashMismatch(
+                        stepRunID: stepRunID, stored: storedHash, computed: computed)
+                }
+            }
+        }
 
         let decisionRows = try await database.query("""
             SELECT id, run_id, step_run_id, decision_key, kind, selected_option,
@@ -1371,14 +1429,18 @@ extension WorkflowRunRepository {
             // 2. Update existing step runs
             for patch in plan.stepsToUpdate {
                 let completedAt: SQLValue = patch.completedAt.map { .date($0) } ?? .null
+                let semantics = Self.hashSemantics(
+                    stateJSON: patch.stateJSON, stateSHA256: patch.stateSHA256)
                 try db.exec("""
                     UPDATE workflow_step_runs
                        SET status = ?, state_json = ?, state_sha256 = ?,
+                           state_hash_semantics = ?,
                            output_json = ?, updated_at = ?, completed_at = ?
                      WHERE id = ? AND run_id = ?;
                     """, [
                         .text(patch.newStatus.rawValue),
                         .text(patch.stateJSON), .text(patch.stateSHA256),
+                        .text(semantics.rawValue),
                         patch.outputJSON.map { SQLValue.text($0) } ?? .null,
                         .date(now), completedAt,
                         .uuid(patch.id), .uuid(runID)
@@ -1401,13 +1463,15 @@ extension WorkflowRunRepository {
                     [.uuid(runID)])
                 let sequence = Int(seqRows.first?.int(0) ?? 1)
                 let completedAt: SQLValue = insert.completedAt.map { .date($0) } ?? .null
+                let semantics = Self.hashSemantics(
+                    stateJSON: insert.stateJSON, stateSHA256: insert.stateSHA256)
                 try db.exec("""
                     INSERT INTO workflow_step_runs
                         (id, run_id, step_definition_id, step_kind, attempt, sequence,
                          status, executor_id, executor_version,
                          input_json, state_json, output_json, state_sha256,
-                         entered_at, updated_at, completed_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                         state_hash_semantics, entered_at, updated_at, completed_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                     """, [
                         .uuid(insert.id), .uuid(runID),
                         .text(insert.stepDefinitionID.rawValue), .text(insert.stepKind.rawValue),
@@ -1417,6 +1481,7 @@ extension WorkflowRunRepository {
                         .text(insert.inputJSON), .text(insert.stateJSON),
                         insert.outputJSON.map { SQLValue.text($0) } ?? .null,
                         .text(insert.stateSHA256),
+                        .text(semantics.rawValue),
                         .date(now), .date(now), completedAt
                     ])
             }

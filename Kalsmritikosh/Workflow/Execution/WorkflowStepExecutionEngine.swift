@@ -92,8 +92,9 @@ public actor WorkflowStepExecutionEngine {
             )
         }
 
-        // Recalculate hash — do not trust executor's stated hash
-        let canonicalHash = try WorkflowStepPayloadCodec.hashJSON(prepResult.stateJSON)
+        // Recalculate hash — do not trust executor's stated hash.
+        // PJE-006B.1: unified contract — SHA-256 of the exact stored UTF-8 bytes.
+        let canonicalHash = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: prepResult.stateJSON)
 
         let entryPayload = WorkflowStepEntryPayload(
             inputJSON: prepResult.inputJSON,
@@ -154,8 +155,9 @@ public actor WorkflowStepExecutionEngine {
 
         let result = try await executor.execute(context: execCtx, commandJSON: commandJSON)
 
-        // Engine recalculates hash; does not trust executor's stated hash
-        let canonicalHash = try WorkflowStepPayloadCodec.hashJSON(result.stateJSON)
+        // Engine recalculates hash; does not trust executor's stated hash.
+        // PJE-006B.1: unified contract — SHA-256 of the exact stored UTF-8 bytes.
+        let canonicalHash = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: result.stateJSON)
 
         switch result.disposition {
         case .remainActive:

@@ -24,7 +24,7 @@ struct WorkflowLifecycleRelaunchTests {
     // MARK: - Setup
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 75)
+        try await MigrationFixtureBuilder.database(atVersion: 76)
     }
 
     private func insertWorkspace(_ db: Database, id: UUID) async throws {

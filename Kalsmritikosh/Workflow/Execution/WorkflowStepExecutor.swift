@@ -69,7 +69,8 @@ public extension WorkflowStepExecutor {
             requirementFacts: requirementFacts
         )
         let json = try WorkflowStepPayloadCodec.encode(envelope)
-        let sha256 = try WorkflowStepPayloadCodec.hashJSON(json)
+        // PJE-006B.1: hash the EXACT returned string — never a second canonicalization pass.
+        let sha256 = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: json)
         return (json, sha256)
     }
 
