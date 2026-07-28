@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 1257,
-  "baselineCommit": "5b3e3c6e767e02ef522da4e1e3870f285e9262dc",
-  "note": "Floor, not an equality requirement, measured by the SAME metric the verifier reads: xcresulttool's test-results summary `totalTestCount` (a parameterized test FUNCTION counts as 1; env-gated owner-archive tests count as skipped but remain in the total). 1257 = 1154 (PJE-003 floor) + 103 (PJE-004: 20 WorkflowLifecycleDefinitionValidatorTests + 20 WorkflowLifecycleStateMachineTests + 35 WorkflowLifecycleEngineTests + 15 WorkflowLifecycleAtomicityTests + 12 WorkflowLifecycleScopeGuardTests + 1 WorkflowLifecycleRelaunchTests). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text. baselineCommit stays pinned to PJE-003 hosted-green SHA (fde9955) until PJE-004 CI-green evidence commit."
+  "minimumExecutedTests": 1292,
+  "baselineCommit": "94ba85d",
+  "note": "Floor, not an equality requirement. 1292 = 1257 (PJE-004 floor) + 35 (PJE-005: WorkflowRequirementsEngineTests — 10 type-level + 8 pure evaluator + 5 validator protocol + 12 lifecycle integration). Tests are cumulative. New tests raise it; the verifier fails when fewer execute or any test fails. Read from build/TestResults.xcresult — never from console text."
 }
