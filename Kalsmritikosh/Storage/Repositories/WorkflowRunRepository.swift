@@ -1146,3 +1146,526 @@ public actor WorkflowRunRepository {
         )
     }
 }
+
+// MARK: - Lifecycle plan types (PJE-004)
+
+/// Immutable description of what one lifecycle action should persist.
+/// Built by WorkflowLifecycleEngine; executed atomically by applyLifecyclePlan.
+public struct WorkflowLifecycleRunPatch: Sendable {
+    public let newStatus: WorkflowRunStatus
+    public let currentStepDefinitionID: StepDefinitionID?
+    public let currentStepRunID: UUID?
+    public let startedAt: Date?
+    public let pausedAt: Date?
+    public let completedAt: Date?
+    public let cancelledAt: Date?
+    public let cancellationReason: String?
+    public let supersededByRunID: UUID?
+
+    public nonisolated init(
+        newStatus: WorkflowRunStatus,
+        currentStepDefinitionID: StepDefinitionID?,
+        currentStepRunID: UUID?,
+        startedAt: Date?,
+        pausedAt: Date?,
+        completedAt: Date?,
+        cancelledAt: Date?,
+        cancellationReason: String?,
+        supersededByRunID: UUID?
+    ) {
+        self.newStatus = newStatus
+        self.currentStepDefinitionID = currentStepDefinitionID
+        self.currentStepRunID = currentStepRunID
+        self.startedAt = startedAt
+        self.pausedAt = pausedAt
+        self.completedAt = completedAt
+        self.cancelledAt = cancelledAt
+        self.cancellationReason = cancellationReason
+        self.supersededByRunID = supersededByRunID
+    }
+}
+
+public struct WorkflowLifecycleStepInsert: Sendable {
+    public let id: UUID
+    public let stepDefinitionID: StepDefinitionID
+    public let stepKind: WorkflowStepKind
+    public let attempt: Int
+    public let status: WorkflowStepRunStatus
+    public let inputJSON: String
+    public let stateJSON: String
+    public let stateSHA256: String
+    public let outputJSON: String?
+    public let executorID: String?
+    public let executorVersion: String?
+    public let completedAt: Date?
+
+    public nonisolated init(
+        id: UUID,
+        stepDefinitionID: StepDefinitionID,
+        stepKind: WorkflowStepKind,
+        attempt: Int,
+        status: WorkflowStepRunStatus,
+        inputJSON: String,
+        stateJSON: String,
+        stateSHA256: String,
+        outputJSON: String?,
+        executorID: String?,
+        executorVersion: String?,
+        completedAt: Date?
+    ) {
+        self.id = id
+        self.stepDefinitionID = stepDefinitionID
+        self.stepKind = stepKind
+        self.attempt = attempt
+        self.status = status
+        self.inputJSON = inputJSON
+        self.stateJSON = stateJSON
+        self.stateSHA256 = stateSHA256
+        self.outputJSON = outputJSON
+        self.executorID = executorID
+        self.executorVersion = executorVersion
+        self.completedAt = completedAt
+    }
+}
+
+public struct WorkflowLifecycleStepPatch: Sendable {
+    public let id: UUID
+    public let newStatus: WorkflowStepRunStatus
+    public let stateJSON: String
+    public let stateSHA256: String
+    public let outputJSON: String?
+    public let completedAt: Date?
+
+    public nonisolated init(
+        id: UUID,
+        newStatus: WorkflowStepRunStatus,
+        stateJSON: String,
+        stateSHA256: String,
+        outputJSON: String?,
+        completedAt: Date?
+    ) {
+        self.id = id
+        self.newStatus = newStatus
+        self.stateJSON = stateJSON
+        self.stateSHA256 = stateSHA256
+        self.outputJSON = outputJSON
+        self.completedAt = completedAt
+    }
+}
+
+public struct WorkflowLifecycleDecisionInsert: Sendable {
+    public let id: UUID
+    public let stepRunID: UUID
+    public let decisionKey: String
+    public let kind: WorkflowDecisionKind
+    public let selectedOption: String
+    public let rationale: String?
+    public let actorKind: WorkflowDecisionActorKind
+    public let actorIdentifier: String?
+    public let supersedesDecisionID: UUID?
+    public let metadataJSON: String
+
+    public nonisolated init(
+        id: UUID,
+        stepRunID: UUID,
+        decisionKey: String,
+        kind: WorkflowDecisionKind,
+        selectedOption: String,
+        rationale: String?,
+        actorKind: WorkflowDecisionActorKind,
+        actorIdentifier: String?,
+        supersedesDecisionID: UUID?,
+        metadataJSON: String
+    ) {
+        self.id = id
+        self.stepRunID = stepRunID
+        self.decisionKey = decisionKey
+        self.kind = kind
+        self.selectedOption = selectedOption
+        self.rationale = rationale
+        self.actorKind = actorKind
+        self.actorIdentifier = actorIdentifier
+        self.supersedesDecisionID = supersedesDecisionID
+        self.metadataJSON = metadataJSON
+    }
+}
+
+public struct WorkflowLifecyclePlan: Sendable {
+    public let runPatch: WorkflowLifecycleRunPatch
+    public let stepsToInsert: [WorkflowLifecycleStepInsert]
+    public let stepsToUpdate: [WorkflowLifecycleStepPatch]
+    public let decisionToInsert: WorkflowLifecycleDecisionInsert?
+    /// When non-nil, a checkpoint is created inside the same SAVEPOINT (no separate event).
+    public let checkpointReason: WorkflowCheckpointReason?
+    public let eventType: WorkflowRunEventType
+    public let actorKind: WorkflowDecisionActorKind
+    public let actorIdentifier: String?
+
+    public nonisolated init(
+        runPatch: WorkflowLifecycleRunPatch,
+        stepsToInsert: [WorkflowLifecycleStepInsert],
+        stepsToUpdate: [WorkflowLifecycleStepPatch],
+        decisionToInsert: WorkflowLifecycleDecisionInsert?,
+        checkpointReason: WorkflowCheckpointReason?,
+        eventType: WorkflowRunEventType,
+        actorKind: WorkflowDecisionActorKind,
+        actorIdentifier: String?
+    ) {
+        self.runPatch = runPatch
+        self.stepsToInsert = stepsToInsert
+        self.stepsToUpdate = stepsToUpdate
+        self.decisionToInsert = decisionToInsert
+        self.checkpointReason = checkpointReason
+        self.eventType = eventType
+        self.actorKind = actorKind
+        self.actorIdentifier = actorIdentifier
+    }
+}
+
+// MARK: - Lifecycle persistence primitives
+
+extension WorkflowRunRepository {
+
+    /// Apply a lifecycle plan atomically in one SAVEPOINT.
+    /// Order: CAS update → step updates → step inserts → step pointer update →
+    ///        decision insert → checkpoint (if any) → one event.
+    @discardableResult
+    public func applyLifecyclePlan(
+        runID: UUID,
+        expectedRevision: Int,
+        plan: WorkflowLifecyclePlan,
+        now: Date
+    ) async throws -> ReopenedWorkflowRun {
+        let eventID = UUID()
+        let runHexLC = runID.uuidString.replacingOccurrences(of: "-", with: "")
+        let sp = "wfr_lc_\(runHexLC)\(expectedRevision)"
+
+        try await database.withSavepoint(sp) { db in
+            // 1. CAS update — status/timestamps only; step pointer set after insert
+            try db.exec("""
+                UPDATE workflow_runs
+                   SET revision = revision + 1,
+                       status = ?,
+                       current_step_definition_id = ?,
+                       started_at = ?, paused_at = ?, completed_at = ?, cancelled_at = ?,
+                       cancellation_reason = ?,
+                       updated_at = ?
+                 WHERE id = ? AND revision = ?;
+                """, [
+                    .text(plan.runPatch.newStatus.rawValue),
+                    plan.runPatch.currentStepDefinitionID.map { SQLValue.text($0.rawValue) } ?? .null,
+                    SQLValue.optionalDate(plan.runPatch.startedAt),
+                    SQLValue.optionalDate(plan.runPatch.pausedAt),
+                    SQLValue.optionalDate(plan.runPatch.completedAt),
+                    SQLValue.optionalDate(plan.runPatch.cancelledAt),
+                    .optionalText(plan.runPatch.cancellationReason),
+                    .date(now),
+                    .uuid(runID), .integer(Int64(expectedRevision))
+                ])
+            let changes = try db.query("SELECT changes();", [])
+            guard Int(changes.first?.int(0) ?? 0) == 1 else {
+                throw WorkflowRunRepositoryError.revisionConflict(runID, expected: expectedRevision)
+            }
+            let newRevision = expectedRevision + 1
+
+            // 2. Update existing step runs
+            for patch in plan.stepsToUpdate {
+                let completedAt: SQLValue = patch.completedAt.map { .date($0) } ?? .null
+                try db.exec("""
+                    UPDATE workflow_step_runs
+                       SET status = ?, state_json = ?, state_sha256 = ?,
+                           output_json = ?, updated_at = ?, completed_at = ?
+                     WHERE id = ? AND run_id = ?;
+                    """, [
+                        .text(patch.newStatus.rawValue),
+                        .text(patch.stateJSON), .text(patch.stateSHA256),
+                        patch.outputJSON.map { SQLValue.text($0) } ?? .null,
+                        .date(now), completedAt,
+                        .uuid(patch.id), .uuid(runID)
+                    ])
+            }
+
+            // 3. Insert new step runs
+            for insert in plan.stepsToInsert {
+                // Duplicate attempt guard
+                let dupRows = try db.query("""
+                    SELECT COUNT(*) FROM workflow_step_runs
+                     WHERE run_id = ? AND step_definition_id = ? AND attempt = ?;
+                    """, [.uuid(runID), .text(insert.stepDefinitionID.rawValue), .integer(Int64(insert.attempt))])
+                guard Int(dupRows.first?.int(0) ?? 0) == 0 else {
+                    throw WorkflowRunRepositoryError.duplicateStepAttempt(
+                        runID: runID, stepDefinitionID: insert.stepDefinitionID, attempt: insert.attempt)
+                }
+                let seqRows = try db.query(
+                    "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_step_runs WHERE run_id = ?;",
+                    [.uuid(runID)])
+                let sequence = Int(seqRows.first?.int(0) ?? 1)
+                let completedAt: SQLValue = insert.completedAt.map { .date($0) } ?? .null
+                try db.exec("""
+                    INSERT INTO workflow_step_runs
+                        (id, run_id, step_definition_id, step_kind, attempt, sequence,
+                         status, executor_id, executor_version,
+                         input_json, state_json, output_json, state_sha256,
+                         entered_at, updated_at, completed_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                    """, [
+                        .uuid(insert.id), .uuid(runID),
+                        .text(insert.stepDefinitionID.rawValue), .text(insert.stepKind.rawValue),
+                        .integer(Int64(insert.attempt)), .integer(Int64(sequence)),
+                        .text(insert.status.rawValue),
+                        .optionalText(insert.executorID), .optionalText(insert.executorVersion),
+                        .text(insert.inputJSON), .text(insert.stateJSON),
+                        insert.outputJSON.map { SQLValue.text($0) } ?? .null,
+                        .text(insert.stateSHA256),
+                        .date(now), .date(now), completedAt
+                    ])
+            }
+
+            // 4. Set current_step_run_id now that the referenced row exists
+            try db.exec("""
+                UPDATE workflow_runs SET current_step_run_id = ? WHERE id = ?;
+                """, [
+                    plan.runPatch.currentStepRunID.map { SQLValue.uuid($0) } ?? .null,
+                    .uuid(runID)
+                ])
+
+            // 5. Insert decision (if any)
+            if let d = plan.decisionToInsert {
+                try db.exec("""
+                    INSERT INTO workflow_decisions
+                        (id, run_id, step_run_id, decision_key, kind, selected_option,
+                         rationale, actor_kind, actor_identifier, supersedes_decision_id,
+                         metadata_json, decided_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+                    """, [
+                        .uuid(d.id), .uuid(runID), .uuid(d.stepRunID),
+                        .text(d.decisionKey), .text(d.kind.rawValue), .text(d.selectedOption),
+                        .optionalText(d.rationale),
+                        .text(d.actorKind.rawValue), .optionalText(d.actorIdentifier),
+                        d.supersedesDecisionID.map { SQLValue.uuid($0) } ?? .null,
+                        .text(d.metadataJSON), .date(now)
+                    ])
+            }
+
+            // 6. Build and insert checkpoint (if requested) — no separate event
+            if let reason = plan.checkpointReason {
+                let checkpointID = UUID()
+                let runRows = try db.query("""
+                    SELECT id, workspace_id, application_definition_id, application_definition_version,
+                           workflow_definition_id, workflow_definition_version, title, status,
+                           current_step_definition_id, current_step_run_id,
+                           contract_snapshot_json, contract_snapshot_sha256, snapshot_schema_version,
+                           revision, parent_run_id, superseded_by_run_id,
+                           created_at, updated_at, started_at, paused_at, completed_at,
+                           cancelled_at, cancellation_reason
+                    FROM workflow_runs WHERE id = ?;
+                    """, [.uuid(runID)])
+                guard let runRow = runRows.first, let run = Self.decodeRun(runRow) else {
+                    throw WorkflowRunRepositoryError.runNotFound(runID)
+                }
+                let stepRows = try db.query("""
+                    SELECT id, run_id, step_definition_id, step_kind, attempt, sequence,
+                           status, executor_id, executor_version, input_json, state_json,
+                           output_json, state_sha256, entered_at, updated_at, completed_at
+                    FROM workflow_step_runs WHERE run_id = ? ORDER BY sequence ASC;
+                    """, [.uuid(runID)])
+                let stepRuns = stepRows.compactMap { Self.decodeStepRun($0) }
+                let decisionRows = try db.query("""
+                    SELECT id, run_id, step_run_id, decision_key, kind, selected_option,
+                           rationale, actor_kind, actor_identifier, supersedes_decision_id,
+                           metadata_json, decided_at
+                    FROM workflow_decisions WHERE run_id = ? ORDER BY decided_at ASC;
+                    """, [.uuid(runID)])
+                let decisions = decisionRows.compactMap { Self.decodeDecision($0) }
+                let artifactRows = try db.query("""
+                    SELECT id, run_id, step_run_id, artifact_definition_id, kind, label,
+                           work_product_run_id, target_kind, target_id, reference_uri,
+                           media_type, content_sha256, metadata_json,
+                           supersedes_artifact_id, created_at
+                    FROM workflow_artifacts WHERE run_id = ? ORDER BY created_at ASC;
+                    """, [.uuid(runID)])
+                let artifacts = artifactRows.compactMap { Self.decodeArtifact($0) }
+                let attentionRows = try db.query("""
+                    SELECT id, run_id, step_run_id, source_kind, source_id, severity, status,
+                           title, detail, created_at, resolved_at, resolved_by, resolution_note
+                    FROM workflow_attention_items WHERE run_id = ? ORDER BY created_at ASC;
+                    """, [.uuid(runID)])
+                let attentionItems = attentionRows.compactMap { Self.decodeAttentionItem($0) }
+                let eventRows = try db.query("""
+                    SELECT id, run_id, sequence, run_revision, type, actor_kind,
+                           actor_identifier, payload_json, occurred_at
+                    FROM workflow_run_events WHERE run_id = ? ORDER BY sequence ASC;
+                    """, [.uuid(runID)])
+                let events = eventRows.compactMap { Self.decodeEvent($0) }
+                let payload = WorkflowCheckpointPayload(
+                    run: run, stepRuns: stepRuns, decisions: decisions,
+                    artifacts: artifacts, attentionItems: attentionItems,
+                    events: events,
+                    lastEventSequence: events.last?.sequence ?? 0,
+                    runRevision: newRevision
+                )
+                let encodedCheckpoint = try WorkflowRunSnapshotCodec().encodeCheckpoint(payload)
+                try db.exec("""
+                    INSERT INTO workflow_checkpoints
+                        (id, run_id, run_revision, reason, snapshot_json, snapshot_sha256, created_at)
+                    VALUES (?,?,?,?,?,?,?);
+                    """, [
+                        .uuid(checkpointID), .uuid(runID),
+                        .integer(Int64(newRevision)),
+                        .text(reason.rawValue),
+                        .text(encodedCheckpoint.json), .text(encodedCheckpoint.sha256),
+                        .date(now)
+                    ])
+            }
+
+            // 7. One event
+            let evtSeqRows = try db.query(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
+                [.uuid(runID)])
+            let evtSeq = Int(evtSeqRows.first?.int(0) ?? 1)
+            try db.exec("""
+                INSERT INTO workflow_run_events
+                    (id, run_id, sequence, run_revision, type, actor_kind,
+                     actor_identifier, payload_json, occurred_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(eventID), .uuid(runID),
+                    .integer(Int64(evtSeq)), .integer(Int64(newRevision)),
+                    .text(plan.eventType.rawValue),
+                    .text(plan.actorKind.rawValue), .optionalText(plan.actorIdentifier),
+                    .text("{}"), .date(now)
+                ])
+        }
+
+        return try await reopen(runID)
+    }
+
+    /// Atomically supersede an existing run and create a new draft replacement.
+    /// Both the supersession update and the new run creation happen in one SAVEPOINT.
+    @discardableResult
+    public func applySupersession(
+        runID: UUID,
+        expectedRevision: Int,
+        package: ResolvedPersonaApplicationPackage,
+        selectedWorkflowID: WorkflowDefinitionID,
+        workspaceID: Workspace.ID,
+        title: String?,
+        actorKind: WorkflowDecisionActorKind,
+        actorIdentifier: String?,
+        now: Date
+    ) async throws -> WorkflowSupersessionResult {
+        let contract = try WorkflowRunContractSnapshot(from: package, selectedWorkflowID: selectedWorkflowID)
+        let encoded = try codec.encode(contract)
+        guard let selectedValidated = package.workflows.first(where: { $0.definition.id == selectedWorkflowID }) else {
+            throw WorkflowRunRepositoryError.packageWorkflowNotFound(selectedWorkflowID)
+        }
+        let wfVersion = selectedValidated.definition.version
+
+        let newRunID = UUID()
+        let oldEventID = UUID()
+        let newEventID = UUID()
+        let sp = "wfr_sup2_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))\(expectedRevision)"
+
+        try await database.withSavepoint(sp) { db in
+            // 1. CAS the old run to superseded + set superseded_by_run_id
+            try db.exec("""
+                UPDATE workflow_runs
+                   SET revision = revision + 1,
+                       status = ?,
+                       superseded_by_run_id = ?,
+                       updated_at = ?
+                 WHERE id = ? AND revision = ? AND superseded_by_run_id IS NULL;
+                """, [
+                    .text(WorkflowRunStatus.superseded.rawValue),
+                    .uuid(newRunID),
+                    .date(now),
+                    .uuid(runID), .integer(Int64(expectedRevision))
+                ])
+            let changes = try db.query("SELECT changes();", [])
+            guard Int(changes.first?.int(0) ?? 0) == 1 else {
+                let revRows = try db.query(
+                    "SELECT revision FROM workflow_runs WHERE id = ?;", [.uuid(runID)])
+                if let rev = revRows.first?.int(0), Int(rev) != expectedRevision {
+                    throw WorkflowRunRepositoryError.revisionConflict(runID, expected: expectedRevision)
+                }
+                throw WorkflowRunRepositoryError.supersededRunLinkConflict(runID: runID)
+            }
+            let oldNewRevision = expectedRevision + 1
+
+            // 2. Mark current step run as superseded (if any)
+            try db.exec("""
+                UPDATE workflow_step_runs
+                   SET status = ?, updated_at = ?, completed_at = ?
+                 WHERE run_id = ? AND status NOT IN ('completed','cancelled','superseded');
+                """, [
+                    .text(WorkflowStepRunStatus.superseded.rawValue),
+                    .date(now), .date(now),
+                    .uuid(runID)
+                ])
+
+            // 3. Append event to old run
+            let oldEvtSeqRows = try db.query(
+                "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
+                [.uuid(runID)])
+            let oldEvtSeq = Int(oldEvtSeqRows.first?.int(0) ?? 1)
+            try db.exec("""
+                INSERT INTO workflow_run_events
+                    (id, run_id, sequence, run_revision, type, actor_kind,
+                     actor_identifier, payload_json, occurred_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(oldEventID), .uuid(runID),
+                    .integer(Int64(oldEvtSeq)), .integer(Int64(oldNewRevision)),
+                    .text(WorkflowRunEventType.runSupersessionLinked.rawValue),
+                    .text(actorKind.rawValue), .optionalText(actorIdentifier),
+                    .text("{}"), .date(now)
+                ])
+
+            // 4. Create the replacement run as draft
+            try db.exec("""
+                INSERT INTO workflow_runs
+                    (id, workspace_id, application_definition_id, application_definition_version,
+                     workflow_definition_id, workflow_definition_version, title, status,
+                     current_step_definition_id, current_step_run_id,
+                     contract_snapshot_json, contract_snapshot_sha256, snapshot_schema_version,
+                     revision, parent_run_id, superseded_by_run_id,
+                     created_at, updated_at,
+                     started_at, paused_at, completed_at, cancelled_at, cancellation_reason)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(newRunID), .uuid(workspaceID),
+                    .text(package.applicationKey.id.rawValue),
+                    .integer(Int64(package.applicationKey.version)),
+                    .text(selectedWorkflowID.rawValue),
+                    .integer(Int64(wfVersion)),
+                    .optionalText(title),
+                    .text(WorkflowRunStatus.draft.rawValue),
+                    .null, .null,
+                    .text(encoded.json), .text(encoded.sha256), .integer(1),
+                    .integer(1),
+                    .uuid(runID),
+                    .null,
+                    .date(now), .date(now),
+                    .null, .null, .null, .null, .null
+                ])
+
+            // 5. Append runCreated event to new run
+            try db.exec("""
+                INSERT INTO workflow_run_events
+                    (id, run_id, sequence, run_revision, type, actor_kind,
+                     actor_identifier, payload_json, occurred_at)
+                VALUES (?,?,?,?,?,?,?,?,?);
+                """, [
+                    .uuid(newEventID), .uuid(newRunID),
+                    .integer(1), .integer(1),
+                    .text(WorkflowRunEventType.runCreated.rawValue),
+                    .text(actorKind.rawValue), .optionalText(actorIdentifier),
+                    .text("{}"), .date(now)
+                ])
+        }
+
+        let superseded = try await reopen(runID)
+        let replacement = try await reopen(newRunID)
+        return WorkflowSupersessionResult(superseded: superseded, replacement: replacement)
+    }
+}
