@@ -257,4 +257,7 @@ public enum WorkflowLifecycleError: Error, Equatable, Sendable {
     case invalidJSONPayload
     // Aggregate structural integrity
     case aggregateInvariantViolation(runID: UUID, detail: String)
+    // PJE-005 requirement and validation gate
+    case blockingRequirementNotMet(stepID: StepDefinitionID, requirementID: String, label: String)
+    case blockingValidationNotPassed(stepID: StepDefinitionID, validationID: String, label: String)
 }

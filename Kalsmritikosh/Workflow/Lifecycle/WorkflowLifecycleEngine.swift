@@ -18,16 +18,19 @@ public actor WorkflowLifecycleEngine {
     private let validator: WorkflowLifecycleDefinitionValidator
     private let codec: WorkflowLifecyclePayloadCodec
     private let conditionEvaluator: any WorkflowTransitionConditionEvaluating
+    private let requirementsEngine: WorkflowRequirementsEngine?
 
     public init(
         repository: WorkflowRunRepository,
-        conditionEvaluator: any WorkflowTransitionConditionEvaluating = RejectingWorkflowTransitionConditionEvaluator()
+        conditionEvaluator: any WorkflowTransitionConditionEvaluating = RejectingWorkflowTransitionConditionEvaluator(),
+        requirementsEngine: WorkflowRequirementsEngine? = nil
     ) {
         self.repository = repository
         self.stateMachine = WorkflowLifecycleStateMachine()
         self.validator = WorkflowLifecycleDefinitionValidator()
         self.codec = WorkflowLifecyclePayloadCodec()
         self.conditionEvaluator = conditionEvaluator
+        self.requirementsEngine = requirementsEngine
     }
 
     // MARK: - Start
@@ -331,6 +334,7 @@ public actor WorkflowLifecycleEngine {
         selector: WorkflowTransitionSelector,
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         entryPayload: WorkflowStepEntryPayload = .empty,
+        scope: SensitiveScope? = nil,
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -359,6 +363,29 @@ public actor WorkflowLifecycleEngine {
             case .satisfied(_, _):
                 break
             }
+        }
+
+        // PJE-005: evaluate requirements gate before committing the lifecycle plan
+        var requirementsEval: WorkflowRequirementsEvaluation? = nil
+        if let reqEngine = requirementsEngine {
+            let eval = try await reqEngine.evaluate(
+                stepDefinition: currentStepDef,
+                aggregate: aggregate,
+                scope: scope
+            )
+            if eval.hasBlockingFailure {
+                if let outcome = eval.requirementOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let reqID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingRequirementNotMet(
+                        stepID: currentStepDef.id, requirementID: reqID, label: label)
+                }
+                if let outcome = eval.validationOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let valID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingValidationNotPassed(
+                        stepID: currentStepDef.id, validationID: valID, label: label)
+                }
+            }
+            requirementsEval = eval
         }
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
@@ -435,8 +462,21 @@ public actor WorkflowLifecycleEngine {
             actorIdentifier: actor.identifier
         )
 
-        return try await repository.applyLifecyclePlan(
+        let result = try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
+
+        // PJE-005: apply advisory attention items after the plan succeeds (non-throwing)
+        if let eval = requirementsEval, let reqEngine = requirementsEngine {
+            await reqEngine.applyAttentionItems(
+                evaluation: eval,
+                runID: runID,
+                stepRunID: currentStepRun.id,
+                initialAggregate: result,
+                actor: actor,
+                now: now
+            )
+        }
+        return result
     }
 
     // MARK: - Choose Branch (decision step)
@@ -448,6 +488,7 @@ public actor WorkflowLifecycleEngine {
         rationale: String?,
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         entryPayload: WorkflowStepEntryPayload = .empty,
+        scope: SensitiveScope? = nil,
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -458,6 +499,29 @@ public actor WorkflowLifecycleEngine {
         let (currentStepDef, currentStepRun) = try requireCurrentStep(aggregate, opDef: opDef)
 
         let transition = try stateMachine.resolveDecisionBranch(branch: branch, step: currentStepDef)
+
+        // PJE-005: evaluate requirements gate before committing the lifecycle plan
+        var requirementsEval: WorkflowRequirementsEvaluation? = nil
+        if let reqEngine = requirementsEngine {
+            let eval = try await reqEngine.evaluate(
+                stepDefinition: currentStepDef,
+                aggregate: aggregate,
+                scope: scope
+            )
+            if eval.hasBlockingFailure {
+                if let outcome = eval.requirementOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let reqID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingRequirementNotMet(
+                        stepID: currentStepDef.id, requirementID: reqID, label: label)
+                }
+                if let outcome = eval.validationOutcomes.first(where: { $0.isBlockingFailed }),
+                   case .failed(let valID, let label, _, _) = outcome {
+                    throw WorkflowLifecycleError.blockingValidationNotPassed(
+                        stepID: currentStepDef.id, validationID: valID, label: label)
+                }
+            }
+            requirementsEval = eval
+        }
 
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(completion, current: currentStepRun)
         let stateHash = codec.stateSHA256(for: stateJSON)
@@ -532,8 +596,21 @@ public actor WorkflowLifecycleEngine {
             actorIdentifier: actor.identifier
         )
 
-        return try await repository.applyLifecyclePlan(
+        let result = try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
+
+        // PJE-005: apply advisory attention items after the plan succeeds (non-throwing)
+        if let eval = requirementsEval, let reqEngine = requirementsEngine {
+            await reqEngine.applyAttentionItems(
+                evaluation: eval,
+                runID: runID,
+                stepRunID: currentStepRun.id,
+                initialAggregate: result,
+                actor: actor,
+                now: now
+            )
+        }
+        return result
     }
 
     // MARK: - Request Human Decision

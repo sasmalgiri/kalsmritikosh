@@ -21,6 +21,7 @@ public enum KalsmritikoshLog {
     public nonisolated static let routing = Logger(subsystem: subsystem, category: "routing")
     public nonisolated static let brain = Logger(subsystem: subsystem, category: "brain")
     public nonisolated static let ui = Logger(subsystem: subsystem, category: "ui")
+    public nonisolated static let workflow = Logger(subsystem: subsystem, category: "workflow")
 
     nonisolated private static let subsystem = Bundle.main.bundleIdentifier ?? "com.kalsmritikosh.chronica.memora"
 }
