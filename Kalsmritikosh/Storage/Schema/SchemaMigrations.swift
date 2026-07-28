@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 74
+    public static let latestVersion = 75
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -171,7 +171,22 @@ public enum SchemaMigrations {
             "email_participant_occurrences": ["id", "source_ko_id", "entity_id", "role", "raw_address"],
             // v74 — shared source reliability assessment ledger (OPS-006).
             "source_reliability_assessments": ["id", "source_version_id", "reliability", "independence",
-                                                "assessed_at", "created_at"]
+                                                "assessed_at", "created_at"],
+            // v75 — persistent workflow run ledger (PJE-003). Check all 7 new tables.
+            "workflow_runs": ["id", "workspace_id", "application_definition_id", "workflow_definition_id",
+                               "status", "contract_snapshot_json", "contract_snapshot_sha256",
+                               "snapshot_schema_version", "revision", "created_at", "updated_at"],
+            "workflow_step_runs": ["id", "run_id", "step_definition_id", "step_kind",
+                                    "attempt", "sequence", "status", "state_sha256", "entered_at"],
+            "workflow_decisions": ["id", "run_id", "step_run_id", "decision_key",
+                                    "kind", "selected_option", "actor_kind", "decided_at"],
+            "workflow_artifacts": ["id", "run_id", "artifact_definition_id", "kind", "label", "created_at"],
+            "workflow_checkpoints": ["id", "run_id", "run_revision", "reason",
+                                      "snapshot_json", "snapshot_sha256", "created_at"],
+            "workflow_attention_items": ["id", "run_id", "source_kind", "severity", "status",
+                                          "title", "created_at"],
+            "workflow_run_events": ["id", "run_id", "sequence", "run_revision", "type",
+                                     "actor_kind", "payload_json", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -256,7 +271,8 @@ public enum SchemaMigrations {
         (71, v71),
         (72, v72),
         (73, v73),
-        (74, v74)
+        (74, v74),
+        (75, v75)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -2933,5 +2949,177 @@ public enum SchemaMigrations {
         ON source_reliability_assessments(source_version_id);
     CREATE INDEX idx_sra_active
         ON source_reliability_assessments(source_version_id, superseded_by_id);
+    """
+
+    // MARK: - v75 — persistent workflow run ledger (PJE-003)
+
+    private static let v75: String = """
+    -- Top-level run record locked to a frozen contract snapshot.
+    -- circular FK: current_step_run_id → workflow_step_runs is declared here;
+    -- workflow_step_runs.run_id → workflow_runs is declared in that table.
+    -- SQLite checks FK constraints at DML time, not DDL time, so declaration order is safe.
+    CREATE TABLE workflow_runs (
+        id                              TEXT PRIMARY KEY NOT NULL,
+        workspace_id                    TEXT NOT NULL
+            REFERENCES workspaces(id) ON DELETE CASCADE,
+        application_definition_id       TEXT NOT NULL,
+        application_definition_version  INTEGER NOT NULL,
+        workflow_definition_id          TEXT NOT NULL,
+        workflow_definition_version     INTEGER NOT NULL,
+        title                           TEXT,
+        status                          TEXT NOT NULL
+            CHECK(status IN ('draft','active','paused','waitingForHuman','blocked',
+                             'completed','cancelled','superseded')),
+        current_step_definition_id      TEXT,
+        current_step_run_id             TEXT
+            REFERENCES workflow_step_runs(id) ON DELETE SET NULL,
+        contract_snapshot_json          TEXT NOT NULL,
+        contract_snapshot_sha256        TEXT NOT NULL,
+        snapshot_schema_version         INTEGER NOT NULL,
+        revision                        INTEGER NOT NULL DEFAULT 1,
+        parent_run_id                   TEXT
+            REFERENCES workflow_runs(id) ON DELETE SET NULL,
+        superseded_by_run_id            TEXT
+            REFERENCES workflow_runs(id) ON DELETE SET NULL,
+        created_at                      REAL NOT NULL,
+        updated_at                      REAL NOT NULL,
+        started_at                      REAL,
+        paused_at                       REAL,
+        completed_at                    REAL,
+        cancelled_at                    REAL,
+        cancellation_reason             TEXT
+    );
+    CREATE INDEX idx_wfr_workspace ON workflow_runs(workspace_id);
+    CREATE INDEX idx_wfr_app ON workflow_runs(application_definition_id);
+    CREATE INDEX idx_wfr_status ON workflow_runs(status);
+    CREATE INDEX idx_wfr_created ON workflow_runs(created_at);
+
+    CREATE TABLE workflow_step_runs (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        run_id              TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        step_definition_id  TEXT NOT NULL,
+        step_kind           TEXT NOT NULL,
+        attempt             INTEGER NOT NULL DEFAULT 1,
+        sequence            INTEGER NOT NULL,
+        status              TEXT NOT NULL
+            CHECK(status IN ('ready','active','waiting','blocked',
+                             'completed','skipped','cancelled','superseded')),
+        executor_id         TEXT,
+        executor_version    TEXT,
+        input_json          TEXT NOT NULL DEFAULT '{}',
+        state_json          TEXT NOT NULL DEFAULT '{}',
+        output_json         TEXT,
+        state_sha256        TEXT NOT NULL,
+        entered_at          REAL NOT NULL,
+        updated_at          REAL NOT NULL,
+        completed_at        REAL,
+        UNIQUE(run_id, step_definition_id, attempt)
+    );
+    CREATE INDEX idx_wfsr_run ON workflow_step_runs(run_id);
+    CREATE INDEX idx_wfsr_step ON workflow_step_runs(run_id, step_definition_id);
+
+    CREATE TABLE workflow_decisions (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        run_id                  TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        step_run_id             TEXT NOT NULL
+            REFERENCES workflow_step_runs(id) ON DELETE CASCADE,
+        decision_key            TEXT NOT NULL,
+        kind                    TEXT NOT NULL
+            CHECK(kind IN ('branchSelection','humanDecision','humanApproval')),
+        selected_option         TEXT NOT NULL,
+        rationale               TEXT,
+        actor_kind              TEXT NOT NULL
+            CHECK(actor_kind IN ('human','deterministicRule','system')),
+        actor_identifier        TEXT,
+        supersedes_decision_id  TEXT
+            REFERENCES workflow_decisions(id) ON DELETE SET NULL,
+        metadata_json           TEXT NOT NULL DEFAULT '{}',
+        decided_at              REAL NOT NULL
+    );
+    CREATE INDEX idx_wfd_run ON workflow_decisions(run_id);
+    CREATE INDEX idx_wfd_step ON workflow_decisions(step_run_id);
+
+    CREATE TABLE workflow_artifacts (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        run_id                  TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        step_run_id             TEXT
+            REFERENCES workflow_step_runs(id) ON DELETE SET NULL,
+        artifact_definition_id  TEXT NOT NULL,
+        kind                    TEXT NOT NULL
+            CHECK(kind IN ('attachment','generatedProduct','workProductRun','methodResult')),
+        label                   TEXT NOT NULL,
+        work_product_run_id     TEXT
+            REFERENCES work_product_runs(id) ON DELETE SET NULL,
+        target_kind             TEXT,
+        target_id               TEXT,
+        reference_uri           TEXT,
+        media_type              TEXT,
+        content_sha256          TEXT,
+        metadata_json           TEXT NOT NULL DEFAULT '{}',
+        supersedes_artifact_id  TEXT
+            REFERENCES workflow_artifacts(id) ON DELETE SET NULL,
+        created_at              REAL NOT NULL
+    );
+    CREATE INDEX idx_wfa_run ON workflow_artifacts(run_id);
+    CREATE INDEX idx_wfa_step ON workflow_artifacts(step_run_id);
+
+    CREATE TABLE workflow_checkpoints (
+        id              TEXT PRIMARY KEY NOT NULL,
+        run_id          TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        run_revision    INTEGER NOT NULL,
+        reason          TEXT NOT NULL
+            CHECK(reason IN ('explicitSave','pause','beforeDecision','afterDecision',
+                             'beforeArtifactBuild','completion','recovery')),
+        snapshot_json   TEXT NOT NULL,
+        snapshot_sha256 TEXT NOT NULL,
+        created_at      REAL NOT NULL
+    );
+    CREATE INDEX idx_wfc_run ON workflow_checkpoints(run_id);
+    CREATE INDEX idx_wfc_revision ON workflow_checkpoints(run_id, run_revision);
+
+    CREATE TABLE workflow_attention_items (
+        id              TEXT PRIMARY KEY NOT NULL,
+        run_id          TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        step_run_id     TEXT
+            REFERENCES workflow_step_runs(id) ON DELETE SET NULL,
+        source_kind     TEXT NOT NULL
+            CHECK(source_kind IN ('requirement','validation','system','user','automation')),
+        source_id       TEXT,
+        severity        TEXT NOT NULL
+            CHECK(severity IN ('informational','advisory','blocking')),
+        status          TEXT NOT NULL
+            CHECK(status IN ('open','resolved','dismissed')),
+        title           TEXT NOT NULL,
+        detail          TEXT,
+        created_at      REAL NOT NULL,
+        resolved_at     REAL,
+        resolved_by     TEXT,
+        resolution_note TEXT
+    );
+    CREATE INDEX idx_wfai_run ON workflow_attention_items(run_id);
+    CREATE INDEX idx_wfai_status ON workflow_attention_items(run_id, status);
+
+    -- Append-only event log; UNIQUE(run_id, sequence) enforces no gaps or duplicates.
+    CREATE TABLE workflow_run_events (
+        id               TEXT PRIMARY KEY NOT NULL,
+        run_id           TEXT NOT NULL
+            REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        sequence         INTEGER NOT NULL,
+        run_revision     INTEGER NOT NULL,
+        type             TEXT NOT NULL,
+        actor_kind       TEXT NOT NULL
+            CHECK(actor_kind IN ('human','deterministicRule','system')),
+        actor_identifier TEXT,
+        payload_json     TEXT NOT NULL DEFAULT '{}',
+        occurred_at      REAL NOT NULL,
+        UNIQUE(run_id, sequence)
+    );
+    CREATE INDEX idx_wfre_run ON workflow_run_events(run_id);
+    CREATE INDEX idx_wfre_sequence ON workflow_run_events(run_id, sequence);
     """
 }
