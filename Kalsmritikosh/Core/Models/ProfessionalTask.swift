@@ -139,6 +139,10 @@ public enum DeadlineCandidateOrigin: String, Codable, Sendable, CaseIterable {
     case deterministicRule
     case modelProposed
     case userProposed
+    /// PJE-010: a runtime automation proposed this candidate date. Like every
+    /// other candidate origin it is a PROPOSAL only — never a confirmed Deadline,
+    /// and never a deterministic-rule or model classification.
+    case automationProposed
     case importedLegacy
 }
 
