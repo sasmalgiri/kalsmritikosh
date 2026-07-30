@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 76
+    public static let latestVersion = 77
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -176,11 +176,24 @@ public enum SchemaMigrations {
             "workflow_runs": ["id", "workspace_id", "application_definition_id", "workflow_definition_id",
                                "status", "contract_snapshot_json", "contract_snapshot_sha256",
                                "snapshot_schema_version", "revision", "created_at", "updated_at"],
-            // v76 — state_hash_semantics is the NEWEST marker (PJE-006B.1); without it the
-            // self-heal path would stamp user_version=76 over a v75 schema missing the column.
+            // v76 — state_hash_semantics (PJE-006B.1); v77 — provenance_semantics (PJE-007).
+            // Every migration MUST add its newest physical marker here, or the self-heal
+            // path can stamp user_version over a schema missing that migration's shape.
             "workflow_step_runs": ["id", "run_id", "step_definition_id", "step_kind",
                                     "attempt", "sequence", "status", "state_sha256",
-                                    "state_hash_semantics", "entered_at"],
+                                    "state_hash_semantics", "provenance_semantics", "entered_at"],
+            // v77 — provenance bridge tables (PJE-007): the NEWEST markers.
+            "workflow_provenance_snapshots": ["id", "workflow_run_id", "owner_kind",
+                                               "step_run_id", "artifact_id", "decision_id",
+                                               "workflow_run_revision", "producer_id",
+                                               "producer_version", "snapshot_json",
+                                               "snapshot_sha256", "created_at"],
+            "workflow_provenance_references": ["id", "snapshot_id", "ordinal", "reference_kind",
+                                                "canonical_object_id", "role", "disposition",
+                                                "created_at"],
+            "workflow_attachment_bindings": ["artifact_id", "logical_source_id",
+                                              "source_version_id", "display_name",
+                                              "source_content_sha256", "created_at"],
             "workflow_decisions": ["id", "run_id", "step_run_id", "decision_key",
                                     "kind", "selected_option", "actor_kind", "decided_at"],
             "workflow_artifacts": ["id", "run_id", "artifact_definition_id", "kind", "label", "created_at"],
@@ -276,7 +289,8 @@ public enum SchemaMigrations {
         (73, v73),
         (74, v74),
         (75, v75),
-        (76, v76)
+        (76, v76),
+        (77, v77)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3138,5 +3152,116 @@ public enum SchemaMigrations {
     --   state_json — verified strictly on reopen.
     ALTER TABLE workflow_step_runs
         ADD COLUMN state_hash_semantics TEXT NOT NULL DEFAULT 'legacyCanonicalizedJSON';
+    """
+
+    // MARK: - v77 — evidence, attachment and provenance bridge (PJE-007)
+
+    private static let v77: String = """
+    -- Version-aware provenance semantics on workflow rows.
+    -- 'legacyUntracked': pre-PJE-007 rows — reopen without a snapshot, never
+    --   rewritten by reopening, never given guessed provenance; upgrade only on
+    --   a legitimate mutation.
+    -- 'snapshotV1': the row has a hashed provenance snapshot with ordered,
+    --   gate-verified canonical references.
+    ALTER TABLE workflow_step_runs
+        ADD COLUMN provenance_semantics TEXT NOT NULL DEFAULT 'legacyUntracked';
+    ALTER TABLE workflow_artifacts
+        ADD COLUMN provenance_semantics TEXT NOT NULL DEFAULT 'legacyUntracked';
+    ALTER TABLE workflow_decisions
+        ADD COLUMN provenance_semantics TEXT NOT NULL DEFAULT 'legacyUntracked';
+
+    -- The provenance snapshot ledger: exactly one owner per row (CHECK below).
+    -- snapshot_sha256 = SHA-256 of the exact UTF-8 bytes of snapshot_json
+    -- (the PJE-006B.1 stored-byte contract; no third hash interpretation).
+    CREATE TABLE workflow_provenance_snapshots (
+        id                       TEXT PRIMARY KEY NOT NULL,
+        workflow_run_id          TEXT NOT NULL,
+        owner_kind               TEXT NOT NULL,
+        step_run_id              TEXT,
+        artifact_id              TEXT,
+        decision_id              TEXT,
+        workflow_run_revision    INTEGER NOT NULL,
+        producer_id              TEXT NOT NULL,
+        producer_version         TEXT NOT NULL,
+        source_state_sha256      TEXT,
+        snapshot_json            TEXT NOT NULL,
+        snapshot_sha256          TEXT NOT NULL,
+        created_at               REAL NOT NULL,
+        FOREIGN KEY(workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(step_run_id)     REFERENCES workflow_step_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(artifact_id)     REFERENCES workflow_artifacts(id) ON DELETE CASCADE,
+        FOREIGN KEY(decision_id)     REFERENCES workflow_decisions(id) ON DELETE CASCADE,
+        CHECK(workflow_run_revision >= 1),
+        CHECK(owner_kind IN ('stepState','artifact','decision')),
+        CHECK(
+            (owner_kind = 'stepState' AND step_run_id IS NOT NULL
+                AND artifact_id IS NULL AND decision_id IS NULL)
+            OR
+            (owner_kind = 'artifact' AND step_run_id IS NULL
+                AND artifact_id IS NOT NULL AND decision_id IS NULL)
+            OR
+            (owner_kind = 'decision' AND step_run_id IS NULL
+                AND artifact_id IS NULL AND decision_id IS NOT NULL)
+        )
+    );
+    CREATE UNIQUE INDEX idx_wfps_step_revision
+        ON workflow_provenance_snapshots(step_run_id, workflow_run_revision)
+        WHERE owner_kind = 'stepState';
+    CREATE UNIQUE INDEX idx_wfps_artifact
+        ON workflow_provenance_snapshots(artifact_id)
+        WHERE owner_kind = 'artifact';
+    CREATE UNIQUE INDEX idx_wfps_decision
+        ON workflow_provenance_snapshots(decision_id)
+        WHERE owner_kind = 'decision';
+    CREATE INDEX idx_wfps_run       ON workflow_provenance_snapshots(workflow_run_id);
+    CREATE INDEX idx_wfps_step      ON workflow_provenance_snapshots(step_run_id);
+    CREATE INDEX idx_wfps_artifact2 ON workflow_provenance_snapshots(artifact_id);
+    CREATE INDEX idx_wfps_decision2 ON workflow_provenance_snapshots(decision_id);
+    CREATE INDEX idx_wfps_revision  ON workflow_provenance_snapshots(workflow_run_revision);
+
+    -- Ordered, normalized references belonging to one snapshot.
+    -- Deliberately NO generic FK from canonical_object_id: the referenced kind
+    -- varies, and historical workflow records must remain reopenable even when a
+    -- canonical target later becomes unavailable. Every reference is validated
+    -- through the evidence gate BEFORE insertion.
+    CREATE TABLE workflow_provenance_references (
+        id                       TEXT PRIMARY KEY NOT NULL,
+        snapshot_id              TEXT NOT NULL,
+        ordinal                  INTEGER NOT NULL,
+        reference_kind           TEXT NOT NULL,
+        canonical_object_id      TEXT NOT NULL,
+        role                     TEXT NOT NULL,
+        disposition              TEXT NOT NULL,
+        source_version_id        TEXT,
+        locator_json             TEXT,
+        label                    TEXT,
+        note                     TEXT,
+        created_at               REAL NOT NULL,
+        FOREIGN KEY(snapshot_id) REFERENCES workflow_provenance_snapshots(id) ON DELETE CASCADE,
+        UNIQUE(snapshot_id, ordinal),
+        CHECK(ordinal >= 0)
+    );
+    CREATE INDEX idx_wfpr_snapshot ON workflow_provenance_references(snapshot_id);
+
+    -- Immutable attachment identity snapshot. Stores NO file bytes, NO extracted
+    -- text, NO OCR output, NO copied EvidenceBlock or SourceVersion record —
+    -- the canonical source store remains the one store; source_relations remains
+    -- the parent-child attachment authority.
+    CREATE TABLE workflow_attachment_bindings (
+        artifact_id                  TEXT PRIMARY KEY NOT NULL,
+        logical_source_id            TEXT NOT NULL,
+        source_version_id            TEXT NOT NULL,
+        parent_logical_source_id     TEXT,
+        source_relation              TEXT,
+        display_name                 TEXT NOT NULL,
+        media_type                   TEXT,
+        byte_count                   INTEGER,
+        source_content_sha256        TEXT NOT NULL,
+        created_at                   REAL NOT NULL,
+        FOREIGN KEY(artifact_id) REFERENCES workflow_artifacts(id) ON DELETE CASCADE,
+        CHECK(byte_count IS NULL OR byte_count >= 0)
+    );
+    CREATE INDEX idx_wfab_source_version ON workflow_attachment_bindings(source_version_id);
+    CREATE INDEX idx_wfab_logical_source ON workflow_attachment_bindings(logical_source_id);
     """
 }

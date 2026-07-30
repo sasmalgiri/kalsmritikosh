@@ -58,8 +58,12 @@ struct PJE006BEndToEndTests {
             requirementFactsAdapter: WorkflowStepRequirementFactsAdapter())
         let lifecycle = WorkflowLifecycleEngine(
             repository: repo, requirementsEngine: requirementsEngine)
+        // PJE-007: executor references are revalidated through the gate before
+        // persistence — the rig wires the validator the production engine requires.
+        let validator = WorkflowProvenanceReferenceValidator(gate: gate, database: db)
         let engine = WorkflowStepExecutionEngine(
-            registry: registry, lifecycleEngine: lifecycle, repository: repo)
+            registry: registry, lifecycleEngine: lifecycle, repository: repo,
+            provenanceValidator: validator)
         return Rig(db: db, repo: repo, engine: engine, gate: gate)
     }
 
@@ -175,7 +179,7 @@ struct PJE006BEndToEndTests {
     func fullFlowWithRelaunches() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("pje006b-e2e-\(UUID().uuidString).sqlite")
-        let db1 = try await MigrationFixtureBuilder.database(atVersion: 76, at: url)
+        let db1 = try await MigrationFixtureBuilder.database(atVersion: 77, at: url)
         let (ws, entityIDs, gapID) = try await seedWorkspaceEntityGap(db1)
         let countsBefore = try await canonicalCounts(db1)
 
@@ -385,7 +389,7 @@ struct PJE006BEndToEndTests {
     func evidenceReviewedRequirementActivated() async throws {
         let url = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("pje006b-req-\(UUID().uuidString).sqlite")
-        let db = try await MigrationFixtureBuilder.database(atVersion: 76, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 77, at: url)
         let (ws, entityIDs, _) = try await seedWorkspaceEntityGap(db)
         let rig = try makeRig(db: db)
         let (pkg, wfID) = try makePackage()

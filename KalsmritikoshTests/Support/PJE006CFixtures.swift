@@ -72,9 +72,13 @@ enum PJE006CFixtures {
             requirementFactsAdapter: WorkflowStepRequirementFactsAdapter())
         let lifecycle = WorkflowLifecycleEngine(
             repository: repo, requirementsEngine: requirements)
+        // PJE-007: executor references are revalidated through the gate before
+        // persistence — the rig wires the validator the production engine requires.
+        let validator = WorkflowProvenanceReferenceValidator(gate: gate, database: db)
         let engine = WorkflowStepExecutionEngine(
             registry: registry, lifecycleEngine: lifecycle, repository: repo,
-            workProductCoordinator: coordinator)
+            workProductCoordinator: coordinator,
+            provenanceValidator: validator)
         return PJE006CRig(
             db: db, dbURL: url, repo: repo, workspaces: workspaces, scopes: scopes,
             genericFacts: gf, producer: producer, assembly: assembly,

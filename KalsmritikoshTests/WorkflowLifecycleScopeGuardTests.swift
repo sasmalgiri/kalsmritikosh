@@ -20,7 +20,7 @@ struct WorkflowLifecycleScopeGuardTests {
     // MARK: - Helpers
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 76)
+        try await MigrationFixtureBuilder.database(atVersion: 77)
     }
 
     private func makeEngine(db: Database) -> WorkflowLifecycleEngine {

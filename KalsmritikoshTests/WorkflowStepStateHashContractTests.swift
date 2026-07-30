@@ -23,7 +23,7 @@ struct WorkflowStepStateHashContractTests {
     // MARK: - Helpers
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 76)
+        try await MigrationFixtureBuilder.database(atVersion: 77)
     }
 
     private func insertWorkspace(_ db: Database, id: UUID) async throws {

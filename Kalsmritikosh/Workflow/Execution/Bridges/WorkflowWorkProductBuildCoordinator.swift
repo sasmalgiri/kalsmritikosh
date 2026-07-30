@@ -129,6 +129,70 @@ public actor WorkflowWorkProductBuildCoordinator {
         let newStateJSON = try WorkflowStepPayloadCodec.encode(newEnvelope)
         let newStateSHA = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: newStateJSON)
 
+        // 11. PJE-007: artifact provenance from the EXACT assembled product and
+        // manifest — source Claim IDs, supporting/contradicting citation source
+        // versions, and the manifest's source-version list. Never inferred from
+        // rendered prose. Deduplicated by (kind, id, role), first occurrence wins,
+        // order preserved.
+        let newRevision = aggregate.run.revision + 1
+        var artifactReferences: [WorkflowProvenanceReference] = []
+        var seenReferenceKeys = Set<String>()
+        func appendReference(_ reference: WorkflowProvenanceReference) {
+            let key = "\(reference.kind.rawValue):\(reference.canonicalObjectID.uuidString):\(reference.role.rawValue)"
+            guard seenReferenceKeys.insert(key).inserted else { return }
+            artifactReferences.append(reference)
+        }
+        for section in assembled.workProduct.sections {
+            for claim in section.claims {
+                if let claimID = claim.sourceClaimID {
+                    appendReference(WorkflowProvenanceReference(
+                        kind: .claim, canonicalObjectID: claimID, role: .outputCitation))
+                }
+                for citation in claim.supporting {
+                    guard let versionID = citation.sourceVersionID else { continue }
+                    appendReference(WorkflowProvenanceReference(
+                        kind: .sourceVersion, canonicalObjectID: versionID,
+                        role: .supporting, sourceVersionID: versionID,
+                        label: citation.displayLabel))
+                }
+                for citation in claim.contradicting {
+                    guard let versionID = citation.sourceVersionID else { continue }
+                    appendReference(WorkflowProvenanceReference(
+                        kind: .sourceVersion, canonicalObjectID: versionID,
+                        role: .contradicting, sourceVersionID: versionID,
+                        label: citation.displayLabel))
+                }
+            }
+        }
+        for idString in assembled.manifest.sourceVersionIDs {
+            guard let versionID = UUID(uuidString: idString) else { continue }
+            appendReference(WorkflowProvenanceReference(
+                kind: .sourceVersion, canonicalObjectID: versionID,
+                role: .outputCitation, sourceVersionID: versionID))
+        }
+        let artifactProvenance = try WorkflowProvenancePersistenceInput.make(
+            snapshot: WorkflowProvenanceSnapshot(
+                ownerKind: .artifact,
+                workflowRunID: runID,
+                ownerID: artifactID,
+                workflowRunRevision: newRevision,
+                producerID: WorkflowProvenanceProducers.workProductAssemblyID,
+                producerVersion: WorkflowProvenanceProducers.workProductAssemblyVersion,
+                sourceStateSHA256: nil,
+                references: artifactReferences))
+        let stepProvenance = try WorkflowProvenancePersistenceInput.make(
+            snapshot: WorkflowProvenanceSnapshot(
+                ownerKind: .stepState,
+                workflowRunID: runID,
+                ownerID: stepRunID,
+                workflowRunRevision: newRevision,
+                producerID: currentState.executorID,
+                producerVersion: currentState.executorVersion,
+                sourceStateSHA256: newStateSHA,
+                references: [WorkflowProvenanceReference(
+                    kind: .workProductRun, canonicalObjectID: workProductRunID,
+                    role: .generatedFrom)]))
+
         return try await workflowRuns.applyWorkProductBuild(
             workflowRunID: runID,
             stepRunID: stepRunID,
@@ -141,6 +205,8 @@ public actor WorkflowWorkProductBuildCoordinator {
             corpusSnapshotID: request.corpusSnapshotID,
             newStepStateJSON: newStateJSON,
             newStepStateSHA256: newStateSHA,
+            artifactProvenance: artifactProvenance,
+            stepProvenance: stepProvenance,
             actor: actor,
             at: now)
     }

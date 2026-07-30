@@ -40,7 +40,9 @@ public enum WorkflowRunRepositoryError: Error, Equatable, Sendable {
 // MARK: - Repository
 
 public actor WorkflowRunRepository {
-    private let database: Database
+    // internal (not private) so the same-module +Provenance extension file can
+    // reach it; the raw pointer still never escapes the Database actor.
+    let database: Database
     private let codec = WorkflowRunSnapshotCodec()
 
     public init(database: Database) { self.database = database }
@@ -99,6 +101,8 @@ public actor WorkflowRunRepository {
         corpusSnapshotID: UUID?,
         newStepStateJSON: String,
         newStepStateSHA256: String,
+        artifactProvenance: WorkflowProvenancePersistenceInput? = nil,
+        stepProvenance: WorkflowProvenancePersistenceInput? = nil,
         actor: WorkflowLifecycleActor,
         at now: Date,
         fault: (@Sendable (WorkProductBuildFaultPoint) throws -> Void)? = nil
@@ -177,6 +181,19 @@ public actor WorkflowRunRepository {
                 throw WorkflowRunRepositoryError.stepRunNotFound(stepRunID)
             }
             try fault?(.afterStepStateUpdate)
+
+            // 5b. PJE-007: artifact + step provenance in the SAME SAVEPOINT — a
+            // provenance failure rolls back the entire work-product build.
+            if let artifactProvenance = artifactProvenance {
+                try Self.insertProvenance(
+                    artifactProvenance, workflowRunID: workflowRunID,
+                    newRevision: newRevision, now: now, database: db)
+            }
+            if let stepProvenance = stepProvenance {
+                try Self.insertProvenance(
+                    stepProvenance, workflowRunID: workflowRunID,
+                    newRevision: newRevision, now: now, database: db)
+            }
             try fault?(.beforeEventInsert)
 
             // 6. Append exactly one event.
@@ -449,7 +466,8 @@ public actor WorkflowRunRepository {
         expectedRevision: Int,
         actorKind: WorkflowDecisionActorKind,
         actorIdentifier: String?,
-        now: Date
+        now: Date,
+        provenance: WorkflowProvenancePersistenceInput? = nil
     ) async throws -> ReopenedWorkflowRun {
         let eventID = UUID()
         let sp = "wfr_stepup_\(stepRunID.uuidString.replacingOccurrences(of: "-", with: ""))\(expectedRevision)"
@@ -486,6 +504,13 @@ public actor WorkflowRunRepository {
                     .date(now), completedAt,
                     .uuid(stepRunID), .uuid(runID)
                 ])
+
+            // PJE-007: snapshot rides in the same SAVEPOINT as the state save.
+            if let provenance = provenance {
+                try Self.insertProvenance(
+                    provenance, workflowRunID: runID,
+                    newRevision: newRevision, now: now, database: db)
+            }
 
             let evtSeqRows = try db.query(
                 "SELECT COALESCE(MAX(sequence), 0) + 1 FROM workflow_run_events WHERE run_id = ?;",
@@ -1054,7 +1079,7 @@ public actor WorkflowRunRepository {
             SELECT id, run_id, step_definition_id, step_kind, attempt, sequence,
                    status, executor_id, executor_version, input_json, state_json,
                    output_json, state_sha256, entered_at, updated_at, completed_at,
-                   state_hash_semantics
+                   state_hash_semantics, provenance_semantics
             FROM workflow_step_runs WHERE run_id = ? ORDER BY sequence ASC;
             """, [.uuid(runID)])
         let stepRuns = stepRows.compactMap { Self.decodeStepRun($0) }
@@ -1084,7 +1109,7 @@ public actor WorkflowRunRepository {
         let decisionRows = try await database.query("""
             SELECT id, run_id, step_run_id, decision_key, kind, selected_option,
                    rationale, actor_kind, actor_identifier, supersedes_decision_id,
-                   metadata_json, decided_at
+                   metadata_json, decided_at, provenance_semantics
             FROM workflow_decisions WHERE run_id = ? ORDER BY decided_at ASC;
             """, [.uuid(runID)])
         let decisions = decisionRows.compactMap { Self.decodeDecision($0) }
@@ -1093,7 +1118,7 @@ public actor WorkflowRunRepository {
             SELECT id, run_id, step_run_id, artifact_definition_id, kind, label,
                    work_product_run_id, target_kind, target_id, reference_uri,
                    media_type, content_sha256, metadata_json,
-                   supersedes_artifact_id, created_at
+                   supersedes_artifact_id, created_at, provenance_semantics
             FROM workflow_artifacts WHERE run_id = ? ORDER BY created_at ASC;
             """, [.uuid(runID)])
         let artifacts = artifactRows.compactMap { Self.decodeArtifact($0) }
@@ -1139,6 +1164,31 @@ public actor WorkflowRunRepository {
                 )
             }
         }
+
+        // PJE-007: strict provenance verification for snapshotV1 rows — legacy
+        // rows are skipped and never rewritten by reopening.
+        let stepSemanticsRows: [(id: UUID, stateSHA256: String, semantics: String)] =
+            stepRows.compactMap { r in
+                guard let id = r.uuid(0), let sha = r.string(12),
+                      let semantics = r.string(17) else { return nil }
+                return (id, sha, semantics)
+            }
+        let artifactSemanticsRows: [(id: UUID, semantics: String)] =
+            artifactRows.compactMap { r in
+                guard let id = r.uuid(0), let semantics = r.string(15) else { return nil }
+                return (id, semantics)
+            }
+        let decisionSemanticsRows: [(id: UUID, semantics: String)] =
+            decisionRows.compactMap { r in
+                guard let id = r.uuid(0), let semantics = r.string(12) else { return nil }
+                return (id, semantics)
+            }
+        try await verifyProvenanceOnReopen(
+            runID: runID,
+            runRevision: run.revision,
+            stepRows: stepSemanticsRows,
+            artifactSemantics: artifactSemanticsRows,
+            decisionSemantics: decisionSemanticsRows)
 
         return ReopenedWorkflowRun(
             run: run, contract: contract,
@@ -1489,6 +1539,12 @@ public struct WorkflowLifecyclePlan: Sendable {
     public let eventType: WorkflowRunEventType
     public let actorKind: WorkflowDecisionActorKind
     public let actorIdentifier: String?
+    /// PJE-007: step-state provenance snapshots persisted in the SAME SAVEPOINT
+    /// as the state mutation (one input per owning step run).
+    public let stepProvenance: [WorkflowProvenancePersistenceInput]
+    /// PJE-007: provenance snapshot for `decisionToInsert` (empty-reference
+    /// snapshots are valid; nil leaves the decision legacyUntracked).
+    public let decisionProvenance: WorkflowProvenancePersistenceInput?
 
     public nonisolated init(
         runPatch: WorkflowLifecycleRunPatch,
@@ -1498,7 +1554,9 @@ public struct WorkflowLifecyclePlan: Sendable {
         checkpointReason: WorkflowCheckpointReason?,
         eventType: WorkflowRunEventType,
         actorKind: WorkflowDecisionActorKind,
-        actorIdentifier: String?
+        actorIdentifier: String?,
+        stepProvenance: [WorkflowProvenancePersistenceInput] = [],
+        decisionProvenance: WorkflowProvenancePersistenceInput? = nil
     ) {
         self.runPatch = runPatch
         self.stepsToInsert = stepsToInsert
@@ -1508,7 +1566,18 @@ public struct WorkflowLifecyclePlan: Sendable {
         self.eventType = eventType
         self.actorKind = actorKind
         self.actorIdentifier = actorIdentifier
+        self.stepProvenance = stepProvenance
+        self.decisionProvenance = decisionProvenance
     }
+}
+
+/// PJE-007 test-only fault points for atomic state/provenance persistence.
+public enum WorkflowLifecyclePlanFaultPoint: Sendable, Equatable {
+    case afterCAS
+    case afterStepStateUpdate
+    case afterSnapshotInsert
+    case duringReferenceInsert
+    case beforeEventInsert
 }
 
 // MARK: - Lifecycle persistence primitives
@@ -1523,7 +1592,8 @@ extension WorkflowRunRepository {
         runID: UUID,
         expectedRevision: Int,
         plan: WorkflowLifecyclePlan,
-        now: Date
+        now: Date,
+        provenanceFault: (@Sendable (WorkflowLifecyclePlanFaultPoint) throws -> Void)? = nil
     ) async throws -> ReopenedWorkflowRun {
         let eventID = UUID()
         let runHexLC = runID.uuidString.replacingOccurrences(of: "-", with: "")
@@ -1556,6 +1626,7 @@ extension WorkflowRunRepository {
                 throw WorkflowRunRepositoryError.revisionConflict(runID, expected: expectedRevision)
             }
             let newRevision = expectedRevision + 1
+            try provenanceFault?(.afterCAS)
 
             // 2. Update existing step runs
             for patch in plan.stepsToUpdate {
@@ -1642,6 +1713,28 @@ extension WorkflowRunRepository {
                         .text(d.metadataJSON), .date(now)
                     ])
             }
+
+            try provenanceFault?(.afterStepStateUpdate)
+
+            // 5b. PJE-007: provenance snapshots in the SAME SAVEPOINT as the mutation.
+            // A provenance failure rolls back revision, state, transition, decision,
+            // artifact, checkpoint and event together.
+            for input in plan.stepProvenance {
+                try Self.insertProvenance(
+                    input, workflowRunID: runID,
+                    newRevision: newRevision, now: now, database: db)
+                try provenanceFault?(.afterSnapshotInsert)
+                try provenanceFault?(.duringReferenceInsert)
+            }
+            if let decisionInput = plan.decisionProvenance {
+                guard plan.decisionToInsert?.id == decisionInput.ownerID else {
+                    throw WorkflowProvenanceError.snapshotOwnerMismatch(decisionInput.ownerID)
+                }
+                try Self.insertProvenance(
+                    decisionInput, workflowRunID: runID,
+                    newRevision: newRevision, now: now, database: db)
+            }
+            try provenanceFault?(.beforeEventInsert)
 
             // 6. Build and insert checkpoint (if requested) — no separate event
             if let reason = plan.checkpointReason {

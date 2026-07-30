@@ -23,17 +23,66 @@ public actor WorkflowStepExecutionEngine {
     private let lifecycleEngine: WorkflowLifecycleEngine
     private let repository: WorkflowRunRepository
     private let workProductCoordinator: WorkflowWorkProductBuildCoordinator?
+    private let provenanceValidator: WorkflowProvenanceReferenceValidator?
 
     public init(
         registry: WorkflowStepExecutorRegistry,
         lifecycleEngine: WorkflowLifecycleEngine,
         repository: WorkflowRunRepository,
-        workProductCoordinator: WorkflowWorkProductBuildCoordinator? = nil
+        workProductCoordinator: WorkflowWorkProductBuildCoordinator? = nil,
+        provenanceValidator: WorkflowProvenanceReferenceValidator? = nil
     ) {
         self.registry = registry
         self.lifecycleEngine = lifecycleEngine
         self.repository = repository
         self.workProductCoordinator = workProductCoordinator
+        self.provenanceValidator = provenanceValidator
+    }
+
+    // MARK: - PJE-007: step provenance gathering + defensive revalidation
+
+    /// Ask the exact executor for its provenance references, then REVALIDATE
+    /// every reference before persistence — executor gate usage is not trusted
+    /// on its own (defense in depth). Nonempty references without a wired
+    /// validator fail closed.
+    private func gatherStepReferences(
+        executor: any WorkflowStepExecutor,
+        context: WorkflowStepExecutionContext,
+        resultingStateJSON: String
+    ) async throws -> [WorkflowProvenanceReference] {
+        guard let producer = executor as? any WorkflowStepProvenanceProducing else {
+            return []
+        }
+        let references = try await producer.provenance(
+            context: context, resultingStateJSON: resultingStateJSON)
+        guard !references.isEmpty else { return [] }
+        guard let validator = provenanceValidator else {
+            throw WorkflowProvenanceError.referenceDenied(
+                kind: references[0].kind, id: references[0].canonicalObjectID)
+        }
+        try await validator.validate(
+            references,
+            workflowRunID: context.aggregate.run.id,
+            workspaceID: context.aggregate.run.workspaceID)
+        return references
+    }
+
+    /// Build a step-state snapshot input for a remain-active save.
+    private func stepProvenanceInput(
+        context: WorkflowStepExecutionContext,
+        stateSHA256: String,
+        references: [WorkflowProvenanceReference]
+    ) throws -> WorkflowProvenancePersistenceInput {
+        let snapshot = WorkflowProvenanceSnapshot(
+            ownerKind: .stepState,
+            workflowRunID: context.aggregate.run.id,
+            ownerID: context.stepRun.id,
+            workflowRunRevision: context.aggregate.run.revision + 1,
+            producerID: context.stepRun.executorID ?? WorkflowProvenanceProducers.lifecycleID,
+            producerVersion: context.stepRun.executorVersion ?? WorkflowProvenanceProducers.lifecycleVersion,
+            sourceStateSHA256: stateSHA256,
+            references: references)
+        return try WorkflowProvenancePersistenceInput.make(snapshot: snapshot)
     }
 
     // MARK: - Start a workflow run
@@ -162,6 +211,11 @@ public actor WorkflowStepExecutionEngine {
         // PJE-006B.1: unified contract — SHA-256 of the exact stored UTF-8 bytes.
         let canonicalHash = try WorkflowPersistedJSONIntegrity.sha256(storedJSON: result.stateJSON)
 
+        // PJE-007: exact-executor provenance for the RESULTING state, revalidated
+        // through the evidence gate before any persistence.
+        let stepReferences = try await gatherStepReferences(
+            executor: executor, context: execCtx, resultingStateJSON: result.stateJSON)
+
         switch result.disposition {
         case .remainActive:
             return try await saveCurrentProgress(
@@ -170,6 +224,9 @@ public actor WorkflowStepExecutionEngine {
                 stateJSON: result.stateJSON,
                 stateSHA256: canonicalHash,
                 outputJSON: result.outputJSON,
+                provenance: try stepProvenanceInput(
+                    context: execCtx, stateSHA256: canonicalHash,
+                    references: stepReferences),
                 actor: actor,
                 now: now
             )
@@ -184,6 +241,7 @@ public actor WorkflowStepExecutionEngine {
                 stateJSON: result.stateJSON,
                 stateSHA256: canonicalHash,
                 outputJSON: result.outputJSON,
+                completionReferences: stepReferences,
                 actor: actor,
                 now: now
             )
@@ -198,6 +256,7 @@ public actor WorkflowStepExecutionEngine {
                 stateJSON: result.stateJSON,
                 stateSHA256: canonicalHash,
                 outputJSON: result.outputJSON,
+                completionReferences: stepReferences,
                 actor: actor,
                 now: now
             )
@@ -211,6 +270,7 @@ public actor WorkflowStepExecutionEngine {
                 rationale: rationale,
                 stateJSON: result.stateJSON,
                 outputJSON: result.outputJSON,
+                completionReferences: stepReferences,
                 actor: actor,
                 now: now
             )
@@ -224,6 +284,9 @@ public actor WorkflowStepExecutionEngine {
                 stateJSON: result.stateJSON,
                 stateSHA256: canonicalHash,
                 outputJSON: result.outputJSON,
+                provenance: try stepProvenanceInput(
+                    context: execCtx, stateSHA256: canonicalHash,
+                    references: stepReferences),
                 actor: actor,
                 now: now
             )
@@ -245,6 +308,7 @@ public actor WorkflowStepExecutionEngine {
                 runID: aggregate.run.id,
                 completion: WorkflowStepCompletionPayload(
                     stateJSON: result.stateJSON, outputJSON: result.outputJSON),
+                completionReferences: stepReferences,
                 actor: actor,
                 now: now
             )
@@ -263,11 +327,13 @@ public actor WorkflowStepExecutionEngine {
         decisionKey: String,
         selectedOption: String,
         rationale: String?,
+        basis: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         at now: Date = Date()
     ) async throws -> ReopenedWorkflowRun {
         let aggregate = try await repository.fetchRun(runID)
         let (_, currentStep, currentStepRun) = try resolveCurrentStep(aggregate)
+        try await validateDecisionBasis(basis, aggregate: aggregate)
         guard currentStep.kind == .decision,
               currentStepRun.executorID == "com.kalsmritikosh.step.decision" else {
             throw WorkflowStepExecutionError.executorKindMismatch(
@@ -283,9 +349,11 @@ public actor WorkflowStepExecutionEngine {
                 reason: "Option is not a declared decision branch")
         }
         // recordHumanDecision asserts a human actor with a nonblank identifier.
+        // Rationale text is NEVER parsed to infer evidence — basis is explicit.
         return try await lifecycleEngine.recordHumanDecision(
             runID: runID, decisionKey: decisionKey,
             selectedOption: selectedOption, rationale: rationale,
+            basis: basis,
             actor: actor, now: now)
     }
 
@@ -297,11 +365,13 @@ public actor WorkflowStepExecutionEngine {
         runID: UUID,
         approved: Bool,
         rationale: String?,
+        basis: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         at now: Date = Date()
     ) async throws -> ReopenedWorkflowRun {
         let aggregate = try await repository.fetchRun(runID)
         let (_, currentStep, currentStepRun) = try resolveCurrentStep(aggregate)
+        try await validateDecisionBasis(basis, aggregate: aggregate)
         guard currentStep.kind == .humanApproval,
               currentStepRun.executorID == "com.kalsmritikosh.step.human-approval" else {
             throw WorkflowStepExecutionError.executorKindMismatch(
@@ -315,7 +385,30 @@ public actor WorkflowStepExecutionEngine {
         // role that appears in the frozen approverRoles.
         return try await lifecycleEngine.recordHumanApproval(
             runID: runID, approved: approved, rationale: rationale,
+            basis: basis,
             actor: actor, now: now)
+    }
+
+    /// PJE-007: decision-basis validation — every basis reference uses role
+    /// .decisionBasis and passes the evidence gate (order preserved). Basis is
+    /// optional; an empty basis produces a valid empty snapshot.
+    private func validateDecisionBasis(
+        _ basis: [WorkflowProvenanceReference],
+        aggregate: ReopenedWorkflowRun
+    ) async throws {
+        guard !basis.isEmpty else { return }
+        for reference in basis where reference.role != .decisionBasis {
+            throw WorkflowProvenanceError.referenceDenied(
+                kind: reference.kind, id: reference.canonicalObjectID)
+        }
+        guard let validator = provenanceValidator else {
+            throw WorkflowProvenanceError.referenceDenied(
+                kind: basis[0].kind, id: basis[0].canonicalObjectID)
+        }
+        try await validator.validate(
+            basis,
+            workflowRunID: aggregate.run.id,
+            workspaceID: aggregate.run.workspaceID)
     }
 
     // MARK: - Private: route chooseBranch
@@ -328,6 +421,7 @@ public actor WorkflowStepExecutionEngine {
         rationale: String?,
         stateJSON: String,
         outputJSON: String?,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -361,6 +455,7 @@ public actor WorkflowStepExecutionEngine {
             rationale: rationale,
             completion: WorkflowStepCompletionPayload(stateJSON: stateJSON, outputJSON: outputJSON),
             entryPayload: entryPayload,
+            completionReferences: completionReferences,
             actor: actor,
             now: now
         )
@@ -374,6 +469,7 @@ public actor WorkflowStepExecutionEngine {
         stateJSON: String,
         stateSHA256: String,
         outputJSON: String?,
+        provenance: WorkflowProvenancePersistenceInput? = nil,
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -393,7 +489,8 @@ public actor WorkflowStepExecutionEngine {
             expectedRevision: aggregate.run.revision,
             actorKind: actor.kind,
             actorIdentifier: actor.identifier,
-            now: now
+            now: now,
+            provenance: provenance
         )
     }
 
@@ -408,6 +505,7 @@ public actor WorkflowStepExecutionEngine {
         stateJSON: String,
         stateSHA256: String,
         outputJSON: String?,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -449,6 +547,7 @@ public actor WorkflowStepExecutionEngine {
             selector: selector,
             completion: completion,
             entryPayload: entryPayload,
+            completionReferences: completionReferences,
             actor: actor,
             now: now
         )
@@ -465,6 +564,7 @@ public actor WorkflowStepExecutionEngine {
         stateJSON: String,
         stateSHA256: String,
         outputJSON: String?,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -499,6 +599,7 @@ public actor WorkflowStepExecutionEngine {
             selector: selector,
             completion: completion,
             entryPayload: entryPayload,
+            completionReferences: completionReferences,
             actor: actor,
             now: now
         )
