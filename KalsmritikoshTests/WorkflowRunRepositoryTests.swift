@@ -26,7 +26,7 @@ struct WorkflowRunRepositoryTests {
     // MARK: - Setup helpers
 
     private func makeDatabase() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 76)
+        try await MigrationFixtureBuilder.database(atVersion: 77)
     }
 
     private func makeRepository(db: Database) -> WorkflowRunRepository {

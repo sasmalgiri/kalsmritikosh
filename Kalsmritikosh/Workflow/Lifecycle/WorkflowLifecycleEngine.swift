@@ -90,7 +90,13 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .runStateChanged,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: [try stepProvenanceInput(
+                runID: runID, stepRunID: stepRunID,
+                revision: aggregate.run.revision + 1,
+                executorID: entryPayload.executorID,
+                executorVersion: entryPayload.executorVersion,
+                stateSHA256: stateHash, references: [])]
         )
 
         return try await repository.applyLifecyclePlan(
@@ -157,6 +163,24 @@ public actor WorkflowLifecycleEngine {
         let (stateJSON, outputJSON) = try codec.resolveCompletionPayload(stepCompletion, current: currentStepRun)
         let stateHash = try codec.stateSHA256(for: stateJSON)
 
+        // PJE-007: a pause whose completion payload CHANGES the step state must
+        // ride with a fresh provenance snapshot in the SAME savepoint, or the
+        // step's latest snapshot would stop describing its persisted state and
+        // reopen would fail. References are carried forward from the step's
+        // existing snapshot — never fabricated or dropped. Legacy steps and
+        // no-op pauses (unchanged state) are left untouched.
+        var pauseProvenance: [WorkflowProvenancePersistenceInput] = []
+        if stateHash != currentStepRun.stateSHA256,
+           try await repository.provenanceSemantics(owner: .stepRun(currentStepRun.id)) == .snapshotV1 {
+            let carried = try await currentStepSnapshotReferences(stepRunID: currentStepRun.id)
+            pauseProvenance = [try stepProvenanceInput(
+                runID: runID, stepRunID: currentStepRun.id,
+                revision: aggregate.run.revision + 1,
+                executorID: currentStepRun.executorID,
+                executorVersion: currentStepRun.executorVersion,
+                stateSHA256: stateHash, references: carried)]
+        }
+
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
                 newStatus: .paused,
@@ -182,7 +206,8 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: .pause,
             eventType: .runStateChanged,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: pauseProvenance
         )
 
         return try await repository.applyLifecyclePlan(
@@ -335,6 +360,7 @@ public actor WorkflowLifecycleEngine {
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         entryPayload: WorkflowStepEntryPayload = .empty,
         scope: SensitiveScope? = nil,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -441,6 +467,25 @@ public actor WorkflowLifecycleEngine {
             // The terminal step itself becomes the current step
         }
 
+        // PJE-007: completed-step snapshot (executor references) + prepared-step
+        // snapshot (empty) ride in the SAME SAVEPOINT as the transition.
+        var stepProvenance: [WorkflowProvenancePersistenceInput] = [
+            try stepProvenanceInput(
+                runID: runID, stepRunID: currentStepRun.id,
+                revision: aggregate.run.revision + 1,
+                executorID: currentStepRun.executorID,
+                executorVersion: currentStepRun.executorVersion,
+                stateSHA256: stateHash, references: completionReferences)
+        ]
+        if !isTerminal {
+            stepProvenance.append(try stepProvenanceInput(
+                runID: runID, stepRunID: nextStepRunID,
+                revision: aggregate.run.revision + 1,
+                executorID: entryPayload.executorID,
+                executorVersion: entryPayload.executorVersion,
+                stateSHA256: nextStateHash, references: []))
+        }
+
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
                 newStatus: nextRunStatus,
@@ -459,7 +504,8 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .runStateChanged,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: stepProvenance
         )
 
         let result = try await repository.applyLifecyclePlan(
@@ -489,6 +535,7 @@ public actor WorkflowLifecycleEngine {
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         entryPayload: WorkflowStepEntryPayload = .empty,
         scope: SensitiveScope? = nil,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -557,6 +604,24 @@ public actor WorkflowLifecycleEngine {
             ))
         }
 
+        // PJE-007: completed-step + prepared-step snapshots for this branch transition.
+        var branchStepProvenance: [WorkflowProvenancePersistenceInput] = [
+            try stepProvenanceInput(
+                runID: runID, stepRunID: currentStepRun.id,
+                revision: aggregate.run.revision + 1,
+                executorID: currentStepRun.executorID,
+                executorVersion: currentStepRun.executorVersion,
+                stateSHA256: stateHash, references: completionReferences)
+        ]
+        if !isTerminal {
+            branchStepProvenance.append(try stepProvenanceInput(
+                runID: runID, stepRunID: nextStepRunID,
+                revision: aggregate.run.revision + 1,
+                executorID: entryPayload.executorID,
+                executorVersion: entryPayload.executorVersion,
+                stateSHA256: nextStateHash, references: []))
+        }
+
         let plan = WorkflowLifecyclePlan(
             runPatch: WorkflowLifecycleRunPatch(
                 newStatus: isTerminal ? .completed : .active,
@@ -593,7 +658,11 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .decisionRecorded,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: branchStepProvenance,
+            decisionProvenance: try decisionProvenanceInput(
+                runID: runID, decisionID: decisionID,
+                revision: aggregate.run.revision + 1, basis: [])
         )
 
         let result = try await repository.applyLifecyclePlan(
@@ -664,6 +733,7 @@ public actor WorkflowLifecycleEngine {
         decisionKey: String,
         selectedOption: String,
         rationale: String?,
+        basis: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -714,7 +784,10 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .decisionRecorded,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            decisionProvenance: try decisionProvenanceInput(
+                runID: runID, decisionID: decisionID,
+                revision: aggregate.run.revision + 1, basis: basis)
         )
         return try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
@@ -727,6 +800,7 @@ public actor WorkflowLifecycleEngine {
         runID: UUID,
         approved: Bool,
         rationale: String?,
+        basis: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -777,7 +851,10 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .decisionRecorded,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            decisionProvenance: try decisionProvenanceInput(
+                runID: runID, decisionID: decisionID,
+                revision: aggregate.run.revision + 1, basis: basis)
         )
         return try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
@@ -791,6 +868,7 @@ public actor WorkflowLifecycleEngine {
         selector: WorkflowTransitionSelector,
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         entryPayload: WorkflowStepEntryPayload = .empty,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -858,7 +936,21 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: nil,
             eventType: .runStateChanged,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: [
+                try stepProvenanceInput(
+                    runID: runID, stepRunID: currentStepRun.id,
+                    revision: aggregate.run.revision + 1,
+                    executorID: currentStepRun.executorID,
+                    executorVersion: currentStepRun.executorVersion,
+                    stateSHA256: stateHash, references: completionReferences),
+                try stepProvenanceInput(
+                    runID: runID, stepRunID: newStepRunID,
+                    revision: aggregate.run.revision + 1,
+                    executorID: entryPayload.executorID,
+                    executorVersion: entryPayload.executorVersion,
+                    stateSHA256: nextStateHash, references: [])
+            ]
         )
         return try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
@@ -875,6 +967,7 @@ public actor WorkflowLifecycleEngine {
         runID: UUID,
         completion: WorkflowStepCompletionPayload = WorkflowStepCompletionPayload(),
         scope: SensitiveScope? = nil,
+        completionReferences: [WorkflowProvenanceReference] = [],
         actor: WorkflowLifecycleActor,
         now: Date
     ) async throws -> ReopenedWorkflowRun {
@@ -944,7 +1037,13 @@ public actor WorkflowLifecycleEngine {
             checkpointReason: .completion,
             eventType: .runStateChanged,
             actorKind: actor.kind,
-            actorIdentifier: actor.identifier
+            actorIdentifier: actor.identifier,
+            stepProvenance: [try stepProvenanceInput(
+                runID: runID, stepRunID: currentStepRun.id,
+                revision: aggregate.run.revision + 1,
+                executorID: currentStepRun.executorID,
+                executorVersion: currentStepRun.executorVersion,
+                stateSHA256: stateHash, references: completionReferences)]
         )
         let result = try await repository.applyLifecyclePlan(
             runID: runID, expectedRevision: aggregate.run.revision, plan: plan, now: now)
@@ -1057,6 +1156,68 @@ public actor WorkflowLifecycleEngine {
 
     public func validateDefinition(_ validated: ValidatedWorkflowDefinition) throws {
         try validator.validate(validated)
+    }
+
+    // MARK: - PJE-007 provenance helpers
+
+    /// Build a step-state snapshot input. Producer identity is the exact
+    /// executor identity when known; otherwise the lifecycle fallback identity.
+    private nonisolated func stepProvenanceInput(
+        runID: UUID,
+        stepRunID: UUID,
+        revision: Int,
+        executorID: String?,
+        executorVersion: String?,
+        stateSHA256: String,
+        references: [WorkflowProvenanceReference]
+    ) throws -> WorkflowProvenancePersistenceInput {
+        let producerID = (executorID?.isEmpty == false)
+            ? executorID! : WorkflowProvenanceProducers.lifecycleID
+        let producerVersion = (executorVersion?.isEmpty == false)
+            ? executorVersion! : WorkflowProvenanceProducers.lifecycleVersion
+        let snapshot = WorkflowProvenanceSnapshot(
+            ownerKind: .stepState,
+            workflowRunID: runID,
+            ownerID: stepRunID,
+            workflowRunRevision: revision,
+            producerID: producerID,
+            producerVersion: producerVersion,
+            sourceStateSHA256: stateSHA256,
+            references: references)
+        return try WorkflowProvenancePersistenceInput.make(snapshot: snapshot)
+    }
+
+    /// The references on a step's latest provenance snapshot, decoded and
+    /// hash-verified. Empty when the step has no snapshot. Used to carry an
+    /// executor's references forward through a state-changing pause so provenance
+    /// is preserved rather than fabricated or dropped.
+    private func currentStepSnapshotReferences(
+        stepRunID: UUID
+    ) async throws -> [WorkflowProvenanceReference] {
+        let rows = try await repository.provenanceSnapshots(owner: .stepRun(stepRunID))
+        guard let latest = rows.last else { return [] }
+        return try WorkflowProvenanceCodec.decodeAndVerify(
+            json: latest.snapshotJSON, expectedSHA256: latest.snapshotSHA256,
+            snapshotID: latest.id).references
+    }
+
+    /// Build a decision snapshot input (empty basis snapshots are valid).
+    private nonisolated func decisionProvenanceInput(
+        runID: UUID,
+        decisionID: UUID,
+        revision: Int,
+        basis: [WorkflowProvenanceReference]
+    ) throws -> WorkflowProvenancePersistenceInput {
+        let snapshot = WorkflowProvenanceSnapshot(
+            ownerKind: .decision,
+            workflowRunID: runID,
+            ownerID: decisionID,
+            workflowRunRevision: revision,
+            producerID: WorkflowProvenanceProducers.decisionID,
+            producerVersion: WorkflowProvenanceProducers.decisionVersion,
+            sourceStateSHA256: nil,
+            references: basis)
+        return try WorkflowProvenancePersistenceInput.make(snapshot: snapshot)
     }
 
     // MARK: - Private helpers

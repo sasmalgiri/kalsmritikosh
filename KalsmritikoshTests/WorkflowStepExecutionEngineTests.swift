@@ -17,7 +17,7 @@ struct WorkflowStepExecutionEngineTests {
     // MARK: - DB / engine factories
 
     private func makeDB() async throws -> Database {
-        try await MigrationFixtureBuilder.database(atVersion: 76)
+        try await MigrationFixtureBuilder.database(atVersion: 77)
     }
 
     private func makeRegistry(executors: [any WorkflowStepExecutor]) throws -> WorkflowStepExecutorRegistry {
