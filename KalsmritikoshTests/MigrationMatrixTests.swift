@@ -68,6 +68,8 @@ struct MigrationMatrixTests {
                 "v77 workflow_provenance_snapshots table missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "workflow_attachment_bindings"),
                 "v77 workflow_attachment_bindings table missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "workflow_automation_executions"),
+                "v78 workflow_automation_executions table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -82,7 +84,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 77)           // v77 = PJE-007 provenance bridge
+        #expect(SchemaMigrations.latestVersion == 78)           // v78 = PJE-010 automation execution ledger
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

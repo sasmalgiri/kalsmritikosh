@@ -12,7 +12,8 @@
     "KalsmritikoshTests/EmailParticipantMigrationTests",
     "KalsmritikoshTests/SourceReliabilityAssessmentMigrationTests",
     "KalsmritikoshTests/WorkflowRunMigrationTests",
-    "KalsmritikoshTests/WorkflowProvenanceMigrationTests"
+    "KalsmritikoshTests/WorkflowProvenanceMigrationTests",
+    "KalsmritikoshTests/WorkflowAutomationExecutionMigrationTests"
   ],
   "requiredSuites": [
     "MigrationMatrixTests",
@@ -26,8 +27,9 @@
     "EmailParticipantMigrationTests",
     "SourceReliabilityAssessmentMigrationTests",
     "WorkflowRunMigrationTests",
-    "WorkflowProvenanceMigrationTests"
+    "WorkflowProvenanceMigrationTests",
+    "WorkflowAutomationExecutionMigrationTests"
   ],
-  "minimumExecutedTests": 80,
-  "note": "Milestone migration matrix (v0/1/36/54/61..77 → v77), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the OPS/PJE engine migrations through v75 (Issue/Task/SensitiveScope/WorkProductRun/email/reliability/workflow-run ledgers), v75→v76 (PJE-006B.1 workflow_step_runs.state_hash_semantics), and v76→v77 (PJE-007 provenance bridge: workflow_provenance_snapshots / workflow_provenance_references / workflow_attachment_bindings + provenance_semantics columns on step/artifact/decision, owner-exclusivity CHECK, partial UNIQUE owner indexes, CASCADE delete, canonical isolation, self-heal marker, SAVEPOINT rollback) suites. Counts by xcresulttool (parameterized function = 1): milestoneMigratesToLatest and faultAtBoundaryRollsBack each count as 1. Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh). Floor 80 = 68 (PJE-006B.1 actual group count) + 12 (WorkflowProvenanceMigrationTests)."
+  "minimumExecutedTests": 90,
+  "note": "Milestone migration matrix (v0/1/36/54/61..77 → v77), SAVEPOINT fault atomicity, genuine DDL/backfill/SQLITE_FULL failures, malformed partial schemas, synthetic real-archive preservation, the existing genuine v61→v62 preservation + rollback/retry, plus the OPS/PJE engine migrations through v75 (Issue/Task/SensitiveScope/WorkProductRun/email/reliability/workflow-run ledgers), v75→v76 (PJE-006B.1 workflow_step_runs.state_hash_semantics), and v76→v77 (PJE-007 provenance bridge: workflow_provenance_snapshots / workflow_provenance_references / workflow_attachment_bindings + provenance_semantics columns on step/artifact/decision, owner-exclusivity CHECK, partial UNIQUE owner indexes, CASCADE delete, canonical isolation, self-heal marker, SAVEPOINT rollback) suites. Counts by xcresulttool (parameterized function = 1): milestoneMigratesToLatest and faultAtBoundaryRollsBack each count as 1. Does NOT require the private owner archive (RealArchiveMigrationTests uses a synthetic on-disk archive; the sanitized owner archive is an owner step, ci/migrations/verify-real-archive.sh). v77→v78 (PJE-010 automation execution ledger: workflow_automation_executions table + UNIQUE idempotency index + audit indexes, CASCADE from workflow_runs, status CHECK, canonical isolation, self-heal marker, SAVEPOINT rollback). Floor 90 = 80 (PJE-009 group count) + 10 (WorkflowAutomationExecutionMigrationTests)."
 }

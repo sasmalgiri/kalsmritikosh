@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 77
+    public static let latestVersion = 78
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -202,7 +202,12 @@ public enum SchemaMigrations {
             "workflow_attention_items": ["id", "run_id", "source_kind", "severity", "status",
                                           "title", "created_at"],
             "workflow_run_events": ["id", "run_id", "sequence", "run_revision", "type",
-                                     "actor_kind", "payload_json", "occurred_at"]
+                                     "actor_kind", "payload_json", "occurred_at"],
+            // v78 — automation execution ledger (PJE-010): the NEWEST marker.
+            "workflow_automation_executions": ["id", "workspace_id", "application_definition_id",
+                                                "automation_definition_id", "automation_definition_version",
+                                                "trigger_kind", "trigger_event_key", "action_kind",
+                                                "idempotency_key", "request_sha256", "status", "started_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -290,7 +295,8 @@ public enum SchemaMigrations {
         (74, v74),
         (75, v75),
         (76, v76),
-        (77, v77)
+        (77, v77),
+        (78, v78)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3263,5 +3269,55 @@ public enum SchemaMigrations {
     );
     CREATE INDEX idx_wfab_source_version ON workflow_attachment_bindings(source_version_id);
     CREATE INDEX idx_wfab_logical_source ON workflow_attachment_bindings(logical_source_id);
+    """
+
+    // MARK: - v78 — automation execution ledger (PJE-010)
+
+    private static let v78: String = """
+    -- The automation execution ledger: an idempotent, tamper-evident AUDIT
+    -- RECEIPT for every runtime automation firing. It is NOT a task, deadline,
+    -- evidence or attention store — proposal OUTPUTS live in their existing
+    -- canonical tables (professional_tasks candidate, deadline_candidates,
+    -- workflow_attention_items). This table only records that a version-pinned
+    -- automation ran, what it produced, and its idempotency identity, so the
+    -- same trigger event never creates a duplicate candidate on replay/relaunch.
+    --
+    -- idempotency_key = SHA-256 over (automation def id/version + workspace/run
+    -- scope + trigger event identity). UNIQUE — a repeated delivery reuses the
+    -- prior execution (status 'skippedDuplicate') instead of a second output.
+    -- request_sha256 / result_sha256 are stored-byte hashes (the PJE-006B.1
+    -- contract) so request/result tampering is detectable on reopen.
+    CREATE TABLE workflow_automation_executions (
+        id                            TEXT PRIMARY KEY NOT NULL,
+        workspace_id                  TEXT NOT NULL,
+        workflow_run_id               TEXT,
+        step_run_id                   TEXT,
+        application_definition_id     TEXT NOT NULL,
+        automation_definition_id      TEXT NOT NULL,
+        automation_definition_version INTEGER NOT NULL,
+        trigger_kind                  TEXT NOT NULL,
+        trigger_event_key             TEXT NOT NULL,
+        action_kind                   TEXT NOT NULL,
+        idempotency_key               TEXT NOT NULL,
+        request_json                  TEXT NOT NULL,
+        request_sha256                TEXT NOT NULL,
+        status                        TEXT NOT NULL,
+        output_kind                   TEXT,
+        output_id                     TEXT,
+        result_json                   TEXT,
+        result_sha256                 TEXT,
+        started_at                    REAL NOT NULL,
+        completed_at                  REAL,
+        failure_reason                TEXT,
+        FOREIGN KEY(workflow_run_id) REFERENCES workflow_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(step_run_id)     REFERENCES workflow_step_runs(id) ON DELETE CASCADE,
+        CHECK(automation_definition_version >= 1),
+        CHECK(status IN ('started','succeeded','failed','skippedDuplicate'))
+    );
+    CREATE UNIQUE INDEX idx_wae_idempotency ON workflow_automation_executions(idempotency_key);
+    CREATE INDEX idx_wae_workspace  ON workflow_automation_executions(workspace_id);
+    CREATE INDEX idx_wae_run        ON workflow_automation_executions(workflow_run_id);
+    CREATE INDEX idx_wae_automation ON workflow_automation_executions(automation_definition_id, automation_definition_version);
+    CREATE INDEX idx_wae_trigger    ON workflow_automation_executions(trigger_event_key);
     """
 }
