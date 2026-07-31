@@ -43,7 +43,7 @@ public actor MethodRunRepository {
     private static let edgeColumns =
         "id, method_run_id, from_node_id, to_node_id, edge_kind, label, ordinal"
     private static let linkColumns =
-        "method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at"
+        "id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at"
     private static let assumptionColumns =
         "id, method_run_id, node_id, statement, status, rationale, created_by, reviewed_by, reviewed_at"
     private static let findingColumns =
@@ -118,17 +118,42 @@ public actor MethodRunRepository {
             [.uuid(runID)]).compactMap(Self.decodeValidation)
     }
 
+    /// The run plus all seven child collections read in ONE non-interleavable
+    /// database operation, so the aggregate is a single consistent snapshot (never
+    /// a run at revision N with children from revision N+1). A mutation cannot
+    /// interleave between the reads because they all run inside one savepoint on
+    /// the isolated Database.
     public func aggregate(runID: UUID) async throws -> MethodRunAggregate? {
-        guard let run = try await run(id: runID) else { return nil }
-        return MethodRunAggregate(
-            run: run,
-            nodes: try await nodes(runID: runID),
-            edges: try await edges(runID: runID),
-            evidenceLinks: try await evidenceLinks(runID: runID),
-            assumptions: try await assumptions(runID: runID),
-            findings: try await findings(runID: runID),
-            reviews: try await reviews(runID: runID),
-            validationResults: try await validationResults(runID: runID))
+        try await database.withSavepoint("mrr_agg_\(Self.spSuffix(runID))") { db -> MethodRunAggregate? in
+            guard let run = try db.query(
+                "SELECT \(Self.runColumns) FROM method_runs WHERE id = ?;", [.uuid(runID)])
+                .first.flatMap(Self.decodeRun) else { return nil }
+            let nodes = try db.query(
+                "SELECT \(Self.nodeColumns) FROM method_nodes WHERE method_run_id = ? ORDER BY ordinal, id;",
+                [.uuid(runID)]).compactMap(Self.decodeNode)
+            let edges = try db.query(
+                "SELECT \(Self.edgeColumns) FROM method_edges WHERE method_run_id = ? ORDER BY ordinal, id;",
+                [.uuid(runID)]).compactMap(Self.decodeEdge)
+            let links = try db.query(
+                "SELECT \(Self.linkColumns) FROM method_evidence_links WHERE method_run_id = ? ORDER BY ordinal, id;",
+                [.uuid(runID)]).compactMap(Self.decodeLink)
+            let assumptions = try db.query(
+                "SELECT \(Self.assumptionColumns) FROM method_assumptions WHERE method_run_id = ? ORDER BY rowid;",
+                [.uuid(runID)]).compactMap(Self.decodeAssumption)
+            let findings = try db.query(
+                "SELECT \(Self.findingColumns) FROM method_findings WHERE method_run_id = ? ORDER BY created_at, id;",
+                [.uuid(runID)]).compactMap(Self.decodeFinding)
+            let reviews = try db.query(
+                "SELECT \(Self.reviewColumns) FROM method_reviews WHERE method_run_id = ? ORDER BY reviewed_at, id;",
+                [.uuid(runID)]).compactMap(Self.decodeReview)
+            let validations = try db.query(
+                "SELECT \(Self.validationColumns) FROM method_validation_results WHERE method_run_id = ? ORDER BY created_at, id;",
+                [.uuid(runID)]).compactMap(Self.decodeValidation)
+            return MethodRunAggregate(
+                run: run, nodes: nodes, edges: edges, evidenceLinks: links,
+                assumptions: assumptions, findings: findings, reviews: reviews,
+                validationResults: validations)
+        }
     }
 
     // MARK: - Create
@@ -268,8 +293,7 @@ public actor MethodRunRepository {
         if case .denied(let reason) = verdict {
             throw MethodPersistenceError.evidenceReferenceDenied(reason: reason)
         }
-        let rowID = UUID()
-        return try await database.withSavepoint("mrr_evlink_\(Self.spSuffix(rowID))\(expectedRevision)") { db in
+        return try await database.withSavepoint("mrr_evlink_\(Self.spSuffix(link.id))\(expectedRevision)") { db in
             try Self.casBump(db, runID: link.methodRunID, expected: expectedRevision, now: now)
             if let nodeID = link.nodeID {
                 try Self.requireOwned(db, table: "method_nodes", id: nodeID, runID: link.methodRunID, what: "evidence-link node")
@@ -279,7 +303,7 @@ public actor MethodRunRepository {
                     (id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at)
                 VALUES (?,?,?,?,?,?,?,?,?);
                 """, [
-                    .uuid(rowID), .uuid(link.methodRunID), link.nodeID.map(SQLValue.uuid) ?? .null,
+                    .uuid(link.id), .uuid(link.methodRunID), link.nodeID.map(SQLValue.uuid) ?? .null,
                     .text(link.targetKind.rawValue), .uuid(link.targetID), .text(link.role.rawValue),
                     .integer(Int64(link.ordinal)), .text(link.addedBy), .date(link.addedAt)
                 ])
@@ -372,18 +396,27 @@ public actor MethodRunRepository {
     public func appendValidationResult(_ v: MethodValidationResult, expectedRevision: Int, now: Date) async throws -> MethodRun {
         return try await database.withSavepoint("mrr_valid_\(Self.spSuffix(v.id))\(expectedRevision)") { db in
             try Self.casBump(db, runID: v.methodRunID, expected: expectedRevision, now: now)
-            if let subjectID = v.subjectID {
-                switch v.subjectKind {
-                case .run:
-                    guard subjectID == v.methodRunID else {
-                        throw MethodPersistenceError.invalidValidationSubject("run subject id must equal the run id")
-                    }
-                case .node:        try Self.requireOwned(db, table: "method_nodes", id: subjectID, runID: v.methodRunID, what: "validation node")
-                case .edge:        try Self.requireOwned(db, table: "method_edges", id: subjectID, runID: v.methodRunID, what: "validation edge")
-                case .assumption:  try Self.requireOwned(db, table: "method_assumptions", id: subjectID, runID: v.methodRunID, what: "validation assumption")
-                case .finding:     try Self.requireOwned(db, table: "method_findings", id: subjectID, runID: v.methodRunID, what: "validation finding")
-                case .evidenceLink: try Self.requireOwned(db, table: "method_evidence_links", id: subjectID, runID: v.methodRunID, what: "validation evidence link")
+            switch v.subjectKind {
+            case .run:
+                // A run subject id is optional, but when present must be the run itself.
+                if let subjectID = v.subjectID, subjectID != v.methodRunID {
+                    throw MethodPersistenceError.invalidValidationSubject("run subject id must equal the run id")
                 }
+            case .node, .edge, .assumption, .finding, .evidenceLink:
+                // Every non-run subject is MANDATORY and must belong to the same run.
+                guard let subjectID = v.subjectID else {
+                    throw MethodPersistenceError.invalidValidationSubject("\(v.subjectKind.rawValue) subject requires a subject id")
+                }
+                let table: String
+                switch v.subjectKind {
+                case .node:         table = "method_nodes"
+                case .edge:         table = "method_edges"
+                case .assumption:   table = "method_assumptions"
+                case .finding:      table = "method_findings"
+                case .evidenceLink: table = "method_evidence_links"
+                case .run:          table = ""   // unreachable — handled above
+                }
+                try Self.requireOwned(db, table: table, id: subjectID, runID: v.methodRunID, what: "validation \(v.subjectKind.rawValue)")
             }
             try db.exec("""
                 INSERT INTO method_validation_results
@@ -470,13 +503,13 @@ public actor MethodRunRepository {
     }
 
     private nonisolated static func decodeLink(_ r: SQLRow) -> MethodEvidenceLink? {
-        guard let runID = r.uuid(0), let kindRaw = r.string(2),
+        guard let id = r.uuid(0), let runID = r.uuid(1), let kindRaw = r.string(3),
               let targetKind = WorkflowProvenanceReferenceKind(rawValue: kindRaw),
-              let targetID = r.uuid(3), let roleRaw = r.string(4),
-              let role = MethodEvidenceLinkRole(rawValue: roleRaw), let ordinal = r.int(5),
-              let addedBy = r.string(6), let addedAt = r.date(7) else { return nil }
+              let targetID = r.uuid(4), let roleRaw = r.string(5),
+              let role = MethodEvidenceLinkRole(rawValue: roleRaw), let ordinal = r.int(6),
+              let addedBy = r.string(7), let addedAt = r.date(8) else { return nil }
         return MethodEvidenceLink(
-            methodRunID: runID, nodeID: r.uuid(1), targetKind: targetKind, targetID: targetID,
+            id: id, methodRunID: runID, nodeID: r.uuid(2), targetKind: targetKind, targetID: targetID,
             role: role, ordinal: Int(ordinal), addedBy: addedBy, addedAt: addedAt)
     }
 

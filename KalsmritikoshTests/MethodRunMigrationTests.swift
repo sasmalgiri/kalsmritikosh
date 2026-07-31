@@ -215,6 +215,25 @@ struct MethodRunMigrationTests {
         #expect(Int(try await db.query("SELECT COUNT(*) FROM gap_nodes;", []).first?.int(0) ?? -1) == gapsBefore)
     }
 
+    @Test("method_validation_results requires a subject id for every non-run subject kind")
+    func validationSubjectCheck() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: 79)
+        let ws = UUID(); try await seedWorkspace(db, ws)
+        let run = UUID(); try await insertRun(db, id: run, ws: ws)
+        func insertValidation(_ kind: String, subjectID: SQLValue) async throws {
+            try await db.exec("""
+                INSERT INTO method_validation_results (id, method_run_id, validator_id, validator_version,
+                                                       severity, code, message, subject_kind, subject_id, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(run), .text("v"), .text("1"), .text("info"), .text("C"),
+                      .text("m"), .text(kind), subjectID, .real(0)])
+        }
+        // A non-run subject with a NULL subject_id must fail the CHECK.
+        await #expect(throws: (any Error).self) { try await insertValidation("node", subjectID: .null) }
+        // A run subject may omit the subject id.
+        try await insertValidation("run", subjectID: .null)
+    }
+
     @Test("Foreign-key integrity is clean after seeding a method aggregate")
     func foreignKeyIntegrityClean() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 79)

@@ -119,6 +119,22 @@ struct PM002MethodPersistenceBoundaryTests {
         }
     }
 
+    // MARK: - Aggregate is a single snapshot
+
+    @Test("aggregate reconstruction reads one isolated database snapshot, not separate awaited reads")
+    func aggregateIsSingleSnapshot() throws {
+        let repo = try Self.source("Kalsmritikosh/Method/Persistence/MethodRunRepository.swift")
+        let start = try #require(repo.range(of: "func aggregate(runID:"))
+        let body = String(repo[start.lowerBound...].prefix(1600))
+        // The run + all seven child reads happen inside ONE withSavepoint closure,
+        // never through multiple separately-awaited read helpers.
+        #expect(body.contains("withSavepoint"))
+        for awaited in ["try await nodes(runID", "try await edges(runID", "try await findings(runID"] {
+            #expect(!body.contains(awaited),
+                    "aggregate must not reassemble via separately-awaited reads ('\(awaited)')")
+        }
+    }
+
     // MARK: - Stage 3 adapter untouched
 
     @Test("The Stage 3 MethodStepExecutor references no Stage 4 persistence type")

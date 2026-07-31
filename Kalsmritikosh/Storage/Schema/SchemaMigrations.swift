@@ -3557,7 +3557,9 @@ public enum SchemaMigrations {
         CHECK(length(trim(code)) > 0),
         CHECK(length(trim(message)) > 0),
         CHECK(severity IN ('info','warning','error','blocking')),
-        CHECK(subject_kind IN ('run','node','edge','assumption','finding','evidenceLink'))
+        CHECK(subject_kind IN ('run','node','edge','assumption','finding','evidenceLink')),
+        -- A non-run subject must name a concrete subject id; a run subject may omit it.
+        CHECK(subject_kind = 'run' OR subject_id IS NOT NULL)
     );
     CREATE INDEX idx_method_validation_run ON method_validation_results(method_run_id, created_at);
     """

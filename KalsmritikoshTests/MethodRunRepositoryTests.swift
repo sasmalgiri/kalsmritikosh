@@ -273,7 +273,43 @@ struct MethodRunRepositoryTests {
         #expect(try await rig.repo.findings(runID: run.id).count == 1)
     }
 
-    // MARK: - Validation subject ownership
+    // MARK: - Evidence-link identity
+
+    @Test("An evidence link carries a stable id that reopens and can be a validation subject")
+    func evidenceLinkIdentityRoundTrips() async throws {
+        let rig = try await makeRig()
+        let run = try await makeRun(rig)
+        let link = MethodEvidenceLink(methodRunID: run.id, targetKind: .entity, targetID: rig.entityInWS,
+            role: .supporting, ordinal: 0, addedBy: "a", addedAt: t0)
+        _ = try await rig.repo.addEvidenceLink(link, expectedRevision: 1, gate: rig.gate, now: t0)   // rev 2
+        // The persisted id is the model's id (no hidden repository UUID); it reopens.
+        let db2 = try MigrationFixtureBuilder.reopen(at: rig.url)
+        let reopened = try await MethodRunRepository(database: db2).evidenceLinks(runID: run.id)
+        #expect(reopened.count == 1 && reopened[0].id == link.id)
+        // A validation result can now target that evidence link by its public id.
+        let v = MethodValidationResult(methodRunID: run.id, validatorID: "v", validatorVersion: "1",
+            severity: .warning, code: "C", message: "m", subjectKind: .evidenceLink, subjectID: link.id, createdAt: t0)
+        #expect(try await rig.repo.appendValidationResult(v, expectedRevision: 2, now: t0).revision == 3)
+    }
+
+    // MARK: - Validation subject ownership + mandatory subject
+
+    @Test("A non-run validation subject is mandatory and its absence fails atomically")
+    func validationSubjectMandatoryForNonRun() async throws {
+        let rig = try await makeRig()
+        let run = try await makeRun(rig)
+        let missing = MethodValidationResult(methodRunID: run.id, validatorID: "v", validatorVersion: "1",
+            severity: .error, code: "C", message: "m", subjectKind: .node, subjectID: nil, createdAt: t0)
+        await #expect(throws: MethodPersistenceError.self) {
+            _ = try await rig.repo.appendValidationResult(missing, expectedRevision: 1, now: self.t0)
+        }
+        #expect(try await rig.repo.validationResults(runID: run.id).isEmpty)
+        #expect(try await rig.repo.run(id: run.id)?.revision == 1)   // atomic: no revision bump
+        // A run-level validation with no subject id is allowed.
+        let ok = MethodValidationResult(methodRunID: run.id, validatorID: "v", validatorVersion: "1",
+            severity: .info, code: "OK", message: "m", subjectKind: .run, subjectID: nil, createdAt: t0)
+        #expect(try await rig.repo.appendValidationResult(ok, expectedRevision: 1, now: t0).revision == 2)
+    }
 
     @Test("A validation result cannot name a subject from another run")
     func validationSubjectOwnership() async throws {
