@@ -58,14 +58,6 @@ public actor EvidenceStore: EvidenceBlockResolving {
     ) async throws {
         let now = Date().timeIntervalSince1970
 
-        if makeCurrent {
-            // Retire the prior current version (keep the row; just flip flags).
-            try await database.exec("""
-            UPDATE source_versions SET is_current = 0, valid_to = ?
-            WHERE logical_source_id = ? AND is_current = 1;
-            """, [.real(now), .uuid(doc.logicalSourceID)])
-        }
-
         try await database.exec("""
         INSERT OR REPLACE INTO source_documents
             (id, logical_source_id, filename, detected_type, mime_type, content_hash, extraction_status, metadata, created_at)
@@ -82,22 +74,44 @@ public actor EvidenceStore: EvidenceBlockResolving {
             .real(now)
         ])
 
-        try await database.exec("""
-        INSERT OR REPLACE INTO source_versions
-            (id, logical_source_id, document_id, content_hash, supersedes, valid_from, valid_to, is_current, original_url, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
-            .uuid(doc.sourceVersionID),
-            .uuid(doc.logicalSourceID),
-            .uuid(doc.id),
-            .text(doc.contentHash),
-            .null,
-            .real(now),
-            .null,
-            .integer(makeCurrent ? 1 : 0),
-            originalURL.map { .text($0) } ?? .null,
-            .real(now)
-        ])
+        // USF-001 — source_versions is the ONE version authority; universal intake creates
+        // the version BEFORE any parser runs. Prefer to ATTACH the parsed document to that
+        // pre-existing version (verifying identity); only create a version here on the
+        // standalone/legacy path where intake did not run, and then with the v82 custody
+        // metadata the rebuilt table requires.
+        let normalizedHash = doc.contentHash.lowercased()
+        if let existing = try await database.query(
+            "SELECT logical_source_id FROM source_versions WHERE id = ?;", [.uuid(doc.sourceVersionID)]).first {
+            guard existing.uuid(0) == doc.logicalSourceID else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch(
+                    "parsed document \(doc.id) does not match source version \(doc.sourceVersionID)")
+            }
+            try await database.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;",
+                                    [.uuid(doc.id), .uuid(doc.sourceVersionID)])
+        } else {
+            if makeCurrent {
+                try await database.exec("""
+                UPDATE source_versions SET is_current = 0, valid_to = ?
+                WHERE logical_source_id = ? AND is_current = 1;
+                """, [.real(now), .uuid(doc.logicalSourceID)])
+            }
+            let declaredExtension = (doc.filename as NSString).pathExtension.lowercased()
+            try await database.exec("""
+            INSERT OR REPLACE INTO source_versions
+                (id, logical_source_id, document_id, content_hash, supersedes, valid_from, valid_to, is_current, original_url, created_at,
+                 filename, declared_extension, detected_type, mime_type, detection_basis, size_bytes, modified_at, custody_mode, preservation_status, vault_address, intake_recorded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [
+                .uuid(doc.sourceVersionID), .uuid(doc.logicalSourceID), .uuid(doc.id), .text(normalizedHash),
+                .null, .real(now), .null, .integer(makeCurrent ? 1 : 0),
+                originalURL.map { .text($0) } ?? .null, .real(now),
+                .text(doc.filename.isEmpty ? "legacy-source" : doc.filename),
+                .text(declaredExtension), .text(doc.detectedType.rawValue),
+                doc.mimeType.map { .text($0) } ?? .null, .text("unknown"),
+                .integer(max(0, sizeBytes)), .null, .text("referenced"), .text("referenceRecorded"),
+                .null, .real(now)
+            ])
+        }
 
         for block in doc.blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
             try await database.exec("""

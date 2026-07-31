@@ -146,7 +146,7 @@ struct MethodLifecycleLedgerHardeningMigrationTests {
         let db = try await MigrationFixtureBuilder.database(atVersion: 80)
         #expect(try await db.currentUserVersion() == 80)
         #expect(try await methodRunsSQL(db).contains("status = 'superseded'") == false)  // v80: no reverse CHECK yet
-        try await SchemaMigrations.migrate(db)     // → latest (81); must APPLY v81, not self-heal-skip
+        try await SchemaMigrations.migrate(db, through: 81)   // must APPLY v81, not self-heal-skip
         #expect(try await db.currentUserVersion() == 81)
         #expect(try await methodRunsSQL(db).contains("status = 'superseded'"))            // v81 hardening applied
     }
@@ -177,10 +177,10 @@ struct MethodLifecycleLedgerHardeningMigrationTests {
 
     // MARK: - Repeat + injected fault
 
-    @Test("Re-running migrate over a v81 database is a safe no-op")
+    @Test("Re-running migrate through v81 over a v81 database is a safe no-op")
     func v81Repeatable() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 81)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 81)
         #expect(try await db.currentUserVersion() == 81)
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }

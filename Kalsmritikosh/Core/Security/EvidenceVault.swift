@@ -67,6 +67,59 @@ public actor EvidenceVault {
         try store(Data(contentsOf: url, options: [.mappedIfSafe]))
     }
 
+    /// USF-001 — stream a file into the vault through a bounded window (never a whole-file
+    /// `Data(contentsOf:)`), computing SHA-256 while copying, so archives larger than
+    /// memory are stored safely. Commits atomically, marks the blob read-only, and verifies
+    /// the stored address equals the recomputed hash. Returns the content address.
+    @discardableResult
+    public func storeStreaming(contentsOf url: URL) throws -> String {
+        let chunkSize = 1 << 20
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            throw SourceIntakeError.inputNotAccessible(url)
+        }
+        defer { try? handle.close() }
+
+        // First pass: hash to derive the content address without holding the whole file.
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        let hash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        let dest = location(for: hash)
+        if fm.fileExists(atPath: dest.path) { return hash }   // already vaulted (dedup)
+
+        // Second pass: stream the bytes into a temp file, then commit atomically.
+        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try handle.seek(toOffset: 0)
+        let tmp = dest.deletingLastPathComponent().appendingPathComponent("tmp-" + hash)
+        fm.createFile(atPath: tmp.path, contents: nil)
+        guard let out = try? FileHandle(forWritingTo: tmp) else {
+            throw SourceIntakeError.managedCopyFailed(reason: "cannot open vault temp for \(hash.prefix(8))")
+        }
+        do {
+            while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                try out.write(contentsOf: chunk)
+            }
+            try out.close()
+        } catch {
+            try? out.close(); try? fm.removeItem(at: tmp)
+            throw SourceIntakeError.managedCopyFailed(reason: "vault write failed: \(error)")
+        }
+        // Commit atomically + make read-only, then verify the committed address.
+        do {
+            if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: tmp); return hash }
+            try fm.moveItem(at: tmp, to: dest)
+            try? fm.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dest.path)
+        } catch {
+            try? fm.removeItem(at: tmp)
+            throw SourceIntakeError.managedCopyFailed(reason: "vault commit failed: \(error)")
+        }
+        guard fm.fileExists(atPath: dest.path) else {
+            throw SourceIntakeError.managedCopyFailed(reason: "vault address missing after commit")
+        }
+        return hash
+    }
+
     public func contains(_ hash: String) -> Bool {
         fm.fileExists(atPath: location(for: hash).path)
     }

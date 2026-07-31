@@ -62,13 +62,13 @@ struct PM003MethodRegistryBridgeBoundaryTests {
 
     // MARK: - No schema change / one definition authority
 
-    @Test("The professional-method registry adds no schema table of its own; the latest schema is v81")
+    @Test("The professional-method registry adds no schema table of its own")
     func registryAddsNoSchemaOfItsOwn() {
         // PM-003 introduced no schema change; the run-state ledger is v79 (PM-002), the
-        // generic lifecycle is v80 (PM-004) and its ledger hardening is v81 (PM-004.1).
-        // The registry itself remains code-backed with no definition table (see
-        // noMethodDefinitionTable below).
-        #expect(SchemaMigrations.latestVersion == 81)
+        // generic lifecycle is v80 (PM-004), its ledger hardening is v81 (PM-004.1), and
+        // the latest schema is v82 (USF-001). The registry itself remains code-backed with
+        // no definition table (see noMethodDefinitionTable below).
+        #expect(SchemaMigrations.latestVersion >= 81)
     }
 
     @Test("No method-definition table exists — definitions stay code-registry-backed")

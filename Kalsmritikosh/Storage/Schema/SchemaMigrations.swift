@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 81
+    public static let latestVersion = 82
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -264,7 +264,23 @@ public enum SchemaMigrations {
                                            "severity", "code", "message", "subject_kind", "subject_id",
                                            "validation_batch_id", "evaluated_content_revision", "created_at"],
             "method_run_events": ["id", "method_run_id", "sequence", "run_revision", "content_revision",
-                                   "action", "from_status", "to_status", "actor_kind", "occurred_at"]
+                                   "action", "from_status", "to_status", "actor_kind", "occurred_at"],
+            // v82 — universal safe intake (USF-001): source_versions gains intake custody
+            // metadata (NEW columns, so the column probe distinguishes v82 from v81), plus
+            // two new tables and the version-linked ingest-attempt columns. These are the
+            // NEWEST markers — every future migration MUST add its newest physical marker.
+            "source_versions": ["id", "logical_source_id", "document_id", "content_hash", "supersedes",
+                                 "valid_from", "valid_to", "is_current", "original_url", "created_at",
+                                 "filename", "declared_extension", "detected_type", "mime_type",
+                                 "detection_basis", "size_bytes", "modified_at", "custody_mode",
+                                 "preservation_status", "vault_address", "intake_recorded_at"],
+            "source_intake_receipts": ["id", "occurrence_file_id", "logical_source_id", "source_version_id",
+                                        "outcome", "original_url", "content_hash", "custody_mode",
+                                        "preservation_status", "detail", "recorded_at"],
+            "source_version_relations": ["id", "parent_source_version_id", "child_source_version_id",
+                                          "relation", "ordinal", "created_at"],
+            "ingest_file_attempts": ["id", "url", "content_hash", "status", "stage", "detail",
+                                      "attempted_at", "logical_source_id", "source_version_id"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -373,7 +389,8 @@ public enum SchemaMigrations {
         (78, v78),
         (79, v79),
         (80, v80),
-        (81, v81)
+        (81, v81),
+        (82, v82)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3876,5 +3893,151 @@ public enum SchemaMigrations {
     CREATE INDEX idx_method_validation_contentrev ON method_validation_results(method_run_id, evaluated_content_revision);
     CREATE INDEX idx_method_validation_batch ON method_validation_results(method_run_id, validation_batch_id);
     CREATE INDEX idx_method_validation_validator ON method_validation_results(method_run_id, validator_id);
+    """
+
+    // MARK: - v82 — universal safe intake & pre-parser source custody (USF-001)
+
+    private static let v82: String = """
+    -- USF-001 guarantees that every ACCESSIBLE file receives a durable canonical
+    -- source + source-version custody record BEFORE any loader/parser/OCR/model runs.
+    -- source_versions remains the ONE version authority; this migration extends it with
+    -- intake custody metadata (a rebuild — CHECKs cannot be altered in place), repairs
+    -- any legacy multi-current rows, and adds the append-only intake-receipt ledger and
+    -- exact version-level parent/child relations. NO second source identity table.
+    -- migrate() runs the whole pass with FK enforcement OFF + a final foreign_key_check.
+
+    -- Repair legacy data BEFORE enforcing one-current-per-logical-source: demote every
+    -- current row that is not the newest (by valid_from, ties by stable id) for its
+    -- logical source, closing it with an appropriate valid_to. Never deletes a row.
+    UPDATE source_versions SET is_current = 0,
+        valid_to = COALESCE(valid_to, valid_from)
+    WHERE is_current = 1 AND EXISTS (
+        SELECT 1 FROM source_versions other
+        WHERE other.logical_source_id = source_versions.logical_source_id
+          AND other.is_current = 1
+          AND (other.valid_from > source_versions.valid_from
+               OR (other.valid_from = source_versions.valid_from AND other.id > source_versions.id))
+    );
+
+    -- Rebuild source_versions with intake custody metadata + CHECKs.
+    CREATE TABLE source_versions__v82 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        logical_source_id    TEXT NOT NULL,
+        document_id          TEXT,
+        content_hash         TEXT NOT NULL,
+        supersedes           TEXT,
+        valid_from           REAL NOT NULL,
+        valid_to             REAL,
+        is_current           INTEGER NOT NULL DEFAULT 1,
+        original_url         TEXT,
+        created_at           REAL NOT NULL,
+        -- Intake custody metadata. NOT-NULL with DEFAULTs so a legacy short-form insert
+        -- (id, logical_source_id, document_id, content_hash, valid_from, is_current,
+        -- created_at) still succeeds — source_versions has many existing writers.
+        filename             TEXT NOT NULL DEFAULT 'legacy-source',
+        declared_extension   TEXT NOT NULL DEFAULT '',
+        detected_type        TEXT NOT NULL DEFAULT 'unknown',
+        mime_type            TEXT,
+        detection_basis      TEXT NOT NULL DEFAULT 'unknown',
+        size_bytes           INTEGER NOT NULL DEFAULT 0,
+        modified_at          REAL,
+        custody_mode         TEXT NOT NULL DEFAULT 'referenced',
+        preservation_status  TEXT NOT NULL DEFAULT 'referenceRecorded',
+        vault_address        TEXT,
+        intake_recorded_at   REAL NOT NULL DEFAULT 0,
+        CHECK(length(trim(filename)) > 0),
+        CHECK(length(trim(detected_type)) > 0),
+        CHECK(detection_basis IN ('pathPattern','declaredExtension','magicBytes','unknown')),
+        CHECK(size_bytes >= 0),
+        -- content_hash is intentionally UNCONSTRAINED here (as it was pre-v82): the intake
+        -- path (SourceByteCapture) always writes a normalized 64-char lowercase SHA-256, but
+        -- legacy writers + a deliberately-missing custody hash (blocked downstream, not by the
+        -- schema) must still round-trip.
+        CHECK(custody_mode IN ('referenced','managed')),
+        CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported')),
+        CHECK(is_current IN (0,1)),
+        CHECK(supersedes IS NULL OR supersedes <> id),
+        -- managedCopyStored requires managed custody + a vault address; a referenced
+        -- source can never claim a stored managed copy.
+        CHECK(preservation_status <> 'managedCopyStored'
+              OR (custody_mode = 'managed' AND vault_address IS NOT NULL AND length(trim(vault_address)) > 0))
+    );
+    INSERT INTO source_versions__v82 (id, logical_source_id, document_id, content_hash, supersedes,
+                                      valid_from, valid_to, is_current, original_url, created_at,
+                                      filename, declared_extension, detected_type, mime_type, detection_basis,
+                                      size_bytes, modified_at, custody_mode, preservation_status, vault_address, intake_recorded_at)
+        SELECT sv.id, sv.logical_source_id, sv.document_id, lower(sv.content_hash), sv.supersedes,
+               sv.valid_from, sv.valid_to, sv.is_current, sv.original_url, sv.created_at,
+               COALESCE(NULLIF(sd.filename, ''),
+                        NULLIF(replace(f.url, rtrim(f.url, replace(f.url, '/', '')), ''), ''),
+                        'legacy-source-' || substr(sv.id, 1, 8)),
+               '',
+               COALESCE(NULLIF(sd.detected_type, ''), NULLIF(f.source_type, ''), 'unknown'),
+               sd.mime_type,
+               'unknown',
+               COALESCE(dp.size_bytes, f.size_bytes, 0),
+               f.modified_at,
+               'referenced',
+               'legacyImported',
+               NULL,
+               sv.created_at
+          FROM source_versions sv
+          LEFT JOIN source_documents sd ON sd.id = sv.document_id
+          LEFT JOIN files f ON f.id = sv.logical_source_id
+          LEFT JOIN document_profiles dp ON dp.source_version_id = sv.id;
+    DROP TABLE source_versions;
+    ALTER TABLE source_versions__v82 RENAME TO source_versions;
+    CREATE INDEX idx_source_versions_logical ON source_versions(logical_source_id);
+    CREATE INDEX idx_source_versions_current ON source_versions(logical_source_id, is_current);
+    CREATE INDEX idx_source_versions_hash ON source_versions(content_hash);
+    -- Exactly one current version per logical source.
+    CREATE UNIQUE INDEX idx_source_versions_one_current ON source_versions(logical_source_id) WHERE is_current = 1;
+
+    -- Append-only intake audit ledger. NOT a second source authority.
+    CREATE TABLE source_intake_receipts (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        occurrence_file_id   TEXT NOT NULL,
+        logical_source_id    TEXT NOT NULL,
+        source_version_id    TEXT NOT NULL,
+        outcome              TEXT NOT NULL,
+        original_url         TEXT,
+        content_hash         TEXT NOT NULL,
+        custody_mode         TEXT NOT NULL,
+        preservation_status  TEXT NOT NULL,
+        detail               TEXT,
+        recorded_at          REAL NOT NULL,
+        FOREIGN KEY(occurrence_file_id) REFERENCES files(id) ON DELETE CASCADE,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(outcome IN ('newLogicalSource','newVersion','unchanged','moved','aliased')),
+        CHECK(custody_mode IN ('referenced','managed')),
+        CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported')),
+        CHECK(content_hash = lower(content_hash) AND length(content_hash) = 64)
+    );
+    CREATE INDEX idx_source_intake_receipts_version ON source_intake_receipts(source_version_id);
+    CREATE INDEX idx_source_intake_receipts_logical ON source_intake_receipts(logical_source_id, recorded_at);
+
+    -- Exact version-level parent/child provenance (survives child parser failure).
+    CREATE TABLE source_version_relations (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        parent_source_version_id  TEXT NOT NULL,
+        child_source_version_id   TEXT NOT NULL,
+        relation                  TEXT NOT NULL,
+        ordinal                   INTEGER,
+        created_at                REAL NOT NULL,
+        FOREIGN KEY(parent_source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        FOREIGN KEY(child_source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(parent_source_version_id <> child_source_version_id),
+        CHECK(relation IN ('attachment','archiveMember','message','embedded','derivedConversion')),
+        CHECK(ordinal IS NULL OR ordinal >= 0)
+    );
+    CREATE UNIQUE INDEX idx_source_version_relations_unique
+        ON source_version_relations(parent_source_version_id, child_source_version_id, relation);
+    CREATE INDEX idx_source_version_relations_child ON source_version_relations(child_source_version_id);
+
+    -- Every processing attempt is tied to the exact source version once intake succeeds.
+    ALTER TABLE ingest_file_attempts ADD COLUMN logical_source_id TEXT;
+    ALTER TABLE ingest_file_attempts ADD COLUMN source_version_id TEXT;
+    CREATE INDEX idx_ingest_attempts_logical ON ingest_file_attempts(logical_source_id);
+    CREATE INDEX idx_ingest_attempts_version ON ingest_file_attempts(source_version_id);
     """
 }
