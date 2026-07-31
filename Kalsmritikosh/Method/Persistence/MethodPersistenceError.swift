@@ -32,4 +32,6 @@ public nonisolated enum MethodPersistenceError: Error, Equatable, Sendable {
     case invalidValidationSubject(String)
     /// An ordinal was negative.
     case invalidOrdinal(Int)
+    /// A content write was attempted on a run that is not draft or active (PM-004).
+    case contentMutationNotAllowed(UUID, status: String)
 }

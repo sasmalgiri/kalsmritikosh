@@ -84,7 +84,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 79)           // v79 = PM-002 method run-state ledger (Stage 4)
+        #expect(SchemaMigrations.latestVersion == 80)           // v80 = PM-004 method lifecycle (Stage 4)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

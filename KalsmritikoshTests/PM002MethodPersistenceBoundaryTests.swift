@@ -59,8 +59,15 @@ struct PM002MethodPersistenceBoundaryTests {
 
     @Test("Only MethodRunRepository writes the method tables (one authoritative writer)")
     func oneAuthoritativeWriter() throws {
+        // The authoritative operational writer is the MethodRunRepository type; PM-004
+        // adds its lifecycle writes in a same-type extension file
+        // (MethodRunRepository+Lifecycle.swift). SchemaMigrations.swift is excluded: its
+        // only method-table writes are the v80 rebuild's data-copy DDL (schema evolution,
+        // not an operational writer).
+        let authoritative: Set<String> = ["MethodRunRepository.swift", "MethodRunRepository+Lifecycle.swift",
+                                          "SchemaMigrations.swift"]
         for (name, text) in try Self.swiftFiles(under: "Kalsmritikosh") {
-            guard name != "MethodRunRepository.swift" else { continue }
+            guard !authoritative.contains(name) else { continue }
             for stmt in ["INSERT INTO method_", "UPDATE method_", "DELETE FROM method_"] {
                 #expect(!text.contains(stmt), "\(name) must not write method tables ('\(stmt)')")
             }

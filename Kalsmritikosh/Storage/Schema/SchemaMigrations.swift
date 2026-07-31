@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 79
+    public static let latestVersion = 80
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -67,8 +67,30 @@ public enum SchemaMigrations {
             try await database.setUserVersion(latestVersion)
             return
         }
-        for (version, sql) in all where version > current && version <= targetVersion {
-            try await applyOne(database, version: version, sql: sql, fault: fault)
+        let pending = all.filter { $0.0 > current && $0.0 <= targetVersion }
+        if !pending.isEmpty {
+            // Disable foreign-key enforcement for the whole migration pass — the
+            // SQLite-recommended pattern for table rebuilds (a `DROP TABLE` on a
+            // parent otherwise fires ON DELETE CASCADE on its children, and FK
+            // enforcement cannot be toggled inside the per-migration SAVEPOINT).
+            // A PRAGMA foreign_key_check re-validates every relationship afterward,
+            // and enforcement is always restored — including on the failure path.
+            try await database.exec("PRAGMA foreign_keys=OFF;")
+            do {
+                for (version, sql) in pending {
+                    try await applyOne(database, version: version, sql: sql, fault: fault)
+                }
+                let violations = try await database.query("PRAGMA foreign_key_check;", [])
+                if !violations.isEmpty {
+                    throw DatabaseError.migrationFailed(
+                        version: targetVersion,
+                        message: "foreign_key_check reported \(violations.count) violation(s) after migration")
+                }
+            } catch {
+                try? await database.exec("PRAGMA foreign_keys=ON;")
+                throw error
+            }
+            try await database.exec("PRAGMA foreign_keys=ON;")
         }
         // Belt-and-suspenders: after a fully-successful migration pass, stamp the
         // final version ONCE outside any SAVEPOINT (some WAL configs were observed
@@ -208,26 +230,30 @@ public enum SchemaMigrations {
                                                 "automation_definition_id", "automation_definition_version",
                                                 "trigger_kind", "trigger_event_key", "action_kind",
                                                 "idempotency_key", "request_sha256", "status", "started_at"],
-            // v79 — professional method run-state ledger (PM-002): the NEWEST markers.
-            // Every migration MUST add its newest physical marker here, or the self-heal
-            // path can stamp user_version over a schema missing that migration's shape.
-            "method_runs": ["id", "workspace_id", "method_definition_id", "method_definition_version",
-                             "workflow_run_id", "workflow_step_run_id", "status", "revision",
-                             "created_by", "created_at", "updated_at", "superseded_by_run_id"],
+            // v79 — professional method run-state ledger (PM-002).
             "method_nodes": ["id", "method_run_id", "node_definition_key", "node_kind", "label",
                               "working_state", "ordinal", "parent_node_id", "created_at", "updated_at"],
             "method_edges": ["id", "method_run_id", "from_node_id", "to_node_id", "edge_kind", "ordinal"],
-            "method_evidence_links": ["method_run_id", "node_id", "target_kind", "target_id",
-                                       "role", "ordinal", "added_by", "added_at"],
             "method_assumptions": ["id", "method_run_id", "node_id", "statement", "status",
                                     "created_by", "reviewed_by", "reviewed_at"],
             "method_findings": ["id", "method_run_id", "node_id", "statement", "finding_kind",
                                  "support_status", "review_status", "related_claim_id", "created_at"],
-            "method_reviews": ["id", "method_run_id", "node_id", "finding_id", "action",
-                                "actor_kind", "actor_identifier", "reviewed_at"],
+            // v80 — method lifecycle (PM-004): the NEWEST markers (content_revision,
+            // input_role, review_key/reviewed_content_revision, validation batch, events).
+            // Every migration MUST add its newest physical marker here, or the self-heal
+            // path can stamp user_version over a schema missing that migration's shape.
+            "method_runs": ["id", "workspace_id", "method_definition_id", "method_definition_version",
+                             "workflow_run_id", "workflow_step_run_id", "status", "revision",
+                             "content_revision", "created_by", "created_at", "updated_at", "superseded_by_run_id"],
+            "method_evidence_links": ["id", "method_run_id", "node_id", "target_kind", "target_id",
+                                       "role", "input_role", "ordinal", "added_by", "added_at"],
+            "method_reviews": ["id", "method_run_id", "node_id", "finding_id", "review_key",
+                                "reviewed_content_revision", "action", "actor_kind", "actor_identifier", "reviewed_at"],
             "method_validation_results": ["id", "method_run_id", "validator_id", "validator_version",
                                            "severity", "code", "message", "subject_kind", "subject_id",
-                                           "created_at"]
+                                           "validation_batch_id", "evaluated_content_revision", "created_at"],
+            "method_run_events": ["id", "method_run_id", "sequence", "run_revision", "content_revision",
+                                   "action", "from_status", "to_status", "actor_kind", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -317,7 +343,8 @@ public enum SchemaMigrations {
         (76, v76),
         (77, v77),
         (78, v78),
-        (79, v79)
+        (79, v79),
+        (80, v80)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3562,5 +3589,124 @@ public enum SchemaMigrations {
         CHECK(subject_kind = 'run' OR subject_id IS NOT NULL)
     );
     CREATE INDEX idx_method_validation_run ON method_validation_results(method_run_id, created_at);
+    """
+
+    // MARK: - v80 — method lifecycle (PM-004, Stage 4)
+
+    private static let v80: String = """
+    -- PM-004 evolves the Stage-4 method ledger with a lifecycle runtime:
+    --   * method_runs gains content_revision + the 'paused' status (a table rebuild,
+    --     because a CHECK constraint cannot be altered in place);
+    --   * evidence links gain the fulfilled definition input_role;
+    --   * reviews gain the definition review_key + the evaluated content revision;
+    --   * validation results gain a batch id + the evaluated content revision;
+    --   * a new append-only method_run_events lifecycle ledger.
+    -- content_revision (analytical-content epoch) is distinct from revision (the CAS
+    -- token): review/validation gates are valid only at the exact current content
+    -- revision, so a later content change invalidates a stale acceptance without
+    -- deleting its historical row.
+
+    -- Rebuild method_runs to add content_revision + the 'paused' status (a CHECK
+    -- cannot be altered in place). SchemaMigrations.migrate() disables foreign-key
+    -- enforcement for the whole migration pass (the SQLite-recommended pattern for
+    -- table rebuilds) and runs PRAGMA foreign_key_check afterward, so DROP TABLE
+    -- does NOT cascade-delete the children; their FK text ("method_runs") re-binds
+    -- to the new table after the rename, and every row id is preserved.
+    CREATE TABLE method_runs__v80 (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        workspace_id              TEXT NOT NULL,
+        method_definition_id      TEXT NOT NULL,
+        method_definition_version INTEGER NOT NULL,
+        workflow_run_id           TEXT,
+        workflow_step_run_id      TEXT,
+        status                    TEXT NOT NULL,
+        title                     TEXT,
+        revision                  INTEGER NOT NULL,
+        content_revision          INTEGER NOT NULL,
+        created_by                TEXT NOT NULL,
+        created_at                REAL NOT NULL,
+        updated_at                REAL NOT NULL,
+        completed_at              REAL,
+        superseded_by_run_id      TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(method_definition_version >= 1),
+        CHECK(revision >= 1),
+        CHECK(content_revision >= 1),
+        CHECK(length(trim(method_definition_id)) > 0),
+        CHECK(length(trim(created_by)) > 0),
+        CHECK(status IN ('draft','active','paused','waitingForHuman','blocked','completed','cancelled','superseded')),
+        CHECK(superseded_by_run_id IS NULL OR superseded_by_run_id <> id),
+        CHECK(workflow_step_run_id IS NULL OR workflow_run_id IS NOT NULL),
+        -- completed status <=> completion timestamp
+        CHECK(completed_at IS NULL OR status = 'completed'),
+        CHECK(status <> 'completed' OR completed_at IS NOT NULL),
+        -- superseded status <=> supersession reference
+        CHECK(status <> 'superseded' OR superseded_by_run_id IS NOT NULL)
+    );
+    INSERT INTO method_runs__v80 (id, workspace_id, method_definition_id, method_definition_version,
+                                  workflow_run_id, workflow_step_run_id, status, title, revision,
+                                  content_revision, created_by, created_at, updated_at, completed_at, superseded_by_run_id)
+        SELECT id, workspace_id, method_definition_id, method_definition_version,
+               workflow_run_id, workflow_step_run_id, status, title, revision,
+               1, created_by, created_at, updated_at, completed_at, superseded_by_run_id
+          FROM method_runs;
+    DROP TABLE method_runs;
+    ALTER TABLE method_runs__v80 RENAME TO method_runs;
+    CREATE UNIQUE INDEX idx_method_runs_owned ON method_runs(id);
+    CREATE INDEX idx_method_runs_workspace  ON method_runs(workspace_id);
+    CREATE INDEX idx_method_runs_definition ON method_runs(method_definition_id, method_definition_version);
+    CREATE INDEX idx_method_runs_workflow   ON method_runs(workflow_run_id);
+
+    -- Evidence links: the fulfilled definition input role (separate from analytical role).
+    ALTER TABLE method_evidence_links ADD COLUMN input_role TEXT;
+    DROP INDEX idx_method_evlink_node;
+    DROP INDEX idx_method_evlink_run;
+    -- NULL-safe uniqueness: one canonical reference may serve DIFFERENT input roles,
+    -- but a duplicate within the same scope + analytical role + input role is rejected.
+    CREATE UNIQUE INDEX idx_method_evlink_node ON method_evidence_links(
+        method_run_id, node_id, target_kind, target_id, role, COALESCE(input_role, '')) WHERE node_id IS NOT NULL;
+    CREATE UNIQUE INDEX idx_method_evlink_run ON method_evidence_links(
+        method_run_id, target_kind, target_id, role, COALESCE(input_role, '')) WHERE node_id IS NULL;
+
+    -- Reviews: the definition review key + the content revision the decision evaluated.
+    ALTER TABLE method_reviews ADD COLUMN review_key TEXT NOT NULL DEFAULT 'legacy.unkeyed';
+    ALTER TABLE method_reviews ADD COLUMN reviewed_content_revision INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX idx_method_reviews_key ON method_reviews(method_run_id, review_key, reviewed_content_revision);
+
+    -- Validation results: the batch id + the content revision the batch evaluated.
+    ALTER TABLE method_validation_results ADD COLUMN validation_batch_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+    ALTER TABLE method_validation_results ADD COLUMN evaluated_content_revision INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX idx_method_validation_contentrev ON method_validation_results(method_run_id, evaluated_content_revision);
+    CREATE INDEX idx_method_validation_batch ON method_validation_results(method_run_id, validation_batch_id);
+    CREATE INDEX idx_method_validation_validator ON method_validation_results(method_run_id, validator_id);
+
+    -- Append-only lifecycle-event ledger. NOT canonical evidence events.
+    CREATE TABLE method_run_events (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        method_run_id      TEXT NOT NULL,
+        sequence           INTEGER NOT NULL,
+        run_revision       INTEGER NOT NULL,
+        content_revision   INTEGER NOT NULL,
+        action             TEXT NOT NULL,
+        from_status        TEXT NOT NULL,
+        to_status          TEXT NOT NULL,
+        actor_kind         TEXT NOT NULL,
+        actor_identifier   TEXT,
+        reason             TEXT,
+        occurred_at        REAL NOT NULL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        UNIQUE(method_run_id, sequence),
+        UNIQUE(method_run_id, run_revision),
+        CHECK(sequence >= 1),
+        CHECK(run_revision >= 2),
+        CHECK(content_revision >= 1),
+        CHECK(action IN ('start','pause','resume','requestHumanReview','continueAfterReview','block','unblock',
+                         'validationRecorded','reviewRecorded','complete','cancel','supersede','reopen')),
+        CHECK(from_status IN ('draft','active','paused','waitingForHuman','blocked','completed','cancelled','superseded')),
+        CHECK(to_status IN ('draft','active','paused','waitingForHuman','blocked','completed','cancelled','superseded')),
+        CHECK(actor_kind IN ('human','deterministicRule','system')),
+        CHECK(actor_kind <> 'human' OR (actor_identifier IS NOT NULL AND length(trim(actor_identifier)) > 0))
+    );
+    CREATE INDEX idx_method_run_events_run ON method_run_events(method_run_id, sequence);
     """
 }

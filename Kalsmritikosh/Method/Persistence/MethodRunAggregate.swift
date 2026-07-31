@@ -19,6 +19,7 @@ public nonisolated struct MethodRunAggregate: Sendable, Equatable {
     public let findings: [MethodFinding]
     public let reviews: [MethodReview]
     public let validationResults: [MethodValidationResult]
+    public let lifecycleEvents: [MethodLifecycleEvent]
 
     public nonisolated init(
         run: MethodRun,
@@ -28,7 +29,8 @@ public nonisolated struct MethodRunAggregate: Sendable, Equatable {
         assumptions: [MethodAssumption] = [],
         findings: [MethodFinding] = [],
         reviews: [MethodReview] = [],
-        validationResults: [MethodValidationResult] = []
+        validationResults: [MethodValidationResult] = [],
+        lifecycleEvents: [MethodLifecycleEvent] = []
     ) {
         self.run = run
         self.nodes = nodes
@@ -38,5 +40,6 @@ public nonisolated struct MethodRunAggregate: Sendable, Equatable {
         self.findings = findings
         self.reviews = reviews
         self.validationResults = validationResults
+        self.lifecycleEvents = lifecycleEvents
     }
 }

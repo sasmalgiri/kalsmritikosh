@@ -123,7 +123,13 @@ struct ProfessionalMethodWorkflowBridgeTests {
             let runID = try await PM003Fixtures.makeCompletedMethodRun(
                 c.rig, workspaceID: c.ws, workflowRunID: c.wfRunID, workflowStepRunID: c.wfStepRunID,
                 entityID: c.entity, at: t0, markCompleted: false)
-            try await c.rig.db.exec("UPDATE method_runs SET status=? WHERE id=?;", [.text(status), .uuid(runID)])
+            // Under v80 a 'superseded' row must carry a successor reference (CHECK).
+            if status == "superseded" {
+                try await c.rig.db.exec("UPDATE method_runs SET status='superseded', superseded_by_run_id=? WHERE id=?;",
+                                        [.uuid(UUID()), .uuid(runID)])
+            } else {
+                try await c.rig.db.exec("UPDATE method_runs SET status=? WHERE id=?;", [.text(status), .uuid(runID)])
+            }
             await #expect(throws: ProfessionalMethodWorkflowBridgeError.terminalInvalidRun(runID, status: status)) {
                 _ = try await c.rig.bridge.validateLinkedRun(runID: runID, selection: self.selection, workspaceID: c.ws,
                     workflowRunID: c.wfRunID, workflowStepRunID: c.wfStepRunID)
@@ -160,14 +166,15 @@ struct ProfessionalMethodWorkflowBridgeTests {
             _ = try await c.rig.bridge.completedResult(runID: draft, selection: self.selection, workspaceID: c.ws,
                 workflowRunID: c.wfRunID, workflowStepRunID: c.wfStepRunID, summary: "s", completedBy: "a", limitations: [])
         }
-        // completed status but no completed_at (the CHECK permits this shape).
+        // v80 strengthens this invariant into the schema: a 'completed' row without a
+        // completion timestamp can no longer be persisted at all (both-way CHECK), so the
+        // shape the bridge's missingCompletionTimestamp guard defends against is now
+        // unreachable through the database — the schema itself rejects it.
         let noStamp = try await PM003Fixtures.makeCompletedMethodRun(
             c.rig, workspaceID: c.ws, workflowRunID: c.wfRunID, workflowStepRunID: c.wfStepRunID,
             entityID: c.entity, at: t0, markCompleted: false)
-        try await c.rig.db.exec("UPDATE method_runs SET status='completed' WHERE id=?;", [.uuid(noStamp)])
-        await #expect(throws: ProfessionalMethodWorkflowBridgeError.missingCompletionTimestamp(noStamp)) {
-            _ = try await c.rig.bridge.completedResult(runID: noStamp, selection: self.selection, workspaceID: c.ws,
-                workflowRunID: c.wfRunID, workflowStepRunID: c.wfStepRunID, summary: "s", completedBy: "a", limitations: [])
+        await #expect(throws: (any Error).self) {
+            try await c.rig.db.exec("UPDATE method_runs SET status='completed' WHERE id=?;", [.uuid(noStamp)])
         }
     }
 
