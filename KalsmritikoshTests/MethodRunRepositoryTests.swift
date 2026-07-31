@@ -32,7 +32,7 @@ struct MethodRunRepositoryTests {
 
     private func makeRig() async throws -> Rig {
         let url = PJE006CFixtures.newDatabaseURL()
-        let db = try await MigrationFixtureBuilder.database(atVersion: 79, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 80, at: url)
         try await db.exec("PRAGMA foreign_keys = ON;")
         let ws = UUID(); try await PJE007Fixtures.seedWorkspace(db, id: ws)
         let otherWS = UUID(); try await PJE007Fixtures.seedWorkspace(db, id: otherWS)

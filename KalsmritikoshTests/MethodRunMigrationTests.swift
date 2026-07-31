@@ -98,15 +98,13 @@ struct MethodRunMigrationTests {
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }
 
-    @Test("The self-heal sentinel recognises the v79 markers and reconciles a stale counter")
-    func selfHealRecognizesV79Markers() async throws {
+    @Test("A genuine v79 database upgrades cleanly to the latest schema")
+    func v79UpgradesToLatest() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 79)
-        // Schema is fully v79 but the counter is stale — self-heal must stamp 79
-        // without re-running any DDL (which would fail "table already exists").
-        try await db.setUserVersion(78)
-        try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 79)
+        try await SchemaMigrations.migrate(db)     // v79 → latest (v80)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         for t in methodTables { #expect(try await MigrationFixtureBuilder.tableExists(db, t)) }
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "method_run_events"))
     }
 
     @Test("An injected failure inside the v79 SAVEPOINT rolls back all eight tables and the version stamp")

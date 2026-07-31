@@ -55,7 +55,7 @@ enum PM003Fixtures {
     static func makeRig(
         at url: URL, definitions: [ProfessionalMethodDefinition]? = nil
     ) async throws -> PM003Rig {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 79, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 80, at: url)
         try await db.exec("PRAGMA foreign_keys = ON;")
         let workflowRepo = WorkflowRunRepository(database: db)
         let methodRepo = MethodRunRepository(database: db)
@@ -163,10 +163,10 @@ enum PM003Fixtures {
         let runID = UUID()
         try await rig.db.exec("""
             INSERT INTO method_runs (id, workspace_id, method_definition_id, method_definition_version,
-                                     workflow_run_id, workflow_step_run_id, status, revision, created_by, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?);
+                                     workflow_run_id, workflow_step_run_id, status, revision, content_revision, created_by, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
             """, [.uuid(runID), .uuid(workspaceID), .text(definitionID), .integer(Int64(definitionVersion)),
-                  .uuid(workflowRunID), .uuid(workflowStepRunID), .text("draft"), .integer(1),
+                  .uuid(workflowRunID), .uuid(workflowStepRunID), .text("draft"), .integer(1), .integer(1),
                   .text("analyst"), .date(at), .date(at)])
         let link = MethodEvidenceLink(methodRunID: runID, targetKind: .entity, targetID: entityID,
             role: .supporting, ordinal: 0, addedBy: "analyst", addedAt: at)

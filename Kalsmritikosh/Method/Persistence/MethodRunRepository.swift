@@ -33,27 +33,31 @@ public actor MethodRunRepository {
 
     // MARK: - Column lists (decoder order must match)
 
-    private static let runColumns =
+    static let runColumns =
         "id, workspace_id, method_definition_id, method_definition_version, workflow_run_id, "
         + "workflow_step_run_id, status, title, revision, created_by, created_at, updated_at, "
-        + "completed_at, superseded_by_run_id"
-    private static let nodeColumns =
+        + "completed_at, superseded_by_run_id, content_revision"
+    static let nodeColumns =
         "id, method_run_id, node_definition_key, node_kind, label, body, working_state, ordinal, "
         + "parent_node_id, created_at, updated_at"
-    private static let edgeColumns =
+    static let edgeColumns =
         "id, method_run_id, from_node_id, to_node_id, edge_kind, label, ordinal"
-    private static let linkColumns =
-        "id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at"
-    private static let assumptionColumns =
+    static let linkColumns =
+        "id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at, input_role"
+    static let assumptionColumns =
         "id, method_run_id, node_id, statement, status, rationale, created_by, reviewed_by, reviewed_at"
-    private static let findingColumns =
+    static let findingColumns =
         "id, method_run_id, node_id, statement, finding_kind, support_status, review_status, "
         + "related_claim_id, created_at"
-    private static let reviewColumns =
-        "id, method_run_id, node_id, finding_id, action, actor_kind, actor_identifier, comment, reviewed_at"
-    private static let validationColumns =
+    static let reviewColumns =
+        "id, method_run_id, node_id, finding_id, action, actor_kind, actor_identifier, comment, reviewed_at, "
+        + "review_key, reviewed_content_revision"
+    static let validationColumns =
         "id, method_run_id, validator_id, validator_version, severity, code, message, subject_kind, "
-        + "subject_id, created_at"
+        + "subject_id, created_at, validation_batch_id, evaluated_content_revision"
+    static let eventColumns =
+        "id, method_run_id, sequence, run_revision, content_revision, action, from_status, to_status, "
+        + "actor_kind, actor_identifier, reason, occurred_at"
 
     // MARK: - Reads
 
@@ -123,37 +127,18 @@ public actor MethodRunRepository {
     /// a run at revision N with children from revision N+1). A mutation cannot
     /// interleave between the reads because they all run inside one savepoint on
     /// the isolated Database.
+    /// The run plus all child collections + lifecycle events read in ONE
+    /// non-interleavable database operation — a single consistent snapshot.
     public func aggregate(runID: UUID) async throws -> MethodRunAggregate? {
-        try await database.withSavepoint("mrr_agg_\(Self.spSuffix(runID))") { db -> MethodRunAggregate? in
-            guard let run = try db.query(
-                "SELECT \(Self.runColumns) FROM method_runs WHERE id = ?;", [.uuid(runID)])
-                .first.flatMap(Self.decodeRun) else { return nil }
-            let nodes = try db.query(
-                "SELECT \(Self.nodeColumns) FROM method_nodes WHERE method_run_id = ? ORDER BY ordinal, id;",
-                [.uuid(runID)]).compactMap(Self.decodeNode)
-            let edges = try db.query(
-                "SELECT \(Self.edgeColumns) FROM method_edges WHERE method_run_id = ? ORDER BY ordinal, id;",
-                [.uuid(runID)]).compactMap(Self.decodeEdge)
-            let links = try db.query(
-                "SELECT \(Self.linkColumns) FROM method_evidence_links WHERE method_run_id = ? ORDER BY ordinal, id;",
-                [.uuid(runID)]).compactMap(Self.decodeLink)
-            let assumptions = try db.query(
-                "SELECT \(Self.assumptionColumns) FROM method_assumptions WHERE method_run_id = ? ORDER BY rowid;",
-                [.uuid(runID)]).compactMap(Self.decodeAssumption)
-            let findings = try db.query(
-                "SELECT \(Self.findingColumns) FROM method_findings WHERE method_run_id = ? ORDER BY created_at, id;",
-                [.uuid(runID)]).compactMap(Self.decodeFinding)
-            let reviews = try db.query(
-                "SELECT \(Self.reviewColumns) FROM method_reviews WHERE method_run_id = ? ORDER BY reviewed_at, id;",
-                [.uuid(runID)]).compactMap(Self.decodeReview)
-            let validations = try db.query(
-                "SELECT \(Self.validationColumns) FROM method_validation_results WHERE method_run_id = ? ORDER BY created_at, id;",
-                [.uuid(runID)]).compactMap(Self.decodeValidation)
-            return MethodRunAggregate(
-                run: run, nodes: nodes, edges: edges, evidenceLinks: links,
-                assumptions: assumptions, findings: findings, reviews: reviews,
-                validationResults: validations)
+        try await database.withSavepoint("mrr_agg_\(Self.spSuffix(runID))") { db in
+            try Self.reconstruct(db, runID: runID)
         }
+    }
+
+    public func lifecycleEvents(runID: UUID) async throws -> [MethodLifecycleEvent] {
+        try await database.query(
+            "SELECT \(Self.eventColumns) FROM method_run_events WHERE method_run_id = ? ORDER BY sequence;",
+            [.uuid(runID)]).compactMap(Self.decodeEvent)
     }
 
     // MARK: - Create
@@ -211,16 +196,16 @@ public actor MethodRunRepository {
             try db.exec("""
                 INSERT INTO method_runs
                     (id, workspace_id, method_definition_id, method_definition_version,
-                     workflow_run_id, workflow_step_run_id, status, title, revision,
+                     workflow_run_id, workflow_step_run_id, status, title, revision, content_revision,
                      created_by, created_at, updated_at, completed_at, superseded_by_run_id)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [
                     .uuid(run.id), .uuid(run.workspaceID), .text(run.methodDefinitionID.rawValue),
                     .integer(Int64(run.methodDefinitionVersion)),
                     run.workflowRunID.map(SQLValue.uuid) ?? .null,
                     run.workflowStepRunID.map(SQLValue.uuid) ?? .null,
                     .text(run.status.rawValue), .optionalText(run.title),
-                    .integer(Int64(run.revision)), .text(run.createdBy),
+                    .integer(Int64(run.revision)), .integer(Int64(run.contentRevision)), .text(run.createdBy),
                     .date(run.createdAt), .date(run.updatedAt),
                     .optionalDate(run.completedAt),
                     run.supersededByRunID.map(SQLValue.uuid) ?? .null
@@ -235,7 +220,7 @@ public actor MethodRunRepository {
     public func addNode(_ node: MethodNode, expectedRevision: Int, now: Date) async throws -> MethodRun {
         guard node.ordinal >= 0 else { throw MethodPersistenceError.invalidOrdinal(node.ordinal) }
         return try await database.withSavepoint("mrr_node_\(Self.spSuffix(node.id))\(expectedRevision)") { db in
-            try Self.casBump(db, runID: node.methodRunID, expected: expectedRevision, now: now)
+            try Self.casBump(db, runID: node.methodRunID, expected: expectedRevision, now: now, contentChanged: true)
             if let parent = node.parentNodeID {
                 try Self.requireOwned(db, table: "method_nodes", id: parent, runID: node.methodRunID, what: "parent node")
             }
@@ -259,7 +244,7 @@ public actor MethodRunRepository {
     public func addEdge(_ edge: MethodEdge, expectedRevision: Int, now: Date) async throws -> MethodRun {
         guard edge.ordinal >= 0 else { throw MethodPersistenceError.invalidOrdinal(edge.ordinal) }
         return try await database.withSavepoint("mrr_edge_\(Self.spSuffix(edge.id))\(expectedRevision)") { db in
-            try Self.casBump(db, runID: edge.methodRunID, expected: expectedRevision, now: now)
+            try Self.casBump(db, runID: edge.methodRunID, expected: expectedRevision, now: now, contentChanged: true)
             try Self.requireOwned(db, table: "method_nodes", id: edge.fromNodeID, runID: edge.methodRunID, what: "edge from-node")
             try Self.requireOwned(db, table: "method_nodes", id: edge.toNodeID, runID: edge.methodRunID, what: "edge to-node")
             try db.exec("""
@@ -294,18 +279,19 @@ public actor MethodRunRepository {
             throw MethodPersistenceError.evidenceReferenceDenied(reason: reason)
         }
         return try await database.withSavepoint("mrr_evlink_\(Self.spSuffix(link.id))\(expectedRevision)") { db in
-            try Self.casBump(db, runID: link.methodRunID, expected: expectedRevision, now: now)
+            try Self.casBump(db, runID: link.methodRunID, expected: expectedRevision, now: now, contentChanged: true)
             if let nodeID = link.nodeID {
                 try Self.requireOwned(db, table: "method_nodes", id: nodeID, runID: link.methodRunID, what: "evidence-link node")
             }
             try db.exec("""
                 INSERT INTO method_evidence_links
-                    (id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at)
-                VALUES (?,?,?,?,?,?,?,?,?);
+                    (id, method_run_id, node_id, target_kind, target_id, role, ordinal, added_by, added_at, input_role)
+                VALUES (?,?,?,?,?,?,?,?,?,?);
                 """, [
                     .uuid(link.id), .uuid(link.methodRunID), link.nodeID.map(SQLValue.uuid) ?? .null,
                     .text(link.targetKind.rawValue), .uuid(link.targetID), .text(link.role.rawValue),
-                    .integer(Int64(link.ordinal)), .text(link.addedBy), .date(link.addedAt)
+                    .integer(Int64(link.ordinal)), .text(link.addedBy), .date(link.addedAt),
+                    .optionalText(link.inputRole?.rawValue)
                 ])
             return try Self.requireRun(db, id: link.methodRunID)
         }
@@ -314,7 +300,7 @@ public actor MethodRunRepository {
     @discardableResult
     public func addAssumption(_ a: MethodAssumption, expectedRevision: Int, now: Date) async throws -> MethodRun {
         return try await database.withSavepoint("mrr_assume_\(Self.spSuffix(a.id))\(expectedRevision)") { db in
-            try Self.casBump(db, runID: a.methodRunID, expected: expectedRevision, now: now)
+            try Self.casBump(db, runID: a.methodRunID, expected: expectedRevision, now: now, contentChanged: true)
             if let nodeID = a.nodeID {
                 try Self.requireOwned(db, table: "method_nodes", id: nodeID, runID: a.methodRunID, what: "assumption node")
             }
@@ -347,7 +333,7 @@ public actor MethodRunRepository {
             }
         }
         return try await database.withSavepoint("mrr_find_\(Self.spSuffix(f.id))\(expectedRevision)") { db in
-            try Self.casBump(db, runID: f.methodRunID, expected: expectedRevision, now: now)
+            try Self.casBump(db, runID: f.methodRunID, expected: expectedRevision, now: now, contentChanged: true)
             if let nodeID = f.nodeID {
                 try Self.requireOwned(db, table: "method_nodes", id: nodeID, runID: f.methodRunID, what: "finding node")
             }
@@ -380,13 +366,15 @@ public actor MethodRunRepository {
             }
             try db.exec("""
                 INSERT INTO method_reviews
-                    (id, method_run_id, node_id, finding_id, action, actor_kind, actor_identifier, comment, reviewed_at)
-                VALUES (?,?,?,?,?,?,?,?,?);
+                    (id, method_run_id, node_id, finding_id, action, actor_kind, actor_identifier, comment, reviewed_at,
+                     review_key, reviewed_content_revision)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?);
                 """, [
                     .uuid(r.id), .uuid(r.methodRunID), r.nodeID.map(SQLValue.uuid) ?? .null,
                     r.findingID.map(SQLValue.uuid) ?? .null, .text(r.action.rawValue),
                     .text(r.actorKind.rawValue), .text(r.actorIdentifier),
-                    .optionalText(r.comment), .date(r.reviewedAt)
+                    .optionalText(r.comment), .date(r.reviewedAt),
+                    .text(r.reviewKey), .integer(Int64(r.reviewedContentRevision))
                 ])
             return try Self.requireRun(db, id: r.methodRunID)
         }
@@ -421,13 +409,13 @@ public actor MethodRunRepository {
             try db.exec("""
                 INSERT INTO method_validation_results
                     (id, method_run_id, validator_id, validator_version, severity, code, message,
-                     subject_kind, subject_id, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?);
+                     subject_kind, subject_id, created_at, validation_batch_id, evaluated_content_revision)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
                 """, [
                     .uuid(v.id), .uuid(v.methodRunID), .text(v.validatorID), .text(v.validatorVersion),
                     .text(v.severity.rawValue), .text(v.code), .text(v.message),
                     .text(v.subjectKind.rawValue), v.subjectID.map(SQLValue.uuid) ?? .null,
-                    .date(v.createdAt)
+                    .date(v.createdAt), .uuid(v.validationBatchID), .integer(Int64(v.evaluatedContentRevision))
                 ])
             return try Self.requireRun(db, id: v.methodRunID)
         }
@@ -435,9 +423,22 @@ public actor MethodRunRepository {
 
     // MARK: - In-savepoint helpers (isolated to the passed Database)
 
-    private static func casBump(_ db: isolated Database, runID: UUID, expected: Int, now: Date) throws {
-        try db.exec("UPDATE method_runs SET revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?;",
-                    [.date(now), .uuid(runID), .integer(Int64(expected))])
+    static func casBump(
+        _ db: isolated Database, runID: UUID, expected: Int, now: Date, contentChanged: Bool = false
+    ) throws {
+        // A content write is permitted only while the run is draft or active; a
+        // paused/waiting/blocked/terminal run must be transitioned first (PM-004).
+        if contentChanged {
+            let rows = try db.query("SELECT status FROM method_runs WHERE id = ?;", [.uuid(runID)])
+            guard let statusRaw = rows.first?.string(0) else { throw MethodPersistenceError.runNotFound(runID) }
+            guard statusRaw == "draft" || statusRaw == "active" else {
+                throw MethodPersistenceError.contentMutationNotAllowed(runID, status: statusRaw)
+            }
+        }
+        let sql = contentChanged
+            ? "UPDATE method_runs SET revision = revision + 1, content_revision = content_revision + 1, updated_at = ? WHERE id = ? AND revision = ?;"
+            : "UPDATE method_runs SET revision = revision + 1, updated_at = ? WHERE id = ? AND revision = ?;"
+        try db.exec(sql, [.date(now), .uuid(runID), .integer(Int64(expected))])
         let changed = Int(try db.query("SELECT changes();").first?.int(0) ?? 0)
         guard changed == 1 else {
             let exists = try db.query("SELECT 1 FROM method_runs WHERE id = ?;", [.uuid(runID)])
@@ -447,26 +448,26 @@ public actor MethodRunRepository {
         }
     }
 
-    private static func requireOwned(_ db: isolated Database, table: String, id: UUID, runID: UUID, what: String) throws {
+    static func requireOwned(_ db: isolated Database, table: String, id: UUID, runID: UUID, what: String) throws {
         let rows = try db.query("SELECT 1 FROM \(table) WHERE id = ? AND method_run_id = ?;", [.uuid(id), .uuid(runID)])
         if rows.isEmpty {
             throw MethodPersistenceError.ownershipViolation("\(what) \(id) does not belong to run \(runID)")
         }
     }
 
-    private static func requireRun(_ db: isolated Database, id: UUID) throws -> MethodRun {
+    static func requireRun(_ db: isolated Database, id: UUID) throws -> MethodRun {
         guard let run = try db.query("SELECT \(runColumns) FROM method_runs WHERE id = ?;", [.uuid(id)])
             .first.flatMap(decodeRun) else { throw MethodPersistenceError.runNotFound(id) }
         return run
     }
 
-    private static func spSuffix(_ id: UUID) -> String {
+    static func spSuffix(_ id: UUID) -> String {
         id.uuidString.replacingOccurrences(of: "-", with: "")
     }
 
     // MARK: - Decoders (index-based; order matches the column-list constants)
 
-    private nonisolated static func decodeRun(_ r: SQLRow) -> MethodRun? {
+    nonisolated static func decodeRun(_ r: SQLRow) -> MethodRun? {
         guard let id = r.uuid(0), let ws = r.uuid(1), let defID = r.string(2),
               let defVer = r.int(3), let statusRaw = r.string(6),
               let status = MethodRunStatus(rawValue: statusRaw),
@@ -478,11 +479,12 @@ public actor MethodRunRepository {
             methodDefinitionVersion: Int(defVer),
             workflowRunID: r.uuid(4), workflowStepRunID: r.uuid(5),
             status: status, title: r.string(7), revision: Int(revision),
+            contentRevision: Int(r.int(14) ?? 1),
             createdBy: createdBy, createdAt: createdAt, updatedAt: updatedAt,
             completedAt: r.date(12), supersededByRunID: r.uuid(13))
     }
 
-    private nonisolated static func decodeNode(_ r: SQLRow) -> MethodNode? {
+    nonisolated static func decodeNode(_ r: SQLRow) -> MethodNode? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let key = r.string(2),
               let kind = r.string(3), let label = r.string(4), let stateRaw = r.string(6),
               let state = MethodWorkingState(rawValue: stateRaw), let ordinal = r.int(7),
@@ -494,7 +496,7 @@ public actor MethodRunRepository {
             createdAt: createdAt, updatedAt: updatedAt)
     }
 
-    private nonisolated static func decodeEdge(_ r: SQLRow) -> MethodEdge? {
+    nonisolated static func decodeEdge(_ r: SQLRow) -> MethodEdge? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let from = r.uuid(2),
               let to = r.uuid(3), let kind = r.string(4), let ordinal = r.int(6) else { return nil }
         return MethodEdge(
@@ -502,7 +504,7 @@ public actor MethodRunRepository {
             edgeKind: MethodEdgeKind(rawValue: kind), label: r.string(5), ordinal: Int(ordinal))
     }
 
-    private nonisolated static func decodeLink(_ r: SQLRow) -> MethodEvidenceLink? {
+    nonisolated static func decodeLink(_ r: SQLRow) -> MethodEvidenceLink? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let kindRaw = r.string(3),
               let targetKind = WorkflowProvenanceReferenceKind(rawValue: kindRaw),
               let targetID = r.uuid(4), let roleRaw = r.string(5),
@@ -510,10 +512,11 @@ public actor MethodRunRepository {
               let addedBy = r.string(7), let addedAt = r.date(8) else { return nil }
         return MethodEvidenceLink(
             id: id, methodRunID: runID, nodeID: r.uuid(2), targetKind: targetKind, targetID: targetID,
-            role: role, ordinal: Int(ordinal), addedBy: addedBy, addedAt: addedAt)
+            role: role, inputRole: r.string(9).map(MethodInputRole.init(rawValue:)),
+            ordinal: Int(ordinal), addedBy: addedBy, addedAt: addedAt)
     }
 
-    private nonisolated static func decodeAssumption(_ r: SQLRow) -> MethodAssumption? {
+    nonisolated static func decodeAssumption(_ r: SQLRow) -> MethodAssumption? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let statement = r.string(3),
               let statusRaw = r.string(4), let status = MethodAssumptionStatus(rawValue: statusRaw),
               let createdBy = r.string(6) else { return nil }
@@ -522,7 +525,7 @@ public actor MethodRunRepository {
             rationale: r.string(5), createdBy: createdBy, reviewedBy: r.string(7), reviewedAt: r.date(8))
     }
 
-    private nonisolated static func decodeFinding(_ r: SQLRow) -> MethodFinding? {
+    nonisolated static func decodeFinding(_ r: SQLRow) -> MethodFinding? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let statement = r.string(3),
               let kind = r.string(4), let supportRaw = r.string(5),
               let support = MethodFindingSupportStatus(rawValue: supportRaw),
@@ -534,17 +537,20 @@ public actor MethodRunRepository {
             reviewStatus: review, relatedClaimID: r.uuid(7), createdAt: createdAt)
     }
 
-    private nonisolated static func decodeReview(_ r: SQLRow) -> MethodReview? {
+    nonisolated static func decodeReview(_ r: SQLRow) -> MethodReview? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let actionRaw = r.string(4),
               let action = MethodReviewAction(rawValue: actionRaw), let actorRaw = r.string(5),
               let actorKind = WorkflowDecisionActorKind(rawValue: actorRaw),
               let actorID = r.string(6), let reviewedAt = r.date(8) else { return nil }
         return MethodReview(
-            id: id, methodRunID: runID, nodeID: r.uuid(2), findingID: r.uuid(3), action: action,
-            actorKind: actorKind, actorIdentifier: actorID, comment: r.string(7), reviewedAt: reviewedAt)
+            id: id, methodRunID: runID, nodeID: r.uuid(2), findingID: r.uuid(3),
+            reviewKey: r.string(9) ?? MethodReview.legacyUnkeyedKey,
+            reviewedContentRevision: Int(r.int(10) ?? 0),
+            action: action, actorKind: actorKind, actorIdentifier: actorID,
+            comment: r.string(7), reviewedAt: reviewedAt)
     }
 
-    private nonisolated static func decodeValidation(_ r: SQLRow) -> MethodValidationResult? {
+    nonisolated static func decodeValidation(_ r: SQLRow) -> MethodValidationResult? {
         guard let id = r.uuid(0), let runID = r.uuid(1), let vID = r.string(2),
               let vVer = r.string(3), let sevRaw = r.string(4),
               let severity = MethodValidationSeverity(rawValue: sevRaw), let code = r.string(5),
@@ -553,6 +559,22 @@ public actor MethodRunRepository {
               let createdAt = r.date(9) else { return nil }
         return MethodValidationResult(
             id: id, methodRunID: runID, validatorID: vID, validatorVersion: vVer, severity: severity,
-            code: code, message: message, subjectKind: subjectKind, subjectID: r.uuid(8), createdAt: createdAt)
+            code: code, message: message, subjectKind: subjectKind, subjectID: r.uuid(8),
+            validationBatchID: r.uuid(10) ?? MethodValidationResult.legacyBatchID,
+            evaluatedContentRevision: Int(r.int(11) ?? 0), createdAt: createdAt)
+    }
+
+    nonisolated static func decodeEvent(_ r: SQLRow) -> MethodLifecycleEvent? {
+        guard let id = r.uuid(0), let runID = r.uuid(1), let sequence = r.int(2),
+              let runRevision = r.int(3), let contentRevision = r.int(4),
+              let actionRaw = r.string(5), let action = MethodLifecycleAction(rawValue: actionRaw),
+              let fromRaw = r.string(6), let fromStatus = MethodRunStatus(rawValue: fromRaw),
+              let toRaw = r.string(7), let toStatus = MethodRunStatus(rawValue: toRaw),
+              let actorRaw = r.string(8), let actorKind = WorkflowDecisionActorKind(rawValue: actorRaw),
+              let occurredAt = r.date(11) else { return nil }
+        return MethodLifecycleEvent(
+            id: id, methodRunID: runID, sequence: Int(sequence), runRevision: Int(runRevision),
+            contentRevision: Int(contentRevision), action: action, fromStatus: fromStatus, toStatus: toStatus,
+            actorKind: actorKind, actorIdentifier: r.string(9), reason: r.string(10), occurredAt: occurredAt)
     }
 }

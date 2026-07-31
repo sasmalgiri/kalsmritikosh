@@ -164,6 +164,7 @@ public nonisolated enum MethodValidationSubjectKind: String, Codable, Sendable, 
 public nonisolated enum MethodRunStatus: String, Codable, Sendable, Hashable, CaseIterable {
     case draft
     case active
+    case paused
     case waitingForHuman
     case blocked
     case completed
@@ -272,7 +273,13 @@ public nonisolated struct MethodRun: Codable, Sendable, Hashable, Identifiable {
     public let workflowStepRunID: UUID?
     public let status: MethodRunStatus
     public let title: String?
+    /// Optimistic-concurrency CAS token — incremented by EVERY successful aggregate
+    /// mutation (content write, lifecycle transition, review, validation batch).
     public let revision: Int
+    /// Incremented ONLY when analytical working content changes (node/edge/link/
+    /// assumption/finding added, or a completed run reopened into a new epoch).
+    /// Review/validation gates are valid only for the exact current contentRevision.
+    public let contentRevision: Int
     public let createdBy: String
     public let createdAt: Date
     public let updatedAt: Date
@@ -289,6 +296,7 @@ public nonisolated struct MethodRun: Codable, Sendable, Hashable, Identifiable {
         status: MethodRunStatus,
         title: String? = nil,
         revision: Int,
+        contentRevision: Int = 1,
         createdBy: String,
         createdAt: Date,
         updatedAt: Date,
@@ -304,6 +312,7 @@ public nonisolated struct MethodRun: Codable, Sendable, Hashable, Identifiable {
         self.status = status
         self.title = title
         self.revision = revision
+        self.contentRevision = contentRevision
         self.createdBy = createdBy
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -396,6 +405,10 @@ public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable, Ident
     public let targetKind: WorkflowProvenanceReferenceKind
     public let targetID: UUID
     public let role: MethodEvidenceLinkRole
+    /// The method-definition INPUT ROLE this reference fulfils (problemStatement /
+    /// evidenceSet / …). Distinct from `role` (analytical polarity). A link with no
+    /// input role cannot satisfy a required input role.
+    public let inputRole: MethodInputRole?
     public let ordinal: Int
     public let addedBy: String
     public let addedAt: Date
@@ -407,6 +420,7 @@ public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable, Ident
         targetKind: WorkflowProvenanceReferenceKind,
         targetID: UUID,
         role: MethodEvidenceLinkRole,
+        inputRole: MethodInputRole? = nil,
         ordinal: Int,
         addedBy: String,
         addedAt: Date
@@ -417,6 +431,7 @@ public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable, Ident
         self.targetKind = targetKind
         self.targetID = targetID
         self.role = role
+        self.inputRole = inputRole
         self.ordinal = ordinal
         self.addedBy = addedBy
         self.addedAt = addedAt
@@ -505,10 +520,21 @@ public nonisolated struct MethodFinding: Codable, Sendable, Hashable, Identifiab
 /// automation cannot record a human review — `validate()` enforces a human actor
 /// with a non-blank identifier. Reuses the Stage-3 `WorkflowDecisionActorKind`.
 public nonisolated struct MethodReview: Codable, Sendable, Hashable, Identifiable {
+    /// Reserved key for v79 reviews migrated forward — never satisfies a required gate.
+    public static let legacyUnkeyedKey = "legacy.unkeyed"
+    /// Reserved key for the review appended by a human reopen — never a definition gate.
+    public static let reopenKey = "system.run.reopen"
+
     public let id: UUID
     public let methodRunID: UUID
     public let nodeID: UUID?
     public let findingID: UUID?
+    /// The definition review key this decision answers. Reserved keys never satisfy a
+    /// definition-required review.
+    public let reviewKey: String
+    /// The content revision this review evaluated — a gate is valid only for the
+    /// exact current content revision.
+    public let reviewedContentRevision: Int
     public let action: MethodReviewAction
     public let actorKind: WorkflowDecisionActorKind
     public let actorIdentifier: String
@@ -520,6 +546,8 @@ public nonisolated struct MethodReview: Codable, Sendable, Hashable, Identifiabl
         methodRunID: UUID,
         nodeID: UUID? = nil,
         findingID: UUID? = nil,
+        reviewKey: String = MethodReview.legacyUnkeyedKey,
+        reviewedContentRevision: Int = 0,
         action: MethodReviewAction,
         actorKind: WorkflowDecisionActorKind = .human,
         actorIdentifier: String,
@@ -530,6 +558,8 @@ public nonisolated struct MethodReview: Codable, Sendable, Hashable, Identifiabl
         self.methodRunID = methodRunID
         self.nodeID = nodeID
         self.findingID = findingID
+        self.reviewKey = reviewKey
+        self.reviewedContentRevision = reviewedContentRevision
         self.action = action
         self.actorKind = actorKind
         self.actorIdentifier = actorIdentifier
@@ -537,19 +567,27 @@ public nonisolated struct MethodReview: Codable, Sendable, Hashable, Identifiabl
         self.reviewedAt = reviewedAt
     }
 
-    /// A method review is a HUMAN act: only `.human` actors with a non-blank
-    /// identifier may record one. The PM-002 repository calls this before insert.
+    /// A method review is a HUMAN act with a non-blank identifier + review key, at a
+    /// non-negative content revision, and never targets both a node and a finding.
     public nonisolated func validate() throws {
         guard actorKind == .human else { throw MethodContractError.reviewRequiresHumanActor }
         guard !actorIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MethodContractError.blankReviewActorIdentifier
         }
+        guard !reviewKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MethodContractError.blankReviewKey
+        }
+        guard reviewedContentRevision >= 0 else { throw MethodContractError.invalidReviewedContentRevision }
+        guard !(nodeID != nil && findingID != nil) else { throw MethodContractError.reviewTargetsNodeAndFinding }
     }
 }
 
 /// A persisted deterministic validation result. May block method completion
 /// (severity `.blocking`); it never confirms a professional conclusion.
 public nonisolated struct MethodValidationResult: Codable, Sendable, Hashable, Identifiable {
+    /// Reserved batch id for v79 validation rows migrated forward — always stale.
+    public static let legacyBatchID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
     public let id: UUID
     public let methodRunID: UUID
     public let validatorID: String
@@ -559,6 +597,10 @@ public nonisolated struct MethodValidationResult: Codable, Sendable, Hashable, I
     public let message: String
     public let subjectKind: MethodValidationSubjectKind
     public let subjectID: UUID?
+    /// The batch this result was produced in (one validation operation = one batch).
+    public let validationBatchID: UUID
+    /// The content revision the batch evaluated — the gate only trusts the current one.
+    public let evaluatedContentRevision: Int
     public let createdAt: Date
 
     public nonisolated init(
@@ -571,6 +613,8 @@ public nonisolated struct MethodValidationResult: Codable, Sendable, Hashable, I
         message: String,
         subjectKind: MethodValidationSubjectKind,
         subjectID: UUID? = nil,
+        validationBatchID: UUID = MethodValidationResult.legacyBatchID,
+        evaluatedContentRevision: Int = 0,
         createdAt: Date
     ) {
         self.id = id
@@ -582,11 +626,65 @@ public nonisolated struct MethodValidationResult: Codable, Sendable, Hashable, I
         self.message = message
         self.subjectKind = subjectKind
         self.subjectID = subjectID
+        self.validationBatchID = validationBatchID
+        self.evaluatedContentRevision = evaluatedContentRevision
         self.createdAt = createdAt
     }
 
     /// Whether this result must block method completion.
     public nonisolated var blocksCompletion: Bool { severity == .blocking }
+}
+
+// MARK: - Lifecycle event (PM-004, append-only audit)
+
+/// A closed lifecycle action recorded in the method_run_events ledger.
+public nonisolated enum MethodLifecycleAction: String, Codable, Sendable, Hashable, CaseIterable {
+    case start, pause, resume, requestHumanReview, continueAfterReview, block, unblock
+    case validationRecorded, reviewRecorded, complete, cancel, supersede, reopen
+}
+
+/// One append-only lifecycle audit record. NOT a canonical evidence event.
+public nonisolated struct MethodLifecycleEvent: Codable, Sendable, Hashable, Identifiable {
+    public let id: UUID
+    public let methodRunID: UUID
+    public let sequence: Int
+    public let runRevision: Int
+    public let contentRevision: Int
+    public let action: MethodLifecycleAction
+    public let fromStatus: MethodRunStatus
+    public let toStatus: MethodRunStatus
+    public let actorKind: WorkflowDecisionActorKind
+    public let actorIdentifier: String?
+    public let reason: String?
+    public let occurredAt: Date
+
+    public nonisolated init(
+        id: UUID = UUID(),
+        methodRunID: UUID,
+        sequence: Int,
+        runRevision: Int,
+        contentRevision: Int,
+        action: MethodLifecycleAction,
+        fromStatus: MethodRunStatus,
+        toStatus: MethodRunStatus,
+        actorKind: WorkflowDecisionActorKind,
+        actorIdentifier: String? = nil,
+        reason: String? = nil,
+        occurredAt: Date
+    ) {
+        self.id = id
+        self.methodRunID = methodRunID
+        self.sequence = sequence
+        self.runRevision = runRevision
+        self.contentRevision = contentRevision
+        self.action = action
+        self.fromStatus = fromStatus
+        self.toStatus = toStatus
+        self.actorKind = actorKind
+        self.actorIdentifier = actorIdentifier
+        self.reason = reason
+        self.occurredAt = occurredAt
+    }
 }
 
 // MARK: - Errors
@@ -598,4 +696,7 @@ public nonisolated enum MethodContractError: Error, Equatable, Sendable {
     case blankMethodKey
     case reviewRequiresHumanActor
     case blankReviewActorIdentifier
+    case blankReviewKey
+    case invalidReviewedContentRevision
+    case reviewTargetsNodeAndFinding
 }

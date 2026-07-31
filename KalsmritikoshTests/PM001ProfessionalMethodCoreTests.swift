@@ -234,7 +234,7 @@ struct PM001ProfessionalMethodCoreTests {
         #expect(labels.contains("supersededByRunID"))
         #expect(labels.contains("workflowRunID") && labels.contains("workflowStepRunID"))
         #expect(Set(MethodRunStatus.allCases.map(\.rawValue)) ==
-                ["draft", "active", "waitingForHuman", "blocked", "completed", "cancelled", "superseded"])
+                ["draft", "active", "paused", "waitingForHuman", "blocked", "completed", "cancelled", "superseded"])
     }
 
     // MARK: - 9. Architecture closure: models only — no persistence / UI / network / LLM
