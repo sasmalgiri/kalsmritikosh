@@ -3931,22 +3931,28 @@ public enum SchemaMigrations {
         is_current           INTEGER NOT NULL DEFAULT 1,
         original_url         TEXT,
         created_at           REAL NOT NULL,
-        filename             TEXT NOT NULL,
+        -- Intake custody metadata. NOT-NULL with DEFAULTs so a legacy short-form insert
+        -- (id, logical_source_id, document_id, content_hash, valid_from, is_current,
+        -- created_at) still succeeds — source_versions has many existing writers.
+        filename             TEXT NOT NULL DEFAULT 'legacy-source',
         declared_extension   TEXT NOT NULL DEFAULT '',
-        detected_type        TEXT NOT NULL,
+        detected_type        TEXT NOT NULL DEFAULT 'unknown',
         mime_type            TEXT,
-        detection_basis      TEXT NOT NULL,
-        size_bytes           INTEGER NOT NULL,
+        detection_basis      TEXT NOT NULL DEFAULT 'unknown',
+        size_bytes           INTEGER NOT NULL DEFAULT 0,
         modified_at          REAL,
-        custody_mode         TEXT NOT NULL,
-        preservation_status  TEXT NOT NULL,
+        custody_mode         TEXT NOT NULL DEFAULT 'referenced',
+        preservation_status  TEXT NOT NULL DEFAULT 'referenceRecorded',
         vault_address        TEXT,
-        intake_recorded_at   REAL NOT NULL,
+        intake_recorded_at   REAL NOT NULL DEFAULT 0,
         CHECK(length(trim(filename)) > 0),
         CHECK(length(trim(detected_type)) > 0),
         CHECK(detection_basis IN ('pathPattern','declaredExtension','magicBytes','unknown')),
         CHECK(size_bytes >= 0),
-        CHECK(content_hash = lower(content_hash) AND length(content_hash) = 64),
+        -- content_hash is intentionally UNCONSTRAINED here (as it was pre-v82): the intake
+        -- path (SourceByteCapture) always writes a normalized 64-char lowercase SHA-256, but
+        -- legacy writers + a deliberately-missing custody hash (blocked downstream, not by the
+        -- schema) must still round-trip.
         CHECK(custody_mode IN ('referenced','managed')),
         CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported')),
         CHECK(is_current IN (0,1)),

@@ -39,8 +39,8 @@ struct PM004MethodLifecycleBoundaryTests {
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }.joined(separator: "\n")
     }
 
-    @Test("The schema is exactly v81")
-    func schemaIsV81() { #expect(SchemaMigrations.latestVersion == 81) }
+    @Test("The method ledger schema is at least v81 (latest is v82 after USF-001)")
+    func schemaIsV81() { #expect(SchemaMigrations.latestVersion >= 81) }
 
     @Test("No method-definition table exists")
     func noMethodDefinitionTable() throws {

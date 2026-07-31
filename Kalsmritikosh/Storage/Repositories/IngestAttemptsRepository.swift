@@ -27,6 +27,7 @@ public actor IngestAttemptsRepository {
         case unchanged   // hash matched a prior ingest; skipped
         case aliased     // deduped to a canonical copy
         case moved       // same bytes, new location
+        case deferred    // USF-001 — custody registered, processing deferred (e.g. media)
         case failed      // an error prevented ingest
     }
 
@@ -40,15 +41,17 @@ public actor IngestAttemptsRepository {
         public let attemptedAt: Date
     }
 
-    /// Record an attempt outcome. Best-effort; swallows errors.
+    /// Record an attempt outcome. Best-effort; swallows errors. USF-001 — once intake
+    /// succeeds, the attempt is tied to the exact logical source + source version.
     public func record(
         url: URL, status: Status, contentHash: String? = nil,
-        stage: String? = nil, detail: String? = nil, at when: Date = Date()
+        stage: String? = nil, detail: String? = nil,
+        logicalSourceID: UUID? = nil, sourceVersionID: UUID? = nil, at when: Date = Date()
     ) async {
         try? await database.exec("""
         INSERT INTO ingest_file_attempts
-            (id, url, content_hash, status, stage, detail, attempted_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+            (id, url, content_hash, status, stage, detail, attempted_at, logical_source_id, source_version_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(UUID()),
             .text(url.absoluteString),
@@ -56,7 +59,9 @@ public actor IngestAttemptsRepository {
             .text(status.rawValue),
             stage.map { .text($0) } ?? .null,
             detail.map { .text($0) } ?? .null,
-            .real(when.timeIntervalSince1970)
+            .real(when.timeIntervalSince1970),
+            logicalSourceID.map { .uuid($0) } ?? .null,
+            sourceVersionID.map { .uuid($0) } ?? .null
         ])
     }
 

@@ -206,13 +206,16 @@ struct ClaimEvidenceIdentityTests {
     @Test("In a two-KnowledgeObject source, each block resolves to its own object (no cross-linking)")
     func multiObjectNoCrossLink() async throws {
         let r = try await rig()
-        let file = UUID(), koA = UUID(), koB = UUID(), docA = UUID(), docB = UUID()
-        try await seedFileKO(r, file: file, ko: koA)
+        // Two distinct logical sources (one current version each — USF-001 one-current invariant).
+        let fileA = UUID(), fileB = UUID(), koA = UUID(), koB = UUID(), docA = UUID(), docB = UUID()
+        try await seedFileKO(r, file: fileA, ko: koA)
+        try await r.db.exec("INSERT INTO files (id, url, source_type, availability) VALUES (?,?,?,?);",
+                            [.uuid(fileB), .text("file:///b.txt"), .text("txt"), .text("available")])
         try await r.db.exec("""
         INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at) VALUES (?,?,?,?,?,?);
-        """, [.uuid(koB), .uuid(file), .text("txt"), .text("c"), .real(0), .real(0)])
-        let svA = try await seedVersion(r, file: file, doc: docA)
-        let svB = try await seedVersion(r, file: file, doc: docB)
+        """, [.uuid(koB), .uuid(fileB), .text("txt"), .text("c"), .real(0), .real(0)])
+        let svA = try await seedVersion(r, file: fileA, doc: docA)
+        let svB = try await seedVersion(r, file: fileB, doc: docB)
         let blockA = try await seedBlock(r, doc: docA, sv: svA)
         let blockB = try await seedBlock(r, doc: docB, sv: svB)
         try await link(r, block: blockA, ko: koA)

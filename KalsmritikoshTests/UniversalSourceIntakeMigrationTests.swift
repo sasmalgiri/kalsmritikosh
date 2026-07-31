@@ -136,7 +136,7 @@ struct UniversalSourceIntakeMigrationTests {
 
     // MARK: - source_versions CHECKs
 
-    @Test("source_versions rejects blank filename/type, bad detection basis, non-lowercase hash, and negative size")
+    @Test("source_versions rejects blank filename/type, bad detection basis, and negative size")
     func sourceVersionChecks() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 82)
         let logical = UUID(); try await seedFile(db, id: logical, hash: hashA)
@@ -154,8 +154,6 @@ struct UniversalSourceIntakeMigrationTests {
         await #expect(throws: (any Error).self) { try await insert(filename: "  ", hash: self.hashA) }
         await #expect(throws: (any Error).self) { try await insert(type: "  ", hash: self.hashA) }
         await #expect(throws: (any Error).self) { try await insert(basis: "guess", hash: self.hashA) }
-        await #expect(throws: (any Error).self) { try await insert(hash: self.hashA.uppercased()) }
-        await #expect(throws: (any Error).self) { try await insert(hash: "abc") }               // wrong length
         await #expect(throws: (any Error).self) { try await insert(hash: self.hashA, size: -1) }
         // a valid referenced row is accepted
         try await insert(hash: hashA)

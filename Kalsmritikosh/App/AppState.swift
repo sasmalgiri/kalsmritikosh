@@ -1325,7 +1325,10 @@ public final class AppState {
                 genericFacts: genericFactsRepo,
                 evidenceVault: evidenceVault,   // EV-005 — copies only when managed mode on
                 priorityGate: priorityGate,     // ING-006 — drain yields to interactive queries
-                claimProjection: claimProjectionBackfill  // PA-PROD B3 — incremental projection hook
+                claimProjection: claimProjectionBackfill,  // PA-PROD B3 — incremental projection hook
+                // USF-001 — every accessible file receives canonical custody before any parser runs.
+                intakeCoordinator: UniversalSourceIntakeCoordinator(
+                    repository: CanonicalSourceIntakeRepository(database: db, vault: evidenceVault))
             )
 
             // PERF.1 — resume the resumable background embedding drain as soon
