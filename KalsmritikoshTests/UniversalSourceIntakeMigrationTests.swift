@@ -239,20 +239,20 @@ struct UniversalSourceIntakeMigrationTests {
 
     // MARK: - repeat / self-heal / injected fault
 
-    @Test("Re-running migrate over a v82 database is a safe no-op")
+    @Test("Re-running migrate through v82 over a v82 database is a safe no-op")
     func v82Repeatable() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 82)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 82)
         #expect(try await db.currentUserVersion() == 82)
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }
 
-    @Test("The self-heal sentinel recognises the v82 markers and reconciles a stale counter")
+    @Test("The self-heal sentinel reconciles a stale counter over the fully-applied latest schema")
     func selfHealRecognizesV82() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 82)
-        try await db.setUserVersion(80)               // stale, but schema is fully v82
-        try await SchemaMigrations.migrate(db)         // self-heal stamps 82, no destructive replay
-        #expect(try await db.currentUserVersion() == 82)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        try await db.setUserVersion(80)               // stale, but schema is fully applied
+        try await SchemaMigrations.migrate(db)         // self-heal stamps latest, no destructive replay
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await MigrationFixtureBuilder.tableExists(db, "source_intake_receipts"))
     }
 
@@ -260,7 +260,7 @@ struct UniversalSourceIntakeMigrationTests {
     func v81SchemaGenuinelyUpgrades() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 81)
         #expect(try await MigrationFixtureBuilder.columns(db, "source_versions").contains("custody_mode") == false)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 82)
         #expect(try await db.currentUserVersion() == 82)
         #expect(try await MigrationFixtureBuilder.columns(db, "source_versions").contains("custody_mode"))
     }
@@ -282,7 +282,7 @@ struct UniversalSourceIntakeMigrationTests {
     @Test("Milestone migration from an early version reaches v82 with a clean FK graph")
     func milestoneReachesV82() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 82)
         #expect(try await db.currentUserVersion() == 82)
         #expect(try await db.query("PRAGMA foreign_key_check;", []).isEmpty)
         #expect(try await MigrationFaultHarness.integrityOK(db))
