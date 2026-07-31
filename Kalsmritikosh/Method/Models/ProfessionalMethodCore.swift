@@ -239,7 +239,7 @@ public nonisolated struct ProfessionalMethodDefinition: Codable, Sendable, Hasha
     }
 
     /// Structural validation: nonblank stable id + label, version ≥ 1, no blank
-    /// node/edge/input keys. Called by the PM-002 registry before acceptance.
+    /// node/edge/input keys. Called by the PM-003 registry before acceptance.
     public nonisolated func validateStructure() throws {
         guard !id.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MethodContractError.blankDefinitionID

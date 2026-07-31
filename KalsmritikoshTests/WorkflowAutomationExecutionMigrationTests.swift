@@ -85,11 +85,11 @@ struct WorkflowAutomationExecutionMigrationTests {
         try await db.exec("DROP TABLE workflow_automation_executions;")
         try await db.setUserVersion(77)
         // Because the self-heal sentinel includes the v78 marker table, the schema
-        // is NOT reported complete; migrate() re-applies v78 and the ledger returns.
-        // (If the sentinel lacked the v78 marker it would false-stamp 78 and leave
-        // the table missing — this test would then fail.)
+        // is NOT reported complete; migrate() re-applies v78 (the ledger returns) and
+        // continues to the latest version. (If the sentinel lacked the v78 marker it
+        // would false-stamp and leave the table missing — this test would then fail.)
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 78)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await MigrationFixtureBuilder.tableExists(db, "workflow_automation_executions"))
     }
 
