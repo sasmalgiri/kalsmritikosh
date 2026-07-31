@@ -64,7 +64,7 @@ Evidence-state vocabulary (an item may hold several):
 | Work-product / export engine | Complete for the four templates | Tests + GUI witness | Work-product run persistence (OPS-004) |
 | Stage 1 production verification | In progress | CI-001A green (run 30107577371) | STATUS (this), migrations, specialized CI jobs, branch ruleset |
 | Shared professional objects | In progress (2 of 6) | OPS-001 run 30148706330; OPS-002 runs 30156183281 + 30160395578 (OPS-002.1 accepted) | OPS-003…006 |
-| Persona Job Engine | Pending | — | Stage 3 |
+| Persona Job Engine | Complete (Stage 3) | PJE-001..012 accepted; hosted-green; schema v78; floor 1851 — see `STAGE3_ACCEPTANCE.md` | Consumed by Stage 4/5/6 |
 | Professional Method Engine | Pending | — | 16-method first pack |
 | Evidence Workbench | Pending | — | LAB-001…006 |
 | Shared persona shell | Pending | — | Stage 6 |
@@ -117,7 +117,9 @@ The following prior statements are **obsolete** and are corrected here:
 - Work-product runs are **not persisted** (OPS-004).
 - Explicit email participant roles are **not persisted** (OPS-005; directional "X emailed Y"
   phrasing intentionally withheld until then).
-- Persona Job Engine, Professional Method Engine and Evidence Workbench are **not implemented**.
+- Persona Job Engine (Stage 3) is **complete and acceptance-proven** (PJE-001..012, schema v78 —
+  see `STAGE3_ACCEPTANCE.md`). Professional Method Engine (Stage 4) and Evidence Workbench (Stage 5)
+  remain **not implemented**.
 - Complete five-persona professional workflows are **not implemented**.
 - Scale and release claims remain **unverified** (market only the tested corpus per SHIP_DECISIONS).
 - `actions/checkout@v4` runs on Node 24 (GitHub deprecation notice only — not a failure).
