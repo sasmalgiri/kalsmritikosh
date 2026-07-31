@@ -67,12 +67,13 @@ struct PJE006CScopeGuardTests {
                         "\(url.lastPathComponent) must not declare Stage 4 type \(token)")
             }
         }
-        // No method-run table in any migration.
+        // No Stage-4 method-DEFINITION table in any migration (the Stage-4 run-state
+        // ledger `method_runs` is owned by PM-002 / schema v79 under Method/Persistence;
+        // definitions stay code-registry-backed, so no definition table exists).
         let schema = try String(
             contentsOf: Self.repoRoot.appendingPathComponent(
                 "Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"),
             encoding: .utf8)
-        #expect(!schema.contains("CREATE TABLE method_runs"))
         #expect(!schema.contains("CREATE TABLE professional_method"))
     }
 

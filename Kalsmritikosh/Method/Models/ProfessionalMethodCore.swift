@@ -239,7 +239,7 @@ public nonisolated struct ProfessionalMethodDefinition: Codable, Sendable, Hasha
     }
 
     /// Structural validation: nonblank stable id + label, version ≥ 1, no blank
-    /// node/edge/input keys. Called by the PM-002 registry before acceptance.
+    /// node/edge/input keys. Called by the PM-003 registry before acceptance.
     public nonisolated func validateStructure() throws {
         guard !id.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MethodContractError.blankDefinitionID
@@ -389,7 +389,8 @@ public nonisolated struct MethodEdge: Codable, Sendable, Hashable, Identifiable 
 /// Links a method node to exact canonical evidence. `targetKind` REUSES the
 /// PJE-007 `WorkflowProvenanceReferenceKind` vocabulary; `targetID` is a
 /// canonical ID only — this contract never copies evidence content.
-public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable {
+public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable, Identifiable {
+    public let id: UUID
     public let methodRunID: UUID
     public let nodeID: UUID?
     public let targetKind: WorkflowProvenanceReferenceKind
@@ -400,6 +401,7 @@ public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable {
     public let addedAt: Date
 
     public nonisolated init(
+        id: UUID = UUID(),
         methodRunID: UUID,
         nodeID: UUID? = nil,
         targetKind: WorkflowProvenanceReferenceKind,
@@ -409,6 +411,7 @@ public nonisolated struct MethodEvidenceLink: Codable, Sendable, Hashable {
         addedBy: String,
         addedAt: Date
     ) {
+        self.id = id
         self.methodRunID = methodRunID
         self.nodeID = nodeID
         self.targetKind = targetKind

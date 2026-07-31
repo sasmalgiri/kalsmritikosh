@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 78
+    public static let latestVersion = 79
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -203,11 +203,31 @@ public enum SchemaMigrations {
                                           "title", "created_at"],
             "workflow_run_events": ["id", "run_id", "sequence", "run_revision", "type",
                                      "actor_kind", "payload_json", "occurred_at"],
-            // v78 — automation execution ledger (PJE-010): the NEWEST marker.
+            // v78 — automation execution ledger (PJE-010).
             "workflow_automation_executions": ["id", "workspace_id", "application_definition_id",
                                                 "automation_definition_id", "automation_definition_version",
                                                 "trigger_kind", "trigger_event_key", "action_kind",
-                                                "idempotency_key", "request_sha256", "status", "started_at"]
+                                                "idempotency_key", "request_sha256", "status", "started_at"],
+            // v79 — professional method run-state ledger (PM-002): the NEWEST markers.
+            // Every migration MUST add its newest physical marker here, or the self-heal
+            // path can stamp user_version over a schema missing that migration's shape.
+            "method_runs": ["id", "workspace_id", "method_definition_id", "method_definition_version",
+                             "workflow_run_id", "workflow_step_run_id", "status", "revision",
+                             "created_by", "created_at", "updated_at", "superseded_by_run_id"],
+            "method_nodes": ["id", "method_run_id", "node_definition_key", "node_kind", "label",
+                              "working_state", "ordinal", "parent_node_id", "created_at", "updated_at"],
+            "method_edges": ["id", "method_run_id", "from_node_id", "to_node_id", "edge_kind", "ordinal"],
+            "method_evidence_links": ["method_run_id", "node_id", "target_kind", "target_id",
+                                       "role", "ordinal", "added_by", "added_at"],
+            "method_assumptions": ["id", "method_run_id", "node_id", "statement", "status",
+                                    "created_by", "reviewed_by", "reviewed_at"],
+            "method_findings": ["id", "method_run_id", "node_id", "statement", "finding_kind",
+                                 "support_status", "review_status", "related_claim_id", "created_at"],
+            "method_reviews": ["id", "method_run_id", "node_id", "finding_id", "action",
+                                "actor_kind", "actor_identifier", "reviewed_at"],
+            "method_validation_results": ["id", "method_run_id", "validator_id", "validator_version",
+                                           "severity", "code", "message", "subject_kind", "subject_id",
+                                           "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -296,7 +316,8 @@ public enum SchemaMigrations {
         (75, v75),
         (76, v76),
         (77, v77),
-        (78, v78)
+        (78, v78),
+        (79, v79)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3319,5 +3340,227 @@ public enum SchemaMigrations {
     CREATE INDEX idx_wae_run        ON workflow_automation_executions(workflow_run_id);
     CREATE INDEX idx_wae_automation ON workflow_automation_executions(automation_definition_id, automation_definition_version);
     CREATE INDEX idx_wae_trigger    ON workflow_automation_executions(trigger_event_key);
+    """
+
+    // MARK: - v79 — professional method run-state ledger (PM-002, Stage 4)
+
+    private static let v79: String = """
+    -- Stage 4 Professional Method Engine: the persistent MethodRun aggregate.
+    -- These eight tables store WORKING METHOD STATE only — never canonical
+    -- evidence. Definitions stay immutable, code-registry-backed (PM-003): there
+    -- is deliberately NO professional_method_definitions table, so there is only
+    -- ONE definition authority. method_runs stores the definition id + version.
+    --
+    -- Truth boundaries the schema helps enforce:
+    --   working method state != canonical evidence   (own proposal-layer vocab)
+    --   method finding       != confirmed Claim      (related_claim_id is a soft
+    --                                                  reference, never a promotion)
+    --   review               is HUMAN + append-only  (CHECK actor_kind='human')
+    --   validation           may BLOCK, never confirm
+    --
+    -- Workflow references (workflow_run_id / workflow_step_run_id) are SOFT
+    -- historical invocation identifiers, NOT ownership and NOT FK-enforced: a
+    -- workflow deletion must not delete the MethodRun; the stored id is retained
+    -- and simply becomes unresolved. related_claim_id and superseded_by_run_id
+    -- are soft references for the same reason. Same-run ownership of the working
+    -- graph IS enforced in SQL via composite (id, method_run_id) foreign keys.
+    CREATE TABLE method_runs (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        workspace_id              TEXT NOT NULL,
+        method_definition_id      TEXT NOT NULL,
+        method_definition_version INTEGER NOT NULL,
+        workflow_run_id           TEXT,
+        workflow_step_run_id      TEXT,
+        status                    TEXT NOT NULL,
+        title                     TEXT,
+        revision                  INTEGER NOT NULL,
+        created_by                TEXT NOT NULL,
+        created_at                REAL NOT NULL,
+        updated_at                REAL NOT NULL,
+        completed_at              REAL,
+        superseded_by_run_id      TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(method_definition_version >= 1),
+        CHECK(revision >= 1),
+        CHECK(length(trim(method_definition_id)) > 0),
+        CHECK(length(trim(created_by)) > 0),
+        CHECK(status IN ('draft','active','waitingForHuman','blocked','completed','cancelled','superseded')),
+        CHECK(superseded_by_run_id IS NULL OR superseded_by_run_id <> id),
+        CHECK(workflow_step_run_id IS NULL OR workflow_run_id IS NOT NULL),
+        CHECK(completed_at IS NULL OR status = 'completed')
+    );
+    -- (id, method_run_id) uniqueness anchors the composite ownership foreign keys.
+    CREATE UNIQUE INDEX idx_method_runs_owned ON method_runs(id);
+    CREATE INDEX idx_method_runs_workspace  ON method_runs(workspace_id);
+    CREATE INDEX idx_method_runs_definition ON method_runs(method_definition_id, method_definition_version);
+    CREATE INDEX idx_method_runs_workflow   ON method_runs(workflow_run_id);
+
+    CREATE TABLE method_nodes (
+        id                 TEXT NOT NULL,
+        method_run_id      TEXT NOT NULL,
+        node_definition_key TEXT NOT NULL,
+        node_kind          TEXT NOT NULL,
+        label              TEXT NOT NULL,
+        body               TEXT,
+        working_state      TEXT NOT NULL,
+        ordinal            INTEGER NOT NULL,
+        parent_node_id     TEXT,
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL,
+        PRIMARY KEY(id),
+        UNIQUE(id, method_run_id),
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(parent_node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        CHECK(ordinal >= 0),
+        CHECK(length(trim(node_definition_key)) > 0),
+        CHECK(length(trim(node_kind)) > 0),
+        CHECK(length(trim(label)) > 0),
+        CHECK(parent_node_id IS NULL OR parent_node_id <> id),
+        CHECK(working_state IN ('proposal','ruleSupported','disputed','gap','humanRejected','humanAcceptedForWorkflow'))
+    );
+    CREATE INDEX idx_method_nodes_run    ON method_nodes(method_run_id, ordinal);
+    CREATE INDEX idx_method_nodes_parent ON method_nodes(parent_node_id);
+
+    CREATE TABLE method_edges (
+        id            TEXT PRIMARY KEY NOT NULL,
+        method_run_id TEXT NOT NULL,
+        from_node_id  TEXT NOT NULL,
+        to_node_id    TEXT NOT NULL,
+        edge_kind     TEXT NOT NULL,
+        label         TEXT,
+        ordinal       INTEGER NOT NULL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(from_node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        FOREIGN KEY(to_node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        CHECK(ordinal >= 0),
+        CHECK(length(trim(edge_kind)) > 0),
+        -- Duplicate identical edges FAIL (one documented contract).
+        UNIQUE(method_run_id, from_node_id, to_node_id, edge_kind)
+    );
+    CREATE INDEX idx_method_edges_run  ON method_edges(method_run_id, ordinal);
+    CREATE INDEX idx_method_edges_from ON method_edges(from_node_id);
+    CREATE INDEX idx_method_edges_to   ON method_edges(to_node_id);
+
+    -- Canonical evidence references: IDs only, reusing the PJE-007 reference
+    -- vocabulary (target_kind). No evidence text/bytes/OCR/chunks are copied.
+    CREATE TABLE method_evidence_links (
+        id            TEXT PRIMARY KEY NOT NULL,
+        method_run_id TEXT NOT NULL,
+        node_id       TEXT,
+        target_kind   TEXT NOT NULL,
+        target_id     TEXT NOT NULL,
+        role          TEXT NOT NULL,
+        ordinal       INTEGER NOT NULL,
+        added_by      TEXT NOT NULL,
+        added_at      REAL NOT NULL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        CHECK(ordinal >= 0),
+        CHECK(length(trim(added_by)) > 0),
+        CHECK(role IN ('supporting','contradicting','contextual'))
+    );
+    -- Partial unique indexes so duplicate links cannot slip through SQLite's NULL
+    -- uniqueness behaviour — separately for node-scoped and run-level links.
+    CREATE UNIQUE INDEX idx_method_evlink_node ON method_evidence_links(method_run_id, node_id, target_kind, target_id, role)
+        WHERE node_id IS NOT NULL;
+    CREATE UNIQUE INDEX idx_method_evlink_run  ON method_evidence_links(method_run_id, target_kind, target_id, role)
+        WHERE node_id IS NULL;
+    CREATE INDEX idx_method_evlink_target ON method_evidence_links(target_kind, target_id);
+
+    CREATE TABLE method_assumptions (
+        id            TEXT PRIMARY KEY NOT NULL,
+        method_run_id TEXT NOT NULL,
+        node_id       TEXT,
+        statement     TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        rationale     TEXT,
+        created_by    TEXT NOT NULL,
+        reviewed_by   TEXT,
+        reviewed_at   REAL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        CHECK(length(trim(statement)) > 0),
+        CHECK(length(trim(created_by)) > 0),
+        CHECK(status IN ('open','accepted','rejected','needsEvidence')),
+        CHECK((reviewed_by IS NULL) = (reviewed_at IS NULL))
+    );
+    CREATE INDEX idx_method_assumptions_run ON method_assumptions(method_run_id);
+
+    CREATE TABLE method_findings (
+        id              TEXT NOT NULL,
+        method_run_id   TEXT NOT NULL,
+        node_id         TEXT,
+        statement       TEXT NOT NULL,
+        finding_kind    TEXT NOT NULL,
+        support_status  TEXT NOT NULL,
+        review_status   TEXT NOT NULL,
+        related_claim_id TEXT,
+        created_at      REAL NOT NULL,
+        PRIMARY KEY(id),
+        UNIQUE(id, method_run_id),
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        CHECK(length(trim(statement)) > 0),
+        CHECK(length(trim(finding_kind)) > 0),
+        CHECK(support_status IN ('unsupported','partiallySupported','supported','contradicted')),
+        CHECK(review_status IN ('unreviewed','acceptedForWorkflow','rejected','needsRevision'))
+    );
+    CREATE INDEX idx_method_findings_run   ON method_findings(method_run_id, created_at);
+    CREATE INDEX idx_method_findings_claim ON method_findings(related_claim_id);
+
+    -- Append-only human review ledger (no update/delete API). actor_kind is
+    -- CHECK-pinned to 'human' — no system/rule/automation impersonation.
+    CREATE TABLE method_reviews (
+        id               TEXT PRIMARY KEY NOT NULL,
+        method_run_id    TEXT NOT NULL,
+        node_id          TEXT,
+        finding_id       TEXT,
+        action           TEXT NOT NULL,
+        actor_kind       TEXT NOT NULL,
+        actor_identifier TEXT NOT NULL,
+        comment          TEXT,
+        reviewed_at      REAL NOT NULL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        FOREIGN KEY(finding_id, method_run_id)
+            REFERENCES method_findings(id, method_run_id) ON DELETE CASCADE,
+        CHECK(actor_kind = 'human'),
+        CHECK(length(trim(actor_identifier)) > 0),
+        CHECK(action IN ('acceptForWorkflow','reject','requestRevision','comment','reopen'))
+    );
+    CREATE INDEX idx_method_reviews_run     ON method_reviews(method_run_id, reviewed_at);
+    CREATE INDEX idx_method_reviews_finding ON method_reviews(finding_id);
+
+    -- Append-only deterministic validation ledger (no update/delete API).
+    -- A blocking result restricts completion; it never confirms a conclusion.
+    CREATE TABLE method_validation_results (
+        id                TEXT PRIMARY KEY NOT NULL,
+        method_run_id     TEXT NOT NULL,
+        validator_id      TEXT NOT NULL,
+        validator_version TEXT NOT NULL,
+        severity          TEXT NOT NULL,
+        code              TEXT NOT NULL,
+        message           TEXT NOT NULL,
+        subject_kind      TEXT NOT NULL,
+        subject_id        TEXT,
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        CHECK(length(trim(validator_id)) > 0),
+        CHECK(length(trim(validator_version)) > 0),
+        CHECK(length(trim(code)) > 0),
+        CHECK(length(trim(message)) > 0),
+        CHECK(severity IN ('info','warning','error','blocking')),
+        CHECK(subject_kind IN ('run','node','edge','assumption','finding','evidenceLink')),
+        -- A non-run subject must name a concrete subject id; a run subject may omit it.
+        CHECK(subject_kind = 'run' OR subject_id IS NOT NULL)
+    );
+    CREATE INDEX idx_method_validation_run ON method_validation_results(method_run_id, created_at);
     """
 }
