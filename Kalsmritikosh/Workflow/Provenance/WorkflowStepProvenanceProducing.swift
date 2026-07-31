@@ -173,3 +173,24 @@ extension MethodStepExecutor: WorkflowStepProvenanceProducing {
         }
     }
 }
+
+// MARK: - registered method (v2): provenance from the STORED completed-result snapshot
+// (never queried from the method repository at provenance time)
+
+extension RegisteredMethodStepExecutor: WorkflowStepProvenanceProducing {
+    public func provenance(
+        context: WorkflowStepExecutionContext,
+        resultingStateJSON: String
+    ) async throws -> [WorkflowProvenanceReference] {
+        let state = try decodeState(RegisteredMethodStepState.self, from: resultingStateJSON)
+        guard let result = state.result else { return [] }
+        return result.provenanceReferences.compactMap { ref in
+            guard let objectKind = WorkflowEvidenceObjectKind(rawValue: ref.objectKind),
+                  let kind = referenceKind(fromObjectKind: objectKind),
+                  let objectID = UUID(uuidString: ref.canonicalObjectID) else { return nil }
+            return WorkflowProvenanceReference(
+                kind: kind, canonicalObjectID: objectID,
+                role: .methodInput, disposition: .active)
+        }
+    }
+}
