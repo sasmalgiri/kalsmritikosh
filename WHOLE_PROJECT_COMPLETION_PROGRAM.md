@@ -116,7 +116,12 @@ before its foundation gate is green.
   prompt AND export consistently; prior work-product runs reopen identically; email direction is
   never inferred from order.
 
-### Stage 3 — Persona Job Engine (reusable, not hard-coded per screen)
+### Stage 3 — Persona Job Engine (reusable, not hard-coded per screen) — **COMPLETE (2026-07-31)**
+> Accepted through PJE-001..012 (schema v78, floor 1851). The gate below is PROVEN; full acceptance
+> record, accepted-unit SHAs and the capability/kind/persistence/safety/closure audit are in
+> `STAGE3_ACCEPTANCE.md`. Both carried rulings (`reviewEvidence` disposition; `.brokenLineage`
+> reserved defensive state) are closed. Stage 4/5/6 remain not implemented.
+
 Definition types (`PersonaApplicationDefinition`, `PersonaToolDefinition`,
 `PersonaWorkflowDefinition`, `…StepDefinition`, `…Requirement`, `…Validation`,
 `…ArtifactDefinition`) + run types (`WorkflowRun`, `WorkflowStepRun`, `WorkflowDecision`,
@@ -267,10 +272,10 @@ workflow, analytical workbench, persona applications, and release validation.
 
 ```
 MASTER-001  (this reset — DONE on commit)
-→ Stage 1: CI-001 · STATUS-001 · MIG-001
-→ Stage 2: OPS-001..005
-→ Stage 3: Persona Job Engine
-→ Stage 4: Professional Method Engine
+→ Stage 1: CI-001 · STATUS-001 · MIG-001            [DONE]
+→ Stage 2: OPS-001..006                             [DONE]
+→ Stage 3: Persona Job Engine (PJE-001..012)        [DONE — STAGE3_ACCEPTANCE.md]
+→ Stage 4: Professional Method Engine               [NEXT]
 → Stage 5: Evidence Workbench core
 → Stage 6: Shared persona shell
 → Investigator complete vertical slice
