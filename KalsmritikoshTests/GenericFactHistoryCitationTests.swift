@@ -94,6 +94,14 @@ struct GenericFactHistoryCitationTests {
         let objectID = UUID(), docID = UUID(), versionID = UUID(), subject = UUID()
         let block = EvidenceBlock(documentID: docID, ordinal: 1, kind: .paragraph,
                                   rawText: "Orchid Chemicals Ltd — Executive Director, 2004.")
+        // USF-001.1 — EvidenceStore is attach-only; create the (legacy-exempt) version first.
+        try await db.exec("""
+            INSERT INTO source_versions (id, logical_source_id, content_hash, valid_from, is_current, created_at,
+                filename, detected_type, detection_basis, size_bytes, custody_mode, preservation_status, intake_recorded_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(versionID), .uuid(objectID), .text("h"), .real(0), .integer(1), .real(0),
+                  .text("cv.txt"), .text("txt"), .text("declaredExtension"), .integer(0), .text("referenced"),
+                  .text("legacyImported"), .real(0)])
         let doc = ParsedDocument(id: docID, logicalSourceID: objectID, sourceVersionID: versionID,
                                  filename: "cv.txt", detectedType: .txt, contentHash: "h", blocks: [block])
         try await store.persist(doc, parser: "txt", parserVersion: "1", startedAt: clock)

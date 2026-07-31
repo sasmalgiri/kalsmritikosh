@@ -73,17 +73,25 @@ public enum SourceByteCapture {
 
     // MARK: - Type detection (recorded separately; never proof a parser ran)
 
+    /// USF-001.1 — the ONE authoritative type detector. Order (spec §5):
+    /// canonical path/filename pattern → magic bytes → declared extension → unknown.
+    /// A canonical pattern (e.g. chat.db, browser History) wins over magic bytes so a
+    /// SQLite-backed iMessage/browser source is never flattened to generic `.sqlite`.
     private static func detectType(url: URL, head: Data)
     -> (SourceType, SourceDetectionBasis, String) {
         let declaredExtension = url.pathExtension.lowercased()
-        // 1. magic bytes take priority over any claimed extension.
+        // 1. canonical path / filename pattern.
+        if let pattern = SourceType.detectPathPattern(from: url) {
+            return (pattern, .pathPattern, declaredExtension)
+        }
+        // 2. magic bytes.
         if let magic = SourceType.sniffMagicBytes(head) {
             return (magic, .magicBytes, declaredExtension)
         }
-        // 2/3. path + declared extension (SourceType.detect covers both).
-        let byPath = SourceType.detect(from: url)
-        if byPath != .unknown {
-            return (byPath, declaredExtension.isEmpty ? .pathPattern : .declaredExtension, declaredExtension)
+        // 3. declared extension.
+        let byExtension = SourceType.detect(from: url)
+        if byExtension != .unknown {
+            return (byExtension, .declaredExtension, declaredExtension)
         }
         // 4. unknown.
         return (.unknown, .unknown, declaredExtension)

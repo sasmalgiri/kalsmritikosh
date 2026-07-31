@@ -222,7 +222,8 @@ struct WorkProductReceiptCustodyTests {
             loaders: .standard(), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
             eventExtractor: RuleEventExtractor(), files: files, objects: objects, chunks: chunks,
             entities: entities, events: events, evidenceStore: store,
-            structuralRegistry: .standard(ocr: VisionOCR()), assertions: asrt, genericFacts: gf)
+            structuralRegistry: .standard(ocr: VisionOCR()), assertions: asrt, genericFacts: gf,
+            intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
 
         let eml = dir.appendingPathComponent("matter.eml")
         try """

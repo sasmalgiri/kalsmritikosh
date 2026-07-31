@@ -132,7 +132,8 @@ struct EmailTopicExtractorTests {
             eventExtractor: RuleEventExtractor(), narrativeSlotExtractor: RuleNarrativeSlotExtractor(),
             files: files, objects: objects, chunks: chunks, entities: entities, events: events,
             evidenceStore: store, structuralRegistry: .standard(ocr: VisionOCR()),
-            assertions: asrt, genericFacts: gf)
+            assertions: asrt, genericFacts: gf,
+            intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
         let producer = ClaimProducer(genericFacts: gf, assertions: asrt, temporalClaims: tcs,
                                      events: events, claims: claims, evidence: store)
         return IngestRig(db: db, files: files, objects: objects, events: events, claims: claims,

@@ -84,7 +84,7 @@ enum PAProdGUISmokeFixture {
         // A reopenable source persisted the SAME way production does: source version keyed at the
         // FILE (logical-source) level, plus an explicit block→KnowledgeObject ownership link (B6).
         // The block therefore resolves to its real KnowledgeObject (inside the workspace).
-        let inScopeBlock = try await persistBlock(store, file: file, ko: ko, filename: "valid-contract.txt",
+        let inScopeBlock = try await persistBlock(db, store, file: file, ko: ko, filename: "valid-contract.txt",
                                                   text: "Contract signed by Alex Rivera on 2025-03-01.")
         try await facts.upsert(GenericFact(
             subjectID: subject, subjectLabel: "Alex Rivera",
@@ -97,7 +97,7 @@ enum PAProdGUISmokeFixture {
         let outFile = UUID(), outKO = UUID()
         try await insertFileAndKO(db, file: outFile, ko: outKO, filename: "unrelated.txt",
                                   content: "Unrelated material.")
-        let outBlock = try await persistBlock(store, file: outFile, ko: outKO, filename: "unrelated.txt",
+        let outBlock = try await persistBlock(db, store, file: outFile, ko: outKO, filename: "unrelated.txt",
                                               text: "OUT-OF-SCOPE SENTINEL — MUST NOT APPEAR")
         try await facts.upsert(GenericFact(
             subjectID: subject, subjectLabel: "Alex Rivera",
@@ -166,13 +166,22 @@ enum PAProdGUISmokeFixture {
     /// Persist a one-block source version the SAME way production ingest does — the source version's
     /// `logical_source_id` is the FILE id — then record the canonical block→KnowledgeObject ownership
     /// link (B6). The block therefore resolves through the exact production path. Returns the block id.
-    private static func persistBlock(_ store: EvidenceStore, file: UUID, ko: UUID,
+    private static func persistBlock(_ db: Database, _ store: EvidenceStore, file: UUID, ko: UUID,
                                      filename: String, text: String) async throws -> UUID {
         let docID = UUID(), versionID = UUID(), blockID = UUID()
+        let hash = "pa-prod-\(blockID.uuidString)"
+        // USF-001.1 — EvidenceStore is attach-only; the source version must already exist.
+        // A fixture writes a legacy-imported version (exempt from the SHA rule) directly.
+        try await db.exec("""
+            INSERT INTO source_versions (id, logical_source_id, content_hash, valid_from, is_current, created_at,
+                filename, detected_type, detection_basis, size_bytes, custody_mode, preservation_status, intake_recorded_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(versionID), .uuid(file), .text(hash), .real(0), .integer(1), .real(0),
+                  .text(filename), .text("txt"), .text("declaredExtension"), .integer(0), .text("referenced"),
+                  .text("legacyImported"), .real(0)])
         let block = EvidenceBlock(id: blockID, documentID: docID, ordinal: 0, kind: .paragraph, rawText: text)
         let doc = ParsedDocument(id: docID, logicalSourceID: file, sourceVersionID: versionID,
-                                 filename: filename, detectedType: .txt, contentHash: "pa-prod-\(blockID.uuidString)",
-                                 blocks: [block])
+                                 filename: filename, detectedType: .txt, contentHash: hash, blocks: [block])
         try await store.persist(doc, parser: "pa-prod-gui-fixture", parserVersion: "1", startedAt: Date())
         try await store.linkBlocks([blockID], toObject: ko, at: Date())   // B6 canonical ownership
         return blockID

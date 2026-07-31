@@ -232,4 +232,74 @@ struct IngestCoordinatorSafeIntakeTests {
         #expect(rel.uuid(1) == childVersion)
         #expect(rel.string(2) == "attachment")
     }
+
+    // MARK: - One version-linked terminal attempt (USF-001.1 §4)
+
+    /// The single latest attempt for a url (the terminal one, not the pre-intake `started`).
+    private func latestTerminal(_ rig: Rig, url: URL) async throws -> SQLRow? {
+        try await rig.db.query("""
+            SELECT status, logical_source_id, source_version_id FROM ingest_file_attempts
+              WHERE url = ? AND status <> 'started' ORDER BY attempted_at DESC LIMIT 1;
+            """, [.text(url.absoluteString)]).first
+    }
+
+    @Test("A deferred media file's LATEST terminal status is deferred (never overwritten to unchanged), with version ids")
+    @MainActor func deferredTerminalNotOverwritten() async throws {
+        let rig = try await makeRig()
+        let url = try writeData(rig, "voice.mp3", Data(repeating: 0x11, count: 64))
+        _ = try await rig.coordinator.ingest(fileAt: url)
+        let t = try #require(try await latestTerminal(rig, url: url))
+        #expect(t.string(0) == "deferred")
+        #expect(t.uuid(1) != nil && t.uuid(2) != nil)
+        // exactly one terminal row for this url
+        #expect(try await rig.db.query("SELECT COUNT(*) FROM ingest_file_attempts WHERE url = ? AND status <> 'started';",
+                                       [.text(url.absoluteString)]).first?.int(0) == 1)
+    }
+
+    @Test("A moved input's LATEST terminal status is moved, with version ids")
+    @MainActor func movedTerminalStatus() async throws {
+        let rig = try await makeRig()
+        let a = try write(rig, "a.eml", email)
+        _ = try await rig.coordinator.ingest(fileAt: a)
+        try FileManager.default.removeItem(at: a)
+        let b = try write(rig, "b.eml", email)
+        _ = try await rig.coordinator.ingest(fileAt: b)
+        let t = try #require(try await latestTerminal(rig, url: b))
+        #expect(t.string(0) == "moved")
+        #expect(t.uuid(1) != nil && t.uuid(2) != nil)
+    }
+
+    @Test("A loader failure records ONE terminal failed attempt carrying the exact version ids")
+    @MainActor func loaderFailureTerminalHasVersionIDs() async throws {
+        let rig = try await makeRig()
+        let url = try writeData(rig, "empty.txt", Data())   // text loader rejects empty content
+        _ = try? await rig.coordinator.ingest(fileAt: url)
+        let t = try #require(try await latestTerminal(rig, url: url))
+        #expect(t.string(0) == "failed")
+        #expect(t.uuid(1) != nil && t.uuid(2) != nil)
+        #expect(try await rig.db.query("SELECT COUNT(*) FROM ingest_file_attempts WHERE url = ? AND status = 'failed';",
+                                       [.text(url.absoluteString)]).first?.int(0) == 1)
+    }
+
+    @Test("An unchanged re-ingest's LATEST terminal status is unchanged, with version ids")
+    @MainActor func unchangedTerminalStatus() async throws {
+        let rig = try await makeRig()
+        let url = try write(rig, "a.eml", email)
+        _ = try await rig.coordinator.ingest(fileAt: url)
+        _ = try await rig.coordinator.ingest(fileAt: url)
+        let t = try #require(try await latestTerminal(rig, url: url))
+        #expect(t.string(0) == "unchanged")
+        #expect(t.uuid(1) != nil && t.uuid(2) != nil)
+    }
+
+    @Test("An alias input's LATEST terminal status is aliased, with version ids")
+    @MainActor func aliasTerminalStatus() async throws {
+        let rig = try await makeRig()
+        _ = try await rig.coordinator.ingest(fileAt: try write(rig, "a.eml", email))
+        let b = try write(rig, "b.eml", email)
+        _ = try await rig.coordinator.ingest(fileAt: b)
+        let t = try #require(try await latestTerminal(rig, url: b))
+        #expect(t.string(0) == "aliased")
+        #expect(t.uuid(1) != nil && t.uuid(2) != nil)
+    }
 }

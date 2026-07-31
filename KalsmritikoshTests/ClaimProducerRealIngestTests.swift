@@ -50,7 +50,8 @@ struct ClaimProducerRealIngestTests {
             evidenceStore: store,
             structuralRegistry: .standard(ocr: VisionOCR()),
             assertions: assertions,
-            genericFacts: genericFacts)
+            genericFacts: genericFacts,
+            intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
 
         // A real email — the product's primary input. The structured From/To header yields
         // canonical entities (with mentions → workspace membership) and the rule event extractor's
