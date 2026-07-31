@@ -29,7 +29,9 @@ struct PM001ProfessionalMethodCoreTests {
     }
 
     private static func methodSwiftFiles() throws -> [(name: String, text: String)] {
-        let dir = repoRoot.appendingPathComponent("Kalsmritikosh/Method")
+        // The MODELS layer only — the PM-002 persistence layer under Method/Persistence
+        // legitimately depends on Database.
+        let dir = repoRoot.appendingPathComponent("Kalsmritikosh/Method/Models")
         var out: [(String, String)] = []
         let e = FileManager.default.enumerator(at: dir, includingPropertiesForKeys: nil)
         while let url = e?.nextObject() as? URL {
@@ -249,13 +251,18 @@ struct PM001ProfessionalMethodCoreTests {
         }
     }
 
-    @Test("PM-001 adds no schema migration and no method tables anywhere")
-    func pm001AddsNoSchema() throws {
+    @Test("Method definitions stay code-registry-backed — no method-definition table exists")
+    func noMethodDefinitionTable() throws {
+        // PM-001 added no schema; PM-002 added the RUN-state ledger (v79) but never a
+        // definition table — definitions are immutable, code-registry-backed (PM-003),
+        // so there is exactly one definition authority.
         let schema = try String(
             contentsOf: Self.repoRoot.appendingPathComponent("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift"),
             encoding: .utf8)
-        for token in ["method_runs", "professional_method", "method_nodes", "method_edges"] {
-            #expect(!schema.contains(token), "PM-001 must not add method schema ('\(token)')")
+        for token in ["CREATE TABLE professional_method_definitions",
+                      "CREATE TABLE method_definition_registry",
+                      "CREATE TABLE method_templates"] {
+            #expect(!schema.contains(token), "no method-definition table may exist ('\(token)')")
         }
     }
 

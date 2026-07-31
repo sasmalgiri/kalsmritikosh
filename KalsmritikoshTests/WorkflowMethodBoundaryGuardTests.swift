@@ -184,14 +184,16 @@ struct WorkflowMethodBoundaryGuardTests {
         }
     }
 
-    // MARK: - 10: No method-run tables exist in any migration
+    // MARK: - 10: No method-DEFINITION table and no CONCRETE-method tables
 
-    @Test("No Stage 4 method table is created in any schema migration")
+    @Test("No Stage 4 method-definition or concrete-method table is created in any schema migration")
     func noMethodTablesInSchema() throws {
         let schema = try Self.source("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
+        // The Stage-4 RUN-state ledger (method_runs + children) is owned by PM-002
+        // (schema v79). What must NEVER exist: a method-DEFINITION table (definitions
+        // stay code-registry-backed) or a table for a specific concrete method.
         let bannedTables = [
-            "CREATE TABLE method_runs", "CREATE TABLE professional_method",
-            "CREATE TABLE method_nodes", "CREATE TABLE method_edges",
+            "CREATE TABLE professional_method_definitions", "CREATE TABLE method_definition_registry",
             "CREATE TABLE five_whys", "CREATE TABLE fishbone",
             "CREATE TABLE root_cause", "CREATE TABLE capa"
         ]
@@ -200,21 +202,23 @@ struct WorkflowMethodBoundaryGuardTests {
         }
     }
 
-    // MARK: - 11: Workflow core tables carry no method-specific columns
+    // MARK: - 11: No concrete-method column leaks into any table
 
-    @Test("Workflow core tables carry no method-specific columns")
+    @Test("No concrete-method column is persisted in any table")
     func workflowCoreTablesHaveNoMethodColumns() throws {
         let schema = try Self.source("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
-        // Method state/results live inside the GENERIC step-state JSON, never as
-        // dedicated columns on the workflow core tables.
+        // Concrete-method results live inside GENERIC method/step state, never as
+        // dedicated columns. (The generic method_run_id / method_definition_id linkage
+        // columns are the legitimate PM-002 method-table columns, not concrete-method
+        // columns.) No method column is added to the workflow core tables — see
+        // PM002MethodPersistenceBoundaryTests.workflowCoreHasNoMethodColumns.
         let bannedColumns = [
-            "method_definition_id", "method_run_id", "method_result_id",
             "root_cause", "five_whys", "fishbone_", "hypothesis_matrix",
             "risk_matrix", "decision_matrix"
         ]
         for token in bannedColumns {
             #expect(!schema.contains(token),
-                    "Workflow schema must not persist method-specific column '\(token)'")
+                    "Schema must not persist concrete-method column '\(token)'")
         }
     }
 

@@ -120,9 +120,11 @@ struct PJE010BoundaryGuardTests {
     @Test("The execution ledger is an audit receipt — it carries no task/deadline domain columns")
     func ledgerIsAuditOnly() throws {
         let schema = try Self.source("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
-        // Scope the scan to the v78 ledger DDL block (appended last in the file).
+        // Scope the scan to the v78 ledger DDL block (bounded by the next migration,
+        // so later migrations like v79's method_findings.related_claim_id do not leak in).
         let start = try #require(schema.range(of: "private static let v78"))
-        let v78Block = String(schema[start.lowerBound...])
+        let end = schema.range(of: "private static let v79")?.lowerBound ?? schema.endIndex
+        let v78Block = String(schema[start.lowerBound..<end])
         #expect(v78Block.contains("CREATE TABLE workflow_automation_executions"))
         for token in ["due_date", "task_status", "deadline_value", "task_priority",
                       "claim_id", "evidence_text", "source_bytes"] {
