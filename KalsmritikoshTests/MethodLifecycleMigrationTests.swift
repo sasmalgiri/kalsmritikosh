@@ -163,12 +163,12 @@ struct MethodLifecycleMigrationTests {
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }
 
-    @Test("The self-heal sentinel recognises the v80 markers and reconciles a stale counter")
-    func selfHealRecognizesV80() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 80)
-        try await db.setUserVersion(79)               // stale, but schema is fully v80
-        try await SchemaMigrations.migrate(db)         // self-heal stamps 80, no destructive replay
-        #expect(try await db.currentUserVersion() == 80)
+    @Test("The self-heal sentinel reconciles a stale counter over the fully-applied latest schema")
+    func selfHealReconcilesStaleCounterAtLatest() async throws {
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        try await db.setUserVersion(79)               // stale, but schema is fully applied
+        try await SchemaMigrations.migrate(db)         // self-heal stamps latest, no destructive replay
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         for t in methodTables { #expect(try await MigrationFixtureBuilder.tableExists(db, t)) }
     }
 
@@ -227,10 +227,10 @@ struct MethodLifecycleMigrationTests {
         #expect(try await db.query("PRAGMA foreign_key_check;", []).isEmpty)
     }
 
-    @Test("Milestone migration to latest reaches v80 through v80")
+    @Test("Milestone migration reaches v80 through v80")
     func milestoneReachesV80() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 80)
         #expect(try await db.currentUserVersion() == 80)
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }

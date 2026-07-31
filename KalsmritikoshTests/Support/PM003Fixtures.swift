@@ -55,7 +55,7 @@ enum PM003Fixtures {
     static func makeRig(
         at url: URL, definitions: [ProfessionalMethodDefinition]? = nil
     ) async throws -> PM003Rig {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 80, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 81, at: url)
         try await db.exec("PRAGMA foreign_keys = ON;")
         let workflowRepo = WorkflowRunRepository(database: db)
         let methodRepo = MethodRunRepository(database: db)

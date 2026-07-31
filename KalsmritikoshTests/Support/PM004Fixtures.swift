@@ -79,7 +79,7 @@ enum PM004Fixtures {
         definitions: [ProfessionalMethodDefinition]? = nil
     ) async throws -> PM004Rig {
         let url = PJE006CFixtures.newDatabaseURL()
-        let db = try await MigrationFixtureBuilder.database(atVersion: 80, at: url)
+        let db = try await MigrationFixtureBuilder.database(atVersion: 81, at: url)
         try await db.exec("PRAGMA foreign_keys = ON;")
         let repo = MethodRunRepository(database: db)
         let scopes = SensitiveScopeRepository(database: db)

@@ -34,4 +34,11 @@ public nonisolated enum MethodPersistenceError: Error, Equatable, Sendable {
     case invalidOrdinal(Int)
     /// A content write was attempted on a run that is not draft or active (PM-004).
     case contentMutationNotAllowed(UUID, status: String)
+    /// PM-004.1: a lifecycle plan's review did not evaluate the run's effective content
+    /// revision (current for a normal review, current+1 for a reopen). Gate epochs are
+    /// enforced by the authoritative repository, not trusted from the caller.
+    case reviewEpochMismatch(runID: UUID, expected: Int, actual: Int)
+    /// PM-004.1: a lifecycle plan's validation batch is not a single, non-legacy batch
+    /// evaluating the run's current content revision, all rows owned by the run.
+    case invalidValidationBatch(String)
 }
