@@ -84,7 +84,17 @@ extension MethodRunRepository {
             }
             let run = current.run
 
-            // Optional review append is a HUMAN act (validated) and must belong to the run.
+            // The effective content revision this plan writes AT: unchanged for a normal
+            // action, incremented for a content-changing action (reopen). PM-004.1: the
+            // authoritative repository — not the caller — decides the gate epoch, so a
+            // review or validation row that names a different revision is rejected before
+            // any write. The engine already constructs them correctly; this makes the
+            // public primitive self-enforcing against a hand-built plan.
+            let effectiveContentRevision = run.contentRevision + (plan.patch.contentChanged ? 1 : 0)
+
+            // Optional review append is a HUMAN act (validated), must belong to the run,
+            // and must evaluate the effective content revision (current, or current+1 on
+            // reopen).
             if let review = plan.review {
                 try review.validate()
                 if let nodeID = review.nodeID {
@@ -92,6 +102,32 @@ extension MethodRunRepository {
                 }
                 if let findingID = review.findingID {
                     try Self.requireOwned(db, table: "method_findings", id: findingID, runID: runID, what: "review finding")
+                }
+                guard review.reviewedContentRevision == effectiveContentRevision else {
+                    throw MethodPersistenceError.reviewEpochMismatch(
+                        runID: runID, expected: effectiveContentRevision, actual: review.reviewedContentRevision)
+                }
+            }
+
+            // Optional validation batch: one non-legacy batch id, every row owned by the
+            // run and evaluating the effective (current) content revision.
+            if let batch = plan.validationBatch {
+                guard let batchID = batch.first?.validationBatchID else {
+                    throw MethodPersistenceError.invalidValidationBatch("a validation batch must contain at least one result")
+                }
+                guard batchID != MethodValidationResult.legacyBatchID else {
+                    throw MethodPersistenceError.invalidValidationBatch("a validation batch requires a non-legacy batch id")
+                }
+                for v in batch {
+                    guard v.methodRunID == runID else {
+                        throw MethodPersistenceError.invalidValidationBatch("a validation result belongs to another run")
+                    }
+                    guard v.validationBatchID == batchID else {
+                        throw MethodPersistenceError.invalidValidationBatch("all results must share one batch id")
+                    }
+                    guard v.evaluatedContentRevision == effectiveContentRevision else {
+                        throw MethodPersistenceError.invalidValidationBatch("all results must evaluate the current content revision")
+                    }
                 }
             }
 
@@ -120,7 +156,7 @@ extension MethodRunRepository {
             }
 
             let newRevision = expectedRevision + 1
-            let newContentRevision = plan.patch.contentChanged ? run.contentRevision + 1 : run.contentRevision
+            let newContentRevision = effectiveContentRevision
 
             // Append the review, if any.
             if let r = plan.review {

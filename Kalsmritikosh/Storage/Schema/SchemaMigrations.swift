@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 80
+    public static let latestVersion = 81
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -73,10 +73,18 @@ public enum SchemaMigrations {
             // SQLite-recommended pattern for table rebuilds (a `DROP TABLE` on a
             // parent otherwise fires ON DELETE CASCADE on its children, and FK
             // enforcement cannot be toggled inside the per-migration SAVEPOINT).
-            // A PRAGMA foreign_key_check re-validates every relationship afterward,
-            // and enforcement is always restored — including on the failure path.
+            // A single OUTER savepoint wraps EVERY pending migration AND the final
+            // PRAGMA foreign_key_check, so the whole pass is atomic: a post-pass FK
+            // violation (or any migration failure) rolls back all applied DDL *and*
+            // every user_version stamp together — the database is never left committed
+            // at a newer version while the operation reports failure. Enforcement is
+            // always restored, including on the failure path. (PM-004.1 hardening: the
+            // check formerly ran AFTER each migration had already released its own
+            // savepoint, so a failing check could not undo the committed migrations.)
             try await database.exec("PRAGMA foreign_keys=OFF;")
+            let pass = "kalsmritikosh_mig_pass"
             do {
+                try await database.exec("SAVEPOINT \(pass);")
                 for (version, sql) in pending {
                     try await applyOne(database, version: version, sql: sql, fault: fault)
                 }
@@ -86,7 +94,10 @@ public enum SchemaMigrations {
                         version: targetVersion,
                         message: "foreign_key_check reported \(violations.count) violation(s) after migration")
                 }
+                try await database.exec("RELEASE SAVEPOINT \(pass);")
             } catch {
+                try? await database.exec("ROLLBACK TO SAVEPOINT \(pass);")
+                try? await database.exec("RELEASE SAVEPOINT \(pass);")
                 try? await database.exec("PRAGMA foreign_keys=ON;")
                 throw error
             }
@@ -260,6 +271,23 @@ public enum SchemaMigrations {
             let actual = Set(rows.compactMap { $0.string(1) })
             guard actual.isSuperset(of: expected) else { return false }
         }
+        // v81 (PM-004.1) adds CHECK constraints but NO new column, so the column probe
+        // above cannot distinguish a v81 schema from v80. Confirm the newest v81 markers
+        // directly from each rebuilt table's stored CREATE SQL — without this, the
+        // self-heal path could stamp user_version=81 over a v80 schema that lacks the
+        // hardened CHECKs (the PJE-006B.1 self-heal hazard). Each substring appears ONLY
+        // in the v81 form of its table.
+        let v81Markers: [String: String] = [
+            "method_runs":               "status = 'superseded'",              // reverse supersession CHECK
+            "method_reviews":            "length(trim(review_key)) > 0",       // non-blank review key CHECK
+            "method_validation_results": "length(trim(validation_batch_id)) > 0" // non-blank batch id CHECK
+        ]
+        for (table, marker) in v81Markers {
+            let sql = try await database.query(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?;", [.text(table)])
+                .first?.string(0) ?? ""
+            guard sql.contains(marker) else { return false }
+        }
         return true
     }
 
@@ -344,7 +372,8 @@ public enum SchemaMigrations {
         (77, v77),
         (78, v78),
         (79, v79),
-        (80, v80)
+        (80, v80),
+        (81, v81)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -3708,5 +3737,144 @@ public enum SchemaMigrations {
         CHECK(actor_kind <> 'human' OR (actor_identifier IS NOT NULL AND length(trim(actor_identifier)) > 0))
     );
     CREATE INDEX idx_method_run_events_run ON method_run_events(method_run_id, sequence);
+    """
+
+    // MARK: - v81 — method lifecycle ledger hardening (PM-004.1, Stage 4)
+
+    private static let v81: String = """
+    -- PM-004.1 pushes the lifecycle invariants that PM-004 enforced only in Swift down
+    -- into the ledger itself, by rebuilding three tables to add missing CHECKs (a CHECK
+    -- cannot be altered in place). Adds NO new column and NO new table — every rebuild
+    -- preserves every row (ids unchanged) and every legacy value satisfies the new
+    -- CHECKs (legacy review_key 'legacy.unkeyed', legacy batch id all-zeros, revision 0).
+    -- migrate() disables FK enforcement for the whole pass and runs foreign_key_check,
+    -- so DROP TABLE method_runs does NOT cascade-delete its children.
+
+    -- (1) method_runs: complete the BOTH-WAY supersession invariant. PM-004 enforced
+    --     status='superseded' ⇒ successor exists, but NOT the reverse, so an active /
+    --     blocked / completed run could carry a stray superseded_by_run_id. The reverse
+    --     CHECK closes that: a successor reference implies the run IS superseded.
+    CREATE TABLE method_runs__v81 (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        workspace_id              TEXT NOT NULL,
+        method_definition_id      TEXT NOT NULL,
+        method_definition_version INTEGER NOT NULL,
+        workflow_run_id           TEXT,
+        workflow_step_run_id      TEXT,
+        status                    TEXT NOT NULL,
+        title                     TEXT,
+        revision                  INTEGER NOT NULL,
+        content_revision          INTEGER NOT NULL,
+        created_by                TEXT NOT NULL,
+        created_at                REAL NOT NULL,
+        updated_at                REAL NOT NULL,
+        completed_at              REAL,
+        superseded_by_run_id      TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(method_definition_version >= 1),
+        CHECK(revision >= 1),
+        CHECK(content_revision >= 1),
+        CHECK(length(trim(method_definition_id)) > 0),
+        CHECK(length(trim(created_by)) > 0),
+        CHECK(status IN ('draft','active','paused','waitingForHuman','blocked','completed','cancelled','superseded')),
+        CHECK(superseded_by_run_id IS NULL OR superseded_by_run_id <> id),
+        CHECK(workflow_step_run_id IS NULL OR workflow_run_id IS NOT NULL),
+        -- completed status <=> completion timestamp
+        CHECK(completed_at IS NULL OR status = 'completed'),
+        CHECK(status <> 'completed' OR completed_at IS NOT NULL),
+        -- superseded status <=> supersession reference (BOTH directions)
+        CHECK(status <> 'superseded' OR superseded_by_run_id IS NOT NULL),
+        CHECK(superseded_by_run_id IS NULL OR status = 'superseded')
+    );
+    INSERT INTO method_runs__v81 (id, workspace_id, method_definition_id, method_definition_version,
+                                  workflow_run_id, workflow_step_run_id, status, title, revision,
+                                  content_revision, created_by, created_at, updated_at, completed_at, superseded_by_run_id)
+        SELECT id, workspace_id, method_definition_id, method_definition_version,
+               workflow_run_id, workflow_step_run_id, status, title, revision,
+               content_revision, created_by, created_at, updated_at, completed_at, superseded_by_run_id
+          FROM method_runs;
+    DROP TABLE method_runs;
+    ALTER TABLE method_runs__v81 RENAME TO method_runs;
+    CREATE UNIQUE INDEX idx_method_runs_owned ON method_runs(id);
+    CREATE INDEX idx_method_runs_workspace  ON method_runs(workspace_id);
+    CREATE INDEX idx_method_runs_definition ON method_runs(method_definition_id, method_definition_version);
+    CREATE INDEX idx_method_runs_workflow   ON method_runs(workflow_run_id);
+
+    -- (2) method_reviews: enforce the review contract physically — a non-blank review
+    --     key, a non-negative evaluated revision, and never both a node and a finding.
+    CREATE TABLE method_reviews__v81 (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        method_run_id             TEXT NOT NULL,
+        node_id                   TEXT,
+        finding_id                TEXT,
+        action                    TEXT NOT NULL,
+        actor_kind                TEXT NOT NULL,
+        actor_identifier          TEXT NOT NULL,
+        comment                   TEXT,
+        reviewed_at               REAL NOT NULL,
+        review_key                TEXT NOT NULL DEFAULT 'legacy.unkeyed',
+        reviewed_content_revision INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY(node_id, method_run_id)
+            REFERENCES method_nodes(id, method_run_id) ON DELETE CASCADE,
+        FOREIGN KEY(finding_id, method_run_id)
+            REFERENCES method_findings(id, method_run_id) ON DELETE CASCADE,
+        CHECK(actor_kind = 'human'),
+        CHECK(length(trim(actor_identifier)) > 0),
+        CHECK(action IN ('acceptForWorkflow','reject','requestRevision','comment','reopen')),
+        CHECK(length(trim(review_key)) > 0),
+        CHECK(reviewed_content_revision >= 0),
+        CHECK(NOT (node_id IS NOT NULL AND finding_id IS NOT NULL))
+    );
+    INSERT INTO method_reviews__v81 (id, method_run_id, node_id, finding_id, action, actor_kind,
+                                     actor_identifier, comment, reviewed_at, review_key, reviewed_content_revision)
+        SELECT id, method_run_id, node_id, finding_id, action, actor_kind,
+               actor_identifier, comment, reviewed_at, review_key, reviewed_content_revision
+          FROM method_reviews;
+    DROP TABLE method_reviews;
+    ALTER TABLE method_reviews__v81 RENAME TO method_reviews;
+    CREATE INDEX idx_method_reviews_run     ON method_reviews(method_run_id, reviewed_at);
+    CREATE INDEX idx_method_reviews_finding ON method_reviews(finding_id);
+    CREATE INDEX idx_method_reviews_key     ON method_reviews(method_run_id, review_key, reviewed_content_revision);
+
+    -- (3) method_validation_results: enforce a non-blank batch id + a non-negative
+    --     evaluated revision physically.
+    CREATE TABLE method_validation_results__v81 (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        method_run_id             TEXT NOT NULL,
+        validator_id              TEXT NOT NULL,
+        validator_version         TEXT NOT NULL,
+        severity                  TEXT NOT NULL,
+        code                      TEXT NOT NULL,
+        message                   TEXT NOT NULL,
+        subject_kind              TEXT NOT NULL,
+        subject_id                TEXT,
+        created_at                REAL NOT NULL,
+        validation_batch_id       TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+        evaluated_content_revision INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE,
+        CHECK(length(trim(validator_id)) > 0),
+        CHECK(length(trim(validator_version)) > 0),
+        CHECK(length(trim(code)) > 0),
+        CHECK(length(trim(message)) > 0),
+        CHECK(severity IN ('info','warning','error','blocking')),
+        CHECK(subject_kind IN ('run','node','edge','assumption','finding','evidenceLink')),
+        CHECK(subject_kind = 'run' OR subject_id IS NOT NULL),
+        CHECK(length(trim(validation_batch_id)) > 0),
+        CHECK(evaluated_content_revision >= 0)
+    );
+    INSERT INTO method_validation_results__v81 (id, method_run_id, validator_id, validator_version, severity,
+                                                code, message, subject_kind, subject_id, created_at,
+                                                validation_batch_id, evaluated_content_revision)
+        SELECT id, method_run_id, validator_id, validator_version, severity,
+               code, message, subject_kind, subject_id, created_at,
+               validation_batch_id, evaluated_content_revision
+          FROM method_validation_results;
+    DROP TABLE method_validation_results;
+    ALTER TABLE method_validation_results__v81 RENAME TO method_validation_results;
+    CREATE INDEX idx_method_validation_run ON method_validation_results(method_run_id, created_at);
+    CREATE INDEX idx_method_validation_contentrev ON method_validation_results(method_run_id, evaluated_content_revision);
+    CREATE INDEX idx_method_validation_batch ON method_validation_results(method_run_id, validation_batch_id);
+    CREATE INDEX idx_method_validation_validator ON method_validation_results(method_run_id, validator_id);
     """
 }
