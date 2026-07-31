@@ -67,37 +67,36 @@ public actor EvidenceVault {
         try store(Data(contentsOf: url, options: [.mappedIfSafe]))
     }
 
-    /// USF-001 — stream a file into the vault through a bounded window (never a whole-file
-    /// `Data(contentsOf:)`), computing SHA-256 while copying, so archives larger than
-    /// memory are stored safely. Commits atomically, marks the blob read-only, and verifies
-    /// the stored address equals the recomputed hash. Returns the content address.
+    /// USF-001.1 — stream a file into the vault in ONE verified pass: the bytes written to
+    /// a temp file are the SAME bytes fed to the SHA-256, so the derived content address
+    /// always matches the stored content (no second unhashed copy). The source's size +
+    /// modification time are snapshotted before and after; if they change mid-copy the copy
+    /// fails rather than storing bytes under a mismatched address. Commits atomically to the
+    /// content-addressed path and marks the blob read-only. Returns the content address —
+    /// which the caller compares against the recorded source-version hash before accepting
+    /// `managedCopyStored`.
     @discardableResult
     public func storeStreaming(contentsOf url: URL) throws -> String {
         let chunkSize = 1 << 20
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+        let pre = try? url.resourceValues(forKeys: keys)
         guard let handle = try? FileHandle(forReadingFrom: url) else {
             throw SourceIntakeError.inputNotAccessible(url)
         }
         defer { try? handle.close() }
 
-        // First pass: hash to derive the content address without holding the whole file.
-        var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
-            hasher.update(data: chunk)
-        }
-        let hash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
-        let dest = location(for: hash)
-        if fm.fileExists(atPath: dest.path) { return hash }   // already vaulted (dedup)
-
-        // Second pass: stream the bytes into a temp file, then commit atomically.
-        try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try handle.seek(toOffset: 0)
-        let tmp = dest.deletingLastPathComponent().appendingPathComponent("tmp-" + hash)
+        // Stage into a unique temp file while hashing the SAME bytes in one pass.
+        let stagingDir = root.appendingPathComponent("staging", isDirectory: true)
+        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+        let tmp = stagingDir.appendingPathComponent("tmp-\(UUID().uuidString)")
         fm.createFile(atPath: tmp.path, contents: nil)
         guard let out = try? FileHandle(forWritingTo: tmp) else {
-            throw SourceIntakeError.managedCopyFailed(reason: "cannot open vault temp for \(hash.prefix(8))")
+            throw SourceIntakeError.managedCopyFailed(reason: "cannot open vault temp")
         }
+        var hasher = SHA256()
         do {
             while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                hasher.update(data: chunk)
                 try out.write(contentsOf: chunk)
             }
             try out.close()
@@ -105,13 +104,22 @@ public actor EvidenceVault {
             try? out.close(); try? fm.removeItem(at: tmp)
             throw SourceIntakeError.managedCopyFailed(reason: "vault write failed: \(error)")
         }
-        // Commit atomically + make read-only, then verify the committed address.
+        // Reject if the source changed while we were copying it.
+        let post = try? url.resourceValues(forKeys: keys)
+        if let pre, let post, pre.fileSize != post.fileSize || pre.contentModificationDate != post.contentModificationDate {
+            try? fm.removeItem(at: tmp)
+            throw SourceIntakeError.sourceChangedDuringCapture(url)
+        }
+        let hash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        let dest = location(for: hash)
+        if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: tmp); return hash }   // dedup
         do {
-            if fm.fileExists(atPath: dest.path) { try? fm.removeItem(at: tmp); return hash }
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fm.moveItem(at: tmp, to: dest)
             try? fm.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dest.path)
         } catch {
             try? fm.removeItem(at: tmp)
+            if fm.fileExists(atPath: dest.path) { return hash }   // a concurrent writer won the race
             throw SourceIntakeError.managedCopyFailed(reason: "vault commit failed: \(error)")
         }
         guard fm.fileExists(atPath: dest.path) else {

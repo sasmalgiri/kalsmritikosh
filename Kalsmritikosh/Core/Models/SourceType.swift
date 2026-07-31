@@ -54,34 +54,30 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     case unknown
 
     /// Best-effort detection from a file URL.
-    public nonisolated static func detect(from url: URL) -> SourceType {
-        // Phase K — pattern-based detection for sources whose
-        // canonical filename / location is meaningful (chat.db lives
-        // at ~/Library/Messages/chat.db; History.db is Safari;
-        // bare "History" is Chrome's profile DB).
+    /// USF-001.1 — the canonical filename / path PATTERN detector (Phase K), separated so a
+    /// single authoritative detector can order pattern → magic bytes → declared extension →
+    /// unknown. Returns nil when no meaningful pattern matches (chat.db lives at
+    /// ~/Library/Messages/chat.db; History.db is Safari; bare "History" is Chrome's profile DB).
+    public nonisolated static func detectPathPattern(from url: URL) -> SourceType? {
         let name = url.lastPathComponent.lowercased()
         let path = url.path.lowercased()
-        if name == "chat.db"
-            || path.contains("/library/messages/") {
-            return .imessage
-        }
-        if name == "history.db"
-            || path.contains("/library/safari/history") {
-            return .safariHistory
-        }
+        if name == "chat.db" || path.contains("/library/messages/") { return .imessage }
+        if name == "history.db" || path.contains("/library/safari/history") { return .safariHistory }
         if name == "history"
-            && (path.contains("/google/chrome/")
-                || path.contains("/brave-browser/")
-                || path.contains("/microsoft/edge/")
-                || path.contains("/arc/user data/")) {
+            && (path.contains("/google/chrome/") || path.contains("/brave-browser/")
+                || path.contains("/microsoft/edge/") || path.contains("/arc/user data/")) {
             return .chromeHistory
         }
-        if name.hasPrefix("whatsapp chat ")
-            || name.hasPrefix("_chat ")
-            || name.contains("signal-")
-            || name.contains("slack-export") {
+        if name.hasPrefix("whatsapp chat ") || name.hasPrefix("_chat ")
+            || name.contains("signal-") || name.contains("slack-export") {
             return .chatExport
         }
+        return nil
+    }
+
+    public nonisolated static func detect(from url: URL) -> SourceType {
+        // Phase K path/filename patterns take priority over the extension.
+        if let pattern = detectPathPattern(from: url) { return pattern }
         switch url.pathExtension.lowercased() {
         case "pdf": return .pdf
         case "docx": return .docx

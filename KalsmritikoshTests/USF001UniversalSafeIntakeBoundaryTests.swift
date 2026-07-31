@@ -113,10 +113,10 @@ struct USF001UniversalSafeIntakeBoundaryTests {
         }
     }
 
-    @Test("PM-004 lifecycle boundaries are unchanged (method ledger intact at v82)")
+    @Test("PM-004 lifecycle boundaries are unchanged (method ledger intact)")
     func pm004Untouched() async throws {
-        #expect(SchemaMigrations.latestVersion == 82)
-        let db = try await MigrationFixtureBuilder.database(atVersion: 82)
+        #expect(SchemaMigrations.latestVersion >= 82)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         for t in ["method_runs", "method_reviews", "method_validation_results", "method_run_events"] {
             #expect(try await MigrationFixtureBuilder.tableExists(db, t))
         }

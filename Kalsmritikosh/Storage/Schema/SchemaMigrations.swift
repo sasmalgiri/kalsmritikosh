@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 82
+    public static let latestVersion = 83
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -296,7 +296,12 @@ public enum SchemaMigrations {
         let v81Markers: [String: String] = [
             "method_runs":               "status = 'superseded'",              // reverse supersession CHECK
             "method_reviews":            "length(trim(review_key)) > 0",       // non-blank review key CHECK
-            "method_validation_results": "length(trim(validation_batch_id)) > 0" // non-blank batch id CHECK
+            "method_validation_results": "length(trim(validation_batch_id)) > 0", // non-blank batch id CHECK
+            // v83 (USF-001.1) hardens the intake ledger with CHECKs / composite FKs / unique
+            // keys but adds NO new column, so the column probe cannot distinguish v83 from v82.
+            "source_versions":           "length(content_hash) = 64",          // non-legacy SHA-256 CHECK
+            "source_intake_receipts":    "source_versions(id, content_hash)",  // receipt-hash composite FK
+            "ingest_file_attempts":      "(logical_source_id IS NULL) = (source_version_id IS NULL)"
         ]
         for (table, marker) in v81Markers {
             let sql = try await database.query(
@@ -390,7 +395,8 @@ public enum SchemaMigrations {
         (79, v79),
         (80, v80),
         (81, v81),
-        (82, v82)
+        (82, v82),
+        (83, v83)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4037,6 +4043,135 @@ public enum SchemaMigrations {
     -- Every processing attempt is tied to the exact source version once intake succeeds.
     ALTER TABLE ingest_file_attempts ADD COLUMN logical_source_id TEXT;
     ALTER TABLE ingest_file_attempts ADD COLUMN source_version_id TEXT;
+    CREATE INDEX idx_ingest_attempts_logical ON ingest_file_attempts(logical_source_id);
+    CREATE INDEX idx_ingest_attempts_version ON ingest_file_attempts(source_version_id);
+    """
+
+    // MARK: - v83 — single-path intake & custody-ledger integrity (USF-001.1)
+
+    private static let v83: String = """
+    -- USF-001.1 makes intake the SOLE pre-parser identity authority and hardens the ledger
+    -- so the custody contract is enforced by the database, not just by code. Rebuilds three
+    -- tables (a CHECK / composite-FK cannot be altered in place). NO new column. migrate()
+    -- disables FK enforcement for the whole pass + runs foreign_key_check afterward.
+
+    -- (1) source_versions: a NON-legacy custody version must carry a normalized 64-char
+    --     lowercase SHA-256; `supersedes` must reference a version of the SAME logical
+    --     source (composite self-FK); UNIQUE(id, logical_source_id) + UNIQUE(id, content_hash)
+    --     back the composite FKs from receipts + attempts. Legacy-imported rows are exempt
+    --     from the SHA rule (and any pre-existing non-SHA custody row is demoted to legacy).
+    CREATE TABLE source_versions__v83 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        logical_source_id    TEXT NOT NULL,
+        document_id          TEXT,
+        content_hash         TEXT NOT NULL,
+        supersedes           TEXT,
+        valid_from           REAL NOT NULL,
+        valid_to             REAL,
+        is_current           INTEGER NOT NULL DEFAULT 1,
+        original_url         TEXT,
+        created_at           REAL NOT NULL,
+        filename             TEXT NOT NULL DEFAULT 'legacy-source',
+        declared_extension   TEXT NOT NULL DEFAULT '',
+        detected_type        TEXT NOT NULL DEFAULT 'unknown',
+        mime_type            TEXT,
+        detection_basis      TEXT NOT NULL DEFAULT 'unknown',
+        size_bytes           INTEGER NOT NULL DEFAULT 0,
+        modified_at          REAL,
+        custody_mode         TEXT NOT NULL DEFAULT 'referenced',
+        preservation_status  TEXT NOT NULL DEFAULT 'legacyImported',
+        vault_address        TEXT,
+        intake_recorded_at   REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY(supersedes, logical_source_id) REFERENCES source_versions(id, logical_source_id),
+        CHECK(length(trim(filename)) > 0),
+        CHECK(length(trim(detected_type)) > 0),
+        CHECK(detection_basis IN ('pathPattern','declaredExtension','magicBytes','unknown')),
+        CHECK(size_bytes >= 0),
+        CHECK(custody_mode IN ('referenced','managed')),
+        CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported')),
+        CHECK(is_current IN (0,1)),
+        CHECK(supersedes IS NULL OR supersedes <> id),
+        CHECK(preservation_status <> 'managedCopyStored'
+              OR (custody_mode = 'managed' AND vault_address IS NOT NULL AND length(trim(vault_address)) > 0)),
+        -- A newly-admitted custody version must carry a normalized SHA-256; legacy is exempt.
+        CHECK(preservation_status = 'legacyImported'
+              OR (content_hash = lower(content_hash) AND length(content_hash) = 64))
+    );
+    INSERT INTO source_versions__v83 (id, logical_source_id, document_id, content_hash, supersedes,
+                                      valid_from, valid_to, is_current, original_url, created_at,
+                                      filename, declared_extension, detected_type, mime_type, detection_basis,
+                                      size_bytes, modified_at, custody_mode, preservation_status, vault_address, intake_recorded_at)
+        SELECT id, logical_source_id, document_id, content_hash, supersedes,
+               valid_from, valid_to, is_current, original_url, created_at,
+               filename, declared_extension, detected_type, mime_type, detection_basis,
+               size_bytes, modified_at, custody_mode,
+               CASE WHEN preservation_status <> 'legacyImported'
+                         AND (content_hash <> lower(content_hash) OR length(content_hash) <> 64)
+                    THEN 'legacyImported' ELSE preservation_status END,
+               vault_address, intake_recorded_at
+          FROM source_versions;
+    DROP TABLE source_versions;
+    ALTER TABLE source_versions__v83 RENAME TO source_versions;
+    CREATE INDEX idx_source_versions_logical ON source_versions(logical_source_id);
+    CREATE INDEX idx_source_versions_current ON source_versions(logical_source_id, is_current);
+    CREATE INDEX idx_source_versions_hash ON source_versions(content_hash);
+    CREATE UNIQUE INDEX idx_source_versions_one_current ON source_versions(logical_source_id) WHERE is_current = 1;
+    CREATE UNIQUE INDEX idx_source_versions_id_logical ON source_versions(id, logical_source_id);
+    CREATE UNIQUE INDEX idx_source_versions_id_hash ON source_versions(id, content_hash);
+
+    -- (2) source_intake_receipts: composite FKs pin the receipt to the EXACT source version
+    --     (same logical source AND same content hash) — a receipt can never name a hash that
+    --     differs from its version.
+    CREATE TABLE source_intake_receipts__v83 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        occurrence_file_id   TEXT NOT NULL,
+        logical_source_id    TEXT NOT NULL,
+        source_version_id    TEXT NOT NULL,
+        outcome              TEXT NOT NULL,
+        original_url         TEXT,
+        content_hash         TEXT NOT NULL,
+        custody_mode         TEXT NOT NULL,
+        preservation_status  TEXT NOT NULL,
+        detail               TEXT,
+        recorded_at          REAL NOT NULL,
+        FOREIGN KEY(occurrence_file_id) REFERENCES files(id) ON DELETE CASCADE,
+        FOREIGN KEY(source_version_id, logical_source_id) REFERENCES source_versions(id, logical_source_id) ON DELETE CASCADE,
+        FOREIGN KEY(source_version_id, content_hash) REFERENCES source_versions(id, content_hash) ON DELETE CASCADE,
+        CHECK(outcome IN ('newLogicalSource','newVersion','unchanged','moved','aliased')),
+        CHECK(custody_mode IN ('referenced','managed')),
+        CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported'))
+    );
+    INSERT INTO source_intake_receipts__v83
+        SELECT id, occurrence_file_id, logical_source_id, source_version_id, outcome, original_url,
+               content_hash, custody_mode, preservation_status, detail, recorded_at
+          FROM source_intake_receipts;
+    DROP TABLE source_intake_receipts;
+    ALTER TABLE source_intake_receipts__v83 RENAME TO source_intake_receipts;
+    CREATE INDEX idx_source_intake_receipts_version ON source_intake_receipts(source_version_id);
+    CREATE INDEX idx_source_intake_receipts_logical ON source_intake_receipts(logical_source_id, recorded_at);
+
+    -- (3) ingest_file_attempts: the version + logical-source ids are BOTH null (pre-intake) or
+    --     BOTH present (post-intake, tied to the exact source version via a composite FK).
+    CREATE TABLE ingest_file_attempts__v83 (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        url                TEXT NOT NULL,
+        content_hash       TEXT,
+        status             TEXT NOT NULL,
+        stage              TEXT,
+        detail             TEXT,
+        attempted_at       REAL NOT NULL,
+        logical_source_id  TEXT,
+        source_version_id  TEXT,
+        FOREIGN KEY(source_version_id, logical_source_id) REFERENCES source_versions(id, logical_source_id),
+        CHECK((logical_source_id IS NULL) = (source_version_id IS NULL))
+    );
+    INSERT INTO ingest_file_attempts__v83
+        SELECT id, url, content_hash, status, stage, detail, attempted_at, logical_source_id, source_version_id
+          FROM ingest_file_attempts;
+    DROP TABLE ingest_file_attempts;
+    ALTER TABLE ingest_file_attempts__v83 RENAME TO ingest_file_attempts;
+    CREATE INDEX idx_ingest_attempts_url ON ingest_file_attempts(url, attempted_at);
+    CREATE INDEX idx_ingest_attempts_status ON ingest_file_attempts(status);
     CREATE INDEX idx_ingest_attempts_logical ON ingest_file_attempts(logical_source_id);
     CREATE INDEX idx_ingest_attempts_version ON ingest_file_attempts(source_version_id);
     """

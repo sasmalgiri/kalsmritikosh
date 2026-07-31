@@ -213,7 +213,8 @@ struct PAProdGUIAcceptanceTests {
             loaders: .standard(), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
             eventExtractor: RuleEventExtractor(), files: files, objects: objects, chunks: chunks,
             entities: entities, events: events, evidenceStore: store,
-            structuralRegistry: .standard(ocr: VisionOCR()), assertions: assertions, genericFacts: genericFacts)
+            structuralRegistry: .standard(ocr: VisionOCR()), assertions: assertions, genericFacts: genericFacts,
+            intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
 
         let eml = dir.appendingPathComponent("matter.eml")
         try """

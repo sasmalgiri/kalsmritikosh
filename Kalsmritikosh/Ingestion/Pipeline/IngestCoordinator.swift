@@ -31,6 +31,10 @@ public actor IngestCoordinator {
         public var logicalSourceID: UUID? = nil
         public var sourceVersionID: UUID? = nil
         public var intakeOutcome: SourceIntakeOutcome? = nil
+        /// USF-001.1 — the single terminal processing outcome, written once by runIngest.
+        public var processingStatus: IngestAttemptsRepository.Status? = nil
+        public var processingStage: String? = nil
+        public var processingDetail: String? = nil
     }
 
     private let loaders: LoaderRegistry
@@ -89,11 +93,11 @@ public actor IngestCoordinator {
     /// vault so the exact version can be reopened later. nil, or flag off, = reference mode
     /// (no copy) — the default, unchanged behavior.
     private let evidenceVault: EvidenceVault?
-    /// USF-001 — when wired, every accessible file receives canonical source + source-version
+    /// USF-001.1 — MANDATORY. Every accessible file receives canonical source + source-version
     /// custody through the atomic intake repository BEFORE any loader/parser runs. Unchanged /
-    /// moved / aliased outcomes skip parsing; loader/parser failures retain custody. When nil,
-    /// the legacy identity path runs (kept for existing fixtures during the transition).
-    private let intakeCoordinator: UniversalSourceIntakeCoordinator?
+    /// moved / aliased outcomes skip parsing; loader/parser failures retain custody. There is no
+    /// legacy identity path — intake is the sole pre-parser identity authority.
+    private let intakeCoordinator: UniversalSourceIntakeCoordinator
     /// ING-006 — when wired, the background embedding drain yields to interactive queries
     /// via this gate (checked between batches). nil = no priority gating (drain runs freely).
     private let priorityGate: QueryPriorityGate?
@@ -180,7 +184,7 @@ public actor IngestCoordinator {
         evidenceVault: EvidenceVault? = nil,
         priorityGate: QueryPriorityGate? = nil,
         claimProjection: ClaimProjectionBackfill? = nil,
-        intakeCoordinator: UniversalSourceIntakeCoordinator? = nil
+        intakeCoordinator: UniversalSourceIntakeCoordinator
     ) {
         self.intakeCoordinator = intakeCoordinator
         self.evidenceStore = evidenceStore
@@ -362,42 +366,20 @@ public actor IngestCoordinator {
         // A2 §7.3/§7.7 — record the outcome durably so failures/skips are
         // visible and re-tryable (best-effort; never affects the ingest).
         ensureEmbeddingDrain()   // PERF.1 — vectors deepen in the background
-        // Audio/video are a DEFERRED format — skip transcription entirely. It's
-        // slow and hang-prone (a .3gp email attachment froze the whole ingest at
-        // 0% CPU), and these are typically personal media, not evidence. Recorded
-        // as deferred (never a "failure"); this is the single chokepoint so it
-        // also covers media attachments extracted from mbox/zip. Re-enable later
-        // by transcribing on demand. Applies to direct files AND attachments.
-        // USF-001 — when intake is wired, media deferral happens INSIDE ingestCore AFTER
-        // canonical custody is registered (a deferred media file must still be visible with
-        // a source version). Only the legacy path defers before custody.
-        if intakeCoordinator == nil {
-            var detected = SourceType.detect(from: url)
-            // Content-based fallback: an attachment with no/unknown extension (e.g. a
-            // bare-hash filename) whose bytes are a real JPEG/PNG/PDF/… was falling to
-            // TextLoader and getting refused as binary. Sniff magic bytes and re-route.
-            if detected == .unknown,
-               let head = try? Data(contentsOf: url, options: .mappedIfSafe),
-               let sniffed = SourceType.sniffMagicBytes(head) {
-                detected = sniffed
-            }
-            if detected.category == .audio || detected.category == .video {
-                await ingestAttempts?.record(url: url, status: .unchanged, stage: "media-deferred",
-                                             detail: "audio/video not transcribed (deferred format)")
-                throw IngestSkipped.mediaDeferred
-            }
-        }
-        // v54 resume — durable in-progress marker. If the app is killed mid-
-        // ingest, this row stays the latest for the URL and boot's
-        // resumeIncompleteIngests() re-runs it. Superseded moments later by the
-        // terminal outcome below.
+        // USF-001.1 — media deferral, outcome gating and loader/parser failures all happen
+        // INSIDE ingestCore AFTER canonical custody is registered, and are reported through a
+        // single terminal attempt row here (never a second overwriting row).
+        // v54 resume — durable in-progress marker (both ids null until intake succeeds).
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
             let result = try await ingestCore(fileAt: url, parentVersion: parentVersion)
+            // The ONE version-linked terminal attempt for this url.
             await ingestAttempts?.record(
                 url: url,
-                status: result.chunkCount > 0 ? .queryable : .unchanged,
+                status: result.processingStatus ?? (result.chunkCount > 0 ? .queryable : .unchanged),
                 contentHash: result.fileRecord.contentHash,
+                stage: result.processingStage,
+                detail: result.processingDetail,
                 logicalSourceID: result.logicalSourceID,
                 sourceVersionID: result.sourceVersionID
             )
@@ -522,15 +504,23 @@ public actor IngestCoordinator {
     }
 
     private func parseStructuralOnce(url: URL, type: SourceType, fileID: UUID,
-                                     sourceVersionID: UUID = UUID()) async -> StructuralParse? {
+                                     sourceVersionID: UUID = UUID(), contentHash: String? = nil) async -> StructuralParse? {
         guard let structuralRegistry, evidenceStore != nil,
               let parser = structuralRegistry.parser(for: type),
               let data = try? Data(contentsOf: url) else { return nil }
         let started = Date()
-        guard let doc = try? await parser.parse(
+        guard let parsed = try? await parser.parse(
             data: data, filename: url.lastPathComponent, type: type,
             logicalSourceID: fileID, sourceVersionID: sourceVersionID
         ) else { return nil }
+        // USF-001.1 — stamp the intake's canonical content hash onto the parsed document so
+        // its attachment to the intake-created source version passes the fail-closed hash gate.
+        let doc: ParsedDocument = contentHash.map { h in
+            ParsedDocument(id: parsed.id, logicalSourceID: parsed.logicalSourceID, sourceVersionID: parsed.sourceVersionID,
+                           filename: parsed.filename, detectedType: parsed.detectedType, mimeType: parsed.mimeType,
+                           contentHash: h, metadata: parsed.metadata, blocks: parsed.blocks, warnings: parsed.warnings,
+                           extractionStatus: parsed.extractionStatus)
+        } ?? parsed
         // PERF.0 — structural parse includes image OCR; time it so we can see
         // whether OCR/parse is the real cost centre (measure, don't guess).
         await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
@@ -663,64 +653,43 @@ public actor IngestCoordinator {
         }
     }
 
-    /// USF-001 dispatcher: when intake is wired, custody is registered before any loader
-    /// runs and unchanged/moved/aliased outcomes skip parsing; otherwise the legacy path runs.
+    /// USF-001.1 — custody-first ingest, the SOLE path. Registers canonical source +
+    /// source-version custody BEFORE any loader/parser; unchanged/moved/aliased skip parsing;
+    /// a loader/parser failure keeps the custody record (retriable); a parsed document ATTACHES
+    /// to the pre-created source version. The terminal attempt is recorded ONCE by runIngest —
+    /// this method only decides the processing status it returns.
     private func ingestCore(fileAt url: URL, parentVersion: SourceParentReference? = nil) async throws -> Result {
-        if let intakeCoordinator {
-            return try await ingestCoreWithIntake(fileAt: url, intake: intakeCoordinator, parentVersion: parentVersion)
-        }
-        return try await ingestCoreLegacy(fileAt: url)
-    }
-
-    /// USF-001 — custody-first ingest. Registers canonical source + source-version custody
-    /// BEFORE any loader/parser. Unchanged/moved/aliased skip parsing; a loader/parser failure
-    /// keeps the custody record; a parsed document ATTACHES to the pre-created source version.
-    private func ingestCoreWithIntake(fileAt url: URL, intake: UniversalSourceIntakeCoordinator,
-                                      parentVersion: SourceParentReference?) async throws -> Result {
         await pipelineMetrics?.bump(.discovered)
-        var type = SourceType.detect(from: url)
-        if type == .unknown,
-           let head = try? Data(contentsOf: url, options: .mappedIfSafe),
-           let sniffed = SourceType.sniffMagicBytes(head) {
-            type = sniffed
-        }
 
-        // --- Custody FIRST (before any loader/parser). ---
+        // --- Custody FIRST (before any loader/parser). A failed intake throws; runIngest's
+        //     catch records the single failed attempt (with null ids, pre-intake). ---
         let custodyMode: SourceCustodyMode = FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced
-        let handle: SourceIntakeHandle
-        do {
-            handle = try await intake.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
-        } catch {
-            await ingestAttempts?.record(url: url, status: .failed, stage: "intake",
-                                         detail: String(describing: error).prefix(300).description)
-            throw error
-        }
+        let handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
+        // USF-001.1 §5 — the ONE detected type comes from intake; no second detection pass.
+        let type = handle.detectedType
         let modified = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? Date()
         let fileRecord = FileRecord(
             id: handle.occurrenceFileID, url: url, sourceType: handle.detectedType,
             sizeBytes: handle.sizeBytes, modifiedAt: modified, ingestedAt: Date(),
             contentHash: handle.contentHash,
             aliasOf: handle.outcome == .aliased ? handle.logicalSourceID : nil, availability: .available)
-        func skipResult(_ status: IngestAttemptsRepository.Status, stage: String, detail: String) async -> Result {
-            await ingestAttempts?.record(url: url, status: status, contentHash: handle.contentHash,
-                                         stage: stage, detail: detail,
-                                         logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID)
-            return Result(fileRecord: fileRecord,
-                          object: KnowledgeObject(sourceFile: url, sourceType: handle.detectedType, content: ""),
-                          chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
-                          logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID,
-                          intakeOutcome: handle.outcome)
+        func skipResult(_ status: IngestAttemptsRepository.Status, stage: String, detail: String) -> Result {
+            Result(fileRecord: fileRecord,
+                   object: KnowledgeObject(sourceFile: url, sourceType: handle.detectedType, content: ""),
+                   chunkCount: 0, entityCount: 0, eventCount: 0, documentClass: .other, invalidations: [],
+                   logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID,
+                   intakeOutcome: handle.outcome, processingStatus: status, processingStage: stage, processingDetail: detail)
         }
 
         // Deferred media: custody is registered; defer transcription (never a failure).
         if type.category == .audio || type.category == .video {
-            return await skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
+            return skipResult(.deferred, stage: "media-deferred", detail: "audio/video not transcribed (deferred format)")
         }
         // Unchanged / moved / aliased: custody done — do NOT invoke the loader or parser.
         guard handle.shouldProcess else {
             let status: IngestAttemptsRepository.Status =
                 handle.outcome == .moved ? .moved : (handle.outcome == .aliased ? .aliased : .unchanged)
-            return await skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")
+            return skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")
         }
 
         // --- New logical source / new version: load + parse (custody already committed). ---
@@ -739,11 +708,9 @@ public actor IngestCoordinator {
         let raw: KnowledgeObject
         do { raw = try await loader.ingest(fileAt: url, type: type) }
         catch {
-            // Loader failure — custody is preserved; record a version-linked failure.
-            await ingestAttempts?.record(url: url, status: .failed, stage: "loader",
-                                         detail: String(describing: error).prefix(300).description,
-                                         logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID)
-            throw error
+            // Loader failure — custody is preserved; a single version-linked failure is
+            // recorded by runIngest (retriable), and the ingest does not abort.
+            return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
         }
         let cleaned = ContentDecoder().decode(cleaner.clean(raw))
         let docClass = classifier.classify(cleaned)
@@ -756,10 +723,7 @@ public actor IngestCoordinator {
         let perFileKOs: [KnowledgeObject]
         do { perFileKOs = try await loader.ingestMany(fileAt: url, type: type) }
         catch {
-            await ingestAttempts?.record(url: url, status: .failed, stage: "loader",
-                                         detail: String(describing: error).prefix(300).description,
-                                         logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID)
-            throw error
+            return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
         }
         guard !perFileKOs.isEmpty else {
             return Result(fileRecord: fileRecord, object: cleaned, chunkCount: 0, entityCount: 0, eventCount: 0,
@@ -768,7 +732,7 @@ public actor IngestCoordinator {
         }
 
         let structural = await parseStructuralOnce(url: url, type: type, fileID: handle.logicalSourceID,
-                                                   sourceVersionID: handle.sourceVersionID)
+                                                   sourceVersionID: handle.sourceVersionID, contentHash: handle.contentHash)
         let allBlocks = structural?.doc.blocks ?? []
         let singleKO = perFileKOs.count == 1
         var totalChunks = 0, totalEntities = 0, totalEvents = 0
@@ -812,379 +776,6 @@ public actor IngestCoordinator {
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
                       eventCount: totalEvents, documentClass: docClass, invalidations: allInvalidations,
                       logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
-    }
-
-    private func ingestCoreLegacy(fileAt url: URL) async throws -> Result {
-        await pipelineMetrics?.bump(.discovered)
-        var type = SourceType.detect(from: url)
-        // Content-based fallback for extensionless / unknown files (e.g. an email
-        // attachment named as a bare hash) — sniff magic bytes so a real image /
-        // PDF / zip routes to the right parser instead of falling to TextLoader.
-        if type == .unknown,
-           let head = try? Data(contentsOf: url, options: .mappedIfSafe),
-           let sniffed = SourceType.sniffMagicBytes(head) {
-            type = sniffed
-        }
-
-        // ZIP archives expand recursively. We still emit a manifest KO for
-        // the archive itself (via the ArchiveLoader.ingest path below) so
-        // the file is tracked; then we walk the entries through the
-        // standard pipeline. Cycle/depth defense: only one expansion
-        // level — nested ZIPs become metadata-only KOs after the first.
-        // A2 §7.6 — child file ids from a ZIP expansion, recorded as
-        // archive→member relations once this archive's own file row exists.
-        var expandedMemberIDs: [UUID] = []
-        if type == .zip {
-            if let (root, files) = try? ArchiveLoader.expandZIP(at: url) {
-                KalsmritikoshLog.ingestion.info("Expanded ZIP \(url.lastPathComponent, privacy: .private) → \(files.count, privacy: .public) entries")
-                defer { try? FileManager.default.removeItem(at: root) }
-                for entry in files {
-                    // Avoid recursive expansion of nested zips — they
-                    // get the metadata-only manifest path below.
-                    if SourceType.detect(from: entry) == .zip {
-                        continue
-                    }
-                    do {
-                        let member = try await self.ingest(fileAt: entry)
-                        expandedMemberIDs.append(member.fileRecord.id)
-                    } catch {
-                        KalsmritikoshLog.ingestion.error("Nested-entry ingest failed for \(entry.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                    }
-                }
-            }
-        }
-
-        let loader = loaders.loader(for: type)
-        let raw: KnowledgeObject
-        do {
-            raw = try await loader.ingest(fileAt: url, type: type)
-        } catch {
-            KalsmritikoshLog.ingestion.error("Loader failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-            throw error
-        }
-        // Decode embedded encoded blobs (base64/hex/quoted-printable/percent)
-        // into readable, searchable text — non-destructively appended. Runs after
-        // the Cleaner so the idempotency hash stays tied to the original content.
-        let cleaned = ContentDecoder().decode(cleaner.clean(raw))
-        let docClass = classifier.classify(cleaned)
-
-        // Idempotency: if this URL was already ingested and the cleaned
-        // content hash matches, skip everything. Otherwise delete the
-        // stale row (cascades through KO + chunks + entities + events +
-        // relationships) and re-ingest below.
-        let newHash: String? = {
-            if let value = cleaned.metadata["contentHash"],
-               case .string(let s) = value.value { return s }
-            return nil
-        }()
-        if let existing = try? await files.findByURL(url) {
-            if let newHash, existing.contentHash == newHash {
-                KalsmritikoshLog.ingestion.info("Skipping unchanged file \(url.lastPathComponent, privacy: .private)")
-                // T18 — re-ingest with a matching hash confirms custody.
-                try? await custody?.record(CustodyEvent(
-                    fileID: existing.id, kind: .hashVerified,
-                    detail: url.lastPathComponent, hash: newHash))
-                return Result(
-                    fileRecord: existing,
-                    object: cleaned,
-                    chunkCount: 0,
-                    entityCount: 0,
-                    eventCount: 0,
-                    documentClass: docClass,
-                    invalidations: []
-                )
-            }
-            // T18 — the bytes at a known URL changed: record a mismatch
-            // (surfaced as a tamper signal) BEFORE wiping the stale row.
-            try? await custody?.record(CustodyEvent(
-                fileID: existing.id, kind: .hashMismatch,
-                detail: "content at \(url.lastPathComponent) changed since last ingest",
-                hash: newHash))
-            // PI.1 — content changed: PRESERVE the prior version before the
-            // active rows are refreshed (never silently delete extracted data).
-            // Archive the old file record + its KO content into the history
-            // tables, THEN refresh the active rows. If preservation fails we do
-            // NOT delete — better a rare duplicate row than lost extraction.
-            do {
-                try await files.archiveVersionBeforeSupersede(existing, supersededBy: nil)
-                try await files.deleteByID(existing.id)
-            } catch {
-                KalsmritikoshLog.ingestion.error("Version preserve/supersede failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public) — keeping prior rows, not deleting")
-            }
-        }
-
-        // T8 — Move detection. If findByURL missed but a canonical with
-        // this exact hash exists, treat it as a move: point that file row
-        // at the new url instead of re-ingesting. No new KO is created.
-        if let newHash,
-           let canonical = try? await files.findCanonicalByContentHash(newHash),
-           canonical.url != url {
-            // The canonical bytes used to be at canonical.url — if that
-            // url no longer points at the file (i.e. we got here because
-            // findByURL on the new url returned nil and findByURL on the
-            // old url would also return our row), treat it as a move:
-            // update url on the canonical and reset availability.
-            let canonicalStillAtOldURL = FileManager.default.fileExists(atPath: canonical.url.path)
-            if !canonicalStillAtOldURL {
-                try? await files.updateURL(id: canonical.id, to: url)
-                KalsmritikoshLog.ingestion.info("Move detected for \(url.lastPathComponent, privacy: .private) (was at \(canonical.url.lastPathComponent, privacy: .private))")
-                let updated = FileRecord(
-                    id: canonical.id,
-                    url: url,
-                    sourceType: canonical.sourceType,
-                    sizeBytes: canonical.sizeBytes,
-                    modifiedAt: canonical.modifiedAt,
-                    ingestedAt: canonical.ingestedAt,
-                    contentHash: canonical.contentHash,
-                    aliasOf: canonical.aliasOf,
-                    availability: .available
-                )
-                return Result(
-                    fileRecord: updated,
-                    object: cleaned,
-                    chunkCount: 0,
-                    entityCount: 0,
-                    eventCount: 0,
-                    documentClass: docClass,
-                    invalidations: []
-                )
-            }
-        }
-
-        // T7 — Hash-first dedup. A different URL with the same contentHash
-        // becomes an alias row pointing at the canonical file; no new KO
-        // is created and downstream extraction is skipped. "The same PDF
-        // attached to two emails yields one parsed KO with two parent links."
-        if let newHash,
-           let canonical = try? await files.findCanonicalByContentHash(newHash) {
-            let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
-            let modified = (attrs[.modificationDate] as? Date) ?? .init()
-            let size = (attrs[.size] as? Int64) ?? 0
-            let aliasRecord = FileRecord(
-                url: url,
-                sourceType: type,
-                sizeBytes: size,
-                modifiedAt: modified,
-                ingestedAt: .init(),
-                contentHash: newHash,
-                aliasOf: canonical.id
-            )
-            try? await files.upsert(aliasRecord)
-            KalsmritikoshLog.ingestion.info("Aliased \(url.lastPathComponent, privacy: .private) → canonical \(canonical.id, privacy: .public)")
-            return Result(
-                fileRecord: aliasRecord,
-                object: cleaned,
-                chunkCount: 0,
-                entityCount: 0,
-                eventCount: 0,
-                documentClass: docClass,
-                invalidations: []
-            )
-        }
-
-        let attrs = (try? FileManager.default.attributesOfItem(atPath: url.path)) ?? [:]
-        let modified = (attrs[.modificationDate] as? Date) ?? .init()
-        let size = (attrs[.size] as? Int64) ?? 0
-        let contentHashForFile: String? = {
-            if let value = cleaned.metadata["contentHash"],
-               case .string(let s) = value.value { return s }
-            return nil
-        }()
-        let fileRecord = FileRecord(
-            url: url,
-            sourceType: type,
-            sizeBytes: size,
-            modifiedAt: modified,
-            ingestedAt: .init(),
-            contentHash: contentHashForFile
-        )
-        do {
-            try await files.upsert(fileRecord)
-        } catch {
-            KalsmritikoshLog.storage.error("Failed to upsert file row for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-            throw error
-        }
-        // EV-005 — managed evidence mode: copy the source bytes into the content-addressed
-        // vault so this exact version stays reopenable even if the original is later moved/
-        // replaced. Opt-in (default reference mode) + best-effort; never fails the ingest.
-        if let evidenceVault, FeatureFlags.managedEvidenceModeValue() {
-            do { _ = try await evidenceVault.store(contentsOf: url) }
-            catch { KalsmritikoshLog.ingestion.error("Evidence vault copy failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)") }
-        }
-        // A2 §7.6 — now the archive's file row exists, link its members.
-        for memberID in expandedMemberIDs {
-            await sourceRelations?.record(parent: fileRecord.id, child: memberID, relation: .archiveMember)
-        }
-        // T18 — first acquisition of this file: open its chain of custody.
-        try? await custody?.record(CustodyEvent(
-            fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
-        if let h = contentHashForFile {
-            try? await custody?.record(CustodyEvent(
-                fileID: fileRecord.id, kind: .hashComputed,
-                detail: url.lastPathComponent, hash: h))
-        }
-
-        // T13.1 — one OR MORE KnowledgeObjects per file. mbox produces
-        // one KO per message; other formats wrap their single ingest()
-        // result in a one-element array via the protocol default.
-        let perFileKOs: [KnowledgeObject]
-        do {
-            perFileKOs = try await loader.ingestMany(fileAt: url, type: type)
-        } catch {
-            KalsmritikoshLog.ingestion.error("ingestMany failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-            throw error
-        }
-        guard !perFileKOs.isEmpty else {
-            return Result(
-                fileRecord: fileRecord,
-                object: cleaned,
-                chunkCount: 0,
-                entityCount: 0,
-                eventCount: 0,
-                documentClass: docClass,
-                invalidations: []
-            )
-        }
-
-        // A5.3 / A2 parse-once — parse the structural document a SINGLE time
-        // here (past all the skip/alias/move early returns, so only real
-        // ingests reach it). The same ParsedDocument feeds event extraction
-        // (so events link to specific source blocks) AND is persisted below.
-        // v54 MBOX lineage — a multi-KO (mbox) file's blocks all live in one
-        // ParsedDocument stamped per-message with messageIndex; each message-KO
-        // now receives ITS OWN blocks (matched by messageIndex) so its chunks/
-        // events/entities link to that message's blocks, never cross-linking.
-        let structural = await parseStructuralOnce(url: url, type: type, fileID: fileRecord.id)
-        let allBlocks = structural?.doc.blocks ?? []
-        let singleKO = perFileKOs.count == 1
-
-        var totalChunks = 0
-        var totalEntities = 0
-        var totalEvents = 0
-        var allInvalidations: [SubjectInvalidation.Subject] = []
-        var lastObject: KnowledgeObject = perFileKOs[0]
-        // PA-PROD B6 — collect each KnowledgeObject's OWN structural blocks so canonical Claim
-        // evidence can resolve a real object id. For a multi-KO source (mbox) each message KO gets
-        // only its message's blocks (Self.blocks matches by messageIndex — never cross-linked).
-        var blockOwnership: [(ko: KnowledgeObject.ID, blockIDs: [EvidenceBlock.ID])] = []
-
-        for rawKO in perFileKOs {
-            do {
-                let koBlocks = Self.blocks(for: rawKO, from: allBlocks, singleKO: singleKO)
-                let processed = try await processKnowledgeObject(
-                    rawKO,
-                    fileID: fileRecord.id,
-                    documentClass: docClass,
-                    blocks: koBlocks
-                )
-                totalChunks += processed.chunkCount
-                totalEntities += processed.entityCount
-                totalEvents += processed.eventCount
-                allInvalidations.append(contentsOf: processed.invalidations)
-                lastObject = processed.object
-                if !koBlocks.isEmpty { blockOwnership.append((rawKO.id, koBlocks.map(\.id))) }
-
-                // T13.7 — if this KO staged any attachments, ingest them
-                // recursively as their own files. T7's hash-first dedup
-                // catches the same attachment recurring across many
-                // emails and folds it into a single canonical KO with
-                // alias file rows.
-                if let value = processed.object.metadata[EmailLoader.attachmentURLsMetaKey],
-                   case .string(let json) = value.value {
-                    // DETERMINISM FIX (reproducibility):
-                    // Sort attachments by content hash before recursing
-                    // so the T7 "first-wins" canonical selection is
-                    // stable across runs. Without this, when two emails
-                    // carry the same PDF, which one becomes the canonical
-                    // depended on actor scheduling — varying KO + chunk
-                    // counts by 5-25% across fresh re-ingests.
-                    let attachmentURLs = EmailLoader.decodeAttachmentURLs(from: json)
-                    let ordered: [URL] = attachmentURLs.sorted { lhs, rhs in
-                        let lh = (try? Data(contentsOf: lhs, options: [.mappedIfSafe])).map { Self.sha256Hex($0) } ?? lhs.path
-                        let rh = (try? Data(contentsOf: rhs, options: [.mappedIfSafe])).map { Self.sha256Hex($0) } ?? rhs.path
-                        if lh == rh { return lhs.path < rhs.path }
-                        return lh < rh
-                    }
-                    for attachmentURL in ordered {
-                        do {
-                            let attachmentResult = try await ingest(fileAt: attachmentURL)
-                            // A2 §7.6 — record email → attachment provenance, even
-                            // when dedup folds the attachment into a canonical copy.
-                            await sourceRelations?.record(
-                                parent: fileRecord.id, child: attachmentResult.fileRecord.id,
-                                relation: .attachment
-                            )
-                            totalChunks += attachmentResult.chunkCount
-                            totalEntities += attachmentResult.entityCount
-                            totalEvents += attachmentResult.eventCount
-                            allInvalidations.append(contentsOf: attachmentResult.invalidations)
-                        } catch {
-                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                        }
-                    }
-                }
-            } catch {
-                KalsmritikoshLog.ingestion.error("Per-KO processing failed for \(url.lastPathComponent, privacy: .private) (message \(rawKO.id.uuidString.prefix(8), privacy: .public)): \(String(describing: error), privacy: .public)")
-                // Console echo so dev / smoke runs can see the cause
-                // without subscribing to OSLog; quiet enough not to
-                // spam a healthy ingest.
-                print("PerKO drop \(rawKO.id.uuidString.prefix(8)): \(String(describing: error).prefix(200))")
-            }
-        }
-
-        // G2-QA-PAIRS — once every KO from this file is processed, run
-        // the thread-pair extractor over the batch. mbox files produce
-        // one KO per message; the extractor finds adjacent question →
-        // answer turns and persists summaries via QAPairsRepository.
-        // Single-KO files (.eml singleton, .pdf, .md, ...) emit nothing.
-        if let qaRepo = qaPairs, perFileKOs.count >= 2 {
-            let pairs = await qaPairExtractor.extract(from: perFileKOs)
-            if !pairs.isEmpty {
-                let rows = pairs.map { p in
-                    QAPairsRepository.Row(
-                        questionText: p.questionText,
-                        answerText: p.answerText,
-                        questionObjectID: p.questionObjectID,
-                        answerObjectID: p.answerObjectID,
-                        confidence: p.confidence,
-                        producedBy: qaPairExtractor.id
-                    )
-                }
-                do {
-                    try await qaRepo.insertBatch(rows)
-                    KalsmritikoshLog.ingestion.info("QA-pairs: persisted \(rows.count, privacy: .public) pair(s) from \(url.lastPathComponent, privacy: .private)")
-                } catch {
-                    KalsmritikoshLog.ingestion.error("QA-pairs write failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
-                }
-            }
-        }
-
-        KalsmritikoshLog.ingestion.info("Ingested \(url.lastPathComponent, privacy: .private): \(perFileKOs.count) KO(s), \(totalChunks) chunks, \(totalEntities) entities, \(totalEvents) events")
-
-        // A5.3 / A2 — persist the already-parsed structural document (blocks +
-        // source version + document profile) and derive directly-observed
-        // assertions from it. Same doc that fed event extraction, so the block
-        // IDs referenced by events resolve here. Gated on a real ingest.
-        if let structural, let evidenceStore, totalChunks > 0 {
-            await persistStructuralDoc(structural, url: url, store: evidenceStore)
-            // PA-PROD B6 — now the structural EvidenceBlocks AND the KnowledgeObjects both exist,
-            // record block→object ownership (before incremental Claim projection is scheduled in
-            // `ingest`). Best-effort: a failure here never fails the ingest.
-            for link in blockOwnership {
-                do { try await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date()) }
-                catch { KalsmritikoshLog.ingestion.error("Block→object ownership link failed for \(link.ko.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)") }
-            }
-        }
-
-        return Result(
-            fileRecord: fileRecord,
-            object: lastObject,
-            chunkCount: totalChunks,
-            entityCount: totalEntities,
-            eventCount: totalEvents,
-            documentClass: docClass,
-            invalidations: allInvalidations
-        )
     }
 
     private struct ProcessedKO: Sendable {

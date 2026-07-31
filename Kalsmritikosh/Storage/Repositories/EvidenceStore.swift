@@ -41,11 +41,12 @@ public actor EvidenceStore: EvidenceBlockResolving {
 
     // MARK: - Write
 
-    /// Persist a parsed document as a source version + ordered evidence blocks +
-    /// a deterministic profile, and record the parser run. When `makeCurrent` is
-    /// true the new version becomes the current one for its logical source and
-    /// any prior current version is retired (A2 versioning — never deleted).
-    /// Caller is responsible for wrapping this in the per-document transaction.
+    /// USF-001.1 — ATTACH a parsed document to the source version universal intake already
+    /// created, in ONE savepoint. EvidenceStore never inserts or retires a `source_versions`
+    /// row: intake is the sole version authority. The attachment is fully fail-closed — the
+    /// version must exist, its logical source + normalized content hash must match the parsed
+    /// document, and its `document_id` must be NULL or already this document. Any mismatch
+    /// writes nothing (no partial source_documents row).
     public func persist(
         _ doc: ParsedDocument,
         parser: String,
@@ -57,120 +58,70 @@ public actor EvidenceStore: EvidenceBlockResolving {
         endedAt: Date = Date()
     ) async throws {
         let now = Date().timeIntervalSince1970
-
-        try await database.exec("""
-        INSERT OR REPLACE INTO source_documents
-            (id, logical_source_id, filename, detected_type, mime_type, content_hash, extraction_status, metadata, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
-            .uuid(doc.id),
-            .uuid(doc.logicalSourceID),
-            .text(doc.filename),
-            .text(doc.detectedType.rawValue),
-            doc.mimeType.map { .text($0) } ?? .null,
-            .text(doc.contentHash),
-            .text(doc.extractionStatus.rawValue),
-            .text(Self.json(doc.metadata) ?? "{}"),
-            .real(now)
-        ])
-
-        // USF-001 — source_versions is the ONE version authority; universal intake creates
-        // the version BEFORE any parser runs. Prefer to ATTACH the parsed document to that
-        // pre-existing version (verifying identity); only create a version here on the
-        // standalone/legacy path where intake did not run, and then with the v82 custody
-        // metadata the rebuilt table requires.
-        let normalizedHash = doc.contentHash.lowercased()
-        if let existing = try await database.query(
-            "SELECT logical_source_id FROM source_versions WHERE id = ?;", [.uuid(doc.sourceVersionID)]).first {
-            guard existing.uuid(0) == doc.logicalSourceID else {
-                throw SourceIntakeError.parsedDocumentIdentityMismatch(
-                    "parsed document \(doc.id) does not match source version \(doc.sourceVersionID)")
-            }
-            try await database.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;",
-                                    [.uuid(doc.id), .uuid(doc.sourceVersionID)])
-        } else {
-            if makeCurrent {
-                try await database.exec("""
-                UPDATE source_versions SET is_current = 0, valid_to = ?
-                WHERE logical_source_id = ? AND is_current = 1;
-                """, [.real(now), .uuid(doc.logicalSourceID)])
-            }
-            let declaredExtension = (doc.filename as NSString).pathExtension.lowercased()
-            try await database.exec("""
-            INSERT OR REPLACE INTO source_versions
-                (id, logical_source_id, document_id, content_hash, supersedes, valid_from, valid_to, is_current, original_url, created_at,
-                 filename, declared_extension, detected_type, mime_type, detection_basis, size_bytes, modified_at, custody_mode, preservation_status, vault_address, intake_recorded_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, [
-                .uuid(doc.sourceVersionID), .uuid(doc.logicalSourceID), .uuid(doc.id), .text(normalizedHash),
-                .null, .real(now), .null, .integer(makeCurrent ? 1 : 0),
-                originalURL.map { .text($0) } ?? .null, .real(now),
-                .text(doc.filename.isEmpty ? "legacy-source" : doc.filename),
-                .text(declaredExtension), .text(doc.detectedType.rawValue),
-                doc.mimeType.map { .text($0) } ?? .null, .text("unknown"),
-                .integer(max(0, sizeBytes)), .null, .text("referenced"), .text("referenceRecorded"),
-                .null, .real(now)
-            ])
-        }
-
-        for block in doc.blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
-            try await database.exec("""
-            INSERT OR REPLACE INTO evidence_blocks
-                (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, [
-                .uuid(block.id),
-                .uuid(block.documentID),
-                .uuid(doc.sourceVersionID),
-                block.parentBlockID.map { .uuid($0) } ?? .null,
-                .integer(Int64(block.ordinal)),
-                .text(block.kind.rawValue),
-                .text(block.rawText),
-                .text(block.normalizedText),
-                .text(Self.json(block.locator) ?? "{}"),
-                .text(block.extractionMethod.rawValue),
-                .real(block.extractionConfidence),
-                block.language.map { .text($0) } ?? .null,
-                .text(Self.json(block.attributes) ?? "{}")
-            ])
-        }
-
         let profile = DocumentProfile.from(doc, parser: parser, parserVersion: parserVersion, sizeBytes: sizeBytes)
-        try await database.exec("""
-        INSERT OR REPLACE INTO document_profiles
-            (source_version_id, filename, detected_type, mime_type, content_hash, size_bytes, parser, parser_version, language, section_outline, first_meaningful_block, block_count, page_count, sheet_count, slide_count, message_count, attachment_count, child_count, extraction_status, warning_count, extraction_confidence, is_queryable, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
-            .uuid(profile.sourceVersionID),
-            .text(profile.filename),
-            .text(profile.detectedType.rawValue),
-            profile.mimeType.map { .text($0) } ?? .null,
-            .text(profile.contentHash),
-            .integer(profile.sizeBytes),
-            .text(profile.parser),
-            .text(profile.parserVersion),
-            profile.language.map { .text($0) } ?? .null,
-            .text(Self.json(profile.sectionOutline) ?? "[]"),
-            profile.firstMeaningfulBlock.map { .text($0) } ?? .null,
-            .integer(Int64(profile.blockCount)),
-            profile.pageCount.map { .integer(Int64($0)) } ?? .null,
-            profile.sheetCount.map { .integer(Int64($0)) } ?? .null,
-            profile.slideCount.map { .integer(Int64($0)) } ?? .null,
-            profile.messageCount.map { .integer(Int64($0)) } ?? .null,
-            profile.attachmentCount.map { .integer(Int64($0)) } ?? .null,
-            profile.childCount.map { .integer(Int64($0)) } ?? .null,
-            .text(profile.extractionStatus.rawValue),
-            .integer(Int64(profile.warningCount)),
-            .real(profile.extractionConfidence),
-            .integer(profile.isQueryable ? 1 : 0),
-            .real(now)
-        ])
+        let docHash = doc.contentHash.lowercased()
+        let sp = "es_attach_\(doc.sourceVersionID.uuidString.prefix(8))"
+        try await database.withSavepoint(sp) { db in
+            // Identity gate FIRST — before any write.
+            guard let v = try db.query("""
+                SELECT logical_source_id, content_hash, document_id FROM source_versions WHERE id = ?;
+                """, [.uuid(doc.sourceVersionID)]).first else {
+                throw SourceIntakeError.sourceVersionNotFound(doc.sourceVersionID)
+            }
+            guard v.uuid(0) == doc.logicalSourceID else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("logical source mismatch for version \(doc.sourceVersionID)")
+            }
+            guard (v.string(1) ?? "").lowercased() == docHash else {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("content hash mismatch for version \(doc.sourceVersionID)")
+            }
+            if let existingDoc = v.uuid(2), existingDoc != doc.id {
+                throw SourceIntakeError.parsedDocumentIdentityMismatch("version \(doc.sourceVersionID) already has document \(existingDoc)")
+            }
 
-        try await database.exec("""
-        INSERT INTO parser_runs
-            (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """, [
+            try db.exec("""
+            INSERT OR REPLACE INTO source_documents
+                (id, logical_source_id, filename, detected_type, mime_type, content_hash, extraction_status, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(doc.id), .uuid(doc.logicalSourceID), .text(doc.filename), .text(doc.detectedType.rawValue),
+                   doc.mimeType.map { .text($0) } ?? .null, .text(doc.contentHash), .text(doc.extractionStatus.rawValue),
+                   .text(Self.json(doc.metadata) ?? "{}"), .real(now)])
+
+            // Attach only — never create or retire a version.
+            try db.exec("UPDATE source_versions SET document_id = ? WHERE id = ?;", [.uuid(doc.id), .uuid(doc.sourceVersionID)])
+
+            for block in doc.blocks.sorted(by: { $0.ordinal < $1.ordinal }) {
+                try db.exec("""
+                INSERT OR REPLACE INTO evidence_blocks
+                    (id, document_id, source_version_id, parent_block_id, ordinal, kind, raw_text, normalized_text, locator, extraction_method, extraction_confidence, language, attributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, [.uuid(block.id), .uuid(block.documentID), .uuid(doc.sourceVersionID),
+                       block.parentBlockID.map { .uuid($0) } ?? .null, .integer(Int64(block.ordinal)),
+                       .text(block.kind.rawValue), .text(block.rawText), .text(block.normalizedText),
+                       .text(Self.json(block.locator) ?? "{}"), .text(block.extractionMethod.rawValue),
+                       .real(block.extractionConfidence), block.language.map { .text($0) } ?? .null,
+                       .text(Self.json(block.attributes) ?? "{}")])
+            }
+
+            try db.exec("""
+            INSERT OR REPLACE INTO document_profiles
+                (source_version_id, filename, detected_type, mime_type, content_hash, size_bytes, parser, parser_version, language, section_outline, first_meaningful_block, block_count, page_count, sheet_count, slide_count, message_count, attachment_count, child_count, extraction_status, warning_count, extraction_confidence, is_queryable, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [.uuid(profile.sourceVersionID), .text(profile.filename), .text(profile.detectedType.rawValue),
+                   profile.mimeType.map { .text($0) } ?? .null, .text(profile.contentHash), .integer(profile.sizeBytes),
+                   .text(profile.parser), .text(profile.parserVersion), profile.language.map { .text($0) } ?? .null,
+                   .text(Self.json(profile.sectionOutline) ?? "[]"), profile.firstMeaningfulBlock.map { .text($0) } ?? .null,
+                   .integer(Int64(profile.blockCount)), profile.pageCount.map { .integer(Int64($0)) } ?? .null,
+                   profile.sheetCount.map { .integer(Int64($0)) } ?? .null, profile.slideCount.map { .integer(Int64($0)) } ?? .null,
+                   profile.messageCount.map { .integer(Int64($0)) } ?? .null, profile.attachmentCount.map { .integer(Int64($0)) } ?? .null,
+                   profile.childCount.map { .integer(Int64($0)) } ?? .null, .text(profile.extractionStatus.rawValue),
+                   .integer(Int64(profile.warningCount)), .real(profile.extractionConfidence),
+                   .integer(profile.isQueryable ? 1 : 0), .real(now)])
+
+            try db.exec("""
+            INSERT INTO parser_runs
+                (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, [
             .uuid(UUID()),
             .uuid(doc.sourceVersionID),
             .text(parser),
@@ -181,7 +132,8 @@ public actor EvidenceStore: EvidenceBlockResolving {
             .integer(Int64(doc.blocks.count)),
             .integer(Int64(doc.warnings.count)),
             .null
-        ])
+            ])
+        }
     }
 
     // MARK: - B6 — canonical block → KnowledgeObject ownership
