@@ -67,9 +67,14 @@ public struct ExistingParserPluginAdapter: UniversalParserPlugin {
         do { objects = try await loader.ingestMany(fileAt: request.processingSnapshotURL, type: request.sourceType) }
         catch { throw UniversalParserError.loaderFailure(pluginID: pluginID, detail: String(describing: error).prefix(200).description) }
 
-        // Structural parse over the SAME snapshot bytes, when this plugin has one.
+        // Structural parse over the SAME snapshot bytes, when this plugin has one. USF-M3 §21 — a
+        // `searchCore` request may SKIP structure when the loader already produced usable searchable
+        // text; evidence upgrade re-runs with `evidenceStructure`/`fullAvailable`. Same registry, one
+        // flag — never an alternate parser path.
+        let loaderProducedText = objects.contains { !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let skipStructureForSearchCore = request.intent == .searchCore && loaderProducedText
         var parsedDocument: ParsedDocument? = nil
-        if let structural {
+        if let structural, !skipStructureForSearchCore {
             do {
                 parsedDocument = try await structural.parse(
                     data: snapshotData, filename: request.originalURL.lastPathComponent, type: request.sourceType,

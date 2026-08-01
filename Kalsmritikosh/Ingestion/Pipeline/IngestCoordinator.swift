@@ -364,13 +364,17 @@ public actor IngestCoordinator {
         }
     }
 
-    public func ingest(fileAt url: URL) async throws -> Result {
-        try await runIngest(fileAt: url, parentVersion: nil)
+    /// USF-M3 — `intent` chooses how much the initial pass does. `.fullAvailable` (default) preserves the
+    /// prior behaviour; `.initialFast` runs only custody + searchable text (structure/analytical become
+    /// on-demand upgrades). Members inherit their container's intent.
+    public func ingest(fileAt url: URL, intent: SourceProcessingIntent = .fullAvailable) async throws -> Result {
+        try await runIngest(fileAt: url, parentVersion: nil, intent: intent)
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
     /// archive→member) so intake records the exact relation before the child is parsed.
-    func runIngest(fileAt url: URL, parentVersion: SourceParentReference?, memberByteURL: URL? = nil) async throws -> Result {
+    func runIngest(fileAt url: URL, parentVersion: SourceParentReference?, memberByteURL: URL? = nil,
+                   intent: SourceProcessingIntent = .fullAvailable) async throws -> Result {
         // A2 / A5.3 — the structural layer is parsed ONCE inside ingestCore
         // (past the skip/alias/move early returns), so the same ParsedDocument
         // feeds event extraction AND is persisted with consistent block IDs.
@@ -383,7 +387,7 @@ public actor IngestCoordinator {
         // v54 resume — durable in-progress marker (both ids null until intake succeeds).
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
-            let result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL)
+            let result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
             // The ONE version-linked terminal attempt for this url.
             await ingestAttempts?.record(
                 url: url,
@@ -677,7 +681,8 @@ public actor IngestCoordinator {
     /// a loader/parser failure keeps the custody record (retriable); a parsed document ATTACHES
     /// to the pre-created source version. The terminal attempt is recorded ONCE by runIngest —
     /// this method only decides the processing status it returns.
-    private func ingestCore(fileAt url: URL, parentVersion: SourceParentReference? = nil, memberByteURL: URL? = nil) async throws -> Result {
+    private func ingestCore(fileAt url: URL, parentVersion: SourceParentReference? = nil, memberByteURL: URL? = nil,
+                            intent: SourceProcessingIntent = .fullAvailable) async throws -> Result {
         await pipelineMetrics?.bump(.discovered)
 
         // --- Custody FIRST (before any loader/parser). A failed intake throws; runIngest's
@@ -739,9 +744,19 @@ public actor IngestCoordinator {
             return skipResult(.failed, stage: "router", detail: "no plugin owns \(type.rawValue)")
         }
 
+        // USF-M3 — map the pipeline intent onto the parser intent. `.initialFast` asks for search-core
+        // parsing (structure becomes an on-demand evidence upgrade); default `.fullAvailable` is unchanged.
+        let parserIntent: UniversalParserIntent = {
+            switch intent {
+            case .initialFast: return .searchCore
+            case .evidenceUpgrade: return .evidenceStructure
+            case .fullAvailable, .analyticalUpgrade: return .fullAvailable
+            }
+        }()
         let request = UniversalParserRequest(
             originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
-            sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash, sizeBytes: handle.sizeBytes)
+            sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash,
+            sizeBytes: handle.sizeBytes, intent: parserIntent)
         let started = Date()
         let result: UniversalParserResult
         do { result = try await universalExecutor.execute(request) }

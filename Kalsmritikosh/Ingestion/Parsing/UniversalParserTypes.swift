@@ -36,6 +36,16 @@ public nonisolated struct UniversalParserCapabilities: Sendable, Codable, Hashab
     }
 }
 
+/// USF-M3 (USF-009 §21) — how much parsing a request wants. `searchCore` may skip the structural parser
+/// when the loader already produced usable searchable text (fast initial pass); `evidenceStructure` /
+/// `fullAvailable` run the structural parser (evidence upgrade). This does NOT create an alternate parser
+/// path — it is one flag on the ONE UniversalParserRegistry.
+public nonisolated enum UniversalParserIntent: String, Sendable, Codable, CaseIterable, Hashable {
+    case searchCore
+    case evidenceStructure
+    case fullAvailable
+}
+
 /// One parse request. Plugins parse the immutable processing snapshot, never the original.
 public nonisolated struct UniversalParserRequest: Sendable, Hashable {
     public let originalURL: URL
@@ -45,9 +55,11 @@ public nonisolated struct UniversalParserRequest: Sendable, Hashable {
     public let sourceType: SourceType
     public let contentHash: String
     public let sizeBytes: Int64
+    public let intent: UniversalParserIntent
 
     public nonisolated init(originalURL: URL, processingSnapshotURL: URL, logicalSourceID: UUID,
-                            sourceVersionID: UUID, sourceType: SourceType, contentHash: String, sizeBytes: Int64) {
+                            sourceVersionID: UUID, sourceType: SourceType, contentHash: String, sizeBytes: Int64,
+                            intent: UniversalParserIntent = .fullAvailable) {
         self.originalURL = originalURL
         self.processingSnapshotURL = processingSnapshotURL
         self.logicalSourceID = logicalSourceID
@@ -55,6 +67,7 @@ public nonisolated struct UniversalParserRequest: Sendable, Hashable {
         self.sourceType = sourceType
         self.contentHash = contentHash
         self.sizeBytes = sizeBytes
+        self.intent = intent
     }
 }
 

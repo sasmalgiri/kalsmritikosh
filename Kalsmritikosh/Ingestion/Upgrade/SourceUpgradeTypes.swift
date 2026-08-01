@@ -96,9 +96,10 @@ public nonisolated enum SourceUpgradeExecutionMode: String, Sendable, Codable, C
     case foreground   // enqueue/reuse -> claim -> execute -> verify postcondition -> mark done
 }
 
-/// The intent of a processing pass (initial fast vs on-demand upgrade).
+/// The intent of a processing pass (initial fast vs full vs on-demand upgrade).
 public nonisolated enum SourceProcessingIntent: String, Sendable, Codable, CaseIterable, Hashable {
-    case initialFast
+    case initialFast        // custody + searchable text only; structure/analytical become upgrades
+    case fullAvailable      // the prior default — everything the initial pass could do
     case evidenceUpgrade
     case analyticalUpgrade
 }
