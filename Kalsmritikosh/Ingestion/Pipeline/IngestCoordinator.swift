@@ -387,7 +387,10 @@ public actor IngestCoordinator {
             // The ONE version-linked terminal attempt for this url.
             await ingestAttempts?.record(
                 url: url,
-                status: result.processingStatus ?? (result.chunkCount > 0 ? .queryable : .unchanged),
+                // USF-M3 — a real processed pass records `.passCompleted` (operational), NOT `.queryable`.
+                // Skips/aliases/moves/deferrals set `processingStatus` explicitly upstream. Attempt status
+                // is operational history, never source completion (ask IngestionCompletionSnapshot).
+                status: result.processingStatus ?? .passCompleted,
                 contentHash: result.fileRecord.contentHash,
                 stage: result.processingStage,
                 detail: result.processingDetail,

@@ -23,7 +23,12 @@ public actor IngestAttemptsRepository {
         case started     // v54 — ingest began; a durable in-progress marker. If
                          // this is still the LATEST status for a URL at boot, the
                          // ingest was interrupted (crash/quit) and is resumable.
-        case queryable   // parsed + persisted; answerable
+        case queryable   // LEGACY (pre-USF-M3) — parsed + persisted; answerable. Retained for old
+                         // rows; NEW production ingests write `.passCompleted` instead (attempt status
+                         // is operational history, NOT source completion — see IngestionCompletionSnapshot).
+        case passCompleted  // USF-M3 — the requested processing pass returned without an execution
+                            // failure. This does NOT mean searchable / evidence-ready / answerable;
+                            // ask SourceReadinessSnapshot for what the exact SourceVersion can support.
         case unchanged   // hash matched a prior ingest; skipped
         case aliased     // deduped to a canonical copy
         case moved       // same bytes, new location
