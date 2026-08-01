@@ -1260,8 +1260,14 @@ public final class AppState {
                 files: files, objects: objects, workspaces: workspacesRepo,
                 membership: membershipDeriver, projection: claimProjectionBackfill)
 
+            // USF-M1 — the ONE production routing authority. Feature-gated parsers stay gated.
+            let universalParserRegistry = try UniversalParserRegistryBuilder.standard(
+                ocr: VisionOCR(),
+                iMessageEnabled: FeatureFlags.shared.iMessageLoaderEnabled,
+                browserHistoryEnabled: FeatureFlags.shared.browserHistoryLoaderEnabled,
+                chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled)
             let ingest = IngestCoordinator(
-                loaders: .standard(),
+                universalRegistry: universalParserRegistry,
                 chunker: dynamicChunker,
                 entityExtractor: NLEntityExtractor(),
                 entityLinker: EntityLinker(),
@@ -1318,7 +1324,6 @@ public final class AppState {
                 pipelineMetrics: pipelineMetricsActor,
                 custody: custodyRepo,
                 evidenceStore: evidenceStoreRepo,
-                structuralRegistry: .standard(ocr: VisionOCR()),
                 assertions: assertionsRepo,
                 ingestAttempts: ingestAttemptsRepo,
                 sourceRelations: sourceRelationsRepo,

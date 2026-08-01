@@ -37,7 +37,9 @@ public actor IngestCoordinator {
         public var processingDetail: String? = nil
     }
 
-    private let loaders: LoaderRegistry
+    /// USF-M1 — the ONE production routing authority. Exactly one plugin owns each SourceType; the
+    /// coordinator no longer consults LoaderRegistry or StructuralParserRegistry independently.
+    private let universalExecutor: UniversalParserExecutor
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -78,7 +80,6 @@ public actor IngestCoordinator {
     /// document profile) additively, alongside the legacy KnowledgeObject path.
     /// nil = structural layer not populated (no regression to the KO path).
     private let evidenceStore: EvidenceStore?
-    private let structuralRegistry: StructuralParserRegistry?
     /// A5.1 — when wired, structural blocks yield directly-observed Assertions
     /// (the claim–evidence ledger between EvidenceBlocks and typed rows). nil =
     /// assertion ledger not populated from ingest (no regression).
@@ -152,7 +153,7 @@ public actor IngestCoordinator {
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
 
     public init(
-        loaders: LoaderRegistry,
+        universalRegistry: UniversalParserRegistry,
         cleaner: Cleaner = .init(),
         classifier: DocumentClassifier = .init(),
         chunker: Chunker = .init(),
@@ -181,7 +182,6 @@ public actor IngestCoordinator {
         pipelineMetrics: PipelineMetrics? = nil,
         custody: CustodyRepository? = nil,
         evidenceStore: EvidenceStore? = nil,
-        structuralRegistry: StructuralParserRegistry? = nil,
         assertions: AssertionsRepository? = nil,
         ingestAttempts: IngestAttemptsRepository? = nil,
         sourceRelations: SourceRelationsRepository? = nil,
@@ -195,7 +195,6 @@ public actor IngestCoordinator {
         self.intakeCoordinator = intakeCoordinator
         self.readiness = readiness
         self.evidenceStore = evidenceStore
-        self.structuralRegistry = structuralRegistry
         self.assertions = assertions
         self.genericFacts = genericFacts
         self.evidenceVault = evidenceVault
@@ -204,7 +203,7 @@ public actor IngestCoordinator {
         self.ingestAttempts = ingestAttempts
         self.sourceRelations = sourceRelations
         self.custody = custody
-        self.loaders = loaders
+        self.universalExecutor = UniversalParserExecutor(registry: universalRegistry)
         self.cleaner = cleaner
         self.classifier = classifier
         self.chunker = chunker
@@ -510,34 +509,6 @@ public actor IngestCoordinator {
             .write(to: url, options: .atomic)
     }
 
-    private func parseStructuralOnce(url: URL, snapshotURL: URL, type: SourceType, fileID: UUID,
-                                     sourceVersionID: UUID = UUID(), contentHash: String? = nil) async -> StructuralParse? {
-        guard let structuralRegistry, evidenceStore != nil,
-              let parser = structuralRegistry.parser(for: type),
-              let data = try? Data(contentsOf: snapshotURL) else { return nil }
-        let started = Date()
-        guard let parsed = try? await parser.parse(
-            data: data, filename: url.lastPathComponent, type: type,
-            logicalSourceID: fileID, sourceVersionID: sourceVersionID
-        ) else { return nil }
-        // USF-001.2 exact-byte binding — the parser hashed the SAME immutable snapshot bytes that
-        // produced the intake SHA-256, so `parsed.contentHash` MUST already equal the source
-        // version's hash. We never relabel the parsed document with a foreign hash. If the two
-        // disagree the bytes are not what intake registered — write NO structural artifacts, so a
-        // mismatched document can never be attached to a version it does not describe.
-        if let expected = contentHash, parsed.contentHash != expected {
-            KalsmritikoshLog.ingestion.error("Structural parse hash mismatch for \(url.lastPathComponent, privacy: .private): parsed \(parsed.contentHash.prefix(12), privacy: .public) != intake \(expected.prefix(12), privacy: .public) — skipping structural persist")
-            return nil
-        }
-        // PERF.0 — structural parse includes image OCR; time it so we can see
-        // whether OCR/parse is the real cost centre (measure, don't guess).
-        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
-        return StructuralParse(
-            doc: parsed, parserName: parser.parserName, parserVersion: parser.parserVersion,
-            sizeBytes: Int64(data.count), startedAt: started
-        )
-    }
-
     /// USF-002 — advance a source version's readiness dimensions after a pipeline stage. Reads the
     /// current aggregate revision and applies the updates under CAS. Best-effort: a readiness
     /// failure never fails the ingest (custody + content are already durable).
@@ -738,9 +709,21 @@ public actor IngestCoordinator {
             return skipResult(status, stage: "intake", detail: "\(handle.outcome.rawValue) — parsing skipped")
         }
 
-        // --- New logical source / new version: load + parse (custody already committed). ---
+        // --- New logical source / new version: ONE routing decision + ONE plugin execution. ---
+        // USF-M1 §15/§16 — the coordinator no longer consults LoaderRegistry / StructuralParserRegistry
+        // independently. Exactly one UniversalParserPlugin owns this type; it reads ONLY the immutable
+        // snapshot and runs its loader ONCE (ingestMany). Container formats hand members off to
+        // recursive intake; the plugin still returns the container's own objects.
+        let plugin: any UniversalParserPlugin
+        do { plugin = try universalExecutor.registry.resolve(type) }
+        catch {
+            await advanceReadiness(handle.sourceVersionID, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .unsupported, action: .markUnsupported)])
+            return skipResult(.failed, stage: "router", detail: "no plugin owns \(type.rawValue)")
+        }
+
         var expandedMemberIDs: [UUID] = []
-        if type == .zip, let (root, files) = try? ArchiveLoader.expandZIP(at: processURL) {
+        if plugin.executionMode == .container, let (root, files) = try? ArchiveLoader.expandZIP(at: processURL) {
             defer { try? FileManager.default.removeItem(at: root) }
             let memberParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .archiveMember)
             for entry in files where SourceType.detect(from: entry) != .zip {
@@ -750,40 +733,36 @@ public actor IngestCoordinator {
             }
         }
 
-        let loader = loaders.loader(for: type)
-        let raw: KnowledgeObject
-        // USF-001.2 — load from the immutable snapshot, but rebind the KO's identity to the
-        // ORIGINAL url (the snapshot lives at a temporary path that is removed after processing).
-        do { raw = Self.rebindingSourceFile(try await loader.ingest(fileAt: processURL, type: type), to: url) }
+        let request = UniversalParserRequest(
+            originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
+            sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash, sizeBytes: handle.sizeBytes)
+        let started = Date()
+        let result: UniversalParserResult
+        do { result = try await universalExecutor.execute(request) }
         catch {
-            // Loader failure — custody is preserved; a single version-linked failure is
-            // recorded by runIngest (retriable), and the ingest does not abort. Readiness records
-            // the failed text dimension (the source stays custodied, not silently "processed").
+            // Loader / structural / identity failure — custody preserved; text failed (honest). A
+            // parser-hash mismatch surfaces here as contentHashMismatch, so NO canonical artifacts land.
             await advanceReadiness(handle.sourceVersionID, [
                 SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
                                                detail: String(describing: error).prefix(120).description)])
-            return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
+            return skipResult(.failed, stage: "parser", detail: String(describing: error).prefix(300).description)
         }
-        let cleaned = ContentDecoder().decode(cleaner.clean(raw))
+        await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
+
+        // KOs read the snapshot → rebind identity to the ORIGINAL url (the snapshot path is temporary).
+        let perFileKOs = result.knowledgeObjects.map { Self.rebindingSourceFile($0, to: url) }
+        let cleaned = ContentDecoder().decode(cleaner.clean(perFileKOs.first ?? KnowledgeObject(sourceFile: url, sourceType: type, content: "")))
         let docClass = classifier.classify(cleaned)
         for memberID in expandedMemberIDs {
             await sourceRelations?.record(parent: fileRecord.id, child: memberID, relation: .archiveMember)
         }
         try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
         try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
-
-        let perFileKOs: [KnowledgeObject]
-        do { perFileKOs = try await loader.ingestMany(fileAt: processURL, type: type).map { Self.rebindingSourceFile($0, to: url) } }
-        catch {
-            await advanceReadiness(handle.sourceVersionID, [
-                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
-                                               detail: String(describing: error).prefix(120).description)])
-            return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
-        }
         guard !perFileKOs.isEmpty else {
-            // No usable content. An unsupported unknown format is a real limitation; anything else
-            // is an empty-but-complete text extraction (ready with zero units — NOT search-ready).
-            if structuralRegistry?.parser(for: type) == nil, type == .unknown {
+            // No usable content. A preserved-only / unsupported plugin is a real limitation; anything
+            // else is an empty-but-complete text extraction (ready with zero units — NOT search-ready).
+            // Never fabricate text for a source that produced none.
+            if plugin.executionMode == .preservedOnly || result.extractionStatus == .unsupported {
                 await advanceReadiness(handle.sourceVersionID, [
                     SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .unsupported, action: .markUnsupported)])
             } else {
@@ -795,8 +774,13 @@ public actor IngestCoordinator {
                           logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
         }
 
-        let structural = await parseStructuralOnce(url: url, snapshotURL: processURL, type: type, fileID: handle.logicalSourceID,
-                                                   sourceVersionID: handle.sourceVersionID, contentHash: handle.contentHash)
+        // USF-M1 — the structural document (when the plugin produced one) flows into the SAME
+        // committed-receipt persist + readiness path as before. Gated on evidenceStore so rigs
+        // without the structural layer keep KO-content chunking (no behaviour change).
+        let structural: StructuralParse? = (evidenceStore != nil) ? result.parsedDocument.map {
+            StructuralParse(doc: $0, parserName: result.pluginID, parserVersion: result.pluginVersion,
+                            sizeBytes: request.sizeBytes, startedAt: started)
+        } : nil
         let allBlocks = structural?.doc.blocks ?? []
         let singleKO = perFileKOs.count == 1
         var totalChunks = 0, totalEntities = 0, totalEvents = 0

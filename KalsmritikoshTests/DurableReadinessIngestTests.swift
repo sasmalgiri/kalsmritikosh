@@ -29,12 +29,11 @@ struct DurableReadinessIngestTests {
         let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(
             database: db, vault: EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))))
         let coordinator = IngestCoordinator(
-            loaders: .standard(),
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
             entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
             files: FilesRepository(database: db), objects: KnowledgeObjectRepository(database: db),
             chunks: ChunksRepository(database: db), evidenceStore: EvidenceStore(database: db),
-            structuralRegistry: .standard(ocr: VisionOCR()),
-            ingestAttempts: IngestAttemptsRepository(database: db),
+                        ingestAttempts: IngestAttemptsRepository(database: db),
             sourceRelations: SourceRelationsRepository(database: db),
             readiness: readiness, intakeCoordinator: intake)
         return Rig(coordinator: coordinator, readiness: readiness, db: db, dir: dir, dbURL: dbURL)

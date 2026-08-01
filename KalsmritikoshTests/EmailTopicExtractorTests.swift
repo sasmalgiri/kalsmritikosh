@@ -128,11 +128,10 @@ struct EmailTopicExtractorTests {
         let claims = ClaimRepository(database: db), store = EvidenceStore(database: db)
         let workspaces = WorkspaceRepository(database: db)
         let coordinator = IngestCoordinator(
-            loaders: .standard(), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
             eventExtractor: RuleEventExtractor(), narrativeSlotExtractor: RuleNarrativeSlotExtractor(),
             files: files, objects: objects, chunks: chunks, entities: entities, events: events,
-            evidenceStore: store, structuralRegistry: .standard(ocr: VisionOCR()),
-            assertions: asrt, genericFacts: gf,
+            evidenceStore: store,             assertions: asrt, genericFacts: gf,
             intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
         let producer = ClaimProducer(genericFacts: gf, assertions: asrt, temporalClaims: tcs,
                                      events: events, claims: claims, evidence: store)

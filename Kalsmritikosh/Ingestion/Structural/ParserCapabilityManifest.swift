@@ -70,6 +70,61 @@ public struct ParserCapabilityManifest: Sendable {
             }
     }
 
+    // MARK: - USF-M1 — derived from the ONE universal parser registry
+
+    /// A richer manifest entry generated from the universal parser platform (USF-M1 §14).
+    public struct UniversalEntry: Codable, Sendable, Hashable {
+        public let sourceType: String
+        public let category: String
+        public let pluginID: String
+        public let pluginVersion: String
+        public let executionMode: String
+        public let coverage: ParserCoverage
+        public let producesStructure: Bool
+        public let requiresOCR: Bool
+        public let declaredSurfaces: [String]
+    }
+
+    /// Generate the capability matrix from the UniversalParserRegistry — the single routing
+    /// authority — so marketing/support coverage cannot drift from what actually routes.
+    public nonisolated static func generate(registry: UniversalParserRegistry) -> [UniversalEntry] {
+        SourceType.allCases
+            .filter { $0 != .unknown }
+            .sorted { $0.rawValue < $1.rawValue }
+            .compactMap { type in
+                guard let p = registry.plugin(for: type) else { return nil }
+                let coverage: ParserCoverage
+                switch p.executionMode {
+                case .deferred: coverage = .deferred
+                case .container, .preservedOnly: coverage = .preservedOnly
+                case .immediate:
+                    coverage = p.capabilities.producesStructure ? (p.capabilities.requiresOCR ? .partial : .full) : .preservedOnly
+                }
+                return UniversalEntry(
+                    sourceType: type.rawValue, category: String(describing: type.category),
+                    pluginID: p.pluginID, pluginVersion: p.pluginVersion, executionMode: p.executionMode.rawValue,
+                    coverage: coverage, producesStructure: p.capabilities.producesStructure,
+                    requiresOCR: p.capabilities.requiresOCR,
+                    declaredSurfaces: p.capabilities.declaredSurfaces.map(\.rawValue).sorted())
+            }
+    }
+
+    /// Human-readable coverage matrix generated from the universal registry (SUPPORTED_SOURCES.md).
+    public nonisolated static func renderMarkdown(registry: UniversalParserRegistry) -> String {
+        let entries = generate(registry: registry)
+        var out = "| Format | Category | Coverage | Plugin | Version | Mode |\n|---|---|---|---|---|---|\n"
+        for e in entries {
+            out += "| \(e.sourceType) | \(e.category) | \(e.coverage.rawValue) | \(e.pluginID) | \(e.pluginVersion) | \(e.executionMode) |\n"
+        }
+        let full = entries.filter { $0.coverage == .full }.count
+        let partial = entries.filter { $0.coverage == .partial }.count
+        let deferred = entries.filter { $0.coverage == .deferred }.count
+        let preserved = entries.filter { $0.coverage == .preservedOnly }.count
+        out += "\n_Generated from the universal parser registry: \(full) FULL, \(partial) PARTIAL, "
+            + "\(deferred) DEFERRED, \(preserved) PRESERVED-ONLY._\n"
+        return out
+    }
+
     /// OCR-dependent formats: fidelity varies with scan/image quality → PARTIAL, not FULL.
     nonisolated static func isOCRDependent(_ t: SourceType) -> Bool {
         switch t {
