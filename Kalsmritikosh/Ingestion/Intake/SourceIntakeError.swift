@@ -22,6 +22,8 @@ public nonisolated enum SourceIntakeError: Error, Equatable, Sendable {
     case hashComputationFailed(URL)
     /// Managed-copy storage into the evidence vault failed (source stays visible as managedCopyFailed).
     case managedCopyFailed(reason: String)
+    /// The immutable per-intake processing snapshot could not be written (USF-001.2).
+    case snapshotCreationFailed(URL)
     /// A referenced logical source id does not exist.
     case logicalSourceNotFound(UUID)
     /// A referenced source version id does not exist.

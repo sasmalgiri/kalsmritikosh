@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 83
+    public static let latestVersion = 84
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -299,7 +299,10 @@ public enum SchemaMigrations {
             "method_validation_results": "length(trim(validation_batch_id)) > 0", // non-blank batch id CHECK
             // v83 (USF-001.1) hardens the intake ledger with CHECKs / composite FKs / unique
             // keys but adds NO new column, so the column probe cannot distinguish v83 from v82.
-            "source_versions":           "length(content_hash) = 64",          // non-legacy SHA-256 CHECK
+            // v84 (USF-001.2) adds hexadecimal enforcement (`content_hash NOT GLOB '*[^0-9a-f]*'`),
+            // also CHECK-only — this GLOB marker appears ONLY in the v84 form and implies the
+            // v83 SHA-256 shape it supersedes.
+            "source_versions":           "content_hash NOT GLOB '*[^0-9a-f]*'", // v84 hexadecimal SHA-256 CHECK
             "source_intake_receipts":    "source_versions(id, content_hash)",  // receipt-hash composite FK
             "ingest_file_attempts":      "(logical_source_id IS NULL) = (source_version_id IS NULL)"
         ]
@@ -396,7 +399,8 @@ public enum SchemaMigrations {
         (80, v80),
         (81, v81),
         (82, v82),
-        (83, v83)
+        (83, v83),
+        (84, v84)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4174,5 +4178,81 @@ public enum SchemaMigrations {
     CREATE INDEX idx_ingest_attempts_status ON ingest_file_attempts(status);
     CREATE INDEX idx_ingest_attempts_logical ON ingest_file_attempts(logical_source_id);
     CREATE INDEX idx_ingest_attempts_version ON ingest_file_attempts(source_version_id);
+    """
+
+    // MARK: - v84 — USF-001.2 exact-byte binding: hexadecimal SHA-256 enforcement
+
+    private static let v84: String = """
+    -- USF-001.2 closes the last content-hash gap: v83 accepted ANY 64-char lowercase string
+    -- as a non-legacy custody hash (e.g. a 64-char run of 'z'), so a hash that was never a
+    -- real SHA-256 could satisfy the CHECK. A genuine SHA-256 hex digest is 64 characters
+    -- drawn ONLY from [0-9a-f]. This rebuild adds `content_hash NOT GLOB '*[^0-9a-f]*'` to the
+    -- non-legacy branch so every custody hash is provably hexadecimal, and demotes any existing
+    -- non-hex custody row to legacyImported (the same repair v83 used for non-SHA rows). NO new
+    -- column — CHECK-only, so the self-heal sentinel confirms it via a CHECK-text probe.
+    -- migrate() disables FK enforcement for the whole pass + runs foreign_key_check afterward.
+    CREATE TABLE source_versions__v84 (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        logical_source_id    TEXT NOT NULL,
+        document_id          TEXT,
+        content_hash         TEXT NOT NULL,
+        supersedes           TEXT,
+        valid_from           REAL NOT NULL,
+        valid_to             REAL,
+        is_current           INTEGER NOT NULL DEFAULT 1,
+        original_url         TEXT,
+        created_at           REAL NOT NULL,
+        filename             TEXT NOT NULL DEFAULT 'legacy-source',
+        declared_extension   TEXT NOT NULL DEFAULT '',
+        detected_type        TEXT NOT NULL DEFAULT 'unknown',
+        mime_type            TEXT,
+        detection_basis      TEXT NOT NULL DEFAULT 'unknown',
+        size_bytes           INTEGER NOT NULL DEFAULT 0,
+        modified_at          REAL,
+        custody_mode         TEXT NOT NULL DEFAULT 'referenced',
+        preservation_status  TEXT NOT NULL DEFAULT 'legacyImported',
+        vault_address        TEXT,
+        intake_recorded_at   REAL NOT NULL DEFAULT 0,
+        FOREIGN KEY(supersedes, logical_source_id) REFERENCES source_versions(id, logical_source_id),
+        CHECK(length(trim(filename)) > 0),
+        CHECK(length(trim(detected_type)) > 0),
+        CHECK(detection_basis IN ('pathPattern','declaredExtension','magicBytes','unknown')),
+        CHECK(size_bytes >= 0),
+        CHECK(custody_mode IN ('referenced','managed')),
+        CHECK(preservation_status IN ('referenceRecorded','managedCopyStored','managedCopyFailed','legacyImported')),
+        CHECK(is_current IN (0,1)),
+        CHECK(supersedes IS NULL OR supersedes <> id),
+        CHECK(preservation_status <> 'managedCopyStored'
+              OR (custody_mode = 'managed' AND vault_address IS NOT NULL AND length(trim(vault_address)) > 0)),
+        -- A newly-admitted custody version must carry a normalized HEXADECIMAL SHA-256:
+        -- lowercase, exactly 64 characters, every character in [0-9a-f]. Legacy is exempt.
+        CHECK(preservation_status = 'legacyImported'
+              OR (content_hash = lower(content_hash)
+                  AND length(content_hash) = 64
+                  AND content_hash NOT GLOB '*[^0-9a-f]*'))
+    );
+    INSERT INTO source_versions__v84 (id, logical_source_id, document_id, content_hash, supersedes,
+                                      valid_from, valid_to, is_current, original_url, created_at,
+                                      filename, declared_extension, detected_type, mime_type, detection_basis,
+                                      size_bytes, modified_at, custody_mode, preservation_status, vault_address, intake_recorded_at)
+        SELECT id, logical_source_id, document_id, content_hash, supersedes,
+               valid_from, valid_to, is_current, original_url, created_at,
+               filename, declared_extension, detected_type, mime_type, detection_basis,
+               size_bytes, modified_at, custody_mode,
+               CASE WHEN preservation_status <> 'legacyImported'
+                         AND (content_hash <> lower(content_hash)
+                              OR length(content_hash) <> 64
+                              OR content_hash GLOB '*[^0-9a-f]*')
+                    THEN 'legacyImported' ELSE preservation_status END,
+               vault_address, intake_recorded_at
+          FROM source_versions;
+    DROP TABLE source_versions;
+    ALTER TABLE source_versions__v84 RENAME TO source_versions;
+    CREATE INDEX idx_source_versions_logical ON source_versions(logical_source_id);
+    CREATE INDEX idx_source_versions_current ON source_versions(logical_source_id, is_current);
+    CREATE INDEX idx_source_versions_hash ON source_versions(content_hash);
+    CREATE UNIQUE INDEX idx_source_versions_one_current ON source_versions(logical_source_id) WHERE is_current = 1;
+    CREATE UNIQUE INDEX idx_source_versions_id_logical ON source_versions(id, logical_source_id);
+    CREATE UNIQUE INDEX idx_source_versions_id_hash ON source_versions(id, content_hash);
     """
 }

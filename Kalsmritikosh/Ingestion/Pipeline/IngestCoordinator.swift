@@ -503,31 +503,44 @@ public actor IngestCoordinator {
             .write(to: url, options: .atomic)
     }
 
-    private func parseStructuralOnce(url: URL, type: SourceType, fileID: UUID,
+    private func parseStructuralOnce(url: URL, snapshotURL: URL, type: SourceType, fileID: UUID,
                                      sourceVersionID: UUID = UUID(), contentHash: String? = nil) async -> StructuralParse? {
         guard let structuralRegistry, evidenceStore != nil,
               let parser = structuralRegistry.parser(for: type),
-              let data = try? Data(contentsOf: url) else { return nil }
+              let data = try? Data(contentsOf: snapshotURL) else { return nil }
         let started = Date()
         guard let parsed = try? await parser.parse(
             data: data, filename: url.lastPathComponent, type: type,
             logicalSourceID: fileID, sourceVersionID: sourceVersionID
         ) else { return nil }
-        // USF-001.1 — stamp the intake's canonical content hash onto the parsed document so
-        // its attachment to the intake-created source version passes the fail-closed hash gate.
-        let doc: ParsedDocument = contentHash.map { h in
-            ParsedDocument(id: parsed.id, logicalSourceID: parsed.logicalSourceID, sourceVersionID: parsed.sourceVersionID,
-                           filename: parsed.filename, detectedType: parsed.detectedType, mimeType: parsed.mimeType,
-                           contentHash: h, metadata: parsed.metadata, blocks: parsed.blocks, warnings: parsed.warnings,
-                           extractionStatus: parsed.extractionStatus)
-        } ?? parsed
+        // USF-001.2 exact-byte binding — the parser hashed the SAME immutable snapshot bytes that
+        // produced the intake SHA-256, so `parsed.contentHash` MUST already equal the source
+        // version's hash. We never relabel the parsed document with a foreign hash. If the two
+        // disagree the bytes are not what intake registered — write NO structural artifacts, so a
+        // mismatched document can never be attached to a version it does not describe.
+        if let expected = contentHash, parsed.contentHash != expected {
+            KalsmritikoshLog.ingestion.error("Structural parse hash mismatch for \(url.lastPathComponent, privacy: .private): parsed \(parsed.contentHash.prefix(12), privacy: .public) != intake \(expected.prefix(12), privacy: .public) — skipping structural persist")
+            return nil
+        }
         // PERF.0 — structural parse includes image OCR; time it so we can see
         // whether OCR/parse is the real cost centre (measure, don't guess).
         await pipelineMetrics?.record(.parse, seconds: Date().timeIntervalSince(started))
         return StructuralParse(
-            doc: doc, parserName: parser.parserName, parserVersion: parser.parserVersion,
+            doc: parsed, parserName: parser.parserName, parserVersion: parser.parserVersion,
             sizeBytes: Int64(data.count), startedAt: started
         )
+    }
+
+    /// USF-001.2 — return `ko` with its `sourceFile` rebound to `url`. The loader reads the
+    /// temporary processing snapshot, so its KOs carry the snapshot path; downstream identity
+    /// (retrieval, citations, the file row) must reference the ORIGINAL source location.
+    private static func rebindingSourceFile(_ ko: KnowledgeObject, to url: URL) -> KnowledgeObject {
+        guard ko.sourceFile != url else { return ko }
+        return KnowledgeObject(
+            id: ko.id, sourceFile: url, sourceType: ko.sourceType, content: ko.content,
+            metadata: ko.metadata, entities: ko.entities, events: ko.events,
+            relationships: ko.relationships, summaries: ko.summaries, confidence: ko.confidence,
+            createdAt: ko.createdAt, updatedAt: ko.updatedAt)
     }
 
     /// Persist an already-parsed structural document (typed EvidenceBlocks +
@@ -665,6 +678,12 @@ public actor IngestCoordinator {
         //     catch records the single failed attempt (with null ids, pre-intake). ---
         let custodyMode: SourceCustodyMode = FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced
         let handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
+        // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot
+        // (its bytes are exactly those that produced the intake hash), never the mutable original.
+        // We own the snapshot's lifetime: remove its containing directory before ANY return.
+        let processURL = handle.processingSnapshotURL ?? url
+        let snapshotDir = handle.processingSnapshotURL?.deletingLastPathComponent()
+        defer { if let snapshotDir { try? FileManager.default.removeItem(at: snapshotDir) } }
         // USF-001.1 §5 — the ONE detected type comes from intake; no second detection pass.
         let type = handle.detectedType
         let modified = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? Date()
@@ -694,7 +713,7 @@ public actor IngestCoordinator {
 
         // --- New logical source / new version: load + parse (custody already committed). ---
         var expandedMemberIDs: [UUID] = []
-        if type == .zip, let (root, files) = try? ArchiveLoader.expandZIP(at: url) {
+        if type == .zip, let (root, files) = try? ArchiveLoader.expandZIP(at: processURL) {
             defer { try? FileManager.default.removeItem(at: root) }
             let memberParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .archiveMember)
             for entry in files where SourceType.detect(from: entry) != .zip {
@@ -706,7 +725,9 @@ public actor IngestCoordinator {
 
         let loader = loaders.loader(for: type)
         let raw: KnowledgeObject
-        do { raw = try await loader.ingest(fileAt: url, type: type) }
+        // USF-001.2 — load from the immutable snapshot, but rebind the KO's identity to the
+        // ORIGINAL url (the snapshot lives at a temporary path that is removed after processing).
+        do { raw = Self.rebindingSourceFile(try await loader.ingest(fileAt: processURL, type: type), to: url) }
         catch {
             // Loader failure — custody is preserved; a single version-linked failure is
             // recorded by runIngest (retriable), and the ingest does not abort.
@@ -721,7 +742,7 @@ public actor IngestCoordinator {
         try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
 
         let perFileKOs: [KnowledgeObject]
-        do { perFileKOs = try await loader.ingestMany(fileAt: url, type: type) }
+        do { perFileKOs = try await loader.ingestMany(fileAt: processURL, type: type).map { Self.rebindingSourceFile($0, to: url) } }
         catch {
             return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
         }
@@ -731,7 +752,7 @@ public actor IngestCoordinator {
                           logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
         }
 
-        let structural = await parseStructuralOnce(url: url, type: type, fileID: handle.logicalSourceID,
+        let structural = await parseStructuralOnce(url: url, snapshotURL: processURL, type: type, fileID: handle.logicalSourceID,
                                                    sourceVersionID: handle.sourceVersionID, contentHash: handle.contentHash)
         let allBlocks = structural?.doc.blocks ?? []
         let singleKO = perFileKOs.count == 1

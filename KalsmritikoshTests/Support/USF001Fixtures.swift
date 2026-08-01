@@ -22,12 +22,13 @@ struct USFRig {
 enum USF001Fixtures {
     static let t0 = USFRig.t0
 
-    static func makeRig(withVault: Bool = true) async throws -> USFRig {
+    static func makeRig(withVault: Bool = true,
+                        atVersion version: Int = SchemaMigrations.latestVersion) async throws -> USFRig {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("usf001-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let dbURL = base.appendingPathComponent("intake.sqlite")
-        let db = try await MigrationFixtureBuilder.database(atVersion: 82, at: dbURL)
+        let db = try await MigrationFixtureBuilder.database(atVersion: version, at: dbURL)
         try await db.exec("PRAGMA foreign_keys = ON;")
         let vault = EvidenceVault(root: base.appendingPathComponent("vault", isDirectory: true))
         let repo = CanonicalSourceIntakeRepository(database: db, vault: withVault ? vault : nil)
@@ -49,6 +50,18 @@ enum USF001Fixtures {
         let captured = try SourceByteCapture.capture(url)
         let request = SourceIntakeRequest(url: url, custodyMode: custody, parent: parent, recordedAt: at)
         return try await rig.repo.intake(request: request, captured: captured)
+    }
+
+    /// USF-001.2 — capture a file through the immutable processing snapshot (as the coordinator
+    /// does) and intake it, passing the snapshot so managed custody copies the exact captured
+    /// bytes. Returns the handle (its `processingSnapshotURL` points at the live snapshot).
+    @discardableResult
+    static func intakeWithSnapshot(_ rig: USFRig, url: URL, custody: SourceCustodyMode = .referenced,
+                                   at: Date = t0) async throws -> SourceIntakeHandle {
+        let snapDir = rig.dir.appendingPathComponent("snap-\(UUID().uuidString)", isDirectory: true)
+        let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(url, snapshotDirectory: snapDir)
+        let request = SourceIntakeRequest(url: url, custodyMode: custody, parent: nil, recordedAt: at)
+        return try await rig.repo.intake(request: request, captured: captured, snapshotURL: snapshotURL)
     }
 
     static func bytes(_ s: String) -> Data { Data(s.utf8) }

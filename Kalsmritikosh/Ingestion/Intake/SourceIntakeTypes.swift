@@ -108,6 +108,11 @@ public nonisolated struct SourceIntakeHandle: Sendable, Hashable {
     public let custodyMode: SourceCustodyMode
     public let preservationStatus: SourcePreservationStatus
     public let vaultAddress: String?
+    /// USF-001.2 — the immutable per-intake processing snapshot the loader and structural parser
+    /// must consume (its bytes are exactly those that produced `contentHash`). `nil` when no
+    /// snapshot was produced (e.g. a direct repository intake in a test). The caller owns the
+    /// snapshot's lifetime and removes its containing directory after processing.
+    public let processingSnapshotURL: URL?
 
     /// True only for `newLogicalSource` / `newVersion`; unchanged/moved/aliased must not reparse.
     public var shouldProcess: Bool { outcome.shouldProcess }
@@ -117,7 +122,8 @@ public nonisolated struct SourceIntakeHandle: Sendable, Hashable {
         outcome: SourceIntakeOutcome, filename: String, declaredExtension: String,
         detectedType: SourceType, mimeType: String?, detectionBasis: SourceDetectionBasis,
         contentHash: String, sizeBytes: Int64, custodyMode: SourceCustodyMode,
-        preservationStatus: SourcePreservationStatus, vaultAddress: String?
+        preservationStatus: SourcePreservationStatus, vaultAddress: String?,
+        processingSnapshotURL: URL? = nil
     ) {
         self.occurrenceFileID = occurrenceFileID
         self.logicalSourceID = logicalSourceID
@@ -133,6 +139,18 @@ public nonisolated struct SourceIntakeHandle: Sendable, Hashable {
         self.custodyMode = custodyMode
         self.preservationStatus = preservationStatus
         self.vaultAddress = vaultAddress
+        self.processingSnapshotURL = processingSnapshotURL
+    }
+
+    /// Return a copy carrying the given processing-snapshot URL (the repository builds the
+    /// handle before the snapshot is threaded through by the coordinator).
+    public nonisolated func withProcessingSnapshot(_ url: URL?) -> SourceIntakeHandle {
+        SourceIntakeHandle(
+            occurrenceFileID: occurrenceFileID, logicalSourceID: logicalSourceID, sourceVersionID: sourceVersionID,
+            outcome: outcome, filename: filename, declaredExtension: declaredExtension,
+            detectedType: detectedType, mimeType: mimeType, detectionBasis: detectionBasis,
+            contentHash: contentHash, sizeBytes: sizeBytes, custodyMode: custodyMode,
+            preservationStatus: preservationStatus, vaultAddress: vaultAddress, processingSnapshotURL: url)
     }
 }
 

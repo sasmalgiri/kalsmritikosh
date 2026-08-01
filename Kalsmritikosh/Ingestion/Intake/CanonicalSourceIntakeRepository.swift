@@ -26,41 +26,57 @@ public struct CanonicalSourceIntakeRepository: Sendable {
     // MARK: - Public entry point
 
     /// Resolve and persist canonical custody for a captured accessible source, atomically.
-    public func intake(request: SourceIntakeRequest, captured: CapturedSource) async throws -> SourceIntakeHandle {
+    /// `snapshotURL` (USF-001.2) is the immutable per-intake snapshot whose bytes produced
+    /// `captured.contentHash`; managed custody copies THOSE bytes into the vault (never the
+    /// mutable original).
+    public func intake(request: SourceIntakeRequest, captured: CapturedSource,
+                       snapshotURL: URL? = nil) async throws -> SourceIntakeHandle {
         let now = request.recordedAt
         let canonicalURL = request.url.absoluteString
 
-        // Managed custody: stream a verified copy into the vault BEFORE the identity savepoint,
-        // but only when the exact bytes are not already known (so unchanged/move/alias never
-        // re-copies). The vault address must equal the captured hash to count as stored.
+        // Managed custody: resolve a verified vault address BEFORE the identity savepoint.
+        // USF-001.2 gap 4 — if the exact bytes are already vaulted under a stored address, REUSE
+        // that address (verify the blob is present); otherwise copy the immutable snapshot in one
+        // verified pass. The address is accepted only when it equals the captured hash. A managed
+        // intake that cannot obtain a present address is `managedCopyFailed` — never a silent
+        // `managedCopyStored` with a null address.
         var vaultAddress: String? = nil
-        var managedFailed = false
-        if request.custodyMode == .managed, try await !hashAlreadyKnown(captured.contentHash) {
-            if let vault, let stored = try? await vault.storeStreaming(contentsOf: request.url),
-               stored == captured.contentHash {
-                vaultAddress = stored
-            } else {
-                managedFailed = true
+        if request.custodyMode == .managed {
+            if let known = try await existingManagedVaultAddress(forHash: captured.contentHash),
+               let vault, await vault.contains(known) {
+                vaultAddress = known
+            } else if let vault {
+                let copySource = snapshotURL ?? request.url
+                if let stored = try? await vault.storeStreaming(contentsOf: copySource),
+                   stored == captured.contentHash, await vault.contains(stored) {
+                    vaultAddress = stored
+                }
             }
         }
 
         let sp = "usf_intake_\(captured.contentHash.prefix(8))_\(UUID().uuidString.prefix(4))"
-        let cap = captured, req = request, vAddr = vaultAddress, mFailed = managedFailed
-        return try await database.withSavepoint(sp) { db -> SourceIntakeHandle in
+        let cap = captured, req = request, vAddr = vaultAddress
+        let handle = try await database.withSavepoint(sp) { db -> SourceIntakeHandle in
             try Self.resolveAndWrite(db, request: req, captured: cap, canonicalURL: canonicalURL,
-                                     now: now, vaultAddress: vAddr, managedFailed: mFailed)
+                                     now: now, vaultAddress: vAddr)
         }
+        return handle.withProcessingSnapshot(snapshotURL)
     }
 
-    private func hashAlreadyKnown(_ hash: String) async throws -> Bool {
-        try await database.query("SELECT 1 FROM source_versions WHERE content_hash = ? LIMIT 1;", [.text(hash)]).first != nil
+    /// A stored managed vault address for these exact bytes, if any version already holds one.
+    private func existingManagedVaultAddress(forHash hash: String) async throws -> String? {
+        try await database.query("""
+            SELECT vault_address FROM source_versions
+             WHERE content_hash = ? AND preservation_status = 'managedCopyStored'
+               AND vault_address IS NOT NULL AND length(trim(vault_address)) > 0 LIMIT 1;
+            """, [.text(hash)]).first?.string(0)
     }
 
     // MARK: - Atomic resolve + write (synchronous, inside the savepoint)
 
     private static func resolveAndWrite(_ db: isolated Database, request: SourceIntakeRequest,
                                         captured: CapturedSource, canonicalURL: String, now: Date,
-                                        vaultAddress: String?, managedFailed: Bool) throws -> SourceIntakeHandle {
+                                        vaultAddress: String?) throws -> SourceIntakeHandle {
         // 1. Resolve any existing occurrence at this URL — INCLUDING aliases (USF-001.1 §9).
         let occurrence = try fileRow(db, url: canonicalURL)
         // 2/3. Resolve the canonical logical source + its current version.
@@ -72,6 +88,10 @@ public struct CanonicalSourceIntakeRepository: Sendable {
         var sourceVersionID: UUID
         var priorVersionID: UUID? = nil
         var reuseVersion: VersionRow? = nil
+        // USF-001.2 gap 2 — an alias URL whose bytes changed resolves to exactly one of two
+        // transitions, recorded here so the write step never creates a second file row for this URL.
+        var aliasRetargetTo: UUID? = nil   // case (a): re-point this alias to another canonical
+        var promoteAlias = false           // case (b): promote this occurrence to its own canonical
 
         if let occ = occurrence {
             let canonicalID = occ.aliasOf ?? occ.id
@@ -88,10 +108,22 @@ public struct CanonicalSourceIntakeRepository: Sendable {
                 kind = .newVersion; logical = canonicalID; occurrenceFileID = occ.id
                 sourceVersionID = UUID(); priorVersionID = current.id
             } else {
-                // Alias URL whose bytes changed — resolve by the NEW hash (rare edge).
-                let resolved = try resolveByHash(db, captured: captured, canonicalURL: canonicalURL, now: now)
-                kind = resolved.kind; logical = resolved.logical; occurrenceFileID = occ.id
-                sourceVersionID = resolved.sourceVersionID; reuseVersion = resolved.reuseVersion
+                // Alias URL whose bytes changed — resolve the alias transition WITHOUT ever
+                // creating a second file row for this URL (USF-001.2 §6).
+                occurrenceFileID = occ.id
+                if let target = try canonicalFileByHash(db, hash: captured.contentHash, excludingURL: canonicalURL),
+                   let targetCurrent = try currentVersion(db, logicalSourceID: target.id),
+                   targetCurrent.contentHash == captured.contentHash {
+                    // (a) The new bytes match ANOTHER canonical source → re-point this alias at it
+                    //     and refresh the occurrence's stored bytes; reuse the target's version.
+                    kind = .aliased; logical = target.id; aliasRetargetTo = target.id
+                    sourceVersionID = targetCurrent.id; reuseVersion = targetCurrent
+                } else {
+                    // (b) Entirely new bytes → promote this occurrence to its own canonical
+                    //     logical source (alias_of := NULL) and create its first version.
+                    kind = .newLogicalSource; logical = occ.id; promoteAlias = true
+                    sourceVersionID = UUID()
+                }
             }
         } else {
             let resolved = try resolveByHash(db, captured: captured, canonicalURL: canonicalURL, now: now)
@@ -99,12 +131,14 @@ public struct CanonicalSourceIntakeRepository: Sendable {
             sourceVersionID = resolved.sourceVersionID; reuseVersion = resolved.reuseVersion
         }
 
-        // Preservation for new outcomes; carried from the reused version otherwise.
+        // Preservation for new outcomes; carried from the reused version otherwise. USF-001.2 gap 4 —
+        // managedCopyStored is derived from an ACTUAL present vault address, never from the absence
+        // of a failure flag; no address ⇒ managedCopyFailed.
         let preservation: SourcePreservationStatus
         switch kind {
         case .newLogicalSource, .newVersion:
             preservation = request.custodyMode == .managed
-                ? (managedFailed ? .managedCopyFailed : .managedCopyStored)
+                ? (vaultAddress != nil ? .managedCopyStored : .managedCopyFailed)
                 : .referenceRecorded
         case .unchanged, .moved, .aliased:
             preservation = reuseVersion?.preservation ?? .referenceRecorded
@@ -114,7 +148,15 @@ public struct CanonicalSourceIntakeRepository: Sendable {
         // Writes.
         switch kind {
         case .newLogicalSource:
-            try insertFile(db, id: logical, url: canonicalURL, type: sourceTypeRaw, captured: captured, now: now, aliasOf: nil)
+            if promoteAlias {
+                // Promote the existing alias occurrence in place — no second row for this URL.
+                try db.exec("""
+                    UPDATE files SET alias_of = NULL, content_hash = ?, size_bytes = ?, modified_at = ?, source_type = ?, ingested_at = ?, availability = 'available' WHERE id = ?;
+                    """, [.text(captured.contentHash), .integer(captured.sizeBytes),
+                          captured.modifiedAt.map(SQLValue.date) ?? .real(0), .text(sourceTypeRaw), .date(now), .uuid(logical)])
+            } else {
+                try insertFile(db, id: logical, url: canonicalURL, type: sourceTypeRaw, captured: captured, now: now, aliasOf: nil)
+            }
             try insertVersion(db, id: sourceVersionID, logical: logical, captured: captured, now: now,
                               supersedes: nil, custody: request.custodyMode, preservation: preservation, vault: effectiveVault, url: canonicalURL)
         case .newVersion:
@@ -134,7 +176,14 @@ public struct CanonicalSourceIntakeRepository: Sendable {
         case .moved:
             try db.exec("UPDATE files SET url = ?, availability = 'available' WHERE id = ?;", [.text(canonicalURL), .uuid(logical)])
         case .aliased:
-            if try fileRow(db, url: canonicalURL) == nil {
+            if let retarget = aliasRetargetTo {
+                // Re-point an existing alias URL to a different canonical + refresh its stored
+                // bytes (the occurrence row already exists — never insert a second row).
+                try db.exec("""
+                    UPDATE files SET alias_of = ?, content_hash = ?, size_bytes = ?, modified_at = ?, source_type = ?, availability = 'available' WHERE id = ?;
+                    """, [.uuid(retarget), .text(captured.contentHash), .integer(captured.sizeBytes),
+                          captured.modifiedAt.map(SQLValue.date) ?? .real(0), .text(sourceTypeRaw), .uuid(occurrenceFileID)])
+            } else if try fileRow(db, url: canonicalURL) == nil {
                 try insertFile(db, id: occurrenceFileID, url: canonicalURL, type: sourceTypeRaw, captured: captured, now: now, aliasOf: logical)
             }
         }
