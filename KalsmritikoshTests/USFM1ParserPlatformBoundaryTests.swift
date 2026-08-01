@@ -32,12 +32,22 @@ struct USFM1ParserPlatformBoundaryTests {
     private func coordinator() throws -> String {
         try read("Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift")
     }
+    /// Strip comments so a guard proves the absence of a CALL, not a documentation mention. Drops
+    /// full-line `//` comments and any trailing `//…` on a code line (the sources use no `://` URLs).
+    private func codeOnly(_ src: String) -> String {
+        src.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("//") || trimmed.hasPrefix("*") || trimmed.hasPrefix("/*") { return "" }
+            if let r = line.range(of: "//") { return String(line[line.startIndex..<r.lowerBound]) }
+            return String(line)
+        }.joined(separator: "\n")
+    }
 
     // MARK: - One routing authority
 
     @Test("IngestCoordinator no longer consults the old LoaderRegistry / StructuralParserRegistry")
     func coordinatorDoesNotConsultOldRegistries() throws {
-        let src = try coordinator()
+        let src = codeOnly(try coordinator())   // documentation mentions are allowed; CALLS are not
         #expect(!src.contains("LoaderRegistry"))
         #expect(!src.contains("StructuralParserRegistry"))
         #expect(!src.contains("structuralRegistry"))
@@ -47,7 +57,7 @@ struct USFM1ParserPlatformBoundaryTests {
 
     @Test("IngestCoordinator dispatches through the universal executor + registry only")
     func coordinatorRoutesThroughUniversalExecutor() throws {
-        let src = try coordinator()
+        let src = codeOnly(try coordinator())
         #expect(src.contains("universalExecutor"))
         #expect(src.contains("universalExecutor.execute"))
         #expect(src.contains("registry.resolve"))
@@ -55,7 +65,7 @@ struct USFM1ParserPlatformBoundaryTests {
 
     @Test("IngestCoordinator does not run loaders directly — loader/structural execution lives in the adapter")
     func coordinatorDoesNotRunLoadersDirectly() throws {
-        let src = try coordinator()
+        let src = codeOnly(try coordinator())
         #expect(!src.contains("loader.ingestMany"))
         #expect(!src.contains("loader.ingest("))
         #expect(!src.contains("structural.parse("))

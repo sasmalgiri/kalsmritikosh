@@ -129,4 +129,16 @@ struct UniversalParserRegistryTests {
             _ = try UniversalParserRegistry(plugins: [bad], unknownFallback: self.fallback())
         }
     }
+
+    @Test("The capability manifest derives its coverage from the ONE registry")
+    func manifestDerivesFromRegistry() throws {
+        let registry = try standard()
+        let entries = ParserCapabilityManifest.generate(registry: registry)
+        // One entry per known type, each tied to its owning plugin's declared execution mode.
+        #expect(entries.contains { $0.sourceType == "txt" && $0.coverage == .full && $0.pluginID == "format.txt" })
+        #expect(entries.contains { $0.sourceType == "pdf" && $0.coverage == .partial })            // OCR-dependent
+        #expect(entries.contains { $0.sourceType == "mp3" && $0.coverage == .deferred })
+        #expect(entries.contains { $0.sourceType == "zip" && $0.coverage == .preservedOnly })       // container mode
+        #expect(!ParserCapabilityManifest.renderMarkdown(registry: registry).isEmpty)
+    }
 }
