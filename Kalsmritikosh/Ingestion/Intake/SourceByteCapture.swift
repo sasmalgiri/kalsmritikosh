@@ -107,8 +107,9 @@ public enum SourceByteCapture {
 
     // MARK: - Type detection (recorded separately; never proof a parser ran)
 
-    /// USF-001.1 — the ONE authoritative type detector. Order (spec §5):
-    /// canonical path/filename pattern → magic bytes → declared extension → unknown.
+    /// USF-001.1 + USF-M2 — the ONE authoritative type detector. Order (spec §5, USF-M2 §1):
+    /// canonical path/filename pattern → specific unambiguous magic → compound-container
+    /// disambiguation → declared extension → unknown.
     /// A canonical pattern (e.g. chat.db, browser History) wins over magic bytes so a
     /// SQLite-backed iMessage/browser source is never flattened to generic `.sqlite`.
     private static func detectType(url: URL, head: Data)
@@ -120,6 +121,13 @@ public enum SourceByteCapture {
         }
         // 2. magic bytes.
         if let magic = SourceType.sniffMagicBytes(head) {
+            // 2a. USF-M2 compound-container disambiguation: DOCX/XLSX/PPTX/ODT/ODS/EPUB are ZIPs, so
+            // ZIP magic + one of those extensions selects the logical subtype. The basis stays
+            // .magicBytes (the ZIP signature is what led here); the extension is a subtype selector,
+            // NOT proof the package parses. Everything else keeps the unambiguous magic result.
+            if magic == .zip {
+                return (SourceType.zipSubtype(forDeclaredExtension: declaredExtension), .magicBytes, declaredExtension)
+            }
             return (magic, .magicBytes, declaredExtension)
         }
         // 3. declared extension.
