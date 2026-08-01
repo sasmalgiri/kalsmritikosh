@@ -40,6 +40,9 @@ public actor IngestCoordinator {
     /// USF-M1 — the ONE production routing authority. Exactly one plugin owns each SourceType; the
     /// coordinator no longer consults LoaderRegistry or StructuralParserRegistry independently.
     private let universalExecutor: UniversalParserExecutor
+    /// USF-M2 — safe container expansion + coverage. Nil in lightweight rigs (members still ingest,
+    /// but no container manifest is recorded); wired in production so coverage is durable.
+    private let containerCoordinator: ContainerProcessingCoordinator?
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -190,9 +193,11 @@ public actor IngestCoordinator {
         priorityGate: QueryPriorityGate? = nil,
         claimProjection: ClaimProjectionBackfill? = nil,
         readiness: SourceReadinessRepository? = nil,
+        containerInspection: ContainerInspectionRepository? = nil,
         intakeCoordinator: UniversalSourceIntakeCoordinator
     ) {
         self.intakeCoordinator = intakeCoordinator
+        self.containerCoordinator = ContainerProcessingCoordinator(repository: containerInspection)
         self.readiness = readiness
         self.evidenceStore = evidenceStore
         self.assertions = assertions
@@ -365,7 +370,7 @@ public actor IngestCoordinator {
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
     /// archive→member) so intake records the exact relation before the child is parsed.
-    func runIngest(fileAt url: URL, parentVersion: SourceParentReference?) async throws -> Result {
+    func runIngest(fileAt url: URL, parentVersion: SourceParentReference?, memberByteURL: URL? = nil) async throws -> Result {
         // A2 / A5.3 — the structural layer is parsed ONCE inside ingestCore
         // (past the skip/alias/move early returns), so the same ParsedDocument
         // feeds event extraction AND is persisted with consistent block IDs.
@@ -378,7 +383,7 @@ public actor IngestCoordinator {
         // v54 resume — durable in-progress marker (both ids null until intake succeeds).
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
-            let result = try await ingestCore(fileAt: url, parentVersion: parentVersion)
+            let result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL)
             // The ONE version-linked terminal attempt for this url.
             await ingestAttempts?.record(
                 url: url,
@@ -669,13 +674,22 @@ public actor IngestCoordinator {
     /// a loader/parser failure keeps the custody record (retriable); a parsed document ATTACHES
     /// to the pre-created source version. The terminal attempt is recorded ONCE by runIngest —
     /// this method only decides the processing status it returns.
-    private func ingestCore(fileAt url: URL, parentVersion: SourceParentReference? = nil) async throws -> Result {
+    private func ingestCore(fileAt url: URL, parentVersion: SourceParentReference? = nil, memberByteURL: URL? = nil) async throws -> Result {
         await pipelineMetrics?.bump(.discovered)
 
         // --- Custody FIRST (before any loader/parser). A failed intake throws; runIngest's
         //     catch records the single failed attempt (with null ids, pre-intake). ---
-        let custodyMode: SourceCustodyMode = FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced
-        let handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
+        // USF-M2 — an archive member ingests with its BYTES at `memberByteURL` (a temp extraction) but
+        // its durable IDENTITY as `url` (a stable kalsmritikosh-container:// origin), always MANAGED so
+        // the bytes survive temp removal. The temp path never becomes durable identity.
+        let isMember = memberByteURL != nil
+        let handle: SourceIntakeHandle
+        if let byteURL = memberByteURL {
+            handle = try await intakeCoordinator.admit(byteURL: byteURL, originIdentity: url, custodyMode: .managed, parent: parentVersion, now: Date())
+        } else {
+            let custodyMode: SourceCustodyMode = FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced
+            handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
+        }
         // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot
         // (its bytes are exactly those that produced the intake hash), never the mutable original.
         // We own the snapshot's lifetime: remove its containing directory before ANY return.
@@ -684,7 +698,7 @@ public actor IngestCoordinator {
         defer { if let snapshotDir { try? FileManager.default.removeItem(at: snapshotDir) } }
         // USF-001.1 §5 — the ONE detected type comes from intake; no second detection pass.
         let type = handle.detectedType
-        let modified = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? Date()
+        let modified = ((try? FileManager.default.attributesOfItem(atPath: (memberByteURL ?? url).path))?[.modificationDate] as? Date) ?? Date()
         let fileRecord = FileRecord(
             id: handle.occurrenceFileID, url: url, sourceType: handle.detectedType,
             sizeBytes: handle.sizeBytes, modifiedAt: modified, ingestedAt: Date(),
@@ -722,17 +736,6 @@ public actor IngestCoordinator {
             return skipResult(.failed, stage: "router", detail: "no plugin owns \(type.rawValue)")
         }
 
-        var expandedMemberIDs: [UUID] = []
-        if plugin.executionMode == .container, let (root, files) = try? ArchiveLoader.expandZIP(at: processURL) {
-            defer { try? FileManager.default.removeItem(at: root) }
-            let memberParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .archiveMember)
-            for entry in files where SourceType.detect(from: entry) != .zip {
-                if let member = try? await runIngest(fileAt: entry, parentVersion: memberParent) {
-                    expandedMemberIDs.append(member.fileRecord.id)
-                }
-            }
-        }
-
         let request = UniversalParserRequest(
             originalURL: url, processingSnapshotURL: processURL, logicalSourceID: handle.logicalSourceID,
             sourceVersionID: handle.sourceVersionID, sourceType: type, contentHash: handle.contentHash, sizeBytes: handle.sizeBytes)
@@ -753,9 +756,25 @@ public actor IngestCoordinator {
         let perFileKOs = result.knowledgeObjects.map { Self.rebindingSourceFile($0, to: url) }
         let cleaned = ContentDecoder().decode(cleaner.clean(perFileKOs.first ?? KnowledgeObject(sourceFile: url, sourceType: type, content: "")))
         let docClass = classifier.classify(cleaned)
-        for memberID in expandedMemberIDs {
-            await sourceRelations?.record(parent: fileRecord.id, child: memberID, relation: .archiveMember)
+
+        // USF-M2 — a container (zip) hands its members off to SAFE, bounded, VISIBLE expansion. Each
+        // admitted member is fully ingested through the SAME pipeline (managed custody + universal
+        // parser), the archiveMember relation is recorded atomically by intake, and the container
+        // manifest + every member disposition are persisted. Nested archives share ONE root budget /
+        // depth / cycle limit. RAR/7z stay honest-unsupported. Members never re-enter this branch.
+        if !isMember, plugin.executionMode == .container, let containerCoordinator {
+            let ctx = ContainerTraversalContext.root(sourceVersionID: handle.sourceVersionID, containerHash: handle.contentHash)
+            await containerCoordinator.expand(
+                containerVersionID: handle.sourceVersionID, containerType: type, byteURL: processURL,
+                context: ctx, now: Date()
+            ) { [weak self] byteURL, origin, parentRef in
+                guard let self else { return ContainerProcessingCoordinator.MemberIngestOutcome(childSourceVersionID: nil, contentHash: nil, detectedType: nil) }
+                let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
+                return ContainerProcessingCoordinator.MemberIngestOutcome(
+                    childSourceVersionID: r?.sourceVersionID, contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
+            }
         }
+
         try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .acquired, detail: url.lastPathComponent))
         try? await custody?.record(CustodyEvent(fileID: fileRecord.id, kind: .hashComputed, detail: url.lastPathComponent, hash: handle.contentHash))
         guard !perFileKOs.isEmpty else {

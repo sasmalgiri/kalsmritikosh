@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 86
+    public static let latestVersion = 87
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -292,8 +292,21 @@ public enum SchemaMigrations {
             "source_readiness_events": ["id", "source_version_id", "sequence", "aggregate_revision",
                                         "dimension", "action", "from_state", "to_state", "occurred_at"],
             // v86 — USF-002.1 exact-version chunk ownership (NEW column on chunks, so the column
-            // probe distinguishes v86 from v85). NEWEST marker.
-            "chunks": ["id", "object_id", "ordinal", "text", "evidence_block_id", "source_version_id"]
+            // probe distinguishes v86 from v85).
+            "chunks": ["id", "object_id", "ordinal", "text", "evidence_block_id", "source_version_id"],
+            // v87 — USF-M2 container coverage projection (NEW tables, so the column probe
+            // distinguishes v87 from v86). These are the NEWEST markers — every future migration
+            // MUST add its newest physical marker here.
+            "container_manifests": ["source_version_id", "revision", "container_type", "inspector_id",
+                                     "inspector_version", "policy_version", "status", "total_entries",
+                                     "regular_file_entries", "admitted_members", "blocked_members",
+                                     "unsupported_members", "failed_members", "declared_uncompressed_bytes",
+                                     "created_at", "updated_at"],
+            "container_members": ["id", "parent_source_version_id", "ordinal", "member_path",
+                                   "normalized_member_path", "entry_kind", "compressed_size",
+                                   "uncompressed_size", "detected_type", "disposition",
+                                   "child_source_version_id", "content_hash", "detail",
+                                   "created_at", "updated_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -415,7 +428,8 @@ public enum SchemaMigrations {
         (83, v83),
         (84, v84),
         (85, v85),
-        (86, v86)
+        (86, v86),
+        (87, v87)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4497,5 +4511,94 @@ public enum SchemaMigrations {
       AND EXISTS (
         SELECT 1 FROM evidence_blocks eb WHERE eb.id = chunks.evidence_block_id AND eb.source_version_id IS NOT NULL
       );
+    """
+
+    // MARK: - v87 — USF-M2 container coverage projection (container_manifests + container_members)
+
+    private static let v87: String = """
+    -- USF-M2 (USF-006 + USF-007) — two PROCESSING-PROJECTION tables that record, for a container
+    -- SourceVersion (zip/rar/7z), exactly what the archive claims to contain and how each member was
+    -- disposed. They are NOT source/evidence authorities: source_versions stays the one version
+    -- authority, source_version_relations stays the parent→child provenance authority, and
+    -- source_readiness_* stays the readiness authority. A discovered container member is NOT a source;
+    -- only an ADMITTED member becomes a canonical child SourceVersion. Blocked / encrypted /
+    -- unsupported / failed members remain VISIBLE here rather than silently dropped.
+
+    -- One current inspection manifest per exact container SourceVersion.
+    CREATE TABLE container_manifests (
+        source_version_id            TEXT PRIMARY KEY NOT NULL,
+        revision                     INTEGER NOT NULL,
+        container_type               TEXT NOT NULL,
+        inspector_id                 TEXT NOT NULL,
+        inspector_version            TEXT NOT NULL,
+        policy_version               TEXT NOT NULL,
+        status                       TEXT NOT NULL,
+        total_entries                INTEGER NOT NULL,
+        regular_file_entries         INTEGER NOT NULL,
+        admitted_members             INTEGER NOT NULL,
+        blocked_members              INTEGER NOT NULL,
+        unsupported_members          INTEGER NOT NULL,
+        failed_members               INTEGER NOT NULL,
+        declared_uncompressed_bytes  INTEGER NOT NULL,
+        created_at                   REAL NOT NULL,
+        updated_at                   REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(revision >= 1),
+        CHECK(length(trim(inspector_id)) > 0),
+        CHECK(length(trim(inspector_version)) > 0),
+        CHECK(length(trim(policy_version)) > 0),
+        CHECK(status IN ('complete','partial','blocked','unsupported','failed')),
+        CHECK(total_entries >= 0),
+        CHECK(regular_file_entries >= 0),
+        CHECK(admitted_members >= 0),
+        CHECK(blocked_members >= 0),
+        CHECK(unsupported_members >= 0),
+        CHECK(failed_members >= 0),
+        CHECK(declared_uncompressed_bytes >= 0),
+        -- disposition counts can never exceed the number of regular (non-directory) file entries.
+        CHECK(admitted_members + blocked_members + unsupported_members + failed_members <= regular_file_entries)
+    );
+    CREATE INDEX idx_container_manifests_status ON container_manifests(status);
+
+    -- Every significant member disposition, including members that never became sources. Ordinal is
+    -- the stable disambiguator (ZIP entries can share duplicate path names, so member_path is NOT
+    -- unique). An ADMITTED member must carry BOTH a child SourceVersion and its content hash, pinned
+    -- to the exact source_versions(id, content_hash) authority; a NON-admitted member must never
+    -- fabricate a child SourceVersion.
+    CREATE TABLE container_members (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        parent_source_version_id  TEXT NOT NULL,
+        ordinal                   INTEGER NOT NULL,
+        member_path               TEXT NOT NULL,
+        normalized_member_path    TEXT NOT NULL,
+        entry_kind                TEXT NOT NULL,
+        compressed_size           INTEGER NOT NULL DEFAULT 0,
+        uncompressed_size         INTEGER NOT NULL DEFAULT 0,
+        detected_type             TEXT,
+        disposition               TEXT NOT NULL,
+        child_source_version_id   TEXT,
+        content_hash              TEXT,
+        detail                    TEXT,
+        created_at                REAL NOT NULL,
+        updated_at                REAL NOT NULL,
+        FOREIGN KEY(parent_source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        -- Composite pin to the exact (id, content_hash) version authority. Default RESTRICT: an
+        -- admitted child version cannot be deleted while its coverage row references it (nulling the
+        -- pair would violate the admitted CHECK). Deleting the PARENT container cascades members away.
+        FOREIGN KEY(child_source_version_id, content_hash) REFERENCES source_versions(id, content_hash),
+        UNIQUE(parent_source_version_id, ordinal),
+        CHECK(ordinal >= 0),
+        CHECK(entry_kind IN ('file','directory')),
+        CHECK(compressed_size >= 0),
+        CHECK(uncompressed_size >= 0),
+        CHECK(disposition IN ('admitted','directory','blockedUnsafePath','blockedDepth',
+              'blockedEntryLimit','blockedSizeLimit','blockedCompressionRatio','blockedRootBudget',
+              'blockedCycle','encrypted','unsupported','failedExtraction')),
+        -- Admitted ⇒ child + hash present; non-admitted ⇒ never a fabricated child.
+        CHECK((disposition = 'admitted' AND child_source_version_id IS NOT NULL AND content_hash IS NOT NULL)
+           OR (disposition <> 'admitted' AND child_source_version_id IS NULL))
+    );
+    CREATE INDEX idx_container_members_parent ON container_members(parent_source_version_id);
+    CREATE INDEX idx_container_members_child ON container_members(child_source_version_id);
     """
 }

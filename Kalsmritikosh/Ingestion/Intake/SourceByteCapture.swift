@@ -23,7 +23,7 @@ public enum SourceByteCapture {
     /// Stream `url`'s bytes into a SHA-256 and return the captured source metadata.
     /// Throws when the input is not a regular file, cannot be read, or changes during capture.
     public static func capture(_ url: URL) throws -> CapturedSource {
-        try streamCapture(url, snapshotHandle: nil, snapshotURL: nil).captured
+        try streamCapture(url, identityURL: url, snapshotHandle: nil, snapshotURL: nil).captured
     }
 
     /// USF-001.2 — capture the exact bytes AND, in the SAME verified streaming pass, write an
@@ -35,14 +35,23 @@ public enum SourceByteCapture {
     /// under an intake hash it no longer matches. Returns the captured metadata and the snapshot
     /// URL; the caller owns the snapshot's lifetime and removes it after processing.
     public static func captureToSnapshot(_ url: URL, snapshotDirectory: URL) throws -> (captured: CapturedSource, snapshotURL: URL) {
+        try captureToSnapshot(byteURL: url, identityURL: url, snapshotDirectory: snapshotDirectory)
+    }
+
+    /// USF-M2 §10 — capture bytes from `byteURL` (e.g. a temporary extracted archive member) while
+    /// recording IDENTITY from `identityURL` (a stable virtual origin like
+    /// `kalsmritikosh-container://<parent>/<ordinal>/<name>`). The bytes/hash/snapshot come from
+    /// `byteURL`; the filename, declared extension, path-pattern/extension detection, and MIME come
+    /// from `identityURL`, so a temporary extraction path never becomes durable custody identity.
+    public static func captureToSnapshot(byteURL: URL, identityURL: URL, snapshotDirectory: URL) throws -> (captured: CapturedSource, snapshotURL: URL) {
         try FileManager.default.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
-        let snapshotURL = snapshotDirectory.appendingPathComponent(url.lastPathComponent, isDirectory: false)
+        let snapshotURL = snapshotDirectory.appendingPathComponent(identityURL.lastPathComponent, isDirectory: false)
         FileManager.default.createFile(atPath: snapshotURL.path, contents: nil)
         guard let out = try? FileHandle(forWritingTo: snapshotURL) else {
-            throw SourceIntakeError.snapshotCreationFailed(url)
+            throw SourceIntakeError.snapshotCreationFailed(byteURL)
         }
         do {
-            let captured = try streamCapture(url, snapshotHandle: out, snapshotURL: snapshotURL).captured
+            let captured = try streamCapture(byteURL, identityURL: identityURL, snapshotHandle: out, snapshotURL: snapshotURL).captured
             try? out.close()
             return (captured, snapshotURL)
         } catch {
@@ -52,9 +61,10 @@ public enum SourceByteCapture {
         }
     }
 
-    /// Shared bounded streaming pass. When `snapshotHandle` is provided, every hashed chunk is
+    /// Shared bounded streaming pass. Bytes/hash come from `url`; type detection + filename come from
+    /// `identityURL` (usually the same). When `snapshotHandle` is provided, every hashed chunk is
     /// ALSO written to it, so the snapshot bytes and the hashed bytes are identical by construction.
-    private static func streamCapture(_ url: URL, snapshotHandle: FileHandle?, snapshotURL: URL?) throws
+    private static func streamCapture(_ url: URL, identityURL: URL, snapshotHandle: FileHandle?, snapshotURL: URL?) throws
     -> (captured: CapturedSource, snapshotURL: URL?) {
         // Must be a regular file.
         let preValues = try resourceSnapshot(url)
@@ -93,22 +103,23 @@ public enum SourceByteCapture {
             throw SourceIntakeError.sourceChangedDuringCapture(url)
         }
 
-        let (detectedType, basis, declaredExtension) = detectType(url: url, head: head)
+        let (detectedType, basis, declaredExtension) = detectType(url: identityURL, head: head)
         return (CapturedSource(
             contentHash: contentHash,
             sizeBytes: size,
             modifiedAt: preValues.modifiedAt,
-            filename: url.lastPathComponent,
+            filename: identityURL.lastPathComponent,
             declaredExtension: declaredExtension,
             detectedType: detectedType,
             detectionBasis: basis,
-            mimeType: mimeType(for: url)), snapshotURL)
+            mimeType: mimeType(for: identityURL)), snapshotURL)
     }
 
     // MARK: - Type detection (recorded separately; never proof a parser ran)
 
-    /// USF-001.1 — the ONE authoritative type detector. Order (spec §5):
-    /// canonical path/filename pattern → magic bytes → declared extension → unknown.
+    /// USF-001.1 + USF-M2 — the ONE authoritative type detector. Order (spec §5, USF-M2 §1):
+    /// canonical path/filename pattern → specific unambiguous magic → compound-container
+    /// disambiguation → declared extension → unknown.
     /// A canonical pattern (e.g. chat.db, browser History) wins over magic bytes so a
     /// SQLite-backed iMessage/browser source is never flattened to generic `.sqlite`.
     private static func detectType(url: URL, head: Data)
@@ -120,6 +131,13 @@ public enum SourceByteCapture {
         }
         // 2. magic bytes.
         if let magic = SourceType.sniffMagicBytes(head) {
+            // 2a. USF-M2 compound-container disambiguation: DOCX/XLSX/PPTX/ODT/ODS/EPUB are ZIPs, so
+            // ZIP magic + one of those extensions selects the logical subtype. The basis stays
+            // .magicBytes (the ZIP signature is what led here); the extension is a subtype selector,
+            // NOT proof the package parses. Everything else keeps the unambiguous magic result.
+            if magic == .zip {
+                return (SourceType.zipSubtype(forDeclaredExtension: declaredExtension), .magicBytes, declaredExtension)
+            }
             return (magic, .magicBytes, declaredExtension)
         }
         // 3. declared extension.

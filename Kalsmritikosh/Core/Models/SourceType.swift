@@ -143,12 +143,32 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x49, 0x49, 0x2A, 0x00]) || has([0x4D, 0x4D, 0x00, 0x2A]) { return .tiff }
         if has([0x52, 0x49, 0x46, 0x46]), b.count >= 12,
            Array(b[8..<12]) == [0x57, 0x45, 0x42, 0x50] { return .webp }        // RIFF....WEBP
-        // ZIP container (also docx/xlsx/pptx/epub) — route to the archive path,
-        // which expands members and types each one individually.
+        // USF-M2 — unambiguous archive signatures precede the ZIP check. An extensionless RAR/7z is
+        // classified correctly even though USF-M2 cannot yet DECODE its contents (honest unsupported).
+        if has([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]) { return .rar }           // "Rar!\x1A\x07" (RAR4 + RAR5)
+        if has([0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) { return .sevenZip }      // "7z\xBC\xAF\x27\x1C"
+        // ZIP container (also docx/xlsx/pptx/odt/ods/epub). USF-M2 disambiguates the compound-container
+        // subtype at intake via `zipSubtype(forDeclaredExtension:)` (magic stays the detection basis).
         if has([0x50, 0x4B, 0x03, 0x04]) { return .zip }
         // "SQLite format 3\0" — a generic SQLite database (PAR-009).
         if has([0x53, 0x51, 0x4C, 0x69, 0x74, 0x65]) { return .sqlite }   // "SQLite"
         return nil
+    }
+
+    /// USF-M2 §1 — compound-container disambiguation. A DOCX/XLSX/PPTX/ODT/ODS/EPUB is itself a ZIP,
+    /// so `sniffMagicBytes` reports `.zip` for all of them. The declared extension selects the logical
+    /// container SUBTYPE (it is NOT proof the package will parse — the parser still validates it).
+    /// A `.zip`/unknown extension on ZIP magic stays `.zip`. Detection basis remains `.magicBytes`.
+    public nonisolated static func zipSubtype(forDeclaredExtension ext: String) -> SourceType {
+        switch ext.lowercased() {
+        case "docx": return .docx
+        case "xlsx": return .xlsx
+        case "pptx": return .pptx
+        case "odt":  return .odt
+        case "ods":  return .ods
+        case "epub": return .epub
+        default:     return .zip
+        }
     }
 
     public nonisolated var category: Category {
