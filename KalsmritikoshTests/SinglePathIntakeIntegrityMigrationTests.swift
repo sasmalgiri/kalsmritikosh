@@ -161,19 +161,21 @@ struct SinglePathIntakeIntegrityMigrationTests {
 
     // MARK: - self-heal / repeat / fault
 
-    @Test("The self-heal sentinel recognises the v83 markers")
-    func selfHealRecognizesV83() async throws {
+    @Test("A genuine v83 database migrates forward to the latest schema without destructive replay")
+    func v83MigratesToLatest() async throws {
+        // A real v83 database carries userVersion 83; migrate() runs only the pending
+        // migration(s) after it (v84+), never re-applying an already-present version.
         let db = try await MigrationFixtureBuilder.database(atVersion: 83)
-        try await db.setUserVersion(81)
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 83)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
+        #expect(try await MigrationFaultHarness.integrityOK(db))
     }
 
     @Test("A genuine v82 schema upgrades to v83, applying the SHA rule")
     func v82GenuinelyUpgrades() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 82)
         #expect(try await versionSQL(db).contains("length(content_hash) = 64") == false)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 83)
         #expect(try await db.currentUserVersion() == 83)
         #expect(try await versionSQL(db).contains("length(content_hash) = 64"))
     }
@@ -181,7 +183,7 @@ struct SinglePathIntakeIntegrityMigrationTests {
     @Test("Re-running migrate over a v83 database is a safe no-op")
     func v83Repeatable() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 83)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 83)
         #expect(try await db.currentUserVersion() == 83)
         #expect(try await MigrationFaultHarness.integrityOK(db))
     }
@@ -202,7 +204,7 @@ struct SinglePathIntakeIntegrityMigrationTests {
     @Test("Milestone migration from an early version reaches v83 with a clean FK graph")
     func milestoneReachesV83() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)
-        try await SchemaMigrations.migrate(db)
+        try await SchemaMigrations.migrate(db, through: 83)
         #expect(try await db.currentUserVersion() == 83)
         #expect(try await db.query("PRAGMA foreign_key_check;", []).isEmpty)
         #expect(try await MigrationFaultHarness.integrityOK(db))
