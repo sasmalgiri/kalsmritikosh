@@ -30,11 +30,23 @@ public struct UniversalSourceIntakeCoordinator: Sendable {
     /// lifetime and removes its containing directory after processing.
     public func admit(url: URL, custodyMode: SourceCustodyMode = .referenced,
                       parent: SourceParentReference? = nil, now: Date) async throws -> SourceIntakeHandle {
+        try await admit(byteURL: url, originIdentity: url, custodyMode: custodyMode, parent: parent, now: now)
+    }
+
+    /// USF-M2 §10/§11 — admit a source whose BYTES live at `byteURL` (e.g. a temporary extracted
+    /// archive member) but whose durable IDENTITY is `originIdentity` (a stable virtual origin like
+    /// `kalsmritikosh-container://<parent>/<ordinal>/<name>`). Detection + filename come from the
+    /// origin; the exact bytes/hash/snapshot come from `byteURL`. Archive members pass
+    /// `custodyMode: .managed` so their bytes survive after the temp extraction is removed — the temp
+    /// path never becomes durable identity.
+    public func admit(byteURL: URL, originIdentity: URL, custodyMode: SourceCustodyMode = .referenced,
+                      parent: SourceParentReference? = nil, now: Date) async throws -> SourceIntakeHandle {
         let snapshotDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("usf-intake-snapshot", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(url, snapshotDirectory: snapshotDir)
-        let request = SourceIntakeRequest(url: url, custodyMode: custodyMode, parent: parent, recordedAt: now)
+        let (captured, snapshotURL) = try SourceByteCapture.captureToSnapshot(
+            byteURL: byteURL, identityURL: originIdentity, snapshotDirectory: snapshotDir)
+        let request = SourceIntakeRequest(url: originIdentity, custodyMode: custodyMode, parent: parent, recordedAt: now)
         do {
             let handle = try await repository.intake(request: request, captured: captured, snapshotURL: snapshotURL)
             return handle.withProcessingSnapshot(snapshotURL)
