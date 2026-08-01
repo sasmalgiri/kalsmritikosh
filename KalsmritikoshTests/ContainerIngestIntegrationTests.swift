@@ -151,6 +151,19 @@ struct ContainerIngestIntegrationTests {
         #expect(innerManifest?.admittedMembers == 1)
     }
 
+    @Test("A RAR file ingested through the full pipeline records an honest-unsupported manifest")
+    func rarEndToEnd() async throws {
+        let (c, _, repo, _) = try await makeRig()
+        var bytes = Data([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00]); bytes.append(Data(repeating: 0x11, count: 64))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("usfm2-rar-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("archive.rar"); try bytes.write(to: url)
+        let parent = try #require(try await c.ingest(fileAt: url).sourceVersionID)
+        let m = try await repo.manifest(sourceVersionID: parent)
+        #expect(m?.status == .unsupported)          // recognized, custody kept, contents not enumerated
+        #expect(m?.totalEntries == 0)               // unknown ≠ empty
+    }
+
     // MARK: - Bounded limits (coordinator-level, custom policy)
 
     /// A stub member-ingest that seeds a real child SourceVersion (so the admitted composite FK holds)
