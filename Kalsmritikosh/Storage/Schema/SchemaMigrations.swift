@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 84
+    public static let latestVersion = 85
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -280,7 +280,17 @@ public enum SchemaMigrations {
             "source_version_relations": ["id", "parent_source_version_id", "child_source_version_id",
                                           "relation", "ordinal", "created_at"],
             "ingest_file_attempts": ["id", "url", "content_hash", "status", "stage", "detail",
-                                      "attempted_at", "logical_source_id", "source_version_id"]
+                                      "attempted_at", "logical_source_id", "source_version_id"],
+            // v85 — USF-002 independent source readiness dimensions (NEW tables, so the column
+            // probe distinguishes v85 from v84). These are the NEWEST markers — every future
+            // migration MUST add its newest physical marker here.
+            "source_readiness_aggregates": ["source_version_id", "revision", "event_sequence",
+                                             "created_at", "updated_at"],
+            "source_readiness_dimensions": ["source_version_id", "dimension", "state", "applicability",
+                                            "condition", "completed_units", "total_units", "producer_id",
+                                            "producer_version", "basis_kind", "basis_identifier", "revision"],
+            "source_readiness_events": ["id", "source_version_id", "sequence", "aggregate_revision",
+                                        "dimension", "action", "from_state", "to_state", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -400,7 +410,8 @@ public enum SchemaMigrations {
         (81, v81),
         (82, v82),
         (83, v83),
-        (84, v84)
+        (84, v84),
+        (85, v85)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4254,5 +4265,207 @@ public enum SchemaMigrations {
     CREATE UNIQUE INDEX idx_source_versions_one_current ON source_versions(logical_source_id) WHERE is_current = 1;
     CREATE UNIQUE INDEX idx_source_versions_id_logical ON source_versions(id, logical_source_id);
     CREATE UNIQUE INDEX idx_source_versions_id_hash ON source_versions(id, content_hash);
+    """
+
+    // MARK: - v85 — USF-002 independent source readiness dimensions
+
+    private static let v85: String = """
+    -- USF-002 persists the readiness of every EXACT source version across independent
+    -- dimensions — Preserved ≠ Searchable ≠ Evidence-ready ≠ Analytically ready. One aggregate
+    -- and exactly ten dimension rows per source version; an append-only event ledger records
+    -- every transition. Readiness belongs to the source VERSION (a changed file gets a fresh
+    -- aggregate); it is NOT a second source authority and never confirms a Claim. The overall
+    -- completion state is DERIVED (SourceReadinessEvaluator), never stored or caller-declared.
+
+    -- (1) Aggregate: one row per source version. revision + event_sequence back the optimistic
+    --     CAS and the contiguous event ledger. NO completion-state column (it is derived).
+    CREATE TABLE source_readiness_aggregates (
+        source_version_id  TEXT PRIMARY KEY NOT NULL,
+        revision           INTEGER NOT NULL DEFAULT 1,
+        event_sequence     INTEGER NOT NULL DEFAULT 0,
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(revision >= 1),
+        CHECK(event_sequence >= 0)
+    );
+
+    -- (2) Dimensions: exactly ten closed rows per source version. Applicability lets a native
+    --     text document report transcription as notApplicable (ready) without calling it failed.
+    CREATE TABLE source_readiness_dimensions (
+        source_version_id  TEXT NOT NULL,
+        dimension          TEXT NOT NULL,
+        state              TEXT NOT NULL,
+        applicability      TEXT NOT NULL,
+        condition          TEXT,
+        completed_units    INTEGER,
+        total_units        INTEGER,
+        producer_id        TEXT NOT NULL,
+        producer_version   TEXT NOT NULL,
+        basis_kind         TEXT,
+        basis_identifier   TEXT,
+        detail             TEXT,
+        revision           INTEGER NOT NULL DEFAULT 1,
+        updated_at         REAL NOT NULL,
+        PRIMARY KEY(source_version_id, dimension),
+        FOREIGN KEY(source_version_id) REFERENCES source_readiness_aggregates(source_version_id) ON DELETE CASCADE,
+        CHECK(dimension IN ('preservation','metadataExtraction','textExtraction','structuralExtraction',
+                            'ocr','transcription','indexing','basicQuestionAnswering','typedFieldExtraction','analyticalReadiness')),
+        CHECK(state IN ('notStarted','running','ready','partial','blocked','unsupported','failed')),
+        CHECK(applicability IN ('required','conditional','notApplicable')),
+        CHECK(condition IS NULL OR condition IN ('deferred','encrypted','corrupt','sourceUnavailable',
+                            'missingDependency','awaitingUserAction','policy','resourceLimit')),
+        -- blocked ⇔ a blocking condition is present; no other state may carry one.
+        CHECK((state = 'blocked') = (condition IS NOT NULL)),
+        CHECK(length(trim(producer_id)) > 0),
+        CHECK(length(trim(producer_version)) > 0),
+        CHECK(basis_kind IS NULL OR basis_kind IN ('sourceVersion','sourceDocument','documentProfile',
+                            'evidenceBlock','parserRun','ftsIndex','vectorIndex','custody')),
+        -- unit counts are both null or both non-negative, completed never exceeds total.
+        CHECK((completed_units IS NULL) = (total_units IS NULL)),
+        CHECK(completed_units IS NULL OR (completed_units >= 0 AND total_units >= 0)),
+        CHECK(completed_units IS NULL OR completed_units <= total_units),
+        -- a ready row with a positive total must have completed every unit.
+        CHECK(state <> 'ready' OR total_units IS NULL OR total_units = 0 OR completed_units = total_units),
+        -- notApplicable is expressed as ready, no condition, no units.
+        CHECK(applicability <> 'notApplicable'
+              OR (state = 'ready' AND condition IS NULL AND completed_units IS NULL AND total_units IS NULL)),
+        -- an unsupported dimension is a real limitation, never "not applicable".
+        CHECK(state <> 'unsupported' OR applicability <> 'notApplicable'),
+        CHECK(revision >= 1)
+    );
+    CREATE INDEX idx_readiness_dim_state ON source_readiness_dimensions(dimension, state);
+
+    -- (3) Append-only event ledger. One event per changed dimension; contiguous per source.
+    CREATE TABLE source_readiness_events (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        source_version_id  TEXT NOT NULL,
+        sequence           INTEGER NOT NULL,
+        aggregate_revision INTEGER NOT NULL,
+        dimension          TEXT NOT NULL,
+        action             TEXT NOT NULL,
+        from_state         TEXT,
+        to_state           TEXT NOT NULL,
+        applicability      TEXT NOT NULL,
+        condition          TEXT,
+        completed_units    INTEGER,
+        total_units        INTEGER,
+        producer_id        TEXT NOT NULL,
+        producer_version   TEXT NOT NULL,
+        basis_kind         TEXT,
+        basis_identifier   TEXT,
+        detail             TEXT,
+        occurred_at        REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_readiness_aggregates(source_version_id) ON DELETE CASCADE,
+        CHECK(action IN ('initialize','begin','satisfy','partiallySatisfy','block','markUnsupported','fail','invalidate','reconcile')),
+        CHECK(sequence >= 0),
+        CHECK(aggregate_revision >= 1),
+        UNIQUE(source_version_id, sequence),
+        UNIQUE(source_version_id, aggregate_revision, dimension)
+    );
+    CREATE INDEX idx_readiness_events_seq ON source_readiness_events(source_version_id, sequence);
+
+    -- ------------------------------------------------------------------------------------
+    -- Conservative backfill: every existing source version receives one aggregate + ten
+    -- dimension rows derived from CANONICAL evidence (never optimistic). Dimensions that
+    -- cannot be proved from the ledger (indexing, basic QA, typed fields, analysis) start at
+    -- notStarted; forward processing raises them through the repository.
+    -- ------------------------------------------------------------------------------------
+    INSERT INTO source_readiness_aggregates (source_version_id, revision, event_sequence, created_at, updated_at)
+        SELECT id, 1, 10, CAST(strftime('%s','now') AS REAL), CAST(strftime('%s','now') AS REAL) FROM source_versions;
+
+    INSERT INTO source_readiness_dimensions
+        (source_version_id, dimension, state, applicability, condition, completed_units, total_units,
+         producer_id, producer_version, basis_kind, basis_identifier, detail, revision, updated_at)
+    SELECT x.source_version_id, x.dimension, x.state, x.applicability, x.condition, x.completed_units, x.total_units,
+           'usf-002.backfill', '1', 'sourceVersion', x.source_version_id, NULL, 1, CAST(strftime('%s','now') AS REAL)
+    FROM (
+        -- preservation
+        SELECT sv.id AS source_version_id, 'preservation' AS dimension,
+               CASE WHEN sv.preservation_status IN ('referenceRecorded','managedCopyStored') THEN 'ready' ELSE 'partial' END AS state,
+               'required' AS applicability, NULL AS condition, NULL AS completed_units, NULL AS total_units
+          FROM source_versions sv
+        UNION ALL
+        -- metadataExtraction
+        SELECT sv.id, 'metadataExtraction',
+               CASE WHEN sv.document_id IS NOT NULL THEN 'ready' ELSE 'partial' END,
+               'required', NULL, NULL, NULL FROM source_versions sv
+        UNION ALL
+        -- textExtraction
+        SELECT sv.id, 'textExtraction',
+               CASE
+                 WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'blocked'
+                 WHEN sd.extraction_status = 'complete' THEN 'ready'
+                 WHEN sd.extraction_status = 'partial' THEN 'partial'
+                 WHEN sd.extraction_status = 'empty' THEN 'ready'
+                 WHEN sd.extraction_status = 'unsupported' THEN 'unsupported'
+                 WHEN sd.extraction_status IN ('encrypted','corrupt','deferred') THEN 'blocked'
+                 WHEN sd.extraction_status = 'failed' THEN 'failed'
+                 ELSE 'notStarted' END,
+               'required',
+               CASE
+                 WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'deferred'
+                 WHEN sd.extraction_status IN ('encrypted','corrupt','deferred') THEN sd.extraction_status
+                 ELSE NULL END,
+               CASE WHEN sd.extraction_status = 'empty' THEN 0 ELSE NULL END,
+               CASE WHEN sd.extraction_status = 'empty' THEN 0 ELSE NULL END
+          FROM source_versions sv LEFT JOIN source_documents sd ON sd.id = sv.document_id
+        UNION ALL
+        -- structuralExtraction
+        SELECT sv.id, 'structuralExtraction',
+               CASE
+                 WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'blocked'
+                 WHEN sd.extraction_status = 'complete' AND (SELECT COUNT(*) FROM evidence_blocks eb WHERE eb.source_version_id = sv.id) > 0 THEN 'ready'
+                 WHEN sd.extraction_status = 'complete' THEN 'partial'
+                 WHEN sd.extraction_status = 'partial' THEN 'partial'
+                 WHEN sd.extraction_status = 'unsupported' THEN 'unsupported'
+                 WHEN sd.extraction_status IN ('encrypted','corrupt','deferred') THEN 'blocked'
+                 WHEN sd.extraction_status = 'failed' THEN 'failed'
+                 ELSE 'notStarted' END,
+               'required',
+               CASE
+                 WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'deferred'
+                 WHEN sd.extraction_status IN ('encrypted','corrupt','deferred') THEN sd.extraction_status
+                 ELSE NULL END,
+               NULL, NULL
+          FROM source_versions sv LEFT JOIN source_documents sd ON sd.id = sv.document_id
+        UNION ALL
+        -- ocr (conditional for image/pdf, notApplicable otherwise)
+        SELECT sv.id, 'ocr',
+               CASE WHEN sv.detected_type IN ('png','jpg','heic','tiff','webp','pdf') THEN 'notStarted' ELSE 'ready' END,
+               CASE WHEN sv.detected_type IN ('png','jpg','heic','tiff','webp','pdf') THEN 'conditional' ELSE 'notApplicable' END,
+               NULL, NULL, NULL FROM source_versions sv
+        UNION ALL
+        -- transcription (required for media, notApplicable otherwise)
+        SELECT sv.id, 'transcription',
+               CASE WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'blocked' ELSE 'ready' END,
+               CASE WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'required' ELSE 'notApplicable' END,
+               CASE WHEN sv.detected_type IN ('mp3','wav','m4a','aac','aiff','caf','flac','threegp','mp4','mov') THEN 'deferred' ELSE NULL END,
+               NULL, NULL FROM source_versions sv
+        UNION ALL
+        SELECT sv.id, 'indexing', 'notStarted', 'required', NULL, NULL, NULL FROM source_versions sv
+        UNION ALL
+        SELECT sv.id, 'basicQuestionAnswering', 'notStarted', 'required', NULL, NULL, NULL FROM source_versions sv
+        UNION ALL
+        SELECT sv.id, 'typedFieldExtraction', 'notStarted', 'conditional', NULL, NULL, NULL FROM source_versions sv
+        UNION ALL
+        SELECT sv.id, 'analyticalReadiness', 'notStarted', 'required', NULL, NULL, NULL FROM source_versions sv
+    ) AS x;
+
+    -- One initialize event per backfilled dimension (sequence = the dimension's fixed ordinal).
+    INSERT INTO source_readiness_events
+        (id, source_version_id, sequence, aggregate_revision, dimension, action, from_state, to_state,
+         applicability, condition, completed_units, total_units, producer_id, producer_version,
+         basis_kind, basis_identifier, detail, occurred_at)
+    SELECT lower(hex(randomblob(16))), d.source_version_id,
+           CASE d.dimension
+               WHEN 'preservation' THEN 0 WHEN 'metadataExtraction' THEN 1 WHEN 'textExtraction' THEN 2
+               WHEN 'structuralExtraction' THEN 3 WHEN 'ocr' THEN 4 WHEN 'transcription' THEN 5
+               WHEN 'indexing' THEN 6 WHEN 'basicQuestionAnswering' THEN 7 WHEN 'typedFieldExtraction' THEN 8
+               WHEN 'analyticalReadiness' THEN 9 END,
+           1, d.dimension, 'initialize', NULL, d.state, d.applicability, d.condition,
+           d.completed_units, d.total_units, d.producer_id, d.producer_version,
+           d.basis_kind, d.basis_identifier, NULL, d.updated_at
+      FROM source_readiness_dimensions d;
     """
 }

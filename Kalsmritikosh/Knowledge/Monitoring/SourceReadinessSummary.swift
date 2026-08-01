@@ -21,6 +21,16 @@ public struct SourceReadinessSummary: Sendable, Hashable {
     public let deferred: Int
     public let needsAttention: Int      // encrypted + corrupt + failed
     public let byState: [String: Int]
+    // USF-002 durable dimensions — populated when built from SourceReadinessSnapshots (the
+    // authoritative source). Distinct, honest counts; NEVER collapsed to one percentage.
+    public let evidenceReady: Int
+    public let analyticallyReady: Int
+    public let encrypted: Int
+    public let corrupt: Int
+    public let unsupported: Int
+    public let failed: Int
+    public let byCompletionState: [String: Int]
+    public let byDimensionState: [String: Int]
 
     /// Fraction of sources that are actually searchable NOW (not "processed" hand-waving).
     public var searchableFraction: Double {
@@ -59,5 +69,48 @@ public struct SourceReadinessSummary: Sendable, Hashable {
         self.deferred = deferred
         self.needsAttention = attention
         self.byState = counts
+        self.evidenceReady = 0; self.analyticallyReady = 0
+        self.encrypted = 0; self.corrupt = 0; self.unsupported = 0; self.failed = 0
+        self.byCompletionState = [:]; self.byDimensionState = [:]
+    }
+
+    /// USF-002 — aggregate the DURABLE authority: per-source-version readiness snapshots. Every
+    /// count is independent (searchable ≠ evidence-ready ≠ analytically ready); there is no single
+    /// overall percentage. This is the honest form the Sources view consumes.
+    public nonisolated init(snapshots: [SourceReadinessSnapshot]) {
+        self.total = snapshots.count
+        var searchable = 0, evidence = 0, analytical = 0, preserved = 0
+        var deferred = 0, encrypted = 0, corrupt = 0, unsupported = 0, failed = 0
+        var byCompletion: [String: Int] = [:]
+        var byDimension: [String: Int] = [:]
+        for s in snapshots {
+            if s.isSearchReady { searchable += 1 }
+            if s.isEvidenceReady { evidence += 1 }
+            if s.isAnalyticallyReady { analytical += 1 }
+            byCompletion[s.completionState.rawValue, default: 0] += 1
+            switch s.completionState {
+            case .preservedOnly: preserved += 1
+            case .deferred: deferred += 1
+            case .encrypted: encrypted += 1
+            case .corrupt: corrupt += 1
+            case .unsupported: unsupported += 1
+            case .failed: failed += 1
+            case .evidenceReady, .searchablePartial: break
+            }
+            for d in s.dimensions { byDimension[d.state.rawValue, default: 0] += 1 }
+        }
+        self.searchable = searchable
+        self.evidenceReady = evidence
+        self.analyticallyReady = analytical
+        self.preservedOnly = preserved
+        self.deferred = deferred
+        self.encrypted = encrypted
+        self.corrupt = corrupt
+        self.unsupported = unsupported
+        self.failed = failed
+        self.needsAttention = encrypted + corrupt + failed
+        self.byCompletionState = byCompletion
+        self.byDimensionState = byDimension
+        self.byState = byCompletion
     }
 }

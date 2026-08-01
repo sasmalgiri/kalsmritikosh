@@ -84,10 +84,13 @@ struct USF001UniversalSafeIntakeBoundaryTests {
 
     // MARK: - No scope creep
 
-    @Test("The intake subsystem introduces no readiness model and no parser-registry redesign")
+    @Test("The intake subsystem introduces no parser-registry redesign (USF-002 readiness bootstrap is allowed)")
     func noReadinessOrParserRegistry() throws {
+        // USF-002 — intake now bootstraps source-version readiness in its own savepoint, so a
+        // reference to the readiness subsystem is EXPECTED. Parser-registry / plugin work stays
+        // deferred to USF-003+ and must remain absent.
         for (name, text) in try Self.intakeFiles() {
-            for token in ["Readiness", "ParserRegistry", "ParserPlugin", "LoaderRegistry"] {
+            for token in ["ParserRegistry", "ParserPlugin", "LoaderRegistry"] {
                 #expect(!text.contains(token), "\(name) must not introduce '\(token)' (deferred to later USF units)")
             }
         }

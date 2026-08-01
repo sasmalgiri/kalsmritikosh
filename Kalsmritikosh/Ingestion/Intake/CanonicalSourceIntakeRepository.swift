@@ -188,6 +188,16 @@ public struct CanonicalSourceIntakeRepository: Sendable {
             }
         }
 
+        // USF-002 — a NEW source version is born with its ten readiness dimensions in the SAME
+        // savepoint. No successfully-created version ever exists without them; unchanged/moved/
+        // aliased/retargeted occurrences reuse the canonical version's readiness (no new aggregate).
+        if kind == .newLogicalSource || kind == .newVersion {
+            let readinessRecords = SourceReadinessBootstrap.initialDimensions(
+                sourceVersionID: sourceVersionID, detectedType: captured.detectedType,
+                preservationStatus: preservation, at: now)
+            try SourceReadinessRepository.initialize(db, sourceVersionID: sourceVersionID, records: readinessRecords, now: now)
+        }
+
         // Optional version-level parent relation (survives child parse failure). Idempotent
         // for re-intake, but never silently OR-IGNOREd: a genuine duplicate races to a typed error.
         if let parent = request.parent {

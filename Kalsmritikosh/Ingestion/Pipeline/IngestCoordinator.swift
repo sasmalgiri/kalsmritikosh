@@ -98,6 +98,11 @@ public actor IngestCoordinator {
     /// moved / aliased outcomes skip parsing; loader/parser failures retain custody. There is no
     /// legacy identity path — intake is the sole pre-parser identity authority.
     private let intakeCoordinator: UniversalSourceIntakeCoordinator
+    /// USF-002 — when wired, the loader / structural / indexing stages advance the source
+    /// version's independent readiness dimensions (text, structure, indexing) as durable
+    /// representations become available. nil = readiness not updated by the pipeline (intake
+    /// still bootstraps the ten dimensions; forward stages simply don't advance them).
+    private let readiness: SourceReadinessRepository?
     /// ING-006 — when wired, the background embedding drain yields to interactive queries
     /// via this gate (checked between batches). nil = no priority gating (drain runs freely).
     private let priorityGate: QueryPriorityGate?
@@ -184,9 +189,11 @@ public actor IngestCoordinator {
         evidenceVault: EvidenceVault? = nil,
         priorityGate: QueryPriorityGate? = nil,
         claimProjection: ClaimProjectionBackfill? = nil,
+        readiness: SourceReadinessRepository? = nil,
         intakeCoordinator: UniversalSourceIntakeCoordinator
     ) {
         self.intakeCoordinator = intakeCoordinator
+        self.readiness = readiness
         self.evidenceStore = evidenceStore
         self.structuralRegistry = structuralRegistry
         self.assertions = assertions
@@ -531,6 +538,21 @@ public actor IngestCoordinator {
         )
     }
 
+    /// USF-002 — advance a source version's readiness dimensions after a pipeline stage. Reads the
+    /// current aggregate revision and applies the updates under CAS. Best-effort: a readiness
+    /// failure never fails the ingest (custody + content are already durable).
+    private func advanceReadiness(_ sourceVersionID: UUID, _ updates: [SourceReadinessDimensionUpdate]) async {
+        guard let readiness, !updates.isEmpty else { return }
+        do {
+            let current = try await readiness.snapshot(sourceVersionID: sourceVersionID)
+            _ = try await readiness.apply(SourceReadinessUpdatePlan(
+                sourceVersionID: sourceVersionID, expectedRevision: current.aggregateRevision, updates: updates,
+                producerID: "usf-002.pipeline", producerVersion: "1", occurredAt: Date()))
+        } catch {
+            KalsmritikoshLog.ingestion.error("Readiness advance failed for \(sourceVersionID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
     /// USF-001.2 — return `ko` with its `sourceFile` rebound to `url`. The loader reads the
     /// temporary processing snapshot, so its KOs carry the snapshot path; downstream identity
     /// (retrieval, citations, the file row) must reference the ORIGINAL source location.
@@ -730,7 +752,11 @@ public actor IngestCoordinator {
         do { raw = Self.rebindingSourceFile(try await loader.ingest(fileAt: processURL, type: type), to: url) }
         catch {
             // Loader failure — custody is preserved; a single version-linked failure is
-            // recorded by runIngest (retriable), and the ingest does not abort.
+            // recorded by runIngest (retriable), and the ingest does not abort. Readiness records
+            // the failed text dimension (the source stays custodied, not silently "processed").
+            await advanceReadiness(handle.sourceVersionID, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                               detail: String(describing: error).prefix(120).description)])
             return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
         }
         let cleaned = ContentDecoder().decode(cleaner.clean(raw))
@@ -744,9 +770,21 @@ public actor IngestCoordinator {
         let perFileKOs: [KnowledgeObject]
         do { perFileKOs = try await loader.ingestMany(fileAt: processURL, type: type).map { Self.rebindingSourceFile($0, to: url) } }
         catch {
+            await advanceReadiness(handle.sourceVersionID, [
+                SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .failed, action: .fail,
+                                               detail: String(describing: error).prefix(120).description)])
             return skipResult(.failed, stage: "loader", detail: String(describing: error).prefix(300).description)
         }
         guard !perFileKOs.isEmpty else {
+            // No usable content. An unsupported unknown format is a real limitation; anything else
+            // is an empty-but-complete text extraction (ready with zero units — NOT search-ready).
+            if structuralRegistry?.parser(for: type) == nil, type == .unknown {
+                await advanceReadiness(handle.sourceVersionID, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .unsupported, action: .markUnsupported)])
+            } else {
+                await advanceReadiness(handle.sourceVersionID, [
+                    SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy, completedUnits: 0, totalUnits: 0)])
+            }
             return Result(fileRecord: fileRecord, object: cleaned, chunkCount: 0, entityCount: 0, eventCount: 0,
                           documentClass: docClass, invalidations: [],
                           logicalSourceID: handle.logicalSourceID, sourceVersionID: handle.sourceVersionID, intakeOutcome: handle.outcome)
@@ -792,6 +830,37 @@ public actor IngestCoordinator {
             for link in blockOwnership {
                 try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
             }
+        }
+
+        // USF-002 — advance readiness from the durable representations this ingest produced:
+        // text (loader content), indexing (FTS-backed chunks), and structure (committed blocks +
+        // their located substantive coverage). Structure is based on the committed structural
+        // document, not merely the parser's in-memory result; a parser-hash mismatch (structural
+        // == nil) leaves the structural dimension unadvanced rather than claiming ready.
+        if readiness != nil {
+            var updates: [SourceReadinessDimensionUpdate] = []
+            if totalChunks > 0 {
+                updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                              completedUnits: totalChunks, totalUnits: totalChunks))
+                updates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: .ready, action: .satisfy,
+                                                              completedUnits: totalChunks, totalUnits: totalChunks,
+                                                              basis: SourceReadinessBasis(kind: .ftsIndex, identifier: handle.sourceVersionID.uuidString)))
+            } else {
+                updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                              completedUnits: 0, totalUnits: 0))
+            }
+            if let structural {
+                let substantive = structural.doc.meaningfulBlocks
+                let total = substantive.count
+                let located = substantive.filter { $0.locator != nil }.count
+                if total > 0 {
+                    let full = located == total
+                    updates.append(SourceReadinessDimensionUpdate(
+                        dimension: .structuralExtraction, state: full ? .ready : .partial,
+                        action: full ? .satisfy : .partiallySatisfy, completedUnits: located, totalUnits: total))
+                }
+            }
+            await advanceReadiness(handle.sourceVersionID, updates)
         }
 
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
