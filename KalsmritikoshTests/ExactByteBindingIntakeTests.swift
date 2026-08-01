@@ -109,12 +109,11 @@ struct ExactByteBindingIntakeTests {
         let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(
             database: db, vault: EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))))
         let coordinator = IngestCoordinator(
-            loaders: .standard(),
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
             entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
             files: FilesRepository(database: db), objects: KnowledgeObjectRepository(database: db),
             chunks: ChunksRepository(database: db), evidenceStore: EvidenceStore(database: db),
-            structuralRegistry: .standard(ocr: VisionOCR()),
-            ingestAttempts: IngestAttemptsRepository(database: db),
+                        ingestAttempts: IngestAttemptsRepository(database: db),
             sourceRelations: SourceRelationsRepository(database: db),
             intakeCoordinator: intake)
 
@@ -144,9 +143,14 @@ struct ExactByteBindingIntakeTests {
         let src = try String(contentsOf: repoRoot.appendingPathComponent("Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift"), encoding: .utf8)
         // The USF-001.1 override (relabelling the parsed document with the intake hash) is gone.
         #expect(!src.contains("contentHash: h, metadata: parsed.metadata"))
-        // The exact-byte mismatch guard (write no artifacts on disagreement) is present.
-        #expect(src.contains("Structural parse hash mismatch"))
-        // The loader + parser read the immutable snapshot.
+        // USF-M1 — the loader + structural parser read the immutable snapshot via the universal
+        // request, whose bytes produced the intake hash.
         #expect(src.contains("processingSnapshotURL"))
+        #expect(src.contains("universalExecutor.execute"))
+        // The exact-byte mismatch guard now lives in the universal executor: a parser whose OWN hash
+        // disagrees with the request throws contentHashMismatch, so NO canonical artifacts land.
+        let executor = try String(contentsOf: repoRoot.appendingPathComponent("Kalsmritikosh/Ingestion/Parsing/UniversalParserExecutor.swift"), encoding: .utf8)
+        #expect(executor.contains("contentHashMismatch"))
+        #expect(executor.contains("doc.contentHash.lowercased() == request.contentHash.lowercased()"))
     }
 }

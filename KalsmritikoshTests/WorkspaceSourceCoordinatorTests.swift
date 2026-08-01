@@ -297,10 +297,10 @@ struct WorkspaceSourceCoordinatorTests {
         let coordinator = WorkspaceSourceCoordinator(files: files, objects: objects, workspaces: workspaces, membership: membership, projection: projection)
 
         let ingest = IngestCoordinator(
-            loaders: .standard(), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()), entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
             eventExtractor: RuleEventExtractor(), files: files, objects: objects, chunks: chunks,
             entities: entities, events: events, evidenceStore: store,
-            structuralRegistry: .standard(ocr: VisionOCR()), assertions: asrt, genericFacts: gf,
+            assertions: asrt, genericFacts: gf,
             intakeCoordinator: UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db)))
 
         let eml = dir.appendingPathComponent("matter.eml")

@@ -36,11 +36,10 @@ struct IngestCoordinatorSafeIntakeTests {
         let vault = EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))
         let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db, vault: vault))
         let coordinator = IngestCoordinator(
-            loaders: .standard(),
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
             entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
             files: files, objects: objects, chunks: chunks,
-            evidenceStore: store, structuralRegistry: .standard(ocr: VisionOCR()),
-            ingestAttempts: IngestAttemptsRepository(database: db),
+            evidenceStore: store,             ingestAttempts: IngestAttemptsRepository(database: db),
             sourceRelations: SourceRelationsRepository(database: db),
             intakeCoordinator: intake)
         return Rig(coordinator: coordinator, db: db, dir: dir)
@@ -198,8 +197,12 @@ struct IngestCoordinatorSafeIntakeTests {
         let row = try #require(try await rig.db.query("SELECT size_bytes, content_hash FROM source_versions;", []).first)
         #expect(row.int(0) == 0)
         #expect(row.string(1) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-        // The failure is recorded against the exact version (retriable), custody intact.
-        let attempt = try await rig.db.query("SELECT status, source_version_id FROM ingest_file_attempts WHERE stage='loader';", []).first
+        // The failure is recorded against the exact version (retriable), custody intact. USF-M1 —
+        // the loader now runs inside the universal parser plugin, so an empty-content failure
+        // surfaces at the 'parser' stage rather than a separate 'loader' stage.
+        let attempt = try await rig.db.query("""
+            SELECT status, source_version_id FROM ingest_file_attempts WHERE status = 'failed' ORDER BY attempted_at DESC LIMIT 1;
+            """, []).first
         #expect(attempt?.uuid(1) != nil)
     }
 
