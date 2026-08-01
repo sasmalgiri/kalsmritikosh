@@ -46,4 +46,12 @@ public nonisolated enum SourceReadinessError: Error, Equatable, Sendable {
     case snapshotReconstructionFailed(UUID)
     /// The action is not permitted for this update (e.g. `initialize` outside bootstrap).
     case invalidAction(SourceReadinessAction)
+    /// A positive (ready/partial) state for a proof-bearing dimension was submitted with no basis.
+    case basisRequired(SourceReadinessDimension)
+    /// The supplied coverage units disagree with the database-derived coverage.
+    case coverageMismatch(dimension: SourceReadinessDimension, supplied: Int, actual: Int)
+    /// A readiness plan carried no updates.
+    case emptyPlan
+    /// An invalidation did not change the producer version or the basis (a no-op invalidation).
+    case invalidationWithoutChange(SourceReadinessDimension)
 }

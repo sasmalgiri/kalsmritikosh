@@ -15,8 +15,8 @@ public actor ChunksRepository {
     public func insertBatch(_ chunks: [Chunk]) async throws {
         for chunk in chunks {
             try await database.exec("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -30,7 +30,8 @@ public actor ChunksRepository {
                 chunk.contextPrefixSource.map { .text($0) } ?? .null,
                 .integer(chunk.admitEmbedding ? 1 : 0),
                 chunk.evidenceBlockID.map { .uuid($0) } ?? .null,
-                chunk.blockKind.map { .text($0) } ?? .null
+                chunk.blockKind.map { .text($0) } ?? .null,
+                chunk.sourceVersionID.map { .uuid($0) } ?? .null
             ])
         }
     }

@@ -61,6 +61,7 @@ public struct SourceReadinessRepository: Sendable {
 
     @discardableResult
     public func apply(_ plan: SourceReadinessUpdatePlan) async throws -> SourceReadinessSnapshot {
+        guard !plan.updates.isEmpty else { throw SourceReadinessError.emptyPlan }
         guard !plan.producerID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SourceReadinessError.blankProducerID }
         guard !plan.producerVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw SourceReadinessError.blankProducerVersion }
         // No duplicate dimensions in a single plan.
@@ -91,7 +92,15 @@ public struct SourceReadinessRepository: Sendable {
                 guard let cur = currentByDim[u.dimension] else { throw SourceReadinessError.dimensionMissing(u.dimension) }
                 try Self.validateShape(u)
                 try Self.validateTransition(from: cur.state, update: u)
+                // USF-002.1 — positive readiness for a proof-bearing dimension must carry a durable
+                // basis; indexing readiness must match the database-derived exact-version coverage.
+                try Self.validatePositiveProof(db, update: u, sourceVersionID: p.sourceVersionID)
                 if let basis = u.basis { try Self.validateBasis(db, basis: basis, sourceVersionID: p.sourceVersionID) }
+                // USF-002.1 — an invalidation must genuinely change something (producer version or basis),
+                // not merely re-assert the same ready state with a fresh reason string.
+                if u.action == .invalidate, p.producerVersion == cur.producerVersion, u.basis == cur.basis {
+                    throw SourceReadinessError.invalidationWithoutChange(u.dimension)
+                }
             }
 
             let newAggRevision = agg.revision + 1
@@ -235,8 +244,52 @@ public struct SourceReadinessRepository: Sendable {
                 throw SourceReadinessError.basisOwnershipMismatch(basis)
             }
         case .ftsIndex, .vectorIndex, .custody:
-            break   // soft references — no canonical row to own; ownership is the version by construction.
+            // USF-002.1 — soft references (no canonical row), but the identifier must still name THIS
+            // exact source version so a caller cannot claim readiness against another version's index.
+            guard basis.identifier == sourceVersionID.uuidString else { throw SourceReadinessError.basisOwnershipMismatch(basis) }
         }
+    }
+
+    /// USF-002.1 — a positive (ready/partial) state for a proof-bearing dimension must carry a durable
+    /// basis; indexing readiness is additionally checked against the database-derived exact-version FTS
+    /// coverage, so it can never be merely asserted by the caller.
+    private static let proofDimensions: Set<SourceReadinessDimension> = [.structuralExtraction, .indexing]
+
+    private static func validatePositiveProof(_ db: isolated Database, update u: SourceReadinessDimensionUpdate,
+                                              sourceVersionID: UUID) throws {
+        guard u.state == .ready || u.state == .partial, proofDimensions.contains(u.dimension) else { return }
+        guard let basis = u.basis else { throw SourceReadinessError.basisRequired(u.dimension) }
+        if u.dimension == .indexing {
+            guard basis.kind == .ftsIndex else { throw SourceReadinessError.basisOwnershipMismatch(basis) }
+            let cov = try ftsCoverageInSavepoint(db, sourceVersionID: sourceVersionID)
+            guard u.completedUnits == cov.indexed else {
+                throw SourceReadinessError.coverageMismatch(dimension: .indexing, supplied: u.completedUnits ?? -1, actual: cov.indexed)
+            }
+            guard u.totalUnits == cov.eligible else {
+                throw SourceReadinessError.coverageMismatch(dimension: .indexing, supplied: u.totalUnits ?? -1, actual: cov.eligible)
+            }
+        }
+    }
+
+    /// The exact-version FTS coverage: how many chunks belong to this source version (eligible) and
+    /// how many of those are present in the FTS index (indexed). Reconstructed from persisted rows,
+    /// never derived from a live counter that could include a child attachment's chunks.
+    public func ftsCoverage(sourceVersionID: UUID) async throws -> (eligible: Int, indexed: Int) {
+        let eligible = Int(try await database.query(
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+        let indexed = Int(try await database.query(
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+        return (eligible, indexed)
+    }
+
+    static func ftsCoverageInSavepoint(_ db: isolated Database, sourceVersionID: UUID) throws -> (eligible: Int, indexed: Int) {
+        let eligible = Int(try db.query(
+            "SELECT COUNT(*) FROM chunks WHERE source_version_id = ?;", [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+        let indexed = Int(try db.query(
+            "SELECT COUNT(*) FROM chunks c JOIN chunks_fts f ON f.rowid = c.rowid WHERE c.source_version_id = ?;",
+            [.uuid(sourceVersionID)]).first?.int(0) ?? 0)
+        return (eligible, indexed)
     }
 
     // MARK: - SQL helpers

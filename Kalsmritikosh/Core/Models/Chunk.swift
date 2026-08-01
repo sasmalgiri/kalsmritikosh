@@ -53,6 +53,10 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// "tableCell", "emailBody"), or nil when not block-derived. A retrieval
     /// authority + display signal.
     public let blockKind: String?
+    /// USF-002.1 — the EXACT source version this chunk belongs to (a retrieval projection field,
+    /// not a source authority). New production chunks carry it so indexing readiness can be
+    /// reconstructed per exact version; nil for legacy chunks whose ownership was unprovable.
+    public let sourceVersionID: UUID?
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -69,7 +73,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         contextPrefixSource: String? = nil,
         admitEmbedding: Bool = true,
         evidenceBlockID: UUID? = nil,
-        blockKind: String? = nil
+        blockKind: String? = nil,
+        sourceVersionID: UUID? = nil
     ) {
         self.id = id
         self.objectID = objectID
@@ -83,6 +88,16 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.admitEmbedding = admitEmbedding
         self.evidenceBlockID = evidenceBlockID
         self.blockKind = blockKind
+        self.sourceVersionID = sourceVersionID
+    }
+
+    /// Returns a copy with the exact source-version id set (USF-002.1). Used by IngestCoordinator
+    /// so every persisted chunk carries the version it belongs to.
+    public nonisolated func withSourceVersion(_ versionID: UUID?) -> Chunk {
+        Chunk(id: id, objectID: objectID, ordinal: ordinal, text: text, characterRange: characterRange,
+              pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
+              contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
+              evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: versionID)
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
@@ -101,7 +116,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             contextPrefixSource: source,
             admitEmbedding: admitEmbedding,
             evidenceBlockID: evidenceBlockID,
-            blockKind: blockKind
+            blockKind: blockKind,
+            sourceVersionID: sourceVersionID
         )
     }
 
@@ -119,7 +135,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             contextPrefixSource: contextPrefixSource,
             admitEmbedding: admit,
             evidenceBlockID: evidenceBlockID,
-            blockKind: blockKind
+            blockKind: blockKind,
+            sourceVersionID: sourceVersionID
         )
     }
 
@@ -127,7 +144,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
         case pageNumber, createdAt, contextPrefix, contextPrefixSource, admitEmbedding
-        case evidenceBlockID, blockKind
+        case evidenceBlockID, blockKind, sourceVersionID
     }
 
     public init(from decoder: Decoder) throws {
@@ -146,6 +163,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.admitEmbedding = try c.decodeIfPresent(Bool.self, forKey: .admitEmbedding) ?? true
         self.evidenceBlockID = try c.decodeIfPresent(UUID.self, forKey: .evidenceBlockID)
         self.blockKind = try c.decodeIfPresent(String.self, forKey: .blockKind)
+        self.sourceVersionID = try c.decodeIfPresent(UUID.self, forKey: .sourceVersionID)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -163,5 +181,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encode(admitEmbedding, forKey: .admitEmbedding)
         try c.encodeIfPresent(evidenceBlockID, forKey: .evidenceBlockID)
         try c.encodeIfPresent(blockKind, forKey: .blockKind)
+        try c.encodeIfPresent(sourceVersionID, forKey: .sourceVersionID)
     }
 }

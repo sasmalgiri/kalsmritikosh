@@ -62,6 +62,29 @@ enum USF002Fixtures {
         return blockID
     }
 
+    /// Insert `count` chunks owned by the exact source version (via a knowledge object), so
+    /// ftsCoverage(sourceVersionID:) reports (eligible: count, indexed: count). Returns the KO id.
+    @discardableResult
+    static func seedChunks(_ rig: USF002Rig, sourceVersionID: UUID, count: Int, ownerFileID: UUID? = nil) async throws -> UUID {
+        let koID = UUID()
+        try await rig.db.exec("""
+            INSERT INTO knowledge_objects (id, file_id, source_type, content, created_at, updated_at)
+            VALUES (?,?,?,?,?,?);
+            """, [.uuid(koID), .uuid(ownerFileID ?? sourceVersionID), .text("txt"), .text("body"), .real(0), .real(0)])
+        for i in 0..<count {
+            try await rig.db.exec("""
+                INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at, source_version_id)
+                VALUES (?,?,?,?,?,?,?,?);
+                """, [.uuid(UUID()), .uuid(koID), .integer(Int64(i)), .text("chunk \(i) searchable text"),
+                      .integer(0), .integer(10), .real(0), .uuid(sourceVersionID)])
+        }
+        return koID
+    }
+
+    static func ftsIndexBasis(_ sourceVersionID: UUID) -> SourceReadinessBasis {
+        SourceReadinessBasis(kind: .ftsIndex, identifier: sourceVersionID.uuidString)
+    }
+
     /// One dimension update convenience.
     static func update(_ dim: SourceReadinessDimension, _ state: SourceReadinessDimensionState,
                        action: SourceReadinessAction, appl: SourceReadinessApplicability = .required,

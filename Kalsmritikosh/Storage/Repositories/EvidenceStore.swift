@@ -32,6 +32,31 @@ public enum CanonicalBlockResolution: Sendable, Equatable {
     case ambiguous(blockID: EvidenceBlock.ID)
 }
 
+/// USF-002.1 — the COMMITTED outcome of attaching a structural document, returned only after the
+/// savepoint commits. Readiness may advance structural / metadata / OCR dimensions ONLY from this
+/// receipt (never from the parser's in-memory result). A persistence failure throws instead of
+/// producing a receipt, so a source can never claim structural readiness on uncommitted blocks.
+public struct StructuralPersistenceReceipt: Sendable, Hashable {
+    public let sourceVersionID: UUID
+    public let sourceDocumentID: UUID
+    public let parserRunID: UUID
+    public let blockCount: Int
+    public let substantiveBlockCount: Int
+    public let locatedSubstantiveBlockCount: Int
+    public let ocrBlockCount: Int
+    public let extractionStatus: ExtractionStatus
+    public let warningCount: Int
+    public let parserID: String
+    public let parserVersion: String
+
+    /// Structural extraction is fully ready only when the parser reported COMPLETE and every
+    /// substantive block is located. A `.partial` parse (or a missing locator) is never ready.
+    public var isStructurallyComplete: Bool {
+        extractionStatus == .complete && substantiveBlockCount > 0
+            && locatedSubstantiveBlockCount == substantiveBlockCount
+    }
+}
+
 public actor EvidenceStore: EvidenceBlockResolving {
     private let database: Database
 
@@ -47,6 +72,7 @@ public actor EvidenceStore: EvidenceBlockResolving {
     /// version must exist, its logical source + normalized content hash must match the parsed
     /// document, and its `document_id` must be NULL or already this document. Any mismatch
     /// writes nothing (no partial source_documents row).
+    @discardableResult
     public func persist(
         _ doc: ParsedDocument,
         parser: String,
@@ -56,10 +82,20 @@ public actor EvidenceStore: EvidenceBlockResolving {
         makeCurrent: Bool = true,
         startedAt: Date,
         endedAt: Date = Date()
-    ) async throws {
+    ) async throws -> StructuralPersistenceReceipt {
         let now = Date().timeIntervalSince1970
         let profile = DocumentProfile.from(doc, parser: parser, parserVersion: parserVersion, sizeBytes: sizeBytes)
         let docHash = doc.contentHash.lowercased()
+        let parserRunID = UUID()
+        // USF-002.1 — the committed receipt is computed from the blocks this savepoint persists.
+        let substantive = doc.meaningfulBlocks
+        let receipt = StructuralPersistenceReceipt(
+            sourceVersionID: doc.sourceVersionID, sourceDocumentID: doc.id, parserRunID: parserRunID,
+            blockCount: doc.blocks.count, substantiveBlockCount: substantive.count,
+            locatedSubstantiveBlockCount: substantive.filter { $0.locator.isResolvable }.count,
+            ocrBlockCount: doc.blocks.filter { $0.extractionMethod == .ocr }.count,
+            extractionStatus: doc.extractionStatus, warningCount: doc.warnings.count,
+            parserID: parser, parserVersion: parserVersion)
         let sp = "es_attach_\(doc.sourceVersionID.uuidString.prefix(8))"
         try await database.withSavepoint(sp) { db in
             // Identity gate FIRST — before any write.
@@ -122,7 +158,7 @@ public actor EvidenceStore: EvidenceBlockResolving {
                 (id, source_version_id, parser, parser_version, started_at, ended_at, status, block_count, warning_count, error)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
-            .uuid(UUID()),
+            .uuid(parserRunID),
             .uuid(doc.sourceVersionID),
             .text(parser),
             .text(parserVersion),
@@ -134,6 +170,7 @@ public actor EvidenceStore: EvidenceBlockResolving {
             .null
             ])
         }
+        return receipt
     }
 
     // MARK: - B6 — canonical block → KnowledgeObject ownership
