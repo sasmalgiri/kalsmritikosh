@@ -1326,6 +1326,8 @@ public final class AppState {
                 evidenceVault: evidenceVault,   // EV-005 — copies only when managed mode on
                 priorityGate: priorityGate,     // ING-006 — drain yields to interactive queries
                 claimProjection: claimProjectionBackfill,  // PA-PROD B3 — incremental projection hook
+                // USF-002 — the pipeline advances each source version's independent readiness dimensions.
+                readiness: SourceReadinessRepository(database: db),
                 // USF-001 — every accessible file receives canonical custody before any parser runs.
                 intakeCoordinator: UniversalSourceIntakeCoordinator(
                     repository: CanonicalSourceIntakeRepository(database: db, vault: evidenceVault))
@@ -2986,6 +2988,20 @@ public final class AppState {
             filesDone: koDone, filesTotal: filesTotal,
             embedDone: Int(r.int(3) ?? 0), embedTotal: Int(r.int(2) ?? 0)
         )
+    }
+
+    /// USF-002 — the DURABLE, multi-dimensional readiness of every source version: how many are
+    /// searchable, evidence-ready, analytically ready, preserved-only, deferred, or need attention.
+    /// This consumes the authoritative readiness ledger (not the live `IngestProgress` counters,
+    /// which describe activity, not durable readiness). Never a single overall percentage.
+    public func sourceReadinessSummary() async -> SourceReadinessSummary {
+        guard let db = database else { return SourceReadinessSummary(snapshots: []) }
+        let repo = SourceReadinessRepository(database: db)
+        let ids = ((try? await db.query("SELECT source_version_id FROM source_readiness_aggregates;", [])) ?? [])
+            .compactMap { $0.uuid(0) }
+        var snapshots: [SourceReadinessSnapshot] = []
+        for id in ids { if let s = try? await repo.snapshot(sourceVersionID: id) { snapshots.append(s) } }
+        return SourceReadinessSummary(snapshots: snapshots)
     }
 
     public func removeRoot(_ root: BookmarkStore.Root, strategy: RootRemovalStrategy) async {

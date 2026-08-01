@@ -54,7 +54,29 @@ public struct ParseCoverageReport: Codable, Sendable, Hashable {
         self.reason = reason
     }
 
-    /// Classify an ingested ParsedDocument into a coverage report.
+    /// USF-002 — the compatibility presentation projected from the DURABLE readiness authority.
+    /// ParseCoverageReport is no longer an independent readiness authority: prefer this projection
+    /// (or `SourceReadinessSummary(snapshots:)`) over deriving coverage straight from a
+    /// ParsedDocument. `from(_ doc:)` below survives only as an internal pre-persistence parser
+    /// signal, not as the source of truth.
+    public nonisolated static func from(_ snapshot: SourceReadinessSnapshot, filename: String, detectedType: String) -> ParseCoverageReport {
+        let state: SourceCoverageState
+        switch snapshot.completionState {
+        case .evidenceReady: state = .full
+        case .searchablePartial: state = .partial
+        case .preservedOnly, .unsupported: state = .preservedOnly
+        case .deferred: state = .deferred
+        case .encrypted: state = .encrypted
+        case .corrupt: state = .corrupt
+        case .failed: state = .failed
+        }
+        let blocks = snapshot.dimension(.structuralExtraction)?.completedUnits ?? 0
+        return ParseCoverageReport(filename: filename, detectedType: detectedType, state: state,
+                                   blockCount: blocks, reason: "projected from source readiness (\(snapshot.completionState.rawValue))")
+    }
+
+    /// Classify an ingested ParsedDocument into a coverage report (internal parser signal only —
+    /// NOT the readiness authority; see `from(_ snapshot:)`).
     public nonisolated static func from(_ doc: ParsedDocument) -> ParseCoverageReport {
         let blocks = doc.meaningfulBlocks.count
         let hasError = doc.warnings.contains { $0.severity == .error }

@@ -20,8 +20,11 @@ public struct SourcesView: View {
     @State private var ingesting = false
     /// ING-002 — the last bulk ingest's outcome; drives the failure banner.
     @State private var ingestSummary: IngestBatchSummary?
-    /// UX-002 / ING-007 — multi-dimensional readiness (not one vague %).
+    /// UX-002 / ING-007 — LIVE ingest activity (parse/embed progress), NOT durable readiness.
     @State private var readiness: AppState.IngestProgress?
+    /// USF-002 — durable, multi-dimensional source readiness (searchable / evidence-ready /
+    /// analytical / needs-attention). Distinct from live activity above.
+    @State private var durableReadiness: SourceReadinessSummary?
     @State private var rootPendingRemoval: BookmarkStore.Root?
     @State private var rootPendingRemovalCount: Int = 0
     /// Minimum-touch: drop folders anywhere on this screen to add them —
@@ -36,6 +39,9 @@ public struct SourcesView: View {
             Divider()
             if let summary = ingestSummary, !summary.failures.isEmpty {
                 ingestFailureBanner(summary)
+            }
+            if let d = durableReadiness, d.total > 0 {
+                durableReadinessStrip(d)
             }
             if let r = readiness, (r.filesTotal > 0 || r.embedTotal > 0) {
                 readinessStrip(r)
@@ -241,7 +247,8 @@ public struct SourcesView: View {
         fileCount = (try? await files.count()) ?? 0
         let all = (try? await objects.recent(limit: 25)) ?? []
         recents = await appState.screenAuthorizer?.filterRows(all, boundary: .globalOwner) ?? []
-        readiness = await appState.ingestProgress()   // UX-002 / ING-007
+        readiness = await appState.ingestProgress()   // UX-002 / ING-007 — LIVE activity
+        durableReadiness = await appState.sourceReadinessSummary()   // USF-002 — durable readiness
     }
 
     private func runIngestion() async {
@@ -252,9 +259,33 @@ public struct SourcesView: View {
         ingesting = false
     }
 
-    /// UX-002 / ING-007 — multi-dimensional readiness, shown as separate honest dimensions
-    /// (parse vs search-embeddings), never a single vague percentage. Each dimension shows
-    /// its own done/total and an in-progress hint.
+    /// USF-002 — durable, multi-dimensional readiness counts (never a single percentage). Distinct
+    /// from the live activity strip below: these describe what each source can actually do now.
+    @ViewBuilder
+    private func durableReadinessStrip(_ d: SourceReadinessSummary) -> some View {
+        HStack(spacing: 16) {
+            durableCount("Searchable", d.searchable, "magnifyingglass", .blue)
+            durableCount("Evidence-ready", d.evidenceReady, "checkmark.seal", .green)
+            durableCount("Analytical", d.analyticallyReady, "chart.bar.doc.horizontal", .purple)
+            if d.needsAttention + d.deferred > 0 {
+                durableCount("Needs attention", d.needsAttention + d.deferred, "exclamationmark.triangle", .orange)
+            }
+            Spacer()
+        }
+        .padding(.horizontal).padding(.top, 8)
+    }
+
+    @ViewBuilder
+    private func durableCount(_ title: String, _ count: Int, _ symbol: String, _ tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).foregroundStyle(tint)
+            Text("\(count)").font(.caption.weight(.semibold).monospacedDigit())
+            Text(title).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    /// UX-002 / ING-007 — LIVE ingest activity (parse vs embed), separate from durable readiness.
+    /// Each dimension shows its own done/total and an in-progress hint; never a single vague %.
     @ViewBuilder
     private func readinessStrip(_ r: AppState.IngestProgress) -> some View {
         HStack(spacing: 16) {
