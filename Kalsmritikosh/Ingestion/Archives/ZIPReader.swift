@@ -29,6 +29,22 @@ public struct ZIPEntry: Sendable {
     public let uncompressedSize: Int
     public let compressionMethod: UInt16
     public let localHeaderOffset: Int
+    /// General-purpose bit flags (central directory offset +8). USF-M2 reads bit 0 for encryption.
+    public let flags: UInt16
+
+    public init(name: String, compressedSize: Int, uncompressedSize: Int,
+                compressionMethod: UInt16, localHeaderOffset: Int, flags: UInt16 = 0) {
+        self.name = name
+        self.compressedSize = compressedSize
+        self.uncompressedSize = uncompressedSize
+        self.compressionMethod = compressionMethod
+        self.localHeaderOffset = localHeaderOffset
+        self.flags = flags
+    }
+
+    /// USF-M2 — a traditional-PKWARE / AES encrypted member (GP bit 0). Its bytes cannot be decoded;
+    /// the container layer records it as `encrypted` and never treats it as empty.
+    public var isEncrypted: Bool { (flags & 0x0001) != 0 }
 }
 
 public nonisolated struct ZIPReader {
@@ -55,6 +71,7 @@ public nonisolated struct ZIPReader {
         while cursor + 46 <= cdEnd {
             let signature = readUInt32(at: cursor)
             guard signature == 0x02014b50 else { break }   // central dir sig
+            let flags = readUInt16(at: cursor + 8)
             let method = readUInt16(at: cursor + 10)
             let compressed = Int(readUInt32(at: cursor + 20))
             let uncompressed = Int(readUInt32(at: cursor + 24))
@@ -73,7 +90,8 @@ public nonisolated struct ZIPReader {
                 compressedSize: compressed,
                 uncompressedSize: uncompressed,
                 compressionMethod: method,
-                localHeaderOffset: localOffset
+                localHeaderOffset: localOffset,
+                flags: flags
             ))
             cursor = nameStart + nameLen + extraLen + commentLen
         }
@@ -113,6 +131,24 @@ public nonisolated struct ZIPReader {
         default:
             throw ZIPReaderError.unsupportedCompressionMethod(entry.compressionMethod)
         }
+    }
+
+    /// USF-M2 — the mapped backing bytes. Exposed so ZIPContainerExtractor can read SMALL windows of
+    /// a member's compressed payload without copying the whole (potentially 1 GiB) member into RAM.
+    public var backingData: Data { data }
+
+    /// USF-M2 — the [start, end) byte range of an entry's stored/compressed payload within the mapped
+    /// backing, computed from the LOCAL header (its name/extra lengths can differ from the central dir).
+    public func payloadRange(for entry: ZIPEntry) throws -> Range<Int> {
+        let lho = entry.localHeaderOffset
+        guard lho + 30 <= data.count else { throw ZIPReaderError.truncated }
+        guard readUInt32(at: lho) == 0x04034b50 else { throw ZIPReaderError.notAZIP }
+        let localNameLen = Int(readUInt16(at: lho + 26))
+        let localExtraLen = Int(readUInt16(at: lho + 28))
+        let dataStart = lho + 30 + localNameLen + localExtraLen
+        let dataEnd = dataStart + entry.compressedSize
+        guard dataEnd <= data.count, dataStart >= 0, dataStart <= dataEnd else { throw ZIPReaderError.truncated }
+        return dataStart..<dataEnd
     }
 
     // MARK: - EOCD

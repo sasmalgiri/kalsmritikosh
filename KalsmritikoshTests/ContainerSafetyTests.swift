@@ -133,4 +133,140 @@ struct ContainerSafetyTests {
         #expect(!ContainerMemberDisposition.failedExtraction.isBlocked)
         #expect(!ContainerMemberDisposition.directory.isBlocked)
     }
+
+    // MARK: - Path safety (§9)
+
+    @Test("Path classification rejects only genuine escapes; a filename containing '..' is safe")
+    func pathClassification() {
+        typealias C = ZIPContainerExtractor.PathClassification
+        #expect(ZIPContainerExtractor.classifyPath("dir/report.pdf") == .file(normalized: "dir/report.pdf"))
+        #expect(ZIPContainerExtractor.classifyPath("a..b.txt") == .file(normalized: "a..b.txt"))   // harmless dots
+        #expect(ZIPContainerExtractor.classifyPath("./x/./y.txt") == .file(normalized: "x/y.txt"))
+        #expect(ZIPContainerExtractor.classifyPath("sub/") == .directory)
+        if case .unsafe = ZIPContainerExtractor.classifyPath("/etc/passwd") {} else { Issue.record("absolute not rejected") }
+        if case .unsafe = ZIPContainerExtractor.classifyPath("../../escape") {} else { Issue.record("traversal not rejected") }
+        if case .unsafe = ZIPContainerExtractor.classifyPath("a/../../b") {} else { Issue.record("mid traversal not rejected") }
+        if case .unsafe = ZIPContainerExtractor.classifyPath("C:\\win") {} else { Issue.record("drive letter not rejected") }
+        if case .unsafe = ZIPContainerExtractor.classifyPath("bad\u{0}name") {} else { Issue.record("NUL not rejected") }
+    }
+
+    @Test("Containment check catches a destination that escapes the extraction root")
+    func containment() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("root-\(UUID().uuidString)", isDirectory: true)
+        #expect(ZIPContainerExtractor.isContained(root.appendingPathComponent("a/b.txt"), inRoot: root))
+        #expect(!ZIPContainerExtractor.isContained(root.appendingPathComponent("../sibling.txt"), inRoot: root))
+    }
+
+    // MARK: - Streaming extraction (§8)
+
+    private func extract(_ entry: ZIPTestFixture.Entry, max: Int64 = 1 << 30) throws -> (Int64, Data) {
+        let url = try ZIPTestFixture.writeZIP([entry])
+        let reader = try ZIPReader(url: url)
+        let e = try #require(try reader.entries().first)
+        let dest = url.deletingLastPathComponent().appendingPathComponent("out.bin")
+        let n = try ZIPContainerExtractor.streamExtract(reader: reader, entry: e, to: dest, maxMemberBytes: max)
+        return (n, try Data(contentsOf: dest))
+    }
+
+    @Test("A STORED member streams out byte-exact")
+    func storedRoundTrip() throws {
+        let (n, data) = try extract(ZIPTestFixture.stored("a.txt", "stored synthetic body"))
+        #expect(n == Int64("stored synthetic body".utf8.count))
+        #expect(String(decoding: data, as: UTF8.self) == "stored synthetic body")
+    }
+
+    @Test("A DEFLATE member inflates byte-exact via the streaming path")
+    func deflateRoundTrip() throws {
+        let body = String(repeating: "deflate me — synthetic. ", count: 40)
+        let (n, data) = try extract(ZIPTestFixture.deflated("a.txt", body))
+        #expect(n == Int64(body.utf8.count))
+        #expect(String(decoding: data, as: UTF8.self) == body)
+    }
+
+    @Test("A member exceeding the per-member byte cap aborts as exceededCap")
+    func extractExceedsCap() throws {
+        #expect(throws: ZIPContainerExtractor.ExtractionFailure.exceededCap) {
+            _ = try self.extract(ZIPTestFixture.stored("big.txt", String(repeating: "x", count: 500)), max: 100)
+        }
+    }
+
+    @Test("A corrupt DEFLATE member fails as decompressionFailed")
+    func extractCorruptDeflate() throws {
+        #expect(throws: ZIPContainerExtractor.ExtractionFailure.self) {
+            _ = try self.extract(ZIPTestFixture.Entry(name: "c.bin", data: Data(repeating: 1, count: 200), method: 8, corrupt: true, declaredUncompressed: 200))
+        }
+    }
+
+    @Test("An unsupported compression method fails as unsupportedCompression")
+    func extractUnsupportedMethod() throws {
+        #expect(throws: ZIPContainerExtractor.ExtractionFailure.unsupportedCompression) {
+            _ = try self.extract(ZIPTestFixture.Entry(name: "z.bin", data: Data("x".utf8), method: 12))
+        }
+    }
+
+    // MARK: - Inspector classification (§15)
+
+    @Test("The inspector assigns exactly one disposition to every member, none dropped")
+    func inspectorClassifiesEveryMember() throws {
+        let url = try ZIPTestFixture.writeZIP([
+            ZIPTestFixture.stored("doc/report.pdf", "pdf"),                          // candidate
+            ZIPTestFixture.directory("extras/"),                                     // directory
+            ZIPTestFixture.Entry(name: "../escape.txt", data: Data("x".utf8)),       // unsafe path
+            ZIPTestFixture.Entry(name: "locked.txt", data: Data("x".utf8), encrypted: true),  // encrypted
+            ZIPTestFixture.Entry(name: "weird.bin", data: Data("x".utf8), method: 14),         // unsupported method
+            ZIPTestFixture.Entry(name: "huge.db", data: Data("x".utf8), declaredUncompressed: 10_000_000),  // size
+        ])
+        let policy = ContainerSafetyPolicy(version: "t", maxEntriesPerContainer: 100, maxExpandedBytesPerContainer: 1 << 30,
+                                           maxSingleMemberBytes: 1000, maxNestingDepth: 8, maxRootTotalMembers: 1000,
+                                           maxRootExpandedBytes: 1 << 30, maxNestedContainerCount: 10, maxCompressionRatio: 200)
+        let e = ZIPContainerInspector.inspect(url: url, containerType: .zip, policy: policy)
+        #expect(!e.unreadable)
+        #expect(e.members.count == 6)
+        func disp(_ path: String) -> ContainerMemberDisposition? { e.members.first { $0.memberPath.contains(path) }?.disposition }
+        #expect(disp("report.pdf") == .admitted)
+        #expect(disp("extras/") == .directory)
+        #expect(disp("escape") == .blockedUnsafePath)
+        #expect(disp("locked") == .encrypted)
+        #expect(disp("weird") == .unsupported)
+        #expect(disp("huge") == .blockedSizeLimit)
+        // A candidate carries its entry (for streaming); a non-candidate does not.
+        #expect(e.members.first { $0.disposition == .admitted }?.entry != nil)
+        #expect(e.members.first { $0.disposition == .encrypted }?.entry == nil)
+    }
+
+    @Test("Members beyond the per-container entry ceiling are blocked, not dropped")
+    func inspectorEntryCeiling() throws {
+        let entries = (0..<5).map { ZIPTestFixture.stored("f\($0).txt", "body\($0)") }
+        let url = try ZIPTestFixture.writeZIP(entries)
+        let policy = ContainerSafetyPolicy(version: "t", maxEntriesPerContainer: 3, maxExpandedBytesPerContainer: 1 << 30,
+                                           maxSingleMemberBytes: 1 << 20, maxNestingDepth: 8, maxRootTotalMembers: 1000,
+                                           maxRootExpandedBytes: 1 << 30, maxNestedContainerCount: 10, maxCompressionRatio: 200)
+        let e = ZIPContainerInspector.inspect(url: url, containerType: .zip, policy: policy)
+        #expect(e.members.count == 5)
+        #expect(e.members.filter { $0.disposition == .admitted }.count == 3)
+        #expect(e.members.filter { $0.disposition == .blockedEntryLimit }.count == 2)
+    }
+
+    @Test("An unreadable container yields unreadable == true with no members")
+    func inspectorUnreadable() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("nz-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("notzip.zip")
+        try Data("this is not a zip file".utf8).write(to: url)
+        let e = ZIPContainerInspector.inspect(url: url, containerType: .zip, policy: .standard)
+        #expect(e.unreadable)
+        #expect(e.members.isEmpty)
+    }
+
+    @Test("A high compression ratio member is blocked as a suspected bomb")
+    func inspectorCompressionRatio() throws {
+        // Declared uncompressed 100000 with a tiny stored payload → ratio far exceeds the cap.
+        let url = try ZIPTestFixture.writeZIP([
+            ZIPTestFixture.Entry(name: "bomb.txt", data: Data("x".utf8), method: 8, declaredUncompressed: 100_000)])
+        let policy = ContainerSafetyPolicy(version: "t", maxEntriesPerContainer: 100, maxExpandedBytesPerContainer: 1 << 30,
+                                           maxSingleMemberBytes: 1 << 30, maxNestingDepth: 8, maxRootTotalMembers: 1000,
+                                           maxRootExpandedBytes: 1 << 30, maxNestedContainerCount: 10, maxCompressionRatio: 50)
+        let e = ZIPContainerInspector.inspect(url: url, containerType: .zip, policy: policy)
+        #expect(e.members.first?.disposition == .blockedCompressionRatio)
+    }
 }
