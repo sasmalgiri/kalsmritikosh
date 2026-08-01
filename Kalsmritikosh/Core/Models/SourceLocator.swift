@@ -51,6 +51,18 @@ public nonisolated struct SourceLocator: Codable, Sendable, Hashable {
     // Databases/logs
     public var databaseRowKey: String?
 
+    /// USF-002.1 — whether this locator carries a real positional anchor (not merely a self-reference
+    /// to its own block/chunk). Evidence readiness requires substantive blocks whose locators can
+    /// actually reopen the source at an exact spot; a bare/empty locator does not count as located.
+    public var isResolvable: Bool {
+        page != nil || line != nil || characterLower != nil || characterUpper != nil
+            || boundingBox?.isEmpty == false || sectionPath?.isEmpty == false || paragraphIndex != nil
+            || tableID != nil || row != nil || column != nil || cellRange != nil || sheet != nil
+            || slide != nil || shape != nil || messageID != nil || emailHeaderField != nil
+            || attachmentID != nil || archiveMemberPath != nil || transcriptStart != nil
+            || transcriptEnd != nil || databaseRowKey != nil
+    }
+
     public nonisolated init(
         evidenceBlockID: UUID? = nil,
         chunkID: UUID? = nil,

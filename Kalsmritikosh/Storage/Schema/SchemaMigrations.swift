@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 85
+    public static let latestVersion = 86
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -290,7 +290,10 @@ public enum SchemaMigrations {
                                             "condition", "completed_units", "total_units", "producer_id",
                                             "producer_version", "basis_kind", "basis_identifier", "revision"],
             "source_readiness_events": ["id", "source_version_id", "sequence", "aggregate_revision",
-                                        "dimension", "action", "from_state", "to_state", "occurred_at"]
+                                        "dimension", "action", "from_state", "to_state", "occurred_at"],
+            // v86 — USF-002.1 exact-version chunk ownership (NEW column on chunks, so the column
+            // probe distinguishes v86 from v85). NEWEST marker.
+            "chunks": ["id", "object_id", "ordinal", "text", "evidence_block_id", "source_version_id"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -411,7 +414,8 @@ public enum SchemaMigrations {
         (82, v82),
         (83, v83),
         (84, v84),
-        (85, v85)
+        (85, v85),
+        (86, v86)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4467,5 +4471,31 @@ public enum SchemaMigrations {
            d.completed_units, d.total_units, d.producer_id, d.producer_version,
            d.basis_kind, d.basis_identifier, NULL, d.updated_at
       FROM source_readiness_dimensions d;
+    """
+
+    // MARK: - v86 — USF-002.1 exact-version chunk ownership (indexing readiness proof)
+
+    private static let v86: String = """
+    -- USF-002.1 lets indexing readiness be RECONSTRUCTED from persisted rows rather than asserted
+    -- by the pipeline: each chunk records the EXACT source version it belongs to, so a parent
+    -- source version's FTS coverage can never be inflated by a child attachment's chunks. This is a
+    -- retrieval PROJECTION field, not a second source authority (source_versions stays the one
+    -- version authority). A soft reference (column + index, no hard FK): SQLite cannot ALTER-ADD a
+    -- foreign key, and rebuilding `chunks` would invalidate the external chunks_fts rowid mapping —
+    -- disproportionate for a projection column. Provability comes from the exact-ownership backfill
+    -- below and the ftsCoverage query, not from FK enforcement.
+    ALTER TABLE chunks ADD COLUMN source_version_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_chunks_source_version ON chunks(source_version_id);
+
+    -- Backfill ONLY where exact ownership is provable: chunk → its EvidenceBlock → that block's
+    -- source_version_id. Legacy/fallback chunks (no evidence_block_id, or a block whose version is
+    -- itself null) stay NULL rather than guessing. New production chunks carry the id at insert.
+    UPDATE chunks SET source_version_id = (
+        SELECT eb.source_version_id FROM evidence_blocks eb WHERE eb.id = chunks.evidence_block_id
+    )
+    WHERE evidence_block_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM evidence_blocks eb WHERE eb.id = chunks.evidence_block_id AND eb.source_version_id IS NOT NULL
+      );
     """
 }

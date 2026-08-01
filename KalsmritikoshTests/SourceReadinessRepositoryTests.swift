@@ -70,7 +70,7 @@ struct SourceReadinessRepositoryTests {
         let (rig, id) = try await rigWithVersion()
         _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 1, [
             USF002Fixtures.update(.textExtraction, .ready, action: .satisfy, c: 5, t: 5),
-            USF002Fixtures.update(.indexing, .ready, action: .satisfy, c: 5, t: 5),
+            USF002Fixtures.update(.typedFieldExtraction, .ready, action: .satisfy, appl: .conditional, c: 5, t: 5),
             USF002Fixtures.update(.basicQuestionAnswering, .partial, action: .partiallySatisfy, c: 1, t: 5),
         ]))
         let snap = try await rig.repo.snapshot(sourceVersionID: id)
@@ -158,7 +158,7 @@ struct SourceReadinessRepositoryTests {
         #expect(events.last?.aggregateRevision == 3)
     }
 
-    @Test("An invalidation reopens a ready dimension only with a reason")
+    @Test("An invalidation reopens a ready dimension only with a reason AND a real change")
     func invalidationRequiresReason() async throws {
         let (rig, id) = try await rigWithVersion()
         _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 1, [USF002Fixtures.update(.textExtraction, .ready, action: .satisfy, c: 3, t: 3)]))
@@ -166,9 +166,16 @@ struct SourceReadinessRepositoryTests {
         await #expect(throws: SourceReadinessError.self) {
             _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 2, [USF002Fixtures.update(.textExtraction, .running, action: .invalidate)]))
         }
-        // invalidate with a reason → accepted
-        let snap = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 2,
-            [USF002Fixtures.update(.textExtraction, .running, action: .invalidate, detail: "producer v2 supersedes")]))
+        // USF-002.1 — invalidate with a reason but SAME producer version and no basis change → rejected
+        await #expect(throws: SourceReadinessError.self) {
+            _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 2,
+                [USF002Fixtures.update(.textExtraction, .running, action: .invalidate, detail: "same producer, no change")]))
+        }
+        // invalidate with a reason AND a new producer version → accepted
+        let snap = try await rig.repo.apply(SourceReadinessUpdatePlan(
+            sourceVersionID: id, expectedRevision: 2,
+            updates: [USF002Fixtures.update(.textExtraction, .running, action: .invalidate, detail: "producer v2 supersedes")],
+            producerID: "test.producer", producerVersion: "2", occurredAt: USF002Fixtures.t0))
         #expect(snap.dimension(.textExtraction)?.state == .running)
     }
 
@@ -177,7 +184,7 @@ struct SourceReadinessRepositoryTests {
         let (rig, id) = try await rigWithVersion()
         _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 1, [
             USF002Fixtures.update(.textExtraction, .ready, action: .satisfy, c: 5, t: 5),
-            USF002Fixtures.update(.indexing, .ready, action: .satisfy, c: 5, t: 5),
+            USF002Fixtures.update(.basicQuestionAnswering, .ready, action: .satisfy, c: 5, t: 5),
         ]))
         let before = try await rig.repo.snapshot(sourceVersionID: id)
         let reopened = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion, at: rig.dbURL)
@@ -190,10 +197,12 @@ struct SourceReadinessRepositoryTests {
         let (rig, id) = try await rigWithVersion()
         // Initially preservedOnly (nothing searchable).
         #expect(try await rig.repo.snapshot(sourceVersionID: id).completionState == .preservedOnly)
-        // Make it searchable purely by moving dimensions → completion becomes searchablePartial.
+        // Seed real exact-version chunks so indexing readiness is provable (ftsCoverage 3/3).
+        try await USF002Fixtures.seedChunks(rig, sourceVersionID: id, count: 3)
+        // Make it searchable by moving dimensions with durable proof → completion searchablePartial.
         _ = try await rig.repo.apply(USF002Fixtures.plan(id, expectedRevision: 1, [
-            USF002Fixtures.update(.textExtraction, .ready, action: .satisfy, c: 5, t: 5),
-            USF002Fixtures.update(.indexing, .ready, action: .satisfy, c: 5, t: 5),
+            USF002Fixtures.update(.textExtraction, .ready, action: .satisfy, c: 3, t: 3),
+            USF002Fixtures.update(.indexing, .ready, action: .satisfy, c: 3, t: 3, basis: USF002Fixtures.ftsIndexBasis(id)),
         ]))
         #expect(try await rig.repo.snapshot(sourceVersionID: id).completionState == .searchablePartial)
     }

@@ -75,9 +75,12 @@ public struct ParseCoverageReport: Codable, Sendable, Hashable {
                                    blockCount: blocks, reason: "projected from source readiness (\(snapshot.completionState.rawValue))")
     }
 
-    /// Classify an ingested ParsedDocument into a coverage report (internal parser signal only —
-    /// NOT the readiness authority; see `from(_ snapshot:)`).
-    public nonisolated static func from(_ doc: ParsedDocument) -> ParseCoverageReport {
+    /// Classify an ingested ParsedDocument into a coverage report. USF-002.1 — INTERNAL parser
+    /// signal only, NOT the readiness authority: application code must use the durable path
+    /// (SourceReadinessRepository → SourceReadinessSnapshot → `from(_ snapshot:)`), never derive a
+    /// readiness-style status straight from a ParsedDocument. Kept internal so it cannot be mistaken
+    /// for authoritative source readiness.
+    nonisolated static func from(_ doc: ParsedDocument) -> ParseCoverageReport {
         let blocks = doc.meaningfulBlocks.count
         let hasError = doc.warnings.contains { $0.severity == .error }
         let (state, reason) = classify(status: doc.extractionStatus, meaningfulBlocks: blocks, hasError: hasError)

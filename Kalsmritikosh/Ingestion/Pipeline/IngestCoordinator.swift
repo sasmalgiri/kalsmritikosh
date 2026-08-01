@@ -568,9 +568,12 @@ public actor IngestCoordinator {
     /// Persist an already-parsed structural document (typed EvidenceBlocks +
     /// source version + document profile) and derive directly-observed
     /// assertions from it. Best-effort: never fails the ingest.
-    private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore) async {
+    @discardableResult
+    private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore) async -> StructuralPersistenceReceipt? {
         do {
-            try await store.persist(
+            // USF-002.1 — capture the COMMITTED receipt; readiness advances structure/metadata/OCR
+            // ONLY from this, never from the in-memory parse. A persistence failure returns nil.
+            let receipt = try await store.persist(
                 parse.doc, parser: parse.parserName, parserVersion: parse.parserVersion,
                 sizeBytes: parse.sizeBytes, originalURL: url.absoluteString,
                 makeCurrent: true, startedAt: parse.startedAt
@@ -586,8 +589,10 @@ public actor IngestCoordinator {
             if let genericFacts {
                 await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts)
             }
+            return receipt
         } catch {
             KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            return nil
         }
     }
 
@@ -802,7 +807,7 @@ public actor IngestCoordinator {
         for rawKO in perFileKOs {
             do {
                 let koBlocks = Self.blocks(for: rawKO, from: allBlocks, singleKO: singleKO)
-                let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks)
+                let processed = try await processKnowledgeObject(rawKO, fileID: fileRecord.id, documentClass: docClass, blocks: koBlocks, sourceVersionID: handle.sourceVersionID)
                 totalChunks += processed.chunkCount; totalEntities += processed.entityCount; totalEvents += processed.eventCount
                 allInvalidations.append(contentsOf: processed.invalidations)
                 lastObject = processed.object
@@ -825,42 +830,64 @@ public actor IngestCoordinator {
             }
         }
 
+        // USF-002.1 — a structural persist yields a COMMITTED receipt (nil on failure); readiness
+        // advances structure/metadata/OCR only from it, and links blocks only on a real commit.
+        var structuralReceipt: StructuralPersistenceReceipt? = nil
+        var structuralAttempted = false
         if let structural, let evidenceStore, totalChunks > 0 {
-            await persistStructuralDoc(structural, url: url, store: evidenceStore)
-            for link in blockOwnership {
-                try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+            structuralAttempted = true
+            structuralReceipt = await persistStructuralDoc(structural, url: url, store: evidenceStore)
+            if structuralReceipt != nil {
+                for link in blockOwnership {
+                    try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+                }
             }
         }
 
-        // USF-002 — advance readiness from the durable representations this ingest produced:
-        // text (loader content), indexing (FTS-backed chunks), and structure (committed blocks +
-        // their located substantive coverage). Structure is based on the committed structural
-        // document, not merely the parser's in-memory result; a parser-hash mismatch (structural
-        // == nil) leaves the structural dimension unadvanced rather than claiming ready.
-        if readiness != nil {
+        // USF-002.1 — advance readiness from DURABLE state ONLY. Text + indexing come from the exact
+        // per-version FTS coverage (reconstructed from persisted chunks — never a shared counter that
+        // includes a child attachment's chunks). Structure/metadata/OCR come from the COMMITTED
+        // structural receipt; a persistence failure marks structure FAILED rather than letting the
+        // in-memory parser result claim readiness. Structure is ready only when the parser reported
+        // complete AND every substantive block is located.
+        if let readiness {
+            let svid = handle.sourceVersionID
             var updates: [SourceReadinessDimensionUpdate] = []
-            if totalChunks > 0 {
+            let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
+            if coverage.eligible > 0 {
                 updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                              completedUnits: totalChunks, totalUnits: totalChunks))
-                updates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: .ready, action: .satisfy,
-                                                              completedUnits: totalChunks, totalUnits: totalChunks,
-                                                              basis: SourceReadinessBasis(kind: .ftsIndex, identifier: handle.sourceVersionID.uuidString)))
+                                                              completedUnits: coverage.eligible, totalUnits: coverage.eligible))
+                let fullyIndexed = coverage.indexed == coverage.eligible
+                updates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                              action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                              completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                              basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
             } else {
                 updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
                                                               completedUnits: 0, totalUnits: 0))
             }
-            if let structural {
-                let substantive = structural.doc.meaningfulBlocks
-                let total = substantive.count
-                let located = substantive.filter { $0.locator != nil }.count
-                if total > 0 {
-                    let full = located == total
+            if let r = structuralReceipt {
+                let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
+                let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
+                updates.append(SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
+                                                              action: .satisfy, basis: docBasis))
+                if r.substantiveBlockCount > 0 {
+                    let ready = r.isStructurallyComplete
                     updates.append(SourceReadinessDimensionUpdate(
-                        dimension: .structuralExtraction, state: full ? .ready : .partial,
-                        action: full ? .satisfy : .partiallySatisfy, completedUnits: located, totalUnits: total))
+                        dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                        action: ready ? .satisfy : .partiallySatisfy,
+                        completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
                 }
+                if r.ocrBlockCount > 0 {
+                    updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
+                                                                  applicability: .conditional,
+                                                                  completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
+                }
+            } else if structuralAttempted {
+                updates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed,
+                                                              action: .fail, detail: "structural persistence failed"))
             }
-            await advanceReadiness(handle.sourceVersionID, updates)
+            await advanceReadiness(svid, updates)
         }
 
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
@@ -884,7 +911,8 @@ public actor IngestCoordinator {
         _ rawObject: KnowledgeObject,
         fileID: UUID,
         documentClass docClass: DocumentClass,
-        blocks: [EvidenceBlock] = []
+        blocks: [EvidenceBlock] = [],
+        sourceVersionID: UUID? = nil
     ) async throws -> ProcessedKO {
         var meta = rawObject.metadata
         meta["documentClass"] = AnyCodable(.string(docClass.rawValue))
@@ -942,7 +970,9 @@ public actor IngestCoordinator {
             let isBoilerplate = c.blockKind
                 .flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
             let admit = !isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted
-            return c.withAdmitEmbedding(admit)
+            // USF-002.1 — stamp the EXACT source version so per-version FTS coverage is provable and
+            // a parent's indexing readiness can never count a child attachment's chunks.
+            return c.withAdmitEmbedding(admit).withSourceVersion(sourceVersionID)
         }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
