@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 87
+    public static let latestVersion = 88
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -306,7 +306,15 @@ public enum SchemaMigrations {
                                    "normalized_member_path", "entry_kind", "compressed_size",
                                    "uncompressed_size", "detected_type", "disposition",
                                    "child_source_version_id", "content_hash", "detail",
-                                   "created_at", "updated_at"]
+                                   "created_at", "updated_at"],
+            // v88 — USF-M3 progressive upgrade ledger (enrichment_jobs REBUILT with new columns, so the
+            // column probe distinguishes v88 from v87; enrichment_job_events is a NEW table). NEWEST markers.
+            "enrichment_jobs": ["id", "scope_kind", "subject_id", "source_version_id", "kind",
+                                 "target_dimension", "requested_goal", "priority", "origin", "state",
+                                 "attempts", "max_attempts", "producer_id", "producer_version",
+                                 "not_before", "lease_token", "lease_expires_at", "completed_at"],
+            "enrichment_job_events": ["id", "job_id", "sequence", "action", "from_state", "to_state",
+                                       "detail", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -429,7 +437,8 @@ public enum SchemaMigrations {
         (84, v84),
         (85, v85),
         (86, v86),
-        (87, v87)
+        (87, v87),
+        (88, v88)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4600,5 +4609,100 @@ public enum SchemaMigrations {
     );
     CREATE INDEX idx_container_members_parent ON container_members(parent_source_version_id);
     CREATE INDEX idx_container_members_child ON container_members(child_source_version_id);
+    """
+
+    // MARK: - v88 — USF-M3 progressive upgrade ledger (exact-source-version background work)
+
+    private static let v88: String = """
+    -- USF-M3 (USF-009) EVOLVES the existing enrichment_jobs ledger into an exact-SourceVersion
+    -- progressive-upgrade queue rather than adding a competing background-work system. The table is
+    -- rebuilt (SQLite cannot ALTER a UNIQUE constraint / add many columns at once): legacy rows are
+    -- preserved verbatim as scope_kind='legacySubject' with source_version_id NULL (we NEVER guess an
+    -- exact version for an old ambiguous subject_id); their states/attempts/errors/timestamps carry
+    -- over. New USF-M3 production jobs are scope_kind='sourceVersion' with a non-null source_version_id.
+    -- A job describes WORK; it never asserts readiness (source_readiness_* stays the authority).
+    -- FK-safe with enforcement ON: nothing references the old enrichment_jobs, and legacy rows carry a
+    -- NULL source_version_id so the new FK to source_versions is never triggered.
+    CREATE TABLE enrichment_jobs__v88 (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        scope_kind         TEXT NOT NULL DEFAULT 'legacySubject',
+        subject_id         TEXT,
+        source_version_id  TEXT,
+        kind               TEXT NOT NULL,
+        target_dimension   TEXT,
+        requested_goal     TEXT,
+        priority           INTEGER NOT NULL DEFAULT 40,
+        origin             TEXT NOT NULL DEFAULT 'legacy',
+        state              TEXT NOT NULL DEFAULT 'pending',
+        attempts           INTEGER NOT NULL DEFAULT 0,
+        max_attempts       INTEGER NOT NULL DEFAULT 3,
+        last_error         TEXT,
+        producer_id        TEXT NOT NULL DEFAULT 'legacy',
+        producer_version   TEXT NOT NULL DEFAULT '1',
+        not_before         REAL NOT NULL DEFAULT 0,
+        lease_token        TEXT,
+        lease_expires_at   REAL,
+        created_at         REAL NOT NULL,
+        updated_at         REAL NOT NULL,
+        completed_at       REAL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        CHECK(scope_kind IN ('legacySubject','sourceVersion')),
+        CHECK(state IN ('pending','running','done','failed','blocked','cancelled','superseded')),
+        CHECK(priority >= 0),
+        CHECK(attempts >= 0),
+        CHECK(max_attempts >= 1),
+        -- Scope integrity: a sourceVersion job MUST carry an exact source_version_id; a legacySubject
+        -- job MUST carry a subject_id.
+        CHECK((scope_kind = 'sourceVersion' AND source_version_id IS NOT NULL)
+           OR (scope_kind = 'legacySubject' AND subject_id IS NOT NULL)),
+        -- A running sourceVersion job MUST hold a lease token + expiry. The lease mechanic is a property
+        -- of the exact-version upgrade queue ONLY; legacy subject jobs never leased, so preserving their
+        -- claim-sets-running-without-a-lease contract is required (they carry NULL lease columns).
+        CHECK(scope_kind <> 'sourceVersion' OR state <> 'running'
+              OR (lease_token IS NOT NULL AND lease_expires_at IS NOT NULL))
+    );
+
+    -- Preserve legacy jobs exactly (unknown states collapse to pending; NEVER invent a source version).
+    INSERT INTO enrichment_jobs__v88
+        (id, scope_kind, subject_id, source_version_id, kind, priority, origin, state, attempts,
+         max_attempts, last_error, producer_id, producer_version, not_before, created_at, updated_at)
+    SELECT id, 'legacySubject', subject_id, NULL, kind, 40, 'legacy',
+           CASE state WHEN 'pending' THEN 'pending' WHEN 'running' THEN 'running'
+                      WHEN 'done' THEN 'done' WHEN 'failed' THEN 'failed' ELSE 'pending' END,
+           attempts, 3, last_error, 'legacy', '1', 0, created_at, updated_at
+      FROM enrichment_jobs;
+
+    DROP TABLE enrichment_jobs;
+    ALTER TABLE enrichment_jobs__v88 RENAME TO enrichment_jobs;
+
+    -- Claim ordering: highest priority, earliest eligible, oldest first, stable by id.
+    CREATE INDEX idx_enrichment_jobs_claim ON enrichment_jobs(state, priority, not_before, created_at, id);
+    CREATE INDEX idx_enrichment_jobs_sv ON enrichment_jobs(source_version_id);
+    CREATE INDEX idx_enrichment_jobs_lease ON enrichment_jobs(state, lease_expires_at);
+    -- Idempotency: at most ONE active (pending/running) sourceVersion job per exact work identity.
+    CREATE UNIQUE INDEX idx_enrichment_jobs_active_sv
+        ON enrichment_jobs(source_version_id, kind, producer_id, producer_version)
+        WHERE scope_kind = 'sourceVersion' AND state IN ('pending','running');
+    -- Preserve the legacy (subject_id, kind) idempotency for legacySubject jobs.
+    CREATE UNIQUE INDEX idx_enrichment_jobs_active_subject
+        ON enrichment_jobs(subject_id, kind)
+        WHERE scope_kind = 'legacySubject';
+
+    -- Append-only operational provenance for each job (NOT evidence).
+    CREATE TABLE enrichment_job_events (
+        id           TEXT PRIMARY KEY NOT NULL,
+        job_id       TEXT NOT NULL,
+        sequence     INTEGER NOT NULL,
+        action       TEXT NOT NULL,
+        from_state   TEXT,
+        to_state     TEXT,
+        detail       TEXT,
+        occurred_at  REAL NOT NULL,
+        FOREIGN KEY(job_id) REFERENCES enrichment_jobs(id) ON DELETE CASCADE,
+        UNIQUE(job_id, sequence),
+        CHECK(sequence >= 1),
+        CHECK(action IN ('enqueue','claim','succeed','fail','block','retry','recover','cancel','supersede'))
+    );
+    CREATE INDEX idx_enrichment_job_events_job ON enrichment_job_events(job_id, sequence);
     """
 }

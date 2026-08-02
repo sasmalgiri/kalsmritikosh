@@ -179,9 +179,10 @@ struct IngestCoordinatorSafeIntakeTests {
     @MainActor func attemptCarriesVersionIDs() async throws {
         let rig = try await makeRig()
         let result = try await rig.coordinator.ingest(fileAt: try write(rig, "matter.eml", email))
+        // USF-M3 — a real processed pass records `.passCompleted` (operational), not the legacy `.queryable`.
         let row = try #require(try await rig.db.query("""
             SELECT logical_source_id, source_version_id FROM ingest_file_attempts
-              WHERE status='queryable' ORDER BY attempted_at DESC LIMIT 1;
+              WHERE status='passCompleted' ORDER BY attempted_at DESC LIMIT 1;
             """, []).first)
         #expect(row.uuid(0) == result.logicalSourceID)
         #expect(row.uuid(1) == result.sourceVersionID)
