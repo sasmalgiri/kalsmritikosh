@@ -116,7 +116,7 @@ struct MMIBoundaryTests {
             let lower = text.lowercased()
             for t in models { #expect(!lower.contains(t), "\(name) names model \(t)") }
         }
-        #expect(SchemaMigrations.latestVersion == 90)
+        #expect(SchemaMigrations.latestVersion >= 90)   // introduced at v90; later units bump higher
         let migrations = try read("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
         #expect(migrations.components(separatedBy: "CREATE TABLE typed_fields").count == 2)
     }

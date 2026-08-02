@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 90
+    public static let latestVersion = 91
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -329,10 +329,21 @@ public enum SchemaMigrations {
                          "source", "created_at", "request_id", "mission_lane", "mission_objective",
                          "mission_deliverable", "is_terminal", "updated_at"],
             // v90 — MMI typed identity/document fields (NEW table, so the column probe distinguishes
-            // v90 from v89). These are the NEWEST markers — every future migration MUST add its newest.
+            // v90 from v89).
             "typed_fields": ["id", "source_version_id", "evidence_block_id", "field_type", "raw_value",
                               "normalized_value", "confidence", "extraction_method", "locator",
-                              "ocr_confidence", "bounding_box", "producer_id", "producer_version", "created_at"]
+                              "ocr_confidence", "bounding_box", "producer_id", "producer_version", "created_at"],
+            // v91 — TBJ-FINAL time-bounded job planning envelope (three NEW tables, so the column probe
+            // distinguishes v91 from v90). A Job REFERENCES existing task/deadline/workflow authorities —
+            // it is NOT a second task or deadline system. These are the NEWEST markers — every future
+            // migration MUST add its newest physical marker here.
+            "job_objectives": ["id", "workspace_id", "title", "objective_detail", "budget_basis",
+                                "budget_seconds", "budget_deadline_id", "budget_workflow_run_id",
+                                "primary_workflow_run_id", "lifecycle", "revision", "created_at",
+                                "updated_at", "closed_at", "closure_reason"],
+            "job_plan_references": ["id", "job_id", "reference_kind", "reference_id", "workflow_run_id",
+                                     "role", "is_minimum_deliverable", "ordinal", "note", "created_at"],
+            "job_events": ["id", "job_id", "sequence", "job_revision", "action", "actor", "detail", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -458,7 +469,8 @@ public enum SchemaMigrations {
         (87, v87),
         (88, v88),
         (89, v89),
-        (90, v90)
+        (90, v90),
+        (91, v91)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4843,5 +4855,118 @@ public enum SchemaMigrations {
     CREATE INDEX idx_typed_fields_version ON typed_fields(source_version_id, field_type);
     CREATE INDEX idx_typed_fields_block ON typed_fields(evidence_block_id);
     CREATE INDEX idx_typed_fields_producer ON typed_fields(source_version_id, producer_id, producer_version);
+    """
+
+    private static let v91: String = """
+    -- TBJ-FINAL (Time-Bounded Job core). A Job is a durable PLANNING ENVELOPE over the work a user
+    -- must deliver against a time budget. It is NOT a second task system and NOT a second deadline
+    -- system: every plan item REFERENCES an existing authority object (a ProfessionalTask, a
+    -- WorkflowRun / step / requirement, an evidence requirement, or an expected artifact). Progress,
+    -- priority and the time-bounded outcome are DERIVED at plan time from those live authorities —
+    -- never stored here as a competing truth, and never as a fabricated completion percentage.
+    --
+    -- Time-budget integrity: the ONLY deadline a job may bind as its budget basis is a row in
+    -- `deadlines` — which holds ONLY confirmed deadlines (candidates live in the separate
+    -- `deadline_candidates` table). JobRepository enforces this at write time (it resolves the id in
+    -- `deadlines` before binding), so a DeadlineCandidate CANNOT become a job's authoritative budget;
+    -- an unconfirmed candidate is surfaced by the planning service as "possible deadline — needs
+    -- confirmation", never as a confirmed countdown. The deadline / workflow pointers are SOFT
+    -- references (plain columns validated by the repository, the same idiom as method_runs' soft
+    -- workflow references) — not hard FKs — so an ON DELETE action can never null a budget column out
+    -- from under the basis-integrity CHECK below, and a deleted deadline simply reads as no-longer-
+    -- available when the planning service resolves it. Ownership edges (workspace, owning job) ARE
+    -- hard FKs with CASCADE.
+    CREATE TABLE job_objectives (
+        id                      TEXT PRIMARY KEY NOT NULL,
+        workspace_id            TEXT NOT NULL,
+        title                   TEXT NOT NULL,
+        objective_detail        TEXT,
+        -- Time budget. `budget_basis` selects which (if any) authority defines the usable time.
+        budget_basis            TEXT NOT NULL,        -- explicitDuration | confirmedDeadline | workflowConstraint | none
+        budget_seconds          REAL,                 -- set iff basis = explicitDuration (> 0)
+        budget_deadline_id      TEXT,                 -- set iff basis = confirmedDeadline (soft ref → deadlines.id)
+        budget_workflow_run_id  TEXT,                 -- set iff basis = workflowConstraint (soft ref → workflow_runs.id)
+        primary_workflow_run_id TEXT,                 -- optional run the job is executed through (soft ref)
+        -- Job-envelope lifecycle. DISTINCT vocabulary from ProfessionalTaskStatus / WorkflowRunStatus:
+        -- a job is an objective the user opens, then explicitly closes or abandons. Underlying task /
+        -- workflow completion is a SEPARATE, derived fact and is never inferred from this column.
+        lifecycle               TEXT NOT NULL,        -- active | closed | abandoned
+        revision                INTEGER NOT NULL,
+        created_at              REAL NOT NULL,
+        updated_at              REAL NOT NULL,
+        closed_at               REAL,
+        closure_reason          TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(length(trim(title)) > 0),
+        CHECK(budget_basis IN ('explicitDuration','confirmedDeadline','workflowConstraint','none')),
+        CHECK(lifecycle IN ('active','closed','abandoned')),
+        CHECK(revision >= 1),
+        -- Exactly the column matching the basis is populated; the others stay NULL.
+        CHECK(
+            (budget_basis = 'explicitDuration'   AND budget_seconds IS NOT NULL AND budget_seconds > 0
+                 AND budget_deadline_id IS NULL AND budget_workflow_run_id IS NULL) OR
+            (budget_basis = 'confirmedDeadline'  AND budget_deadline_id IS NOT NULL
+                 AND budget_seconds IS NULL AND budget_workflow_run_id IS NULL) OR
+            (budget_basis = 'workflowConstraint' AND budget_workflow_run_id IS NOT NULL
+                 AND budget_seconds IS NULL AND budget_deadline_id IS NULL) OR
+            (budget_basis = 'none'
+                 AND budget_seconds IS NULL AND budget_deadline_id IS NULL AND budget_workflow_run_id IS NULL)
+        ),
+        -- active forbids a closure timestamp; closed/abandoned require one.
+        CHECK(
+            (lifecycle = 'active'                    AND closed_at IS NULL) OR
+            (lifecycle IN ('closed','abandoned')     AND closed_at IS NOT NULL)
+        )
+    );
+    CREATE INDEX idx_job_objectives_workspace ON job_objectives(workspace_id, lifecycle);
+    CREATE INDEX idx_job_objectives_deadline ON job_objectives(budget_deadline_id);
+    CREATE INDEX idx_job_objectives_workflow ON job_objectives(primary_workflow_run_id);
+
+    -- The persisted JobExecutionPlan: an ordered set of references to existing authority objects.
+    -- The MinimumAcceptableDeliverable is the subset flagged `is_minimum_deliverable = 1` (no separate
+    -- table, no separate truth). A reference NEVER becomes an executable object of its own — it points
+    -- at one that already exists in the canonical engine.
+    CREATE TABLE job_plan_references (
+        id                     TEXT PRIMARY KEY NOT NULL,
+        job_id                 TEXT NOT NULL,
+        reference_kind         TEXT NOT NULL,   -- professionalTask | workflowRun | workflowStep | workflowRequirement | evidenceRequirement | expectedArtifact
+        reference_id           TEXT NOT NULL,   -- UUID (task/run/step) or stable string id (requirement / artifact-definition)
+        workflow_run_id        TEXT,            -- soft context run for step / requirement / artifact references
+        role                   TEXT NOT NULL,   -- required | supporting | optional
+        is_minimum_deliverable INTEGER NOT NULL DEFAULT 0,
+        ordinal                INTEGER NOT NULL,
+        note                   TEXT,
+        created_at             REAL NOT NULL,
+        FOREIGN KEY(job_id) REFERENCES job_objectives(id) ON DELETE CASCADE,
+        CHECK(length(trim(reference_id)) > 0),
+        CHECK(reference_kind IN ('professionalTask','workflowRun','workflowStep','workflowRequirement','evidenceRequirement','expectedArtifact')),
+        CHECK(role IN ('required','supporting','optional')),
+        CHECK(is_minimum_deliverable IN (0,1)),
+        CHECK(ordinal >= 0)
+    );
+    CREATE INDEX idx_job_plan_refs_job ON job_plan_references(job_id, ordinal);
+    -- One reference per (job, kind, target, context-run). COALESCE folds NULL context runs together so
+    -- a duplicate with no run is still rejected (a bare UNIQUE would treat NULLs as distinct).
+    CREATE UNIQUE INDEX idx_job_plan_refs_unique
+        ON job_plan_references(job_id, reference_kind, reference_id, COALESCE(workflow_run_id, ''));
+
+    -- Append-only audit ledger for the job envelope. Durable so a job's history survives relaunch and
+    -- provides provenance for every planning change. Contiguous per-job sequence.
+    CREATE TABLE job_events (
+        id            TEXT PRIMARY KEY NOT NULL,
+        job_id        TEXT NOT NULL,
+        sequence      INTEGER NOT NULL,
+        job_revision  INTEGER NOT NULL,
+        action        TEXT NOT NULL,   -- created | budgetSet | referenceAdded | referenceRemoved | referenceUpdated | closed | abandoned | reopened
+        actor         TEXT NOT NULL,
+        detail        TEXT,
+        occurred_at   REAL NOT NULL,
+        FOREIGN KEY(job_id) REFERENCES job_objectives(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(job_revision >= 1),
+        CHECK(action IN ('created','budgetSet','referenceAdded','referenceRemoved','referenceUpdated','closed','abandoned','reopened')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_job_events_seq ON job_events(job_id, sequence);
     """
 }
