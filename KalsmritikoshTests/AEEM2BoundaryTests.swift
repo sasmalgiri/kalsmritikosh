@@ -37,9 +37,9 @@ struct AEEM2BoundaryTests {
             .compactMap { rel in (try? read(rel)).map { (rel, $0) } }
     }
 
-    @Test("Schema stays at v89; the revision ledger is the only answer-revision authority")
+    @Test("The revision ledger exists (schema ≥ v89) and is the only answer-revision authority")
     func oneAuthoritySchema() async throws {
-        #expect(SchemaMigrations.latestVersion == 89)
+        #expect(SchemaMigrations.latestVersion >= 89)   // introduced at v89; later units may bump higher
         // answer_revisions / answer_revision_events are created exactly once (in the migration).
         let migrations = try read(migrationsFile)
         #expect(migrations.components(separatedBy: "CREATE TABLE answer_revisions").count == 2)

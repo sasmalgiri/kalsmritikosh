@@ -96,13 +96,13 @@ struct AEEM1BoundaryTests {
         }
     }
 
-    @Test("No model names anywhere in AEE; schema is at v89 (AEE-M2 revision ledger)")
+    @Test("No model names anywhere in AEE; schema is at least v89 (AEE-M2 revision ledger)")
     func grepGuardAndSchema() {
         let models = ["qwen", "gemma", "deepseek", "llama", "mistral", "nomic", "gpt"]
         for (name, text) in aeeFiles() {
             let lower = text.lowercased()
             for token in models { #expect(!lower.contains(token), "\(name) names model \(token)") }
         }
-        #expect(SchemaMigrations.latestVersion == 89)   // AEE-M2 added the answer-revision ledger
+        #expect(SchemaMigrations.latestVersion >= 89)   // AEE-M2 added the answer-revision ledger; later units bump higher
     }
 }
