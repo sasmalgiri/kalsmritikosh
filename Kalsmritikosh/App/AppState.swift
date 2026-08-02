@@ -416,6 +416,10 @@ public final class AppState {
     public private(set) var evidenceStore: EvidenceStore?
     /// PERF.2 — durable deferred-enrichment job ledger.
     public private(set) var enrichmentJobs: EnrichmentJobRepository?
+    /// TBJ-FINAL — durable time-bounded Job planning envelope over the existing task / deadline /
+    /// workflow authorities. Live from boot; consumed by the persona shell's "My Work" surface in a
+    /// later stage. It is NOT a second task or deadline system — see JobRepository.
+    public private(set) var jobs: JobRepository?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1744,6 +1748,8 @@ public final class AppState {
             // Commit
             self.database = db
             self.enrichmentJobs = enrichmentJobsRepo
+            // TBJ-FINAL — the time-bounded Job planning envelope, live from boot over the shared ledger.
+            self.jobs = JobRepository(database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
