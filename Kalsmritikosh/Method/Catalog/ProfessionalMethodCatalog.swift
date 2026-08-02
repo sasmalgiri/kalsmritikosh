@@ -54,7 +54,9 @@ public nonisolated struct ProfessionalMethodCatalog: Sendable {
     @MainActor public static var standardMethods: [any ConcreteProfessionalMethod] {
         [
             BrainstormingMethod(),
-            FiveW1HMethod()
+            FiveW1HMethod(),
+            HypothesisMatrixMethod(),
+            EvidenceCollectionPlanMethod()
         ]
     }
 
