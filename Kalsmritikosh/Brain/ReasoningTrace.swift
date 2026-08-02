@@ -47,6 +47,18 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
     /// archive carries the answer.
     public let uncertainties: [String]
 
+    // AEE-M1 — the single QueryMission that served this request. All optional so
+    // legacy/uninstrumented traces stay valid; the mission is DERIVED from the existing
+    // signals, so these are observational only (no second trace authority).
+    public let missionLane: String?
+    public let missionObjective: String?
+    public let missionDeliverable: String?
+    public let evidenceRisk: String?
+    public let missionReadinessFloor: String?
+    public let missionCorrectivePassCount: Int?
+    /// Exact-version upgrades the adaptive lane requested, as "sourceVersionID:goal".
+    public let missionUpgradeActions: [String]?
+
     public struct RetrievalCounts: Codable, Sendable, Hashable {
         public let events: Int
         public let entities: Int
@@ -87,7 +99,14 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
         llmPurposes: [String] = [],
         retrievalCounts: RetrievalCounts = RetrievalCounts(),
         assumptions: [String] = [],
-        uncertainties: [String] = []
+        uncertainties: [String] = [],
+        missionLane: String? = nil,
+        missionObjective: String? = nil,
+        missionDeliverable: String? = nil,
+        evidenceRisk: String? = nil,
+        missionReadinessFloor: String? = nil,
+        missionCorrectivePassCount: Int? = nil,
+        missionUpgradeActions: [String]? = nil
     ) {
         self.pathTaken = pathTaken
         self.intent = intent
@@ -99,6 +118,13 @@ public struct ReasoningTrace: Codable, Sendable, Hashable {
         self.retrievalCounts = retrievalCounts
         self.assumptions = assumptions
         self.uncertainties = uncertainties
+        self.missionLane = missionLane
+        self.missionObjective = missionObjective
+        self.missionDeliverable = missionDeliverable
+        self.evidenceRisk = evidenceRisk
+        self.missionReadinessFloor = missionReadinessFloor
+        self.missionCorrectivePassCount = missionCorrectivePassCount
+        self.missionUpgradeActions = missionUpgradeActions
     }
 
     /// Canonical path labels — kept as static strings (not an enum)
