@@ -81,6 +81,14 @@ public actor MasterBrain {
     /// so every retrieval respects the caller's SensitiveScope. nil = no enforcement
     /// (existing retrieve path, backward compatible).
     private let sensitivePolicy: SensitiveRetrievalPolicy?
+    /// AEE-M1 — optional bridge to the USF exact-version upgrade subsystem. When wired,
+    /// the adaptive evidence lane may raise ONLY the decisive retrieved source versions
+    /// to the mission's readiness floor (never the whole archive). nil = AEE answers from
+    /// what is already retrieved (mission framing still applies; no upgrades run) — this
+    /// keeps every existing path byte-for-byte unchanged. A `var` so the boot sequence can
+    /// attach it AFTER the IngestCoordinator exists (the brain is constructed first); tests
+    /// inject it directly through init.
+    private var aeeUpgradeBridge: AEEEvidenceUpgrading?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -104,7 +112,8 @@ public actor MasterBrain {
         evidenceStore: EvidenceStore? = nil,
         objects: KnowledgeObjectRepository? = nil,
         priorityGate: QueryPriorityGate? = nil,
-        sensitivePolicy: SensitiveRetrievalPolicy? = nil
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil,
+        aeeUpgradeBridge: AEEEvidenceUpgrading? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -125,6 +134,14 @@ public actor MasterBrain {
         self.objects = objects
         self.priorityGate = priorityGate
         self.sensitivePolicy = sensitivePolicy
+        self.aeeUpgradeBridge = aeeUpgradeBridge
+    }
+
+    /// AEE-M1 — attach the exact-version upgrade bridge after boot (the brain is
+    /// constructed before the IngestCoordinator exists). Idempotent; a later attach
+    /// replaces an earlier one. When never attached, AEE runs mission framing only.
+    public func attachAEEUpgradeBridge(_ bridge: AEEEvidenceUpgrading) {
+        self.aeeUpgradeBridge = bridge
     }
 
     /// ING-006 — held for the duration of an answer so the background embedding/enrichment
@@ -669,9 +686,13 @@ public actor MasterBrain {
     /// Returns the first result unchanged when no corrective pass is warranted.
     nonisolated static func applyCorrectiveRetrieval(
         first: RetrievalResult, intent: UserIntent, layers: [RetrievalLayer],
+        plan providedPlan: QueryPlan? = nil,
         retrieve: (UserIntent) async -> RetrievalResult
     ) async -> RetrievalResult {
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // AEE-M1 — use the request's REAL compiled plan when supplied (category/class-
+        // accurate fields + corroboration). Falls back to the legacy neutral compile only
+        // when no plan is threaded in (kept for the standalone corrective-retrieval tests).
+        let plan = providedPlan ?? QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         let sufficiency = EvidenceSufficiencyAssessor().assess(
             plan: plan, evidenceTexts: first.chunks.map { $0.chunk.text })
         let decision = CorrectiveRetrievalPlanner().decide(
@@ -689,6 +710,47 @@ public actor MasterBrain {
             entityHints: hints, rawQuestion: focusedQuestion)
         let extra = await retrieve(focused)
         return mergeRetrievals(first, extra)
+    }
+
+    /// AEE-M1 — run the mission's adaptive evidence upgrades. Only when the mission needs
+    /// evidence-ready DECISIVE sources: read each decisive exact version's durable
+    /// completion state through the bridge, plan the MINIMAL upgrades (planner only sees
+    /// the decisive versions — never a whole-archive upgrade), and request each one
+    /// foreground. Best-effort + exact-byte protected: a changed/unavailable source throws
+    /// and is skipped (the old version is never mutated; no answer is fabricated around a
+    /// permanently-blocked source — the assessor reports it). Returns the actions planned.
+    nonisolated static func runAdaptiveEvidenceUpgrades(
+        mission: QueryMission, retrieval: RetrievalResult, bridge: AEEEvidenceUpgrading
+    ) async -> [AEEUpgradeAction] {
+        guard mission.evidenceObligations.minimumSourceReadiness == .evidenceReady else { return [] }
+        let decisiveIDs = decisiveSourceVersionIDs(in: retrieval)
+        guard !decisiveIDs.isEmpty else { return [] }
+        var readiness: [UUID: SourceCompletionState] = [:]
+        for id in decisiveIDs {
+            if let state = await bridge.completionState(sourceVersionID: id) { readiness[id] = state }
+        }
+        guard !readiness.isEmpty else { return [] }
+        let plan = AdaptiveEvidencePlanner().plan(mission: mission, decisiveReadiness: readiness)
+        for action in plan.upgradeActions {
+            try? await bridge.ensureReady(sourceVersionID: action.sourceVersionID, goal: action.goal)
+        }
+        return plan.upgradeActions
+    }
+
+    /// The distinct exact source versions of the retrieved chunks — the decisive
+    /// candidates the answer will draw from. Bounded so a broad retrieval never fans out
+    /// into a large upgrade batch; legacy chunks without an exact version are skipped.
+    nonisolated static func decisiveSourceVersionIDs(in retrieval: RetrievalResult, limit: Int = 8) -> [UUID] {
+        var seen = Set<UUID>()
+        var ids: [UUID] = []
+        for rc in retrieval.chunks {
+            guard let sv = rc.chunk.sourceVersionID else { continue }
+            if seen.insert(sv).inserted {
+                ids.append(sv)
+                if ids.count >= limit { break }
+            }
+        }
+        return ids
     }
 
     /// RET-007 — union a corrective retrieval pass into the base result. Base items
@@ -1177,6 +1239,21 @@ public actor MasterBrain {
         let llmContext = externalContext?.child(purpose: "answer")
             ?? LLMRequestContext(budget: LLMCallBudget(limit: queryClass.callLimit), queryClass: queryClass)
 
+        // AEE-M1 — compile ONE QueryMission for this request from the already-computed
+        // signals (intent, category, class, plan). Deterministic, no model call, no
+        // re-analysis: it frames the request (objective/deliverable/lane/risk), sets the
+        // per-lane evidence obligations, and bounds the budget (allowedLLMCalls can only be
+        // equal-or-stricter than the class call limit). The SAME mission is threaded below
+        // into the corrective plan, the adaptive evidence lane, and the reasoning trace —
+        // `category` is computed here ONCE and reused (it was previously recomputed for the
+        // trace). A plain question never carries a workflow invocation, so this path never
+        // enters the professionalWorkflow lane.
+        let category = QueryCategoryClassifier().classify(question: question, intent: intent)
+        let missionPlan = QueryPlanCompiler().compile(intent: intent, category: category, queryClass: queryClass)
+        let mission = QueryMissionCompiler().compile(
+            intent: intent, category: category, queryClass: queryClass, plan: missionPlan,
+            context: AEERequestContext(requestID: UUID()))
+
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
         // is intentionally narrow so "new project" / "new supplier" don't
@@ -1231,6 +1308,17 @@ public actor MasterBrain {
         let firstRetrieval = (try? await retriever.retrieve(
             for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
 
+        // AEE-M1 — adaptive evidence lane. When an upgrade bridge is wired AND the mission
+        // needs evidence-ready DECISIVE sources, raise ONLY those exact source versions to
+        // the readiness floor (never the whole archive); the corrective pass below is the
+        // single targeted retrieval refresh. A no-op when no bridge is wired, so every
+        // existing path is byte-for-byte unchanged.
+        var missionUpgradeActions: [AEEUpgradeAction] = []
+        if let aeeUpgradeBridge {
+            missionUpgradeActions = await Self.runAdaptiveEvidenceUpgrades(
+                mission: mission, retrieval: firstRetrieval, bridge: aeeUpgradeBridge)
+        }
+
         // RET-007 — bounded corrective retrieval. If the first pass didn't cover the
         // fields the question asked for, run ONE focused second pass biased at the
         // still-missing fields + the plan's subjects, and MERGE it in (base ordering
@@ -1240,6 +1328,7 @@ public actor MasterBrain {
         // OPS-003B: corrective pass also goes through the scoped path.
         let sharedRetrieval = await Self.applyCorrectiveRetrieval(
             first: firstRetrieval, intent: intent, layers: decision.retrievalLayers,
+            plan: mission.queryPlan,
             retrieve: { focused in
                 (try? await retriever.retrieve(for: focused, layers: decision.retrievalLayers, access: access))?.result
                     ?? RetrievalResult()
@@ -1314,7 +1403,8 @@ public actor MasterBrain {
         // can distinguish it from the historical / RAG paths. The
         // existing Verifier doesn't set `source`, so we re-emit
         // the value with the field stamped in.
-        let category = QueryCategoryClassifier().classify(question: question, intent: intent)
+        // `category` was compiled once at the top of this method (with the mission) and is
+        // reused here — the expert path no longer re-classifies the question for the trace.
         let trace = ReasoningTrace(
             pathTaken: ReasoningTrace.pathExpertPipeline,
             intent: intent.kind.rawValue,
@@ -1333,7 +1423,16 @@ public actor MasterBrain {
                 genericFacts: sharedRetrieval.genericFacts.count
             ),
             assumptions: Self.assumptionsFromExpertReport(verified),
-            uncertainties: verified.contradictions.map(\.description)
+            uncertainties: verified.contradictions.map(\.description),
+            missionLane: mission.primaryLane.rawValue,
+            missionObjective: mission.objective.rawValue,
+            missionDeliverable: mission.deliverable.rawValue,
+            evidenceRisk: mission.evidenceRisk.rawValue,
+            missionReadinessFloor: mission.evidenceObligations.minimumSourceReadiness.rawValue,
+            missionCorrectivePassCount: nil,
+            missionUpgradeActions: missionUpgradeActions.map {
+                "\($0.sourceVersionID.uuidString):\($0.goal.rawValue)"
+            }
         )
 
         // Adaptive minimum-LLM budget (ledger-first Phase 4). An ORDINARY

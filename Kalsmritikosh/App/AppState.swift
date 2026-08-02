@@ -1346,6 +1346,11 @@ public final class AppState {
             await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
             try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
 
+            // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
+            // evidence bridge so a mission that needs evidence-ready DECISIVE sources can
+            // raise ONLY those exact versions at query time (never the whole archive).
+            await brain.attachAEEUpgradeBridge(IngestCoordinatorEvidenceUpgradeBridge(ingest: ingest))
+
             // PERF.1 — resume the resumable background embedding drain as soon
             // as the coordinator exists (embedder + vectors are set at init),
             // NOT at the end of boot. On a populated DB the tail of boot does
