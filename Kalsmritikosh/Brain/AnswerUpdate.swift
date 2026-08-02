@@ -20,6 +20,31 @@ import Foundation
 /// Phase 1), it is simply omitted from the stream. Phase 4 (verified)
 /// is the only guaranteed terminal event for a non-refused answer.
 public enum AnswerUpdate: Sendable {
+
+    // ── AEE-M2 progressive answer lifecycle (the ONLY states production emits) ──
+    // Answer LIFECYCLE, not evidence truth. Each content-bearing case carries the
+    // VerifiedAnswer to render; analysisProgress is status-only (may carry a chapter
+    // artifact). A `verifiedFinal` is emitted ONLY after the durable answer-ledger commit;
+    // a persistence failure yields `incomplete`, never `verifiedFinal`.
+
+    /// A cited, explicitly-provisional finding (deterministic/source-grounded).
+    case immediateFinding(VerifiedAnswer)
+    /// The first answer-shaped result with citations — grounded but not final.
+    case groundedWorkingResult(VerifiedAnswer)
+    /// Status/progress only — no uncited claims. May carry a reconstruction chapter artifact.
+    case analysisProgress(detail: String, chapter: NarrativeChapter?)
+    /// The current content satisfies the mission's evidence obligations.
+    case reviewReady(VerifiedAnswer)
+    /// The locked answer, AFTER verification AND a durable answer-ledger commit.
+    case verifiedFinal(VerifiedAnswer)
+    /// An explicit replacement of previously-visible content; the prior revision is preserved.
+    case corrected(VerifiedAnswer, reason: String)
+    /// The mission could not complete honestly — carries what was found + limitations.
+    case incomplete(VerifiedAnswer)
+
+    // ── Legacy cases — retained for compile compatibility with old callers/tests ONLY.
+    //    Production MasterBrain no longer emits these (proven by AEEM2BoundaryTests). ──
+
     /// Phase 1 — instant cached read (< 500 ms target). The body and
     /// citations come from the MemoryObject for the resolved subject,
     /// IF the subject and a confident-enough cached narrative exist.

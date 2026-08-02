@@ -165,9 +165,14 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         access: SensitiveAccessContext.testUnrestricted()
     ) {
         switch update {
-        case .chapterReady(let chapter):
+        // AEE-M2 — chapters stream as analysisProgress artifacts; terminal = verifiedFinal/incomplete.
+        case .analysisProgress(_, let chapter):
+            if let chapter { historyChapters.append(chapter) }
+        case .verifiedFinal(let answer), .incomplete(let answer):
+            historyVerified = answer
+        case .chapterReady(let chapter):   // legacy compat
             historyChapters.append(chapter)
-        case .verified(let answer):
+        case .verified(let answer):        // legacy compat
             historyVerified = answer
         default:
             continue

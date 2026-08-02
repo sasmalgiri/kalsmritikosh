@@ -751,11 +751,16 @@ public struct HistoryView: View {
                                                        access: SensitiveAccessContext.testUnrestricted())
         for await update in stream {
             switch update {
-            case .instant:
-                continue
-            case .synthesisToken:
-                continue
-            case .expertFindingsArrived:
+            // AEE-M2 — chapters stream as analysisProgress artifacts; the terminal answer is
+            // verifiedFinal or incomplete. Provisional finding/working/review carry the answer.
+            case .analysisProgress(_, let chapter):
+                if let chapter { await MainActor.run { chapters.append(chapter) } }
+            case .verifiedFinal(let answer), .incomplete(let answer),
+                 .immediateFinding(let answer), .groundedWorkingResult(let answer),
+                 .reviewReady(let answer), .corrected(let answer, _):
+                await MainActor.run { finalAnswer = answer }
+            // Legacy cases (not emitted by production) retained for compatibility.
+            case .instant, .synthesisToken, .expertFindingsArrived:
                 continue
             case .chapterReady(let chapter):
                 await MainActor.run { chapters.append(chapter) }

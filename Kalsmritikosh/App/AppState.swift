@@ -707,6 +707,10 @@ public final class AppState {
             let conversationsRepo = ConversationsRepository(database: db)
             let corpusSnapshotsRepo = CorpusSnapshotRepository(database: db)
             let answerLedgerRepo = AnswerLedgerRepository(database: db)
+            // AEE-M2 §27 — an app restart mid-answer must not leave a v89 answer silently
+            // abandoned: mark any non-terminal progressive answer incomplete(interrupted),
+            // preserving its last durable revision. Legacy pre-v89 answers are untouched.
+            Task { try? await answerLedgerRepo.recoverInterruptedAnswers(reason: "interrupted") }
             let enrichmentRepo = EnrichmentStatusRepository(database: db)
             let gapNodesRepo = GapNodeRepository(database: db)
             let monitorSnapshotsRepo = MonitorSnapshotRepository(database: db)
