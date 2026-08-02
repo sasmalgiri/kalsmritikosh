@@ -93,6 +93,30 @@ public actor TypedFieldRepository {
         Int(try await database.query("SELECT COUNT(*) FROM typed_fields;", []).first?.int(0) ?? 0)
     }
 
+    /// All located values of a field type across the corpus (confidence desc) — the input to the
+    /// deterministic identity fast path. Bounded so a huge corpus never fans out unboundedly.
+    public func allFields(type: TypedFieldType, limit: Int = 200) async throws -> [TypedField] {
+        let rows = try await database.query("""
+            SELECT id, source_version_id, evidence_block_id, field_type, raw_value, normalized_value,
+                   confidence, extraction_method, locator, ocr_confidence, bounding_box,
+                   producer_id, producer_version, created_at
+            FROM typed_fields WHERE field_type = ?
+            ORDER BY confidence DESC LIMIT ?;
+            """, [.text(type.rawValue), .integer(Int64(limit))])
+        return rows.compactMap(Self.decode)
+    }
+
+    /// Resolve a source version to the current KnowledgeObject that owns it (for a citation).
+    /// version → logical source (files) → the KO whose file_id is that logical source.
+    public func sourceKnowledgeObjectID(forVersion sourceVersionID: UUID) async throws -> UUID? {
+        let rows = try await database.query("""
+            SELECT ko.id FROM knowledge_objects ko
+            JOIN source_versions sv ON sv.logical_source_id = ko.file_id
+            WHERE sv.id = ? LIMIT 1;
+            """, [.uuid(sourceVersionID)])
+        return rows.first?.uuid(0)
+    }
+
     // MARK: - Decoding
 
     private static func decode(_ r: SQLRow) -> TypedField? {

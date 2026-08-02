@@ -1162,7 +1162,10 @@ public final class AppState {
                 answerLedger: answerLedgerRepo,
                 evidenceStore: evidenceStoreRepo,
                 objects: objects,
-                priorityGate: priorityGate
+                priorityGate: priorityGate,
+                // MMI-FINAL — deterministic identity fast path over typed fields, SensitiveScope-gated.
+                typedFields: TypedFieldRepository(database: db),
+                sensitiveScope: sensitiveScopesRepo
             )
 
             // ── Ingestion ────────────────────────────────────────────
