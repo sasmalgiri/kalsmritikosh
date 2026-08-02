@@ -35,6 +35,11 @@ public actor IngestCoordinator {
         public var processingStatus: IngestAttemptsRepository.Status? = nil
         public var processingStage: String? = nil
         public var processingDetail: String? = nil
+        /// USF-M3 — the canonical completion snapshot for the resolved source version (nil in rigs
+        /// without the completion service). "Searchable now; evidence upgrade pending" lives here.
+        public var completionSnapshot: IngestionCompletionSnapshot? = nil
+        /// USF-M3 — the kinds of durable background upgrade work scheduled after this pass.
+        public var workScheduled: [SourceUpgradeKind] = []
     }
 
     /// USF-M1 — the ONE production routing authority. Exactly one plugin owns each SourceType; the
@@ -43,6 +48,12 @@ public actor IngestCoordinator {
     /// USF-M2 — safe container expansion + coverage. Nil in lightweight rigs (members still ingest,
     /// but no container manifest is recorded); wired in production so coverage is durable.
     private let containerCoordinator: ContainerProcessingCoordinator?
+    /// USF-M3 — progressive on-demand upgrade. Nil unless `configureUpgrades` is called with a database
+    /// + upgrade-job ledger (production + progressive tests). Existing rigs leave these nil (unchanged).
+    private var sourceUpgrade: SourceUpgradeCoordinator? = nil
+    private var completionService: IngestionCompletionService? = nil
+    private var byteResolver: SourceVersionByteResolver? = nil
+    private var upgradeDatabase: Database? = nil
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -371,6 +382,88 @@ public actor IngestCoordinator {
         try await runIngest(fileAt: url, parentVersion: nil, intent: intent)
     }
 
+    // MARK: - USF-M3 progressive on-demand upgrade
+
+    /// Wire the on-demand progressive-upgrade machinery (production + progressive tests). Rigs that do
+    /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
+    public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
+        self.upgradeDatabase = database
+        self.byteResolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
+        let r = readiness ?? SourceReadinessRepository(database: database)
+        let containerRepo = ContainerInspectionRepository(database: database)
+        // The dimension-advancing kinds reopen exact bytes and re-parse through the ONE registry.
+        let handler: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeStructure(sourceVersionID: svid) }
+        let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: handler])
+        self.sourceUpgrade = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
+                                                      container: containerRepo, executor: executor, priorityGate: priorityGate)
+        self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
+                                                            upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
+    }
+
+    /// Plan + (foreground) execute the minimal work to reach `goal` for an EXACT source version.
+    @discardableResult
+    public func ensureUpgrade(sourceVersionID: UUID, goal: SourceUpgradeGoal, priority: SourceUpgradePriority = .userRequested,
+                              execution: SourceUpgradeExecutionMode = .background) async throws -> [SourceUpgradeKind] {
+        guard let sourceUpgrade else { return [] }
+        return try await sourceUpgrade.ensure(sourceVersionID: sourceVersionID, goal: goal, priority: priority,
+                                              execution: execution, origin: .userRequested, at: Date()).map(\.kind)
+    }
+
+    /// Drain up to `max` eligible background upgrade jobs (yields to interactive queries).
+    @discardableResult
+    public func drainUpgrades(max: Int = .max) async -> Int {
+        guard let sourceUpgrade else { return 0 }
+        return await sourceUpgrade.drain(max: max, at: Date())
+    }
+
+    /// The canonical completion snapshot for an EXACT source version, if the completion service is wired.
+    public func completion(sourceVersionID: UUID) async throws -> IngestionCompletionSnapshot? {
+        try await completionService?.snapshot(sourceVersionID: sourceVersionID, at: Date())
+    }
+
+    /// USF-M3 — the structural/evidence upgrade handler: reopen EXACT bytes → parse (evidenceStructure)
+    /// through the ONE registry → persist the structural document → advance readiness from the COMMITTED
+    /// receipt. Idempotent: a rerun re-persists the same structure and the readiness stays ready.
+    func upgradeStructure(sourceVersionID svid: UUID) async throws {
+        guard let byteResolver, let evidenceStore, let readiness, let db = upgradeDatabase else { return }
+        guard let row = try await db.query(
+            "SELECT logical_source_id, content_hash, detected_type, size_bytes FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(svid)]).first,
+            let logical = row.uuid(0), let hash = row.string(1) else { throw SourceUpgradeError.sourceVersionMissing(svid) }
+        let type = SourceType(rawValue: row.string(2) ?? "") ?? .unknown
+        let size = row.int(3) ?? 0
+        let resolved = try await byteResolver.resolve(sourceVersionID: svid, at: Date())
+        defer { try? FileManager.default.removeItem(at: resolved.cleanupDirectory) }
+        let started = Date()
+        let request = UniversalParserRequest(
+            originalURL: resolved.identityURL, processingSnapshotURL: resolved.snapshotURL, logicalSourceID: logical,
+            sourceVersionID: svid, sourceType: type, contentHash: hash, sizeBytes: size, intent: .evidenceStructure)
+        let result = try await universalExecutor.execute(request)
+        guard let doc = result.parsedDocument else { return }   // loader-only type: no structure to add
+        let structural = StructuralParse(doc: doc, parserName: result.pluginID, parserVersion: result.pluginVersion, sizeBytes: size, startedAt: started)
+        guard let receipt = await persistStructuralDoc(structural, url: resolved.identityURL, store: evidenceStore) else {
+            // §33 — a rerun over already-committed structure is idempotent: if structure is already
+            // ready, this is a no-op success (no duplicated blocks); otherwise the persist genuinely failed.
+            if let snap = try? await readiness.snapshot(sourceVersionID: svid),
+               snap.dimension(.structuralExtraction)?.state == .ready { return }
+            throw SourceUpgradeError.postconditionNotSatisfied(kind: .structuralExtraction, sourceVersionID: svid)
+        }
+        var updates: [SourceReadinessDimensionUpdate] = [
+            SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready, action: .satisfy,
+                                           basis: SourceReadinessBasis(kind: .sourceDocument, identifier: receipt.sourceDocumentID.uuidString))]
+        let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: receipt.parserRunID.uuidString)
+        if receipt.substantiveBlockCount > 0 {
+            let ready = receipt.isStructurallyComplete
+            updates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: ready ? .ready : .partial,
+                action: ready ? .satisfy : .partiallySatisfy, completedUnits: receipt.locatedSubstantiveBlockCount,
+                totalUnits: receipt.substantiveBlockCount, basis: runBasis))
+        }
+        if receipt.ocrBlockCount > 0 {
+            updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
+                applicability: .conditional, completedUnits: receipt.ocrBlockCount, totalUnits: receipt.ocrBlockCount, basis: runBasis))
+        }
+        await advanceReadiness(svid, updates)
+    }
+
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
     /// archive→member) so intake records the exact relation before the child is parsed.
     func runIngest(fileAt url: URL, parentVersion: SourceParentReference?, memberByteURL: URL? = nil,
@@ -387,7 +480,21 @@ public actor IngestCoordinator {
         // v54 resume — durable in-progress marker (both ids null until intake succeeds).
         await ingestAttempts?.record(url: url, status: .started, stage: "ingest")
         do {
-            let result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+            var result = try await ingestCore(fileAt: url, parentVersion: parentVersion, memberByteURL: memberByteURL, intent: intent)
+            // USF-M3 — attach the canonical completion snapshot + schedule only the MISSING background
+            // work (search if not searchable, else evidence if not evidence-ready; analytical only on
+            // request — never deep-study every file). Best-effort; never fails the ingest.
+            if let svid = result.sourceVersionID, let completionService {
+                let snap = try? await completionService.snapshot(sourceVersionID: svid, at: Date())
+                result.completionSnapshot = snap
+                if let sourceUpgrade, result.processingStatus == nil, let snap {
+                    let goal: SourceUpgradeGoal? = !snap.isSearchReady ? .searchReady : (!snap.isEvidenceReady ? .evidenceReady : nil)
+                    if let goal, let scheduled = try? await sourceUpgrade.ensure(
+                        sourceVersionID: svid, goal: goal, priority: .background, execution: .background, origin: .initialIngest, at: Date()) {
+                        result.workScheduled = scheduled.map(\.kind)
+                    }
+                }
+            }
             // The ONE version-linked terminal attempt for this url.
             await ingestAttempts?.record(
                 url: url,

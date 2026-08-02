@@ -72,6 +72,21 @@ public struct SourceUpgradeJobRepository: Sendable {
         }
     }
 
+    /// Lease a SPECIFIC pending job (foreground execution). Returns nil when the job is not pending.
+    public func claim(jobID: UUID, leaseSeconds: TimeInterval = 300, at now: Date) async throws -> SourceUpgradeJob? {
+        let sp = "usf_upgrade_claimone_\(jobID.uuidString.prefix(8))"
+        return try await database.withSavepoint(sp) { db -> SourceUpgradeJob? in
+            guard let job = try Self.row(db, id: jobID), job.state == .pending, job.notBefore <= now else { return nil }
+            try db.exec("""
+                UPDATE enrichment_jobs SET state = 'running', lease_token = ?, lease_expires_at = ?,
+                    attempts = attempts + 1, updated_at = ? WHERE id = ?;
+                """, [.text(UUID().uuidString), .real(now.addingTimeInterval(leaseSeconds).timeIntervalSince1970),
+                      .real(now.timeIntervalSince1970), .uuid(jobID)])
+            try Self.event(db, jobID: jobID, action: "claim", from: "pending", to: "running", detail: nil, now: now)
+            return try Self.row(db, id: jobID)
+        }
+    }
+
     // MARK: - Terminal / retry transitions
 
     public func succeed(_ id: UUID, at now: Date) async throws {
@@ -99,6 +114,20 @@ public struct SourceUpgradeJobRepository: Sendable {
                     """, [.text(err), .real(now.timeIntervalSince1970), .uuid(id)])
                 try Self.event(db, jobID: id, action: "fail", from: job.state.rawValue, to: "failed", detail: err, now: now)
             }
+        }
+    }
+
+    /// Terminal failure with NO auto-retry (e.g. a handler ran but did not satisfy its readiness
+    /// postcondition — re-running the same work would not change that).
+    public func failTerminal(_ id: UUID, error: String, at now: Date) async throws {
+        let sp = "usf_upgrade_failt_\(id.uuidString.prefix(8))"
+        try await database.withSavepoint(sp) { db in
+            guard let job = try Self.row(db, id: id) else { throw SourceUpgradeError.jobNotFound(id) }
+            try db.exec("""
+                UPDATE enrichment_jobs SET state = 'failed', last_error = ?, lease_token = NULL,
+                    lease_expires_at = NULL, updated_at = ? WHERE id = ?;
+                """, [.text(String(error.prefix(500))), .real(now.timeIntervalSince1970), .uuid(id)])
+            try Self.event(db, jobID: id, action: "fail", from: job.state.rawValue, to: "failed", detail: String(error.prefix(200)), now: now)
         }
     }
 
