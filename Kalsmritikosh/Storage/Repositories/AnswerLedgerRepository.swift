@@ -52,7 +52,9 @@ public struct StoredAnswer: Sendable, Identifiable, Hashable {
 }
 
 public actor AnswerLedgerRepository {
-    private let database: Database
+    // Internal (not file-private) so the AEE-M2 revision-writer extension in
+    // AnswerLedgerRepository+Revisions.swift can reach the same connection + helpers.
+    let database: Database
 
     public init(database: Database) {
         self.database = database
@@ -144,7 +146,7 @@ public actor AnswerLedgerRepository {
     /// A5.3-linked block ids an event cites, read from `events.attributes_json`
     /// (`sourceBlockIDs`). Empty when the event predates the structural layer or
     /// no block matched. Transparent JSON (AnyCodable is a single-value codec).
-    private func blockIDs(forEvent eventID: UUID) async -> [String] {
+    func blockIDs(forEvent eventID: UUID) async -> [String] {
         let rows = (try? await database.query(
             "SELECT attributes_json FROM events WHERE id = ? LIMIT 1;", [.uuid(eventID)]
         )) ?? []
@@ -158,7 +160,7 @@ public actor AnswerLedgerRepository {
     /// scoped to the cited object's OWN source. Hops object → file → current
     /// source version → FTS-ranked blocks matching the snippet. Empty when the
     /// object has no structural version or nothing matches. Best-effort.
-    private func blockIDs(forObject objectID: UUID, snippet: String) async -> [String] {
+    func blockIDs(forObject objectID: UUID, snippet: String) async -> [String] {
         // object → logical source (file_id).
         let fileRows = (try? await database.query(
             "SELECT file_id FROM knowledge_objects WHERE id = ? LIMIT 1;", [.uuid(objectID)]

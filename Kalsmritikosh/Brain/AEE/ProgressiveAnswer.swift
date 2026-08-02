@@ -31,8 +31,10 @@ public nonisolated enum ProgressiveAnswerState: String, Sendable, Codable, CaseI
     /// insufficient.
     case incomplete
 
-    /// A content-bearing state MUST reference a revision. `analysisProgress` is status-only.
-    public var isContentBearing: Bool { self != .analysisProgress }
+    /// A content-bearing state MUST reference a revision. `analysisProgress` is status-only,
+    /// and `incomplete` may be revision-less (a mission interrupted/failed before any content)
+    /// OR carry a partial revision (what was found) — so it does not strictly require one.
+    public var isContentBearing: Bool { self != .analysisProgress && self != .incomplete }
 
     /// Terminal lifecycle states — nothing follows them for this answer.
     public var isTerminal: Bool { self == .verifiedFinal || self == .incomplete }

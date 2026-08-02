@@ -78,10 +78,11 @@ struct ProgressiveAnswerStateMachineTests {
         }
     }
 
-    @Test("Only analysisProgress is non-content-bearing")
+    @Test("analysisProgress and incomplete are non-content-bearing; the rest require a revision")
     func contentBearing() {
         #expect(!ProgressiveAnswerState.analysisProgress.isContentBearing)
-        for s in ProgressiveAnswerState.allCases where s != .analysisProgress {
+        #expect(!ProgressiveAnswerState.incomplete.isContentBearing)
+        for s in ProgressiveAnswerState.allCases where s != .analysisProgress && s != .incomplete {
             #expect(s.isContentBearing, "\(s) should be content-bearing")
         }
     }

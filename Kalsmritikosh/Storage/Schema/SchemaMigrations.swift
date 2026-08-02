@@ -4794,7 +4794,10 @@ public enum SchemaMigrations {
         CHECK(sequence >= 1),
         CHECK(state IN ('immediateFinding','groundedWorkingResult','analysisProgress',
                         'reviewReady','verifiedFinal','corrected','incomplete')),
-        CHECK(state = 'analysisProgress' OR revision_id IS NOT NULL)
+        -- Content-bearing states MUST reference a revision. analysisProgress (status only) and
+        -- incomplete (may be interrupted before any content, or carry a partial revision) may
+        -- be revision-less.
+        CHECK(state IN ('analysisProgress','incomplete') OR revision_id IS NOT NULL)
     );
     CREATE INDEX idx_answer_revision_events_answer ON answer_revision_events(answer_id, sequence);
     """
