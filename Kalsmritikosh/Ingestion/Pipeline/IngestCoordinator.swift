@@ -53,6 +53,7 @@ public actor IngestCoordinator {
     private var sourceUpgrade: SourceUpgradeCoordinator? = nil
     private var completionService: IngestionCompletionService? = nil
     private var byteResolver: SourceVersionByteResolver? = nil
+    private var reprocessing: SourceReprocessingCoordinator? = nil   // USF-010
     private var upgradeDatabase: Database? = nil
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
@@ -388,16 +389,35 @@ public actor IngestCoordinator {
     /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
     public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
         self.upgradeDatabase = database
-        self.byteResolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
+        let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
+        self.byteResolver = resolver
         let r = readiness ?? SourceReadinessRepository(database: database)
         let containerRepo = ContainerInspectionRepository(database: database)
         // The dimension-advancing kinds reopen exact bytes and re-parse through the ONE registry.
         let handler: SourceUpgradeExecutor.Handler = { [weak self] svid in try await self?.upgradeStructure(sourceVersionID: svid) }
         let executor = SourceUpgradeExecutor(handlers: [.structuralExtraction: handler, .ocr: handler, .indexing: handler])
-        self.sourceUpgrade = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
-                                                      container: containerRepo, executor: executor, priorityGate: priorityGate)
+        let upg = SourceUpgradeCoordinator(database: database, jobs: jobs, readiness: r,
+                                           container: containerRepo, executor: executor, priorityGate: priorityGate)
+        self.sourceUpgrade = upg
+        self.reprocessing = SourceReprocessingCoordinator(database: database, readiness: r, byteResolver: resolver)
         self.completionService = IngestionCompletionService(database: database, readiness: r, container: containerRepo,
                                                             upgradeKinds: { sv in await jobs.kindsByState(sourceVersionID: sv) })
+    }
+
+    /// USF-010 — reprocess an exact source version to the CURRENT structural parser version: invalidate
+    /// only the parser-dependent dimensions produced by an older version and re-run the exact-byte
+    /// structural upgrade. Custody + search readiness + unrelated accepted work are preserved; an
+    /// up-to-date version is a no-op.
+    @discardableResult
+    public func reprocess(sourceVersionID: UUID, execution: SourceUpgradeExecutionMode = .foreground) async throws -> SourceReprocessingCoordinator.Outcome {
+        guard let reprocessing, let db = upgradeDatabase else { return .upToDate }
+        guard let typeRaw = try await db.query("SELECT detected_type FROM source_versions WHERE id = ? LIMIT 1;", [.uuid(sourceVersionID)]).first?.string(0) else {
+            throw SourceUpgradeError.sourceVersionMissing(sourceVersionID)
+        }
+        let type = SourceType(rawValue: typeRaw) ?? .unknown
+        let parserVersion = universalExecutor.registry.plugin(for: type)?.pluginVersion ?? "1"
+        _ = execution   // reprocessing re-stamps synchronously (bytes verified, structure unchanged)
+        return try await reprocessing.reprocess(sourceVersionID: sourceVersionID, currentParserVersion: parserVersion, at: Date())
     }
 
     /// Plan + (foreground) execute the minimal work to reach `goal` for an EXACT source version.
@@ -461,7 +481,9 @@ public actor IngestCoordinator {
             updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
                 applicability: .conditional, completedUnits: receipt.ocrBlockCount, totalUnits: receipt.ocrBlockCount, basis: runBasis))
         }
-        await advanceReadiness(svid, updates)
+        // USF-010 — stamp the EXACT parser version as the producer version so a later parser upgrade can
+        // detect this structure as stale (producer version < current) and reprocess only what changed.
+        await advanceReadiness(svid, updates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
     }
 
     /// USF-001 — internal ingest that can thread a version-level parent (email→attachment,
@@ -631,13 +653,14 @@ public actor IngestCoordinator {
     /// USF-002 — advance a source version's readiness dimensions after a pipeline stage. Reads the
     /// current aggregate revision and applies the updates under CAS. Best-effort: a readiness
     /// failure never fails the ingest (custody + content are already durable).
-    private func advanceReadiness(_ sourceVersionID: UUID, _ updates: [SourceReadinessDimensionUpdate]) async {
+    private func advanceReadiness(_ sourceVersionID: UUID, _ updates: [SourceReadinessDimensionUpdate],
+                                  producerID: String = "usf-002.pipeline", producerVersion: String = "1") async {
         guard let readiness, !updates.isEmpty else { return }
         do {
             let current = try await readiness.snapshot(sourceVersionID: sourceVersionID)
             _ = try await readiness.apply(SourceReadinessUpdatePlan(
                 sourceVersionID: sourceVersionID, expectedRevision: current.aggregateRevision, updates: updates,
-                producerID: "usf-002.pipeline", producerVersion: "1", occurredAt: Date()))
+                producerID: producerID, producerVersion: producerVersion, occurredAt: Date()))
         } catch {
             KalsmritikoshLog.ingestion.error("Readiness advance failed for \(sourceVersionID.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")
         }
@@ -980,42 +1003,50 @@ public actor IngestCoordinator {
         // complete AND every substantive block is located.
         if let readiness {
             let svid = handle.sourceVersionID
-            var updates: [SourceReadinessDimensionUpdate] = []
+            // Search dimensions (loader-produced) — default pipeline producer.
+            var searchUpdates: [SourceReadinessDimensionUpdate] = []
             let coverage = (try? await readiness.ftsCoverage(sourceVersionID: svid)) ?? (eligible: 0, indexed: 0)
             if coverage.eligible > 0 {
-                updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                              completedUnits: coverage.eligible, totalUnits: coverage.eligible))
+                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                    completedUnits: coverage.eligible, totalUnits: coverage.eligible))
                 let fullyIndexed = coverage.indexed == coverage.eligible
-                updates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
-                                                              action: fullyIndexed ? .satisfy : .partiallySatisfy,
-                                                              completedUnits: coverage.indexed, totalUnits: coverage.eligible,
-                                                              basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
+                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .indexing, state: fullyIndexed ? .ready : .partial,
+                                                                    action: fullyIndexed ? .satisfy : .partiallySatisfy,
+                                                                    completedUnits: coverage.indexed, totalUnits: coverage.eligible,
+                                                                    basis: SourceReadinessBasis(kind: .ftsIndex, identifier: svid.uuidString)))
             } else {
-                updates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
-                                                              completedUnits: 0, totalUnits: 0))
+                searchUpdates.append(SourceReadinessDimensionUpdate(dimension: .textExtraction, state: .ready, action: .satisfy,
+                                                                    completedUnits: 0, totalUnits: 0))
             }
+            await advanceReadiness(svid, searchUpdates)
+
+            // USF-010 — parser-produced dimensions carry the EXACT parser version as producer version so a
+            // later parser upgrade can detect this structure as stale and reprocess only what changed.
+            var structuralUpdates: [SourceReadinessDimensionUpdate] = []
             if let r = structuralReceipt {
                 let docBasis = SourceReadinessBasis(kind: .sourceDocument, identifier: r.sourceDocumentID.uuidString)
                 let runBasis = SourceReadinessBasis(kind: .parserRun, identifier: r.parserRunID.uuidString)
-                updates.append(SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
-                                                              action: .satisfy, basis: docBasis))
+                structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .metadataExtraction, state: .ready,
+                                                                        action: .satisfy, basis: docBasis))
                 if r.substantiveBlockCount > 0 {
                     let ready = r.isStructurallyComplete
-                    updates.append(SourceReadinessDimensionUpdate(
+                    structuralUpdates.append(SourceReadinessDimensionUpdate(
                         dimension: .structuralExtraction, state: ready ? .ready : .partial,
                         action: ready ? .satisfy : .partiallySatisfy,
                         completedUnits: r.locatedSubstantiveBlockCount, totalUnits: r.substantiveBlockCount, basis: runBasis))
                 }
                 if r.ocrBlockCount > 0 {
-                    updates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
-                                                                  applicability: .conditional,
-                                                                  completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
+                    structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .ocr, state: .ready, action: .satisfy,
+                                                                            applicability: .conditional,
+                                                                            completedUnits: r.ocrBlockCount, totalUnits: r.ocrBlockCount, basis: runBasis))
                 }
             } else if structuralAttempted {
-                updates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed,
-                                                              action: .fail, detail: "structural persistence failed"))
+                structuralUpdates.append(SourceReadinessDimensionUpdate(dimension: .structuralExtraction, state: .failed,
+                                                                        action: .fail, detail: "structural persistence failed"))
             }
-            await advanceReadiness(svid, updates)
+            if !structuralUpdates.isEmpty {
+                await advanceReadiness(svid, structuralUpdates, producerID: "usf-m3.structural", producerVersion: result.pluginVersion)
+            }
         }
 
         return Result(fileRecord: fileRecord, object: lastObject, chunkCount: totalChunks, entityCount: totalEntities,
