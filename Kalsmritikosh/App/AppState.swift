@@ -1340,6 +1340,12 @@ public final class AppState {
                     repository: CanonicalSourceIntakeRepository(database: db, vault: evidenceVault))
             )
 
+            // USF-M3 / USF-FINAL — wire progressive on-demand upgrade + completion + reprocessing, and
+            // recover any upgrade jobs stranded (running with an expired lease) by a prior crash/quit.
+            let sourceUpgradeJobs = SourceUpgradeJobRepository(database: db)
+            await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
+            try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
+
             // PERF.1 — resume the resumable background embedding drain as soon
             // as the coordinator exists (embedder + vectors are set at init),
             // NOT at the end of boot. On a populated DB the tail of boot does
