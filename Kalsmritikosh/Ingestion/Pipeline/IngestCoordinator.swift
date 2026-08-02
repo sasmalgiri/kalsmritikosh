@@ -119,6 +119,10 @@ public actor IngestCoordinator {
     /// representations become available. nil = readiness not updated by the pipeline (intake
     /// still bootstraps the ten dimensions; forward stages simply don't advance them).
     private let readiness: SourceReadinessRepository?
+    /// MMI-FINAL — when wired, the deterministic typed-field producer runs over the persisted
+    /// EvidenceBlocks after a structural parse and advances the typedFieldExtraction readiness
+    /// dimension. nil = no typed-field extraction (backward compatible).
+    private let typedFields: TypedFieldRepository?
     /// ING-006 — when wired, the background embedding drain yields to interactive queries
     /// via this gate (checked between batches). nil = no priority gating (drain runs freely).
     private let priorityGate: QueryPriorityGate?
@@ -205,12 +209,14 @@ public actor IngestCoordinator {
         priorityGate: QueryPriorityGate? = nil,
         claimProjection: ClaimProjectionBackfill? = nil,
         readiness: SourceReadinessRepository? = nil,
+        typedFields: TypedFieldRepository? = nil,
         containerInspection: ContainerInspectionRepository? = nil,
         intakeCoordinator: UniversalSourceIntakeCoordinator
     ) {
         self.intakeCoordinator = intakeCoordinator
         self.containerCoordinator = ContainerProcessingCoordinator(repository: containerInspection)
         self.readiness = readiness
+        self.typedFields = typedFields
         self.evidenceStore = evidenceStore
         self.assertions = assertions
         self.genericFacts = genericFacts
@@ -702,11 +708,34 @@ public actor IngestCoordinator {
             if let genericFacts {
                 await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts)
             }
+            // MMI-FINAL — deterministic typed identity/document fields from the SAME persisted
+            // blocks (the accepted producer for the typedFieldExtraction readiness dimension).
+            await extractTypedFields(from: parse.doc)
             return receipt
         } catch {
             KalsmritikoshLog.ingestion.error("Structural persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
             return nil
         }
+    }
+
+    /// MMI-FINAL — run the deterministic typed-field extractor over a document's persisted
+    /// EvidenceBlocks, store the fields (atomic, provenance-complete), and advance the
+    /// typedFieldExtraction readiness dimension with an evidence-block basis when fields exist.
+    /// Best-effort: never fails the ingest. A typed field is NOT a Claim.
+    private func extractTypedFields(from doc: ParsedDocument) async {
+        guard let typedFields else { return }
+        let sourceVersionID = doc.sourceVersionID
+        let fields = TypedFieldExtractor().extract(blocks: doc.blocks, sourceVersionID: sourceVersionID)
+        try? await typedFields.replaceFields(
+            sourceVersionID: sourceVersionID, producerID: "mmi.typed-field", producerVersion: "1", fields: fields)
+        guard !fields.isEmpty, let basisBlock = fields.first?.evidenceBlockID else { return }
+        await advanceReadiness(sourceVersionID, [
+            SourceReadinessDimensionUpdate(
+                dimension: .typedFieldExtraction, state: .ready, action: .satisfy,
+                applicability: .conditional, completedUnits: fields.count, totalUnits: fields.count,
+                basis: SourceReadinessBasis(kind: .evidenceBlock, identifier: basisBlock.uuidString),
+                detail: "\(fields.count) typed field(s) extracted")
+        ], producerID: "mmi.typed-field", producerVersion: "1")
     }
 
     /// A5.1 — turn high-signal typed EvidenceBlocks into directly-observed

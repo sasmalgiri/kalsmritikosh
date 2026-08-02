@@ -1337,6 +1337,8 @@ public final class AppState {
                 claimProjection: claimProjectionBackfill,  // PA-PROD B3 — incremental projection hook
                 // USF-002 — the pipeline advances each source version's independent readiness dimensions.
                 readiness: SourceReadinessRepository(database: db),
+                // MMI-FINAL — deterministic typed identity/document fields from the persisted blocks.
+                typedFields: TypedFieldRepository(database: db),
                 // USF-M2 — safe container expansion records a durable coverage manifest per archive.
                 containerInspection: ContainerInspectionRepository(database: db),
                 // USF-001 — every accessible file receives canonical custody before any parser runs.
