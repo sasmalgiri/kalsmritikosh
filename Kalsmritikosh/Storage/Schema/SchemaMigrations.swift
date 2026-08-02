@@ -4652,10 +4652,14 @@ public enum SchemaMigrations {
         CHECK(attempts >= 0),
         CHECK(max_attempts >= 1),
         -- Scope integrity: a sourceVersion job MUST carry an exact source_version_id; a legacySubject
-        -- job MUST carry a subject_id. A running job MUST hold a lease token + expiry.
+        -- job MUST carry a subject_id.
         CHECK((scope_kind = 'sourceVersion' AND source_version_id IS NOT NULL)
            OR (scope_kind = 'legacySubject' AND subject_id IS NOT NULL)),
-        CHECK(state <> 'running' OR (lease_token IS NOT NULL AND lease_expires_at IS NOT NULL))
+        -- A running sourceVersion job MUST hold a lease token + expiry. The lease mechanic is a property
+        -- of the exact-version upgrade queue ONLY; legacy subject jobs never leased, so preserving their
+        -- claim-sets-running-without-a-lease contract is required (they carry NULL lease columns).
+        CHECK(scope_kind <> 'sourceVersion' OR state <> 'running'
+              OR (lease_token IS NOT NULL AND lease_expires_at IS NOT NULL))
     );
 
     -- Preserve legacy jobs exactly (unknown states collapse to pending; NEVER invent a source version).
