@@ -90,6 +90,13 @@ public actor MasterBrain {
     /// attach it AFTER the IngestCoordinator exists (the brain is constructed first); tests
     /// inject it directly through init.
     private var aeeUpgradeBridge: AEEEvidenceUpgrading?
+    /// MMI-FINAL — the deterministic typed identity/document field store. When wired, an
+    /// identity question ("what is the name / document number / issue date?") is answered with
+    /// ZERO generative calls from a located, source-backed field. nil = no identity fast path.
+    private let typedFields: TypedFieldRepository?
+    /// MMI-FINAL — reused to gate identity field values by the caller's SensitiveScope (the
+    /// existing authority; no second sensitive-data state). nil = no gating.
+    private let sensitiveScope: SensitiveScopeRepository?
     /// Entities already warmed this session, so repeated questions about
     /// the same subject don't re-distill it.
     private var warmedEntities: Set<String> = []
@@ -114,7 +121,9 @@ public actor MasterBrain {
         objects: KnowledgeObjectRepository? = nil,
         priorityGate: QueryPriorityGate? = nil,
         sensitivePolicy: SensitiveRetrievalPolicy? = nil,
-        aeeUpgradeBridge: AEEEvidenceUpgrading? = nil
+        aeeUpgradeBridge: AEEEvidenceUpgrading? = nil,
+        typedFields: TypedFieldRepository? = nil,
+        sensitiveScope: SensitiveScopeRepository? = nil
     ) {
         self.intentDetector = intentDetector
         self.router = router
@@ -136,6 +145,8 @@ public actor MasterBrain {
         self.priorityGate = priorityGate
         self.sensitivePolicy = sensitivePolicy
         self.aeeUpgradeBridge = aeeUpgradeBridge
+        self.typedFields = typedFields
+        self.sensitiveScope = sensitiveScope
     }
 
     /// AEE-M1 — attach the exact-version upgrade bridge after boot (the brain is
@@ -176,6 +187,64 @@ public actor MasterBrain {
     /// Fail closed — no spreadsheet value is returned when access is mandatory (OPS-003B).
     private func tableFastPath(question: String, intent: UserIntent, access: SensitiveAccessContext) async -> VerifiedAnswer? {
         return nil
+    }
+
+    /// MMI-FINAL — the deterministic identity fast path. Maps an identity/document question to
+    /// a typed field type, reads the located values, SensitiveScope-gates each by its owning
+    /// KnowledgeObject, and answers with ZERO generative calls when one dominant value exists.
+    /// Several distinct values → candidates (never a guess); no value / not an identity
+    /// question / all restricted → nil (falls through to the normal path). internal for tests.
+    func identityFieldFastPath(question: String, intent: UserIntent, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        guard let typedFields, let type = IdentityFieldResolver.questionFieldType(question) else { return nil }
+        let located = (try? await typedFields.allFields(type: type)) ?? []
+        guard !located.isEmpty else { return nil }
+        // Resolve each field's owning KO and gate it by the caller's SensitiveScope.
+        var permitted: [TypedField] = []
+        var koByFieldID: [UUID: UUID] = [:]
+        for f in located {
+            guard let koID = try? await typedFields.sourceKnowledgeObjectID(forVersion: f.sourceVersionID) else { continue }
+            guard await isIdentityFieldPermitted(koID: koID, access: access) else { continue }
+            permitted.append(f); koByFieldID[f.id] = koID
+        }
+        guard !permitted.isEmpty else { return nil }
+        switch IdentityFieldResolver().resolve(fieldType: type, fields: permitted) {
+        case .notFound:
+            return nil
+        case .answer(let f):
+            guard let ko = koByFieldID[f.id] else { return nil }
+            return Self.identityAnswer(type: type, field: f, koID: ko)
+        case .ambiguous(let candidates):
+            return Self.identityCandidates(type: type, fields: candidates, koByFieldID: koByFieldID)
+        }
+    }
+
+    private func isIdentityFieldPermitted(koID: UUID, access: SensitiveAccessContext) async -> Bool {
+        guard let sensitiveScope else { return true }   // no gating wired → allow
+        guard let resolution = try? await sensitiveScope.effectiveLabel(
+            for: SensitiveScopeTarget(kind: .knowledgeObject, id: koID)) else { return false }
+        switch resolution {
+        case .resolved(let label): return access.scope.permits(label)
+        case .brokenLineage:       return false
+        }
+    }
+
+    /// A deterministic, cited identity answer (0 generative calls).
+    static func identityAnswer(type: TypedFieldType, field: TypedField, koID: UUID) -> VerifiedAnswer {
+        let body = "The \(IdentityFieldResolver.label(type)) is \(field.rawValue)."
+        return VerifiedAnswer(
+            body: body,
+            citations: [VerifiedAnswer.Citation(objectID: koID, chunkID: field.locator.chunkID, eventID: nil, snippet: field.rawValue)],
+            confidence: Confidence(field.confidence), refused: false, refusalReason: nil)
+    }
+
+    /// Several distinct located values — present them as candidates, never a single guess.
+    static func identityCandidates(type: TypedFieldType, fields: [TypedField], koByFieldID: [UUID: UUID]) -> VerifiedAnswer {
+        let lines = fields.map { "• \($0.rawValue)" }.joined(separator: "\n")
+        let body = "The \(IdentityFieldResolver.label(type)) is ambiguous across the evidence — the sources give different values:\n\(lines)"
+        let citations = fields.compactMap { f in
+            koByFieldID[f.id].map { VerifiedAnswer.Citation(objectID: $0, chunkID: nil, eventID: nil, snippet: f.rawValue) }
+        }
+        return VerifiedAnswer(body: body, citations: citations, confidence: .low, refused: false, refusalReason: nil)
     }
 
     /// A5.9 — fire-and-forget: persist the shipped answer as a first-class
@@ -1268,6 +1337,14 @@ public actor MasterBrain {
         // a spreadsheet source is answered EXACTLY from the persisted cells,
         // before any LLM/expert work. Returns nil (falls through to the normal
         // path) unless it produces a confident numeric result.
+        // MMI-FINAL — deterministic identity fast path. An identity/document question
+        // ("what is the name / document number / issue date?") is answered with ZERO
+        // generative calls from a located, source-backed typed field, SensitiveScope-gated.
+        // Ambiguity returns candidates (never a guess); a non-identity question returns nil.
+        if let identity = await identityFieldFastPath(question: question, intent: intent, access: access) {
+            return identity
+        }
+
         if let table = await tableFastPath(question: question, intent: intent, access: access) {
             return table
         }

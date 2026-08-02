@@ -76,8 +76,10 @@ struct UniversalContentSurfaceTests {
         #expect(surface(project([block(0, .transcriptSegment)]), .transcript)?.coverage == .complete)
     }
 
-    @Test("typedFields is always notApplicable (no accepted producer yet)")
+    @Test("typedFields is notApplicable when the document carries no identity fields (MMI producer)")
     func typedFieldsNotApplicable() {
+        // MMI-FINAL is now the accepted typed-field producer; a generic paragraph with no
+        // identity/document fields still projects notApplicable (nothing to type).
         #expect(surface(project([block(0, .paragraph)]), .typedFields)?.coverage == .notApplicable)
     }
 

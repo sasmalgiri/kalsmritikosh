@@ -24,6 +24,10 @@ public enum ContentSurfaceProjector {
         !b.kind.isBoilerplate && b.normalizedText.count >= 3
     }
 
+    /// A fixed placeholder version id for the typed-field SURFACE probe — the surface receipt
+    /// only needs the field COUNT + basis block ids, never the version, so this is not persisted.
+    private static let surfaceProbeVersion = UUID(uuidString: "00000000-0000-0000-0000-0000000000FF")!
+
     /// Project a parsed document's blocks + metadata into content surfaces.
     public static func project(blocks: [EvidenceBlock], metadata: [String: AnyCodable],
                                extractionStatus: ExtractionStatus) -> [ContentSurfaceReceipt] {
@@ -59,7 +63,18 @@ public enum ContentSurfaceProjector {
         surfaces.append(blockReceipt(.images, images))
         surfaces.append(blockReceipt(.attachments, attachments))
         surfaces.append(blockReceipt(.transcript, transcript))
-        surfaces.append(ContentSurfaceReceipt(kind: .typedFields, coverage: .notApplicable, unitCount: 0))
+        // MMI-FINAL — the deterministic typed-field producer is the accepted producer for this
+        // surface. A version-independent projection over the SAME blocks (the receipt only needs
+        // the count + basis block ids); notApplicable when the document carries no typed fields.
+        let typed = TypedFieldExtractor().extract(blocks: blocks, sourceVersionID: Self.surfaceProbeVersion)
+        if typed.isEmpty {
+            surfaces.append(ContentSurfaceReceipt(kind: .typedFields, coverage: .notApplicable, unitCount: 0))
+        } else {
+            let basis = Array(Set(typed.map(\.evidenceBlockID)))
+            surfaces.append(ContentSurfaceReceipt(kind: .typedFields,
+                coverage: extractionStatus == .complete ? .complete : .partial,
+                unitCount: typed.count, basisBlockIDs: basis))
+        }
         return surfaces
     }
 

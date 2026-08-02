@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 89
+    public static let latestVersion = 90
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -327,7 +327,12 @@ public enum SchemaMigrations {
                                "ordinal", "created_at", "revision_id"],
             "answers": ["id", "question", "answer_state", "corpus_snapshot_id", "body", "confidence",
                          "source", "created_at", "request_id", "mission_lane", "mission_objective",
-                         "mission_deliverable", "is_terminal", "updated_at"]
+                         "mission_deliverable", "is_terminal", "updated_at"],
+            // v90 — MMI typed identity/document fields (NEW table, so the column probe distinguishes
+            // v90 from v89). These are the NEWEST markers — every future migration MUST add its newest.
+            "typed_fields": ["id", "source_version_id", "evidence_block_id", "field_type", "raw_value",
+                              "normalized_value", "confidence", "extraction_method", "locator",
+                              "ocr_confidence", "bounding_box", "producer_id", "producer_version", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -452,7 +457,8 @@ public enum SchemaMigrations {
         (86, v86),
         (87, v87),
         (88, v88),
-        (89, v89)
+        (89, v89),
+        (90, v90)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4800,5 +4806,42 @@ public enum SchemaMigrations {
         CHECK(state IN ('analysisProgress','incomplete') OR revision_id IS NOT NULL)
     );
     CREATE INDEX idx_answer_revision_events_answer ON answer_revision_events(answer_id, sequence);
+    """
+
+    // MARK: - v90 — MMI typed identity/document fields (deterministic, block-backed, provenance-complete)
+
+    private static let v90: String = """
+    -- MMI-FINAL. A deterministic typed-field producer (the FIRST accepted producer for the
+    -- USF-004 typedFields surface + the typedFieldExtraction readiness dimension) extracts
+    -- identity/document fields (personName, documentNumber, issueDate, email, amount, …) FROM
+    -- the ALREADY-ACCEPTED EvidenceBlocks. Each typed value is pinned to the EXACT EvidenceBlock
+    -- + SourceVersion + locator it came from, so a value can always reopen its source region.
+    -- A typed field is NOT a confirmed Claim — it is a located, source-backed extraction with a
+    -- confidence band; conflicts between locations are preserved, never silently resolved.
+    CREATE TABLE typed_fields (
+        id                 TEXT PRIMARY KEY NOT NULL,
+        source_version_id  TEXT NOT NULL,
+        evidence_block_id  TEXT NOT NULL,
+        field_type         TEXT NOT NULL,
+        raw_value          TEXT NOT NULL,
+        normalized_value   TEXT NOT NULL,
+        confidence         REAL NOT NULL,
+        extraction_method  TEXT NOT NULL,          -- carried from the block (native/ocr/vision/…)
+        locator            TEXT,                   -- JSON SourceLocator (page / bbox / char range)
+        ocr_confidence     REAL,                   -- the block's OCR confidence when method='ocr'
+        bounding_box       TEXT,                   -- JSON [x,y,w,h] for OCR/vision fields
+        producer_id        TEXT NOT NULL,
+        producer_version   TEXT NOT NULL,
+        created_at         REAL NOT NULL,
+        FOREIGN KEY(source_version_id) REFERENCES source_versions(id) ON DELETE CASCADE,
+        FOREIGN KEY(evidence_block_id) REFERENCES evidence_blocks(id) ON DELETE CASCADE,
+        CHECK(confidence >= 0.0 AND confidence <= 1.0),
+        CHECK(length(trim(field_type)) > 0),
+        CHECK(length(trim(raw_value)) > 0),
+        CHECK(ocr_confidence IS NULL OR (ocr_confidence >= 0.0 AND ocr_confidence <= 1.0))
+    );
+    CREATE INDEX idx_typed_fields_version ON typed_fields(source_version_id, field_type);
+    CREATE INDEX idx_typed_fields_block ON typed_fields(evidence_block_id);
+    CREATE INDEX idx_typed_fields_producer ON typed_fields(source_version_id, producer_id, producer_version);
     """
 }
