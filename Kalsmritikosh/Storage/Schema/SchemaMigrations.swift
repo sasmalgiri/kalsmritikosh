@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 88
+    public static let latestVersion = 89
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -314,7 +314,20 @@ public enum SchemaMigrations {
                                  "attempts", "max_attempts", "producer_id", "producer_version",
                                  "not_before", "lease_token", "lease_expires_at", "completed_at"],
             "enrichment_job_events": ["id", "job_id", "sequence", "action", "from_state", "to_state",
-                                       "detail", "occurred_at"]
+                                       "detail", "occurred_at"],
+            // v89 — AEE-M2 progressive answer revision ledger (NEW tables + NEW columns on the
+            // existing answers/answer_claims, so the column probe distinguishes v89 from v88).
+            // These are the NEWEST markers — every future migration MUST add its newest here.
+            "answer_revisions": ["id", "answer_id", "revision_number", "body", "answer_state",
+                                  "confidence", "source", "content_hash", "correction_of_revision_id",
+                                  "correction_reason", "correction_reason_kind", "created_at"],
+            "answer_revision_events": ["id", "answer_id", "sequence", "revision_id", "state",
+                                        "detail", "created_at"],
+            "answer_claims": ["id", "answer_id", "claim_text", "support_status", "confidence",
+                               "ordinal", "created_at", "revision_id"],
+            "answers": ["id", "question", "answer_state", "corpus_snapshot_id", "body", "confidence",
+                         "source", "created_at", "request_id", "mission_lane", "mission_objective",
+                         "mission_deliverable", "is_terminal", "updated_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -438,7 +451,8 @@ public enum SchemaMigrations {
         (85, v85),
         (86, v86),
         (87, v87),
-        (88, v88)
+        (88, v88),
+        (89, v89)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4704,5 +4718,87 @@ public enum SchemaMigrations {
         CHECK(action IN ('enqueue','claim','succeed','fail','block','retry','recover','cancel','supersede'))
     );
     CREATE INDEX idx_enrichment_job_events_job ON enrichment_job_events(job_id, sequence);
+    """
+
+    // MARK: - v89 — AEE-M2 progressive answer revision ledger + durable final-answer audit
+
+    private static let v89: String = """
+    -- AEE-M2 EXTENDS the existing answer-ledger authority (answers / answer_claims /
+    -- claim_evidence, created at v28) — it does NOT introduce a second answer store. Two new
+    -- tables record the per-answer REVISION chain and its append-only lifecycle events; the
+    -- existing answers/answer_claims gain nullable compat/audit columns. Legacy pre-v89 rows
+    -- stay valid and are NEVER given fabricated revision history — v89 history begins when a
+    -- v89 answer is first written. No backfill.
+
+    -- answers — compat/audit metadata (nullable / defaulted so legacy short-form inserts and
+    -- existing rows round-trip unchanged).
+    ALTER TABLE answers ADD COLUMN request_id TEXT;
+    ALTER TABLE answers ADD COLUMN mission_lane TEXT;
+    ALTER TABLE answers ADD COLUMN mission_objective TEXT;
+    ALTER TABLE answers ADD COLUMN mission_deliverable TEXT;
+    ALTER TABLE answers ADD COLUMN is_terminal INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE answers ADD COLUMN updated_at REAL;
+
+    -- answer_claims — pin every NEW v89 claim to the EXACT revision it belongs to. Legacy
+    -- rows stay NULL (their ownership predates the revision chain and is never guessed).
+    ALTER TABLE answer_claims ADD COLUMN revision_id TEXT;
+
+    -- answer_revisions — the immutable revision chain for one answer. A revision is never
+    -- updated or deleted; a materially different answer is a NEW revision. A correction points
+    -- at the exact PRIOR revision it replaces (same answer, enforced by the composite FK) and
+    -- carries a nonblank reason; a non-correction carries neither.
+    CREATE TABLE answer_revisions (
+        id                        TEXT PRIMARY KEY NOT NULL,
+        answer_id                 TEXT NOT NULL,
+        revision_number           INTEGER NOT NULL,
+        body                      TEXT NOT NULL,
+        answer_state              TEXT NOT NULL,
+        confidence                REAL NOT NULL DEFAULT 0.0,
+        source                    TEXT,
+        content_hash              TEXT NOT NULL,
+        correction_of_revision_id TEXT,
+        correction_reason         TEXT,
+        correction_reason_kind    TEXT,
+        created_at                REAL NOT NULL,
+        FOREIGN KEY(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+        FOREIGN KEY(correction_of_revision_id, answer_id)
+            REFERENCES answer_revisions(id, answer_id) ON DELETE RESTRICT,
+        UNIQUE(answer_id, revision_number),
+        UNIQUE(id, answer_id),
+        CHECK(revision_number >= 1),
+        -- SHA-256-shaped: 64 lowercase hex chars (matches the ProgressiveAnswerContentHasher).
+        CHECK(length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'),
+        -- A correction needs a referenced prior revision AND a nonblank reason; a
+        -- non-correction has neither.
+        CHECK(
+            (correction_of_revision_id IS NULL AND correction_reason IS NULL)
+            OR (correction_of_revision_id IS NOT NULL AND length(trim(correction_reason)) > 0)
+        )
+    );
+    CREATE INDEX idx_answer_revisions_answer ON answer_revisions(answer_id, revision_number);
+
+    -- answer_revision_events — append-only progressive-answer lifecycle ledger. Exactly the
+    -- seven AEE-M2 lifecycle states. A content-bearing state MUST reference a revision;
+    -- analysisProgress (status only) MAY be revision-less.
+    CREATE TABLE answer_revision_events (
+        id          TEXT PRIMARY KEY NOT NULL,
+        answer_id   TEXT NOT NULL,
+        sequence    INTEGER NOT NULL,
+        revision_id TEXT,
+        state       TEXT NOT NULL,
+        detail      TEXT,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY(answer_id) REFERENCES answers(id) ON DELETE CASCADE,
+        FOREIGN KEY(revision_id) REFERENCES answer_revisions(id) ON DELETE CASCADE,
+        UNIQUE(answer_id, sequence),
+        CHECK(sequence >= 1),
+        CHECK(state IN ('immediateFinding','groundedWorkingResult','analysisProgress',
+                        'reviewReady','verifiedFinal','corrected','incomplete')),
+        -- Content-bearing states MUST reference a revision. analysisProgress (status only) and
+        -- incomplete (may be interrupted before any content, or carry a partial revision) may
+        -- be revision-less.
+        CHECK(state IN ('analysisProgress','incomplete') OR revision_id IS NOT NULL)
+    );
+    CREATE INDEX idx_answer_revision_events_answer ON answer_revision_events(answer_id, sequence);
     """
 }

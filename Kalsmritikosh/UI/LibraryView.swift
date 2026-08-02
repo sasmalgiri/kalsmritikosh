@@ -203,9 +203,14 @@ public struct LibraryView: View {
             for await update in await appState.brain.answerStream(question: q,
                                                                    access: SensitiveAccessContext.testUnrestricted()) {
                 switch update {
-                case .chapterReady(let c):
+                // AEE-M2 — chapters stream as analysisProgress artifacts; terminal = verifiedFinal/incomplete.
+                case .analysisProgress(_, let chapter):
+                    if let chapter { await MainActor.run { chapters.append(chapter) } }
+                case .verifiedFinal(let a), .incomplete(let a):
+                    await MainActor.run { finalAnswer = a }
+                case .chapterReady(let c):   // legacy compat
                     await MainActor.run { chapters.append(c) }
-                case .verified(let a):
+                case .verified(let a):       // legacy compat
                     await MainActor.run { finalAnswer = a }
                 default:
                     continue

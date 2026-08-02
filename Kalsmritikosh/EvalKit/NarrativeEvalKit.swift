@@ -158,9 +158,14 @@ public nonisolated enum NarrativeEvalKit {
             for await update in await brain.answerStream(question: question.text,
                                                          access: SensitiveAccessContext.testUnrestricted()) {
                 switch update {
+                // AEE-M2 — chapters arrive as analysisProgress artifacts; the terminal answer
+                // is verifiedFinal (or incomplete).
+                case .analysisProgress(_, let chapter): if let chapter { chapters.append(chapter) }
+                case .verifiedFinal(let answer), .incomplete(let answer): verified = answer
+                case .immediateFinding, .groundedWorkingResult, .reviewReady, .corrected: continue
+                // Legacy cases (not emitted by production) retained for compatibility.
                 case .chapterReady(let chapter): chapters.append(chapter)
-                case .verified(let answer): verified = answer
-                case .instant, .synthesisToken, .expertFindingsArrived: continue
+                case .instant, .synthesisToken, .expertFindingsArrived, .verified: continue
                 }
             }
             // Resolve chapter event ids to source filenames so the

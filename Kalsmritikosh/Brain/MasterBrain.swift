@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import os   // AEE-M2 — os.Logger string interpolation for the durable-commit failure path
 
 public actor MasterBrain {
     private let intentDetector: IntentDetector?
@@ -237,35 +238,37 @@ public actor MasterBrain {
                 await self.priorityGate?.beginInteractive()
                 defer { let g = self.priorityGate; Task { await g?.endInteractive() } }
 
-                // G2-PROGRESSIVE Phase 1 — emit an instant cached read
-                // if a confident MemoryObject for the resolved subject
-                // exists. The UI MUST tag this as "Quick read · verifying…"
-                // and NEVER treat it as a verified answer (trust contract,
-                // GATE2_ROADMAP §G2-PROGRESSIVE). The pipeline continues
-                // regardless; Phase 4 is the locked answer.
-                if let instant = await self.phase1Instant(question: question, access: access) {
-                    continuation.yield(instant)
+                // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
+                // its own (unsupported cached prose must not appear as an answer). It surfaces
+                // as analysisProgress; the durable grounded answer follows below.
+                if await self.phase1Instant(question: question, access: access) != nil {
+                    continuation.yield(.analysisProgress(
+                        detail: "Cached context found; verifying against source evidence", chapter: nil))
                 }
 
-                // HISTORY Phase D.7 — reconstructive intents route
-                // through the narrative composer. Each chapter is
-                // yielded as it lands so the UI can render the story
-                // top-down; the terminal `.verified` carries the same
-                // chapters folded into a VerifiedAnswer for legacy
-                // callers (EvalKit, the chat-shaped path).
+                // Reconstructive intents stream their chapters as analysisProgress artifacts,
+                // then finalise through the SAME durable revision-ledger path as the expert
+                // pipeline (one revision chain — no separate history-answer ledger).
                 if let reconstructed = await self.tryReconstructHistoryStreaming(
                     question: question,
                     yield: { continuation.yield($0) },
                     externalContext: context,
                     access: access
                 ) {
-                    continuation.yield(.verified(reconstructed))
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: reconstructed, mission: nil) {
+                        continuation.yield(update)
+                    }
                     continuation.finish()
                     return
                 }
 
-                let final = await self.computeVerified(question: question, externalContext: context, access: access)
-                continuation.yield(.verified(final))
+                let (final, mission) = await self.computeVerified(
+                    question: question, externalContext: context, access: access)
+                for update in await self.finalizeProgressiveAnswer(
+                    question: question, verified: final, mission: mission) {
+                    continuation.yield(update)
+                }
                 continuation.finish()
             }
         }
@@ -344,7 +347,9 @@ public actor MasterBrain {
         for await event in stream {
             switch event {
             case .chapter(let chapter):
-                yield(.chapterReady(chapter))
+                // AEE-M2 §25 — chapters stream as analysisProgress artifacts (not an eighth
+                // lifecycle state); the answer itself remains one revision chain.
+                yield(.analysisProgress(detail: "Composing chapter: \(chapter.title)", chapter: chapter))
             case .completed(let result):
                 narrative = result
             case .failed(let reason):
@@ -1149,27 +1154,85 @@ public actor MasterBrain {
         access: SensitiveAccessContext
     ) async -> VerifiedAnswer {
         for await update in answerStream(question: question, context: context, access: access) {
-            if case .verified(let answer) = update {
-                return answer
+            // AEE-M2 — the terminal states are verifiedFinal (locked, durably committed) and
+            // incomplete (honest failure). Both carry the VerifiedAnswer for legacy callers.
+            switch update {
+            case .verifiedFinal(let answer), .incomplete(let answer): return answer
+            default: continue
             }
         }
-        // Stream finished without emitting .verified — defensive.
+        // Stream finished without a terminal event — defensive.
         return VerifiedAnswer(
             body: "Kalsmritikosh produced no terminal answer.",
             citations: [],
             confidence: .zero,
             refused: true,
-            refusalReason: "answerStream closed without .verified event."
+            refusalReason: "answerStream closed without a terminal event."
         )
+    }
+
+    /// AEE-M2 — persist the answer durably as a progressive revision chain and emit the
+    /// lifecycle updates. A groundable answer commits working-result → review-ready →
+    /// verifiedFinal in the ledger BEFORE `verifiedFinal` is emitted; a persistence failure
+    /// yields `incomplete`, never a final. A refused/uncited answer is recorded incomplete.
+    /// When no answer ledger is wired (degraded/tests) the terminal state is still emitted.
+    func finalizeProgressiveAnswer(   // internal — exercised directly by AEEM2MasterBrainIntegrationTests
+        question: String, verified: VerifiedAnswer, mission: QueryMission?
+    ) async -> [AnswerUpdate] {
+        let groundable = !verified.refused && !verified.citations.isEmpty
+        guard let answerLedger else {
+            return groundable ? [.verifiedFinal(verified)] : [.incomplete(verified)]
+        }
+        do {
+            let id = try await answerLedger.beginAnswer(question: question, mission: mission, corpusSnapshotID: nil)
+            guard groundable else {
+                if !verified.citations.isEmpty {
+                    _ = try? await answerLedger.appendWorkingResult(
+                        answerID: id, body: verified.body, answerText: verified.answerText,
+                        citations: verified.citations, answerState: verified.answerState,
+                        confidence: verified.confidence.value, source: verified.source.rawValue)
+                }
+                try await answerLedger.markIncomplete(
+                    answerID: id, reason: verified.refusalReason ?? "insufficient evidence for a grounded answer")
+                return [.incomplete(verified)]
+            }
+            _ = try await answerLedger.appendWorkingResult(
+                answerID: id, body: verified.body, answerText: verified.answerText,
+                citations: verified.citations, answerState: verified.answerState,
+                confidence: verified.confidence.value, source: verified.source.rawValue)
+            try await answerLedger.markReviewReady(answerID: id)
+            try await answerLedger.lockVerifiedFinal(answerID: id)   // durable commit BEFORE verifiedFinal
+            return [.groundedWorkingResult(verified), .reviewReady(verified), .verifiedFinal(verified)]
+        } catch {
+            KalsmritikoshLog.brain.error("AEE-M2 durable answer commit failed: \(String(describing: error))")
+            return [.incomplete(verified)]   // never emit verifiedFinal when the audit record failed
+        }
     }
 
     /// G2-PROGRESSIVE — the previous body of `answer(question:)`, now
     /// shared between the stream wrapper and any future per-phase
     /// emitter. Returns the terminal `VerifiedAnswer`.
+    /// AEE-M2 — the expert pipeline result plus the QueryMission it was answered under
+    /// (needed for the durable revision-ledger commit). Wraps `computeVerifiedAnswer`,
+    /// which reports the compiled mission through a callback so the many early-return sites
+    /// stay untouched.
     private func computeVerified(
         question: String,
         externalContext: LLMRequestContext? = nil,
         access: SensitiveAccessContext
+    ) async -> (answer: VerifiedAnswer, mission: QueryMission?) {
+        var mission: QueryMission? = nil
+        let answer = await computeVerifiedAnswer(
+            question: question, externalContext: externalContext, access: access,
+            onMission: { mission = $0 })
+        return (answer, mission)
+    }
+
+    private func computeVerifiedAnswer(
+        question: String,
+        externalContext: LLMRequestContext? = nil,
+        access: SensitiveAccessContext,
+        onMission: (QueryMission) -> Void = { _ in }
     ) async -> VerifiedAnswer {
         guard
             let intentDetector,
@@ -1253,6 +1316,7 @@ public actor MasterBrain {
         let mission = QueryMissionCompiler().compile(
             intent: intent, category: category, queryClass: queryClass, plan: missionPlan,
             context: AEERequestContext(requestID: UUID()))
+        onMission(mission)   // AEE-M2 — surface the mission for the durable revision-ledger commit
 
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
@@ -1467,9 +1531,10 @@ public actor MasterBrain {
         // §16 — persist the verified answer as a derived ledger object (with
         // provenance) so derived knowledge compounds across sessions.
         persistDerived(tagged, purposes: trace.expertIDs)
-        // A5.9 — also persist it to the atomic answer ledger (answer + claim +
-        // claim→evidence) so the answer is auditable/replayable.
-        persistAnswerLedger(question: question, answer: tagged)
+        // AEE-M2 — the answer-ledger persistence is NO LONGER fire-and-forget here: the
+        // stream's finalizeProgressiveAnswer commits the durable revision chain (working
+        // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
+        // best-effort persistAnswerLedger(...) call is removed to avoid a duplicate answer row.
         return tagged
     }
 

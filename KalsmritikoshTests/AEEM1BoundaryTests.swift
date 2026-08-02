@@ -85,22 +85,24 @@ struct AEEM1BoundaryTests {
         }
     }
 
-    @Test("AEE introduces no AEE-M2 progressive-answer states yet")
+    @Test("The AEE-M1 mission/lane files carry no AEE-M2 progressive-answer states")
     func noProgressiveAnswerStates() {
-        // These belong to AEE-M2 (progressive answer contract) — not M1.
+        // AEE-M2 landed the progressive lifecycle in its OWN files (ProgressiveAnswer*.swift);
+        // this guard ensures those states did not leak into the M1 mission/lane orchestration.
         let m2 = ["immediateFinding", "groundedWorkingResult", "analysisProgress", "reviewReady", "verifiedFinal"]
-        for (name, text) in aeeFiles() {
+        let m1Only = aeeFiles().filter { !$0.name.hasPrefix("ProgressiveAnswer") }
+        for (name, text) in m1Only {
             for token in m2 { #expect(!text.contains(token), "\(name) introduces M2 state \(token)") }
         }
     }
 
-    @Test("No model names anywhere in AEE; schema stays v88")
+    @Test("No model names anywhere in AEE; schema is at v89 (AEE-M2 revision ledger)")
     func grepGuardAndSchema() {
         let models = ["qwen", "gemma", "deepseek", "llama", "mistral", "nomic", "gpt"]
         for (name, text) in aeeFiles() {
             let lower = text.lowercased()
             for token in models { #expect(!lower.contains(token), "\(name) names model \(token)") }
         }
-        #expect(SchemaMigrations.latestVersion == 88)   // AEE-M1 is orchestration only
+        #expect(SchemaMigrations.latestVersion == 89)   // AEE-M2 added the answer-revision ledger
     }
 }

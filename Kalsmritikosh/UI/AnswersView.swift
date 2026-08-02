@@ -29,6 +29,8 @@ public struct AnswersView: View {
                     ForEach(answers) { answer in
                         AnswerCard(answer: answer, loadClaims: { id in
                             (try? await appState.answerLedger?.claims(forAnswer: id)) ?? []
+                        }, loadHistory: { id in
+                            try? await appState.answerLedger?.history(answerID: id)
                         })
                     }
                 }
@@ -78,9 +80,13 @@ public struct AnswersView: View {
 private struct AnswerCard: View {
     let answer: StoredAnswer
     let loadClaims: (UUID) async -> [AnswerLedgerRepository.StoredClaim]
+    // AEE-M2 — the progressive revision history (provisional / corrected / review-ready /
+    // verified / incomplete). nil for legacy pre-v89 answers with no revision chain.
+    var loadHistory: (UUID) async -> AnswerHistory? = { _ in nil }
     @State private var expanded = false
     @State private var claims: [AnswerLedgerRepository.StoredClaim] = []
     @State private var loadedEvidence = false
+    @State private var history: AnswerHistory?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -107,6 +113,7 @@ private struct AnswerCard: View {
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                revisionSection
                 evidenceSection
             }
             Button(expanded ? "Hide answer" : "Show answer & evidence") {
@@ -160,7 +167,53 @@ private struct AnswerCard: View {
     private func loadEvidence() async {
         guard !loadedEvidence else { return }
         claims = await loadClaims(answer.id)
+        history = await loadHistory(answer.id)
         loadedEvidence = true
+    }
+
+    /// AEE-M2 — the minimal revision history: the current lifecycle state plus each revision,
+    /// with a correction reason where one applies. Shown only when there is a real chain
+    /// (more than one revision or a non-final current state); legacy answers show nothing.
+    @ViewBuilder private var revisionSection: some View {
+        if let history, history.latestState != nil,
+           history.revisions.count > 1 || history.latestState != .verifiedFinal {
+            Divider().padding(.vertical, 2)
+            HStack(spacing: 6) {
+                Text("Answer history")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                if let s = history.latestState { lifecycleBadge(s) }
+            }
+            ForEach(history.revisions) { rev in
+                HStack(alignment: .top, spacing: 8) {
+                    Text("Rev \(rev.revisionNumber)")
+                        .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                    if rev.isCorrection {
+                        Text("corrected — \(rev.correctionReason ?? rev.correctionReasonKind?.rawValue ?? "revised")")
+                            .font(.caption2).foregroundStyle(.orange)
+                    } else {
+                        Text("working result").font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func lifecycleBadge(_ s: ProgressiveAnswerState) -> some View {
+        let (label, color): (String, Color) = {
+            switch s {
+            case .immediateFinding, .groundedWorkingResult: return ("Provisional", .secondary)
+            case .analysisProgress:                          return ("In progress", .secondary)
+            case .reviewReady:                               return ("Review ready", .blue)
+            case .verifiedFinal:                             return ("Verified", .green)
+            case .corrected:                                 return ("Corrected", .orange)
+            case .incomplete:                                return ("Incomplete", .red)
+            }
+        }()
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(color.opacity(0.18), in: Capsule())
+            .foregroundStyle(color)
     }
 
     private var stateBadge: some View {
