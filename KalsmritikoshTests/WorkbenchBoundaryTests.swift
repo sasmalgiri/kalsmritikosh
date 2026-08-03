@@ -92,11 +92,13 @@ struct WorkbenchBoundaryTests {
 
     @Test("LAB-001 adds exactly one schema bump: latest is v92 and the Workbench tables are created once")
     func oneSchemaBump() throws {
-        #expect(SchemaMigrations.latestVersion == 92)
+        #expect(SchemaMigrations.latestVersion >= 92)   // v92 = LAB-001; later units (LAB-002+) bump higher
         let migrations = try read("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
         for table in ["workbench_datasets", "workbench_fields", "workbench_rows", "workbench_cells",
                       "workbench_source_bindings", "workbench_saved_views", "workbench_dataset_events"] {
-            #expect(migrations.components(separatedBy: "CREATE TABLE \(table)").count == 2, "\(table) not created exactly once")
+            // Match the exact creation "CREATE TABLE <table> (" so the LAB-002 v93 events-table rebuild
+            // (workbench_dataset_events_v93) is not counted as a second creation of workbench_dataset_events.
+            #expect(migrations.components(separatedBy: "CREATE TABLE \(table) (").count == 2, "\(table) not created exactly once")
         }
     }
 

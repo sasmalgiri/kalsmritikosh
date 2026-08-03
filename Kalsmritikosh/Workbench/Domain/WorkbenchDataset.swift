@@ -66,6 +66,7 @@ public nonisolated enum WorkbenchDatasetEventAction: String, Codable, Sendable, 
     case renamed
     case modeChanged
     case converted            // a legacy EvidenceDataset was converted into this canonical form
+    case transformed          // LAB-002: a safe transformation produced derived values / a projection
 }
 
 /// A typed column. Shape reuses the canonical FactSchemaRegistry.ValueShape — no new value vocabulary.

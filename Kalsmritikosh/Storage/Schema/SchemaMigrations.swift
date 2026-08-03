@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 92
+    public static let latestVersion = 93
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -356,7 +356,17 @@ public enum SchemaMigrations {
                                            "locator_json", "ordinal", "created_at"],
             "workbench_saved_views": ["id", "dataset_id", "name", "projection_json", "created_at"],
             "workbench_dataset_events": ["id", "dataset_id", "sequence", "dataset_revision", "action",
-                                          "actor", "detail", "occurred_at"]
+                                          "actor", "detail", "occurred_at"],
+            // v93 — LAB-002 safe transformation engine (three NEW tables, so their presence
+            // distinguishes v93 from v92 by the column probe alone — no stored-SQL sentinel needed
+            // for the co-migrated workbench_dataset_events CHECK rebuild that adds 'transformed').
+            // These are the NEWEST markers — every future migration MUST add its newest physical marker.
+            "workbench_transformations": ["id", "dataset_id", "sequence", "kind", "formula_text",
+                                           "engine_version", "spec_json", "target_field_id", "result_json",
+                                           "actor", "created_at"],
+            "workbench_derivations": ["id", "transformation_id", "dataset_id", "output_cell_id",
+                                       "result_key", "output_value", "created_at"],
+            "workbench_derivation_inputs": ["id", "derivation_id", "input_cell_id", "ordinal"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -484,7 +494,8 @@ public enum SchemaMigrations {
         (89, v89),
         (90, v90),
         (91, v91),
-        (92, v92)
+        (92, v92),
+        (93, v93)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5107,6 +5118,107 @@ public enum SchemaMigrations {
         CHECK(action IN ('created','fieldAdded','rowAdded','cellSet','sourceBound','viewSaved','renamed','modeChanged','converted')),
         CHECK(length(trim(actor)) > 0)
     );
+    CREATE UNIQUE INDEX idx_workbench_dataset_events_seq ON workbench_dataset_events(dataset_id, sequence);
+    """
+
+    private static let v93: String = """
+    -- LAB-002 (Stage C, Evidence Workbench / DataLab). The safe transformation engine's DURABLE
+    -- lineage. A transformation is a deterministic, reproducible operation over a v92 dataset
+    -- computed by a parsed, allowlisted expression language (tokenizer → parser → evaluator) —
+    -- NEVER `eval`, never arbitrary code. It NEVER mutates canonical evidence and never overwrites a
+    -- source cell: it produces new deterministicCalculation cells (calculated / running-total
+    -- columns), a projection (filter / sort / deduplicate), or grouped aggregates. Per the contract,
+    -- every derived value stores its formula/transformation, the EXACT input cell IDs it read, the
+    -- engine version, and its output, so the value can be reproduced and audited.
+
+    -- One applied transformation (append-only history; sequence is per-dataset and monotone). kind is
+    -- the closed transform vocabulary; formula_text is the canonical formula source (calculated
+    -- column / filter predicate / running-total field), NULL for a purely structural transform;
+    -- spec_json is the full typed spec; engine_version pins the evaluator semantics; target_field_id
+    -- is the new column a row-wise transform created; result_json holds a projection's ordered row-id
+    -- set (filter/sort/deduplicate) for audit.
+    CREATE TABLE workbench_transformations (
+        id             TEXT PRIMARY KEY NOT NULL,
+        dataset_id     TEXT NOT NULL,
+        sequence       INTEGER NOT NULL,
+        kind           TEXT NOT NULL,
+        formula_text   TEXT,
+        engine_version TEXT NOT NULL,
+        spec_json      TEXT NOT NULL,
+        target_field_id TEXT,
+        result_json    TEXT,
+        actor          TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        FOREIGN KEY(dataset_id)      REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        FOREIGN KEY(target_field_id) REFERENCES workbench_fields(id)   ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(kind IN ('calculatedColumn','runningTotal','filter','sort','deduplicate','aggregate','pivot','join','rollingCalculation')),
+        CHECK(length(trim(engine_version)) > 0),
+        CHECK(length(trim(spec_json)) > 0),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_transformations_seq ON workbench_transformations(dataset_id, sequence);
+    CREATE INDEX idx_workbench_transformations_dataset ON workbench_transformations(dataset_id);
+
+    -- One derived value produced by a transformation. output_cell_id points at the
+    -- deterministicCalculation cell a row-wise column produced (NULL for an aggregate/projection
+    -- result); result_key labels an aggregate group; output_value is the computed value string
+    -- (NULL = a null / not-computable result). Reproducing (formula + inputs + engine_version) must
+    -- yield output_value again.
+    CREATE TABLE workbench_derivations (
+        id                TEXT PRIMARY KEY NOT NULL,
+        transformation_id TEXT NOT NULL,
+        dataset_id        TEXT NOT NULL,
+        output_cell_id    TEXT,
+        result_key        TEXT,
+        output_value      TEXT,
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(transformation_id) REFERENCES workbench_transformations(id) ON DELETE CASCADE,
+        FOREIGN KEY(dataset_id)        REFERENCES workbench_datasets(id)         ON DELETE CASCADE,
+        FOREIGN KEY(output_cell_id)    REFERENCES workbench_cells(id)            ON DELETE CASCADE
+    );
+    CREATE INDEX idx_workbench_derivations_transformation ON workbench_derivations(transformation_id);
+    CREATE INDEX idx_workbench_derivations_cell ON workbench_derivations(output_cell_id);
+
+    -- The EXACT input cells a derived value read (its provenance). ordinal preserves argument order.
+    -- ON DELETE CASCADE from the input cell keeps lineage honest: if a source cell is removed the
+    -- derivation input link goes with it (the derivation itself remains, with fewer inputs, surfaced
+    -- by the LAB-005 data-quality pass rather than silently repaired).
+    CREATE TABLE workbench_derivation_inputs (
+        id            TEXT PRIMARY KEY NOT NULL,
+        derivation_id TEXT NOT NULL,
+        input_cell_id TEXT NOT NULL,
+        ordinal       INTEGER NOT NULL,
+        FOREIGN KEY(derivation_id) REFERENCES workbench_derivations(id) ON DELETE CASCADE,
+        FOREIGN KEY(input_cell_id) REFERENCES workbench_cells(id)       ON DELETE CASCADE,
+        CHECK(ordinal >= 0)
+    );
+    CREATE INDEX idx_workbench_derivation_inputs_derivation ON workbench_derivation_inputs(derivation_id);
+    CREATE UNIQUE INDEX idx_workbench_derivation_inputs_unique ON workbench_derivation_inputs(derivation_id, ordinal);
+
+    -- Extend the dataset revision-history vocabulary with 'transformed'. SQLite cannot ALTER a CHECK,
+    -- so rebuild workbench_dataset_events (created empty at v92) with the widened action set. Copy any
+    -- existing rows verbatim (no history is invented or dropped), then swap the table and its unique
+    -- (dataset_id, sequence) index back into place.
+    CREATE TABLE workbench_dataset_events_v93 (
+        id               TEXT PRIMARY KEY NOT NULL,
+        dataset_id       TEXT NOT NULL,
+        sequence         INTEGER NOT NULL,
+        dataset_revision INTEGER NOT NULL,
+        action           TEXT NOT NULL,
+        actor            TEXT NOT NULL,
+        detail           TEXT,
+        occurred_at      REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(dataset_revision >= 1),
+        CHECK(action IN ('created','fieldAdded','rowAdded','cellSet','sourceBound','viewSaved','renamed','modeChanged','converted','transformed')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    INSERT INTO workbench_dataset_events_v93 (id, dataset_id, sequence, dataset_revision, action, actor, detail, occurred_at)
+        SELECT id, dataset_id, sequence, dataset_revision, action, actor, detail, occurred_at FROM workbench_dataset_events;
+    DROP TABLE workbench_dataset_events;
+    ALTER TABLE workbench_dataset_events_v93 RENAME TO workbench_dataset_events;
     CREATE UNIQUE INDEX idx_workbench_dataset_events_seq ON workbench_dataset_events(dataset_id, sequence);
     """
 }
