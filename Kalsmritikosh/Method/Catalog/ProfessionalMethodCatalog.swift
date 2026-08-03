@@ -56,7 +56,9 @@ public nonisolated struct ProfessionalMethodCatalog: Sendable {
             BrainstormingMethod(),
             FiveW1HMethod(),
             HypothesisMatrixMethod(),
-            EvidenceCollectionPlanMethod()
+            EvidenceCollectionPlanMethod(),
+            FiveWhysMethod(),
+            FishboneMethod()
         ]
     }
 
