@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 91
+    public static let latestVersion = 92
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -343,7 +343,20 @@ public enum SchemaMigrations {
                                 "updated_at", "closed_at", "closure_reason"],
             "job_plan_references": ["id", "job_id", "reference_kind", "reference_id", "workflow_run_id",
                                      "role", "is_minimum_deliverable", "ordinal", "note", "created_at"],
-            "job_events": ["id", "job_id", "sequence", "job_revision", "action", "actor", "detail", "occurred_at"]
+            "job_events": ["id", "job_id", "sequence", "job_revision", "action", "actor", "detail", "occurred_at"],
+            // v92 — LAB-001 canonical Workbench dataset model (seven NEW tables, so the column probe
+            // distinguishes v92 from v91). The ONE canonical DataLab dataset authority; the legacy
+            // evidence_datasets/dataset_rows prototype is superseded (kept decode-only for compat).
+            // These are the NEWEST markers — every future migration MUST add its newest physical marker.
+            "workbench_datasets": ["id", "workspace_id", "title", "mode", "revision", "created_at", "updated_at"],
+            "workbench_fields": ["id", "dataset_id", "name", "value_shape", "ordinal", "created_at"],
+            "workbench_rows": ["id", "dataset_id", "ordinal", "created_at"],
+            "workbench_cells": ["id", "dataset_id", "row_id", "field_id", "kind", "value", "status", "created_at"],
+            "workbench_source_bindings": ["id", "cell_id", "target_kind", "target_id", "source_version_id",
+                                           "locator_json", "ordinal", "created_at"],
+            "workbench_saved_views": ["id", "dataset_id", "name", "projection_json", "created_at"],
+            "workbench_dataset_events": ["id", "dataset_id", "sequence", "dataset_revision", "action",
+                                          "actor", "detail", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -470,7 +483,8 @@ public enum SchemaMigrations {
         (88, v88),
         (89, v89),
         (90, v90),
-        (91, v91)
+        (91, v91),
+        (92, v92)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -4968,5 +4982,131 @@ public enum SchemaMigrations {
         CHECK(length(trim(actor)) > 0)
     );
     CREATE UNIQUE INDEX idx_job_events_seq ON job_events(job_id, sequence);
+    """
+
+    private static let v92: String = """
+    -- LAB-001 (Stage C, Evidence Workbench / DataLab). The ONE canonical dataset authority. A
+    -- Workbench dataset is a working table DERIVED from the read-only evidence ledger: every
+    -- source-derived cell drills through to its exact canonical origin (EvidenceBlock / Claim /
+    -- Event / … + SourceVersion + locator), and every cell declares its KIND so a derived, entered
+    -- or proposed value is never mistaken for a direct source observation. Canonical evidence is
+    -- NEVER copied into or mutated through this store — a dataset only references it. This supersedes
+    -- the earlier evidence_datasets / dataset_rows prototype (kept decode-only for compatibility;
+    -- WorkbenchDatasetRepository is the sole canonical writer). Transformations (LAB-002), scenarios
+    -- (LAB-003), visual surfaces (LAB-004) and modes build ON this model.
+    CREATE TABLE workbench_datasets (
+        id           TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT NOT NULL,
+        title        TEXT NOT NULL,
+        mode         TEXT NOT NULL DEFAULT 'advanced',   -- simple | advanced (one truth, two presentations)
+        revision     INTEGER NOT NULL,
+        created_at   REAL NOT NULL,
+        updated_at   REAL NOT NULL,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(length(trim(title)) > 0),
+        CHECK(mode IN ('simple','advanced')),
+        CHECK(revision >= 1)
+    );
+    CREATE INDEX idx_workbench_datasets_workspace ON workbench_datasets(workspace_id);
+
+    -- Typed columns. value_shape carries the field's shape (text/number/date/…); ordinal gives
+    -- deterministic left-to-right order.
+    CREATE TABLE workbench_fields (
+        id          TEXT PRIMARY KEY NOT NULL,
+        dataset_id  TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        value_shape TEXT NOT NULL,
+        ordinal     INTEGER NOT NULL,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(length(trim(name)) > 0),
+        CHECK(ordinal >= 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_fields_ordinal ON workbench_fields(dataset_id, ordinal);
+
+    -- STABLE row identity (the contract requires it): a row keeps its id across edits/reopens so
+    -- cells, scenarios and lineage stay attached through revisions. ordinal gives display order.
+    CREATE TABLE workbench_rows (
+        id          TEXT PRIMARY KEY NOT NULL,
+        dataset_id  TEXT NOT NULL,
+        ordinal     INTEGER NOT NULL,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(ordinal >= 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_rows_ordinal ON workbench_rows(dataset_id, ordinal);
+
+    -- One cell per (row, field). `kind` is the provenance class the whole Workbench turns on:
+    -- a source value must bind evidence; a deterministic calculation records its transformation
+    -- (LAB-002); user-entered / user-corrected / model-proposal / reviewed values are NEVER treated
+    -- as source observations. `status` carries the evidence/claim disposition.
+    CREATE TABLE workbench_cells (
+        id         TEXT PRIMARY KEY NOT NULL,
+        dataset_id TEXT NOT NULL,
+        row_id     TEXT NOT NULL,
+        field_id   TEXT NOT NULL,
+        kind       TEXT NOT NULL,   -- sourceValue | deterministicCalculation | userEntered | userCorrected | modelProposal | reviewed
+        value      TEXT,            -- NULL = missing (a missing cell binds no evidence)
+        status     TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        FOREIGN KEY(row_id)     REFERENCES workbench_rows(id)     ON DELETE CASCADE,
+        FOREIGN KEY(field_id)   REFERENCES workbench_fields(id)   ON DELETE CASCADE,
+        CHECK(kind IN ('sourceValue','deterministicCalculation','userEntered','userCorrected','modelProposal','reviewed')),
+        CHECK(length(trim(status)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_cells_rowfield ON workbench_cells(row_id, field_id);
+    CREATE INDEX idx_workbench_cells_dataset ON workbench_cells(dataset_id);
+
+    -- The drill-through: a source-derived cell binds to its EXACT canonical origin. target_kind names
+    -- the canonical authority (evidence block / claim / event / entity / source version / contradiction
+    -- / gap / knowledge object); source_version_id + locator_json pin the exact region so the Evidence
+    -- Inspector can reopen it, and stale-source detection can compare producer versions. Soft
+    -- references (validated by the repository) — canonical rows are never cascade-mutated by a dataset.
+    CREATE TABLE workbench_source_bindings (
+        id                TEXT PRIMARY KEY NOT NULL,
+        cell_id           TEXT NOT NULL,
+        target_kind       TEXT NOT NULL,
+        target_id         TEXT NOT NULL,
+        source_version_id TEXT,
+        locator_json      TEXT,
+        ordinal           INTEGER NOT NULL,
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(cell_id) REFERENCES workbench_cells(id) ON DELETE CASCADE,
+        CHECK(target_kind IN ('evidenceBlock','claim','event','entity','sourceVersion','contradiction','gap','knowledgeObject')),
+        CHECK(length(trim(target_id)) > 0),
+        CHECK(ordinal >= 0)
+    );
+    CREATE INDEX idx_workbench_source_bindings_cell ON workbench_source_bindings(cell_id);
+
+    -- Saved projections/filters over a dataset (the "saved view" of the LAB-001 model).
+    CREATE TABLE workbench_saved_views (
+        id              TEXT PRIMARY KEY NOT NULL,
+        dataset_id      TEXT NOT NULL,
+        name            TEXT NOT NULL,
+        projection_json TEXT NOT NULL,
+        created_at      REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(length(trim(name)) > 0)
+    );
+    CREATE INDEX idx_workbench_saved_views_dataset ON workbench_saved_views(dataset_id);
+
+    -- Append-only revision history so a dataset's construction survives relaunch and is auditable.
+    CREATE TABLE workbench_dataset_events (
+        id               TEXT PRIMARY KEY NOT NULL,
+        dataset_id       TEXT NOT NULL,
+        sequence         INTEGER NOT NULL,
+        dataset_revision INTEGER NOT NULL,
+        action           TEXT NOT NULL,   -- created | fieldAdded | rowAdded | cellSet | sourceBound | viewSaved | renamed | modeChanged | converted
+        actor            TEXT NOT NULL,
+        detail           TEXT,
+        occurred_at      REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(dataset_revision >= 1),
+        CHECK(action IN ('created','fieldAdded','rowAdded','cellSet','sourceBound','viewSaved','renamed','modeChanged','converted')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_dataset_events_seq ON workbench_dataset_events(dataset_id, sequence);
     """
 }
