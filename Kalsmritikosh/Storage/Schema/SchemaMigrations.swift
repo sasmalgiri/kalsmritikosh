@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 93
+    public static let latestVersion = 94
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -366,7 +366,20 @@ public enum SchemaMigrations {
                                            "actor", "created_at"],
             "workbench_derivations": ["id", "transformation_id", "dataset_id", "output_cell_id",
                                        "result_key", "output_value", "created_at"],
-            "workbench_derivation_inputs": ["id", "derivation_id", "input_cell_id", "ordinal"]
+            "workbench_derivation_inputs": ["id", "derivation_id", "input_cell_id", "ordinal"],
+            // v94 — LAB-003 scenario overlays (four NEW tables, so their presence distinguishes v94 from
+            // v93 by the column probe alone). A scenario is a non-destructive overlay: an append-only
+            // operation log + undo/redo pointer + reviewed-promotion ledger, never a canonical mutation.
+            // These are the NEWEST markers — every future migration MUST add its newest physical marker.
+            "workbench_scenarios": ["id", "dataset_id", "base_dataset_revision", "title", "status",
+                                     "current_op_seq", "revision", "actor", "created_at", "updated_at"],
+            "workbench_scenario_operations": ["id", "scenario_id", "sequence", "kind", "target_kind",
+                                               "row_id", "field_id", "before_value", "after_value",
+                                               "reason", "status", "actor", "created_at"],
+            "workbench_scenario_reviews": ["id", "scenario_id", "operation_id", "destination", "decision",
+                                            "reviewer", "reason", "resulting_reference", "decided_at"],
+            "workbench_scenario_events": ["id", "scenario_id", "sequence", "scenario_revision", "action",
+                                           "actor", "detail", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -495,7 +508,8 @@ public enum SchemaMigrations {
         (90, v90),
         (91, v91),
         (92, v92),
-        (93, v93)
+        (93, v93),
+        (94, v94)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5220,5 +5234,110 @@ public enum SchemaMigrations {
     DROP TABLE workbench_dataset_events;
     ALTER TABLE workbench_dataset_events_v93 RENAME TO workbench_dataset_events;
     CREATE UNIQUE INDEX idx_workbench_dataset_events_seq ON workbench_dataset_events(dataset_id, sequence);
+    """
+
+    private static let v94: String = """
+    -- LAB-003 (Stage C, Evidence Workbench / DataLab). Scenario overlays: a NON-DESTRUCTIVE analytical
+    -- what-if layer on a v92 dataset. A scenario is an append-only OPERATION LOG plus an undo/redo
+    -- pointer (current_op_seq) — the current state is REPLAYED from the log, never a stored mutated
+    -- blob, so history is reconstructable and undo/redo is a deterministic pointer move. Canonical
+    -- evidence, source cells and LAB-002 derivations are NEVER mutated here. Promotion of a scenario
+    -- proposal into canonical/professional truth happens ONLY through an explicit human-reviewed action
+    -- recorded in workbench_scenario_reviews, routed to an EXISTING authority; a rejected promotion
+    -- leaves canonical state unchanged. Discard marks a scenario inactive without erasing its history.
+
+    -- The scenario header. base_dataset_revision pins the dataset revision the scenario was built on
+    -- (for staleness detection); current_op_seq is the undo/redo pointer (0 = origin); revision is the
+    -- optimistic-CAS counter; status active|discarded|promoted.
+    CREATE TABLE workbench_scenarios (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        dataset_id           TEXT NOT NULL,
+        base_dataset_revision INTEGER NOT NULL,
+        title                TEXT NOT NULL,
+        status               TEXT NOT NULL DEFAULT 'active',
+        current_op_seq       INTEGER NOT NULL DEFAULT 0,
+        revision             INTEGER NOT NULL,
+        actor                TEXT NOT NULL,
+        created_at           REAL NOT NULL,
+        updated_at           REAL NOT NULL,
+        FOREIGN KEY(dataset_id) REFERENCES workbench_datasets(id) ON DELETE CASCADE,
+        CHECK(length(trim(title)) > 0),
+        CHECK(status IN ('active','discarded','promoted')),
+        CHECK(current_op_seq >= 0),
+        CHECK(base_dataset_revision >= 1),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX idx_workbench_scenarios_dataset ON workbench_scenarios(dataset_id);
+
+    -- The durable overlay operation log (append-only; sequence is monotone and never reused). status
+    -- is 'live' (on the current branch) or 'abandoned' (a redo branch truncated by a new operation
+    -- after an undo — retained for audit, never re-applied). before_value captures the projected value
+    -- at the target immediately before this op. A cell op requires a field; a row op does not.
+    CREATE TABLE workbench_scenario_operations (
+        id           TEXT PRIMARY KEY NOT NULL,
+        scenario_id  TEXT NOT NULL,
+        sequence     INTEGER NOT NULL,
+        kind         TEXT NOT NULL,
+        target_kind  TEXT NOT NULL,
+        row_id       TEXT NOT NULL,
+        field_id     TEXT,
+        before_value TEXT,
+        after_value  TEXT,
+        reason       TEXT,
+        status       TEXT NOT NULL DEFAULT 'live',
+        actor        TEXT NOT NULL,
+        created_at   REAL NOT NULL,
+        FOREIGN KEY(scenario_id) REFERENCES workbench_scenarios(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(kind IN ('valueOverride','proposedCorrection','classification','annotation','derivedExperimentalValue','rowInclusion','rowExclusion')),
+        CHECK(target_kind IN ('cell','row')),
+        CHECK(target_kind = 'row' OR field_id IS NOT NULL),
+        CHECK(status IN ('live','abandoned')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_scenario_ops_seq ON workbench_scenario_operations(scenario_id, sequence);
+    CREATE INDEX idx_workbench_scenario_ops_scenario ON workbench_scenario_operations(scenario_id);
+
+    -- The reviewed-promotion ledger. A row records ONE human decision (accepted|rejected) routing a
+    -- specific operation to an EXISTING authority (destination) + the resulting canonical/professional
+    -- object reference. LAB-003 records the routing + reference; it never writes the canonical object
+    -- itself and never bypasses the destination authority's own review rules.
+    CREATE TABLE workbench_scenario_reviews (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        scenario_id         TEXT NOT NULL,
+        operation_id        TEXT NOT NULL,
+        destination         TEXT NOT NULL,
+        decision            TEXT NOT NULL,
+        reviewer            TEXT NOT NULL,
+        reason              TEXT,
+        resulting_reference TEXT,
+        decided_at          REAL NOT NULL,
+        FOREIGN KEY(scenario_id)  REFERENCES workbench_scenarios(id)            ON DELETE CASCADE,
+        FOREIGN KEY(operation_id) REFERENCES workbench_scenario_operations(id)  ON DELETE CASCADE,
+        CHECK(destination IN ('userCorrection','workingFinding','methodRunInput','claimReview','workProductInput')),
+        CHECK(decision IN ('accepted','rejected')),
+        CHECK(length(trim(reviewer)) > 0)
+    );
+    CREATE INDEX idx_workbench_scenario_reviews_scenario ON workbench_scenario_reviews(scenario_id);
+
+    -- Append-only scenario audit history so construction, undo/redo, promotion and discard survive
+    -- relaunch and are provable.
+    CREATE TABLE workbench_scenario_events (
+        id                TEXT PRIMARY KEY NOT NULL,
+        scenario_id       TEXT NOT NULL,
+        sequence          INTEGER NOT NULL,
+        scenario_revision INTEGER NOT NULL,
+        action            TEXT NOT NULL,
+        actor             TEXT NOT NULL,
+        detail            TEXT,
+        occurred_at       REAL NOT NULL,
+        FOREIGN KEY(scenario_id) REFERENCES workbench_scenarios(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(scenario_revision >= 1),
+        CHECK(action IN ('created','operationApplied','undone','redone','reset','discarded','duplicated','promotionAccepted','promotionRejected')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_workbench_scenario_events_seq ON workbench_scenario_events(scenario_id, sequence);
     """
 }
