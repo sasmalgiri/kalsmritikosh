@@ -423,6 +423,10 @@ public final class AppState {
     /// LAB-001 — the ONE canonical Workbench / DataLab dataset authority (supersedes the EvidenceDataset
     /// prototype). Live from boot over the shared ledger; consumed by the DataLab surfaces (LAB-004+).
     public private(set) var workbenchDatasets: WorkbenchDatasetRepository?
+    /// LAB-002 — the safe transformation engine's authoritative writer/reader over the same dataset
+    /// ledger. Computes with the pure WorkbenchTransformEngine (no `eval`) and persists reproducible,
+    /// audited derived values. Live from boot; consumed by the DataLab surfaces (LAB-004+).
+    public private(set) var workbenchTransforms: WorkbenchTransformRepository?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1755,6 +1759,8 @@ public final class AppState {
             self.jobs = JobRepository(database: db)
             // LAB-001 — the canonical Workbench dataset authority, live from boot over the shared ledger.
             self.workbenchDatasets = WorkbenchDatasetRepository(database: db)
+            // LAB-002 — the safe transformation engine's writer, live from boot over the shared ledger.
+            self.workbenchTransforms = WorkbenchTransformRepository(database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
