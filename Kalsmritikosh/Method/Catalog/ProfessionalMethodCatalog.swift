@@ -66,7 +66,9 @@ public nonisolated struct ProfessionalMethodCatalog: Sendable {
             GapAnalysisMethod(),
             TimelineAnalysisMethod(),
             RelationshipAnalysisMethod(),
-            TransactionFlowMethod()
+            TransactionFlowMethod(),
+            RiskMatrixMethod(),
+            DecisionMatrixMethod()
         ]
     }
 
