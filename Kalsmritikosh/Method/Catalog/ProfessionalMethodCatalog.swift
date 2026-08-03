@@ -58,7 +58,10 @@ public nonisolated struct ProfessionalMethodCatalog: Sendable {
             HypothesisMatrixMethod(),
             EvidenceCollectionPlanMethod(),
             FiveWhysMethod(),
-            FishboneMethod()
+            FishboneMethod(),
+            RootCauseAssessmentMethod(),
+            CAPAMethod(),
+            EffectivenessReviewMethod()
         ]
     }
 
