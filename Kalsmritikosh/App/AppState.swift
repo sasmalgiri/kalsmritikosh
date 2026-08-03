@@ -420,6 +420,9 @@ public final class AppState {
     /// workflow authorities. Live from boot; consumed by the persona shell's "My Work" surface in a
     /// later stage. It is NOT a second task or deadline system — see JobRepository.
     public private(set) var jobs: JobRepository?
+    /// LAB-001 — the ONE canonical Workbench / DataLab dataset authority (supersedes the EvidenceDataset
+    /// prototype). Live from boot over the shared ledger; consumed by the DataLab surfaces (LAB-004+).
+    public private(set) var workbenchDatasets: WorkbenchDatasetRepository?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1750,6 +1753,8 @@ public final class AppState {
             self.enrichmentJobs = enrichmentJobsRepo
             // TBJ-FINAL — the time-bounded Job planning envelope, live from boot over the shared ledger.
             self.jobs = JobRepository(database: db)
+            // LAB-001 — the canonical Workbench dataset authority, live from boot over the shared ledger.
+            self.workbenchDatasets = WorkbenchDatasetRepository(database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind

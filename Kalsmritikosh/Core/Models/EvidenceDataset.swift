@@ -2,7 +2,13 @@
 //  EvidenceDataset.swift
 //  Kalsmritikosh
 //
-//  LAB-001 — the one evidence kernel for the Workbench/DataLab. An EvidenceDataset is a
+//  SUPERSEDED (Stage C, LAB-001): this prototype kernel and its historical in-file "LAB-001..006"
+//  labels are superseded by the canonical Workbench dataset model (Kalsmritikosh/Workbench/) — the
+//  ONE dataset authority. It is retained ONLY as a temporary compatibility surface for existing code
+//  and tests; convert a legacy value into the canonical form via
+//  WorkbenchDatasetRepository.convertLegacy(_:). Do not add new persistence or behavior here.
+//
+//  (historical) LAB-001 — the one evidence kernel for the Workbench/DataLab. An EvidenceDataset is a
 //  versioned table derived from the ledger where EVERY cell carries the evidence blocks that
 //  back its value. "Every value and visual must drill through to source evidence" (locked
 //  contract). A cell with no provenance is not allowed to hold a derived value — it must be
