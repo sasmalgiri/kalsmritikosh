@@ -111,9 +111,9 @@ struct TBJBoundaryTests {
         #expect(!bad.isWellFormed)
     }
 
-    @Test("TBJ adds exactly one schema bump: latest is v91 and the job tables are created once")
+    @Test("TBJ adds exactly one schema bump: the job tables are created once (v91+)")
     func oneSchemaBump() throws {
-        #expect(SchemaMigrations.latestVersion == 91)
+        #expect(SchemaMigrations.latestVersion >= 91)   // introduced at v91; later units bump higher
         let migrations = try read("Kalsmritikosh/Storage/Schema/SchemaMigrations.swift")
         #expect(migrations.components(separatedBy: "CREATE TABLE job_objectives").count == 2)
         #expect(migrations.components(separatedBy: "CREATE TABLE job_plan_references").count == 2)
