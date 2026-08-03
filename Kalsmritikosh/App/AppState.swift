@@ -436,6 +436,10 @@ public final class AppState {
     /// Pure read-only analysis; never mutates canonical evidence. Live from boot once the dataset +
     /// scenario authorities are constructed.
     public private(set) var workbenchDataQuality: WorkbenchDataQualityAnalyzer?
+    /// SHELL-001 — the shared macOS shell's durable navigation-session autosave/resume (browser-style
+    /// Back/Forward location history, distinct from workflow Prev/Next). Live from boot; restores the
+    /// exact location on relaunch. Pure shell state — touches no canonical evidence.
+    public private(set) var shellSession: ShellSessionRepository?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1776,6 +1780,8 @@ public final class AppState {
             if let wbDatasets = self.workbenchDatasets, let wbScenarios = self.workbenchScenarios {
                 self.workbenchDataQuality = WorkbenchDataQualityAnalyzer(datasets: wbDatasets, scenarios: wbScenarios)
             }
+            // SHELL-001 — the shell navigation-session autosave/resume, live from boot over the shared ledger.
+            self.shellSession = ShellSessionRepository(database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind

@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 94
+    public static let latestVersion = 95
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -379,7 +379,12 @@ public enum SchemaMigrations {
             "workbench_scenario_reviews": ["id", "scenario_id", "operation_id", "destination", "decision",
                                             "reviewer", "reason", "resulting_reference", "decided_at"],
             "workbench_scenario_events": ["id", "scenario_id", "sequence", "scenario_revision", "action",
-                                           "actor", "detail", "occurred_at"]
+                                           "actor", "detail", "occurred_at"],
+            // v95 — SHELL-001 shared-shell navigation session (two NEW tables, so their presence
+            // distinguishes v95 from v94). Browser-style Back/Forward location history + autosave/resume.
+            // These are the NEWEST markers — every future migration MUST add its newest physical marker.
+            "app_navigation_sessions": ["id", "scope_key", "current_index", "revision", "updated_at"],
+            "app_navigation_entries": ["id", "session_id", "ordinal", "destination", "context_kind", "context_id"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -509,7 +514,8 @@ public enum SchemaMigrations {
         (91, v91),
         (92, v92),
         (93, v93),
-        (94, v94)
+        (94, v94),
+        (95, v95)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5339,5 +5345,40 @@ public enum SchemaMigrations {
         CHECK(length(trim(actor)) > 0)
     );
     CREATE UNIQUE INDEX idx_workbench_scenario_events_seq ON workbench_scenario_events(scenario_id, sequence);
+    """
+
+    private static let v95: String = """
+    -- SHELL-001 (product shell). The shared macOS shell's LOCATION navigation history, autosaved so a
+    -- relaunch resumes at the exact place the user left. This is browser-style Back/Forward across app
+    -- locations — DELIBERATELY DISTINCT from workflow Prev/Next (stepping through one workflow run's
+    -- ordered steps). One session per scope_key (e.g. a workspace or the default shell); its entries are
+    -- an ordered stack and current_index is the cursor (-1 when empty).
+    CREATE TABLE app_navigation_sessions (
+        id            TEXT PRIMARY KEY NOT NULL,
+        scope_key     TEXT NOT NULL,
+        current_index INTEGER NOT NULL,
+        revision      INTEGER NOT NULL,
+        updated_at    REAL NOT NULL,
+        CHECK(length(trim(scope_key)) > 0),
+        CHECK(current_index >= -1),
+        CHECK(revision >= 1)
+    );
+    CREATE UNIQUE INDEX idx_app_navigation_sessions_scope ON app_navigation_sessions(scope_key);
+
+    -- One visited location. destination is the closed top-level place; context_kind/context_id pin the
+    -- exact item (e.g. a specific dataset) so Back/Forward returns to precisely where the user was.
+    CREATE TABLE app_navigation_entries (
+        id           TEXT PRIMARY KEY NOT NULL,
+        session_id   TEXT NOT NULL,
+        ordinal      INTEGER NOT NULL,
+        destination  TEXT NOT NULL,
+        context_kind TEXT,
+        context_id   TEXT,
+        FOREIGN KEY(session_id) REFERENCES app_navigation_sessions(id) ON DELETE CASCADE,
+        CHECK(ordinal >= 0),
+        CHECK(destination IN ('home','sources','timeline','entities','relationships','dataLab','methods','jobs','answers','reports','evidenceInspector','settings'))
+    );
+    CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
+    CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
     """
 }
