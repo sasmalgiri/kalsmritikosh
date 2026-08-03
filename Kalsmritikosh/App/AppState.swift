@@ -431,6 +431,11 @@ public final class AppState {
     /// reviewed promotion) over the same dataset ledger. Live from boot; consumed by the DataLab
     /// surfaces (LAB-004+). Never mutates canonical evidence.
     public private(set) var workbenchScenarios: WorkbenchScenarioRepository?
+    /// LAB-005 — the deterministic evidence-quality analyzer over the dataset/scenario ledger (missing
+    /// values, stale/inaccessible sources, unsupported transformations, unreviewed scenario values, …).
+    /// Pure read-only analysis; never mutates canonical evidence. Live from boot once the dataset +
+    /// scenario authorities are constructed.
+    public private(set) var workbenchDataQuality: WorkbenchDataQualityAnalyzer?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1767,6 +1772,10 @@ public final class AppState {
             self.workbenchTransforms = WorkbenchTransformRepository(database: db)
             // LAB-003 — the scenario overlay authority, live from boot over the shared ledger.
             self.workbenchScenarios = WorkbenchScenarioRepository(database: db)
+            // LAB-005 — the read-only data-quality analyzer, composing the dataset + scenario authorities.
+            if let wbDatasets = self.workbenchDatasets, let wbScenarios = self.workbenchScenarios {
+                self.workbenchDataQuality = WorkbenchDataQualityAnalyzer(datasets: wbDatasets, scenarios: wbScenarios)
+            }
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
