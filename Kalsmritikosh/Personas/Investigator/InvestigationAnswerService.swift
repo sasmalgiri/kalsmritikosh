@@ -28,9 +28,16 @@ public nonisolated struct InvestigationScopeContext: Sendable, Equatable {
     public let workspaceID: UUID
     public let status: InvestigationCaseStatus
     public let scope: RetrievalSourceScope
+    /// INV-01-C4 — the case revision + the ONE deterministic scope fingerprint this context resolves to.
+    /// Every case-produced artifact (Ask / Methods / DataLab) is stamped with THIS fingerprint, so a later
+    /// scope change is detectable as staleness the same way for all engines.
+    public let caseRevision: Int
+    public let fingerprint: CaseScopeFingerprint
 
-    public nonisolated init(caseID: UUID, workspaceID: UUID, status: InvestigationCaseStatus, scope: RetrievalSourceScope) {
+    public nonisolated init(caseID: UUID, workspaceID: UUID, status: InvestigationCaseStatus, scope: RetrievalSourceScope,
+                            caseRevision: Int, fingerprint: CaseScopeFingerprint) {
         self.caseID = caseID; self.workspaceID = workspaceID; self.status = status; self.scope = scope
+        self.caseRevision = caseRevision; self.fingerprint = fingerprint
     }
 }
 
@@ -74,8 +81,11 @@ public actor InvestigationAnswerService {
             throw InvestigationAnswerError.caseNotFound(caseID)
         }
         let scope = try await resolver.scope(for: record)
+        let fingerprint = CaseScopeFingerprinter.fingerprint(
+            caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
         return InvestigationScopeContext(caseID: caseID, workspaceID: record.caseHeader.workspaceID,
-                                         status: record.caseHeader.status, scope: scope)
+                                         status: record.caseHeader.status, scope: scope,
+                                         caseRevision: record.caseHeader.revision, fingerprint: fingerprint)
     }
 
     /// The case-scoped retriever for a case — the SHARED retriever wrapped so every retrieval pass is
