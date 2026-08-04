@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 96
+    public static let latestVersion = 97
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -394,7 +394,9 @@ public enum SchemaMigrations {
                                      "status", "confirmed_deadline_id", "possible_deadline_note", "revision",
                                      "actor", "created_at", "updated_at"],
             "investigation_case_sources": ["id", "case_id", "source_ref", "source_kind", "in_scope", "note", "created_at"],
-            "investigation_case_events": ["id", "case_id", "sequence", "case_revision", "action", "actor", "detail", "occurred_at"]
+            "investigation_case_events": ["id", "case_id", "sequence", "case_revision", "action", "actor", "detail", "occurred_at"],
+            // v97 — INV-01-C4 canonical case-scope fingerprint / staleness ledger.
+            "investigation_scope_artifacts": ["id", "case_id", "artifact_kind", "artifact_id", "scope_fingerprint", "case_revision", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -526,7 +528,8 @@ public enum SchemaMigrations {
         (93, v93),
         (94, v94),
         (95, v95),
-        (96, v96)
+        (96, v96),
+        (97, v97)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5391,6 +5394,32 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v97: String = """
+    -- INV-01-C4 — the canonical case-scope fingerprint / staleness ledger. ONE deterministic scope
+    -- identity per case-produced analytical artifact (an Ask answer, a MethodRun, a Workbench dataset,
+    -- a work product), so a later scope change can mark current surfaces stale WITHOUT rewriting the
+    -- historical artifact: each row keeps the fingerprint + case revision under which it was produced.
+    -- The fingerprint is computed by the ONE CaseScopeFingerprinter (never a per-engine variant); this
+    -- table only records it. Canonical evidence is untouched — a soft artifact_id reference by design.
+    CREATE TABLE investigation_scope_artifacts (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        artifact_kind     TEXT NOT NULL,   -- ask | methodRun | workbenchDataset | workProduct
+        artifact_id       TEXT NOT NULL,
+        scope_fingerprint TEXT NOT NULL,
+        case_revision     INTEGER NOT NULL,
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(artifact_kind IN ('ask','methodRun','workbenchDataset','workProduct')),
+        CHECK(length(trim(artifact_id)) > 0),
+        CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*'),
+        CHECK(case_revision >= 1)
+    );
+    CREATE UNIQUE INDEX idx_investigation_scope_artifacts_unique
+        ON investigation_scope_artifacts(case_id, artifact_kind, artifact_id);
+    CREATE INDEX idx_investigation_scope_artifacts_case ON investigation_scope_artifacts(case_id);
     """
 
     private static let v96: String = """
