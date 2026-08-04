@@ -451,6 +451,10 @@ public final class AppState {
     /// LENS over the one engine: it references canonical workspaces / sources / deadlines by id and forks
     /// no canonical evidence, task, deadline or SensitiveScope authority. Live from boot.
     public private(set) var investigationCases: InvestigationCaseRepository?
+    /// INV-01-C1 — the Investigator "Ask" entry point. Orchestration only: it resolves the active case's
+    /// authorized source scope and runs the SHARED MasterBrain over a SourceScopedRetriever so no
+    /// unauthorized source can enter the evidence packet or citations. No persona engine. Live from boot.
+    public private(set) var investigationAnswers: InvestigationAnswerService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1796,7 +1800,27 @@ public final class AppState {
             // SHELL-001 — the shell navigation-session autosave/resume, live from boot over the shared ledger.
             self.shellSession = ShellSessionRepository(database: db)
             // INV-01-A — the Investigator case-intake & scope authority, live from boot over the shared ledger.
-            self.investigationCases = InvestigationCaseRepository(database: db)
+            let investigationCasesRepo = InvestigationCaseRepository(database: db)
+            self.investigationCases = investigationCasesRepo
+            // INV-01-C1 — the Investigator Ask entry point: composes the active case's authorized scope
+            // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
+            // request via this factory so the case-scoped retriever governs every retrieval pass while the
+            // same shared collaborators are reused; building the actor only stores references.
+            self.investigationAnswers = InvestigationAnswerService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                baseRetriever: retriever,
+                evidence: evidenceStoreRepo,
+                makeBrain: { scoped in
+                    MasterBrain(
+                        intentDetector: intentDetector, router: router, retriever: scoped, executor: executor,
+                        capabilities: capabilities, verifier: verifier, weeklyBriefing: weeklyBriefing,
+                        sessionProfile: sessionProfile, memoryRepo: memoryRepo, narrativeComposer: narrativeComposer,
+                        eventsRepo: events, eventLinks: eventLinksRepo, onDemandDistiller: memoryDistiller,
+                        derivedObjects: derivedObjectsRepo, answerLedger: answerLedgerRepo, evidenceStore: evidenceStoreRepo,
+                        objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
+                        sensitiveScope: sensitiveScopesRepo)
+                })
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
