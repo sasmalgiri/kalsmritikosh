@@ -440,6 +440,11 @@ public final class AppState {
     /// Back/Forward location history, distinct from workflow Prev/Next). Live from boot; restores the
     /// exact location on relaunch. Pure shell state — touches no canonical evidence.
     public private(set) var shellSession: ShellSessionRepository?
+    /// SHELL-003 — the ONE background-work gate: every optional/deferred worker asks this instead of
+    /// checking idle independently. Composes the shared QueryPriorityGate + SystemActivity + the user's
+    /// background preference into a single P0–P6 decision, so background maintenance never competes with
+    /// foreground user work.
+    public private(set) var backgroundWorkGate: BackgroundWorkGate?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1168,6 +1173,8 @@ public final class AppState {
             // ING-006 — shared query-priority gate: the answer path holds it, the
             // background embedding drain yields to it (interactive pre-empts background).
             let priorityGate = QueryPriorityGate()
+            // SHELL-003 — the one background-work gate, composing the shared priority gate + idle signal.
+            self.backgroundWorkGate = BackgroundWorkGate(queryGate: priorityGate)
             let brain = MasterBrain(
                 intentDetector: intentDetector,
                 router: router,
