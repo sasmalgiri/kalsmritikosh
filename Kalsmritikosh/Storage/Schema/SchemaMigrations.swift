@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 95
+    public static let latestVersion = 96
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -384,7 +384,17 @@ public enum SchemaMigrations {
             // distinguishes v95 from v94). Browser-style Back/Forward location history + autosave/resume.
             // These are the NEWEST markers — every future migration MUST add its newest physical marker.
             "app_navigation_sessions": ["id", "scope_key", "current_index", "revision", "updated_at"],
-            "app_navigation_entries": ["id", "session_id", "ordinal", "destination", "context_kind", "context_id"]
+            "app_navigation_entries": ["id", "session_id", "ordinal", "destination", "context_kind", "context_id"],
+            // v96 — INV-01-A Investigator case + scope authority (three NEW tables, so their presence
+            // distinguishes v96 from v95). A persona lens over the canonical engine: the case REFERENCES
+            // canonical sources (never copies), and its in-scope set is the hard evidence boundary.
+            // These are the NEWEST markers — every future migration MUST add its newest physical marker.
+            "investigation_cases": ["id", "workspace_id", "title", "purpose", "scope_statement",
+                                     "out_of_scope_statement", "time_window_start", "time_window_end",
+                                     "status", "confirmed_deadline_id", "possible_deadline_note", "revision",
+                                     "actor", "created_at", "updated_at"],
+            "investigation_case_sources": ["id", "case_id", "source_ref", "source_kind", "in_scope", "note", "created_at"],
+            "investigation_case_events": ["id", "case_id", "sequence", "case_revision", "action", "actor", "detail", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -515,7 +525,8 @@ public enum SchemaMigrations {
         (92, v92),
         (93, v93),
         (94, v94),
-        (95, v95)
+        (95, v95),
+        (96, v96)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5380,5 +5391,76 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v96: String = """
+    -- INV-01-A (Investigator persona pack — Case Intake & Scope). The Investigator is a professional
+    -- LENS over the one canonical engine: a case REFERENCES canonical sources, deadlines and evidence
+    -- by id — it never copies them and never forks a second evidence/task/deadline/workflow authority.
+    -- The set of in-scope case sources is the HARD evidence boundary that downstream Ask / Full Evidence
+    -- / Methods / DataLab / exports must respect: a source being present in the workspace does NOT put
+    -- it inside the active investigation until it is added in-scope here.
+    CREATE TABLE investigation_cases (
+        id                     TEXT PRIMARY KEY NOT NULL,
+        workspace_id           TEXT NOT NULL,
+        title                  TEXT NOT NULL,
+        purpose                TEXT,
+        scope_statement        TEXT,
+        out_of_scope_statement TEXT,
+        time_window_start      REAL,
+        time_window_end        REAL,
+        status                 TEXT NOT NULL DEFAULT 'open',   -- open | scopeConfirmed | closed
+        confirmed_deadline_id  TEXT,                           -- soft ref to a CONFIRMED deadlines row only
+        possible_deadline_note TEXT,                           -- advisory candidate text, never authoritative
+        revision               INTEGER NOT NULL,
+        actor                  TEXT NOT NULL,
+        created_at             REAL NOT NULL,
+        updated_at             REAL NOT NULL,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        CHECK(length(trim(title)) > 0),
+        CHECK(status IN ('open','scopeConfirmed','closed')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX idx_investigation_cases_workspace ON investigation_cases(workspace_id);
+
+    -- The scope binding: which canonical sources are authorized for this case. source_ref is a soft
+    -- reference to a canonical source identity (logical source / source version / workspace source);
+    -- in_scope = 1 authorizes it, 0 explicitly excludes it. UNIQUE(case, source_ref) so a source has
+    -- exactly one disposition per case. Canonical source rows are never cascade-mutated by a case.
+    CREATE TABLE investigation_case_sources (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        source_ref  TEXT NOT NULL,
+        source_kind TEXT NOT NULL,   -- logicalSource | sourceVersion | workspaceSource
+        in_scope    INTEGER NOT NULL DEFAULT 1,
+        note        TEXT,
+        created_at  REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(length(trim(source_ref)) > 0),
+        CHECK(source_kind IN ('logicalSource','sourceVersion','workspaceSource')),
+        CHECK(in_scope IN (0,1))
+    );
+    CREATE UNIQUE INDEX idx_investigation_case_sources_unique ON investigation_case_sources(case_id, source_ref);
+    CREATE INDEX idx_investigation_case_sources_case ON investigation_case_sources(case_id);
+
+    -- Append-only case audit so intake, scope changes, confirmation, deadline binding and reopen survive
+    -- relaunch and are provable.
+    CREATE TABLE investigation_case_events (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        sequence      INTEGER NOT NULL,
+        case_revision INTEGER NOT NULL,
+        action        TEXT NOT NULL,   -- created | scopeSet | sourceIncluded | sourceExcluded | scopeConfirmed | deadlineBound | reopened
+        actor         TEXT NOT NULL,
+        detail        TEXT,
+        occurred_at   REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(sequence >= 1),
+        CHECK(case_revision >= 1),
+        CHECK(action IN ('created','scopeSet','sourceIncluded','sourceExcluded','scopeConfirmed','deadlineBound','reopened')),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_case_events_seq ON investigation_case_events(case_id, sequence);
     """
 }

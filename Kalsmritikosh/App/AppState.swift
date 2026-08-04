@@ -445,6 +445,12 @@ public final class AppState {
     /// background preference into a single P0–P6 decision, so background maintenance never competes with
     /// foreground user work.
     public private(set) var backgroundWorkGate: BackgroundWorkGate?
+    /// INV-01-A — the Investigator persona's durable case-intake & scope authority (schema v96). Records
+    /// a case's purpose, scope framing, time window, the in-scope source set (the HARD evidence boundary),
+    /// scope confirmation and any bound CONFIRMED deadline — surviving relaunch with append-only audit. A
+    /// LENS over the one engine: it references canonical workspaces / sources / deadlines by id and forks
+    /// no canonical evidence, task, deadline or SensitiveScope authority. Live from boot.
+    public private(set) var investigationCases: InvestigationCaseRepository?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1789,6 +1795,8 @@ public final class AppState {
             }
             // SHELL-001 — the shell navigation-session autosave/resume, live from boot over the shared ledger.
             self.shellSession = ShellSessionRepository(database: db)
+            // INV-01-A — the Investigator case-intake & scope authority, live from boot over the shared ledger.
+            self.investigationCases = InvestigationCaseRepository(database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
