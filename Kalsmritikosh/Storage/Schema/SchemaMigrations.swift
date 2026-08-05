@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 99
+    public static let latestVersion = 100
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -418,7 +418,13 @@ public enum SchemaMigrations {
             "investigation_evidence_requests": ["id", "case_id", "hypothesis_id", "description", "status",
                                                  "revision", "actor", "created_at", "updated_at"],
             "investigation_worksheet_cells": ["id", "case_id", "dimension", "status", "answer_text",
-                                               "source_version_id", "knowledge_object_id", "revision", "actor", "updated_at"]
+                                               "source_version_id", "knowledge_object_id", "revision", "actor", "updated_at"],
+            // v100 — INV-08 + INV-12 case-scoped review desk (one NEW table, so its presence distinguishes
+            // v100 from v99). A thin, case-scoped human confirm/dismiss decision that REFERENCES a shared
+            // canonical item (a source-reliability assessment / contradiction / gap) by id — it never forks
+            // those authorities. This is the NEWEST marker.
+            "investigation_desk_reviews": ["id", "case_id", "item_kind", "item_id", "decision", "note",
+                                            "actor", "created_at", "updated_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -553,7 +559,8 @@ public enum SchemaMigrations {
         (96, v96),
         (97, v97),
         (98, v98),
-        (99, v99)
+        (99, v99),
+        (100, v100)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5418,6 +5425,35 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v100: String = """
+    -- INV-08 (Source reliability) + INV-12 (Contradiction & gap desk). A thin, CASE-SCOPED human review
+    -- decision that REFERENCES a shared canonical item by id — a source-reliability assessment
+    -- (source_reliability_assessments, OPS-006), a contradiction (contradictions), or a gap (gap_nodes).
+    -- It forks none of those authorities: the shared item keeps its own global status; this table records
+    -- only what THIS case decided, so one case's dismissal never hides an item from another persona or case.
+    -- item_id is a soft reference (reliability → source_version_id; contradiction/gap → the item's id).
+    -- Truth boundaries: a reliability rating is not a verified fact; a contradiction is not a resolved
+    -- truth; a gap is not a guessed answer — the desk records a human disposition, it resolves nothing.
+    CREATE TABLE investigation_desk_reviews (
+        id          TEXT PRIMARY KEY NOT NULL,
+        case_id     TEXT NOT NULL,
+        item_kind   TEXT NOT NULL,   -- reliability | contradiction | gap
+        item_id     TEXT NOT NULL,
+        decision    TEXT NOT NULL,   -- confirmed | dismissed
+        note        TEXT,
+        actor       TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        updated_at  REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(item_kind IN ('reliability','contradiction','gap')),
+        CHECK(decision IN ('confirmed','dismissed')),
+        CHECK(length(trim(item_id)) > 0),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_desk_reviews_unique ON investigation_desk_reviews(case_id, item_kind, item_id);
+    CREATE INDEX idx_investigation_desk_reviews_case ON investigation_desk_reviews(case_id);
     """
 
     private static let v99: String = """
