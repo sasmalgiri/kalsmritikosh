@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 100
+    public static let latestVersion = 101
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -424,7 +424,14 @@ public enum SchemaMigrations {
             // canonical item (a source-reliability assessment / contradiction / gap) by id — it never forks
             // those authorities. This is the NEWEST marker.
             "investigation_desk_reviews": ["id", "case_id", "item_kind", "item_id", "decision", "note",
-                                            "actor", "created_at", "updated_at"]
+                                            "actor", "created_at", "updated_at"],
+            // v101 — INV-20 Closure & export: the durable, append-only human closure/reopen decision log (one
+            // NEW table, so its presence distinguishes v101 from v100). A case is CLOSED only by a recorded
+            // human decision; unresolved items remain visible; a reopen never erases a prior closure. This is
+            // the NEWEST marker.
+            "investigation_case_closures": ["id", "case_id", "sequence", "decision", "rationale",
+                                             "work_product_run_id", "scope_fingerprint", "unresolved_json",
+                                             "receipt_seal", "actor", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -560,7 +567,8 @@ public enum SchemaMigrations {
         (97, v97),
         (98, v98),
         (99, v99),
-        (100, v100)
+        (100, v100),
+        (101, v101)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5425,6 +5433,37 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v101: String = """
+    -- INV-20 (Closure & export). The durable, APPEND-ONLY human closure/reopen decision log. A case is
+    -- CLOSED only by a recorded human decision — never auto-closed by task/method completion, export, or
+    -- confidence. Closure is HONEST: the unresolved items known at closure (gaps / open contradictions /
+    -- pending evidence / residual risk) are retained here, never erased. A reopen is a NEW row that never
+    -- rewrites the closure it follows, so the decision genealogy survives. work_product_run_id is a soft
+    -- reference to the sealed findings work product; scope_fingerprint pins the case scope at the decision;
+    -- receipt_seal pins the sealed export receipt (both optional — a case may be closed without a report).
+    CREATE TABLE investigation_case_closures (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        sequence            INTEGER NOT NULL,
+        decision            TEXT NOT NULL,   -- closed | reopened
+        rationale           TEXT NOT NULL,
+        work_product_run_id TEXT,            -- soft ref to work_product_runs(id) (the sealed findings report)
+        scope_fingerprint   TEXT NOT NULL,
+        unresolved_json     TEXT NOT NULL DEFAULT '[]',
+        receipt_seal        TEXT,            -- the sealed export receipt's seal hash, when exported
+        actor               TEXT NOT NULL,
+        created_at          REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(decision IN ('closed','reopened')),
+        CHECK(length(trim(rationale)) > 0),
+        CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*'),
+        CHECK(sequence >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_case_closures_seq ON investigation_case_closures(case_id, sequence);
+    CREATE INDEX idx_investigation_case_closures_case ON investigation_case_closures(case_id);
     """
 
     private static let v100: String = """
