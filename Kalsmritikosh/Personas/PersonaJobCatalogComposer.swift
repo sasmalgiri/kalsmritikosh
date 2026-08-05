@@ -22,6 +22,7 @@ public nonisolated enum PersonaJobCatalogComposer {
         try ResearcherPersonaPackage.register(into: &builder)
         try JournalistPersonaPackage.register(into: &builder)
         try IndividualPersonaPackage.register(into: &builder)
+        try LawyerPersonaPackage.register(into: &builder)
         return try builder.build()
     }
 
@@ -34,6 +35,7 @@ public nonisolated enum PersonaJobCatalogComposer {
         case ResearcherPersonaPackage.applicationID:   return ResearcherPersonaPackage.jobs
         case JournalistPersonaPackage.applicationID:   return JournalistPersonaPackage.jobs
         case IndividualPersonaPackage.applicationID:   return IndividualPersonaPackage.jobs
+        case LawyerPersonaPackage.applicationID:       return LawyerPersonaPackage.jobs
         default: return []
         }
     }
