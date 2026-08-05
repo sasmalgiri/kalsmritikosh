@@ -486,6 +486,13 @@ public final class AppState {
     /// SHARED assembly/run/receipt engines, restricted to `case-authorized ∩ SensitiveScope`, and become the
     /// case's findings only by an explicit recorded human approval. Live from boot.
     public private(set) var investigationFindings: InvestigationFindingsService?
+    /// INV-01-C3 — the case DataLab authority: prepares authorized-only datasets over the shared Workbench,
+    /// restricted to `case-authorized ∩ SensitiveScope`. Live from boot (also the DataLab persona job's target).
+    public private(set) var investigationDataLab: InvestigationDataLabService?
+    /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
+    /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
+    public private(set) var personaJobCatalog: PersonaJobCatalog?
+    public private(set) var personaJobs: PersonaJobService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1920,6 +1927,32 @@ public final class AppState {
                     workspaces: workspacesRepo),
                 runs: WorkProductRunRepository(database: db),
                 approvals: InvestigationFindingsApprovalRepository(database: db))
+            // INV-01-C3 — the case DataLab authority, live from boot (also the DataLab persona job's target).
+            let investigationDataLabService = InvestigationDataLabService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                datasets: WorkbenchDatasetRepository(database: db),
+                scopes: SensitiveScopeRepository(database: db))
+            self.investigationDataLab = investigationDataLabService
+            // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
+            // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
+            // selected job into the real implementation (the case-scoped services wired above). This is the
+            // single production composition + consumer — before it, the catalog was exercised only in tests.
+            let composedCatalog = try PersonaJobCatalogComposer.composeProduction()
+            self.personaJobCatalog = composedCatalog
+            self.personaJobs = PersonaJobService(
+                catalog: composedCatalog,
+                cases: investigationCasesRepo,
+                answers: self.investigationAnswers,
+                subjectDossier: self.investigationSubjectDossier,
+                identityResolution: self.investigationIdentityResolution,
+                analysis: self.investigationAnalysis,
+                reliability: self.investigationReliability,
+                contradictionGap: self.investigationContradictionGap,
+                custody: self.investigationCustody,
+                closure: self.investigationClosure,
+                findings: self.investigationFindings,
+                dataLab: investigationDataLabService)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
