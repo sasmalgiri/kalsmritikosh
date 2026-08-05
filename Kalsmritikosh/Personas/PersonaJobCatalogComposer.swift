@@ -19,6 +19,7 @@ public nonisolated enum PersonaJobCatalogComposer {
     public static func composeProduction() throws -> PersonaJobCatalog {
         var builder = PersonaJobCatalogBuilder(composerRegistry: try WorkProductComposerRegistry.makeDefault())
         try InvestigatorPersonaPackage.register(into: &builder)
+        try ResearcherPersonaPackage.register(into: &builder)
         return try builder.build()
     }
 
@@ -28,6 +29,7 @@ public nonisolated enum PersonaJobCatalogComposer {
     public static func jobs(forPersona applicationID: ApplicationDefinitionID) -> [PersonaJob] {
         switch applicationID {
         case InvestigatorPersonaPackage.applicationID: return InvestigatorPersonaPackage.jobs
+        case ResearcherPersonaPackage.applicationID:   return ResearcherPersonaPackage.jobs
         default: return []
         }
     }
