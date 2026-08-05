@@ -28,6 +28,11 @@ public actor PersonaJobService {
     private let closure: InvestigationClosureService?
     private let findings: InvestigationFindingsService?
     private let dataLab: InvestigationDataLabService?
+    // #143 — the case-scoped method-engine services (shared ProfessionalMethod engine).
+    private let methods: InvestigationMethodService?
+    private let causal: InvestigationCausalService?
+    private let linkage: InvestigationLinkageService?
+    private let capa: InvestigationCAPAService?
 
     public init(catalog: PersonaJobCatalog,
                 cases: InvestigationCaseRepository?,
@@ -40,12 +45,17 @@ public actor PersonaJobService {
                 custody: InvestigationCustodyService?,
                 closure: InvestigationClosureService?,
                 findings: InvestigationFindingsService?,
-                dataLab: InvestigationDataLabService?) {
+                dataLab: InvestigationDataLabService?,
+                methods: InvestigationMethodService? = nil,
+                causal: InvestigationCausalService? = nil,
+                linkage: InvestigationLinkageService? = nil,
+                capa: InvestigationCAPAService? = nil) {
         self.catalog = catalog
         self.cases = cases; self.answers = answers; self.subjectDossier = subjectDossier
         self.identityResolution = identityResolution; self.analysis = analysis; self.reliability = reliability
         self.contradictionGap = contradictionGap; self.custody = custody; self.closure = closure
         self.findings = findings; self.dataLab = dataLab
+        self.methods = methods; self.causal = causal; self.linkage = linkage; self.capa = capa
     }
 
     // MARK: - Discovery
@@ -149,13 +159,38 @@ public actor PersonaJobService {
             let latest = try await closure.latestClosure(caseID: caseID)
             return PersonaJobLaunch(job: job, summary: latest.map { "Latest closure decision: \($0.decision.rawValue)" } ?? "No closure decision yet", producedID: caseID)
 
-        // Method-engine-backed jobs: real services exist but the shared professional-method engine is not
-        // booted in this build, so there is no live implementation to route into. Fail closed, honestly.
-        case .methods:             throw PersonaJobError.serviceUnavailable(.methods)
-        case .causalAnalysis:      throw PersonaJobError.serviceUnavailable(.causalAnalysis)
-        case .linkage:             throw PersonaJobError.serviceUnavailable(.linkage)
-        case .capaRegister:        throw PersonaJobError.serviceUnavailable(.capaRegister)
-        case .effectivenessReview: throw PersonaJobError.serviceUnavailable(.effectivenessReview)
+        // Method-engine-backed jobs — route into the SHARED ProfessionalMethod engine (booted in production).
+        // Each launch resolves the case-scoped recommended methods, proving the real engine is reachable; the
+        // full run (evidence selection + validation + human review) is exercised by the persona acceptance.
+        case .methods:
+            guard let methods else { throw PersonaJobError.serviceUnavailable(.methods) }
+            let caseID = try requireCase(context)
+            let recs = try await methods.recommendedMethods(caseID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) professional method(s) available for this case", producedID: caseID)
+
+        case .causalAnalysis:
+            guard let causal else { throw PersonaJobError.serviceUnavailable(.causalAnalysis) }
+            let caseID = try requireCase(context)
+            let recs = try await causal.recommendedCausalMethods(caseID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) causal method(s) available (Five Whys / Fishbone / Root-cause)", producedID: caseID)
+
+        case .linkage:
+            guard let linkage else { throw PersonaJobError.serviceUnavailable(.linkage) }
+            let caseID = try requireCase(context)
+            let recs = try await linkage.recommendedLinkageMethods(caseID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) linkage method(s) available (Timeline / Relationship / Transaction)", producedID: caseID)
+
+        case .capaRegister:
+            guard let capa else { throw PersonaJobError.serviceUnavailable(.capaRegister) }
+            let caseID = try requireCase(context)
+            let recs = try await capa.recommendedCAPAMethods(caseID: caseID)
+            return PersonaJobLaunch(job: job, summary: "\(recs.count) CAPA / effectiveness method(s) available", producedID: caseID)
+
+        case .effectivenessReview:
+            guard let capa else { throw PersonaJobError.serviceUnavailable(.effectivenessReview) }
+            let caseID = try requireCase(context)
+            let recs = try await capa.recommendedCAPAMethods(caseID: caseID)
+            return PersonaJobLaunch(job: job, summary: "Effectiveness review available among \(recs.count) CAPA method(s)", producedID: caseID)
         }
     }
 

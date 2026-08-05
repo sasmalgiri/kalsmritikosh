@@ -489,6 +489,13 @@ public final class AppState {
     /// INV-01-C3 — the case DataLab authority: prepares authorized-only datasets over the shared Workbench,
     /// restricted to `case-authorized ∩ SensitiveScope`. Live from boot (also the DataLab persona job's target).
     public private(set) var investigationDataLab: InvestigationDataLabService?
+    /// #143 — the case-scoped professional-method services, live from boot over the SHARED ProfessionalMethod
+    /// engine (ProfessionalMethodRegistry + MethodRunRepository + canonical evidence gate). These make the
+    /// Investigator method / causal / linkage / CAPA persona jobs route into the real engine (no serviceUnavailable).
+    public private(set) var investigationMethods: InvestigationMethodService?
+    public private(set) var investigationCausal: InvestigationCausalService?
+    public private(set) var investigationLinkage: InvestigationLinkageService?
+    public private(set) var investigationCAPA: InvestigationCAPAService?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -1934,6 +1941,27 @@ public final class AppState {
                 datasets: WorkbenchDatasetRepository(database: db),
                 scopes: SensitiveScopeRepository(database: db))
             self.investigationDataLab = investigationDataLabService
+            // #143 — boot the SHARED ProfessionalMethod engine ONCE (registry + run store + canonical evidence
+            // gate) and wire the case-scoped method services so the Investigator method / causal / linkage /
+            // CAPA persona jobs route into the REAL engine. Every persona resolves this SAME method runtime.
+            let sharedMethodCatalog = try await ProfessionalMethodCatalog.standard()
+            let sharedMethodRuns = MethodRunRepository(database: db)
+            let sharedMethodGate = CanonicalWorkflowEvidenceReferenceGate(database: db, scopeRepository: sensitiveScopesRepo)
+            let investigationMethodsService = InvestigationMethodService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                evidence: evidenceStoreRepo,
+                methodRuns: sharedMethodRuns, registry: sharedMethodCatalog.methods, gate: sharedMethodGate)
+            self.investigationMethods = investigationMethodsService
+            let investigationCausalService = InvestigationCausalService(
+                cases: investigationCasesRepo, registry: sharedMethodCatalog.methods, methods: investigationMethodsService)
+            self.investigationCausal = investigationCausalService
+            let investigationLinkageService = InvestigationLinkageService(
+                cases: investigationCasesRepo, registry: sharedMethodCatalog.methods, methods: investigationMethodsService)
+            self.investigationLinkage = investigationLinkageService
+            let investigationCAPAService = InvestigationCAPAService(
+                cases: investigationCasesRepo, registry: sharedMethodCatalog.methods, methods: investigationMethodsService)
+            self.investigationCAPA = investigationCAPAService
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the
@@ -1952,7 +1980,11 @@ public final class AppState {
                 custody: self.investigationCustody,
                 closure: self.investigationClosure,
                 findings: self.investigationFindings,
-                dataLab: investigationDataLabService)
+                dataLab: investigationDataLabService,
+                methods: investigationMethodsService,
+                causal: investigationCausalService,
+                linkage: investigationLinkageService,
+                capa: investigationCAPAService)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
