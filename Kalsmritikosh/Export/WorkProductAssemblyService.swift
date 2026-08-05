@@ -124,9 +124,17 @@ public actor WorkProductAssemblyService {
 
     // MARK: - Compose
 
+    /// - Parameter caseAuthorizedVersionIDs: OPTIONAL case-scope restriction (INV-19). When non-nil, a claim
+    ///   is kept only when EVERY one of its evidence citations pins to a source VERSION inside this set —
+    ///   a fail-closed, version-exact boundary applied on top of (never instead of) the SensitiveScope filter.
+    ///   The final usable evidence set is therefore `case-authorized ∩ SensitiveScope`, with no workspace
+    ///   fallback and no widening: a claim whose evidence lacks a source version, or cites one version outside
+    ///   the set, is withheld from the report, the manifest, and the receipt alike. `nil` = the ordinary
+    ///   workspace-wide behavior (unchanged for every existing caller).
     public func compose(workspace: Workspace, template: WorkProductTemplate,
                         subjectLabel: String, corpusSnapshotID: UUID?,
-                        access: SensitiveAccessContext) async throws -> AssembledWorkProduct {
+                        access: SensitiveAccessContext,
+                        caseAuthorizedVersionIDs: Set<UUID>? = nil) async throws -> AssembledWorkProduct {
         // OPS-003C.2: three mandatory guards — purpose, workspace identity, repo availability.
         // Any bypass here would allow unscoped reports; all three must hold before composition begins.
         guard access.scope.purpose == .export else {
@@ -148,7 +156,8 @@ public actor WorkProductAssemblyService {
         // no legacy fallback.
         let composed = try await composeThroughRegistry(
             plan: Self.plan(for: template), workspace: workspace, template: template,
-            subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID, access: access)
+            subjectLabel: subjectLabel, corpusSnapshotID: corpusSnapshotID, access: access,
+            caseAuthorizedVersionIDs: caseAuthorizedVersionIDs)
         // PA-REC-001 — enrich every citation with its EXACT source-version custody hash ONCE, here,
         // so both the report and its receipt consume the identical hash-pinned product.
         let wp = try await enrichCustodyHashes(composed)
@@ -165,7 +174,8 @@ public actor WorkProductAssemblyService {
     private func composeThroughRegistry(plan: WorkProductTemplatePlan, workspace: Workspace,
                                         template: WorkProductTemplate,
                                         subjectLabel: String, corpusSnapshotID: UUID?,
-                                        access: SensitiveAccessContext) async throws -> WorkProduct {
+                                        access: SensitiveAccessContext,
+                                        caseAuthorizedVersionIDs: Set<UUID>?) async throws -> WorkProduct {
         // Workspace membership is resolved here (outside the Claim model). Claim selection runs
         // ONCE; disclosure selection runs ONCE over the same selected claims. No global fallback.
         let members = Set(try await workspaces.entityIDs(in: workspace.id))
@@ -181,6 +191,12 @@ public actor WorkProductAssemblyService {
         // OPS-003C.2: sensitivity scope filter always enforced; repo availability was verified
         // at compose() entry so scopeFilter will not throw on nil-repo here.
         context = try await scopeFilter(context, access: access)
+        // INV-19: case-scope restriction applied ON TOP of SensitiveScope — the final usable set is
+        // `case-authorized ∩ SensitiveScope`. Applied here (before disclosures + composers) so the report,
+        // manifest, and receipt all derive from the same case-scoped selection — no widening downstream.
+        if let caseAuthorizedVersionIDs {
+            context = Self.caseScopeFilter(context, authorizedVersionIDs: caseAuthorizedVersionIDs)
+        }
         if plan.requiresDisclosures {
             let conflicts = try await disclosures.conflicts(forSelectedClaims: context.selectedClaims)
             let scopedGaps = try await disclosures.gaps(forSelectedClaims: context.selectedClaims)
@@ -256,6 +272,38 @@ public actor WorkProductAssemblyService {
         if filtered.count < claims.count {
             KalsmritikoshLog.storage.notice(
                 "WorkProductAssemblyService: scope filter withheld \(claims.count - filtered.count, privacy: .public) claim(s) with blocked evidence KOs.")
+        }
+        return WorkProductContext(
+            selectedClaims:   filtered,
+            selectedConflicts: ctx.selectedConflicts,
+            selectedGaps:     ctx.selectedGaps,
+            subjectLabel:     ctx.subjectLabel,
+            workspaceID:      ctx.workspaceID,
+            corpusSnapshotID: ctx.corpusSnapshotID)
+    }
+
+    // MARK: - INV-19 case-scope filter
+
+    /// Withhold any claim whose evidence is not FULLY inside the case's authorized source-version set. This is
+    /// version-exact and fail-closed: a claim is kept only when EVERY citation pins to a `sourceVersionID` in
+    /// `authorizedVersionIDs` — a citation with no source version, or one citing a version outside the set, is
+    /// treated as unauthorized and drops the whole claim. Pure and synchronous (no repo read): the authorized
+    /// set is resolved once by the caller (the ONE CaseRetrievalScopeResolver). Disclosures are re-selected
+    /// downstream from the filtered claims, so a withheld claim can never resurface via a conflict/gap row.
+    private static func caseScopeFilter(_ ctx: WorkProductContext, authorizedVersionIDs: Set<UUID>) -> WorkProductContext {
+        let claims = ctx.selectedClaims
+        guard !claims.isEmpty else { return ctx }
+        let filtered = claims.filter { sc in
+            let evidence = sc.resolved.claim.evidence
+            guard !evidence.isEmpty else { return false }        // no evidence → cannot be case-authorized
+            return evidence.allSatisfy { ref in
+                guard let v = ref.sourceVersionID else { return false }   // unpinned → not version-exact → withhold
+                return authorizedVersionIDs.contains(v)
+            }
+        }
+        if filtered.count < claims.count {
+            KalsmritikoshLog.storage.notice(
+                "WorkProductAssemblyService: case-scope filter withheld \(claims.count - filtered.count, privacy: .public) claim(s) outside the case's authorized source-version set.")
         }
         return WorkProductContext(
             selectedClaims:   filtered,

@@ -482,6 +482,10 @@ public final class AppState {
     /// INV-20 — the case Closure authority: a case is closed only by a recorded human decision, unresolved
     /// items are retained (honest closure), and reopening preserves the prior closure. Live from boot.
     public private(set) var investigationClosure: InvestigationClosureService?
+    /// INV-19 — the case Findings & export authority: findings are a case-scoped work product over the
+    /// SHARED assembly/run/receipt engines, restricted to `case-authorized ∩ SensitiveScope`, and become the
+    /// case's findings only by an explicit recorded human approval. Live from boot.
+    public private(set) var investigationFindings: InvestigationFindingsService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1903,6 +1907,19 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 closures: InvestigationClosureRepository(database: db))
+            // INV-19 — the case Findings & export authority, live from boot. Findings are a case-scoped work
+            // product over the SHARED WorkProductAssemblyService (the ONE composition/receipt/run engine),
+            // restricted to `case-authorized ∩ SensitiveScope` via the ONE CaseRetrievalScopeResolver; they
+            // become the case's findings only by an explicit recorded human approval (never inferred).
+            self.investigationFindings = InvestigationFindingsService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                workspaces: workspacesRepo,
+                assembly: try WorkProductAssemblyService(
+                    database: db, events: events, contradictions: contradictionsRepo, gaps: gapNodesRepo,
+                    workspaces: workspacesRepo),
+                runs: WorkProductRunRepository(database: db),
+                approvals: InvestigationFindingsApprovalRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind

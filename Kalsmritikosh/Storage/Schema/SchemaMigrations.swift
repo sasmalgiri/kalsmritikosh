@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 101
+    public static let latestVersion = 102
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -431,7 +431,15 @@ public enum SchemaMigrations {
             // the NEWEST marker.
             "investigation_case_closures": ["id", "case_id", "sequence", "decision", "rationale",
                                              "work_product_run_id", "scope_fingerprint", "unresolved_json",
-                                             "receipt_seal", "actor", "created_at"]
+                                             "receipt_seal", "actor", "created_at"],
+            // v102 — INV-19 Findings & export: the durable, append-only human approval/withdrawal decision log
+            // for a case's findings work product (one NEW table, so its presence distinguishes v102 from v101).
+            // The findings work product itself is the SHARED WorkProductRun; this records only the explicit
+            // human approval that authorizes it as the case's findings — never inferred from build, workflow /
+            // method completion, confidence, or absence of contradiction. This is the NEWEST marker.
+            "investigation_findings_approvals": ["id", "case_id", "sequence", "decision", "work_product_run_id",
+                                                  "receipt_seal", "scope_fingerprint", "rationale", "actor",
+                                                  "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -568,7 +576,8 @@ public enum SchemaMigrations {
         (98, v98),
         (99, v99),
         (100, v100),
-        (101, v101)
+        (101, v101),
+        (102, v102)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5433,6 +5442,42 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v102: String = """
+    -- INV-19 (Findings & export). The durable, APPEND-ONLY human approval/withdrawal decision log for a
+    -- case's FINDINGS work product. The findings work product itself is the SHARED WorkProductRun
+    -- (work_product_runs) — this table introduces NO second reporting authority. It records only the
+    -- explicit human decision that a specific, immutable findings run is APPROVED as the case's findings.
+    -- Approval is NEVER inferred: building findings, a completed workflow / method, high confidence, or the
+    -- absence of a contradiction do not approve anything. work_product_run_id is a soft reference to the
+    -- approved run; receipt_seal pins the sealed receipt at approval (report==receipt integrity);
+    -- scope_fingerprint pins the exact case scope the findings were built under (no export-time widening).
+    -- A withdrawal is a NEW row that never rewrites the approval it follows, so the decision genealogy
+    -- survives. Truth boundary: a finding is not a confirmed fact — approval authorizes the report, it does
+    -- not verify the world.
+    CREATE TABLE investigation_findings_approvals (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        sequence            INTEGER NOT NULL,
+        decision            TEXT NOT NULL,   -- approved | withdrawn
+        work_product_run_id TEXT NOT NULL,   -- soft ref to work_product_runs(id) (the immutable findings run)
+        receipt_seal        TEXT NOT NULL,   -- the sealed receipt's seal at approval (report==receipt)
+        scope_fingerprint   TEXT NOT NULL,
+        rationale           TEXT NOT NULL,
+        actor               TEXT NOT NULL,
+        created_at          REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(decision IN ('approved','withdrawn')),
+        CHECK(length(trim(work_product_run_id)) > 0),
+        CHECK(length(trim(receipt_seal)) > 0),
+        CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*'),
+        CHECK(length(trim(rationale)) > 0),
+        CHECK(sequence >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_findings_approvals_seq ON investigation_findings_approvals(case_id, sequence);
+    CREATE INDEX idx_investigation_findings_approvals_case ON investigation_findings_approvals(case_id);
     """
 
     private static let v101: String = """
