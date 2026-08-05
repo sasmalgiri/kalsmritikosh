@@ -463,6 +463,11 @@ public final class AppState {
     /// of canonical identities behind a human gate, over the SHARED reversible EntitiesRepository merge,
     /// recording every decision. No auto-merge. Live from boot.
     public private(set) var investigationIdentityResolution: InvestigationIdentityResolutionService?
+    /// INV-04..07 — the Investigator analytical spine: Brainstorm board (leads → hypotheses), 5W1H
+    /// worksheet (each cell cites evidence or is marked unknown), Evidence collection plan (requests for
+    /// missing evidence), and the Hypothesis matrix (for/against evidence, human-confirmed, never auto-won).
+    /// Case-scoped over canonical evidence. Live from boot.
+    public private(set) var investigationAnalysis: InvestigationAnalysisService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1843,6 +1848,16 @@ public final class AppState {
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 scopedEntities: caseScopedEntities, entities: entities,
                 decisions: InvestigationIdentityDecisionRepository(database: db))
+            // INV-04..07 — the analytical spine (Brainstorm / 5W1H / Evidence collection plan / Hypothesis
+            // matrix), live from boot. Case-scoped reasoning over canonical evidence: every citation is
+            // checked against the case's authorized scope; a hypothesis is confirmed only when its counted
+            // evidence profile supports it; unknowns are never fabricated. Forks no Claim/gap/contradiction
+            // authority.
+            self.investigationAnalysis = InvestigationAnalysisService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                evidence: evidenceStoreRepo,
+                analysis: InvestigationAnalysisRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind

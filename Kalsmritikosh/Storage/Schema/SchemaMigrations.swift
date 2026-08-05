@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 98
+    public static let latestVersion = 99
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -405,7 +405,20 @@ public enum SchemaMigrations {
             "investigation_subjects": ["id", "case_id", "canonical_entity_id", "label", "identity_status",
                                         "confirmed_by", "confirmed_at", "revision", "actor", "created_at", "updated_at"],
             "investigation_identity_decisions": ["id", "case_id", "sequence", "decision_kind", "winner_entity_id",
-                                                  "loser_entity_id", "rationale", "actor", "prior_decision_id", "occurred_at"]
+                                                  "loser_entity_id", "rationale", "actor", "prior_decision_id", "occurred_at"],
+            // v99 — INV-04..07 analytical spine (four NEW tables, so their presence distinguishes v99 from
+            // v98). Leads/hypotheses (proposal→hypothesis promotion, human confirm, never auto-won) + their
+            // for/against evidence links (cite exact in-scope evidence) + evidence requests (describe MISSING
+            // evidence, never assert it exists) + the 5W1H worksheet (each cell cites evidence or is marked
+            // unknown). These are the NEWEST markers — every future migration MUST add its newest marker.
+            "investigation_hypotheses": ["id", "case_id", "kind", "statement", "status", "origin_hypothesis_id",
+                                          "revision", "actor", "created_at", "updated_at"],
+            "investigation_hypothesis_evidence": ["id", "hypothesis_id", "stance", "source_version_id",
+                                                   "knowledge_object_id", "note", "added_by", "created_at"],
+            "investigation_evidence_requests": ["id", "case_id", "hypothesis_id", "description", "status",
+                                                 "revision", "actor", "created_at", "updated_at"],
+            "investigation_worksheet_cells": ["id", "case_id", "dimension", "status", "answer_text",
+                                               "source_version_id", "knowledge_object_id", "revision", "actor", "updated_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -539,7 +552,8 @@ public enum SchemaMigrations {
         (95, v95),
         (96, v96),
         (97, v97),
-        (98, v98)
+        (98, v98),
+        (99, v99)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5404,6 +5418,107 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v99: String = """
+    -- INV-04..07 — the Investigator analytical spine. Persona reasoning state bounded to a case: it
+    -- REFERENCES canonical evidence (source versions + knowledge objects + known Claims) by id and forks no
+    -- second Claim/contradiction/gap authority. Four truth boundaries are enforced here, not just documented:
+    --   • an idea is never a fact          (a lead/hypothesis is typed reasoning, not a Claim)
+    --   • proposal ≠ hypothesis            (a lead is promoted to a hypothesis by a human decision)
+    --   • unsupported stays a proposal     (a hypothesis is confirmed by a human, never auto-won)
+    --   • an unknown is never fabricated   (a 5W1H cell either cites exact evidence or is marked unknown)
+
+    -- Leads + hypotheses. kind='lead' is a captured idea (INV-04); a lead is PROMOTED into kind='hypothesis'
+    -- (origin_hypothesis_id → the lead). status is a HUMAN decision: proposed → confirmed | rejected |
+    -- dismissed. A hypothesis is never auto-confirmed. (INV-04 Brainstorm, INV-07 Hypothesis matrix.)
+    CREATE TABLE investigation_hypotheses (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        kind                TEXT NOT NULL,   -- lead | hypothesis
+        statement           TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'proposed',   -- proposed | confirmed | rejected | dismissed
+        origin_hypothesis_id TEXT,           -- a promoted hypothesis links back to the lead it came from
+        revision            INTEGER NOT NULL,
+        actor               TEXT NOT NULL,
+        created_at          REAL NOT NULL,
+        updated_at          REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        FOREIGN KEY(origin_hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE SET NULL,
+        CHECK(kind IN ('lead','hypothesis')),
+        CHECK(length(trim(statement)) > 0),
+        CHECK(status IN ('proposed','confirmed','rejected','dismissed')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX idx_investigation_hypotheses_case ON investigation_hypotheses(case_id);
+
+    -- For/against evidence links (INV-07 HypothesisEvidenceLink). Each link cites EXACT evidence — a source
+    -- version + knowledge object — with a stance. The evidence profile is COUNTED from these rows; the engine
+    -- never picks a winner. UNIQUE so the same evidence isn't double-counted for a stance.
+    CREATE TABLE investigation_hypothesis_evidence (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        hypothesis_id       TEXT NOT NULL,
+        stance              TEXT NOT NULL,   -- for | against
+        source_version_id   TEXT NOT NULL,
+        knowledge_object_id TEXT NOT NULL,
+        note                TEXT,
+        added_by            TEXT NOT NULL,
+        created_at          REAL NOT NULL,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE CASCADE,
+        CHECK(stance IN ('for','against')),
+        CHECK(length(trim(added_by)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_hypothesis_evidence_unique
+        ON investigation_hypothesis_evidence(hypothesis_id, stance, source_version_id, knowledge_object_id);
+    CREATE INDEX idx_investigation_hypothesis_evidence_hyp ON investigation_hypothesis_evidence(hypothesis_id);
+
+    -- Evidence requests (INV-06 EvidenceRequest). A request describes MISSING evidence to gather; it never
+    -- asserts the evidence exists. It may link to the hypothesis it would test (SET NULL if that hypothesis
+    -- is deleted). status is a human decision: open → confirmed | fulfilled | cancelled.
+    CREATE TABLE investigation_evidence_requests (
+        id            TEXT PRIMARY KEY NOT NULL,
+        case_id       TEXT NOT NULL,
+        hypothesis_id TEXT,
+        description   TEXT NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'open',   -- open | confirmed | fulfilled | cancelled
+        revision      INTEGER NOT NULL,
+        actor         TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        updated_at    REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        FOREIGN KEY(hypothesis_id) REFERENCES investigation_hypotheses(id) ON DELETE SET NULL,
+        CHECK(length(trim(description)) > 0),
+        CHECK(status IN ('open','confirmed','fulfilled','cancelled')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE INDEX idx_investigation_evidence_requests_case ON investigation_evidence_requests(case_id);
+
+    -- The 5W1H worksheet (INV-05). One cell per dimension per case. A cell is either 'answered' — carrying an
+    -- answer AND a cited source version + knowledge object — or 'unknown', carrying NEITHER (an unknown is
+    -- never fabricated). UNIQUE(case, dimension) so a case has exactly one cell per dimension.
+    CREATE TABLE investigation_worksheet_cells (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        dimension           TEXT NOT NULL,   -- who | what | when | where | why | how
+        status              TEXT NOT NULL DEFAULT 'unknown',   -- unknown | answered
+        answer_text         TEXT,
+        source_version_id   TEXT,
+        knowledge_object_id TEXT,
+        revision            INTEGER NOT NULL,
+        actor               TEXT NOT NULL,
+        updated_at          REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(dimension IN ('who','what','when','where','why','how')),
+        CHECK(status IN ('unknown','answered')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0),
+        -- answered ⇔ an answer + cited evidence are present; unknown ⇔ none of them (no fabricated unknown).
+        CHECK((status = 'answered') OR (answer_text IS NULL AND source_version_id IS NULL AND knowledge_object_id IS NULL)),
+        CHECK((status <> 'answered') OR (length(trim(answer_text)) > 0 AND source_version_id IS NOT NULL AND knowledge_object_id IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX idx_investigation_worksheet_cells_unique ON investigation_worksheet_cells(case_id, dimension);
     """
 
     private static let v98: String = """
