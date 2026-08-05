@@ -468,6 +468,13 @@ public final class AppState {
     /// missing evidence), and the Hypothesis matrix (for/against evidence, human-confirmed, never auto-won).
     /// Case-scoped over canonical evidence. Live from boot.
     public private(set) var investigationAnalysis: InvestigationAnalysisService?
+    /// INV-08 — the case Source Reliability desk: a schedule of reliability ratings over the case's
+    /// authorized source versions, reusing the shared SourceReliabilityAssessmentRepository; a rating is a
+    /// judgement, never a fact. Live from boot.
+    public private(set) var investigationReliability: InvestigationReliabilityService?
+    /// INV-12 — the case Contradiction & Gap desk: in-scope contradictions (both sides preserved) and gaps
+    /// (absence is not proof) over the shared detectors, with case-scoped human dispositions. Live from boot.
+    public private(set) var investigationContradictionGap: InvestigationContradictionGapService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1858,6 +1865,21 @@ public final class AppState {
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo,
                 analysis: InvestigationAnalysisRepository(database: db))
+            // INV-08 + INV-12 — the case review desks (Source reliability + Contradiction & gap), live from
+            // boot. Both REUSE the shared canonical authorities (SourceReliabilityAssessmentRepository /
+            // ContradictionsRepository / GapNodeRepository) bounded to the case scope, and record the case's
+            // human disposition in the thin InvestigationDeskReviewRepository — forking none of them and
+            // mutating no shared item's global status.
+            let investigationDeskReviews = InvestigationDeskReviewRepository(database: db)
+            self.investigationReliability = InvestigationReliabilityService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                reliability: SourceReliabilityAssessmentRepository(database: db), reviews: investigationDeskReviews)
+            self.investigationContradictionGap = InvestigationContradictionGapService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                evidence: evidenceStoreRepo, contradictions: contradictionsRepo, gaps: gapNodesRepo,
+                reviews: investigationDeskReviews)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
