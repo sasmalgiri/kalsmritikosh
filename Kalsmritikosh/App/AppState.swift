@@ -475,6 +475,10 @@ public final class AppState {
     /// INV-12 — the case Contradiction & Gap desk: in-scope contradictions (both sides preserved) and gaps
     /// (absence is not proof) over the shared detectors, with case-scoped human dispositions. Live from boot.
     public private(set) var investigationContradictionGap: InvestigationContradictionGapService?
+    /// INV-18 — the case Evidence vault & custody manifest: per-authorized-source-version content hash +
+    /// the shared append-only custody chain; recording a custody entry is a case-scoped human decision.
+    /// Reuses the shared CustodyRepository + EvidenceStore. Live from boot.
+    public private(set) var investigationCustody: InvestigationCustodyService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1880,6 +1884,14 @@ public final class AppState {
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo, contradictions: contradictionsRepo, gaps: gapNodesRepo,
                 reviews: investigationDeskReviews)
+            // INV-18 — the case Evidence vault & custody manifest, live from boot. REUSES the shared
+            // append-only CustodyRepository + the EvidenceStore per-version content hashes, bounded to the
+            // case's authorized source versions. Custody is never broken silently: every entry is a new
+            // append-only row in the shared ledger. Forks no custody authority.
+            self.investigationCustody = InvestigationCustodyService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                evidence: evidenceStoreRepo, custody: custodyRepo, database: db)
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
