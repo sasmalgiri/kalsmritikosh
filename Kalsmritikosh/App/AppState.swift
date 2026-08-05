@@ -479,6 +479,9 @@ public final class AppState {
     /// the shared append-only custody chain; recording a custody entry is a case-scoped human decision.
     /// Reuses the shared CustodyRepository + EvidenceStore. Live from boot.
     public private(set) var investigationCustody: InvestigationCustodyService?
+    /// INV-20 — the case Closure authority: a case is closed only by a recorded human decision, unresolved
+    /// items are retained (honest closure), and reopening preserves the prior closure. Live from boot.
+    public private(set) var investigationClosure: InvestigationClosureService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1892,6 +1895,14 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 evidence: evidenceStoreRepo, custody: custodyRepo, database: db)
+            // INV-20 — the case Closure authority, live from boot. A case is CLOSED only by a recorded human
+            // decision (never auto-closed); the accepted unresolved items are retained (honest closure); a
+            // reopen is a new decision that preserves the prior closure. The closure + case status transition
+            // are atomic in the durable log.
+            self.investigationClosure = InvestigationClosureService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                closures: InvestigationClosureRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
