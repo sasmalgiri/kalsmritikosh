@@ -455,6 +455,14 @@ public final class AppState {
     /// authorized source scope and runs the SHARED MasterBrain over a SourceScopedRetriever so no
     /// unauthorized source can enter the evidence packet or citations. No persona engine. Live from boot.
     public private(set) var investigationAnswers: InvestigationAnswerService?
+    /// INV-02 — the Investigator "Subject dossier" entry point: nominate a canonical entity as a case
+    /// subject (only with in-scope evidence), record the human identity confirmation, and assemble a
+    /// dossier that cites exact evidence within the case scope. A lens over the shared entity engine.
+    public private(set) var investigationSubjectDossier: InvestigationSubjectDossierService?
+    /// INV-03 — the Investigator "Identity resolution" entry point: propose/confirm/reject/reverse merges
+    /// of canonical identities behind a human gate, over the SHARED reversible EntitiesRepository merge,
+    /// recording every decision. No auto-merge. Live from boot.
+    public private(set) var investigationIdentityResolution: InvestigationIdentityResolutionService?
     /// PERF.2 — consumer of the ledger above. Live but INERT until per-kind
     /// handlers are registered (a kind with no handler is never drained), so it
     /// is a strict no-op today; this is the integration point the future
@@ -1821,6 +1829,20 @@ public final class AppState {
                         objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
                         sensitiveScope: sensitiveScopesRepo)
                 })
+            // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
+            // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
+            // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
+            let investigationSubjectsRepo = InvestigationSubjectRepository(database: db)
+            let caseScopedEntities = CaseScopedEntityResolver(entities: entities, evidence: evidenceStoreRepo)
+            self.investigationSubjectDossier = InvestigationSubjectDossierService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                subjects: investigationSubjectsRepo, entities: entities, scopedEntities: caseScopedEntities)
+            self.investigationIdentityResolution = InvestigationIdentityResolutionService(
+                cases: investigationCasesRepo,
+                resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
+                scopedEntities: caseScopedEntities, entities: entities,
+                decisions: InvestigationIdentityDecisionRepository(database: db))
             // PERF.2 — the drainer yields to interactive queries via the same
             // priority gate the brain/ingest use (ING-006). No handlers are
             // registered yet, so drainAll() below is a no-op until the per-kind
