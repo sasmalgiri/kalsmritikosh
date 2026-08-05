@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 97
+    public static let latestVersion = 98
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -396,7 +396,16 @@ public enum SchemaMigrations {
             "investigation_case_sources": ["id", "case_id", "source_ref", "source_kind", "in_scope", "note", "created_at"],
             "investigation_case_events": ["id", "case_id", "sequence", "case_revision", "action", "actor", "detail", "occurred_at"],
             // v97 — INV-01-C4 canonical case-scope fingerprint / staleness ledger.
-            "investigation_scope_artifacts": ["id", "case_id", "artifact_kind", "artifact_id", "scope_fingerprint", "case_revision", "created_at"]
+            "investigation_scope_artifacts": ["id", "case_id", "artifact_kind", "artifact_id", "scope_fingerprint", "case_revision", "created_at"],
+            // v98 — INV-02 Subject dossier + INV-03 Identity resolution (two NEW tables, so their presence
+            // distinguishes v98 from v97). A subject anchors to a canonical entity id (proposed→confirmed
+            // human decision); the identity-decision log records proposed/confirmed/rejected/reversed merges
+            // over the SHARED reversible entity merge. These are the NEWEST markers — every future migration
+            // MUST add its newest physical marker.
+            "investigation_subjects": ["id", "case_id", "canonical_entity_id", "label", "identity_status",
+                                        "confirmed_by", "confirmed_at", "revision", "actor", "created_at", "updated_at"],
+            "investigation_identity_decisions": ["id", "case_id", "sequence", "decision_kind", "winner_entity_id",
+                                                  "loser_entity_id", "rationale", "actor", "prior_decision_id", "occurred_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -529,7 +538,8 @@ public enum SchemaMigrations {
         (94, v94),
         (95, v95),
         (96, v96),
-        (97, v97)
+        (97, v97),
+        (98, v98)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5394,6 +5404,68 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v98: String = """
+    -- INV-02 (Subject dossier) + INV-03 (Identity resolution). Persona state over the ONE canonical entity
+    -- engine: a subject REFERENCES a canonical `entities` row by id (never copies it), and the identity
+    -- decision log records the human-gated, reversible merges that compose the SHARED EntitiesRepository
+    -- merge/unmerge. No second entity, alias, or merge authority is forked.
+
+    -- A subject of an investigation, anchored to one canonical entity. identity_status is proposed until a
+    -- human CONFIRMS it (confirmed_by / confirmed_at then set) or rejects it. UNIQUE(case, entity) so a
+    -- canonical entity is a subject at most once per case.
+    CREATE TABLE investigation_subjects (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        case_id             TEXT NOT NULL,
+        canonical_entity_id TEXT NOT NULL,   -- soft ref to entities(id); entities may soft-merge underneath
+        label               TEXT NOT NULL,
+        identity_status     TEXT NOT NULL DEFAULT 'proposed',   -- proposed | confirmed | rejected
+        confirmed_by        TEXT,                               -- the human who confirmed (NULL until confirmed)
+        confirmed_at        REAL,
+        revision            INTEGER NOT NULL,
+        actor               TEXT NOT NULL,
+        created_at          REAL NOT NULL,
+        updated_at          REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        CHECK(length(trim(label)) > 0),
+        CHECK(identity_status IN ('proposed','confirmed','rejected')),
+        CHECK(revision >= 1),
+        CHECK(length(trim(actor)) > 0),
+        -- confirmed ⇔ a confirmer + timestamp are recorded; any non-confirmed status carries neither.
+        CHECK((identity_status = 'confirmed') OR (confirmed_by IS NULL AND confirmed_at IS NULL)),
+        CHECK((identity_status <> 'confirmed') OR (confirmed_by IS NOT NULL AND confirmed_at IS NOT NULL))
+    );
+    CREATE UNIQUE INDEX idx_investigation_subjects_unique ON investigation_subjects(case_id, canonical_entity_id);
+    CREATE INDEX idx_investigation_subjects_case ON investigation_subjects(case_id);
+
+    -- Append-only identity-resolution decision log. Every proposed / confirmed / rejected / reversed merge
+    -- is a new row (never an update), so the decision is RECORDED and a reversal never erases the
+    -- confirmation it undoes (INV-03 validation invariant: merge reversible; decision recorded). winner and
+    -- loser are soft refs to canonical entities; prior_decision_id links a confirmation to its proposal and
+    -- a reversal to its confirmation.
+    CREATE TABLE investigation_identity_decisions (
+        id                TEXT PRIMARY KEY NOT NULL,
+        case_id           TEXT NOT NULL,
+        sequence          INTEGER NOT NULL,
+        decision_kind     TEXT NOT NULL,   -- mergeProposed | mergeConfirmed | mergeRejected | mergeReversed
+        winner_entity_id  TEXT NOT NULL,
+        loser_entity_id   TEXT NOT NULL,
+        rationale         TEXT,
+        actor             TEXT NOT NULL,
+        prior_decision_id TEXT,
+        occurred_at       REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        FOREIGN KEY(prior_decision_id) REFERENCES investigation_identity_decisions(id) ON DELETE SET NULL,
+        CHECK(decision_kind IN ('mergeProposed','mergeConfirmed','mergeRejected','mergeReversed')),
+        CHECK(length(trim(winner_entity_id)) > 0),
+        CHECK(length(trim(loser_entity_id)) > 0),
+        CHECK(winner_entity_id <> loser_entity_id),
+        CHECK(sequence >= 1),
+        CHECK(length(trim(actor)) > 0)
+    );
+    CREATE UNIQUE INDEX idx_investigation_identity_decisions_seq ON investigation_identity_decisions(case_id, sequence);
+    CREATE INDEX idx_investigation_identity_decisions_pair ON investigation_identity_decisions(case_id, winner_entity_id, loser_entity_id);
     """
 
     private static let v97: String = """
