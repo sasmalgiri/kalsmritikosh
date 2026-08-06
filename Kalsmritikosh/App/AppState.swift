@@ -496,6 +496,10 @@ public final class AppState {
     public private(set) var investigationCausal: InvestigationCausalService?
     public private(set) var investigationLinkage: InvestigationLinkageService?
     public private(set) var investigationCAPA: InvestigationCAPAService?
+    /// #146 — the persona-neutral Handoff / Review read-service. Aggregates a matter's findings-approval,
+    /// closure, and custody state from the shared authorities above so the Handoff & Review UI can review a
+    /// matter and record the human-only approve / close / reopen decisions. Reads only; forks no engine.
+    public private(set) var workProductHandoff: WorkProductHandoffService?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -1962,6 +1966,17 @@ public final class AppState {
             let investigationCAPAService = InvestigationCAPAService(
                 cases: investigationCasesRepo, registry: sharedMethodCatalog.methods, methods: investigationMethodsService)
             self.investigationCAPA = investigationCAPAService
+            // #146 — the persona-neutral Handoff / Review read-service, live from boot. It composes the SHARED
+            // case authorities (findings approval + closure + custody + case header) into one snapshot so the
+            // Handoff & Review UI can review a matter and record the human-only approve / close / reopen
+            // decisions. Reads only; forks no authority.
+            if let handoffFindings = self.investigationFindings,
+               let handoffClosure = self.investigationClosure,
+               let handoffCustody = self.investigationCustody {
+                self.workProductHandoff = WorkProductHandoffService(
+                    cases: investigationCasesRepo, findings: handoffFindings,
+                    closure: handoffClosure, custody: handoffCustody)
+            }
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the
