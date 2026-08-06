@@ -184,6 +184,19 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             }
         }
 
+        /// The SINGLE destination kept in Simple mode for this group — Simple collapses each group to one
+        /// primary surface for a calmer first-run. Everything else stays reachable via the always-on header
+        /// search and the ⌘K palette, so nothing is lost (Simple state == Advanced state).
+        var simplePrimary: Destination {
+            switch self {
+            case .converse:    return .ask
+            case .reconstruct: return .workspaces
+            case .knowledge:   return .knowledge
+            case .workspace:   return .sources
+            case .system:      return .settings
+            }
+        }
+
         /// Short uppercase caption shown under each header group.
         var shortTitle: String {
             switch self {
@@ -214,15 +227,14 @@ public struct RootView: View {
     @Environment(AppState.self) private var appState
     @AppStorage("kalsmritikosh.onboarding.shown") private var onboardingShown: Bool = false
     @State private var presentingOnboarding = false
-    @State private var selection: Destination? = .home
+    @State private var selection: Destination? = .ask
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
-    /// Interface mode. Simple hides the power-user surfaces (Notebook, Explore)
-    /// from the sidebar; Advanced shows every screen. Persisted; default Simple.
+    /// Interface mode. Simple collapses each sidebar group to its ONE primary surface
+    /// (Group.simplePrimary); Advanced shows every screen. Everything hidden in Simple stays
+    /// reachable via the header search + ⌘K palette. Persisted; default Simple.
     @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
-    /// Screens hidden in Simple mode (still reachable via ⌘K).
-    private let simpleHidden: Set<Destination> = [.notebook, .explore]
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// Text in the always-visible header search box.
@@ -367,8 +379,8 @@ public struct RootView: View {
                     .padding(.bottom, 6)
                 paletteButton
                     .padding(.bottom, 6)
-                // Simple / Advanced interface toggle. Simple hides power-user
-                // screens (Notebook, Explore); everything stays reachable via ⌘K.
+                // Simple / Advanced interface toggle. Simple shows one primary screen per group;
+                // everything else stays reachable via the header search + ⌘K.
                 Picker("Interface", selection: $simpleMode) {
                     Text("Simple").tag(true)
                     Text("Advanced").tag(false)
@@ -380,7 +392,7 @@ public struct RootView: View {
                 onboardingTip
                 personaSection
                 ForEach(Destination.Group.allCases) { group in
-                    let visible = group.items.filter { !(simpleMode && simpleHidden.contains($0)) }
+                    let visible = simpleMode ? group.items.filter { $0 == group.simplePrimary } : group.items
                     if !visible.isEmpty {
                         collapsibleGroup(group, visible: visible)
                     }
@@ -657,7 +669,7 @@ public struct RootView: View {
     private func headerGroup(_ group: Destination.Group) -> some View {
         VStack(spacing: 3) {
             HStack(spacing: 4) {
-                ForEach(group.items.filter { !(simpleMode && simpleHidden.contains($0)) }) { dest in
+                ForEach(simpleMode ? group.items.filter { $0 == group.simplePrimary } : group.items) { dest in
                     headerIcon(dest)
                 }
             }
