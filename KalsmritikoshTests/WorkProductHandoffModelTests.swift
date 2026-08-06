@@ -26,8 +26,9 @@ struct WorkProductHandoffModelTests {
         let h = try await PersonaAcceptanceHarness.make(seed: "handoff")
         // Seed one authorized source and a workspace holding it.
         // hashChar MUST be a hex digit — content hashes are validated as 64-char hex SHA-256, and the sealed
-        // findings receipt fails closed on any authorized version lacking a valid custody hash.
-        let a = try await h.seedFact(value: "authorized finding \(UUID().uuidString)", hashChar: "c")
+        // findings receipt fails closed on any authorized version lacking a valid custody hash. The distinctive
+        // ACMESECRET token lets the export redaction test assert removal without a manifest false-positive.
+        let a = try await h.seedFact(value: "ACMESECRET finding \(UUID().uuidString)", hashChar: "c")
         let wsID = UUID()
         try await h.workspaces.upsert(Workspace(id: wsID, title: "Handoff Matter", template: .investigation))
         try await h.workspaces.addSource(a.fileID, to: wsID)
@@ -106,5 +107,26 @@ struct WorkProductHandoffModelTests {
         #expect(model.lastError != nil)
         #expect(model.snapshot?.isClosed == false)
         #expect(model.snapshot?.closureHistory.isEmpty == true)
+    }
+
+    @Test("Built findings export to valid file bytes (DOCX/PDF) and honor optional redaction")
+    func exportBuiltFindings() async throws {
+        let (model, caseID, _) = try await makeModel()
+        await model.load(caseID: caseID)
+        await model.buildFindings(actor: "me", at: t0)
+        try #require(model.built != nil)
+        // DOCX is a ZIP package.
+        model.exportFormat = .docx
+        #expect(Array((try model.exportData()).prefix(4)) == [0x50, 0x4b, 0x03, 0x04])
+        // PDF is a valid PDF.
+        model.exportFormat = .pdf
+        #expect(Array((try model.exportData()).prefix(5)) == Array("%PDF-".utf8))
+        // Markdown carries the seeded finding token; redaction removes it and inserts the token.
+        model.exportFormat = .markdown
+        let plain = String(decoding: try model.exportData(), as: UTF8.self)
+        #expect(plain.contains("ACMESECRET"))
+        model.exportRedactionTerms = "ACMESECRET"
+        let redacted = String(decoding: try model.exportData(), as: UTF8.self)
+        #expect(!redacted.contains("ACMESECRET") && redacted.contains("[REDACTED]"))
     }
 }

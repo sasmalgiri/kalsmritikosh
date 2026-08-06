@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 // MARK: - Model (testable, @Observable)
 
@@ -119,6 +120,42 @@ public final class WorkProductHandoffModel {
         }
     }
 
+    // MARK: - Export (#147)
+
+    /// The chosen deliverable format and optional redaction terms for exporting the built findings.
+    public var exportFormat: ExportDeliverableFormat = .pdf
+    public var exportRedactionTerms: String = ""
+
+    private let exporter = WorkProductExportService()
+
+    /// Map the built findings work product into the neutral export document (reuses the ONE composer).
+    private func exportableDocument() -> ExportableDocument? {
+        guard let f = built else { return nil }
+        return WorkProductComposer.exportable(f.assembled.workProduct, citationStyle: .footnote, manifest: f.manifest)
+    }
+
+    private var redactionPolicy: RedactionPolicy? {
+        let terms = exportRedactionTerms
+            .split(whereSeparator: { $0 == "," || $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return terms.isEmpty ? nil : RedactionPolicy(customTerms: terms)
+    }
+
+    /// Render the built findings to bytes in the chosen format (fail-closed if redaction would leak).
+    public func exportData() throws -> Data {
+        guard let doc = exportableDocument() else { throw WorkProductExportError.writeFailed("Build findings first.") }
+        return try exporter.data(for: doc, format: exportFormat, redaction: redactionPolicy)
+    }
+
+    /// Render the built findings and write them to a user-chosen file.
+    public func export(to url: URL) {
+        guard let doc = exportableDocument() else { lastError = "Build findings first."; return }
+        do {
+            _ = try exporter.write(doc, format: exportFormat, to: url, redaction: redactionPolicy)
+            lastOutcome = "Exported \(exportFormat.displayName) → \(url.lastPathComponent)"; lastError = nil
+        } catch { lastError = "Export failed: \(error)"; lastOutcome = nil }
+    }
+
     // MARK: - Internals
 
     private func perform(_ work: @escaping () async throws -> String) async {
@@ -170,6 +207,7 @@ public struct WorkProductHandoffView: View {
                 if let model, let snap = model.snapshot {
                     matterSummary(snap)
                     findingsSection(model, snap)
+                    if model.built != nil { exportSection(model, snap) }
                     closureSection(model, snap)
                     custodySection(snap)
                     if let outcome = model.lastOutcome {
@@ -239,6 +277,35 @@ public struct WorkProductHandoffView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func exportSection(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
+        @Bindable var model = model
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Export").font(.headline)
+            Text("Export the built findings as a file. Optional redaction removes the terms below and refuses the export if any would leak.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Picker("Format", selection: $model.exportFormat) {
+                    ForEach(ExportDeliverableFormat.allCases, id: \.self) { f in Text(f.displayName).tag(f) }
+                }.frame(maxWidth: 220)
+                TextField("Redact terms (comma-separated, optional)", text: $model.exportRedactionTerms)
+                    .textFieldStyle(.roundedBorder).frame(maxWidth: 280)
+                Button {
+                    presentSavePanel(model: model, title: snap.title)
+                } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                .buttonStyle(.borderedProminent).disabled(model.busy)
+            }
+        }
+    }
+
+    /// Present a save panel and, on confirmation, write the export to the chosen location.
+    private func presentSavePanel(model: WorkProductHandoffModel, title: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(title).\(model.exportFormat.fileExtension)"
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url { model.export(to: url) }
     }
 
     @ViewBuilder
