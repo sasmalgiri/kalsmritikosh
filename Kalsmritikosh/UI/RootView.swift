@@ -642,22 +642,16 @@ public struct RootView: View {
     ///    search the archive from anywhere, no navigation first.
     private var appHeader: some View {
         VStack(spacing: 8) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(Destination.Group.allCases) { group in
-                        headerGroup(group)
-                        if group != .system {
-                            Divider().frame(height: 30)
-                        }
-                    }
+            // The group icons lay out in a WRAPPING flow — NOT a horizontal ScrollView. On macOS a horizontal
+            // ScrollView intercepts the mouse-down for panning, so child Buttons never fire (the sidebar uses
+            // the same Button pattern but in a vertical scroll and works). A flow keeps every icon directly
+            // hittable and always visible (wraps to another line instead of hiding behind a scroll).
+            FlowLayout(spacing: 12, lineSpacing: 8) {
+                ForEach(Destination.Group.allCases) { group in
+                    headerGroup(group)
                 }
-                .padding(.horizontal, 16)
             }
-            // A horizontal ScrollView is greedy vertically by default; without
-            // this it competes with the (greedy) detail view below and can
-            // collapse to zero height on some screens (e.g. History). Pin it
-            // to its natural content height.
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
             headerSearchBar
                 .padding(.horizontal, 16)
         }
@@ -862,6 +856,41 @@ public struct RootView: View {
         }
     }
 
+}
+
+// MARK: - Flow layout
+
+/// A minimal wrapping layout: places subviews left-to-right, wrapping to the next line when the row is full.
+/// Used for the header icon groups so they are laid out as ordinary, directly-clickable controls (no
+/// horizontal ScrollView, which on macOS swallows child Button clicks) and never hidden behind a scroll.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 12
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, widest: CGFloat = 0
+        for sub in subviews {
+            let size = sub.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth { x = 0; y += lineHeight + lineSpacing; lineHeight = 0 }
+            x += size.width + spacing
+            widest = max(widest, x - spacing)
+            lineHeight = max(lineHeight, size.height)
+        }
+        return CGSize(width: min(widest, maxWidth), height: y + lineHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        let maxX = bounds.minX + bounds.width
+        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
+        for sub in subviews {
+            let size = sub.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > maxX { x = bounds.minX; y += lineHeight + lineSpacing; lineHeight = 0 }
+            sub.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+    }
 }
 
 // MARK: - Sidebar row
