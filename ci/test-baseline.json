@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 3354,
-  "baselineCommit": "96b77d6",
-  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #65 head 96b77d6: total=3354 passed=3352 failed=0 skipped=2. Simple-mode one-option-per-group (Destination.Group.simplePrimary; sidebar+header filters collapse to it in Simple) added 3 executed tests (SimpleModeSidebarTests) over the prior floor 3351. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
+  "baselineCommit": "14134c5",
+  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #66 head 14134c5: total=3354 passed=3352 failed=0 skipped=2. UI-only fix (header nav icons: horizontal ScrollView \u2192 FlowLayout so child Buttons are clickable on macOS) \u2014 no new tests, floor unchanged at 3354. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit; this evidence commit follows it."
 }
