@@ -1,16 +1,41 @@
 # PRODUCTION_STATUS
 
 ```
-Audit date:            2026-07-24 (STATUS-001)
-Current audited HEAD:  41ca36114fa4327dbe136f14a79731be37549908
-Latest schema version: 67  (SchemaMigrations.latestVersion; highest migration v67)
-Local full-suite:      781/781 green (this machine, Xcode 26.6)
-Verified hosted run:   30107577371
-Hosted tested SHA:     fbd124358f5cf01583800b91a4a6ac1486e0eb1a
-Hosted result:         Passed — 781 executed, 781 passed, 0 failed
-Architecture guards:   Passed (ci/guards/run-all.sh on ubuntu-latest)
-Branch ruleset:        Pending owner configuration
+Audit date:            2026-08-06 (STATUS refresh)
+Current audited HEAD:  8d151ea (main; PR #62 merged — Exports UI)
+Latest schema version: 102 (SchemaMigrations.latestVersion; highest migration v102)
+Whole-suite floor:     3348 (ci/test-baseline.json; the LIVE authority — updated every evidence commit)
+Migration-group floor: 375 (ci/test-groups/migration-matrix.json)
+Verified hosted run:   PR #62 build-and-test — xcresult total=3348, passed=3346, failed=0, skipped=2
+Hosted tested SHA:     7c6be7b (PR #62 evidence head; merged as 8d151ea)
+Architecture guards:   Passed (architecture-guards CI job)
+CI:                    6 jobs green on every PR head + evidence head + main (build-and-test,
+                       migration-matrix, sensitive-export, parser-fixtures, report-receipt-integrity,
+                       architecture-guards)
+Branch ruleset:        main branch-protected; per-PR CI 6/6 required to merge
 ```
+
+> **2026-08-06 refresh note.** The header above supersedes the 2026-07-24 snapshot (which predated ~35
+> migrations). This block is now accurate to `main`; the LIVE test-count authority is `ci/test-baseline.json`,
+> not this file. The detailed evidence matrix in the sections below is historical (persona-v2 pipeline era)
+> and is retained as-is — newer subsystems are summarized in "Current status" immediately below rather than
+> back-filled row-by-row.
+
+## Current status (2026-08-06)
+
+- **All five personas live** (Investigator/Researcher/Journalist/Individual/Lawyer) — 71 launchable jobs over
+  the shared engines via `PersonaJobService` + `PersonaJobCatalogComposer.composeProduction()`, booted in AppState.
+- **Cross-persona UI** (`PersonaJobsView`, `Destination.work`) — discovers personas, enumerates jobs, opens a
+  matter, and runs any job into the real service; Simple == Advanced routing.
+- **Handoff & Review** (`WorkProductHandoffView` / `WorkProductHandoffService`, `Destination.handoff`) — review a
+  matter's findings/approval/closure/custody and record the human-only approve / close / reopen decisions.
+- **Exports** (owner Decision 4) — `WorkProductExportService` renders markdown/html/csv/json/rtf + native PDF
+  (CoreGraphics/CoreText) + pure-Swift OOXML DOCX/XLSX (dependency-free `ZIPArchiveWriter`), with optional
+  redaction verified fail-closed; export UI in the Handoff view via NSSavePanel.
+- **Schema at v102**; migrations SAVEPOINT-wrapped with self-heal markers; no shipped migration edited.
+- **Zero-remainder hardening audit** (2026-08-06, 8 dimensions, adversarially verified): live-wiring, dead-code,
+  security/privacy, and recovery/migration came back CLEAN; remediation of 3 confirmed defects (this doc drift,
+  a HybridRetriever N+1 entity top-up, a custody-icon accessibility label) is landing in the hardening macros.
 
 **Authority:** `SHIP_DECISIONS.md` (CURRENT) → `WHOLE_PROJECT_COMPLETION_PROGRAM.md` →
 `PERSONA_JOB_COVERAGE_MATRIX.csv` → code → tests → recorded acceptance. This file is regenerated

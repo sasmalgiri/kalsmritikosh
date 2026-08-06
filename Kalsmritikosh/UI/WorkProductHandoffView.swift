@@ -347,6 +347,7 @@ public struct WorkProductHandoffView: View {
                 HStack(spacing: 8) {
                     Image(systemName: entry.contentHash == nil ? "questionmark.circle" : "checkmark.shield")
                         .foregroundStyle(entry.contentHash == nil ? .orange : .green)
+                        .accessibilityLabel(entry.contentHash == nil ? "Evidence not yet verified" : "Evidence verified with content hash")
                     Text(entry.sourceVersionID.uuidString).font(.caption.monospaced()).lineLimit(1)
                     Spacer(minLength: 0)
                     Text("\(entry.custodyEvents.count) custody event(s)").font(.caption2).foregroundStyle(.secondary)

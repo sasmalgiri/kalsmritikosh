@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3348,
-  "baselineCommit": "7c6be7b",
-  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #62 head 7c6be7b: total=3348 passed=3346 failed=0 skipped=2. Exports UI (WorkProductHandoffModel export path + Export panel + NSSavePanel) added 1 executed test (WorkProductHandoffModelTests.exportBuiltFindings) over the prior floor 3347. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
+  "minimumExecutedTests": 3350,
+  "baselineCommit": "db51ff3",
+  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #63 head db51ff3: total=3350 passed=3348 failed=0 skipped=2. Zero-remainder audit remediation (HybridRetriever N+1 batch, custody accessibilityLabel, PRODUCTION_STATUS refresh) added 2 executed tests (EntitiesFindByIDsBatchTests) over the prior floor 3348. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
 }
