@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 3354,
-  "baselineCommit": "31f893c",
-  "note": "Whole-suite floor from hosted build-and-test on PR #68 head 31f893c: total=3354 (UI-only Ask layout rebuild — robust 3-part VStack fixes blank pane; DEBUG-only #Preview is not a test; no new executed tests; floor unchanged at 3354). No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit 31f893c; this evidence commit follows it."
+  "baselineCommit": "b2ed69b",
+  "note": "Whole-suite floor from hosted build-and-test on PR #69 head b2ed69b: total=3354 (UI-only sidebar fix — always-visible column + flat Simple-mode nav + expanded Advanced groups; no new executed tests; floor unchanged at 3354). No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit b2ed69b; this evidence commit follows it."
 }
