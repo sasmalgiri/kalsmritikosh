@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3333,
-  "baselineCommit": "f70f29d",
-  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #59 head f70f29d: total=3333 passed=3331 failed=0 skipped=2. Cross-persona production UI macro (Destination.work + PersonaJobsView + PersonaJobsModel) added 3 executed tests (PersonaJobsModelTests) over the prior floor 3330. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
+  "minimumExecutedTests": 3336,
+  "baselineCommit": "fd1ec2a",
+  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #60 head fd1ec2a: total=3336 passed=3334 failed=0 skipped=2. Handoff & Review surface (WorkProductHandoffService read-service + WorkProductHandoffView/Model + Destination.handoff) added 3 executed tests (WorkProductHandoffModelTests) over the prior floor 3333. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
 }
