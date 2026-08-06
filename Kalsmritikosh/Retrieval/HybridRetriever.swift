@@ -730,11 +730,13 @@ public actor HybridRetriever: Retriever {
             let topUpKinds: [Entity.Kind] = [.emailAddress, .organization, .person, .vendor, .client, .project]
             for kind in topUpKinds {
                 let rows = try await entities.list(kind: kind, limit: 8)
-                for row in rows where seen.insert(row.id).inserted {
-                    if let real = try await entities.find(byID: row.id) {
-                        results.append(real)
-                    }
-                }
+                // Batch the hydration: `list` already returns canonical (review_status IS NULL,
+                // merged_into IS NULL) rows, so a single findByIDs over the newly-seen ids resolves the
+                // same full entities as per-row find(byID:) would — one query per kind instead of up to 8.
+                let freshIDs = rows.map(\.id).filter { seen.insert($0).inserted }
+                guard !freshIDs.isEmpty else { continue }
+                let reals = try await entities.findByIDs(freshIDs, limit: freshIDs.count)
+                results.append(contentsOf: reals)
             }
         }
         return results
