@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3350,
-  "baselineCommit": "db51ff3",
-  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #63 head db51ff3: total=3350 passed=3348 failed=0 skipped=2. Zero-remainder audit remediation (HybridRetriever N+1 batch, custody accessibilityLabel, PRODUCTION_STATUS refresh) added 2 executed tests (EntitiesFindByIDsBatchTests) over the prior floor 3348. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
+  "minimumExecutedTests": 3351,
+  "baselineCommit": "62fc45f",
+  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #64 head 62fc45f: total=3351 passed=3349 failed=0 skipped=2. Session-review P1 fix (WorkProductHandoffModel.load resets reviewer state when the matter changes) added 1 executed test (switchingMattersResetsState) over the prior floor 3350. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
 }

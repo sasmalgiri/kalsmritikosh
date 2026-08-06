@@ -129,4 +129,28 @@ struct WorkProductHandoffModelTests {
         let redacted = String(decoding: try model.exportData(), as: UTF8.self)
         #expect(!redacted.contains("ACMESECRET") && redacted.contains("[REDACTED]"))
     }
+
+    @Test("Switching matters starts a clean slate: reviewer inputs and built findings never carry across")
+    func switchingMattersResetsState() async throws {
+        let (model, caseA, h) = try await makeModel()
+        await model.load(caseID: caseA)
+        // Dirty the reviewer state on matter A.
+        await model.buildFindings(actor: "me", at: t0)
+        try #require(model.built != nil)
+        model.rationale = "A rationale"
+        model.unresolvedText = "A unresolved"
+        model.exportRedactionTerms = "A-SECRET"
+        model.exportFormat = .docx
+        // Open a DIFFERENT matter — inputs from A must not leak into B.
+        let wsB = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsB, title: "Matter B", template: .investigation))
+        let caseB = try await h.cases.createCase(workspaceID: wsB, title: "Matter B", actor: "me", at: t0)
+        await model.load(caseID: caseB.id)
+        #expect(model.snapshot?.caseID == caseB.id)
+        #expect(model.built == nil)
+        #expect(model.rationale.isEmpty)
+        #expect(model.unresolvedText.isEmpty)
+        #expect(model.exportRedactionTerms.isEmpty)
+        #expect(model.exportFormat == .pdf)
+    }
 }
