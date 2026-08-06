@@ -50,39 +50,41 @@ public struct AskView: View {
     public init() {}
 
     public var body: some View {
+        // Dead-simple, can't-collapse layout: three stacked regions — a header on top, a flexible middle that
+        // fills all remaining space (empty-state hero centered, or the scrolling transcript), and the composer
+        // pinned at the very bottom. No GeometryReader / safeAreaInset tricks, so the composer is ALWAYS visible.
         VStack(spacing: 0) {
             header
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        if turns.isEmpty {
-                            placeholder.padding(.horizontal, 40).padding(.top, 20)
-                                .transition(.opacity)
-                        } else {
-                            ForEach(turns) { turn in
-                                turnBubble(turn)
-                                    .id(turn.id)
-                                    .transition(.popIn)
+            Divider().opacity(0.4)
+            ZStack {
+                AuroraBackdrop().ignoresSafeArea()
+                if turns.isEmpty {
+                    placeholder
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 14) {
+                                ForEach(turns) { turn in
+                                    turnBubble(turn)
+                                        .id(turn.id)
+                                        .transition(.popIn)
+                                }
                             }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .animation(Theme.springSoft, value: turns.count)
+                        }
+                        .scrollContentBackground(.hidden)
+                        .onChange(of: turns.count) { _, _ in
+                            if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
                         }
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .animation(Theme.springSoft, value: turns.count)
                 }
-                .onChange(of: turns.count) { _, _ in
-                    if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-                .scrollContentBackground(.hidden)
-                // Pin the composer to the bottom of the scroll region. Was a
-                // plain VStack sibling, which the greedy ScrollView pushed off
-                // the bottom of the window on tall layouts — so the input bar
-                // vanished. safeAreaInset keeps it always visible.
-                .safeAreaInset(edge: .bottom, spacing: 0) { input }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            input
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AuroraBackdrop())
         .task { await loadOrCreateConversation() }
         .onAppear {
             inputFocused = true
@@ -294,7 +296,7 @@ public struct AskView: View {
             // input box below is the only affordance.
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.bottom, 24)
     }
 
     private var isBlank: Bool { question.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -922,5 +924,13 @@ private struct InvestigationSheet: View {
         .padding(.top, 6)
     }
 }
+
+#if DEBUG
+#Preview("Ask — empty state") {
+    AskView()
+        .environment(AppState())
+        .frame(width: 940, height: 660)
+}
+#endif
 
 
