@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3336,
-  "baselineCommit": "fd1ec2a",
-  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #60 head fd1ec2a: total=3336 passed=3334 failed=0 skipped=2. Handoff & Review surface (WorkProductHandoffService read-service + WorkProductHandoffView/Model + Destination.handoff) added 3 executed tests (WorkProductHandoffModelTests) over the prior floor 3333. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
+  "minimumExecutedTests": 3347,
+  "baselineCommit": "8caae59",
+  "note": "Whole-suite floor from hosted build-and-test xcresult on PR #61 head 8caae59: total=3347 passed=3345 failed=0 skipped=2. Exports engine (ZIPArchiveWriter + DOCX/XLSX OOXML writers + PDFReportWriter + WorkProductExportService) added 11 executed tests (ExportEngineTests) over the prior floor 3336. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. baselineCommit is the impl commit; this evidence commit follows it (two-run protocol)."
 }
