@@ -29,6 +29,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case workspaces
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
     case review
+    case handoff
     case transcripts
     case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
@@ -43,6 +44,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .ask:          return "Ask"
         case .search:       return "Search"
         case .work:         return "Professional Jobs"
+        case .handoff:      return "Handoff & Review"
         case .workspaces:   return "Workspaces"
         case .timeline:     return "Timeline"
         case .history:      return "History"
@@ -79,6 +81,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .ask:          return "bubble.left.and.text.bubble.right"
         case .search:       return "magnifyingglass"
         case .work:         return "person.crop.rectangle.stack"
+        case .handoff:      return "checkmark.seal"
         case .workspaces:   return "folder.badge.gearshape"
         case .timeline:     return "calendar.day.timeline.left"
         case .history:      return "book.closed"
@@ -131,6 +134,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .ask:          return "Ask in plain language; answers cite their evidence"
         case .search:       return "Instant full-text search across every chunk"
         case .work:         return "Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer"
+        case .handoff:      return "Review a matter's findings and evidence, then record the human decisions that hand it off — approve, close, reopen"
         case .workspaces:   return "Organize a matter, case, or project — a filtered view over your evidence"
         case .timeline:     return "Chronological view of all dated events"
         case .history:      return "Narrative reconstruction of what happened"
@@ -173,7 +177,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work]
-            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
@@ -815,6 +819,7 @@ public struct RootView: View {
         case .ask:          AskView()
         case .search:       SearchView()
         case .work:         PersonaJobsView()
+        case .handoff:      WorkProductHandoffView()
         case .workspaces:   WorkspacesView()
         case .timeline:     TimelineView()
         case .history:      HistoryView()
