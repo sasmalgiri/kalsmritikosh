@@ -44,8 +44,19 @@ public final class WorkProductHandoffModel {
         self.handoff = handoff; self.findings = findings; self.closure = closure
     }
 
-    /// Load (or reload) the handoff snapshot for a matter.
+    /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
+    /// inputs (rationale, unresolved items, export choices) and the last built findings never carry across
+    /// matters — a rationale typed for one matter can never be reused to approve/close/export another.
     public func load(caseID: UUID) async {
+        if self.caseID != caseID {
+            built = nil
+            rationale = ""
+            unresolvedText = ""
+            exportRedactionTerms = ""
+            exportFormat = .pdf
+            lastOutcome = nil
+            lastError = nil
+        }
         self.caseID = caseID
         await refresh()
     }
