@@ -258,111 +258,107 @@ public struct AskView: View {
     }
 
     private var placeholder: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             ZStack {
                 Circle()
                     .fill(
                         LinearGradient(
-                            colors: [Color.accentColor.opacity(0.28), Color.accentColor.opacity(0.04)],
+                            colors: [Color.accentColor.opacity(0.22), Color.accentColor.opacity(0.03)],
                             startPoint: .top, endPoint: .bottom
                         )
                     )
-                    .frame(width: 92, height: 92)
-                Circle()
-                    .stroke(Color.accentColor.opacity(0.18), lineWidth: 1)
-                    .frame(width: 92, height: 92)
+                    .frame(width: 76, height: 76)
                 Image(systemName: "sparkles")
-                    .font(.system(size: 40, weight: .light))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color.accentColor, Color.accentColor.opacity(0.6)],
-                            startPoint: .top, endPoint: .bottom
-                        )
-                    )
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(Theme.brandGradient())
                     .symbolEffect(.pulse)
             }
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 Text("What do you want to know?")
-                    .font(Theme.display(32, .bold))
+                    .font(Theme.display(30, .bold))
                     .multilineTextAlignment(.center)
                 Text("Kalsmritikosh reconstructs answers only from your ingested files — every claim carries its evidence.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 460)
+                    .frame(maxWidth: 440)
+                Label("Private · on-device · evidence-gated", systemImage: "lock.shield")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Color.primary.opacity(0.05), in: Capsule())
+                    .padding(.top, 2)
             }
             // SHIP_DECISIONS / P8.3 — Ask opens BLANK: no suggestion grid, no
             // leading the witness. The user discovers their own questions; the
             // input box below is the only affordance.
         }
-        .padding(.top, 24)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 60)
     }
 
+    private var isBlank: Bool { question.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /// Modern assistant-style composer: a rounded, width-capped bar that grows with the text (1–6 lines),
+    /// secondary glyph actions, and a filled circular send. Enter sends; Shift+Enter inserts a newline.
     private var input: some View {
-        HStack(spacing: 10) {
-            TextField("Ask about projects, people, contracts, money…", text: $question)
+        HStack(alignment: .bottom, spacing: 6) {
+            TextField("Message Kalsmritikosh…", text: $question, axis: .vertical)
                 .textFieldStyle(.plain)
+                .font(.body)
+                .lineLimit(1...6)
                 .padding(.leading, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 11)
                 .focused($inputFocused)
                 .onSubmit(submit)
             Button {
                 Task { await saveCurrentQuestion() }
             } label: {
-                Image(systemName: "bookmark")
-                    .frame(width: 30, height: 30)
+                Image(systemName: "bookmark").font(.system(size: 15)).frame(width: 32, height: 32)
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             .help("Save this question for later (visible in the Saved surface).")
-            .disabled(
-                appState.savedQueries == nil
-                || question.trimmingCharacters(in: .whitespaces).isEmpty
-            )
+            .disabled(appState.savedQueries == nil || isBlank)
             Button {
                 startInvestigation()
             } label: {
                 if investigationInFlight {
-                    ProgressView().controlSize(.small).frame(width: 30, height: 30)
+                    ProgressView().controlSize(.small).frame(width: 32, height: 32)
                 } else {
-                    Image(systemName: "magnifyingglass.circle")
-                        .frame(width: 30, height: 30)
+                    Image(systemName: "magnifyingglass.circle").font(.system(size: 15)).frame(width: 32, height: 32)
                 }
             }
             .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
             .help("Decompose this question into focused sub-questions and synthesize an answer.")
-            .disabled(
-                appState.investigationRunner == nil
-                || investigationInFlight
-                || question.trimmingCharacters(in: .whitespaces).isEmpty
-            )
+            .disabled(appState.investigationRunner == nil || investigationInFlight || isBlank)
             Button(action: submit) {
                 ZStack {
-                    Circle().fill(Theme.brandGradient())
-                        .frame(width: 34, height: 34)
-                        .shadow(color: Color.accentColor.opacity(0.35), radius: 6, y: 2)
+                    Circle().fill(isBlank ? AnyShapeStyle(Color.secondary.opacity(0.25)) : AnyShapeStyle(Theme.brandGradient()))
+                        .frame(width: 32, height: 32)
                     if asking {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
+                        ProgressView().controlSize(.small).tint(.white)
                     } else {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
+                        Image(systemName: "arrow.up").font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(isBlank ? AnyShapeStyle(.secondary) : AnyShapeStyle(.white))
                     }
                 }
             }
             .buttonStyle(.pressable)
             .keyboardShortcut(.return, modifiers: [])
-            .disabled(asking || question.trimmingCharacters(in: .whitespaces).isEmpty)
-            .opacity(question.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+            .disabled(asking || isBlank)
             .animation(Theme.springFast, value: asking)
+            .padding(.trailing, 6)
+            .padding(.bottom, 4)
         }
-        .padding(8)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Theme.brand.opacity(0.18), lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .padding(.vertical, 1)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Theme.brand.opacity(0.18), lineWidth: 1))
+        .shadow(color: .black.opacity(0.10), radius: 10, y: 3)
+        .frame(maxWidth: 820)
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity)
         .background(.ultraThinMaterial)   // clean pinned-bar backing over scroll content
     }
