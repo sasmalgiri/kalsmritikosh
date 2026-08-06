@@ -52,33 +52,36 @@ public struct AskView: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        if turns.isEmpty {
-                            placeholder.padding(.horizontal, 40).padding(.top, 20)
-                                .transition(.opacity)
-                        } else {
-                            ForEach(turns) { turn in
-                                turnBubble(turn)
-                                    .id(turn.id)
-                                    .transition(.popIn)
+            // Bottom-anchored transcript: content grows UP from just above the composer (classic chat feel),
+            // instead of floating at the top with a large empty gap below. The GeometryReader pins the scroll
+            // content to at least the viewport height and bottom-aligns it, so the empty-state hero and short
+            // conversations both sit low, right above the always-pinned input bar.
+            GeometryReader { geo in
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            if turns.isEmpty {
+                                placeholder.padding(.horizontal, 40)
+                                    .transition(.opacity)
+                            } else {
+                                ForEach(turns) { turn in
+                                    turnBubble(turn)
+                                        .id(turn.id)
+                                        .transition(.popIn)
+                                }
                             }
                         }
+                        .padding()
+                        .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .bottom)
+                        .animation(Theme.springSoft, value: turns.count)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .animation(Theme.springSoft, value: turns.count)
+                    .onChange(of: turns.count) { _, _ in
+                        if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                    .scrollContentBackground(.hidden)
+                    // Pin the composer to the bottom of the scroll region — always visible on any window height.
+                    .safeAreaInset(edge: .bottom, spacing: 0) { input }
                 }
-                .onChange(of: turns.count) { _, _ in
-                    if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-                .scrollContentBackground(.hidden)
-                // Pin the composer to the bottom of the scroll region. Was a
-                // plain VStack sibling, which the greedy ScrollView pushed off
-                // the bottom of the window on tall layouts — so the input bar
-                // vanished. safeAreaInset keeps it always visible.
-                .safeAreaInset(edge: .bottom, spacing: 0) { input }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -294,7 +297,7 @@ public struct AskView: View {
             // input box below is the only affordance.
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .padding(.bottom, 24)
     }
 
     private var isBlank: Bool { question.trimmingCharacters(in: .whitespaces).isEmpty }
