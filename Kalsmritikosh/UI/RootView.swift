@@ -244,9 +244,14 @@ public struct RootView: View {
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
     /// First-run / "change focus" persona picker sheet.
     @State private var showPersonaPicker = false
-    /// Which sidebar groups are expanded. Empty = all collapsed (so the sidebar
-    /// isn't a wall of buttons); the user clicks a group header to open it.
-    @State private var expandedGroups: Set<Destination.Group> = []
+    /// Which sidebar groups are expanded (Advanced mode only). Default = ALL expanded so the
+    /// navigation is visible on first open; the user can collapse a group by clicking its header.
+    /// (Simple mode ignores this — it shows one flat row per group, no collapsing.)
+    @State private var expandedGroups: Set<Destination.Group> = Set(Destination.Group.allCases)
+    /// Sidebar column visibility. Pinned to `.all` so the sidebar is ALWAYS shown by default —
+    /// otherwise a narrow window lets NavigationSplitView auto-collapse it and the navigation
+    /// "disappears". The user can still hide it via the toolbar toggle.
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Namespace private var sidebarNS
 
     /// Single navigation entry point. Records the outgoing screen for the
@@ -323,7 +328,7 @@ public struct RootView: View {
     // MARK: Main split
 
     private var main: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
             NavigationStack {
@@ -343,9 +348,10 @@ public struct RootView: View {
                 }
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .tint(Theme.brand)
         .preferredColorScheme(.light)
-        .frame(minWidth: 980, minHeight: 660)
+        .frame(minWidth: 880, minHeight: 620)
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .sheet(isPresented: $presentingOnboarding) {
@@ -391,10 +397,28 @@ public struct RootView: View {
                 .padding(.bottom, 6)
                 onboardingTip
                 personaSection
-                ForEach(Destination.Group.allCases) { group in
-                    let visible = simpleMode ? group.items.filter { $0 == group.simplePrimary } : group.items
-                    if !visible.isEmpty {
-                        collapsibleGroup(group, visible: visible)
+                if simpleMode {
+                    // Simple mode: exactly one primary per group. Collapsing a single-item group would
+                    // hide it behind a chevron (the "empty sidebar" bug), so show the primaries as a
+                    // flat, always-visible list under one calm caption. Everything else is one ⌘K away.
+                    Text("GO TO")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .tracking(0.5)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+                        .padding(.bottom, 2)
+                    ForEach(Destination.Group.allCases) { group in
+                        SidebarRow(dest: group.simplePrimary, isSelected: selection == group.simplePrimary, namespace: sidebarNS) {
+                            navigate(to: group.simplePrimary)
+                        }
+                    }
+                } else {
+                    // Advanced mode: every screen, grouped and collapsible (groups start expanded).
+                    ForEach(Destination.Group.allCases) { group in
+                        if !group.items.isEmpty {
+                            collapsibleGroup(group, visible: group.items)
+                        }
                     }
                 }
             }
