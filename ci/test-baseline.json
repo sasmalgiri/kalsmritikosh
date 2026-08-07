@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3354,
-  "baselineCommit": "d0b90ae",
-  "note": "Whole-suite floor from hosted build-and-test on PR #70 head d0b90ae (macro B: GOV-004 release configuration + OPS-003C port \u2014 Release configuration compiles for the first time; new release-build CI check added): total=3354 passed=3352 failed=0 skipped=2; floor unchanged at 3354. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit d0b90ae; this evidence commit follows it."
+  "minimumExecutedTests": 3369,
+  "baselineCommit": "2142ffa",
+  "note": "Whole-suite floor from hosted build-and-test on PR #71 head 2142ffa (macro C: citation-integrity P1 closure \u2014 CitationResolver authority union, 15 new tests): total=3369 passed=3367 failed=0 skipped=2; floor RAISED 3354 -> 3369. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit 2142ffa; this evidence commit follows it."
 }

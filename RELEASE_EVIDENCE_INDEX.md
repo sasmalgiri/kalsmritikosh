@@ -14,7 +14,7 @@ Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_
 |---|---|---|---|
 | F1 | All advertised formats pass a declared matrix | (link parser fixture matrix + CI job) | PENDING |
 | F2 | All five persona primary workflows complete | (per-persona workflow run + acceptance) | PENDING |
-| F3 | All material Claims reopen exact evidence | (verifier test ids) | PENDING |
+| F3 | All material Claims reopen exact evidence | CitationResolver authority union (chunk/event/relationship/deterministic-evaluation/authority layers + ledger existence probes) wired into EvidenceVerifier + AppState; `CitationResolverTests` (11) + `EvidenceVerifierCitationIntegrationTests` (4) hosted-green on PR #71 run 31168181813 (build-and-test total=3369, 0 failed); reopen path unchanged (PJE009CitationTamperTests, GenericFactHistoryCitationTests) | INTEGRATION |
 | F4 | Report and receipt match | report/receipt identity tests (per template) | INTEGRATION |
 | F5 | Previous work-product runs reopen | OPS-004 reopen tests green (run 30271215068, SHA 8678c0c) | INTEGRATION |
 | F6 | Workflow runs resume after relaunch | Stage 3 gate PROVEN — `PJE011CompleteSyntheticWorkflowTests.completeWorkflowWithRelaunch` (start→save→close→resume→complete method→human decision→cited work product→reopen exact run) + PJE-012 final acceptance; see `STAGE3_ACCEPTANCE.md` | PASS |
