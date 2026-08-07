@@ -12,8 +12,8 @@ Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_
 ## A. Functional gates
 | Gate | Requirement | Evidence | State |
 |---|---|---|---|
-| F1 | All advertised formats pass a declared matrix | (link parser fixture matrix + CI job) | PENDING |
-| F2 | All five persona primary workflows complete | (per-persona workflow run + acceptance) | PENDING |
+| F1 | All advertised formats pass a declared matrix | Every advertised structural format has a dedicated fixture suite (DocxParserTests + MarkdownParserTests added; ZIP proven via ContainerSafety/ContainerIngestIntegration inside the gate); parser-fixtures named check floor 126, hosted-green PR #73 run 31170924940; SUPPORTED_FORMATS_V1.md synced to code truth | INTEGRATION |
+| F2 | All five persona primary workflows complete | PersonaJobMatrixCoverageTests: 71 launchable jobs pinned (16/14/14/13/14) against the 75-row coverage matrix (read in-test); live routing (intake->real case->findings/closure/custody/contradictionGap/dataLab) proven for ALL five personas + fail-closed for unwired kinds; hosted-green PR #73 run 31170924940. Owner acceptance journeys (section E) remain the owner-run half of this gate | INTEGRATION |
 | F3 | All material Claims reopen exact evidence | CitationResolver authority union (chunk/event/relationship/deterministic-evaluation/authority layers + ledger existence probes) wired into EvidenceVerifier + AppState; `CitationResolverTests` (11) + `EvidenceVerifierCitationIntegrationTests` (4) hosted-green on PR #71 run 31168181813 (build-and-test total=3369, 0 failed); reopen path unchanged (PJE009CitationTamperTests, GenericFactHistoryCitationTests) | INTEGRATION |
 | F4 | Report and receipt match | report/receipt identity tests (per template) | INTEGRATION |
 | F5 | Previous work-product runs reopen | OPS-004 reopen tests green (run 30271215068, SHA 8678c0c) | INTEGRATION |
