@@ -36,15 +36,17 @@ jobs:
           if-no-files-found: ignore
 
   # ── Build + full test target ───────────────────────────────────────────────
-  # Runs on macos-26 to match the LOCKED macOS 26 release contract (SHIP_DECISIONS.md):
-  # the SDK builds the app's 26.x deployment target natively, so there is NO
-  # deployment-target downgrade. The full KalsmritikoshTests target MUST execute
-  # (it is wired into the shared scheme's Test action); a build-only or zero-test
-  # run is a hard failure, proven from the .xcresult by ci/verify-xcresult-tests.sh.
-  #
-  # NOTE: if a future hosted runner lacks the macOS 26 SDK, a MACOSX_DEPLOYMENT_TARGET
-  # override may be reintroduced ONLY as a clearly-labelled compatibility-CI override —
-  # it would NOT be evidence that the locked macOS 26 contract passed.
+  # Runs on macos-26 because the macOS 26 SDK is required to COMPILE the
+  # runtime-gated Foundation Models paths (#if canImport(FoundationModels)) and to
+  # exercise the FM-available branch in tests. The shipping floor itself is
+  # macOS 15.6, capability-adaptive (SHIP_DECISIONS.md GOV-004) — deployment
+  # targets are pinned 15.6 uniformly (enforced by ci/guards/release-configuration.sh),
+  # so tests execute natively on the runner with no deployment-target override.
+  # The deterministic-only behaviour on a real macOS 15.6–25 Mac is an
+  # owner-acceptance item; a green run here does NOT prove it.
+  # The full KalsmritikoshTests target MUST execute (it is wired into the shared
+  # scheme's Test action); a build-only or zero-test run is a hard failure,
+  # proven from the .xcresult by ci/verify-xcresult-tests.sh.
   build-and-test:
     runs-on: macos-26
     timeout-minutes: 45
@@ -85,14 +87,10 @@ jobs:
           NSUnbufferedIO: YES
         run: |
           set -o pipefail
-          # Compatibility-CI override (labelled, honest): the hosted macOS 26 runner can be a
-          # POINT RELEASE below the test target's pinned deployment target (e.g. runner 26.4 vs
-          # pinned 26.5), which blocks test EXECUTION ("host's macOS doesn't match deployment
-          # target"). Lower the deployment target to the runner's own OS for the CI test run
-          # ONLY. This stays within the LOCKED macOS 26 contract floor — it is NOT evidence that
-          # the pinned 26.5 point release passed; it proves the suite on the macOS 26 baseline.
-          DEPLOY="$(sw_vers -productVersion | cut -d. -f1-2)"
-          echo "Runner macOS: $(sw_vers -productVersion) — using MACOSX_DEPLOYMENT_TARGET=$DEPLOY for the test run"
+          # No deployment-target override: the uniform 15.6 floor (GOV-004) executes
+          # natively on any macOS 26 runner. The former 26.5 test-target pin (and its
+          # labelled compatibility override) is gone.
+          echo "Runner macOS: $(sw_vers -productVersion)"
           rm -rf build/TestResults.xcresult
           xcodebuild \
             -project Kalsmritikosh.xcodeproj \
@@ -102,7 +100,6 @@ jobs:
             -derivedDataPath build/derived \
             -resultBundlePath build/TestResults.xcresult \
             -skipMacroValidation \
-            MACOSX_DEPLOYMENT_TARGET="$DEPLOY" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_ALLOWED=NO \

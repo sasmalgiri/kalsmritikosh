@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Release-configuration guard (GOV-001 locked contract — macro B).
-# The shipping product promise is: macOS 26 floor, fully offline release,
-# no Ollama/cloud metadata in the release product. This guard proves it from
-# the project file on every CI run so the configuration can never drift back.
+# Release-configuration guard (GOV-004 + GOV-001 locked contract — macro B).
+# The shipping product promise is: macOS 15.6 floor with runtime-gated
+# Foundation Models (GOV-004), fully offline release, no Ollama/cloud metadata
+# in the release product (GOV-001). This guard proves it from the project file
+# on every CI run so the configuration can never drift.
 #
 #   1. Deployment floor — every MACOSX_DEPLOYMENT_TARGET in the project must
-#      be exactly 26.0. A stray 15.6 (old floor) or 26.5 (point-release pin)
-#      at ANY level can silently override what the app target resolves to.
+#      be exactly 15.6. A stray value at ANY level (e.g. the old 26.5
+#      test-target pin) silently overrides what a target resolves to and
+#      breaks either the shipping floor or test execution.
 #   2. Offline release — the app target's Release configuration must have
 #      outgoing AND incoming network connections disabled, with App Sandbox
 #      and Hardened Runtime enabled.
@@ -26,10 +28,10 @@ fi
 # ── 1. Deployment-target floor ──────────────────────────────────────────────
 FOUND_TARGETS=$(grep -oE "MACOSX_DEPLOYMENT_TARGET = [0-9.]+" "$PBX" | awk '{print $3}' | sort -u | tr '\n' ' ' | sed 's/ $//')
 if [ -z "$FOUND_TARGETS" ]; then
-  echo "::error::Release-configuration guard: no MACOSX_DEPLOYMENT_TARGET set anywhere in $PBX — the locked macOS 26.0 floor is not pinned"
+  echo "::error::Release-configuration guard: no MACOSX_DEPLOYMENT_TARGET set anywhere in $PBX — the locked macOS 15.6 floor (GOV-004) is not pinned"
   FAIL=1
-elif [ "$FOUND_TARGETS" != "26.0" ]; then
-  echo "::error::Release-configuration guard: MACOSX_DEPLOYMENT_TARGET drift — locked shipping floor is 26.0, project contains: $FOUND_TARGETS"
+elif [ "$FOUND_TARGETS" != "15.6" ]; then
+  echo "::error::Release-configuration guard: MACOSX_DEPLOYMENT_TARGET drift — locked shipping floor is 15.6 (GOV-004), project contains: $FOUND_TARGETS"
   grep -n "MACOSX_DEPLOYMENT_TARGET" "$PBX"
   FAIL=1
 fi
@@ -81,4 +83,4 @@ fi
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
-echo "Release-configuration guard clean (floor 26.0, offline Release, no Ollama release metadata)."
+echo "Release-configuration guard clean (floor 15.6, offline Release, no Ollama release metadata)."
