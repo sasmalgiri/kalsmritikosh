@@ -295,6 +295,10 @@ public final class AppState {
     /// the resolver can prefer it over the heavy one. No download happens without
     /// this explicit call.
     public func installRecommendedModel() async {
+        // Ollama is an internal/DEBUG-only provider path (GOV-001): the release
+        // build must never download via or register a network-backed provider,
+        // so this action compiles to a no-op outside DEBUG.
+        #if DEBUG
         guard let sug = pendingModelSuggestion, let capabilities else { return }
         let base = URL(string: "http://localhost:11434")!
         let proc = beginProcess("Downloading \(sug.displayName)…")
@@ -327,6 +331,7 @@ public final class AppState {
             KalsmritikoshLog.app.info("Installed + registered device-suitable model \(sug.modelTag, privacy: .public)")
             pendingModelSuggestion = nil
         }
+        #endif
     }
 
     /// Count regular, non-hidden files under `urls` — a fast pre-pass (no file
@@ -953,6 +958,12 @@ public final class AppState {
             // When the daemon isn't reachable OR no model is pulled,
             // we compute an OllamaSetupSuggestion so SettingsView can
             // walk the user through installing + downloading.
+            // The ENTIRE Ollama path (including the localhost:11434 reachability
+            // probe and the model suggestion) is internal-only: a release build
+            // must make zero network connections, so it never probes the daemon
+            // and never surfaces a setup suggestion.
+            var internalOllamaSetupSuggestion: OllamaSetupAdvisor.SetupSuggestion? = nil
+            if internalProvidersEnabled {
             let ollamaBase = URL(string: "http://localhost:11434")!
             let detectedOllama = await OllamaDiscovery.list(baseURL: ollamaBase)
             let ollamaReachable: Bool
@@ -968,6 +979,7 @@ public final class AppState {
             )
             if setupSuggestion.action != .nothingNeeded {
                 KalsmritikoshLog.app.info("Ollama setup needed: \(setupSuggestion.summary, privacy: .public)")
+                internalOllamaSetupSuggestion = setupSuggestion
             }
             // Device-fit gate. Even when a reasoning model IS installed, if NONE
             // of them fits this Mac comfortably (≤70% RAM) — e.g. only a 26 GB
@@ -985,7 +997,7 @@ public final class AppState {
                     KalsmritikoshLog.app.info("No comfortably-fitting reasoning model on \(hardware.totalRAMBytes / 1_073_741_824, privacy: .public)GB device — suggesting \(sug.modelTag, privacy: .public)")
                 }
             }
-            if internalProvidersEnabled, detectedOllama.isEmpty {
+            if detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(
                     id: "provider.local.network",
                     baseURL: ollamaBase,
@@ -995,7 +1007,7 @@ public final class AppState {
                     displayName: "Local Ollama (llama3:latest)",
                     tier: .medium
                 ))
-            } else if internalProvidersEnabled {
+            } else {
                 KalsmritikoshLog.app.info("Ollama discovery: \(detectedOllama.count, privacy: .public) model(s) installed")
                 for m in detectedOllama {
                     // Pull the actual context window from /api/show
@@ -1018,6 +1030,7 @@ public final class AppState {
                     ))
                 }
             }
+            } // internalProvidersEnabled (Ollama probe + discovery + registration)
             if internalProvidersEnabled {
                 await capabilities.register(CloudProvider())
             }
@@ -2128,8 +2141,7 @@ public final class AppState {
             self.benchmark = benchmark
             self.capabilities = capabilities
             self.modelChoiceAdvice = advice
-            self.ollamaSetupSuggestion = setupSuggestion.action == .nothingNeeded
-                ? nil : setupSuggestion
+            self.ollamaSetupSuggestion = internalOllamaSetupSuggestion
             self.ggufRegistry = gguf
             self.cloudEndpointRegistry = cloudRegistry
             self.expertRegistry = expertRegistry
