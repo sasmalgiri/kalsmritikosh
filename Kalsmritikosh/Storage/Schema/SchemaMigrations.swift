@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 102
+    public static let latestVersion = 103
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -439,7 +439,14 @@ public enum SchemaMigrations {
             // method completion, confidence, or absence of contradiction. This is the NEWEST marker.
             "investigation_findings_approvals": ["id", "case_id", "sequence", "decision", "work_product_run_id",
                                                   "receipt_seal", "scope_fingerprint", "rationale", "actor",
-                                                  "created_at"]
+                                                  "created_at"],
+            // v103 — P9.3/GOV-005 disk-backed ANN: IVF meta/cells/postings in the single ledger (three NEW
+            // tables; ann_index_meta's presence distinguishes v103 from v102). Population is background
+            // build work, never migration work. This is the NEWEST marker.
+            "ann_index_meta": ["model_id", "strategy", "state", "dimension", "cell_count",
+                               "trained_vector_count", "train_seed", "created_at", "updated_at"],
+            "ann_cells": ["model_id", "cell_id", "centroid", "vector_count", "updated_at"],
+            "ann_postings": ["model_id", "cell_id", "chunk_id", "q", "scale"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -577,7 +584,8 @@ public enum SchemaMigrations {
         (99, v99),
         (100, v100),
         (101, v101),
-        (102, v102)
+        (102, v102),
+        (103, v103)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5442,6 +5450,59 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v103: String = """
+    -- P9.3 (GOV-005) — disk-backed ANN: IVF coarse-quantizer state in the SINGLE ledger. Pure DDL;
+    -- population is a background build (ANNIndexCoordinator.maintain), never migration work.
+    -- ann_index_meta: one row per embedding model — the persisted index-strategy decision, geometry,
+    -- and build state. state='building' is the crash marker: a reopen that finds it treats the disk
+    -- index as not-ready (queries brute-force) and the background job resumes the rebuild.
+    CREATE TABLE ann_index_meta (
+        model_id             TEXT PRIMARY KEY NOT NULL,   -- 'bge-small.v1' | 'apple.nl.v1'
+        strategy             TEXT NOT NULL DEFAULT 'inMemoryHNSW',
+        state                TEXT NOT NULL DEFAULT 'empty',
+        dimension            INTEGER NOT NULL,
+        cell_count           INTEGER NOT NULL DEFAULT 0,
+        trained_vector_count INTEGER NOT NULL DEFAULT 0,  -- corpus size at last k-means train
+        train_seed           INTEGER NOT NULL DEFAULT 0,  -- deterministic PRNG seed → reproducible builds
+        created_at           REAL NOT NULL,
+        updated_at           REAL NOT NULL,
+        CHECK(strategy IN ('inMemoryHNSW','diskIVF')),
+        CHECK(state IN ('empty','building','ready')),
+        CHECK(dimension > 0),
+        CHECK(cell_count >= 0),
+        CHECK(trained_vector_count >= 0)
+    );
+    -- Coarse-quantizer centroids (float32 LE blob, dimension × 4 bytes). Cascade from meta so a
+    -- model reset is one DELETE.
+    CREATE TABLE ann_cells (
+        model_id     TEXT NOT NULL,
+        cell_id      INTEGER NOT NULL,
+        centroid     BLOB NOT NULL,
+        vector_count INTEGER NOT NULL DEFAULT 0,
+        updated_at   REAL NOT NULL,
+        PRIMARY KEY (model_id, cell_id),
+        FOREIGN KEY (model_id) REFERENCES ann_index_meta(model_id) ON DELETE CASCADE,
+        CHECK(cell_id >= 0),
+        CHECK(vector_count >= 0)
+    ) WITHOUT ROWID;
+    -- Posting lists, physically CLUSTERED by (model_id, cell_id, …) via WITHOUT ROWID so a probe is
+    -- a sequential range scan. q/scale are denormalized copies of chunk_embeddings (int8 blob +
+    -- max|x|/127 scale) for read locality — a documented disk-for-latency trade. Deliberately NO FK
+    -- to ann_cells: a retrain replaces cells and reassigns postings inside one repository-managed
+    -- rebuild. Chunk deletion cascades the posting.
+    CREATE TABLE ann_postings (
+        model_id TEXT NOT NULL,
+        cell_id  INTEGER NOT NULL,
+        chunk_id TEXT NOT NULL,
+        q        BLOB NOT NULL,
+        scale    REAL NOT NULL,
+        PRIMARY KEY (model_id, cell_id, chunk_id),
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+    ) WITHOUT ROWID;
+    -- Leading chunk_id serves the FK-cascade lookup AND enforces one cell per (chunk, model).
+    CREATE UNIQUE INDEX idx_ann_postings_chunk_model ON ann_postings(chunk_id, model_id);
     """
 
     private static let v102: String = """
