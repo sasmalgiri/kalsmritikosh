@@ -1,18 +1,23 @@
 # PRODUCTION_STATUS
 
 ```
-Audit date:            2026-08-06 (STATUS refresh)
-Current audited HEAD:  8d151ea (main; PR #62 merged — Exports UI)
-Latest schema version: 102 (SchemaMigrations.latestVersion; highest migration v102)
-Whole-suite floor:     3348 (ci/test-baseline.json; the LIVE authority — updated every evidence commit)
+Audit date:            2026-08-07 (release-closure program refresh)
+Current audited HEAD:  main after PRs #70-#73 (macros B-E merged; macro F on PR #74)
+Latest schema version: 102 (SchemaMigrations.latestVersion)
+Whole-suite floor:     3389 (ci/test-baseline.json; the LIVE authority — updated every evidence commit)
 Migration-group floor: 375 (ci/test-groups/migration-matrix.json)
-Verified hosted run:   PR #62 build-and-test — xcresult total=3348, passed=3346, failed=0, skipped=2
-Hosted tested SHA:     7c6be7b (PR #62 evidence head; merged as 8d151ea)
-Architecture guards:   Passed (architecture-guards CI job)
-CI:                    6 jobs green on every PR head + evidence head + main (build-and-test,
-                       migration-matrix, sensitive-export, parser-fixtures, report-receipt-integrity,
-                       architecture-guards)
-Branch ruleset:        main branch-protected; per-PR CI 6/6 required to merge
+Parser-fixtures floor: 126 (ci/test-groups/parser-fixtures.json; raised 78 -> 126 in macro E)
+Verified hosted run:   PR #73 build-and-test — xcresult total=3389, passed=3387, failed=0, skipped=2
+Architecture guards:   8 green (capability-discipline, no-try-fatalerror, no-network-evidence-layers,
+                       no-synthetic-questions, sensitive-scope-mutation-bypass, release-configuration,
+                       persona-neutral-truth [PR #74], + run-all aggregation)
+CI:                    7 named jobs green on every PR head + main (the original 6 + release-build,
+                       which compiles the TRUE Release configuration on every push)
+Release configuration: GOV-004 — macOS 15.6 capability-adaptive floor; Release build offline
+                       (outgoing network entitlement OFF); Ollama/cloud DEBUG-internal only;
+                       Release configuration compiles (first proven in macro B, then CI-gated)
+Branch ruleset:        main branch-protected; per-PR CI required to merge (owner: add release-build
+                       to the required-checks list)
 ```
 
 > **2026-08-06 refresh note.** The header above supersedes the 2026-07-24 snapshot (which predated ~35
@@ -21,21 +26,33 @@ Branch ruleset:        main branch-protected; per-PR CI 6/6 required to merge
 > and is retained as-is — newer subsystems are summarized in "Current status" immediately below rather than
 > back-filled row-by-row.
 
-## Current status (2026-08-06)
+## Current status (2026-08-07)
 
-- **All five personas live** (Investigator/Researcher/Journalist/Individual/Lawyer) — 71 launchable jobs over
-  the shared engines via `PersonaJobService` + `PersonaJobCatalogComposer.composeProduction()`, booted in AppState.
-- **Cross-persona UI** (`PersonaJobsView`, `Destination.work`) — discovers personas, enumerates jobs, opens a
-  matter, and runs any job into the real service; Simple == Advanced routing.
-- **Handoff & Review** (`WorkProductHandoffView` / `WorkProductHandoffService`, `Destination.handoff`) — review a
-  matter's findings/approval/closure/custody and record the human-only approve / close / reopen decisions.
-- **Exports** (owner Decision 4) — `WorkProductExportService` renders markdown/html/csv/json/rtf + native PDF
-  (CoreGraphics/CoreText) + pure-Swift OOXML DOCX/XLSX (dependency-free `ZIPArchiveWriter`), with optional
-  redaction verified fail-closed; export UI in the Handoff view via NSSavePanel.
+- **Release-closure program (macros B-F)**: release configuration corrected + CI-enforced (GOV-004
+  15.6 adaptive floor, offline Release, Ollama DEBUG-only; the Release configuration COMPILES —
+  it never had before macro B — and a `release-build` CI check keeps it that way); citation-integrity
+  P1 closed (`CitationResolver` authority union across chunk/event/relationship/deterministic-
+  evaluation/authority layers, gate F3); security gates S3/S4/S6 closed at the output-representation
+  level; advertised-format matrix fully fixture-backed (F1); five-persona coverage + live routing
+  proven (F2, 71 launchable jobs pinned against the 75-row matrix); truth gates T1 (persona-neutral
+  truth, guard-enforced) and T3 (duplicate-source independence) closed; §19 deterministic 60-question
+  retrieval eval hosted with measured floors (PR #74).
+- **All five personas live** — 71 launchable jobs over the shared engines via `PersonaJobService` +
+  `PersonaJobCatalogComposer.composeProduction()`, booted in AppState; live routing proven for all
+  five personas (PersonaJobMatrixCoverageTests).
+- **Cross-persona UI** (`PersonaJobsView`, `Destination.work`); **Handoff & Review**
+  (`WorkProductHandoffView`, `Destination.handoff`); **Exports** (markdown/html/csv/json/rtf +
+  native PDF + pure-Swift OOXML DOCX/XLSX) with redaction verified fail-closed at the
+  output-representation level (ReleaseSecurityGateTests, incl. PDFKit page-text inspection).
+- **Professional Method Engine**: MET-01..16 all registered with validators, MethodRun persistence,
+  pause/resume/reopen proven. **Evidence Workbench**: LAB-001..006 capabilities present
+  (datasets/fields/rows/bindings/lineage/safe formulas/presets/scenarios/undo-redo/quality
+  warnings/saved views). **Shared shell**: Fast / Full Evidence modes (locked names shipped);
+  LLM call budgets pinned 8/8 with one budget spanning the whole request (LLMBudgetTests).
 - **Schema at v102**; migrations SAVEPOINT-wrapped with self-heal markers; no shipped migration edited.
-- **Zero-remainder hardening audit** (2026-08-06, 8 dimensions, adversarially verified): live-wiring, dead-code,
-  security/privacy, and recovery/migration came back CLEAN; remediation of 3 confirmed defects (this doc drift,
-  a HybridRetriever N+1 entity top-up, a custody-icon accessibility label) is landing in the hardening macros.
+- **Gate scoreboard** (RELEASE_EVIDENCE_INDEX.md): F1 F2 F3 S3 S4 S6 at INTEGRATION with hosted run
+  ids; T1 T3 land with PR #74. Remaining PENDING gates are owner-run (persona acceptance journeys,
+  scale run SC1/SC2, clean-machine, App Store AS1-11) or documentation refresh in flight.
 
 **Authority:** `SHIP_DECISIONS.md` (CURRENT) → `WHOLE_PROJECT_COMPLETION_PROGRAM.md` →
 `PERSONA_JOB_COVERAGE_MATRIX.csv` → code → tests → recorded acceptance. This file is regenerated
@@ -81,7 +98,7 @@ Evidence-state vocabulary (an item may hold several):
 
 ---
 
-## 2. Whole-project status (master stages)
+## 2. Whole-project status (master stages) — HISTORICAL (2026-07 era; superseded by "Current status" above)
 
 | Program area | Status | Verification | Remaining work |
 |---|---|---|---|
@@ -98,7 +115,7 @@ Evidence-state vocabulary (an item may hold several):
 | Quality track | Partial | Existing evidence-integrity + fail-closed gate | QUALITY-001…009 |
 | Release | Pending | No signed release acceptance | Full release gates (SHIP_DECISIONS §3) |
 
-**Whole-project engineering estimate: ~50–55% complete.** This percentage is an *estimate*; the
+**Whole-project engineering estimate (HISTORICAL, 2026-08-06): ~50–55%.** After the release-closure macros (B-F) the agent-completable engineering remainder is tracked in RELEASE_EVIDENCE_INDEX.md gate states, not a percentage. This percentage is an *estimate*; the
 implementation states and release gates above are *evidence-backed*.
 
 ---
@@ -130,28 +147,30 @@ The following prior statements are **obsolete** and are corrected here:
 
 ---
 
-## 5. Known limitations (honest)
+## 5. Known limitations (honest, 2026-08-07)
 
-- Hosted tests execute with a documented **macOS 26.4 compatibility deployment target** (the
-  runner's OS), not proof of the pinned macOS **26.5** point release; the locked floor is macOS 26.
-- Specialized CI jobs (migration-matrix, parser-fixtures, report-receipt-integrity) are **not yet
-  separated** (CI-001B).
-- Branch ruleset is **not configured**.
-- Migration matrix is **incomplete** (MIG-001A/B).
-- `SensitiveScope` is **not implemented** (OPS-003).
-- Work-product runs are **not persisted** (OPS-004).
-- Explicit email participant roles are **not persisted** (OPS-005; directional "X emailed Y"
-  phrasing intentionally withheld until then).
-- Persona Job Engine (Stage 3) is **complete and acceptance-proven** (PJE-001..012, schema v78 —
-  see `STAGE3_ACCEPTANCE.md`). Professional Method Engine (Stage 4) and Evidence Workbench (Stage 5)
-  remain **not implemented**.
-- Complete five-persona professional workflows are **not implemented**.
-- Scale and release claims remain **unverified** (market only the tested corpus per SHIP_DECISIONS).
-- `actions/checkout@v4` runs on Node 24 (GitHub deprecation notice only — not a failure).
+- Owner-run gates are genuinely pending: five persona acceptance journeys, sanitized-archive
+  migration run, owner-hardware scale run (SC1/SC2 — market only the tested figure), clean-machine
+  offline install, App Store archive/signing/metadata (AS1-11), branch-ruleset update to require
+  `release-build`.
+- The deterministic-only experience on a real macOS 15.6-25 Mac (GOV-004) cannot be executed on
+  hosted runners (macOS 26 SDK required to build); it is an owner acceptance item.
+- The hosted 60-question retrieval eval measures the DETERMINISTIC-LAYER floor of a fresh
+  Tier-0/1 ingest (overall 0.339); full-pipeline (Tier-2 enriched) in-app numbers are far higher
+  (see release/RELEASE_EVIDENCE_v1.md) and the answer-level eval on target hardware is owner-run.
+- Scale-strategy engineering (P9.3 disk-backed/sharded ANN + strategy selector) is NOT implemented;
+  v1 ships the in-memory HNSW index only — an explicit owner decision on Gate 8 scope is pending
+  (implement vs. supersede with tested-figure-only marketing).
+- Audio/video remain recognized-but-deferred; PPT/PST/OST/MSG/NSF/RAR/7z remain honestly
+  unsupported (RAR/7z custody-preserved with an explicit unsupported manifest).
+- Superseded 2026-08-07 (previously listed here, now closed): SensitiveScope (OPS-003 complete,
+  S2 PASS), work-product run persistence (OPS-004 PASS), specialized CI jobs (all separated),
+  migration matrix (375-test group), Method Engine + Evidence Workbench + shared shell (complete),
+  the macOS 26.5 deployment-target note (GOV-004 floor is 15.6 uniform).
 
 ---
 
-## 6. Formal stage state (2026-07-26, after OPS-002.2)
+## 6. Formal stage state — HISTORICAL (2026-07-26, after OPS-002.2; superseded by "Current status" above)
 
 ```
 Stage 1 implementation:    complete   (CI-001A/A.1/A.2/B, STATUS-001, MIG-001A/B/B.1/C —
