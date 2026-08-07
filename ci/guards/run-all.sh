@@ -10,6 +10,7 @@ GUARDS=(
   no-synthetic-questions-answer-path.sh
   sensitive-scope-mutation-bypass.sh
   release-configuration.sh
+  persona-neutral-truth.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
