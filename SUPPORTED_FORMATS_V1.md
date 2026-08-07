@@ -31,13 +31,20 @@ Verified against `origin/main`. Structural parsers live in `Ingestion/Structural
 | MBOX | `.mbox` | Structural | `MBOXStructuralParser` | per-message header/body/attachment blocks; message-id + messageIndex locator | splits on `From ` separators; reuses the EML per-message extractor |
 | EMLX (Apple Mail) | `.appleMail` | Structural | `EMLXStructuralParser` | header/body/attachment blocks; message-id + header-field locator | peels emlx length prefix + plist trailer; reuses the EML per-message extractor |
 | Images | `.png/.jpg/.heic/.tiff/.webp` | Structural | `ImageStructuralParser` | image container + paragraph-per-line + table/tableRow; line/row locator; OCR confidence | Vision OCR; word bboxes are a later refinement |
-| ZIP | `.zip` | Structural relations pending | `ArchiveLoader` | members re-ingested | security guards done (zip-bomb/slip); A3.12 member provenance |
+| ZIP | `.zip` | Structural | `ContainerProcessingCoordinator` (USF-M2) | members re-ingested as managed child SourceVersions with archiveMember provenance + full member manifest | safety proven: traversal/slip, symlink containment, depth/entry/nested/root budgets, ratio bombs, encrypted + corrupt members visible (ContainerSafetyTests + ContainerIngestIntegrationTests, parser-fixtures gate) |
+| DOC (Word 97–2003) | `.doc` | Structural | `DocStructuralParser` | paragraph blocks | Phase 2, shipped in v1 (LegacyOfficeParserTests); binary WordDocument stream text extraction |
+| XLS (Excel 97–2003) | `.xls` | Structural | `XlsStructuralParser` | sheet + row blocks | Phase 2, shipped in v1 (LegacyOfficeParserTests); BIFF8 cell extraction |
+| HTML/JSON/XML/LOG | `.html/.json/.xml/.log` | Structural | `StructuredTextStructuralParser` | typed blocks per format (PAR-008) | StructuredTextParserTests |
+| SQLite | `.sqlite` | Structural | `SQLiteStructuralParser` | table + row blocks (PAR-009) | read-only, schema-walked; SQLiteStructuralParserTests |
 | Audio | `.mp3/.wav/.m4a/.aac` | **Deferred/experimental** | `AudioLoader`+ASR | transcript (no timecodes yet) | advertise only after timecoded evidence (A3.13) |
 | Video | `.mp4/.mov` | **Deferred/experimental** | `AudioLoader` | audio transcript only | NOT "video understanding" |
 
 ## Deferred (locked exclusions — do not advertise)
-`DOC` `.doc` · `XLS` `.xls` · `PPT` `.ppt` · `PST/OST` · `MSG` · `NSF` · `RAR`/`7z` ·
-Keynote (unless proven) · Publisher · browser/iMessage direct DB loading · cloud OCR/ASR.
+`PPT` `.ppt` · `PST/OST` · `MSG` · `NSF` · `RAR`/`7z` (recognized, custody preserved,
+honest-unsupported manifest — never silently empty) · Keynote (unless proven) · Publisher ·
+browser/iMessage direct DB loading · cloud OCR/ASR.
+_(`.doc`/`.xls` moved OUT of this list 2026-08-07 — their Phase 2 structural parsers +
+LegacyOfficeParserTests shipped; the table above is the current truth.)_
 
 ## Acceptance per advertised format (A3.14)
 normal · empty · corrupt · encrypted (where applicable) · huge · duplicate · renamed ·
