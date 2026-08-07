@@ -788,7 +788,20 @@ public final class AppState {
             // migrate().
             let activeEmbeddingModelID = await CoreMLEmbedderProvider().isAvailable()
                 ? "bge-small.v1" : "apple.nl.v1"
-            let vectors = SQLiteVectorStore(database: db, annIndex: hnsw, modelID: activeEmbeddingModelID)
+            // P9.3 (GOV-005) — the strategy coordinator owns BOTH ANN
+            // accelerators (in-memory HNSW + disk-backed IVF) and the
+            // persisted decision; the store consumes only the coordinator,
+            // so every retrieval caller is unchanged.
+            let annRepo = ANNIndexRepository(database: db)
+            let annDimension = activeEmbeddingModelID == "bge-small.v1" ? 384 : NLEmbedder().dimension
+            let annCoordinator = ANNIndexCoordinator(
+                hnsw: hnsw,
+                ivf: IVFDiskVectorIndex(repository: annRepo, modelID: activeEmbeddingModelID,
+                                        dimension: annDimension),
+                repository: annRepo,
+                modelID: activeEmbeddingModelID,
+                dimension: annDimension)
+            let vectors = SQLiteVectorStore(database: db, ann: annCoordinator, modelID: activeEmbeddingModelID)
             let files = FilesRepository(database: db)
             let objects = KnowledgeObjectRepository(database: db)
             let chunks = ChunksRepository(database: db)
@@ -1513,6 +1526,13 @@ public final class AppState {
 
             // ── Concurrency + Live wiring ────────────────────────────
             let backgroundScheduler = BackgroundTaskScheduler()
+            // P9.3 (GOV-005) — index-strategy maintenance runs OFF the query
+            // path: decide (selector + hysteresis) → background rebuild →
+            // flip the persisted strategy; also fires IVF retrains and the
+            // steady-state posting reconcile.
+            await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
+                id: "ann.strategy.maintenance", interval: 300,
+                body: { [annCoordinator] in await annCoordinator.maintain() }))
             let compression = NightlyCompressionScheduler(
                 summarizer: summarizer,
                 memoryRepo: memoryRepo,
@@ -1750,6 +1770,10 @@ public final class AppState {
                 // Cache file lives next to knowledge.sqlite so a DB wipe
                 // also wipes the index.
                 async let hnswWarm: HNSWVectorIndex.BuildStats = {
+                    // P9.3 — warm the persisted ANN strategy first (metadata +
+                    // IVF centroid cache; milliseconds). The HNSW build below
+                    // stays the in-memory strategy's boot job.
+                    await annCoordinator.warm()
                     let cacheURL = resolvedDBURL
                         .deletingLastPathComponent()
                         .appendingPathComponent("hnsw-index.bin")
