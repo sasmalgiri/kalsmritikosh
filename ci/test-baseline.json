@@ -1,5 +1,5 @@
 {
   "minimumExecutedTests": 3354,
-  "baselineCommit": "b2ed69b",
-  "note": "Whole-suite floor from hosted build-and-test on PR #69 head b2ed69b: total=3354 (UI-only sidebar fix — always-visible column + flat Simple-mode nav + expanded Advanced groups; no new executed tests; floor unchanged at 3354). No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit b2ed69b; this evidence commit follows it."
+  "baselineCommit": "d0b90ae",
+  "note": "Whole-suite floor from hosted build-and-test on PR #70 head d0b90ae (macro B: GOV-004 release configuration + OPS-003C port \u2014 Release configuration compiles for the first time; new release-build CI check added): total=3354 passed=3352 failed=0 skipped=2; floor unchanged at 3354. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit d0b90ae; this evidence commit follows it."
 }
