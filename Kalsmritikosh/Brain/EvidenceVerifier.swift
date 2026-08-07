@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import OSLog
 
 public struct EvidenceVerifier: Verifier {
     /// Per-claim citation cap (Item 1 of UPDATE_08). The previous
@@ -182,6 +183,14 @@ public struct EvidenceVerifier: Verifier {
     /// model can resolve pronouns / topic returns against recent turns.
     /// Nil → reranker prompt falls back to the G2-1 question-only form.
     private let sessionProfile: SessionProfile?
+    /// P1 citation integrity (release gate F3) — optional. When present,
+    /// every built citation must resolve to a real canonical source identity
+    /// through one of the approved retrieval layers (chunk / event /
+    /// relationship / deterministic evaluation / authority document, plus a
+    /// ledger-existence probe). Phantom citations are dropped BEFORE the
+    /// reranker; an answer whose citations all fail resolution refuses.
+    /// Nil → pre-P1 behavior, preserved for existing unit fixtures.
+    private let citationResolver: CitationResolver?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -191,7 +200,8 @@ public struct EvidenceVerifier: Verifier {
         entityQualityGate: EntityQualityGate? = nil,
         reranker: Reranker? = nil,
         sessionProfile: SessionProfile? = nil,
-        answerabilityMinRetrievalScore: Double = 0.20
+        answerabilityMinRetrievalScore: Double = 0.20,
+        citationResolver: CitationResolver? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -201,6 +211,7 @@ public struct EvidenceVerifier: Verifier {
         self.reranker = reranker
         self.sessionProfile = sessionProfile
         self.answerabilityMinRetrievalScore = answerabilityMinRetrievalScore
+        self.citationResolver = citationResolver
     }
 
     public func verify(
@@ -280,6 +291,25 @@ public struct EvidenceVerifier: Verifier {
                     snippet: String(claim.statement.prefix(180))
                 ))
             }
+        }
+        // P1 citation-integrity gate (release gate F3). Every citation must
+        // resolve to a real canonical source identity through one of the
+        // approved retrieval layers — NOT just the chunk-score map, which
+        // would wrongly discard event/relationship/authority-backed
+        // citations. Phantom objectIDs are dropped here, before the
+        // reranker spends work on them; phantom eventID annotations are
+        // scrubbed while the citation survives on its objectID authority.
+        var droppedPhantomCitations = 0
+        if let citationResolver {
+            let resolution = await citationResolver.resolve(citations, retrieval: retrieval)
+            droppedPhantomCitations = resolution.rejectedObjectIDs.count
+            if droppedPhantomCitations > 0 {
+                KalsmritikoshLog.brain.warning("EvidenceVerifier: rejected \(droppedPhantomCitations, privacy: .public) phantom citation(s) — objectIDs resolved through no approved retrieval layer")
+            }
+            if !resolution.scrubbedEventIDs.isEmpty {
+                KalsmritikoshLog.brain.warning("EvidenceVerifier: scrubbed \(resolution.scrubbedEventIDs.count, privacy: .public) phantom eventID annotation(s) from citations")
+            }
+            citations = resolution.citations
         }
         // G2-1 — pairwise relevance scoring of (question, candidate
         // citation snippet) via the reranker. Lifts citation precision
@@ -444,7 +474,9 @@ public struct EvidenceVerifier: Verifier {
                 refused: true,
                 refusalReason: claims.isEmpty
                     ? "No expert produced any claim."
-                    : "Evidence below confidence threshold (\(minimumConfidence.value)).",
+                    : (citations.count < minimumCitations && droppedPhantomCitations > 0)
+                        ? "All candidate citations failed canonical source resolution (\(droppedPhantomCitations) phantom citation(s) rejected)."
+                        : "Evidence below confidence threshold (\(minimumConfidence.value)).",
                 report: report
             )
         }
