@@ -215,4 +215,51 @@ public actor ANNIndexRepository {
         WHERE model_id = ? AND cell_id = ?;
         """, [.integer(Int64(delta)), .date(now), .text(modelID), .integer(Int64(cellID))])
     }
+
+    // MARK: - chunk_embeddings read helpers (build/reconcile inputs)
+
+    /// One stored embedding row as build input.
+    public struct EmbeddingRow: Sendable {
+        public let rowid: Int64
+        public let chunkID: UUID
+        public let q: Data
+        public let scale: Double
+    }
+
+    public func embeddingCount(for modelID: String) async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;", [.text(modelID)])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Rowid-paged stream of the model's stored embeddings — the memory-bounded
+    /// build input (same paging idiom as the store's brute-force scan).
+    public func embeddingPage(for modelID: String, afterRowid: Int64, limit: Int) async throws -> [EmbeddingRow] {
+        let rows = try await database.query("""
+        SELECT rowid, chunk_id, q, scale FROM chunk_embeddings
+        WHERE model_id = ? AND rowid > ? ORDER BY rowid LIMIT ?;
+        """, [.text(modelID), .integer(afterRowid), .integer(Int64(limit))])
+        return rows.compactMap { r in
+            guard let rowid = r.int(0), let chunk = r.uuid(1),
+                  let q = r.blob(2), let scale = r.double(3) else { return nil }
+            return EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale)
+        }
+    }
+
+    /// Embeddings that have NO posting yet — the reconcile input that closes
+    /// the build-vs-concurrent-insert race and doubles as the DataHealthCheck
+    /// parity repair. Bounded so a repair pass stays incremental.
+    public func embeddingsMissingPostings(for modelID: String, limit: Int) async throws -> [EmbeddingRow] {
+        let rows = try await database.query("""
+        SELECT e.rowid, e.chunk_id, e.q, e.scale FROM chunk_embeddings e
+        LEFT JOIN ann_postings p ON p.chunk_id = e.chunk_id AND p.model_id = e.model_id
+        WHERE e.model_id = ? AND p.chunk_id IS NULL
+        ORDER BY e.rowid LIMIT ?;
+        """, [.text(modelID), .integer(Int64(limit))])
+        return rows.compactMap { r in
+            guard let rowid = r.int(0), let chunk = r.uuid(1),
+                  let q = r.blob(2), let scale = r.double(3) else { return nil }
+            return EmbeddingRow(rowid: rowid, chunkID: chunk, q: q, scale: scale)
+        }
+    }
 }
