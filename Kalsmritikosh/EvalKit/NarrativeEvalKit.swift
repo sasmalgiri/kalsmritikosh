@@ -156,7 +156,7 @@ public nonisolated enum NarrativeEvalKit {
             var chapters: [NarrativeChapter] = []
             var verified: VerifiedAnswer?
             for await update in await brain.answerStream(question: question.text,
-                                                         access: SensitiveAccessContext.testUnrestricted()) {
+                                                         access: SensitiveAccessContext(scope: .globalOwnerRetrieval())) {
                 switch update {
                 // AEE-M2 — chapters arrive as analysisProgress artifacts; the terminal answer
                 // is verifiedFinal (or incomplete).

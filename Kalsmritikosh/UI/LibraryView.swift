@@ -201,7 +201,7 @@ public struct LibraryView: View {
             defer { streaming = false }
             let q = "Tell me the story of \(topic.title)."
             for await update in await appState.brain.answerStream(question: q,
-                                                                   access: SensitiveAccessContext.testUnrestricted()) {
+                                                                   access: SensitiveAccessContext(scope: .globalOwnerRetrieval())) {
                 switch update {
                 // AEE-M2 — chapters stream as analysisProgress artifacts; terminal = verifiedFinal/incomplete.
                 case .analysisProgress(_, let chapter):

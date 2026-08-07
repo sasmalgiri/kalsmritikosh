@@ -28,11 +28,12 @@
     <!--
       Personal-data categories the app collects (= sends off-device).
       The v1 CONSUMER RELEASE registers ONLY on-device providers (no
-      cloud, no Ollama — enforced in AppState/ReleaseCapabilityProfile),
-      so NO user content, files, questions, or answers ever leave the
-      Mac. The only network egress is an optional, user-initiated model
-      download (model bytes only — no user data). Therefore the release
-      binary collects NOTHING and this array is empty, matching
+      cloud and no network-backed LLM provider of any kind — enforced
+      in AppState/ReleaseCapabilityProfile), and the Release build has
+      the outgoing-network sandbox entitlement DISABLED, so NO user
+      content, files, questions, or answers ever leave the Mac — the
+      release binary has no network egress at all. Therefore it
+      collects NOTHING and this array is empty, matching
       PRIVACY_DATA_FLOW.md and the App Store nutrition label
       ("Data Not Collected").
     -->

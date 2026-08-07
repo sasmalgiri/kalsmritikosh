@@ -9,6 +9,7 @@ GUARDS=(
   no-network-evidence-layers.sh
   no-synthetic-questions-answer-path.sh
   sensitive-scope-mutation-bypass.sh
+  release-configuration.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
