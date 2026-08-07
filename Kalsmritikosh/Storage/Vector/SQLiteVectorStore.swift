@@ -232,28 +232,21 @@ public actor SQLiteVectorStore: VectorStore {
 
     // MARK: - Quantization
 
+    // P9.3 step 2 — quantization delegates to the ONE shared kernel
+    // (VectorQuantization) so ingest, brute force, HNSW and IVF can never
+    // drift numerically. Parity with the previous private copy is pinned by
+    // VectorQuantizationTests.
+
     /// Returns the int8 blob + scale. scale = max|x|/127, falling back to
     /// 1.0 when the vector is all zeros so the blob stays well-defined.
     private func quantize(_ embedding: [Float]) -> (Data, Double) {
-        let (bytes, scale) = quantizeToBytes(embedding)
-        return (Data(bytes), scale)
+        VectorQuantization.quantize(embedding)
     }
 
     /// Returns the int8 quantization as `[UInt8]` so callers can scan the
     /// values without an extra Data → buffer round trip.
     private func quantizeToBytes(_ embedding: [Float]) -> ([UInt8], Double) {
-        var maxAbs: Float = 0
-        for x in embedding { let a = Swift.abs(x); if a > maxAbs { maxAbs = a } }
-        let scale = maxAbs == 0 ? 1.0 : Double(maxAbs) / 127.0
-        var out = [UInt8](repeating: 0, count: embedding.count)
-        if scale > 0 {
-            for i in 0..<embedding.count {
-                let v = (Double(embedding[i]) / scale).rounded()
-                let clamped = Swift.max(-127.0, Swift.min(127.0, v))
-                out[i] = UInt8(bitPattern: Int8(clamped))
-            }
-        }
-        return (out, scale)
+        VectorQuantization.quantizeToBytes(embedding)
     }
 }
 
