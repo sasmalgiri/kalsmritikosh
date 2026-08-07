@@ -12,6 +12,8 @@
     "KalsmritikoshTests/EMLXParserTests",
     "KalsmritikoshTests/MBOXParserTests",
     "KalsmritikoshTests/PlainTextParserTests",
+    "KalsmritikoshTests/MarkdownParserTests",
+    "KalsmritikoshTests/DocxParserTests",
     "KalsmritikoshTests/CSVParserTests",
     "KalsmritikoshTests/RTFParserTests",
     "KalsmritikoshTests/PDFParserTests",
@@ -20,7 +22,9 @@
     "KalsmritikoshTests/EPUBParserTests",
     "KalsmritikoshTests/ImageParserTests",
     "KalsmritikoshTests/OpenDocumentParserTests",
-    "KalsmritikoshTests/LegacyOfficeParserTests"
+    "KalsmritikoshTests/LegacyOfficeParserTests",
+    "KalsmritikoshTests/ContainerSafetyTests",
+    "KalsmritikoshTests/ContainerIngestIntegrationTests"
   ],
   "requiredSuites": [
     "ParserCapabilityManifestTests",
@@ -34,6 +38,8 @@
     "EMLXParserTests",
     "MBOXParserTests",
     "PlainTextParserTests",
+    "MarkdownParserTests",
+    "DocxParserTests",
     "CSVParserTests",
     "RTFParserTests",
     "PDFParserTests",
@@ -42,8 +48,10 @@
     "EPUBParserTests",
     "ImageParserTests",
     "OpenDocumentParserTests",
-    "LegacyOfficeParserTests"
+    "LegacyOfficeParserTests",
+    "ContainerSafetyTests",
+    "ContainerIngestIntegrationTests"
   ],
-  "minimumExecutedTests": 78,
-  "note": "Every currently-registered parser/format-fixture suite found by enumeration, plus EmailTopicExtractorTests (real .eml, subjectless .eml, real 2-message .mbox, cross-message isolation). STATUS: a green parser-fixtures job proves the CURRENTLY REGISTERED fixtures; it does NOT close release gate F1 (the complete advertised-format matrix with a real fixture + expected assertions per advertised format remains PENDING)."
+  "minimumExecutedTests": 126,
+  "note": "Every advertised structural format now has a dedicated fixture suite: macro E added MarkdownParserTests + DocxParserTests (the two advertised formats without one) and pulled the ZIP container suites (safety + end-to-end ingest) into this gate so the advertised 'ZIP' row is fixture-proven here, not only in build-and-test. With this, the advertised-format matrix in SUPPORTED_FORMATS_V1.md is fully fixture-backed (release gate F1 evidence)."
 }

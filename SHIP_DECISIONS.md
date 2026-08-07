@@ -31,7 +31,7 @@ Every technical number here must name its verification evidence, or be marked *u
 | Mode | Contract |
 |---|---|
 | **Fast** | Currently-queryable evidence; deterministic exact paths first; zero model calls when possible; **max 1 generative call** for an ordinary supported question; shows readiness/coverage limits; never fabricates missing fields. |
-| **Deep Analysis** | Completes required deferred work for the scope; broader structured/lexical/dense/temporal/graph evidence; may decompose within a hard request budget; selects only necessary experts; builds contradictions/gaps/alternatives; shows expected resource use and permits cancellation. |
+| **Full Evidence** *(user-facing name; formerly documented "Deep Analysis" — normalized 2026-08-07 to the locked product language already shipped in `ShellAnswerMode.displayName`)* | Completes required deferred work for the scope; broader structured/lexical/dense/temporal/graph evidence; may decompose within a hard request budget; selects only necessary experts; builds contradictions/gaps/alternatives; shows expected resource use and permits cancellation. |
 
 Hard generative-call budgets (enforced, shared across classifier/experts/planner/synthesis/retry/fallback; a failed call still consumes budget): deterministic 0, ordinary 1, moderate 2, complex 3, reconstruction 3, deep-reconstruction 5, investigation 5, unsupported 0.
 
