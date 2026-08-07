@@ -82,9 +82,9 @@ latency makes this an owner/hardware run]`
 peak memory + DB/index size at the target corpus size on the test hardware; the store
 "tested to N GB" figure comes from THIS run and nothing else (SC1/SC2)]`
 
-Scale-strategy note: v1 ships the in-memory HNSW index only; disk-backed/sharded ANN (P9.3)
-is not implemented. Gate 8 scope needs an explicit owner decision: implement P9.3, or supersede
-it with tested-figure-only marketing (GOV-00x entry in SHIP_DECISIONS).
+Scale-strategy decision (GOV-005, 2026-08-07): the owner chose to IMPLEMENT P9.3 (disk-backed/
+sharded ANN + strategy selector + benchmarks) before release. The scale macro precedes closure;
+SC1 executes on the new selector.
 
 ## Privacy / security results
 
