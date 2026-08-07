@@ -12,6 +12,7 @@
 import Foundation
 import Testing
 import CryptoKit
+import os
 @testable import Kalsmritikosh
 
 @Suite("USF-M2 — container ingest integration", .serialized)
@@ -286,5 +287,58 @@ struct ContainerIngestIntegrationTests {
         let m = try await repo.manifest(sourceVersionID: id)
         #expect(m?.status == .unsupported)
         #expect(m?.totalEntries == 0)   // contents unknown ≠ empty
+    }
+
+    // MARK: - Release gates S6/S4 (macro D)
+
+    @Test("The root byte budget blocks members beyond the whole-root expanded-byte ceiling")
+    func rootByteLimit() async throws {
+        let (_, db, repo, _) = try await makeRig()
+        // Two 30-byte members against a 40-byte ROOT ceiling: the first is
+        // admitted, the second must be blocked by the shared root budget —
+        // even though each fits the per-container/per-member caps.
+        let policy = ContainerSafetyPolicy(version: "t", maxEntriesPerContainer: 100, maxExpandedBytesPerContainer: 1 << 30,
+                                           maxSingleMemberBytes: 1 << 30, maxNestingDepth: 8, maxRootTotalMembers: 100,
+                                           maxRootExpandedBytes: 40, maxNestedContainerCount: 100, maxCompressionRatio: 1000)
+        let coord = ContainerProcessingCoordinator(repository: repo, policy: policy)
+        let body = String(repeating: "x", count: 30)
+        let outer = try ZIPTestFixture.writeZIP([ZIPTestFixture.stored("a.txt", body),
+                                                 ZIPTestFixture.stored("b.txt", body)], named: "outer.zip")
+        let outerID = UUID(); try await seedContainer(db, outerID)
+        await coord.expand(containerVersionID: outerID, containerType: .zip, byteURL: outer,
+                           context: .root(sourceVersionID: outerID, containerHash: "h", policy: policy), now: Date(), ingestMember: seedingStub(db))
+        let ms = try await repo.members(parentSourceVersionID: outerID)
+        #expect(ms.filter { $0.disposition == .admitted }.count == 1)
+        #expect(ms.contains { $0.disposition == .blockedRootBudget })
+    }
+
+    @Test("S4 — the extraction temp directory is removed after expand(), on success AND when a member fails extraction")
+    func extractionTempDirCleanedUp() async throws {
+        let (_, db, repo, _) = try await makeRig()
+        let coord = ContainerProcessingCoordinator(repository: repo, policy: .standard)
+        // One good member + one corrupt DEFLATE member: the good one reaches the
+        // ingest closure (which sees the byteURL INSIDE the temp root), the bad
+        // one takes the failedExtraction path — cleanup must hold on both.
+        let outer = try ZIPTestFixture.writeZIP([
+            ZIPTestFixture.stored("good.txt", "good body"),
+            ZIPTestFixture.Entry(name: "bad.bin", data: Data(repeating: 1, count: 200), method: 8, corrupt: true, declaredUncompressed: 200),
+        ], named: "outer.zip")
+        let outerID = UUID(); try await seedContainer(db, outerID)
+        // Capture the temp extraction root via the byteURL handed to the ingest
+        // closure — deterministic, no temp-directory scanning.
+        let captured = OSAllocatedUnfairLock<URL?>(initialState: nil)
+        let stub = seedingStub(db)
+        await coord.expand(containerVersionID: outerID, containerType: .zip, byteURL: outer,
+                           context: .root(sourceVersionID: outerID, containerHash: "h"), now: Date()) { byteURL, origin, parent in
+            captured.withLock { $0 = byteURL.deletingLastPathComponent() }
+            return await stub(byteURL, origin, parent)
+        }
+        let tempRoot = try #require(captured.withLock { $0 })
+        #expect(!FileManager.default.fileExists(atPath: tempRoot.path),
+                "extraction temp directory must not survive expand()")
+        // The failed member stays VISIBLE, honestly disposed.
+        let ms = try await repo.members(parentSourceVersionID: outerID)
+        #expect(ms.contains { $0.disposition == .failedExtraction })
+        #expect(ms.contains { $0.disposition == .admitted })
     }
 }

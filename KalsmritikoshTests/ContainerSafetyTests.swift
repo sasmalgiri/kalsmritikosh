@@ -204,6 +204,16 @@ struct ContainerSafetyTests {
         }
     }
 
+    @Test("S6 — a zero-byte member is legal: admitted by the inspector and extracted byte-exact to empty")
+    func zeroByteMemberIsValid() throws {
+        let (n, data) = try extract(ZIPTestFixture.stored("empty.txt", ""))
+        #expect(n == 0)
+        #expect(data.isEmpty)
+        let url = try ZIPTestFixture.writeZIP([ZIPTestFixture.stored("empty.txt", "")])
+        let e = ZIPContainerInspector.inspect(url: url, containerType: .zip, policy: .standard)
+        #expect(e.members.first?.disposition == .admitted)
+    }
+
     // MARK: - Inspector classification (§15)
 
     @Test("The inspector assigns exactly one disposition to every member, none dropped")
