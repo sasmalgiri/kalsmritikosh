@@ -41,7 +41,7 @@ Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_
 ## D. Scale gate
 | Gate | Requirement | Evidence | State |
 |---|---|---|---|
-| SC1 | Market only the largest corpus actually tested on owner hardware | recorded owner-hardware run (GB figure) | PENDING |
+| SC1 | Market only the largest corpus actually tested on owner hardware | GOV-005 engineering COMPLETE (PR #76 run 31181872761: disk-backed IVF ANN + strategy selector + ANNBenchmark); owner runs the prepared one-command (OWNER_ACCEPTANCE_CHECKLIST §5) and records the marketed figure | OWNER ACTION REQUIRED |
 | SC2 | No unverified 100 GB / 1 TB claim in any copy | copy audit vs SHIP_DECISIONS | PENDING |
 
 ## E. Owner acceptance (per persona: Investigator, Researcher, Journalist, Individual, Lawyer)
