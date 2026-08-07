@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3389,
-  "baselineCommit": "db57efe",
-  "note": "Whole-suite floor from hosted build-and-test on PR #73 head db57efe (macro E: F1 advertised-format matrix fixture-backed + F2 five-persona coverage/routing + mode-name normalization): total=3389 passed=3387 failed=0 skipped=2; floor RAISED 3377 -> 3389. parser-fixtures group floor raised 78 -> 126 in the same macro. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375."
+  "minimumExecutedTests": 3400,
+  "baselineCommit": "231a104",
+  "note": "Whole-suite floor from hosted build-and-test on PR #74 head 231a104 (macro F: T1 truth invariance + persona-neutral-truth guard, T3 duplicate-source independence, \u00a719 deterministic 60Q retrieval gold eval with measured floors): total=3400 passed=3398 failed=0 skipped=2; floor RAISED 3389 -> 3400. No schema change (latestVersion stays 102); migration floor 375; parser-fixtures floor 126."
 }

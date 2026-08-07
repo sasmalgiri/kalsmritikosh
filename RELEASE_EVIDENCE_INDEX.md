@@ -22,9 +22,9 @@ Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_
 ## B. Truth gates (all must be zero / always)
 | Gate | Requirement | Evidence | State |
 |---|---|---|---|
-| T1 | Persona truth divergence = zero | (cross-persona truth test) | PENDING |
+| T1 | Persona truth divergence = zero | CrossPersonaTruthInvarianceTests (same destinations all personas/modes; PersonaRoutingContext + PersonaPolicy pinned to exact presentation/default field sets; shared builder+policy persona-blind) + ci/guards/persona-neutral-truth.sh (evidence layers may never reference persona/shell types) + Claim personaInvariance (structural); hosted-green PR #74 run 31172818544 | INTEGRATION |
 | T2 | Unsupported material Claims exported = zero | fail-closed validator tests | INTEGRATION |
-| T3 | Duplicate evidence counted as independent corroboration = zero | (QUALITY-002 independence tests) | PENDING |
+| T3 | Duplicate evidence counted as independent corroboration = zero | DuplicateSourceIndependenceTests through the SHARED AssertabilityContextBuilder (dup/forwarded copies collapse to one group; unkeyed/blank keys contribute nothing; pile + one independent = exactly two groups) + AssertabilityPolicyTests; production keys batch-resolved in HybridRetriever; hosted-green PR #74 run 31172818544 | INTEGRATION |
 | T4 | Silent global fallback = zero | no-fallback assembly tests + arch guard | INTEGRATION |
 | T5 | Confirmed professional decisions always have a human audit record | Stage 3 engine enforces human-only decision/approval (humanDecision/humanApproval require `actorKind==.human` + non-blank identity), persisted as a tamper-evident `WorkflowDecision` with provenance basis (WorkflowRunRepositoryTests, PJE006C decision/approval suites, PJE011 tamperDecisionBasisDetected) | INTEGRATION |
 
