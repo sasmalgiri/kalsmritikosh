@@ -3,7 +3,9 @@
 **Status: CURRENT.** MIG-001A (2026-07-25). Inventory of the representative schema-migration
 fixtures and the invariants each proves. Authority: `WHOLE_PROJECT_COMPLETION_PROGRAM.md` Stage 1.
 
-Schema head is **v70** (`SchemaMigrations.latestVersion`); v67 added nullable `scope_kind` /
+Schema head is **v103** (`SchemaMigrations.latestVersion`; v103 = P9.3/GOV-005 disk-backed ANN
+state — ann_index_meta/ann_cells/ann_postings, DDL only, ANNIndexMigrationTests in the
+migration-matrix gate, floor 385). Historical note (v70-era text below retained): v67 added nullable `scope_kind` /
 `scope_id` to `claims`; **v68 (OPS-001)** adds the professional Issue Engine tables
 (`professional_issues`, `professional_issue_links`, `professional_issue_reviews`); **v69
 (OPS-002)** adds the Task and Deadline Engine tables (`professional_tasks`,

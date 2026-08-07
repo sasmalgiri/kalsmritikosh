@@ -79,7 +79,7 @@ struct RetrievalGoldEvalTests {
             chunks: chunks,
             summaries: SummariesRepository(database: db),
             graph: GraphStore(relationships: RelationshipsRepository(database: db)),
-            vectors: SQLiteVectorStore(database: db, annIndex: HNSWVectorIndex(), modelID: "apple.nl.v1"),
+            vectors: SQLiteVectorStore(database: db, modelID: "apple.nl.v1"),
             embedder: NLEmbedder(),
             objects: objects)
 

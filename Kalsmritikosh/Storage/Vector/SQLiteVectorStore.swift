@@ -17,11 +17,12 @@ import Accelerate
 
 public actor SQLiteVectorStore: VectorStore {
     private let database: Database
-    /// Optional ANN accelerator. When wired AND built, `nearest()` hits
-    /// the HNSW index instead of brute-forcing every row. SQL stays
-    /// the durable source-of-truth; the index is rebuilt from SQL on
-    /// every cold boot.
-    private let annIndex: HNSWVectorIndex?
+    /// Optional ANN accelerator (P9.3): the coordinator owns BOTH the
+    /// in-memory HNSW and the disk-backed IVF index plus the persisted
+    /// strategy decision. When it can serve, `nearest()` takes the index
+    /// path; SQL stays the durable source-of-truth and the brute-force scan
+    /// remains the always-correct fallback.
+    private let ann: ANNIndexCoordinator?
 
     /// v54 — the model whose rows in `chunk_embeddings` this store owns. All
     /// reads/writes are scoped `WHERE model_id = <this>` so an Apple index and
@@ -37,12 +38,12 @@ public actor SQLiteVectorStore: VectorStore {
 
     public init(
         database: Database,
-        annIndex: HNSWVectorIndex? = nil,
+        ann: ANNIndexCoordinator? = nil,
         modelID: String = "apple.nl.v1",
         modelVersion: String = "1"
     ) {
         self.database = database
-        self.annIndex = annIndex
+        self.ann = ann
         self.embeddingModelID = modelID
         self.embeddingModelVersion = modelVersion
     }
@@ -107,6 +108,9 @@ public actor SQLiteVectorStore: VectorStore {
             .real(scale),
             .date(Date())
         ])
+        // P9.3 — keep the disk index durably fresh in the SAME call chain as
+        // the ledger write (staleness structurally impossible on this path).
+        await ann?.noteUpsert(chunkID: chunkID, q: qBlob, scale: scale)
     }
 
     public func nearest(
@@ -115,24 +119,17 @@ public actor SQLiteVectorStore: VectorStore {
         candidateChunkIDs: [Chunk.ID]?
     ) async throws -> [VectorHit] {
         guard !embedding.isEmpty, limit > 0 else { return [] }
-        // ANN hot path: when the HNSW index is built AND no
-        // pre-filter is requested (candidateChunkIDs == nil), the
-        // index answers in O(log N) instead of O(N) brute-force.
-        // Pre-filtered queries still take the SQL path so the
-        // vector layer can honour upstream layer prefilters.
-        if let ann = annIndex, candidateChunkIDs == nil, await ann.isBuilt() {
-            // Only trust the ANN when it's in sync with the ledger. It's built
-            // once (often at boot, before the background embedding drain has
-            // written this session's vectors), and isn't rebuilt on every
-            // upsert — so a stale/empty index would silently return nothing and
-            // bypass the durable SQL scan (observed: vector retrieval dead after
-            // a fresh ingest, lookup recall 0.07). When the index is smaller
-            // than the stored vector count, fall through to the SQL brute-force,
-            // which always reflects the current embeddings.
-            let annSize = await ann.size()
-            let stored = (try? await self.count()) ?? annSize
-            if annSize > 0 && annSize >= stored {
-                return await ann.nearest(to: embedding, limit: limit)
+        // ANN hot path (P9.3): the coordinator serves via the PERSISTED
+        // strategy — in-memory HNSW (with its historical size >= stored
+        // in-sync guard, the fix for the stale-index recall-0.07 incident)
+        // or the disk-backed IVF (transactionally in sync by construction).
+        // Pre-filtered queries still take the SQL path so the vector layer
+        // honours upstream prefilters; a nil answer falls through to the
+        // always-correct brute-force scan.
+        if let ann, candidateChunkIDs == nil {
+            let stored = (try? await self.count()) ?? 0
+            if let hits = await ann.nearest(to: embedding, limit: limit, storedCount: stored) {
+                return hits
             }
         }
         let (qBytes, queryScale) = quantizeToBytes(embedding)
@@ -223,37 +220,31 @@ public actor SQLiteVectorStore: VectorStore {
 
     public func remove(chunkID: Chunk.ID) async throws {
         // Remove this model's embedding for the chunk. (Chunk deletion itself
-        // cascades all models via the FK.)
+        // cascades all models via the FK, ann_postings included.)
         try await database.exec(
             "DELETE FROM chunk_embeddings WHERE chunk_id = ? AND model_id = ?;",
             [.uuid(chunkID), .text(embeddingModelID)]
         )
+        await ann?.noteRemove(chunkID: chunkID)
     }
 
     // MARK: - Quantization
 
+    // P9.3 step 2 — quantization delegates to the ONE shared kernel
+    // (VectorQuantization) so ingest, brute force, HNSW and IVF can never
+    // drift numerically. Parity with the previous private copy is pinned by
+    // VectorQuantizationTests.
+
     /// Returns the int8 blob + scale. scale = max|x|/127, falling back to
     /// 1.0 when the vector is all zeros so the blob stays well-defined.
     private func quantize(_ embedding: [Float]) -> (Data, Double) {
-        let (bytes, scale) = quantizeToBytes(embedding)
-        return (Data(bytes), scale)
+        VectorQuantization.quantize(embedding)
     }
 
     /// Returns the int8 quantization as `[UInt8]` so callers can scan the
     /// values without an extra Data → buffer round trip.
     private func quantizeToBytes(_ embedding: [Float]) -> ([UInt8], Double) {
-        var maxAbs: Float = 0
-        for x in embedding { let a = Swift.abs(x); if a > maxAbs { maxAbs = a } }
-        let scale = maxAbs == 0 ? 1.0 : Double(maxAbs) / 127.0
-        var out = [UInt8](repeating: 0, count: embedding.count)
-        if scale > 0 {
-            for i in 0..<embedding.count {
-                let v = (Double(embedding[i]) / scale).rounded()
-                let clamped = Swift.max(-127.0, Swift.min(127.0, v))
-                out[i] = UInt8(bitPattern: Int8(clamped))
-            }
-        }
-        return (out, scale)
+        VectorQuantization.quantizeToBytes(embedding)
     }
 }
 

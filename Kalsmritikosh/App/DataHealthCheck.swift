@@ -162,8 +162,32 @@ public enum DataHealthCheck {
             return ids.sorted()
         }()
 
+        // P9.3 (GOV-005) — disk-ANN parity tripwire: when a model's persisted
+        // strategy is diskIVF and its index claims ready, every stored
+        // embedding must have a posting. A mismatch means the reconcile pass
+        // is behind (the maintenance job repairs it) — surfacing it here
+        // makes a silent-degradation regression impossible to miss.
+        var annParityIssues: [String] = []
+        if let metaRows = try? await database.query(
+            "SELECT model_id, strategy, state FROM ann_index_meta;", []) {
+            for row in metaRows {
+                guard let modelID = row.string(0), row.string(1) == "diskIVF", row.string(2) == "ready"
+                else { continue }
+                let embeddings = Int((try? await database.query(
+                    "SELECT COUNT(*) FROM chunk_embeddings WHERE model_id = ?;",
+                    [.text(modelID)]))?.first?.int(0) ?? 0)
+                let postings = Int((try? await database.query(
+                    "SELECT COUNT(*) FROM ann_postings WHERE model_id = ?;",
+                    [.text(modelID)]))?.first?.int(0) ?? 0)
+                if postings != embeddings {
+                    annParityIssues.append("ANN postings/embeddings parity broken for \(modelID): \(postings) postings vs \(embeddings) embeddings — the ann.strategy.maintenance reconcile will repair; if it persists, the maintenance job is not running")
+                }
+            }
+        }
+
         // ── Identify issues ──────────────────────────────────────────
         var issues: [String] = []
+        issues.append(contentsOf: annParityIssues)
         if fileCount > 0, filesNoKO > 0 {
             let pct = Double(filesNoKO) / Double(fileCount) * 100
             issues.append("\(filesNoKO) of \(fileCount) files have NO KnowledgeObject row (\(String(format: "%.1f", pct))%) — loader failure or unsupported type")

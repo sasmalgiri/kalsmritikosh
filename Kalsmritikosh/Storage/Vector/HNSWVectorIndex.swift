@@ -640,19 +640,10 @@ public actor HNSWVectorIndex {
         return sumSq.squareRoot() * scale
     }
 
+    // P9.3 step 2 — delegates to the ONE shared kernel (VectorQuantization);
+    // parity with the previous private copy is pinned by VectorQuantizationTests.
     private func quantize(_ embedding: [Float]) -> ([UInt8], Double) {
-        var maxAbs: Float = 0
-        for x in embedding { let a = Swift.abs(x); if a > maxAbs { maxAbs = a } }
-        let scale = maxAbs == 0 ? 1.0 : Double(maxAbs) / 127.0
-        var out = [UInt8](repeating: 0, count: embedding.count)
-        if scale > 0 {
-            for i in 0..<embedding.count {
-                let v = (Double(embedding[i]) / scale).rounded()
-                let clamped = Swift.max(-127.0, Swift.min(127.0, v))
-                out[i] = UInt8(bitPattern: Int8(clamped))
-            }
-        }
-        return (out, scale)
+        VectorQuantization.quantizeToBytes(embedding)
     }
 
     // MARK: - Random layer (xorshift64* — deterministic, no need for SystemRandomNumberGenerator)
