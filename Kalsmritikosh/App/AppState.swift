@@ -1195,7 +1195,24 @@ public final class AppState {
                 },
                 entityQualityGate: EntityQualityGate.bundled(),
                 reranker: reranker,
-                sessionProfile: sessionProfile
+                sessionProfile: sessionProfile,
+                // P1 citation integrity (release gate F3) — citations must
+                // resolve through the approved retrieval layers AND still
+                // exist in the ledger. On probe error the resolver fails
+                // OPEN to the union verdict (the ID already came from this
+                // request's scope-filtered retrieval); failing closed here
+                // would nuke every answer on a transient DB hiccup.
+                citationResolver: CitationResolver(
+                    ledgerObjectProbe: { [weak objects] ids in
+                        guard let objects else { return ids }
+                        return (try? await objects.existingIDs(ids)) ?? ids
+                    },
+                    ledgerEventProbe: { [weak events] ids in
+                        guard let events else { return ids }
+                        let found = (try? await events.findByIDs(Array(ids))) ?? []
+                        return Set(found.map(\.id))
+                    }
+                )
             )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,

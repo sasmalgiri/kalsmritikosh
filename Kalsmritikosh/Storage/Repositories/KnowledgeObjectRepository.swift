@@ -42,6 +42,23 @@ public actor KnowledgeObjectRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// P1 citation-integrity probe — the subset of `ids` that exist as real
+    /// knowledge_objects rows. CitationResolver uses this as the
+    /// deleted/broken-target guard; citation lists are small (intent caps
+    /// keep them ≤ 8 after capping, ≤ ~24 raw), so per-id EXISTS probes are
+    /// simpler than a dynamic IN clause.
+    public func existingIDs(_ ids: Set<KnowledgeObject.ID>) async throws -> Set<KnowledgeObject.ID> {
+        var out = Set<KnowledgeObject.ID>()
+        out.reserveCapacity(ids.count)
+        for id in ids {
+            let rows = try await database.query(
+                "SELECT 1 FROM knowledge_objects WHERE id = ? LIMIT 1;", [.uuid(id)]
+            )
+            if !rows.isEmpty { out.insert(id) }
+        }
+        return out
+    }
+
     /// v54 per-document atomicity — remove a KO and everything derived from it.
     /// Every derived table (chunks, chunk_embeddings, entity_mentions, events,
     /// qa_pairs, …) declares `ON DELETE CASCADE` on its knowledge_objects FK and
