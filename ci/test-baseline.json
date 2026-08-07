@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3369,
-  "baselineCommit": "2142ffa",
-  "note": "Whole-suite floor from hosted build-and-test on PR #71 head 2142ffa (macro C: citation-integrity P1 closure \u2014 CitationResolver authority union, 15 new tests): total=3369 passed=3367 failed=0 skipped=2; floor RAISED 3354 -> 3369. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit 2142ffa; this evidence commit follows it."
+  "minimumExecutedTests": 3377,
+  "baselineCommit": "c3fee52",
+  "note": "Whole-suite floor from hosted build-and-test on PR #72 head c3fee52 (macro D: release security gates S3/S4/S6 closure tests): total=3377 passed=3375 failed=0 skipped=2; floor RAISED 3369 -> 3377. No schema change (latestVersion stays 102); migration-matrix floor unchanged at 375. Two-run protocol: baselineCommit is the impl commit c3fee52; this evidence commit follows it."
 }
