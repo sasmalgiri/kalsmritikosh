@@ -91,7 +91,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
 
     // 4. Ask the canonical question.
     let answer = await state.brain.answer(question: "Why was Project Delta delayed?",
-                                          access: SensitiveAccessContext.testUnrestricted())
+                                          access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
 
     // 5. Assertions.
     let entityCount = (try? await countAllEntities(entities)) ?? 0
@@ -162,7 +162,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     var historyVerified: VerifiedAnswer?
     for await update in await state.brain.answerStream(
         question: "Reconstruct the history of Project Delta.",
-        access: SensitiveAccessContext.testUnrestricted()
+        access: SensitiveAccessContext(scope: .globalOwnerRetrieval())
     ) {
         switch update {
         // AEE-M2 — chapters stream as analysisProgress artifacts; terminal = verifiedFinal/incomplete.
@@ -1038,7 +1038,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     do {
         let mmrAnswer = await state.brain.answer(
             question: "List all delays mentioned across the Project Delta archive.",
-            access: SensitiveAccessContext.testUnrestricted()
+            access: SensitiveAccessContext(scope: .globalOwnerRetrieval())
         )
         // A3 in the eval is an aggregation question — cap is 8.
         // The smoke ProjectDelta fixture has 6-8 KOs depending on what

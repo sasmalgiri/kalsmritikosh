@@ -83,7 +83,7 @@ public actor InvestigationRunner {
                     }
                     continuation.yield(.stepStarted(stepID: step.id))
                     let answer = await brain.answer(question: step.question, context: llmContext,
-                                                   access: SensitiveAccessContext.testUnrestricted())
+                                                   access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
                     var withAnswer = step
                     withAnswer.answer = answer
                     completedSteps.append(withAnswer)

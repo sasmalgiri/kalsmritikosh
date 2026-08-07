@@ -748,7 +748,7 @@ public struct HistoryView: View {
         error = nil
         defer { streaming = false }
         let stream = await appState.brain.answerStream(question: trimmed,
-                                                       access: SensitiveAccessContext.testUnrestricted())
+                                                       access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
         for await update in stream {
             switch update {
             // AEE-M2 — chapters stream as analysisProgress artifacts; the terminal answer is

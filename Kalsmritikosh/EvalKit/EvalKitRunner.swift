@@ -183,7 +183,7 @@ public struct EvalKitRunner {
             // harness is the only caller that resets per-question.
             await brain.resetSession()
             let started = Date()
-            let answer = await brain.answer(question: q.text, access: SensitiveAccessContext.testUnrestricted())
+            let answer = await brain.answer(question: q.text, access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
             let latency = Date().timeIntervalSince(started)
             // UPDATE_13 Item 4 — keyword-hit must score against the
             // synthesized answer text only, not the full body. Otherwise
@@ -270,7 +270,7 @@ public struct EvalKitRunner {
         for q in questions {
             await brain.resetSession()
             let started = Date()
-            let answer = await brain.answer(question: q.text, access: SensitiveAccessContext.testUnrestricted())
+            let answer = await brain.answer(question: q.text, access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
             let latency = Date().timeIntervalSince(started)
             let scoringText = (answer.answerText ?? answer.body).lowercased()
             let keywordHit = q.expectedKeywords.allSatisfy {

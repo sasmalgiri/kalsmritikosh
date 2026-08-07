@@ -81,8 +81,10 @@ public enum SensitiveRetrievalError: Error, Sendable {
 extension SensitiveAccessContext {
     /// DEBUG-ONLY factory: maximally permissive access context that bypasses workspace
     /// enforcement (sentinel UUID skips the workspace-sources check in
-    /// SensitiveRetrievalPolicy). Use ONLY in tests, SmokeTest, NarrativeEvalKit, and
-    /// UI callers not yet ported to workspace-scoped access (OPS-003C).
+    /// SensitiveRetrievalPolicy). Use ONLY in KalsmritikoshTests. All app-target
+    /// callers (UI, SmokeTest, EvalKit, InvestigationRunner) use the production
+    /// `.globalOwnerRetrieval()` scope instead — OPS-003C port completed 2026-08-07,
+    /// which is what makes the Release configuration compile at all.
     /// Must NOT be reachable from consumer-release builds.
     public static func testUnrestricted(
         purpose: SensitiveUsePurpose = .retrieval

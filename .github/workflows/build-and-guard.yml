@@ -125,6 +125,51 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  # ── Release-configuration build gate ──────────────────────────────────────
+  # The TRUE Release configuration must compile (a Debug build is never release
+  # verification). Added 2026-08-07 after discovering Release had NEVER built:
+  # DEBUG-only SensitiveAccessContext.testUnrestricted() was referenced from
+  # production UI/Brain/EvalKit paths (OPS-003C debt). This gate keeps every PR
+  # honest about the shipping configuration.
+  release-build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          lfs: false
+      - name: Select Xcode (newest available on the runner)
+        run: |
+          NEWEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$NEWEST" ]; then sudo xcode-select -s "$NEWEST"; else sudo xcode-select -s /Applications/Xcode.app; fi
+          xcodebuild -version
+      - name: Build (Release)
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Kalsmritikosh.xcodeproj \
+            -scheme Kalsmritikosh \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath build/release-derived \
+            -skipMacroValidation \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee release-build.log
+          grep -q "BUILD SUCCEEDED" release-build.log
+      - name: Upload log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-log
+          path: release-build.log
+          retention-days: 14
+          if-no-files-found: ignore
+
   # ── Specialized gates (CI-001B / CI-001C) ─────────────────────────────────
   # Independently-enforceable named checks over versioned test groups
   # (ci/test-groups/*.json). Each runs in isolated build paths and verifies its own

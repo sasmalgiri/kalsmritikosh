@@ -108,7 +108,7 @@ public struct KillerFeaturesView: View {
         answer = nil
         Task {
             let result = await appState.brain.answer(question: q,
-                                                      access: SensitiveAccessContext.testUnrestricted())
+                                                      access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
             await MainActor.run {
                 self.answer = result
                 self.running = false
