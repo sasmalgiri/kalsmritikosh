@@ -254,11 +254,90 @@ public struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @Namespace private var sidebarNS
 
+    /// SHELL-001 live wiring — browser-style Back/Forward across surfaces.
+    /// The durable model + repository landed with SHELL-001; this connects
+    /// them to the actual UI: every navigate() pushes an entry, the toolbar
+    /// chevrons walk the cursor, and the whole history autosaves so a
+    /// relaunch resumes exactly where the user left off.
+    @State private var navHistory = AppNavigationHistory()
+    /// True once resume has run (or found nothing) — pushes before that
+    /// would race the restored history.
+    @State private var navRestored = false
+
     /// Single navigation entry point. Records the outgoing screen for the
-    /// ⌘\ quick-swap, then animates to the new one.
+    /// ⌘\ quick-swap, pushes the new location into the durable Back/Forward
+    /// history (SHELL-001), then animates to the new one.
     private func navigate(to dest: Destination) {
         if let current = selection, current != dest { previousSelection = current }
         withAnimation(Theme.springFast) { selection = dest }
+        navHistory.navigate(to: AppNavigationEntry(
+            destination: Self.navBucket(for: dest),
+            contextKind: "surface",
+            contextID: dest.rawValue))
+        autosaveNavHistory()
+    }
+
+    /// Back one location (⌘[ or the toolbar chevron).
+    private func navGoBack() {
+        guard let entry = navHistory.goBack() else { return }
+        applyNavEntry(entry)
+        autosaveNavHistory()
+    }
+
+    /// Forward one location (⌘] or the toolbar chevron).
+    private func navGoForward() {
+        guard let entry = navHistory.goForward() else { return }
+        applyNavEntry(entry)
+        autosaveNavHistory()
+    }
+
+    /// Show a history entry WITHOUT pushing (cursor moves only — that's the
+    /// browser contract). The exact surface round-trips via contextID.
+    private func applyNavEntry(_ entry: AppNavigationEntry) {
+        guard let dest = entry.contextID.flatMap(Destination.init(rawValue:)) else { return }
+        if let current = selection, current != dest { previousSelection = current }
+        withAnimation(Theme.springFast) { selection = dest }
+    }
+
+    private func autosaveNavHistory() {
+        let snapshot = navHistory
+        Task { try? await appState.shellSession?.saveHistory(scopeKey: "shell.root", history: snapshot, at: Date()) }
+    }
+
+    /// Resume the last session's history (entries + cursor) and land on the
+    /// exact surface that was open. Runs once, before any user navigation.
+    private func resumeNavHistory() async {
+        defer { navRestored = true }
+        guard !navRestored else { return }
+        if let history = try? await appState.shellSession?.loadHistory(scopeKey: "shell.root"),
+           !history.isEmpty {
+            navHistory = history
+            if let entry = history.current { applyNavEntry(entry) }
+        } else if let dest = selection {
+            // Fresh session — seed the history with the launch surface.
+            navHistory.navigate(to: AppNavigationEntry(
+                destination: Self.navBucket(for: dest),
+                contextKind: "surface",
+                contextID: dest.rawValue))
+        }
+    }
+
+    /// Coarse mapping of every UI surface into the closed SHELL-001
+    /// destination vocabulary; the EXACT surface rides in contextID.
+    private static func navBucket(for dest: Destination) -> AppNavigationDestination {
+        switch dest {
+        case .home:                                                   return .home
+        case .ask, .search, .answers, .saved:                         return .answers
+        case .work:                                                   return .jobs
+        case .sources, .convert, .live, .completeness, .workspaces:   return .sources
+        case .timeline, .history, .changes:                           return .timeline
+        case .knowledge, .assertions, .insights, .library,
+             .transcripts:                                            return .entities
+        case .connections, .explore, .matrix:                         return .relationships
+        case .findings, .notebook, .dossier, .story, .review,
+             .handoff, .verifyReceipt, .audit:                        return .reports
+        case .guide, .settings:                                       return .settings
+        }
     }
 
     public init() {}
@@ -339,6 +418,22 @@ public struct RootView: View {
                 }
                 .navigationTitle(selection?.title ?? "Kalsmritikosh")
                 .toolbar {
+                    // SHELL-001 — browser-style location Back/Forward, deliberately
+                    // distinct from any workflow's Prev/Next stepping.
+                    ToolbarItemGroup(placement: .navigation) {
+                        Button(action: navGoBack) {
+                            Image(systemName: "chevron.backward")
+                        }
+                        .disabled(!navHistory.canGoBack)
+                        .keyboardShortcut("[", modifiers: .command)
+                        .help("Back — previous place you visited  (⌘[)")
+                        Button(action: navGoForward) {
+                            Image(systemName: "chevron.forward")
+                        }
+                        .disabled(!navHistory.canGoForward)
+                        .keyboardShortcut("]", modifiers: .command)
+                        .help("Forward  (⌘])")
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button { showPalette = true } label: {
                             Image(systemName: "magnifyingglass")
@@ -354,6 +449,7 @@ public struct RootView: View {
         .frame(minWidth: 880, minHeight: 620)
         .background(shortcutButtons)
         .overlay(paletteOverlay)
+        .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
         .sheet(isPresented: $presentingOnboarding) {
             OnboardingView()
                 .environment(appState)
