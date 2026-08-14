@@ -76,6 +76,20 @@ public actor Database {
         // "database is locked" errors. 30 s gives SQLite room to wait
         // out any in-flight transaction without raising.
         try Self.execRaw(handle: db, sql: "PRAGMA busy_timeout=30000;")
+        // PERF-1 — modern read tuning, all zero-dependency and reversible:
+        //  • mmap_size: memory-map up to 256 MB of the DB so large sequential
+        //    reads (FTS scans, vector/posting range reads, migration walks)
+        //    avoid read() syscall + buffer-copy overhead. Best-effort — SQLite
+        //    silently caps to what the platform allows and falls back to
+        //    normal I/O, so this can only help.
+        //  • cache_size: negative = KiB, so -20000 ≈ 20 MB page cache (up from
+        //    the ~2 MB default), cutting page re-reads on repeated queries.
+        //  • temp_store=MEMORY: keep transient sort/GROUP BY/index-build spills
+        //    in RAM rather than a temp file. All bounded, none affect
+        //    durability (WAL + synchronous=NORMAL unchanged).
+        try? Self.execRaw(handle: db, sql: "PRAGMA mmap_size=268435456;")
+        try? Self.execRaw(handle: db, sql: "PRAGMA cache_size=-20000;")
+        try? Self.execRaw(handle: db, sql: "PRAGMA temp_store=MEMORY;")
     }
 
     deinit {
