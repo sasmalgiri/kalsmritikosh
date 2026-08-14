@@ -27,6 +27,9 @@ public struct AuditView: View {
     @State private var decisionCount = 0
     @State private var mismatchCount = 0
     @State private var loaded = false
+    @State private var integrityStatus: String?
+    @State private var integrityIntact = true
+    @State private var verifying = false
 
     public init() {}
 
@@ -34,6 +37,7 @@ public struct AuditView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                integrityBar
                 summary
                 if mismatchCount > 0 { tamperBanner }
                 if entries.isEmpty && loaded {
@@ -62,6 +66,33 @@ public struct AuditView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .cardSurface(cornerRadius: 16, tint: Theme.brand)
+    }
+
+    // AUD-CHAIN — the tamper-evident integrity chain over both ledgers. The
+    // button seals any new events, then re-verifies the whole chain end to end
+    // and reports the first broken seal (or confirms it is intact).
+    private var integrityBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: integrityIntact ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(integrityIntact ? .green : .red)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Integrity chain")
+                    .font(.callout.weight(.semibold))
+                Text(integrityStatus ?? "Each recorded event is cryptographically linked to the one before it. Verify to confirm nothing has been altered, inserted, or removed.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button {
+                Task { await verifyIntegrity() }
+            } label: {
+                if verifying { ProgressView().controlSize(.small) }
+                else { Label("Verify integrity", systemImage: "checkmark.shield") }
+            }
+            .disabled(verifying)
+        }
+        .padding(12)
+        .cardSurface(cornerRadius: 12, tint: integrityIntact ? Theme.brand : .red)
     }
 
     private var summary: some View {
@@ -151,6 +182,29 @@ public struct AuditView: View {
         merged.sort { $0.date > $1.date }
         entries = Array(merged.prefix(500))
         loaded = true
+    }
+
+    private func verifyIntegrity() async {
+        guard let chain = appState.auditChain else {
+            integrityStatus = "Integrity chain unavailable on this build."
+            return
+        }
+        verifying = true
+        defer { verifying = false }
+        _ = try? await chain.seal()                       // seal any new events first
+        guard let v = try? await chain.verify() else {
+            integrityStatus = "Verification could not run."
+            return
+        }
+        integrityIntact = v.isIntact
+        if v.isIntact {
+            let extra = v.unsealedCount > 0 ? " (\(v.unsealedCount) just-recorded event\(v.unsealedCount == 1 ? "" : "s") pending the next seal)" : ""
+            integrityStatus = "Intact — \(v.sealedCount) event\(v.sealedCount == 1 ? "" : "s") verified, none altered\(extra)."
+        } else if let seq = v.missingEventSeq {
+            integrityStatus = "BROKEN — a sealed event (position \(seq)) is missing from the ledger. The record was tampered with."
+        } else if let seq = v.firstBrokenSeq {
+            integrityStatus = "BROKEN — the chain fails at position \(seq). An event was altered or reordered after it was sealed."
+        }
     }
 }
 
