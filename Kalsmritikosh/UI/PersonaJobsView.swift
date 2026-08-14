@@ -101,6 +101,7 @@ public final class PersonaJobsModel {
 public struct PersonaJobsView: View {
     @Environment(AppState.self) private var appState
     @State private var model: PersonaJobsModel?
+    @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
 
     public init() {}
 
@@ -108,6 +109,11 @@ public struct PersonaJobsView: View {
         Group {
             if let model {
                 content(model)
+                    .sheet(item: $docJob) { job in
+                        JobDocumentationDetail(
+                            job: job,
+                            personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "")
+                    }
             } else if appState.personaJobs != nil {
                 ProgressView().task { await setup() }
             } else {
@@ -204,7 +210,20 @@ public struct PersonaJobsView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], alignment: .leading, spacing: 12) {
                 ForEach(model.runnableJobs) { job in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(job.title).font(.callout.weight(.semibold))
+                        HStack(alignment: .top, spacing: 4) {
+                            Text(job.title).font(.callout.weight(.semibold))
+                            Spacer(minLength: 0)
+                            // JOB-DOC — SAP-style documentation for this job.
+                            if JobDocumentationCatalog.doc(
+                                personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
+                                jobTitle: job.title) != nil {
+                                Button { docJob = job } label: {
+                                    Image(systemName: "info.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("What this job does, needs, produces, and must not conclude")
+                            }
+                        }
                         Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                         Spacer(minLength: 0)
                         Button {
@@ -217,6 +236,78 @@ public struct PersonaJobsView: View {
                     .frame(height: 130, alignment: .topLeading)
                     .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - JOB-DOC — SAP-style job documentation sheet
+
+private struct JobDocumentationDetail: View {
+    let job: PersonaJob
+    let personaLabel: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let doc = JobDocumentationCatalog.doc(personaLabel: personaLabel, jobTitle: job.title)
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(job.title).font(.title3.weight(.semibold))
+                    if let doc { Text("\(doc.persona) · \(doc.jobID)").font(.caption).foregroundStyle(.secondary) }
+                }
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding(16)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let doc {
+                        section("Purpose", systemImage: "target") {
+                            Text(job.detail).font(.callout)
+                        }
+                        section("Workflow", systemImage: "list.number") {
+                            Text(doc.workflow).font(.callout)
+                        }
+                        bulletSection("Required inputs", systemImage: "tray.and.arrow.down", items: doc.requiredInputs)
+                        bulletSection("Methods", systemImage: "flask", items: doc.methods)
+                        bulletSection("Work products", systemImage: "doc.richtext", items: doc.workProducts)
+                        bulletSection("Human decisions", systemImage: "person.crop.circle.badge.checkmark", items: doc.humanDecisions)
+                        // The SAP-style guardrail: what this job must NOT assert.
+                        bulletSection("Must NOT conclude", systemImage: "hand.raised", items: doc.prohibitedConclusions, tint: .red)
+                    } else {
+                        Text(job.detail).font(.callout)
+                        Text("No structured documentation is recorded for this job yet.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+            }
+        }
+        .frame(minWidth: 460, minHeight: 420)
+    }
+
+    @ViewBuilder
+    private func section<Content: View>(_ title: String, systemImage: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(title, systemImage: systemImage).font(.subheadline.weight(.semibold))
+            content().foregroundStyle(.primary)
+        }
+    }
+
+    @ViewBuilder
+    private func bulletSection(_ title: String, systemImage: String, items: [String], tint: Color = .primary) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(title, systemImage: systemImage).font(.subheadline.weight(.semibold)).foregroundStyle(tint)
+                ForEach(items, id: \.self) { item in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•").foregroundStyle(tint.opacity(0.7))
+                        Text(item).font(.callout)
+                    }
                 }
             }
         }
