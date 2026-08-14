@@ -22,9 +22,12 @@ struct ANNBenchmarkTests {
         let envSizes = ProcessInfo.processInfo.environment["KALSMRITIKOSH_ANN_BENCH_SIZES"]?
             .split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
         let sizes = (envSizes?.isEmpty == false) ? envSizes! : [2_000]
+        // KALSMRITIKOSH_ANN_BENCH_DIM lets the owner scale run measure at the
+        // real embedding width (384 for BGE); CI stays fast at 64.
+        let dim = ProcessInfo.processInfo.environment["KALSMRITIKOSH_ANN_BENCH_DIM"].flatMap { Int($0) } ?? 64
 
         let metrics = try await ANNBenchmark(queryCount: 20, insertCount: 20)
-            .run(sizes: sizes, dimension: 64, seed: 0xBEEF)
+            .run(sizes: sizes, dimension: dim, seed: 0xBEEF)
         #expect(metrics.count == sizes.count)
         for m in metrics {
             #expect(m.size >= 2_000)
@@ -39,5 +42,11 @@ struct ANNBenchmarkTests {
         #expect(report.contains("| size |"))
         #expect(report.contains("recall@10"))
         print("ANN-BENCH:\n\(report)")
+        // XCTest does not forward the test process's stdout to xcodebuild, so
+        // the scale run also writes the table to KALSMRITIKOSH_ANN_BENCH_OUT
+        // when set — a durable artifact for the owner-hardware SC1 evidence.
+        if let out = ProcessInfo.processInfo.environment["KALSMRITIKOSH_ANN_BENCH_OUT"], !out.isEmpty {
+            try? report.write(toFile: out, atomically: true, encoding: .utf8)
+        }
     }
 }

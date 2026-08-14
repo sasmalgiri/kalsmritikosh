@@ -56,13 +56,46 @@ public struct ANNBenchmark: Sendable {
         try await db.exec("PRAGMA foreign_keys = ON;")
 
         let model = "bench.v1"
-        var rng = XorShift64Star(state: seed)
-        func unit() -> Float { Float(Double(rng.next() % 1_000_000) / 1_000_000.0) - 0.5 }
         let clusterCount = max(8, size / 200)
+        // Representative embedding geometry: an L2-NORMALIZED unit vector per
+        // point (like real BGE output), deterministic per-index i, drawn from a
+        // well-separated planted-cluster center plus tight per-vector noise.
+        // Deliberately NO unbounded index-proportional axis — an earlier
+        // `v[0] = i·0.01` term reached 5000 at 500k, ~50× every other dim, and
+        // under int8 quantization collapsed all other dimensions to 0–2, making
+        // recall@10 a quantization-noise tie that worsened purely with corpus
+        // size (a benchmark artifact, not an index defect). The unit-test corpus
+        // — no dominant axis — already measures ≥0.95 recall through this index.
+        //
+        // Cluster centers are independent random directions (seeded by c), so
+        // every cluster is genuinely distinct (no modular-pattern collapse) and
+        // the true top-K neighbours of a point are its cluster-mates — a
+        // localizable neighborhood IVF can recover, the way real embeddings do.
+        func randomUnit(seededBy s: UInt64, count: Int) -> [Float] {
+            var r = XorShift64Star(state: s | 1)
+            func g() -> Float { Float(Double(r.next() % 2_000_000) / 1_000_000.0 - 1.0) }  // [-1,1)
+            var v = (0..<count).map { _ in g() }
+            var norm: Float = 0
+            for x in v { norm += x * x }
+            norm = norm.squareRoot()
+            if norm > 0 { for d in 0..<count { v[d] /= norm } }
+            return v
+        }
+        let centers: [[Float]] = (0..<clusterCount).map {
+            randomUnit(seededBy: seed &+ 0xC0FFEE &+ UInt64($0) &* 0x9E3779B97F4A7C15, count: dimension)
+        }
         func vector(_ i: Int) -> [Float] {
             let c = i % clusterCount
-            var v = (0..<dimension).map { d in Float((c * 5 + d * 3) % 13) * 8.0 + unit() }
-            v[0] = Float(i) * 0.01 + unit()   // per-vector uniqueness
+            // Per-index deterministic RNG (odd, non-zero) so a query vector is a
+            // genuine stored point across the seed/query passes.
+            var r = XorShift64Star(state: (seed &+ UInt64(bitPattern: Int64(i)) &* 0x9E3779B97F4A7C15) | 1)
+            func noise() -> Float { Float(Double(r.next() % 2_000_000) / 1_000_000.0 - 1.0) }  // [-1,1)
+            let center = centers[c]
+            var v = (0..<dimension).map { d in center[d] + noise() * 0.15 }   // tight cluster
+            var norm: Float = 0
+            for x in v { norm += x * x }
+            norm = norm.squareRoot()
+            if norm > 0 { for d in 0..<dimension { v[d] /= norm } }
             return v
         }
 

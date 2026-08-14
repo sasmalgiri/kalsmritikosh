@@ -276,4 +276,7 @@ struct BoundedTopK {
 
     /// Best-first (descending score).
     func sortedDescending() -> [(Chunk.ID, Double)] { items.reversed() }
+
+    /// Number of hits currently kept (≤ limit).
+    var count: Int { items.count }
 }

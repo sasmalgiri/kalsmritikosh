@@ -68,6 +68,15 @@ public struct KMeansClusterer: Sendable {
             centroids = Self.distinctRandomSeed(vectors: vectors, k: k, rng: &rng)
         }
 
+        // SPHERICAL k-means (PERF-3): the IVF probe scores by COSINE, so cells
+        // must be angular. Keeping every centroid on the unit sphere makes the
+        // `2·dot − |c|²` assignment identical to a cosine ranking and — crucially
+        // — structurally forbids the origin-collapse that otherwise sinks one
+        // centroid to the data mean (≈0 for zero-mean spherical embeddings) where
+        // it is Euclidean-closest to the diffuse middle and swallows the corpus
+        // (measured: one cell held 93% of 20k vectors, recall-blind and slow).
+        for i in 0..<centroids.count { Self.normalizeInPlace(&centroids[i]) }
+
         // ── Mini-batch Lloyd refinement ─────────────────────────────────────
         var counts = [Int](repeating: 0, count: k)
         let batch = max(1, min(miniBatchSize, n))
@@ -81,6 +90,7 @@ public struct KMeansClusterer: Sendable {
                 for d in 0..<dim {
                     centroids[c][d] += eta * (v[d] - centroids[c][d])
                 }
+                Self.normalizeInPlace(&centroids[c])   // keep the centroid on the sphere
             }
         }
 
@@ -95,6 +105,7 @@ public struct KMeansClusterer: Sendable {
             // Deterministically steal a random sample vector so no cell is dead.
             let vi = Int(rng.next() % UInt64(n))
             centroids[c] = vectors[vi]
+            Self.normalizeInPlace(&centroids[c])
             reseeded = true
         }
         if reseeded {
@@ -143,6 +154,16 @@ public struct KMeansClusterer: Sendable {
 
     private nonisolated static func clusterAssignments(vectors: [[Float]], to centroids: [[Float]]) -> [Int] {
         vectors.map { nearestCentroid(of: $0, among: centroids) }
+    }
+
+    /// Project a centroid onto the unit sphere (spherical k-means). A zero
+    /// vector is left unchanged — it cannot win a cosine assignment anyway.
+    nonisolated static func normalizeInPlace(_ v: inout [Float]) {
+        var normSq: Float = 0
+        vDSP_svesq(v, 1, &normSq, vDSP_Length(v.count))
+        guard normSq > 0 else { return }
+        var inv = 1.0 / normSq.squareRoot()
+        vDSP_vsmul(v, 1, &inv, &v, 1, vDSP_Length(v.count))
     }
 
     private nonisolated static func distinctRandomSeed(
