@@ -196,6 +196,28 @@ public actor ANNIndexRepository {
         }
     }
 
+    /// Batched probe: fetch every posting in ANY of the given cells in a single
+    /// query. The table is clustered on (model_id, cell_id, chunk_id) WITHOUT
+    /// ROWID, so `cell_id IN (…)` is a set of sequential range scans. This
+    /// collapses an N-cell probe from N actor round-trips to ONE (PERF-3: the
+    /// per-cell round-trip, not coverage, was the query-latency bottleneck).
+    public func postings(inCells cellIDs: [Int], for modelID: String) async throws -> [ANNPosting] {
+        guard !cellIDs.isEmpty else { return [] }
+        let placeholders = Array(repeating: "?", count: cellIDs.count).joined(separator: ",")
+        var bindings: [SQLValue] = [.text(modelID)]
+        bindings.reserveCapacity(cellIDs.count + 1)
+        for c in cellIDs { bindings.append(.integer(Int64(c))) }
+        let rows = try await database.query("""
+        SELECT cell_id, chunk_id, q, scale FROM ann_postings
+        WHERE model_id = ? AND cell_id IN (\(placeholders));
+        """, bindings)
+        return rows.compactMap { r in
+            guard let cell = r.int(0), let chunk = r.uuid(1),
+                  let q = r.blob(2), let scale = r.double(3) else { return nil }
+            return ANNPosting(cellID: Int(cell), chunkID: chunk, q: q, scale: scale)
+        }
+    }
+
     public func postingCount(for modelID: String) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM ann_postings WHERE model_id = ?;", [.text(modelID)])

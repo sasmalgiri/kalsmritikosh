@@ -22,10 +22,21 @@ Chosen over (b) mmap flat shards (no useful pruning without clustering → full-
 query; sidecar crash protocol) and (c) disk-persisted HNSW (random-hop page faults kill p95;
 in-place graph mutation needs a custom pager; worst risk).
 
-- Centroids in RAM: K ≈ 4·√N (1M → K≈4096 → ~6.3 MB, corpus-independent).
-- Query: one vDSP pass over centroids (sub-ms) → probe nProbe cells (default 32, adaptive ×2 up
-  to 128 when hits < limit or best score below floor) → sequential range scans of clustered
-  postings scored with the existing int8/vDSP kernel. Target p50 < 25 ms / p95 < 60 ms warm at 1M.
+- Centroids in RAM: K ≈ 4·√N (1M → K≈4096 → ~6.3 MB, corpus-independent). Training is SPHERICAL
+  k-means (centroids re-projected onto the unit sphere every update) so cells are ANGULAR — matching
+  the cosine probe metric and structurally preventing the origin-collapse degeneracy.
+- Query: one vDSP pass over centroids (sub-ms) → rank cells by cosine → walk nearest cells in
+  batched round-trips, accumulating a bounded candidate POOL (≥4000 rows), scored with the existing
+  int8/vDSP kernel → top-K. Target p50 < 25 ms / p95 < 60 ms warm at 1M.
+- PERF-3 (measured, 384-D corpus): TWO real defects surfaced once the benchmark corpus was made
+  representative (L2-normalized planted clusters instead of a synthetic unbounded axis).
+  (1) *k-means origin-collapse*: Euclidean clustering on zero-mean spherical embeddings sank one
+  centroid to the data mean, which then swallowed 93% of a 20k corpus into a single cell — recall
+  looked fine only because the probe was scanning almost everything, at ~1.7 s/query. Fixed by
+  spherical k-means (cell max size fell from 18650 to 200). (2) *count-based nProbe*: in high-D the
+  "nearest" cells past #1 are near-equidistant noise, so a 2·√K cell probe pulled in ~99% of rows;
+  bounding ROWS scanned (scan-budget) instead of cells restores O(pool) latency. Net at 100k:
+  recall@10 = 1.000 and query p50 118 ms vs 438 ms brute (IVF 3.7× faster).
 - Insert: assign-to-centroid + posting INSERT inside the SAME `SQLiteVectorStore.upsert` actor
   call → index can never be stale vs the ledger (structurally kills the recall-0.07 incident class).
 - Crash-safety: all state is rows in the single ledger (WAL/SAVEPOINT/CASCADE); `state='building'`

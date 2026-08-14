@@ -118,6 +118,21 @@ struct IVFDiskVectorIndexTests {
                 "IVF recall@10 \(recallSum / Double(queries)) below floor")
     }
 
+    @Test("PERF-3: scan-budget probe bounds rows, and the cell ceiling scales sanely with K")
+    func scanBudgetAndCeiling() async throws {
+        // Candidate pool: a floor of 4000 rows, growing with the result count.
+        #expect(IVFDiskVectorIndex.candidatePool(forLimit: 10) == 4_000)     // floor dominates
+        #expect(IVFDiskVectorIndex.candidatePool(forLimit: 100) == 10_000)   // 100·100 > floor
+        // Ceiling on cells ever considered: ≈ K/6, floored at 128, clamped to K.
+        #expect(IVFDiskVectorIndex.maxNProbe(forCellCount: 16) == 16)        // clamped to K
+        #expect(IVFDiskVectorIndex.maxNProbe(forCellCount: 179) == 128)      // 179/6≈29 → floor 128
+        let k = IVFDiskVectorIndex.cellCount(forVectorCount: 500_000)
+        #expect(k >= 2_800)
+        #expect(IVFDiskVectorIndex.maxNProbe(forCellCount: k) >= 400)        // ~2828/6 ≈ 471
+        #expect(IVFDiskVectorIndex.maxNProbe(forCellCount: k) <= k)
+        #expect(IVFDiskVectorIndex.maxNProbe(forCellCount: 0) == 0)          // empty index
+    }
+
     @Test("Incremental insert is immediately retrievable with no rebuild; posting count reconciles")
     func incrementalInsert() async throws {
         let r = try await rig()

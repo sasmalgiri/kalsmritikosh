@@ -30,11 +30,36 @@ public actor IVFDiskVectorIndex {
         public let score: Double
     }
 
-    // Probe tuning (plan §1): default nProbe, escalation ceiling, and the
-    // score floor below which an escalation is attempted even with enough hits.
-    public static let defaultNProbe = 32
-    public static let maxNProbe = 128
-    public static let escalationScoreFloor = 0.30
+    // Probe tuning (plan §1, rewritten by the PERF-3 scale measurement).
+    //
+    // A COUNT-based nProbe is wrong for high-dimensional embeddings. Cluster
+    // centres in 384-D are near-equidistant (concentration of measure), so only
+    // a query's own cell is genuinely close; the next "nearest" cells are an
+    // arbitrary tail that collectively covers almost the whole corpus. Probing
+    // 2·√K cells at 100k pulled in 98.8% of all rows and scoring them cost
+    // ~1.7 s — no better than brute force. So we bound the ROWS scanned, not the
+    // cell count: fetch nearest cells in batches until a candidate POOL is
+    // filled. That pool is the nearest-by-centroid postings — where a point's
+    // true neighbours live — so recall stays high while latency is bounded
+    // regardless of k-means cell-size imbalance.
+    //
+    /// Rows to accumulate before stopping (also ≥ limit·multiplier for large K).
+    public static let minCandidatePool = 4_000
+    public static let candidatePoolPerResult = 100
+    /// Cells fetched per batched round (one SQL round-trip each).
+    public static let probeCellBatch = 8
+
+    /// The candidate pool for a query returning `limit` results.
+    public nonisolated static func candidatePool(forLimit limit: Int) -> Int {
+        max(minCandidatePool, limit * candidatePoolPerResult)
+    }
+
+    /// Ceiling on cells ever considered (the ranked-centroid shortlist), a small
+    /// fraction of the index so a pathological all-tiny-cells corpus still ends.
+    public nonisolated static func maxNProbe(forCellCount k: Int) -> Int {
+        guard k > 0 else { return 0 }
+        return min(k, max(128, k / 6))
+    }
 
     /// K ≈ 4·√N clamped to a sane band (plan §1).
     public nonisolated static func cellCount(forVectorCount n: Int) -> Int {
@@ -219,33 +244,41 @@ public actor IVFDiskVectorIndex {
 
     // MARK: - Probe
 
-    /// nProbe search with adaptive escalation. Deterministic for a given
-    /// ledger state. Returns [] when not ready (caller falls back).
+    /// Scan-budget probe over the nearest cells, deterministic for a given
+    /// ledger state. Returns [] when not ready (caller falls back to brute).
+    ///
+    /// We walk the ranked cells in batches and stop once the candidate POOL is
+    /// filled (`candidatePool(forLimit:)` rows) — the nearest-by-centroid
+    /// postings, where the true neighbours live. Bounding rows (not cells)
+    /// keeps latency flat under high-dim cell-size imbalance: at 100k the old
+    /// 2·√K rule scanned 98.8% of the corpus (~1.7 s); a fixed pool scans a few
+    /// thousand rows regardless of size. Each batch is one SQL round-trip.
     public func nearest(embedding: [Float], limit: Int) async throws -> [Hit] {
         guard isReady(), limit > 0, embedding.count == dimension,
               let query = VectorQuantization.prepareQuery(embedding) else { return [] }
 
-        let ranked = KMeansClusterer.nearestCentroids(of: embedding, among: centroids, top: Self.maxNProbe)
-        var probed = 0
+        let k = centroids.count
+        let ceiling = Self.maxNProbe(forCellCount: k)
+        let ranked = KMeansClusterer.nearestCentroids(of: embedding, among: centroids, top: ceiling)
+        guard !ranked.isEmpty else { return [] }
+
+        let budget = Self.candidatePool(forLimit: limit)
         var top = BoundedTopK(limit: limit)
-        var nProbe = min(Self.defaultNProbe, ranked.count)
-        while true {
-            while probed < nProbe {
-                let cell = ranked[probed]
-                probed += 1
-                for posting in try await repository.postings(inCell: cell, for: modelID) {
-                    if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
-                        top.offer(posting.chunkID, score)
-                    }
+        var scored = 0
+        var idx = 0
+        while idx < ranked.count {
+            let end = min(idx + Self.probeCellBatch, ranked.count)
+            for posting in try await repository.postings(inCells: Array(ranked[idx..<end]), for: modelID) {
+                if let score = VectorQuantization.cosineScore(query: query, candidate: posting.q, scale: posting.scale) {
+                    top.offer(posting.chunkID, score)
+                    scored += 1
                 }
             }
-            let hits = top.sortedDescending()
-            let enough = hits.count >= limit && (hits.first?.1 ?? -1) >= Self.escalationScoreFloor
-            if enough || nProbe >= ranked.count {
-                return hits.map { Hit(chunkID: $0.0, score: $0.1) }
-            }
-            nProbe = min(nProbe * 2, ranked.count)   // escalate and continue
+            idx = end
+            // Stop once the pool is filled AND we can return a full result set.
+            if scored >= budget && top.count >= limit { break }
         }
+        return top.sortedDescending().map { Hit(chunkID: $0.0, score: $0.1) }
     }
 
     // MARK: - Encoding helpers

@@ -92,16 +92,23 @@ migration to v-latest, count preservation, stable-ID samples, foreign_key/integr
 ## 5. Scale benchmark on THIS hardware (SC1/SC2, one command)
 
 ```bash
-KALSMRITIKOSH_ANN_BENCH_SIZES="100000,500000,1000000" \
+# NOTE: xcodebuild only forwards env vars PREFIXED with TEST_RUNNER_ to the
+# XCTest process, and it does NOT capture the test's stdout — so pass the sizes
+# with that prefix and write the table to a file via ..._BENCH_OUT.
+# _DIM=384 measures at the real BGE embedding width (default is 64 for fast CI).
+TEST_RUNNER_KALSMRITIKOSH_ANN_BENCH_SIZES="100000,500000,1000000" \
+TEST_RUNNER_KALSMRITIKOSH_ANN_BENCH_DIM="384" \
+TEST_RUNNER_KALSMRITIKOSH_ANN_BENCH_OUT="$HOME/ann-bench.md" \
 xcodebuild -project Kalsmritikosh.xcodeproj -scheme Kalsmritikosh \
   -destination 'platform=macOS' \
   -only-testing:KalsmritikoshTests/ANNBenchmarkTests test
+cat "$HOME/ann-bench.md"
 ```
-The test prints an `ANN-BENCH:` markdown table (build s, insert p50, query p50/p95, brute
-baseline, recall@10, disk bytes) — paste it into `release/RELEASE_EVIDENCE_v1.md` →
-"Large-corpus metrics". Additionally record, from a REAL archive of the size you intend to
-market: ingest duration, first-search latency, Fast latency, Full Evidence latency, peak
-memory (Activity Monitor), DB+index size on disk.
+The run writes a markdown table to `~/ann-bench.md` (build s, insert p50, query p50/p95, brute
+baseline, recall@10, disk bytes) and the test passes only when recall@10 ≥ 0.90 at every size —
+paste the table into `release/RELEASE_EVIDENCE_v1.md` → "Large-corpus metrics". Additionally
+record, from a REAL archive of the size you intend to market: ingest duration, first-search
+latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB+index size on disk.
 - [ ] Recorded. **The marketed "tested to N GB" figure is THIS run's figure and nothing else.**
 
 ## 6. Release-binary network egress (§32, prepared procedure)
