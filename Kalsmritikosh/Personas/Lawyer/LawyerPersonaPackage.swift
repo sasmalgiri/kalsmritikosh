@@ -52,7 +52,17 @@ public nonisolated enum LawyerPersonaPackage {
             job("deposition",        "Deposition outline",         "Draft a deposition outline; questions cite the record.", .analysis),
             job("exhibit-binder",    "Exhibit binder",             "Assemble the exhibit binder; each exhibit cites its source version.", .evidenceCustody),
             job("production",        "Production / export",        "Produce the export package — report==receipt with custody hashes.", .findings),
-            job("redaction",         "Redaction validation",       "Validate text + visual redaction before production.", .findings)
+            job("redaction",         "Redaction validation",       "Validate text + visual redaction before production.", .findings),
+            // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
+            // surfaced with matter framing. Same persona-neutral router, no fork.
+            job("ask",               "Ask the case file",          "Ask a question over the matter's record — every claim cited.", .ask),
+            job("methods",           "Method workbench",           "Run structured methods (5W1H, hypothesis matrix…) over the matter.", .methods),
+            job("party-resolution",  "Party & alias resolution",   "Unify party names and aliases (reversible, human-reviewed).", .identityResolution),
+            job("source-desk",       "Source reliability desk",    "Assess reliability and independence of record sources.", .sourceReliability),
+            job("causation",         "Causation analysis",         "Trace causation step by step — Five Whys / Fishbone over the record.", .causalAnalysis),
+            job("remediation",       "Remediation register",       "Track remediation/undertaking actions to closure.", .capaRegister),
+            job("remediation-review","Remediation effectiveness",  "Verify a completed remediation actually resolved the issue.", .effectivenessReview),
+            job("matter-closure",    "Matter closure & reopen",    "Close the matter (sealed); reopen preserves full history.", .closure)
         ]
     }
 

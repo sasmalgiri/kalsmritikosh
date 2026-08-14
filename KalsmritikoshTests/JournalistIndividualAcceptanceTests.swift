@@ -18,12 +18,12 @@ struct JournalistPersonaAcceptanceTests {
     static let stories = ["contract award", "safety recall", "campaign finance", "public appointment", "supply chain"]
     private let t0 = Date(timeIntervalSince1970: 1_768_700_000)
 
-    @Test("Each story processes through the production PersonaJobService path — all 14 jobs route real",
+    @Test("Each story processes through the production PersonaJobService path — all 22 jobs route real",
           arguments: JournalistPersonaAcceptanceTests.stories)
     func storyThroughProductionPath(_ story: String) async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: story)
         try await h.runFullPersonaMatter(
-            personaID: JournalistPersonaPackage.applicationID, expectedJobCount: 14, intakeJobID: "jrn.story-intake",
+            personaID: JournalistPersonaPackage.applicationID, expectedJobCount: 22, intakeJobID: "jrn.story-intake",
             template: .journalism, title: story, actor: "reporter", at: t0)
     }
 
@@ -41,12 +41,12 @@ struct IndividualPersonaAcceptanceTests {
     static let matters = ["home purchase", "insurance claim", "family history", "job application", "estate planning"]
     private let t0 = Date(timeIntervalSince1970: 1_768_800_000)
 
-    @Test("Each personal matter processes through the production PersonaJobService path — all 13 jobs route real",
+    @Test("Each personal matter processes through the production PersonaJobService path — all 23 jobs route real",
           arguments: IndividualPersonaAcceptanceTests.matters)
     func matterThroughProductionPath(_ matter: String) async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: matter)
         try await h.runFullPersonaMatter(
-            personaID: IndividualPersonaPackage.applicationID, expectedJobCount: 13, intakeJobID: "ind.personal-records",
+            personaID: IndividualPersonaPackage.applicationID, expectedJobCount: 23, intakeJobID: "ind.personal-records",
             template: .personalMatter, title: matter, actor: "owner", at: t0)
     }
 
@@ -65,7 +65,7 @@ struct IndividualPersonaAcceptanceTests {
                    JournalistPersonaPackage.applicationID, IndividualPersonaPackage.applicationID] {
             #expect(catalog.latestApplication(id: id) != nil)
         }
-        #expect(PersonaJobCatalogComposer.jobs(forPersona: JournalistPersonaPackage.applicationID).count == 14)
-        #expect(PersonaJobCatalogComposer.jobs(forPersona: IndividualPersonaPackage.applicationID).count == 13)
+        #expect(PersonaJobCatalogComposer.jobs(forPersona: JournalistPersonaPackage.applicationID).count == 22)
+        #expect(PersonaJobCatalogComposer.jobs(forPersona: IndividualPersonaPackage.applicationID).count == 23)
     }
 }

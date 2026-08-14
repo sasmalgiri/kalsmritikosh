@@ -132,15 +132,15 @@ struct ResearcherPersonaAcceptanceTests {
         try await db.query("SELECT status FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)]).first?.string(0)
     }
 
-    @Test("Each research matter processes through the production PersonaJobService path — all 14 jobs route real",
+    @Test("Each research matter processes through the production PersonaJobService path — all 20 jobs route real",
           arguments: ResearcherPersonaAcceptanceTests.matters)
     func matterThroughProductionPath(_ matter: String) async throws {
         let r = try await rig()
 
-        // DISCOVER + ENUMERATE the Researcher persona.
+        // DISCOVER + ENUMERATE the Researcher persona (PJOB-MAX: all 16 kinds, 20 jobs).
         #expect(await r.service.personas().contains { $0.id == researcherID })
         let jobs = await r.service.jobs(forPersona: researcherID)
-        #expect(jobs.count == 14)
+        #expect(jobs.count == 20)
         #expect(jobs.allSatisfy { $0.id.hasPrefix("res.") })
 
         // Seed a workspace with authorized A + unauthorized B, and a matter authorizing only A.
@@ -167,9 +167,17 @@ struct ResearcherPersonaAcceptanceTests {
         let base = PersonaJobLaunchContext(caseID: caseID, access: exportAccess(wsID), actor: "researcher", at: t0)
 
         // EVERY Researcher job routes into its real shared service — none may throw serviceUnavailable.
-        for j in jobs where j.id != "res.protocol" {   // protocol already launched (create)
+        // (.ask needs the production brain, nil in this rig → honest fail-closed below.)
+        for j in jobs where j.id != "res.protocol" && j.kind != .ask {   // protocol already launched (create)
             let out = try await r.service.launch(j, context: base)
             #expect(out.producedID != nil, "\(j.id) must route into a real service")
+        }
+        if let askJob = jobs.first(where: { $0.kind == .ask }) {
+            await #expect(throws: PersonaJobError.self) {
+                _ = try await r.service.launch(askJob, context: PersonaJobLaunchContext(
+                    caseID: caseID, access: exportAccess(wsID), actor: "researcher",
+                    question: "what does the corpus say?", at: t0))
+            }
         }
 
         // Annotated edition (findings) → human approval → closure/reopen, scope preserved.
@@ -196,7 +204,7 @@ struct ResearcherPersonaAcceptanceTests {
         let catalog = try PersonaJobCatalogComposer.composeProduction()
         #expect(catalog.latestApplication(id: InvestigatorPersonaPackage.applicationID) != nil)
         #expect(catalog.latestApplication(id: ResearcherPersonaPackage.applicationID) != nil)
-        #expect(PersonaJobCatalogComposer.jobs(forPersona: ResearcherPersonaPackage.applicationID).count == 14)
+        #expect(PersonaJobCatalogComposer.jobs(forPersona: ResearcherPersonaPackage.applicationID).count == 20)
         #expect(PersonaJobCatalogComposer.jobs(forPersona: InvestigatorPersonaPackage.applicationID).count == 16)
         // Job ids are unique within each persona.
         let rjobs = ResearcherPersonaPackage.jobs

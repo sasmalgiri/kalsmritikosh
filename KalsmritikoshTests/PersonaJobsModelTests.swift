@@ -41,9 +41,10 @@ struct PersonaJobsModelTests {
         #expect(model.personas.contains { $0.id == InvestigatorPersonaPackage.applicationID })
         // Default selection enumerates a real, non-empty job set with an intake job.
         #expect(!model.jobs.isEmpty)
-        // Switching persona re-enumerates.
+        // Switching persona re-enumerates. (PJOB-MAX: Researcher now covers
+        // all 16 PersonaJobKinds across 20 jobs.)
         await model.select(persona: ResearcherPersonaPackage.applicationID)
-        #expect(model.jobs.count == 14)
+        #expect(model.jobs.count == 20)
         #expect(model.intakeJob != nil)
         await model.select(persona: InvestigatorPersonaPackage.applicationID)
         #expect(model.jobs.count == 16)

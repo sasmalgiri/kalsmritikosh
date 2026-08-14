@@ -7,11 +7,12 @@
 //  this suite extends the proof to ALL FIVE personas: the production catalog
 //  and PERSONA_JOB_COVERAGE_MATRIX.csv agree on the persona set, every
 //  package enumerates its declared launchable jobs with pinned counts
-//  (71 total — 16/14/14/13/14; non-Investigator personas legitimately
-//  declare several jobs of one kind, e.g. multiple analysis presets),
-//  and each persona's jobs ROUTE into the real case-scoped services (create
-//  case → findings → closure/custody/contradictionGap/dataLab reads), with
-//  honest fail-closed behavior for unwired services. Synthetic only.
+//  (PJOB-MAX: 103 total — 16/20/22/23/22; every persona now covers ALL 16
+//  PersonaJobKinds, and several personas legitimately declare multiple jobs
+//  of one kind, e.g. analysis presets), and each persona's jobs ROUTE into
+//  the real case-scoped services (create case → findings → closure/custody/
+//  contradictionGap/dataLab reads), with honest fail-closed behavior for
+//  unwired services. Synthetic only.
 //
 
 import Testing
@@ -25,15 +26,15 @@ struct PersonaJobMatrixCoverageTests {
 
     private static let expectedCounts: [(id: ApplicationDefinitionID, label: String, jobs: [PersonaJob], count: Int)] = [
         (InvestigatorPersonaPackage.applicationID, "Investigator", InvestigatorPersonaPackage.jobs, 16),
-        (ResearcherPersonaPackage.applicationID, "Researcher", ResearcherPersonaPackage.jobs, 14),
-        (JournalistPersonaPackage.applicationID, "Journalist", JournalistPersonaPackage.jobs, 14),
-        (IndividualPersonaPackage.applicationID, "Individual", IndividualPersonaPackage.jobs, 13),
-        (LawyerPersonaPackage.applicationID, "Lawyer", LawyerPersonaPackage.jobs, 14),
+        (ResearcherPersonaPackage.applicationID, "Researcher", ResearcherPersonaPackage.jobs, 20),
+        (JournalistPersonaPackage.applicationID, "Journalist", JournalistPersonaPackage.jobs, 22),
+        (IndividualPersonaPackage.applicationID, "Individual", IndividualPersonaPackage.jobs, 23),
+        (LawyerPersonaPackage.applicationID, "Lawyer", LawyerPersonaPackage.jobs, 22),
     ]
 
     // MARK: - Catalog ↔ package composition, all five personas
 
-    @Test("The production catalog discovers all five personas and enumerates every package job, 71 total")
+    @Test("The production catalog discovers all five personas and enumerates every package job, 103 total")
     func allFivePersonasEnumerate() throws {
         let catalog = try PersonaJobCatalogComposer.composeProduction()
         var total = 0
@@ -48,9 +49,13 @@ struct PersonaJobMatrixCoverageTests {
             #expect(jobs.map(\.id) == expected.jobs.map(\.id))
             // Every persona declares an intake path (the routing precondition).
             #expect(jobs.contains { $0.kind == .caseIntake }, "\(expected.label): no intake job")
+            // PJOB-MAX — full capability coverage: every persona declares at
+            // least one job for EVERY PersonaJobKind.
+            #expect(Set(jobs.map(\.kind)).count == PersonaJobKind.allCases.count,
+                    "\(expected.label): does not cover all job kinds")
             total += jobs.count
         }
-        #expect(total == 71)
+        #expect(total == 103)
     }
 
     @Test("PERSONA_JOB_COVERAGE_MATRIX.csv and the production catalog agree on the persona set and total row count")
@@ -65,15 +70,15 @@ struct PersonaJobMatrixCoverageTests {
         let matrixPersonas = Set(personaColumn)
         #expect(matrixPersonas == ["Investigator", "Researcher", "Journalist", "Lawyer", "Individual"],
                 "matrix personas drifted: \(matrixPersonas.sorted())")
-        // The matrix decomposes persona work into 75 requirement rows; the
-        // catalog exposes 71 launchable jobs (several matrix rows share one
+        // The matrix decomposes persona work into 107 requirement rows; the
+        // catalog exposes 103 launchable jobs (several matrix rows share one
         // launchable job, e.g. preset variants). Both totals are pinned so
         // either side drifting — a new matrix row without a launchable job,
         // or a new job without a matrix row — fails here and forces the
         // mapping to be re-audited.
-        #expect(rows.count == 75, "matrix rows: \(rows.count)")
+        #expect(rows.count == 107, "matrix rows: \(rows.count)")
         let catalogTotal = Self.expectedCounts.map(\.count).reduce(0, +)
-        #expect(catalogTotal == 71)
+        #expect(catalogTotal == 103)
     }
 
     // MARK: - Live routing for the four non-Investigator personas
