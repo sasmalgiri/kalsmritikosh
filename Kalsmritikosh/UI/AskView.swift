@@ -46,6 +46,12 @@ public struct AskView: View {
     /// previously reachable from the UI.
     @State private var showHistory = false
     @State private var pastConversations: [Conversation] = []
+    /// Composer attachments — files picked via the paperclip. Each file is
+    /// ingested into the ledger the moment it's picked (initialFast: custody +
+    /// searchable text in seconds; deeper tiers arrive as background upgrades),
+    /// so the very next question can already retrieve and cite it. Chips clear
+    /// on send; the ingested knowledge is durable either way.
+    @State private var attachments: [AskAttachment] = []
 
     public init() {}
 
@@ -82,6 +88,9 @@ public struct AskView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if !attachments.isEmpty {
+                attachmentChips
+            }
             input
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -313,6 +322,13 @@ public struct AskView: View {
                 .padding(.vertical, 11)
                 .focused($inputFocused)
                 .onSubmit(submit)
+            Button(action: attachFiles) {
+                Image(systemName: "paperclip").font(.system(size: 15)).frame(width: 32, height: 32)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Attach files — they're ingested into your archive and become searchable, citable evidence for this and every future question.")
+            .disabled(appState.ingest == nil)
             Button {
                 Task { await saveCurrentQuestion() }
             } label: {
@@ -365,6 +381,100 @@ public struct AskView: View {
         .background(.ultraThinMaterial)   // clean pinned-bar backing over scroll content
     }
 
+    // MARK: - Attachments
+
+    /// One row of removable chips above the composer, one per picked file,
+    /// each showing its live ingest state. Removing a chip only clears the
+    /// chip — content already ingested stays in the archive (durable ledger).
+    private var attachmentChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { att in
+                    HStack(spacing: 6) {
+                        switch att.state {
+                        case .ingesting:
+                            ProgressView().controlSize(.mini)
+                        case .ready:
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .imageScale(.small)
+                        case .failed:
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                                .imageScale(.small)
+                        }
+                        Text(att.url.lastPathComponent)
+                            .font(.caption)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 180)
+                        Button {
+                            attachments.removeAll { $0.id == att.id }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .imageScale(.small)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(att.state == .ready
+                              ? "Dismiss chip — the file stays ingested in your archive."
+                              : "Dismiss chip.")
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.brand.opacity(0.15), lineWidth: 1))
+                    .help(att.state.helpText)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+        }
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+    }
+
+    /// Paperclip action: pick files, then ingest each one immediately with
+    /// the fast intent (custody + searchable text now; structure/vectors as
+    /// background upgrades) so the next question can already cite them. This
+    /// is the evidence-gated equivalent of a chat "attach": nothing rides
+    /// along with a single message — attached content joins the archive.
+    private func attachFiles() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Attach"
+        panel.message = "Attached files are ingested into your private archive and become citable evidence."
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            let attachment = AskAttachment(url: url, state: .ingesting)
+            attachments.append(attachment)
+            Task {
+                do {
+                    guard let ingest = appState.ingest else {
+                        throw CocoaError(.featureUnsupported)
+                    }
+                    _ = try await ingest.ingest(fileAt: url, intent: .initialFast)
+                    await MainActor.run {
+                        if let idx = attachments.firstIndex(where: { $0.id == attachment.id }) {
+                            attachments[idx].state = .ready
+                        }
+                    }
+                } catch {
+                    KalsmritikoshLog.ui.error("Ask attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    await MainActor.run {
+                        if let idx = attachments.firstIndex(where: { $0.id == attachment.id }) {
+                            attachments[idx].state = .failed
+                        }
+                    }
+                }
+            }
+        }
+        #endif
+    }
+
     // MARK: - Turn bubbles
 
     @ViewBuilder
@@ -373,14 +483,20 @@ public struct AskView: View {
         case .user:
             HStack {
                 Spacer(minLength: 60)
-                Text(turn.body)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 15)
-                    .padding(.vertical, 11)
-                    .background(Theme.bubbleGradient, in: .rect(cornerRadius: 18, style: .continuous))
-                    .shadow(color: Theme.brand.opacity(0.28), radius: 8, y: 3)
-                    .frame(maxWidth: 520, alignment: .trailing)
-                    .textSelection(.enabled)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(turn.body)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 11)
+                        .background(Theme.bubbleGradient, in: .rect(cornerRadius: 18, style: .continuous))
+                        .shadow(color: Theme.brand.opacity(0.28), radius: 8, y: 3)
+                        .frame(maxWidth: 520, alignment: .trailing)
+                        .textSelection(.enabled)
+                    Text(turn.createdAt.formatted(date: .omitted, time: .shortened))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.trailing, 4)
+                }
             }
         case .assistant:
             HStack {
@@ -392,6 +508,20 @@ public struct AskView: View {
                         Text(turn.createdAt.formatted(date: .omitted, time: .shortened))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        if !turn.body.isEmpty {
+                            Button {
+                                #if canImport(AppKit)
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(turn.body, forType: .string)
+                                #endif
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .imageScale(.small)
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Copy this answer")
+                        }
                     }
                     // HISTORY follow-on — assistant bodies may carry
                     // `## Chapter heading` lines from the narrative
@@ -600,6 +730,9 @@ public struct AskView: View {
         guard !q.isEmpty, !asking else { return }
         asking = true
         question = ""
+        // Chips are transient composer UI; the attached files are already
+        // (being) ingested durably, so the question below can cite them.
+        attachments.removeAll()
 
         Task {
             guard let repo = appState.conversations, let convID = conversationID else {
@@ -923,6 +1056,28 @@ private struct InvestigationSheet: View {
         }
         .padding(.top, 6)
     }
+}
+
+/// One composer attachment and its live ingest state. Value type held in
+/// view state only — the durable record is the ingested KnowledgeObject.
+private struct AskAttachment: Identifiable {
+    enum State: Equatable {
+        case ingesting
+        case ready
+        case failed
+
+        var helpText: String {
+            switch self {
+            case .ingesting: return "Ingesting — becoming searchable…"
+            case .ready:     return "Ingested — searchable and citable in your archive."
+            case .failed:    return "Ingest failed — see Sources for details."
+            }
+        }
+    }
+
+    let id = UUID()
+    let url: URL
+    var state: State
 }
 
 #if DEBUG
