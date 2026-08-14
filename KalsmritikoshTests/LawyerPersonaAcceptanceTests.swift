@@ -20,12 +20,12 @@ struct LawyerPersonaAcceptanceTests {
                           "regulatory inquiry", "estate litigation"]
     private let t0 = Date(timeIntervalSince1970: 1_768_900_000)
 
-    @Test("Each legal matter processes through the production PersonaJobService path — all 14 jobs route real",
+    @Test("Each legal matter processes through the production PersonaJobService path — all 22 jobs route real",
           arguments: LawyerPersonaAcceptanceTests.matters)
     func matterThroughProductionPath(_ matter: String) async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: matter)
         try await h.runFullPersonaMatter(
-            personaID: LawyerPersonaPackage.applicationID, expectedJobCount: 14, intakeJobID: "law.matter-intake",
+            personaID: LawyerPersonaPackage.applicationID, expectedJobCount: 22, intakeJobID: "law.matter-intake",
             template: .legalMatter, title: matter, actor: "counsel", at: t0)
     }
 
@@ -42,18 +42,18 @@ struct LawyerPersonaAcceptanceTests {
         let catalog = try PersonaJobCatalogComposer.composeProduction()
         let expected: [(ApplicationDefinitionID, Int)] = [
             (InvestigatorPersonaPackage.applicationID, 16),
-            (ResearcherPersonaPackage.applicationID, 14),
-            (JournalistPersonaPackage.applicationID, 14),
-            (IndividualPersonaPackage.applicationID, 13),
-            (LawyerPersonaPackage.applicationID, 14),
+            (ResearcherPersonaPackage.applicationID, 20),
+            (JournalistPersonaPackage.applicationID, 22),
+            (IndividualPersonaPackage.applicationID, 23),
+            (LawyerPersonaPackage.applicationID, 22),
         ]
         for (id, count) in expected {
             #expect(catalog.latestApplication(id: id) != nil, "\(id.rawValue) must be discoverable")
             #expect(PersonaJobCatalogComposer.jobs(forPersona: id).count == count, "\(id.rawValue) job count")
         }
-        // 16+14+14+13+14 = 71 launchable jobs across the five shipped personas.
+        // PJOB-MAX: 16+20+22+23+22 = 103 launchable jobs across the five shipped personas.
         let total = expected.reduce(0) { $0 + PersonaJobCatalogComposer.jobs(forPersona: $1.0).count }
-        #expect(total == 71)
+        #expect(total == 103)
         // Every job across every persona carries a valid persona-neutral kind (routable by PersonaJobService).
         for (id, _) in expected {
             for job in PersonaJobCatalogComposer.jobs(forPersona: id) {

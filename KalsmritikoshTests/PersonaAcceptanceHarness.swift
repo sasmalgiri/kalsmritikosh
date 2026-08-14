@@ -152,9 +152,18 @@ struct PersonaAcceptanceHarness {
                                           sourceRef: a.svID.uuidString, sourceKind: .sourceVersion, actor: actor, at: t0)
 
         let base = PersonaJobLaunchContext(caseID: caseID, access: exportAccess(wsID), actor: actor, at: t0)
-        for j in jobs where j.id != intakeJobID {
+        for j in jobs where j.id != intakeJobID && j.kind != .ask {
             let out = try await service.launch(j, context: base)
             #expect(out.producedID != nil, "\(j.id) must route into a real service")
+        }
+        // PJOB-MAX — every persona now carries an .ask job. Ask needs the brain
+        // (wired in production; nil in this rig) → honest serviceUnavailable,
+        // the same fail-closed contract the Investigator acceptance pins.
+        if let askJob = jobs.first(where: { $0.kind == .ask }) {
+            await #expect(throws: PersonaJobError.self) {
+                _ = try await service.launch(askJob, context: PersonaJobLaunchContext(
+                    caseID: caseID, access: exportAccess(wsID), actor: actor, question: "what happened?", at: t0))
+            }
         }
 
         let f = try await findings.buildFindings(caseID: caseID, access: exportAccess(wsID), actor: actor, at: t0)

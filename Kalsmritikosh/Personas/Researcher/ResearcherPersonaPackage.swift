@@ -61,7 +61,15 @@ public nonisolated enum ResearcherPersonaPackage {
             job("interpretation",     "Interpretation comparison",    "Compare competing interpretations — both accounts preserved.", .contradictionGap),
             job("alternative",        "Alternative histories",        "Explore evidence-bounded counterfactuals (never mutates the ledger).", .dataLab),
             job("bibliography",       "Bibliography & citation audit", "Verify every citation reopens its exact source.", .evidenceCustody),
-            job("edition",            "Annotated edition",            "Assemble an annotated edition/report with a sealed receipt.", .findings)
+            job("edition",            "Annotated edition",            "Assemble an annotated edition/report with a sealed receipt.", .findings),
+            // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
+            // surfaced with research framing. Same persona-neutral router, no fork.
+            job("ask",                "Ask the corpus",               "Ask a question over the authorized corpus — every claim cited.", .ask),
+            job("methods",            "Method workbench",             "Run structured methods (5W1H, hypothesis matrix, root cause…) over the matter.", .methods),
+            job("causal",             "Causal analysis",              "Trace why an event unfolded — Five Whys / Fishbone over cited evidence.", .causalAnalysis),
+            job("errata",             "Errata register",              "Track corrections to the edition as corrective actions to closure.", .capaRegister),
+            job("errata-review",      "Errata effectiveness review",  "Verify a published correction actually resolved the issue.", .effectivenessReview),
+            job("matter-closure",     "Matter closure",               "Close the research matter (sealed, reopenable with history).", .closure)
         ]
     }
 

@@ -46,7 +46,19 @@ public nonisolated enum IndividualPersonaPackage {
             job("emergency-pack",      "Emergency pack",           "Assemble an emergency information package.", .findings),
             job("secure-share",        "Secure share / redaction", "Prepare a redacted package to share safely.", .findings),
             job("personal-chronology", "Personal chronology",      "See your personal timeline (undated labelled).", .linkage),
-            job("legacy-archive",      "Legacy archive",           "Assemble a legacy archive with a sealed receipt.", .findings)
+            job("legacy-archive",      "Legacy archive",           "Assemble a legacy archive with a sealed receipt.", .findings),
+            // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
+            // surfaced in plain personal language. Same persona-neutral router, no fork.
+            job("ask",                 "Ask my records",           "Ask a question over your records — every answer cites its document.", .ask),
+            job("methods",             "Guided methods",           "Step-by-step structured methods (5W1H, checklists) over your records.", .methods),
+            job("name-resolution",     "Name & alias resolution",  "Confirm two names are the same person/company (reversible, you decide).", .identityResolution),
+            job("doc-reliability",     "Document reliability",     "Assess how reliable a document or its source is.", .sourceReliability),
+            job("conflicts-gaps",      "Conflicts & gaps",         "See where your records disagree or are missing (absence ≠ proof).", .contradictionGap),
+            job("why",                 "Why did this happen?",     "Trace causes step by step over your cited records.", .causalAnalysis),
+            job("fix-it",              "Fix-it list",              "Track corrective actions (renewals, disputes, fixes) to closure.", .capaRegister),
+            job("fix-review",          "Did the fix work?",        "Verify a completed fix actually resolved the problem.", .effectivenessReview),
+            job("document-vault",      "Document vault",           "Custody-tracked vault for originals with integrity hashes.", .evidenceCustody),
+            job("close-matter",        "Close a matter",           "Close a personal matter (sealed, reopenable with history).", .closure)
         ]
     }
 

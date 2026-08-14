@@ -48,8 +48,19 @@ public enum JobDocumentationCatalog {
     }
 
     /// All documented jobs for a persona label ("Investigator", …), matrix order.
+    /// Application labels may carry a descriptive suffix ("Researcher / Historian",
+    /// "Lawyer / Professional Reviewer") while the matrix keys on the bare persona
+    /// name — match on the label's first "/"-separated component so the bridge
+    /// holds for every persona, not only the ones whose label happens to be bare.
     public static func docs(forPersona persona: String) -> [JobDocumentation] {
-        all.filter { $0.persona.caseInsensitiveCompare(persona) == .orderedSame }
+        let key = normalizedPersona(persona)
+        return all.filter { normalizedPersona($0.persona) == key }
+    }
+
+    private static func normalizedPersona(_ label: String) -> String {
+        (label.split(separator: "/").first.map(String.init) ?? label)
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
     }
 
     /// Bridge from a launchable PersonaJob to its matrix documentation by

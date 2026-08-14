@@ -48,7 +48,17 @@ public nonisolated enum JournalistPersonaPackage {
             job("right-of-reply",     "Right of reply",         "Log subjects and their responses.", .subjectDossier),
             job("publication",        "Publication decision",   "Record the human publication decision (never automated).", .closure),
             job("correction-history", "Correction history",     "Track post-publication corrections.", .analysis),
-            job("publication-package","Publication package",    "Assemble the verified publication package + sealed receipt.", .findings)
+            job("publication-package","Publication package",    "Assemble the verified publication package + sealed receipt.", .findings),
+            // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
+            // surfaced with newsroom framing. Same persona-neutral router, no fork.
+            job("ask",                "Ask the story file",     "Ask a question over the story's sources — every claim cited.", .ask),
+            job("methods",            "Method workbench",       "Run structured methods (5W1H, hypothesis matrix…) over the story.", .methods),
+            job("data-desk",          "Story data desk",        "Build datasets over documents (logs, filings) with cited cells.", .dataLab),
+            job("whos-who",           "Who's who resolution",   "Unify names and aliases to one subject (reversible, human-reviewed).", .identityResolution),
+            job("causal",             "Causal analysis",        "Trace why events unfolded — Five Whys / Fishbone over cited evidence.", .causalAnalysis),
+            job("source-vault",       "Source-document vault",  "Custody-tracked vault for source documents with integrity hashes.", .evidenceCustody),
+            job("correction-actions", "Correction actions",     "Track corrective actions on published errors to closure.", .capaRegister),
+            job("correction-review",  "Correction effectiveness", "Verify a published correction actually resolved the error.", .effectivenessReview)
         ]
     }
 
