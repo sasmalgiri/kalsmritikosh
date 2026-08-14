@@ -85,27 +85,72 @@ public struct CoreMLEmbedderProvider: ModelProvider {
     // MARK: - Embedding
 
     public func embed(text: String) async throws -> [Float] {
-        guard let modelURL = locateModelURL(),
-              let tokenizer = BERTWordPieceTokenizer(subdirectory: subdirectory,
-                                                     maxLength: maxSequenceLength) else {
+        // PERF-2: the compiled model + tokenizer are loaded ONCE and cached
+        // process-wide (see CoreMLEmbedderRuntime) instead of recompiled and
+        // reloaded on every call — the dominant cost on a large ingest.
+        guard let runtime = await CoreMLEmbedderRuntime.shared.runtime(
+            modelName: modelName, subdirectory: subdirectory, maxSequenceLength: maxSequenceLength) else {
             return []   // not bundled → let the caller fall back to NLEmbedder
         }
-        let model: MLModel
-        do {
-            let compiled = try modelURL.pathExtension == "mlmodelc"
-                ? modelURL : await MLModel.compileModel(at: modelURL)
-            model = try MLModel(contentsOf: compiled)
-        } catch {
-            KalsmritikoshLog.routing.error("CoreMLEmbedderProvider: model load failed: \(String(describing: error), privacy: .public)")
-            return []
-        }
-        let encoded = tokenizer.encode(text: text)
+        let encoded = runtime.tokenizer.encode(text: text)
         return (try? Self.runForward(
-            model: model,
+            model: runtime.model,
             inputIDs: encoded.inputIDs,
             attentionMask: encoded.attentionMask,
             length: maxSequenceLength
         )) ?? []
+    }
+
+    /// PERF-2: TRUE batched Core ML inference. Tokenizes every text, submits
+    /// them as ONE `MLArrayBatchProvider`, and lets Core ML run the batch in a
+    /// single dispatch (far fewer per-call boundaries than N single predictions
+    /// — and the model/tokenizer are loaded once). Each output is pooled +
+    /// L2-normalized identically to the single path, so stored vectors are
+    /// byte-for-byte the same. Order is preserved. On any failure the whole
+    /// batch returns [] so the caller falls back cleanly.
+    public func embedBatch(texts: [String]) async throws -> [[Float]] {
+        guard !texts.isEmpty else { return [] }
+        guard let runtime = await CoreMLEmbedderRuntime.shared.runtime(
+            modelName: modelName, subdirectory: subdirectory, maxSequenceLength: maxSequenceLength) else {
+            return []
+        }
+        let length = maxSequenceLength
+        var providers: [MLFeatureProvider] = []
+        var masks: [[Int32]] = []
+        providers.reserveCapacity(texts.count)
+        masks.reserveCapacity(texts.count)
+        do {
+            for text in texts {
+                let encoded = runtime.tokenizer.encode(text: text)
+                let shape: [NSNumber] = [1, NSNumber(value: length)]
+                let ids = try MLMultiArray(shape: shape, dataType: .int32)
+                let mask = try MLMultiArray(shape: shape, dataType: .int32)
+                for i in 0..<length {
+                    ids[i] = NSNumber(value: i < encoded.inputIDs.count ? encoded.inputIDs[i] : Int32(BGETokenizer.padID))
+                    mask[i] = NSNumber(value: i < encoded.attentionMask.count ? encoded.attentionMask[i] : 0)
+                }
+                masks.append(encoded.attentionMask)
+                providers.append(try MLDictionaryFeatureProvider(dictionary: [
+                    "input_ids": MLFeatureValue(multiArray: ids),
+                    "attention_mask": MLFeatureValue(multiArray: mask)
+                ]))
+            }
+            let batch = MLArrayBatchProvider(array: providers)
+            let results = try runtime.model.predictions(fromBatch: batch)
+            guard results.count == texts.count else { return [] }
+            var out: [[Float]] = []
+            out.reserveCapacity(texts.count)
+            for i in 0..<results.count {
+                let r = results.features(at: i)
+                guard let name = r.featureNames.first(where: { r.featureValue(for: $0)?.multiArrayValue != nil }),
+                      let arr = r.featureValue(for: name)?.multiArrayValue else { return [] }
+                out.append(Self.l2normalize(Self.poolIfNeeded(arr, mask: masks[i], seqLength: length)))
+            }
+            return out
+        } catch {
+            KalsmritikoshLog.routing.error("CoreMLEmbedderProvider: batch inference failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     // MARK: - Model location
@@ -184,5 +229,62 @@ public struct CoreMLEmbedderProvider: ModelProvider {
         let norm = sqrt(v.reduce(0) { $0 + $1 * $1 })
         guard norm > 0 else { return [] }
         return v.map { $0 / norm }
+    }
+}
+
+// MARK: - PERF-2 — process-wide compiled-model + tokenizer cache
+
+/// Loads and compiles the Core ML embedder ONCE per (modelName, subdirectory)
+/// and keeps the compiled MLModel + tokenizer resident for the process. Before
+/// this, CoreMLEmbedderProvider recompiled + reloaded the model and rebuilt the
+/// tokenizer on EVERY embed call — thousands of times during a large ingest.
+/// An actor so concurrent lanes share one warm model without a data race.
+actor CoreMLEmbedderRuntime {
+    static let shared = CoreMLEmbedderRuntime()
+
+    struct Runtime {
+        let model: MLModel
+        let tokenizer: BERTWordPieceTokenizer
+    }
+
+    private var cache: [String: Runtime] = [:]
+    /// Keys that were tried and found unavailable (not bundled / load failed),
+    /// so we don't repeatedly pay a failing compile on the fallback path.
+    private var unavailable: Set<String> = []
+
+    func runtime(modelName: String, subdirectory: String, maxSequenceLength: Int) async -> Runtime? {
+        let key = "\(subdirectory)/\(modelName)#\(maxSequenceLength)"
+        if let hit = cache[key] { return hit }
+        if unavailable.contains(key) { return nil }
+
+        guard let modelURL = Self.locate(modelName: modelName, subdirectory: subdirectory),
+              let tokenizer = BERTWordPieceTokenizer(subdirectory: subdirectory, maxLength: maxSequenceLength) else {
+            unavailable.insert(key)
+            return nil
+        }
+        do {
+            let compiled = modelURL.pathExtension == "mlmodelc"
+                ? modelURL : try await MLModel.compileModel(at: modelURL)
+            let model = try MLModel(contentsOf: compiled)
+            let runtime = Runtime(model: model, tokenizer: tokenizer)
+            cache[key] = runtime
+            return runtime
+        } catch {
+            KalsmritikoshLog.routing.error("CoreMLEmbedderRuntime: model load failed: \(String(describing: error), privacy: .public)")
+            unavailable.insert(key)
+            return nil
+        }
+    }
+
+    private static func locate(modelName: String, subdirectory: String) -> URL? {
+        for ext in ["mlmodelc", "mlpackage"] {
+            if let url = Bundle.main.url(forResource: modelName, withExtension: ext, subdirectory: subdirectory) {
+                return url
+            }
+            if let url = Bundle.main.url(forResource: modelName, withExtension: ext) {
+                return url
+            }
+        }
+        return nil
     }
 }
