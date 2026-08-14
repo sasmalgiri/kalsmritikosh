@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 103
+    public static let latestVersion = 104
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -442,11 +442,15 @@ public enum SchemaMigrations {
                                                   "created_at"],
             // v103 — P9.3/GOV-005 disk-backed ANN: IVF meta/cells/postings in the single ledger (three NEW
             // tables; ann_index_meta's presence distinguishes v103 from v102). Population is background
-            // build work, never migration work. This is the NEWEST marker.
+            // build work, never migration work.
             "ann_index_meta": ["model_id", "strategy", "state", "dimension", "cell_count",
                                "trained_vector_count", "train_seed", "created_at", "updated_at"],
             "ann_cells": ["model_id", "cell_id", "centroid", "vector_count", "updated_at"],
-            "ann_postings": ["model_id", "cell_id", "chunk_id", "q", "scale"]
+            "ann_postings": ["model_id", "cell_id", "chunk_id", "q", "scale"],
+            // v104 — AUD-CHAIN tamper-evident audit hash chain sealing the existing append-only
+            // ledgers (one NEW table; its presence distinguishes v104 from v103). This is the NEWEST marker.
+            "audit_chain": ["seq", "source", "event_id", "occurred_at", "payload_hash",
+                            "prev_hash", "entry_hash", "sealed_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -585,7 +589,8 @@ public enum SchemaMigrations {
         (100, v100),
         (101, v101),
         (102, v102),
-        (103, v103)
+        (103, v103),
+        (104, v104)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5450,6 +5455,31 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v104: String = """
+    -- AUD-CHAIN (SAP-inspired change-document audit trail) — a tamper-EVIDENT hash chain SEALING
+    -- the app's existing append-only audit ledgers (custody_events + fact_reviews). This adds NO
+    -- second source of truth: each row is a SEAL over one already-recorded audit event, ordered
+    -- deterministically, with entry_hash = HMAC(payload || prev_hash). Any insertion, edit,
+    -- deletion or reordering of a sealed event breaks the chain at that point; a user-facing
+    -- "Verify integrity" pass reports the first broken seq. Append-only: seals are never rewritten.
+    CREATE TABLE audit_chain (
+        seq          INTEGER PRIMARY KEY,          -- 1-based position in the chain
+        source       TEXT NOT NULL,                -- 'custody' | 'review'
+        event_id     TEXT NOT NULL,                -- the sealed event's UUID
+        occurred_at  REAL NOT NULL,                -- the sealed event's timestamp
+        payload_hash TEXT NOT NULL,                -- HMAC of the event's canonical payload
+        prev_hash    TEXT NOT NULL,                -- previous row's entry_hash (genesis for seq 1)
+        entry_hash   TEXT NOT NULL,                -- HMAC(payload_hash || prev_hash)
+        sealed_at    REAL NOT NULL,
+        CHECK(source IN ('custody','review')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    -- One seal per (source, event) — sealing is idempotent, re-sealing a seen event is a no-op.
+    CREATE UNIQUE INDEX idx_audit_chain_event ON audit_chain(source, event_id);
     """
 
     private static let v103: String = """

@@ -95,6 +95,28 @@ public actor FactReviewsRepository {
         return rows.compactMap(decode)
     }
 
+    /// AUD-CHAIN — every human decision as a canonical seal input, oldest
+    /// first. Stable sorted `key=value;` payload over the immutable fields so
+    /// verification re-hashing is deterministic.
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        let rows = try await database.query("""
+        SELECT id, subject_kind, subject_id, action, prior_value, new_value, reviewer, reason, reviewed_at, reversal_of
+        FROM fact_reviews ORDER BY reviewed_at ASC, id ASC;
+        """, [])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let subjectKind = r.string(1), let subjectID = r.uuid(2),
+                  let action = r.string(3), let reviewer = r.string(6), let at = r.date(8) else { return nil }
+            let prior = r.string(4) ?? ""
+            let newV = r.string(5) ?? ""
+            let reason = r.string(7) ?? ""
+            let reversalOf = r.uuid(9)?.uuidString ?? ""
+            let payload = "action=\(action);at=\(at.timeIntervalSince1970);new=\(newV);"
+                + "prior=\(prior);reason=\(reason);reversalOf=\(reversalOf);reviewer=\(reviewer);"
+                + "subjectID=\(subjectID.uuidString);subjectKind=\(subjectKind)"
+            return AuditChainEvent(source: .review, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
+
     /// Full append-only history for one subject, newest first.
     public func history(forSubject id: UUID) async throws -> [FactReview] {
         let rows = try await database.query("""

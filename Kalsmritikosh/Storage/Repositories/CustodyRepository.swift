@@ -57,6 +57,25 @@ public actor CustodyRepository {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// AUD-CHAIN — every custody event as a canonical seal input, oldest first.
+    /// The payload is a stable sorted `key=value;` string over the immutable
+    /// fields so re-hashing during verification is deterministic across runs.
+    public func auditChainEvents() async throws -> [AuditChainEvent] {
+        let rows = try await database.query("""
+        SELECT id, file_id, kind, actor, at, detail, hash
+        FROM custody_events ORDER BY at ASC, id ASC;
+        """, [])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let fileID = r.uuid(1), let kind = r.string(2),
+                  let actor = r.string(3), let at = r.date(4) else { return nil }
+            let detail = r.string(5) ?? ""
+            let hash = r.string(6) ?? ""
+            let payload = "actor=\(actor);at=\(at.timeIntervalSince1970);detail=\(detail);"
+                + "fileID=\(fileID.uuidString);hash=\(hash);kind=\(kind)"
+            return AuditChainEvent(source: .custody, eventID: id, occurredAt: at, canonicalPayload: payload)
+        }
+    }
+
     /// Count of recorded hash mismatches — a tamper signal the UI can surface.
     public func mismatchCount() async throws -> Int {
         let rows = try await database.query(

@@ -415,6 +415,9 @@ public final class AppState {
     public private(set) var factReviews: FactReviewsRepository?
     /// T18 — append-only chain-of-custody ledger over source files.
     public private(set) var custody: CustodyRepository?
+    /// AUD-CHAIN — tamper-evident hash chain sealing the custody + review
+    /// ledgers; drives the Audit view's "Verify integrity" action.
+    public private(set) var auditChain: AuditChainService?
     /// §16 — append-only derived-objects ledger (query-time extractions).
     public private(set) var derivedObjects: DerivedObjectsRepository?
     /// A2 — canonical structural evidence store (typed blocks + versions).
@@ -2078,6 +2081,24 @@ public final class AppState {
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
+            // AUD-CHAIN — seal the two append-only ledgers into a verifiable
+            // hash chain. Secret in the Keychain (falls back to a per-run
+            // secret if unavailable — still detects corruption). The provider
+            // reads BOTH ledgers' ordered canonical events at seal/verify time.
+            if let auditSecret = AuditChainSecret.loadOrGenerate() {
+                let auditChainService = AuditChainService(
+                    database: db, secret: auditSecret,
+                    eventProvider: { [weak custodyRepo, weak factReviewsRepo] in
+                        var out = (try? await custodyRepo?.auditChainEvents()) ?? []
+                        out += (try? await factReviewsRepo?.auditChainEvents()) ?? []
+                        return out
+                    })
+                self.auditChain = auditChainService
+                // Seal off the query path, then keep it current on a slow cadence.
+                await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
+                    id: "audit.chain.seal", interval: 600,
+                    body: { [weak auditChainService] in _ = try? await auditChainService?.seal() }))
+            }
             self.sensitiveScopes = sensitiveScopesRepo
             self.screenAuthorizer = ScreenScopeAuthorizer(repository: sensitiveScopesRepo)
             let svc = SensitiveScopeMutationService(repository: sensitiveScopesRepo)
