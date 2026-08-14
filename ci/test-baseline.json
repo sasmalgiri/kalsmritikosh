@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3448,
-  "baselineCommit": "HEAD-perf1",
-  "note": "Whole-suite floor from hosted build-and-test on PR #80 (PERF-1 SQLite read tuning: mmap_size/cache_size/temp_store; durability unchanged): total=3448 passed=3446 failed=0 skipped=2; floor RAISED 3446 -> 3448. Schema v104; migration floor 393; parser floor 126."
+  "minimumExecutedTests": 3452,
+  "baselineCommit": "HEAD-perf2",
+  "note": "Whole-suite floor from hosted build-and-test on PR #81 (PERF-2: BGE embedder loads model once + true batched Core ML inference; byte-identical vectors, no re-embed): total=3452 passed=3450 failed=0 skipped=2; floor RAISED 3448 -> 3452. Schema v104; migration floor 393; parser floor 126."
 }
