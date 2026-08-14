@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3435,
-  "baselineCommit": "7ebaf41",
-  "note": "Whole-suite floor from hosted build-and-test on PR #76 head 7ebaf41 (P9.3/GOV-005 complete: v103 disk-backed IVF ANN + strategy selector + coordinator + benchmarks, 36 new tests): total=3435 passed=3433 failed=0 skipped=2; floor RAISED 3400 -> 3435. Schema v103; migration floor 385; parser floor 126."
+  "minimumExecutedTests": 3443,
+  "baselineCommit": "c9839e2",
+  "note": "Whole-suite floor from hosted build-and-test on PR #78 head c9839e2 (AUD-CHAIN: SAP-style tamper-evident audit hash chain sealing the append-only ledgers, migration v104, 9 new tests): total=3443 passed=3441 failed=0 skipped=2; floor RAISED 3435 -> 3443. Schema v104; migration floor 393; parser floor 126."
 }
