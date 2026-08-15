@@ -176,13 +176,56 @@ public final class AppState {
         maintenanceAskPending = false
     }
 
-    /// Called by the UI when the user answers the "scan is running —
-    /// continue or stop?" card. Stop cancels the in-flight pass at its next
-    /// rule boundary; the previously derived gap/contradiction layers stay
-    /// intact (a cancelled pass never persists a partial derivation).
+    /// Called by the UI when the user answers the "background work running —
+    /// continue or stop?" card. Stop cancels the in-flight maintenance pass
+    /// at its next rule boundary (prior derived layers stay intact) AND
+    /// pauses the ingest/enrichment pipeline (resumable from the Live panel —
+    /// nothing in flight is left half-written). Continue suppresses re-asking
+    /// until the current busy episode fully ends.
     public func respondToScanContinuePrompt(continueScanning: Bool) {
-        if !continueScanning { idleMaintenanceScan?.cancel() }
+        if continueScanning {
+            resumePromptSuppressed = true
+        } else {
+            idleMaintenanceScan?.cancel()
+            if ingestRunState == .running || ingestActiveCount > 0 { pauseIngest() }
+        }
         scanContinuePromptPending = false
+    }
+
+    /// Once the user chose Continue for this busy episode, don't re-ask on
+    /// every later idle/return cycle — cleared when all work goes quiet.
+    private var resumePromptSuppressed = false
+    private var idleResumeWatcher: Task<Void, Never>?
+
+    /// Any long-running background work in flight: bulk ingest, per-file
+    /// enrichment activity, or the idle maintenance scan.
+    private var backgroundWorkInFlight: Bool {
+        ingestRunState == .running || ingestActiveCount > 0 || idleMaintenanceScan != nil
+    }
+
+    /// Owner decision 2026-08-15 (generalized): whenever the user RETURNS
+    /// from ≥90s of inactivity while background work is running, raise the
+    /// continue-or-stop card. This watcher covers the minutes-long work
+    /// (ingest + enrichment) that the per-scan watcher was too narrow for.
+    private func startIdleResumeWatcher() {
+        idleResumeWatcher?.cancel()
+        idleResumeWatcher = Task { [weak self] in
+            var wasIdle = false
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard let self else { return }
+                let idle = SystemActivity.isIdle(threshold: 90)
+                let busy = self.backgroundWorkInFlight
+                if !busy {
+                    // Episode over — clear suppression and any stale card.
+                    self.resumePromptSuppressed = false
+                    if self.scanContinuePromptPending { self.scanContinuePromptPending = false }
+                } else if wasIdle && !idle && !self.resumePromptSuppressed {
+                    self.scanContinuePromptPending = true
+                }
+                wasIdle = idle
+            }
+        }
     }
 
     /// Shared memory-distillation core used by BOTH the on-demand "Distill
@@ -1952,6 +1995,10 @@ public final class AppState {
             }
             // SHELL-001 — the shell navigation-session autosave/resume, live from boot over the shared ledger.
             self.shellSession = ShellSessionRepository(database: db)
+            // Owner decision 2026-08-15 — the return-from-idle consent card
+            // covers ALL long-running background work, not only the
+            // seconds-long maintenance scan.
+            startIdleResumeWatcher()
             // INV-01-A — the Investigator case-intake & scope authority, live from boot over the shared ledger.
             let investigationCasesRepo = InvestigationCaseRepository(database: db)
             self.investigationCases = investigationCasesRepo

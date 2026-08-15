@@ -688,10 +688,10 @@ public struct RootView: View {
                     Image(systemName: "wand.and.rays")
                         .foregroundStyle(Theme.brand)
                         .imageScale(.small)
-                    Text("Background scan running")
+                    Text("Background work running")
                         .font(.caption.weight(.semibold))
                 }
-                Text("You're back — the idle gap/contradiction scan is still finishing. Keep going or stop?")
+                Text("You're back — scanning/enrichment is still running. Keep going or stop?")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -699,10 +699,12 @@ public struct RootView: View {
                     Button("Stop") { appState.respondToScanContinuePrompt(continueScanning: false) }
                         .controlSize(.small)
                         .buttonStyle(.pressable)
+                        .help("Pauses ingest/enrichment (resume any time from the Live panel) and cancels the maintenance scan — nothing is left half-written.")
                     Button("Continue") { appState.respondToScanContinuePrompt(continueScanning: true) }
                         .controlSize(.small)
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.brand)
+                        .help("Lets the work finish — you won't be asked again until it completes.")
                 }
             }
             .padding(12)
