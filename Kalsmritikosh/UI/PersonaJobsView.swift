@@ -102,6 +102,7 @@ public struct PersonaJobsView: View {
     @Environment(AppState.self) private var appState
     @State private var model: PersonaJobsModel?
     @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
+    @State private var runnerJob: PersonaJob?       // JOB-RUN: job whose guided walkthrough is open
 
     public init() {}
 
@@ -113,6 +114,19 @@ public struct PersonaJobsView: View {
                         JobDocumentationDetail(
                             job: job,
                             personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "")
+                    }
+                    .sheet(item: $runnerJob) { job in
+                        // JOB-RUN — guided Previous/Next walkthrough over the job's
+                        // documented workflow; "Run job now" uses the SAME launch path.
+                        if let doc = JobDocumentationCatalog.doc(
+                            personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
+                            jobTitle: job.title) {
+                            JobRunnerView(
+                                job: job, doc: doc,
+                                canRun: !model.busy && model.activeCaseID != nil,
+                                onRun: { Task { await model.run(job, actor: "me", at: Date()) } },
+                                onClose: { runnerJob = nil })
+                        }
                     }
             } else if appState.personaJobs != nil {
                 ProgressView().task { await setup() }
@@ -226,11 +240,31 @@ public struct PersonaJobsView: View {
                         }
                         Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                         Spacer(minLength: 0)
-                        Button {
-                            Task { await model.run(job, actor: "me", at: Date()) }
-                        } label: { Label("Run", systemImage: "arrow.right.circle") }
-                        .buttonStyle(.bordered)
-                        .disabled(model.busy || model.activeCaseID == nil)
+                        HStack(spacing: 8) {
+                            Button {
+                                Task { await model.run(job, actor: "me", at: Date()) }
+                            } label: { Label("Run", systemImage: "arrow.right.circle") }
+                            .buttonStyle(.bordered)
+                            .disabled(model.busy || model.activeCaseID == nil)
+                            // JOB-RUN — the guided step-by-step walkthrough of this
+                            // job's documented workflow (Previous/Next/Save/progress).
+                            if let doc = JobDocumentationCatalog.doc(
+                                personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
+                                jobTitle: job.title) {
+                                Button { runnerJob = job } label: {
+                                    Label("Guide", systemImage: "signpost.right")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Walk this job step by step — your place is saved.")
+                                if let saved = JobRunnerProgress.savedStep(jobID: doc.jobID) {
+                                    Text("step \(saved + 1)/\(JobRunnerView.steps(of: doc).count)")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                        .help("Guided walkthrough in progress — reopen Guide to resume.")
+                                }
+                            }
+                        }
                     }
                     .padding(12)
                     .frame(height: 130, alignment: .topLeading)
