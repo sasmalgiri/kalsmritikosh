@@ -56,42 +56,51 @@ public struct AskView: View {
     public init() {}
 
     public var body: some View {
-        // Dead-simple, can't-collapse layout: three stacked regions — a header on top, a flexible middle that
-        // fills all remaining space (empty-state hero centered, or the scrolling transcript), and the composer
-        // pinned at the very bottom. No GeometryReader / safeAreaInset tricks, so the composer is ALWAYS visible.
-        VStack(spacing: 0) {
-            header
-            Divider().opacity(0.4)
-            ZStack {
-                AuroraBackdrop().ignoresSafeArea()
+        // The middle is ALWAYS a ScrollView (empty-state hero centered via
+        // containerRelativeFrame, or the transcript), exactly like every other
+        // surface that lays out correctly (Settings, Answers, …): a ScrollView
+        // absorbs whatever height the macOS 26 NavigationSplitView proposes,
+        // where a raw expanding stack inflates and pushes chrome off-window.
+        // The composer is pinned to the VIEWPORT bottom with safeAreaInset —
+        // the platform pattern for message bars — so it cannot be pushed out.
+        ScrollViewReader { proxy in
+            ScrollView {
                 if turns.isEmpty {
                     placeholder
+                        .frame(maxWidth: .infinity)
+                        .containerRelativeFrame(.vertical, alignment: .center)
                 } else {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 14) {
-                                ForEach(turns) { turn in
-                                    turnBubble(turn)
-                                        .id(turn.id)
-                                        .transition(.popIn)
-                                }
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .animation(Theme.springSoft, value: turns.count)
-                        }
-                        .scrollContentBackground(.hidden)
-                        .onChange(of: turns.count) { _, _ in
-                            if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(turns) { turn in
+                            turnBubble(turn)
+                                .id(turn.id)
+                                .transition(.popIn)
                         }
                     }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .animation(Theme.springSoft, value: turns.count)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if !attachments.isEmpty {
-                attachmentChips
+            .scrollContentBackground(.hidden)
+            .background(AuroraBackdrop())
+            .onChange(of: turns.count) { _, _ in
+                if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }
-            input
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            VStack(spacing: 0) {
+                header
+                Divider().opacity(0.4)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if !attachments.isEmpty {
+                    attachmentChips
+                }
+                input
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task { await loadOrCreateConversation() }

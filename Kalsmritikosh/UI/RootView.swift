@@ -942,7 +942,16 @@ public struct RootView: View {
     private var detail: some View {
         switch selection ?? .home {
         case .home:         HomeView(onNavigate: { navigate(to: $0) })
-        case .ask:          AskView()
+        case .ask:
+            // Hard-frame Ask to the REAL viewport. On macOS 26 the split-view
+            // detail can propose a pathological size to non-scroll content
+            // (measured: 210×1698 for a 850×630 viewport), which pushed the
+            // composer/header off-window. GeometryReader reports the actual
+            // available area; pinning AskView to it makes the layout immune
+            // to whatever the container proposes.
+            GeometryReader { g in
+                AskView().frame(width: g.size.width, height: g.size.height)
+            }
         case .search:       SearchView()
         case .work:         PersonaJobsView()
         case .handoff:      WorkProductHandoffView()
