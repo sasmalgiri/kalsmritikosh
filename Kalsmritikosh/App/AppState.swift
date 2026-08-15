@@ -113,6 +113,15 @@ public final class AppState {
     public private(set) var maintenanceAskPending: Bool = false
     private var maintenanceAskContinuation: CheckedContinuation<Bool, Never>?
 
+    /// True when the user resumed keyboard/mouse activity while an idle
+    /// background scan (gap + contradiction maintenance) was mid-pass —
+    /// drives the sidebar "keep scanning or stop?" card (owner decision
+    /// 2026-08-15: the idle start is fine, but resuming should ask).
+    public private(set) var scanContinuePromptPending: Bool = false
+    /// The in-flight idle maintenance pass; the card's Stop cancels it at
+    /// the next rule boundary (the prior derived layer is preserved).
+    private var idleMaintenanceScan: Task<Int, Never>?
+
     /// True while a memory-distillation pass is running (on-demand button or
     /// the idle background pass). Guards against overlapping runs and lets the
     /// UI disable the "Distill memory now" button while it's working.
@@ -165,6 +174,15 @@ public final class AppState {
         maintenanceAskContinuation?.resume(returning: run)
         maintenanceAskContinuation = nil
         maintenanceAskPending = false
+    }
+
+    /// Called by the UI when the user answers the "scan is running —
+    /// continue or stop?" card. Stop cancels the in-flight pass at its next
+    /// rule boundary; the previously derived gap/contradiction layers stay
+    /// intact (a cancelled pass never persists a partial derivation).
+    public func respondToScanContinuePrompt(continueScanning: Bool) {
+        if !continueScanning { idleMaintenanceScan?.cancel() }
+        scanContinuePromptPending = false
     }
 
     /// Shared memory-distillation core used by BOTH the on-demand "Distill
@@ -1594,10 +1612,39 @@ public final class AppState {
                 events: events,
                 distiller: memoryDistiller,
                 scanForGaps: { [weak self] in
-                    // System 3 idle maintenance re-derives BOTH the gap
-                    // layer and the contradiction layer (both rule-based).
-                    let gaps = await self?.scanForGaps() ?? 0
-                    await self?.scanForContradictions()
+                    guard let self else { return 0 }
+                    // System 3 idle maintenance re-derives BOTH the gap layer
+                    // and the contradiction layer (both rule-based). The pass
+                    // is cancellable: if the user resumes activity while it
+                    // runs, a sidebar card asks continue-or-stop (owner
+                    // decision 2026-08-15); Stop cancels at the next rule
+                    // boundary and the prior derived layers stay intact.
+                    let scan = Task { () -> Int in
+                        let gaps = await self.scanForGaps()
+                        if !Task.isCancelled { await self.scanForContradictions() }
+                        return gaps
+                    }
+                    await MainActor.run { self.idleMaintenanceScan = scan }
+                    let watcher = Task {
+                        while !Task.isCancelled {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            if Task.isCancelled { return }
+                            if !SystemActivity.isIdle(threshold: 3) {
+                                await MainActor.run {
+                                    if self.idleMaintenanceScan != nil {
+                                        self.scanContinuePromptPending = true
+                                    }
+                                }
+                                return
+                            }
+                        }
+                    }
+                    let gaps = await scan.value
+                    watcher.cancel()
+                    await MainActor.run {
+                        self.idleMaintenanceScan = nil
+                        self.scanContinuePromptPending = false
+                    }
                     return gaps
                 },
                 onGapScan: { count in
@@ -2517,7 +2564,10 @@ public final class AppState {
         guard let entities, let gapNodes else { return 0 }
         let activity = beginProcess("Scanning for evidence gaps")
         defer { finishProcess(activity) }
-        await gapNodes.clear()
+        // The prior layer is REPLACED only at the very end (clear + insert
+        // together): a pass cancelled mid-way (the user's continue-or-stop
+        // card) leaves the previous complete derivation intact rather than
+        // an empty or partial gap layer.
         let detector = GapDetector()
         var found: [GapNode] = []
 
@@ -2536,6 +2586,8 @@ public final class AppState {
                 for label in labels { knownInvoiceNumbers.formUnion(Self.integers(in: label)) }
             }
         }
+
+        if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
 
         // Rules 2 & 3 need document bodies + subjects. Load a bounded
         // sample so one huge archive can't make an idle scan expensive.
@@ -2603,6 +2655,8 @@ public final class AppState {
             found += detector.detectMissingFinalVersion(documents: documents)
         }
 
+        if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
+
         // Rule 5 (A5.7) — unreadable regions from the structural layer: sources
         // whose parse was partial / corrupt / encrypted / unsupported / failed.
         if let evidenceStore {
@@ -2641,6 +2695,9 @@ public final class AppState {
             )
         }
 
+        if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
+        // Atomic-enough replace: clear + insert back-to-back at the end.
+        await gapNodes.clear()
         await gapNodes.insertMany(found)
         KalsmritikoshLog.knowledge.info("Gap scan found \(found.count, privacy: .public) likely-missing items (sequence + dangling-ref + thread-parent + missing-attachment + unreadable-region + payment-proof + custody-break + expected-response + final-version + cadence-break)")
         return found.count
@@ -2677,6 +2734,7 @@ public final class AppState {
                 found += detector.detectStatementConflicts(asserts)
             }
         }
+        if Task.isCancelled { return found.count }   // stopped by the user — prior layer stands
         await contradictions.clear()
         await contradictions.insertMany(found)
         let openCount = await contradictions.count()

@@ -533,11 +533,13 @@ public struct RootView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
                 maintenanceAskPrompt
+                scanContinuePrompt
                 // Persistent live-activity window pinned to the sidebar corner
                 // (always visible — replaces the old auto-hiding pills). Tap to
                 // open the full Live dashboard.
                 LiveActivityPanel(onOpen: { navigate(to: .live) })
             }
+            .animation(Theme.springSoft, value: appState.scanContinuePromptPending)
             .animation(Theme.springSoft, value: appState.maintenanceAskPending)
             .animation(Theme.springSoft, value: appState.maintenanceActive)
             .animation(Theme.springSoft, value: appState.ingestActiveCount)
@@ -657,6 +659,47 @@ public struct RootView: View {
                         .controlSize(.small)
                         .buttonStyle(.pressable)
                     Button("Run now") { appState.respondToMaintenancePrompt(true) }
+                        .controlSize(.small)
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.brand)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Theme.brand.opacity(0.35), lineWidth: 1)
+            )
+            .padding(.horizontal, 10)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Owner decision 2026-08-15 — the idle background scan may START after
+    /// 90 quiet seconds, but the moment the user RESUMES activity mid-pass
+    /// this card asks whether to keep scanning or stop. Stop cancels the pass
+    /// at its next rule boundary; the prior derived layers stay intact.
+    @ViewBuilder
+    private var scanContinuePrompt: some View {
+        if appState.scanContinuePromptPending {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.rays")
+                        .foregroundStyle(Theme.brand)
+                        .imageScale(.small)
+                    Text("Background scan running")
+                        .font(.caption.weight(.semibold))
+                }
+                Text("You're back — the idle gap/contradiction scan is still finishing. Keep going or stop?")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Button("Stop") { appState.respondToScanContinuePrompt(continueScanning: false) }
+                        .controlSize(.small)
+                        .buttonStyle(.pressable)
+                    Button("Continue") { appState.respondToScanContinuePrompt(continueScanning: true) }
                         .controlSize(.small)
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.brand)
