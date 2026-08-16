@@ -321,7 +321,10 @@ public actor IngestCoordinator {
         let modelID = vectors.embeddingModelID   // v54 — embed the ACTIVE model's gap
         while !Task.isCancelled {
             // Live Pause — idle between batches until resumed (or cancelled).
-            while drainPaused && !Task.isCancelled {
+            // ENGINE POWER — Lightning mode idles the drain the same way; the
+            // pending set is durable, so flipping back to Full power resumes
+            // embedding exactly where it left off (nothing is lost).
+            while (drainPaused || !FeatureFlags.fullPowerModeValue()) && !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
             if Task.isCancelled { break }
