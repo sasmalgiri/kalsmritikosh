@@ -252,7 +252,7 @@ private struct KnowledgeListView: View {
     private func reject(_ row: EntitySummaryRow) async {
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, "rejected")
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .entity, subjectID: row.id, action: .reject,
             priorValue: row.value, reviewer: "user",
             reason: "Excluded from the Knowledge browser"
@@ -263,7 +263,7 @@ private struct KnowledgeListView: View {
     private func restore(_ row: EntitySummaryRow) async {
         guard let entities = appState.entities else { return }
         try? await entities.setReviewStatus(row.id, nil)
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .entity, subjectID: row.id, action: .accept,
             priorValue: row.value, reviewer: "user", reason: "Restored"
         ))
@@ -279,7 +279,7 @@ private struct KnowledgeListView: View {
         guard !trimmed.isEmpty, trimmed != row.value,
               let entities = appState.entities else { return }
         try? await entities.addAlias(entityID: row.id, aliasNormalized: trimmed, source: "user-correction")
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .entity, subjectID: row.id, action: .correct,
             priorValue: row.value, newValue: trimmed, reviewer: "user",
             reason: "Corrected spelling"
@@ -295,7 +295,7 @@ private struct KnowledgeListView: View {
         guard loser.id != winner.id, let entities = appState.entities else { return }
         do {
             try await entities.merge(loserID: loser.id, winnerID: winner.id)
-            try? await appState.factReviews?.record(FactReview(
+            _ = try? await appState.factReviews?.record(FactReview(
                 subjectKind: .entity, subjectID: loser.id, action: .merge,
                 priorValue: loser.value, newValue: winner.value, reviewer: "user",
                 reason: "Merged \"\(loser.value)\" into \"\(winner.value)\""
@@ -311,7 +311,7 @@ private struct KnowledgeListView: View {
     private func unmerge(_ row: EntitySummaryRow) async {
         guard let entities = appState.entities else { return }
         try? await entities.unmerge(loserID: row.id)
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .entity, subjectID: row.id, action: .split,
             priorValue: row.value, reviewer: "user", reason: "Unmerged"
         ))

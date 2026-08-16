@@ -132,7 +132,7 @@ public enum RealDataProbe {
 
         // 2. Auto-generate from the archive's top real entities.
         var qs: [String] = []
-        if let entities = await appState.entities {
+        if let entities = appState.entities {
             let projects = (try? await entities.list(kind: .project, limit: 4))?.map(\.value) ?? []
             let orgs = (try? await entities.list(kind: .organization, limit: 4))?.map(\.value) ?? []
             let people = (try? await entities.list(kind: .person, limit: 4))?.map(\.value) ?? []

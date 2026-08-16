@@ -395,7 +395,7 @@ public struct FactStatusView: View {
     /// reload so the overlay reverts to the pre-review classification.
     private func undoReview(_ item: FactStatusItem) async {
         guard let review = reviews[item.id], let repo = appState.factReviews else { return }
-        try? await repo.reverse(
+        _ = try? await repo.reverse(
             review.id, subjectKind: item.sourceKind, subjectID: item.id,
             reason: "Undo of \(review.action.rawValue)"
         )
@@ -571,7 +571,7 @@ private struct ReviewSheet: View {
                 : nil,
             reason: trimmedReason.isEmpty ? nil : trimmedReason
         )
-        try? await appState.factReviews?.record(review)
+        _ = try? await appState.factReviews?.record(review)
         saving = false
         onDone()
         dismiss()

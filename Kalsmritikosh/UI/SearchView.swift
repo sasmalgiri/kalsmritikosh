@@ -127,7 +127,7 @@ public struct SearchView: View {
     private func setExcluded(_ chunk: Chunk, _ excluded: Bool) async {
         guard let chunks = appState.chunks else { return }
         try? await chunks.setReviewStatus(chunk.id, excluded ? "rejected" : nil)
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .chunk, subjectID: chunk.id,
             action: excluded ? .reject : .accept,
             priorValue: String(chunk.text.prefix(120)), reviewer: "user",
