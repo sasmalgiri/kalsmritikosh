@@ -1550,7 +1550,7 @@ public final class AppState {
             // recover any upgrade jobs stranded (running with an expired lease) by a prior crash/quit.
             let sourceUpgradeJobs = SourceUpgradeJobRepository(database: db)
             await ingest.configureUpgrades(database: db, jobs: sourceUpgradeJobs, priorityGate: priorityGate)
-            try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
+            _ = try? await sourceUpgradeJobs.recoverExpiredLeases(at: Date())
 
             // AEE-M1 — now that the upgrade subsystem is live, give the brain its adaptive
             // evidence bridge so a mission that needs evidence-ready DECISIVE sources can
@@ -2099,7 +2099,7 @@ public final class AppState {
             // #143 — boot the SHARED ProfessionalMethod engine ONCE (registry + run store + canonical evidence
             // gate) and wire the case-scoped method services so the Investigator method / causal / linkage /
             // CAPA persona jobs route into the REAL engine. Every persona resolves this SAME method runtime.
-            let sharedMethodCatalog = try await ProfessionalMethodCatalog.standard()
+            let sharedMethodCatalog = try ProfessionalMethodCatalog.standard()
             let sharedMethodRuns = MethodRunRepository(database: db)
             let sharedMethodGate = CanonicalWorkflowEvidenceReferenceGate(database: db, scopeRepository: sensitiveScopesRepo)
             let investigationMethodsService = InvestigationMethodService(

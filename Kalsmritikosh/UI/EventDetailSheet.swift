@@ -183,7 +183,7 @@ public struct EventDetailSheet: View {
         reviewBusy = true
         defer { reviewBusy = false }
         try? await events.setReviewStatus(event.id, excluded ? "rejected" : nil)
-        try? await appState.factReviews?.record(FactReview(
+        _ = try? await appState.factReviews?.record(FactReview(
             subjectKind: .event, subjectID: event.id,
             action: excluded ? .reject : .accept,
             priorValue: event.title, reviewer: "user",
