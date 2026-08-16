@@ -949,6 +949,9 @@ public actor HybridRetriever: Retriever {
         _ intent: UserIntent,
         candidateChunkIDs: [Chunk.ID]? = nil
     ) async throws -> [RetrievedChunk] {
+        // ENGINE POWER — Lightning mode answers from the structured layers
+        // alone; the vector layer (last in priority) is skipped entirely.
+        guard FeatureFlags.fullPowerModeValue() else { return [] }
         let query = await embedder.embed(intent.rawQuestion)
         // Empty = no embedding produced (T15). Treat the vector layer as
         // unavailable for this query and fall through to the structured

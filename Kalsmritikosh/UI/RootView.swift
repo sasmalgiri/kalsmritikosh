@@ -235,6 +235,9 @@ public struct RootView: View {
     /// (Group.simplePrimary); Advanced shows every screen. Everything hidden in Simple stays
     /// reachable via the header search + ⌘K palette. Persisted; default Simple.
     @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
+    /// ENGINE POWER — same defaults key FeatureFlags.fullPowerMode reads, so
+    /// the sidebar toggle and the engine's value getters stay in lockstep.
+    @AppStorage("kalsmritikosh.feature.fullPower") private var fullPower: Bool = true
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// Text in the always-visible header search box.
@@ -491,6 +494,20 @@ public struct RootView: View {
                 .labelsHidden()
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
+                // ENGINE POWER (owner request 2026-08-16) — Full power runs the
+                // complete stack (embeddings, vector search, on-device AI);
+                // Lightning answers from structure + full-text alone: fastest,
+                // lowest energy, still evidence-cited. Lossless flip: vectors
+                // resume backfilling the moment Full power returns.
+                Picker("Engine", selection: $fullPower) {
+                    Label("Full power", systemImage: "brain").tag(true)
+                    Label("Lightning", systemImage: "bolt.fill").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+                .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
                 onboardingTip
                 personaSection
                 if simpleMode {

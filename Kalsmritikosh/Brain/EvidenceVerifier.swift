@@ -345,7 +345,11 @@ public struct EvidenceVerifier: Verifier {
         let defaultsMode = UserDefaults.standard
             .string(forKey: "KALSMRITIKOSH_RERANKER")?
             .lowercased()
-        let rerankerMode = envMode ?? defaultsMode ?? "ladder"
+        // ENGINE POWER — Lightning mode turns the reranker off outright; the
+        // deterministic ranking (structure + FTS scores) stands alone.
+        let rerankerMode = FeatureFlags.fullPowerModeValue()
+            ? (envMode ?? defaultsMode ?? "ladder")
+            : "off"
         let rerankerDisabled = (rerankerMode == "off")
         let useEmbeddingReranker = (rerankerMode == "embed")
         let useLadder = (rerankerMode == "ladder")

@@ -242,8 +242,27 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func llmAnswerSynthesisValue() -> Bool {
+        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
         if UserDefaults.standard.object(forKey: kLLMSynthesis) == nil { return true }
         return UserDefaults.standard.bool(forKey: kLLMSynthesis)
+    }
+
+    /// ENGINE POWER (owner request 2026-08-16). Full power (default) = the
+    /// complete stack: embeddings, vector search, reranking, and on-device
+    /// AI. Lightning = the deterministic layers alone (structure + FTS) —
+    /// fastest, lowest energy; answers stay evidence-cited. The flip is
+    /// instant and lossless: the embedding drain idles (resumes exactly
+    /// where it left off when Full power returns), the vector layer skips,
+    /// the reranker turns off, and every LLM value getter reads false —
+    /// stored per-feature preferences are untouched.
+    public var fullPowerMode: Bool {
+        get { Self.fullPowerModeValue() }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kFullPower) }
+    }
+
+    public nonisolated static func fullPowerModeValue() -> Bool {
+        if UserDefaults.standard.object(forKey: kFullPower) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kFullPower)
     }
 
     /// MoE depth: after the brain drafts an answer, a critic pass checks it
@@ -259,6 +278,7 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func llmSelfCritiqueValue() -> Bool {
+        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
         if UserDefaults.standard.object(forKey: kLLMSelfCritique) == nil { return true }
         return UserDefaults.standard.bool(forKey: kLLMSelfCritique)
     }
@@ -276,6 +296,7 @@ public final class FeatureFlags {
     }
 
     public nonisolated static func moeCouncilValue() -> Bool {
+        guard fullPowerModeValue() else { return false }   // Lightning: all LLM features read OFF
         if UserDefaults.standard.object(forKey: kMoECouncil) == nil { return true }
         return UserDefaults.standard.bool(forKey: kMoECouncil)
     }
@@ -385,6 +406,7 @@ public final class FeatureFlags {
 
     // MARK: - Storage keys
 
+    private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "kalsmritikosh.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "kalsmritikosh.feature.expertRelevanceGating"
