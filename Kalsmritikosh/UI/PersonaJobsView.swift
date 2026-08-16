@@ -34,6 +34,22 @@ public final class PersonaJobsModel {
     public private(set) var lastOutcome: String?
     public private(set) var lastError: String?
     public private(set) var busy = false
+    /// JOB-JOURNEY — job ids already run against the active matter. UI journey
+    /// state (drives the phase progress + per-card checkmarks), persisted per
+    /// case in UserDefaults; the durable truth of what actually happened stays
+    /// in the ledger (case events / work products).
+    public private(set) var ranJobs: Set<String> = []
+
+    private func ranKey(_ caseID: UUID) -> String { "kalsmritikosh.jobs.ran.\(caseID.uuidString)" }
+    private func loadRanJobs() {
+        guard let caseID = activeCaseID else { ranJobs = []; return }
+        ranJobs = Set(UserDefaults.standard.stringArray(forKey: ranKey(caseID)) ?? [])
+    }
+    private func markRan(_ jobID: String) {
+        guard let caseID = activeCaseID else { return }
+        ranJobs.insert(jobID)
+        UserDefaults.standard.set(Array(ranJobs).sorted(), forKey: ranKey(caseID))
+    }
 
     public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository) {
         self.service = service; self.catalog = catalog; self.workspaces = workspaces
@@ -55,6 +71,7 @@ public final class PersonaJobsModel {
     public func select(persona id: ApplicationDefinitionID) async {
         selectedPersona = id
         activeCaseID = nil; activeMatterTitle = nil; lastOutcome = nil; lastError = nil
+        ranJobs = []
         await reloadJobs()
     }
 
@@ -77,6 +94,8 @@ public final class PersonaJobsModel {
             activeCaseID = out.producedID
             activeMatterTitle = title
             lastOutcome = out.summary; lastError = nil
+            loadRanJobs()
+            if let intakeID = intakeJob?.id { markRan(intakeID) }   // intake IS phase 1, done
         } catch { lastError = "\(error)"; lastOutcome = nil }
     }
 
@@ -92,6 +111,7 @@ public final class PersonaJobsModel {
             let out = try await service.launch(job, context: PersonaJobLaunchContext(
                 caseID: caseID, access: access, actor: actor, at: date))
             lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
+            markRan(job.id)
         } catch { lastError = "\(job.title): \(error)"; lastOutcome = nil }
     }
 }
@@ -195,14 +215,40 @@ public struct PersonaJobsView: View {
         }
     }
 
+    // JOB-JOURNEY — the matter card is the journey's front door. No matter
+    // open → a prominent "Start here" card (this IS phase 1, Intake). Matter
+    // open → the matter header with whole-journey progress.
     @ViewBuilder
     private func matterBar(_ model: PersonaJobsModel) -> some View {
         @Bindable var model = model
-        VStack(alignment: .leading, spacing: 8) {
-            if let title = model.activeMatterTitle, model.activeCaseID != nil {
-                Label("Open matter: \(title)", systemImage: "folder.fill.badge.person.crop").font(.callout.weight(.medium))
-            } else {
-                Text("Start a matter to run this persona's jobs").font(.subheadline).foregroundStyle(.secondary)
+        if let title = model.activeMatterTitle, model.activeCaseID != nil {
+            let total = model.jobs.count
+            let done = model.ranJobs.intersection(Set(model.jobs.map(\.id))).count
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill.badge.person.crop").foregroundStyle(Theme.brand)
+                    Text(title).font(.headline)
+                    Spacer()
+                    Text("\(done) of \(total) jobs run")
+                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+                ProgressView(value: Double(done), total: Double(max(total, 1)))
+                    .tint(Theme.brand)
+                Text("Work down the phases below — the highlighted phase is your next step. Every job stays evidence-cited.")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            .padding(14)
+            .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.25), lineWidth: 1))
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    stepBadge(1, done: false, active: true)
+                    Text("Start here — open a matter").font(.headline)
+                }
+                Text("A matter is the container all jobs run against (a case, story, research question, or personal topic). Name it, pick the workspace holding its documents, and start.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     TextField("Matter title", text: $model.matterTitle).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
                     Picker("Workspace", selection: $model.selectedWorkspace) {
@@ -212,19 +258,122 @@ public struct PersonaJobsView: View {
                         Task { await model.startMatter(actor: "me", at: Date()) }
                     } label: { Label("Start matter", systemImage: "play.fill") }
                     .buttonStyle(.borderedProminent)
+                    .tint(Theme.brand)
                     .disabled(model.busy || model.intakeJob == nil || model.selectedWorkspace == nil)
                 }
+            }
+            .padding(14)
+            .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.35), lineWidth: 1))
+        }
+    }
+
+    private func stepBadge(_ n: Int, done: Bool, active: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(done ? Color.green : (active ? Theme.brand : Color.primary.opacity(0.15)))
+                .frame(width: 22, height: 22)
+            if done {
+                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+            } else {
+                Text("\(n)").font(.caption.weight(.bold)).foregroundStyle(active ? .white : .secondary)
+            }
+        }
+    }
+
+    // JOB-JOURNEY — the persona's work as ordered PHASES (Intake → Collect →
+    // Analyze → Act → Deliver) instead of one flat grid. The first phase with
+    // unrun jobs is highlighted as the next step; each phase shows its own
+    // progress; run jobs get a checkmark.
+    private enum JobPhase: Int, CaseIterable, Identifiable {
+        case intake, collect, analyze, act, deliver
+        var id: Int { rawValue }
+        var label: String {
+            switch self {
+            case .intake:  return "Intake & scope"
+            case .collect: return "Collect & organize"
+            case .analyze: return "Analyze"
+            case .act:     return "Act & verify"
+            case .deliver: return "Deliver & close"
+            }
+        }
+        var icon: String {
+            switch self {
+            case .intake:  return "tray.and.arrow.down.fill"
+            case .collect: return "shippingbox.fill"
+            case .analyze: return "brain.head.profile"
+            case .act:     return "checkmark.seal.fill"
+            case .deliver: return "paperplane.fill"
+            }
+        }
+        static func phase(of kind: PersonaJobKind) -> JobPhase {
+            switch kind {
+            case .caseIntake:
+                return .intake
+            case .dataLab, .evidenceCustody, .sourceReliability, .identityResolution:
+                return .collect
+            case .ask, .analysis, .methods, .causalAnalysis, .linkage, .contradictionGap, .subjectDossier:
+                return .analyze
+            case .capaRegister, .effectivenessReview:
+                return .act
+            case .findings, .closure:
+                return .deliver
             }
         }
     }
 
     private func jobGrid(_ model: PersonaJobsModel) -> some View {
+        let phased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
+            let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
+            return inPhase.isEmpty ? nil : (phase, inPhase)
+        }
+        // The journey pointer: the first phase that still has unrun jobs.
+        let nextPhase = phased.first { !$0.1.allSatisfy { model.ranJobs.contains($0.id) } }?.0
+        return VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(phased.enumerated()), id: \.element.0.id) { index, entry in
+                let (phase, phaseJobs) = entry
+                let done = phaseJobs.filter { model.ranJobs.contains($0.id) }.count
+                let isNext = phase == nextPhase && model.activeCaseID != nil
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        stepBadge(index + 2, done: done == phaseJobs.count && model.activeCaseID != nil, active: isNext)
+                        Image(systemName: phase.icon).foregroundStyle(Theme.brand).imageScale(.small)
+                        Text(phase.label).font(.headline)
+                        if isNext {
+                            Text("Next up")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Theme.brand.opacity(0.15), in: Capsule())
+                                .foregroundStyle(Theme.brand)
+                        }
+                        Spacer()
+                        Text("\(done)/\(phaseJobs.count)")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    jobCards(model, jobs: phaseJobs)
+                }
+                .padding(12)
+                .background(isNext ? Theme.brand.opacity(0.05) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .stroke(isNext ? Theme.brand.opacity(0.35) : Color.primary.opacity(0.06), lineWidth: 1))
+            }
+        }
+    }
+
+    private func jobCards(_ model: PersonaJobsModel, jobs: [PersonaJob]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Jobs").font(.headline)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12)], alignment: .leading, spacing: 12) {
-                ForEach(model.runnableJobs) { job in
+                ForEach(jobs) { job in
+                    let ran = model.ranJobs.contains(job.id)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .top, spacing: 4) {
+                            if ran {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                    .imageScale(.small)
+                                    .help("Already run against this matter — run again any time.")
+                            }
                             Text(job.title).font(.callout.weight(.semibold))
                             Spacer(minLength: 0)
                             // JOB-DOC — SAP-style documentation for this job.
@@ -268,8 +417,10 @@ public struct PersonaJobsView: View {
                     }
                     .padding(12)
                     .frame(height: 130, alignment: .topLeading)
-                    .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+                    .background(ran ? Color.green.opacity(0.05) : Color.primary.opacity(0.03),
+                                in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10)
+                        .stroke(ran ? Color.green.opacity(0.25) : Color.primary.opacity(0.08), lineWidth: 1))
                 }
             }
         }
