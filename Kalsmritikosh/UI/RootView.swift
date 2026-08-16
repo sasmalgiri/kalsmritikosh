@@ -238,6 +238,10 @@ public struct RootView: View {
     /// ENGINE POWER — same defaults key FeatureFlags.fullPowerMode reads, so
     /// the sidebar toggle and the engine's value getters stay in lockstep.
     @AppStorage("kalsmritikosh.feature.fullPower") private var fullPower: Bool = true
+    /// Semantic-index backlog (embedded chunks vs total), refreshed every 30s
+    /// — drives the caption under the Engine picker so Lightning's deferred
+    /// indexing is never silent.
+    @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// Text in the always-visible header search box.
@@ -453,6 +457,14 @@ public struct RootView: View {
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
+        .task {
+            // ENGINE POWER — refresh the semantic-index backlog caption.
+            while !Task.isCancelled {
+                let p = await appState.ingestProgress()
+                semanticBacklog = (p.embedDone, p.embedTotal)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+            }
+        }
         .sheet(isPresented: $presentingOnboarding) {
             OnboardingView()
                 .environment(appState)
@@ -508,6 +520,24 @@ public struct RootView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
                 .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
+                // ENGINE POWER visibility — the one honest caveat of the flip:
+                // content ingested during Lightning has no semantic index yet.
+                // Surface the backlog so catch-up is never silent.
+                if semanticBacklog.total > 0 && semanticBacklog.done < semanticBacklog.total {
+                    Label(
+                        fullPower
+                            ? "Semantic index catching up — \(semanticBacklog.done) of \(semanticBacklog.total)"
+                            : "Semantic indexing paused — \(semanticBacklog.total - semanticBacklog.done) waiting",
+                        systemImage: fullPower ? "arrow.triangle.2.circlepath" : "pause.circle"
+                    )
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+                    .help(fullPower
+                          ? "New content becomes semantically searchable as the background index catches up. Exact and structured search already covers everything."
+                          : "Lightning skips semantic indexing. Everything stays searchable by structure and full text; the semantic index resumes when you switch to Full power.")
+                }
                 onboardingTip
                 personaSection
                 if simpleMode {
