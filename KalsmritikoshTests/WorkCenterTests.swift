@@ -114,6 +114,132 @@ struct WorkCenterEngineTests {
         }
     }
 
+    @Test("Auto-complete eligibility — engagement guard, required fields, gates")
+    func autoCompleteEligibility() {
+        let receive = WCCatalog.evidenceIntake.operations[0]   // has required fields + launches a tool
+        let filled = ["caseNumber": "CASE-1", "custodian": "j.doe"]
+        // A tool step needs its tool opened — touch alone is not engagement.
+        #expect(!WCAutoComplete.eligible(receive, confirmed: [], lockedReasons: [],
+                                         values: filled, touched: true, openedTool: false))
+        #expect(WCAutoComplete.eligible(receive, confirmed: [], lockedReasons: [],
+                                        values: filled, touched: false, openedTool: true))
+        // Missing required fields never auto-complete.
+        #expect(!WCAutoComplete.eligible(receive, confirmed: [], lockedReasons: [],
+                                         values: ["caseNumber": "CASE-1"], touched: true, openedTool: true))
+        // Confirmed or locked steps never auto-complete.
+        #expect(!WCAutoComplete.eligible(receive, confirmed: [1], lockedReasons: [],
+                                         values: filled, touched: true, openedTool: true))
+        #expect(!WCAutoComplete.eligible(receive, confirmed: [], lockedReasons: ["locked"],
+                                         values: filled, touched: true, openedTool: true))
+        // A step with NO required fields never auto-completes (nothing to fill = no signal).
+        let examine = WCCatalog.evidenceIntake.operations[2]
+        #expect(!WCAutoComplete.eligible(examine, confirmed: [1, 2], lockedReasons: [],
+                                         values: ["itemsOfInterest": "3"], touched: true, openedTool: true))
+    }
+
+    @Test("Reserved keys — attestation parses, prefix detection")
+    func reservedKeys() {
+        #expect(WCReservedKey.isReserved("__note"))
+        #expect(!WCReservedKey.isReserved("caseNumber"))
+        let values = [WCReservedKey.confirmedAt: "1700000000",
+                      WCReservedKey.confirmedBy: "Tester"]
+        let att = WCReservedKey.attestation(in: values)
+        #expect(att?.by == "Tester")
+        #expect(att?.at == Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(WCReservedKey.attestation(in: ["caseNumber": "X"]) == nil)
+    }
+
+    @Test("Document filter — number, title, field value, reserved keys excluded")
+    func documentFilter() {
+        let doc = WCDocument(
+            id: UUID(), docNumber: "WF-2026-0007", docType: "WF", runID: nil,
+            defID: "builtin.investigator.intake", stepSeq: nil,
+            title: "Estate matter", status: .released,
+            fieldValues: [1: ["caseNumber": "CASE-42",
+                              WCReservedKey.note: "call the custodian",
+                              WCReservedKey.confirmedBy: "SecretActorKey"]],
+            confirmedSeqs: [1], actor: "Tester",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(WCDocumentFilter.matches(doc, query: ""))
+        #expect(WCDocumentFilter.matches(doc, query: "wf-2026"))
+        #expect(WCDocumentFilter.matches(doc, query: "estate"))
+        #expect(WCDocumentFilter.matches(doc, query: "case-42"))
+        #expect(WCDocumentFilter.matches(doc, query: "custodian"), "notes are searchable")
+        #expect(!WCDocumentFilter.matches(doc, query: "SecretActorKey"),
+                "reserved attestation values are not search text")
+        #expect(!WCDocumentFilter.matches(doc, query: "no-such-thing"))
+        // Date range: inclusive of the creation day, exclusive outside it.
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(WCDocumentFilter.inRange(doc, from: day, to: day, calendar: .current))
+        #expect(!WCDocumentFilter.inRange(doc, from: day.addingTimeInterval(2 * 86_400),
+                                          to: day.addingTimeInterval(3 * 86_400), calendar: .current))
+    }
+
+    @Test("Technical report — steps, marks, values, attestations, doc echoes")
+    func instanceReport() {
+        let def = WCCatalog.evidenceIntake
+        let runID = UUID()
+        let run = WCDocument(
+            id: runID, docNumber: "WF-2026-0001", docType: "WF", runID: nil,
+            defID: def.defID, stepSeq: nil, title: "Estate intake", status: .released,
+            fieldValues: [1: ["caseNumber": "CASE-42", "custodian": "j.doe",
+                              WCReservedKey.confirmedAt: "1700000000",
+                              WCReservedKey.confirmedBy: "Tester",
+                              WCReservedKey.note: "receipt attached"]],
+            confirmedSeqs: [1], actor: "Tester",
+            createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let intake = WCDocument(
+            id: UUID(), docNumber: "IMP-2026-0001", docType: "IMP", runID: runID,
+            defID: def.defID, stepSeq: 1, title: "Receive & Identify — Estate intake",
+            status: .confirmed, fieldValues: [:], confirmedSeqs: [1], actor: "Tester",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let text = WCInstanceReport(run: run, definition: def, documents: [intake]).rendered()
+        #expect(text.contains("WORKFLOW WF-2026-0001"))
+        #expect(text.contains("[x] 1. Receive & Identify"))
+        #expect(text.contains("[ ] 2. Preserve & Verify"))
+        #expect(text.contains("Case / Matter number: CASE-42"))
+        #expect(text.contains("by Tester"))
+        #expect(text.contains("→ IMP-2026-0001"))
+        #expect(text.contains("note: receipt attached"))
+        #expect(!text.contains("__confirmed"), "reserved keys never leak as text")
+    }
+
+    @Test("Stakeholder summary — plain language, records produced, no jargon leaks")
+    func stakeholderSummary() {
+        let def = WCCatalog.production
+        let runID = UUID()
+        let run = WCDocument(
+            id: runID, docNumber: "WF-2026-0002", docType: "WF", runID: nil,
+            defID: def.defID, stepSeq: nil, title: "Acme v. Roe production", status: .released,
+            fieldValues: [1: ["matter": "Acme v. Roe",
+                              WCReservedKey.confirmedAt: "1700000000",
+                              WCReservedKey.confirmedBy: "Counsel"]],
+            confirmedSeqs: [1], actor: "Counsel",
+            createdAt: Date(timeIntervalSince1970: 1_699_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let prod = WCDocument(
+            id: UUID(), docNumber: "PRD-2026-0001", docType: "PRD", runID: runID,
+            defID: def.defID, stepSeq: 5, title: "Produce — Acme", status: .confirmed,
+            fieldValues: [:], confirmedSeqs: [5], actor: "Counsel",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let text = WCStakeholderSummary(run: run, definition: def, documents: [prod],
+                                        preparedAt: Date(timeIntervalSince1970: 1_700_100_000)).rendered()
+        #expect(text.contains("# Acme v. Roe production"))
+        #expect(text.contains("**Reference:** WF-2026-0002"))
+        #expect(text.contains("In progress — 1 of 5 steps done"))
+        #expect(text.contains("**Assemble Set** — completed"))
+        #expect(text.contains("by Counsel"))
+        #expect(text.contains("**Review & Code** — not yet started."))
+        #expect(text.contains("## Records produced"))
+        #expect(text.contains("- PRD-2026-0001"))
+        #expect(!text.contains("__confirmed"), "reserved keys never leak")
+        #expect(!text.contains("seq"), "no engine jargon in the stakeholder summary")
+    }
+
     @Test("Field-map JSON encoding round-trips")
     func fieldsRoundTrip() {
         let values: [Int: [String: String]] = [
@@ -264,6 +390,25 @@ struct WorkCenterRepositoryTests {
         #expect(docs.count == def.operations.compactMap(\.postsDocType).count)
         let all = try await repo.allDocuments()
         #expect(Set(all.map(\.docNumber)).count == all.count, "document numbers must be unique")
+    }
+
+    @Test("confirmStep stamps the who/when attestation into the step's values")
+    func attestationStamped() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let def = WCCatalog.lifeRecords
+        let run = try await repo.createRun(defID: def.defID, title: "t", actor: "Creator", at: Date())
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        try await repo.saveFields(runID: run.id, seq: 1,
+                                  values: ["scope": "Insurance", WCReservedKey.note: "first pass"],
+                                  at: when)
+        _ = try await repo.confirmStep(runID: run.id, seq: 1, actor: "Attester", at: when)
+        let after = try #require(try await repo.run(run.id))
+        let vals = try #require(after.fieldValues[1])
+        let att = try #require(WCReservedKey.attestation(in: vals))
+        #expect(att.by == "Attester")
+        #expect(att.at == when)
+        #expect(vals["scope"] == "Insurance", "user values survive the stamp")
+        #expect(vals[WCReservedKey.note] == "first pass", "the note rides with the record")
     }
 
     @Test("Runs and their documents survive a reopen (durability)")
