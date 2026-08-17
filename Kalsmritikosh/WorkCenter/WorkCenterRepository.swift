@@ -124,6 +124,15 @@ public actor WorkCenterRepository {
             confirmed: run.confirmedSeqs, fieldValues: run.fieldValues))
         guard locked.isEmpty else { throw WorkCenterError.gatesLocked(locked) }
 
+        // Stamp the attestation (who/when) into the step's value map — the
+        // reserved keys ride inside fields_json so both the run and the
+        // posted document carry the record with no extra table.
+        var stamped = values
+        stamped[WCReservedKey.confirmedAt] = String(date.timeIntervalSince1970)
+        stamped[WCReservedKey.confirmedBy] = actor
+        var allFields = run.fieldValues
+        allFields[seq] = stamped
+
         var stepDoc: WCDocument?
         let sp = "wcstep_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)"
         do {
@@ -139,7 +148,7 @@ public actor WorkCenterRepository {
                     """, [.uuid(id), .text(number), .text(type), .uuid(runID), .text(defID),
                           .integer(Int64(seq)), .text("\(op.title) — \(run.title)"),
                           .text(WCRunStatus.confirmed.rawValue),
-                          .text(Self.encodeFields([seq: values])), .text("\(seq)"),
+                          .text(Self.encodeFields([seq: stamped])), .text("\(seq)"),
                           .text(actor), .real(date.timeIntervalSince1970),
                           .real(date.timeIntervalSince1970)])
                 stepDoc = try await requireRun(id)
@@ -154,8 +163,8 @@ public actor WorkCenterRepository {
             let newStatus: WCRunStatus = allDone ? .confirmed : .released
             try await database.exec("""
                 UPDATE work_center_documents
-                SET confirmed_seqs = ?, status = ?, updated_at = ? WHERE id = ?;
-                """, [.text(joined), .text(newStatus.rawValue),
+                SET confirmed_seqs = ?, status = ?, fields_json = ?, updated_at = ? WHERE id = ?;
+                """, [.text(joined), .text(newStatus.rawValue), .text(Self.encodeFields(allFields)),
                       .real(date.timeIntervalSince1970), .uuid(runID)])
             try await database.exec("RELEASE SAVEPOINT \(sp);")
         } catch {
