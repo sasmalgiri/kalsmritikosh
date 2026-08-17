@@ -51,8 +51,62 @@ public final class PersonaJobsModel {
         UserDefaults.standard.set(Array(ranJobs).sorted(), forKey: ranKey(caseID))
     }
 
-    public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository) {
-        self.service = service; self.catalog = catalog; self.workspaces = workspaces
+    public init(service: PersonaJobService, catalog: PersonaJobCatalog, workspaces: WorkspaceRepository,
+                cases: InvestigationCaseRepository? = nil) {
+        self.service = service; self.catalog = catalog; self.workspaces = workspaces; self.cases = cases
+    }
+
+    // JOB-RESUME — matters are durable; the page must let the user return to
+    // them (the whole point of a jobs system). Open matters for the selected
+    // workspace, newest first.
+    private let cases: InvestigationCaseRepository?
+    public private(set) var openMatters: [InvestigationCase] = []
+
+    public func reloadMatters() async {
+        guard let cases, let wsID = selectedWorkspace else { openMatters = []; return }
+        let all = (try? await cases.listCases(workspaceID: wsID)) ?? []
+        openMatters = all.filter { $0.status == .open }.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Reopen an existing matter: all job runs, phase progress, work log, and
+    /// guided-walkthrough positions come back exactly as left.
+    public func openMatter(_ matter: InvestigationCase) {
+        activeCaseID = matter.id
+        activeMatterTitle = matter.title
+        lastOutcome = "Resumed matter \"\(matter.title)\""
+        lastError = nil
+        loadRanJobs()
+        loadWorkLog()
+    }
+
+    // JOB-LOG (maxmailin pattern) — the work and its results live TOGETHER:
+    // every job run against the matter is recorded with its outcome summary
+    // and shown on this page, so returning to a matter shows what was done,
+    // when, and what it found. UI journey state (UserDefaults per case); the
+    // durable evidence itself stays in the ledger the services wrote to.
+    public struct MatterLogEntry: Codable, Identifiable, Sendable {
+        public var id: UUID = UUID()
+        public let jobTitle: String
+        public let summary: String
+        public let at: Date
+    }
+    public private(set) var workLog: [MatterLogEntry] = []
+
+    private func logKey(_ caseID: UUID) -> String { "kalsmritikosh.jobs.log.\(caseID.uuidString)" }
+    private func loadWorkLog() {
+        guard let caseID = activeCaseID,
+              let data = UserDefaults.standard.data(forKey: logKey(caseID)),
+              let entries = try? JSONDecoder().decode([MatterLogEntry].self, from: data) else {
+            workLog = []; return
+        }
+        workLog = entries
+    }
+    private func appendLog(jobTitle: String, summary: String, at date: Date) {
+        guard let caseID = activeCaseID else { return }
+        workLog.append(MatterLogEntry(jobTitle: jobTitle, summary: summary, at: date))
+        if let data = try? JSONEncoder().encode(workLog) {
+            UserDefaults.standard.set(data, forKey: logKey(caseID))
+        }
     }
 
     /// The persona-neutral intake job (the one job that opens a matter) for the selected persona.
@@ -66,6 +120,7 @@ public final class PersonaJobsModel {
         workspaceList = (try? await workspaces.all(includeArchived: false)) ?? []
         if selectedWorkspace == nil { selectedWorkspace = workspaceList.first?.id }
         await reloadJobs()
+        await reloadMatters()
     }
 
     public func select(persona id: ApplicationDefinitionID) async {
@@ -96,6 +151,8 @@ public final class PersonaJobsModel {
             lastOutcome = out.summary; lastError = nil
             loadRanJobs()
             if let intakeID = intakeJob?.id { markRan(intakeID) }   // intake IS phase 1, done
+            appendLog(jobTitle: "Matter opened", summary: out.summary, at: date)
+            await reloadMatters()
         } catch { lastError = "\(error)"; lastOutcome = nil }
     }
 
@@ -112,6 +169,7 @@ public final class PersonaJobsModel {
                 caseID: caseID, access: access, actor: actor, at: date))
             lastOutcome = "\(job.title): \(out.summary)"; lastError = nil
             markRan(job.id)
+            appendLog(jobTitle: job.title, summary: out.summary, at: date)
         } catch { lastError = "\(job.title): \(error)"; lastOutcome = nil }
     }
 }
@@ -160,7 +218,8 @@ public struct PersonaJobsView: View {
     private func setup() async {
         guard let service = appState.personaJobs, let catalog = appState.personaJobCatalog,
               let ws = appState.workspaces else { return }
-        let m = PersonaJobsModel(service: service, catalog: catalog, workspaces: ws)
+        let m = PersonaJobsModel(service: service, catalog: catalog, workspaces: ws,
+                                 cases: appState.investigationCases)
         await m.load()
         model = m
     }
@@ -179,9 +238,14 @@ public struct PersonaJobsView: View {
                 if let err = model.lastError {
                     Label(err, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.callout)
                 }
+                workLogSection(model)
                 jobGrid(model)
             }
             .padding(20)
+        }
+        // JOB-RESUME — the resumable-matters list follows the chosen workspace.
+        .onChange(of: model.selectedWorkspace) { _, _ in
+            Task { await model.reloadMatters() }
         }
     }
 
@@ -249,6 +313,35 @@ public struct PersonaJobsView: View {
                 Text("A matter is the container all jobs run against (a case, story, research question, or personal topic). Name it, pick the workspace holding its documents, and start.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                // JOB-RESUME — matters are durable; come back to them any time.
+                if !model.openMatters.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Resume where you left off")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(model.openMatters.prefix(5)) { matter in
+                            HStack(spacing: 8) {
+                                Image(systemName: "folder.badge.person.crop")
+                                    .foregroundStyle(Theme.brand)
+                                    .imageScale(.small)
+                                Text(matter.title).font(.callout)
+                                Text(matter.createdAt.formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                Spacer()
+                                Button("Open") { model.openMatter(matter) }
+                                    .controlSize(.small)
+                                    .buttonStyle(.bordered)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+                    Text("Or start a new one:")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 HStack(spacing: 10) {
                     TextField("Matter title", text: $model.matterTitle).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
                     Picker("Workspace", selection: $model.selectedWorkspace) {
@@ -265,6 +358,40 @@ public struct PersonaJobsView: View {
             .padding(14)
             .background(Theme.brand.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.brand.opacity(0.35), lineWidth: 1))
+        }
+    }
+
+    // JOB-LOG (maxmailin pattern) — what was done against this matter, when,
+    // and what it found: the results live on the same page as the work.
+    @ViewBuilder
+    private func workLogSection(_ model: PersonaJobsModel) -> some View {
+        if model.activeCaseID != nil, !model.workLog.isEmpty {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.workLog.suffix(12).reversed()) { entry in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(entry.at.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption2).foregroundStyle(.secondary)
+                                .monospacedDigit()
+                                .frame(width: 118, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(entry.jobTitle).font(.caption.weight(.semibold))
+                                Text(entry.summary).font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+                .padding(.top, 6)
+            } label: {
+                Label("Work log — \(model.workLog.count) action(s) on this matter",
+                      systemImage: "list.bullet.clipboard")
+                    .font(.callout.weight(.medium))
+            }
+            .padding(12)
+            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 1))
         }
     }
 
