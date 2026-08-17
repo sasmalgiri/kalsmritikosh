@@ -509,6 +509,11 @@ public final class AppState {
     /// Back/Forward location history, distinct from workflow Prev/Next). Live from boot; restores the
     /// exact location on relaunch. Pure shell state — touches no canonical evidence.
     public private(set) var shellSession: ShellSessionRepository?
+    /// WORK-CENTER — the SAP-style guided workflow runner's numbered-document ledger (schema v105):
+    /// WF- run documents plus the IMP/RPT/PRD/… documents each confirmed step posts, with transactional
+    /// TYPE-YEAR-#### number ranges. Documents REFERENCE work done in the shared surfaces (soft refs);
+    /// they fork no canonical evidence. Live from boot.
+    public private(set) var workCenter: WorkCenterRepository?
     /// SHELL-003 — the ONE background-work gate: every optional/deferred worker asks this instead of
     /// checking idle independently. Composes the shared QueryPriorityGate + SystemActivity + the user's
     /// background preference into a single P0–P6 decision, so background maintenance never competes with
@@ -1995,6 +2000,8 @@ public final class AppState {
             }
             // SHELL-001 — the shell navigation-session autosave/resume, live from boot over the shared ledger.
             self.shellSession = ShellSessionRepository(database: db)
+            // WORK-CENTER — the guided-workflow numbered-document ledger, live from boot over the shared ledger.
+            self.workCenter = WorkCenterRepository(database: db)
             // Owner decision 2026-08-15 — the return-from-idle consent card
             // covers ALL long-running background work, not only the
             // seconds-long maintenance scan.

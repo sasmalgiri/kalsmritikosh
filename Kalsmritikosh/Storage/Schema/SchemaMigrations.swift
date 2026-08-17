@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 104
+    public static let latestVersion = 105
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -448,9 +448,15 @@ public enum SchemaMigrations {
             "ann_cells": ["model_id", "cell_id", "centroid", "vector_count", "updated_at"],
             "ann_postings": ["model_id", "cell_id", "chunk_id", "q", "scale"],
             // v104 — AUD-CHAIN tamper-evident audit hash chain sealing the existing append-only
-            // ledgers (one NEW table; its presence distinguishes v104 from v103). This is the NEWEST marker.
+            // ledgers (one NEW table; its presence distinguishes v104 from v103).
             "audit_chain": ["seq", "source", "event_id", "occurred_at", "payload_hash",
-                            "prev_hash", "entry_hash", "sealed_at"]
+                            "prev_hash", "entry_hash", "sealed_at"],
+            // v105 — WORK-CENTER numbered documents + number-range counters (two NEW tables;
+            // work_center_documents' presence distinguishes v105 from v104). NEWEST marker.
+            "work_center_documents": ["id", "doc_number", "doc_type", "run_id", "def_id", "step_seq",
+                                      "title", "status", "fields_json", "confirmed_seqs", "actor",
+                                      "created_at", "updated_at"],
+            "work_center_counters": ["doc_type", "year", "next_seq"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -590,7 +596,8 @@ public enum SchemaMigrations {
         (101, v101),
         (102, v102),
         (103, v103),
-        (104, v104)
+        (104, v104),
+        (105, v105)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5455,6 +5462,46 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v105: String = """
+    -- WORK-CENTER (maxmailin/SAP port, owner request 2026-08-17) — numbered documents.
+    -- "Nothing is real until it has a number you can quote": every workflow run is a
+    -- WF-YEAR-#### document; confirming a step that posts (Intake, Report, Production…)
+    -- issues that step its own number. Documents are the durable, findable record of
+    -- guided work — they REFERENCE the evidence/work products the shared services wrote
+    -- (soft refs), never a second store of them. Statuses follow the SAP lifecycle
+    -- open -> released -> confirmed and only ever advance.
+    CREATE TABLE work_center_documents (
+        id             TEXT PRIMARY KEY,
+        doc_number     TEXT NOT NULL UNIQUE,      -- WF-2026-0012 / IMP-2026-0004 …
+        doc_type       TEXT NOT NULL,             -- typed prefix (WF, IMP, RPT, PRD, PUB, EDN, ARC…)
+        run_id         TEXT,                      -- owning WF run document (NULL for run docs themselves)
+        def_id         TEXT,                      -- workflow definition id (run docs)
+        step_seq       INTEGER,                   -- posting step (step docs)
+        title          TEXT NOT NULL,
+        status         TEXT NOT NULL DEFAULT 'open',
+        fields_json    TEXT NOT NULL DEFAULT '{}',   -- captured field values ({seq:{key:value}} for runs)
+        confirmed_seqs TEXT NOT NULL DEFAULT '',     -- run docs: comma-joined confirmed step seqs
+        actor          TEXT NOT NULL,
+        created_at     REAL NOT NULL,
+        updated_at     REAL NOT NULL,
+        CHECK(status IN ('open','released','confirmed')),
+        CHECK(length(trim(doc_number)) > 0),
+        CHECK(length(trim(doc_type)) > 0),
+        CHECK(length(trim(title)) > 0)
+    );
+    CREATE INDEX idx_wc_documents_run ON work_center_documents(run_id);
+    CREATE INDEX idx_wc_documents_type ON work_center_documents(doc_type, created_at);
+
+    -- Transactional per-type-per-year number ranges (the SAP number-range object).
+    CREATE TABLE work_center_counters (
+        doc_type TEXT NOT NULL,
+        year     INTEGER NOT NULL,
+        next_seq INTEGER NOT NULL,
+        PRIMARY KEY (doc_type, year),
+        CHECK(next_seq >= 1)
+    );
     """
 
     private static let v104: String = """
