@@ -382,7 +382,7 @@ public enum DataHealthCheck {
                 md += "1. Restart the app — OntologyBackfill runs at boot; let it complete before running diagnostics.\n"
             }
             if filesNoKO > 0 || koNoChunks > 0 || koNoVectors > 0 {
-                md += "1. Inspect ingestion logs (`log show --subsystem ecosanskritiinnovation.-Kalsmritikosh`) for loader / chunker / embedder errors on the offending files.\n"
+                md += "1. Inspect ingestion logs (`log show --subsystem ecosanskritiinnovation.Kalsmritikosh`) for loader / chunker / embedder errors on the offending files.\n"
             }
             md += "\n"
         }
