@@ -412,7 +412,7 @@
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Kalsmritikosh connects to your local Ollama daemon (http://localhost:11434) for on-device LLM generation when you have configured it in Settings. ";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kalsmritikosh transcribes audio and video you convert or ingest, on-device, to make them searchable.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -424,7 +424,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "ecosanskritiinnovation.-Kalsmritikosh";
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -469,6 +469,7 @@
 				INFOPLIST_KEY_NSDocumentsFolderUsageDescription = "To ingest emails, documents, PDFs, and other files into your private knowledge ledger.";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "To ingest files you have placed in Downloads.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "© 2026 Shirshendu Sasmal Giri. All rights reserved.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Kalsmritikosh transcribes audio and video you convert or ingest, on-device, to make them searchable.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -480,7 +481,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "ecosanskritiinnovation.-Kalsmritikosh";
+				PRODUCT_BUNDLE_IDENTIFIER = ecosanskritiinnovation.Kalsmritikosh;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
