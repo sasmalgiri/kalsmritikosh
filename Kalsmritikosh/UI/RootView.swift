@@ -28,6 +28,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case work
     case workCenter
     case workspaces
+    case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
     case review
     case handoff
@@ -46,6 +47,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "Search"
         case .work:         return "Professional Jobs"
         case .workCenter:   return "Work Center"
+        case .dataLab:      return "DataLab"
         case .handoff:      return "Handoff & Review"
         case .workspaces:   return "Workspaces"
         case .timeline:     return "Timeline"
@@ -84,6 +86,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "magnifyingglass"
         case .work:         return "person.crop.rectangle.stack"
         case .workCenter:   return "list.bullet.clipboard"
+        case .dataLab:      return "tablecells.badge.ellipsis"
         case .handoff:      return "checkmark.seal"
         case .workspaces:   return "folder.badge.gearshape"
         case .timeline:     return "calendar.day.timeline.left"
@@ -138,6 +141,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .search:       return "Instant full-text search across every chunk"
         case .work:         return "Pick a professional focus and run its jobs — Investigator, Researcher, Journalist, Individual, Lawyer"
         case .workCenter:   return "Run a guided workflow step by step — gated steps, per-field guidance, and a numbered document for every confirmed step"
+        case .dataLab:      return "Build cited datasets over your evidence — transform, test scenarios, check quality; every cell drills to its source"
         case .handoff:      return "Review a matter's findings and evidence, then record the human decisions that hand it off — approve, close, reopen"
         case .workspaces:   return "Organize a matter, case, or project — a filtered view over your evidence"
         case .timeline:     return "Chronological view of all dated events"
@@ -181,7 +185,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter]
-            case .reconstruct: return [.workspaces, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
             case .workspace:   return [.sources, .convert, .completeness, .live]
             case .system:      return [.guide, .settings]
@@ -344,6 +348,7 @@ public struct RootView: View {
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
              .transcripts:                                            return .entities
+        case .dataLab:                                                return .dataLab
         case .connections, .explore, .matrix:                         return .relationships
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit:                        return .reports
@@ -1051,6 +1056,7 @@ public struct RootView: View {
         case .search:       SearchView()
         case .work:         PersonaJobsView()
         case .workCenter:   WorkCenterView(onNavigate: { navigate(to: $0) })
+        case .dataLab:      DataLabView()
         case .handoff:      WorkProductHandoffView()
         case .workspaces:   WorkspacesView()
         case .timeline:     TimelineView()
