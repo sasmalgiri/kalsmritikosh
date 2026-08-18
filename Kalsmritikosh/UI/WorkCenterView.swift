@@ -20,6 +20,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -40,6 +41,16 @@ public struct WorkCenterView: View {
     @State private var errorMessage: String?
     @State private var justPosted: WCDocument?
     @State private var showSummary = false
+
+    // Variants (SAP master data: start a run pre-filled from a saved one).
+    @State private var variantsByDef: [String: [WCDocument]] = [:]
+    @State private var showSaveVariant = false
+    @State private var variantName = ""
+    /// The run's "Client / matter" name — renames the run so it's findable.
+    @State private var clientName = ""
+    // Attach-evidence + derivation-notice state.
+    @State private var showFileImporter = false
+    @State private var derivedKeys: Set<String> = []
 
     // Auto-save / auto-complete (both default ON, like the source system).
     @AppStorage("kalsmritikosh.wc.autoSave") private var autoSave = true
@@ -83,6 +94,18 @@ public struct WorkCenterView: View {
         }
         .task { await restoreAndReload() }
         .sheet(isPresented: $showSummary) { summarySheet }
+        .alert("Save as Variant", isPresented: $showSaveVariant) {
+            TextField("Variant name", text: $variantName)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") { saveVariant() }
+        } message: {
+            Text("Reuse this run's field entries next time by starting from this variant.")
+        }
+        .fileImporter(isPresented: $showFileImporter,
+                      allowedContentTypes: [.item],
+                      allowsMultipleSelection: true) { result in
+            if case .success(let urls) = result { attachFiles(urls) }
+        }
         .alert("Opening a tool for this step",
                isPresented: Binding(get: { openPromptOp != nil },
                                     set: { if !$0 { openPromptOp = nil } }),
@@ -195,6 +218,17 @@ public struct WorkCenterView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Start a new run of this workflow — it gets its own WF number")
+            }
+            ForEach(variantsByDef[def.defID] ?? []) { variant in
+                Button {
+                    start(def, variant: variant)
+                } label: {
+                    Label("Start from: \(variant.title)", systemImage: "square.stack.3d.up")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .help("Start a run pre-filled from this saved variant (\(variant.docNumber))")
             }
         }
         .padding(14)
@@ -309,6 +343,9 @@ public struct WorkCenterView: View {
                 ForEach(op.fields.filter { !(vals[$0.key] ?? "").isEmpty }) { field in
                     detailLine(field.label, vals[field.key] ?? "")
                 }
+                ForEach(WCStepRef.decodeList(vals[WCReservedKey.refs])) { ref in
+                    detailLine("Evidence", ref.detail.isEmpty ? ref.title : "\(ref.title) — \(ref.detail)")
+                }
                 if let note = vals[WCReservedKey.note], !note.isEmpty {
                     detailLine("Note", note)
                 }
@@ -411,6 +448,13 @@ public struct WorkCenterView: View {
                         .textSelection(.enabled)
                     statusChip(run.status)
                 }
+                HStack(spacing: 4) {
+                    Text("Client / matter").font(.caption2).foregroundStyle(.secondary)
+                    TextField("name this job so you can find it later", text: $clientName)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .onSubmit { renameRun(run) }
+                }
                 ProgressView(value: Double(run.confirmedSeqs.count),
                              total: Double(def.operations.count))
                     .tint(.green)
@@ -431,6 +475,14 @@ public struct WorkCenterView: View {
                     }
                     .controlSize(.small)
                     .help("Copy the full technical report — every step, value, attestation and document number")
+                    Button {
+                        variantName = ""
+                        showSaveVariant = true
+                    } label: {
+                        Label("Variant", systemImage: "square.and.arrow.down.on.square").font(.caption)
+                    }
+                    .controlSize(.small)
+                    .help("Save this run's entries as a reusable variant — next time, start pre-filled in one click")
                     #if os(macOS)
                     Button { printText(reportText(run, def), jobTitle: run.docNumber, monospace: true) } label: {
                         Image(systemName: "printer").font(.caption)
@@ -663,9 +715,15 @@ public struct WorkCenterView: View {
                 // Fields
                 if !op.fields.isEmpty {
                     VStack(alignment: .leading, spacing: 14) {
+                        if !derivedKeys.isEmpty && !confirmed {
+                            Label("Some fields were filled in from your earlier runs — check and adjust.",
+                                  systemImage: "wand.and.stars")
+                                .font(.caption).foregroundStyle(.tint)
+                        }
                         ForEach(op.fields) { field in
                             fieldInput(field, run: run, op: op, disabled: confirmed)
                         }
+                        evidenceSection(run: run, op: op, disabled: confirmed)
                         // Optional per-step note (attached to the record).
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Note (optional)").font(.callout.weight(.medium))
@@ -796,6 +854,30 @@ public struct WorkCenterView: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 220)
                 .disabled(disabled)
+            case .date:
+                DatePicker("", selection: dateBinding(field.key, run: run, op: op),
+                           displayedComponents: .date)
+                    .datePickerStyle(.compact)
+                    .labelsHidden()
+                    .disabled(disabled)
+            case .dateRange:
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("From").font(.caption2).foregroundStyle(.secondary)
+                        DatePicker("", selection: rangeBinding(field.key, part: 0, run: run, op: op),
+                                   displayedComponents: .date)
+                            .datePickerStyle(.compact).labelsHidden()
+                            .disabled(disabled)
+                    }
+                    Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("To").font(.caption2).foregroundStyle(.secondary)
+                        DatePicker("", selection: rangeBinding(field.key, part: 1, run: run, op: op),
+                                   displayedComponents: .date)
+                            .datePickerStyle(.compact).labelsHidden()
+                            .disabled(disabled)
+                    }
+                }
             }
             Text(field.help)
                 .font(.caption)
@@ -813,6 +895,163 @@ public struct WorkCenterView: View {
                 onFieldEdited(run, op: op)
             }
         )
+    }
+
+    // MARK: Date fields (stored as "yyyy-MM-dd" / "yyyy-MM-dd → yyyy-MM-dd")
+
+    private var dayFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }
+
+    private func dateBinding(_ key: String, run: WCDocument, op: WCOperation) -> Binding<Date> {
+        Binding(
+            get: { dayFormatter.date(from: draft[key] ?? "") ?? Date() },
+            set: { draftBinding(key, run: run, op: op).wrappedValue = dayFormatter.string(from: $0) }
+        )
+    }
+
+    private func rangeParts(_ key: String) -> (String, String) {
+        let parts = (draft[key] ?? "").components(separatedBy: " → ")
+        return (parts.first ?? "", parts.count > 1 ? parts[1] : "")
+    }
+
+    private func rangeBinding(_ key: String, part: Int, run: WCDocument, op: WCOperation) -> Binding<Date> {
+        Binding(
+            get: {
+                let raw = part == 0 ? rangeParts(key).0 : rangeParts(key).1
+                return dayFormatter.date(from: raw) ?? Date()
+            },
+            set: { newDate in
+                var (from, to) = rangeParts(key)
+                if part == 0 { from = dayFormatter.string(from: newDate) }
+                else { to = dayFormatter.string(from: newDate) }
+                draftBinding(key, run: run, op: op).wrappedValue = "\(from) → \(to)"
+            }
+        )
+    }
+
+    // MARK: Attach evidence (external files, stored as reserved __refs JSON)
+
+    private func stepRefs() -> [WCStepRef] {
+        WCStepRef.decodeList(draft[WCReservedKey.refs])
+    }
+
+    @ViewBuilder
+    private func evidenceSection(run: WCDocument, op: WCOperation, disabled: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Evidence attached").font(.callout.weight(.medium))
+                Spacer()
+                if !disabled {
+                    Button {
+                        showFileImporter = true
+                    } label: { Label("Attach files", systemImage: "paperclip") }
+                    .controlSize(.small)
+                    .help("Attach the files this step rests on — they ride with the record and are searchable")
+                }
+            }
+            if stepRefs().isEmpty {
+                Text("Nothing attached — optional, but attached files make the record self-explanatory later.")
+                    .font(.caption).foregroundStyle(.tertiary)
+            }
+            ForEach(stepRefs()) { ref in
+                HStack(spacing: 6) {
+                    Image(systemName: "doc").foregroundStyle(.secondary)
+                    Text(ref.title).font(.caption)
+                    if !ref.detail.isEmpty {
+                        Text(ref.detail).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                    Spacer()
+                    if !disabled {
+                        Button {
+                            setRefs(stepRefs().filter { $0.id != ref.id }, run: run, op: op)
+                        } label: { Image(systemName: "xmark.circle") }
+                        .buttonStyle(.plain)
+                        .help("Remove this attachment from the step")
+                    }
+                }
+            }
+        }
+    }
+
+    private func attachFiles(_ urls: [URL]) {
+        guard let run = activeRun, let def = run.defID.flatMap(WCCatalog.definition),
+              let op = def.operations.first(where: { $0.seq == selectedSeq }) else { return }
+        let new = urls.map {
+            WCStepRef(id: UUID().uuidString, title: $0.lastPathComponent,
+                      detail: $0.deletingLastPathComponent().path)
+        }
+        setRefs(stepRefs() + new, run: run, op: op)
+    }
+
+    private func setRefs(_ refs: [WCStepRef], run: WCDocument, op: WCOperation) {
+        draft[WCReservedKey.refs] = WCStepRef.encodeList(refs)
+        draftDirty = true
+        onFieldEdited(run, op: op)
+    }
+
+    // MARK: Prefill (derivation + date seeds — never marks the step touched)
+
+    private func prefill(_ op: WCOperation, run: WCDocument) {
+        derivedKeys = []
+        guard !run.confirmedSeqs.contains(op.seq) else { return }
+        let derived = WCFieldDerivation.derive(
+            for: op, examiner: actorName,
+            priorRuns: runs.filter { $0.id != run.id })
+        for (key, value) in derived where (draft[key] ?? "").isEmpty {
+            draft[key] = value
+            derivedKeys.insert(key)
+            draftDirty = true
+        }
+        // Seed date fields so the calendar opens on a real date.
+        let today = dayFormatter.string(from: Date())
+        for field in op.fields where (draft[field.key] ?? "").isEmpty {
+            switch field.kind {
+            case .date:
+                draft[field.key] = today
+                draftDirty = true
+            case .dateRange:
+                let start = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+                draft[field.key] = "\(dayFormatter.string(from: start)) → \(today)"
+                draftDirty = true
+            default: break
+            }
+        }
+    }
+
+    // MARK: Variants + rename
+
+    private func saveVariant() {
+        guard let repo = appState.workCenter, let run = activeRun,
+              let defID = run.defID else { return }
+        let name = variantName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var values = run.fieldValues
+        var merged = values[selectedSeq] ?? [:]
+        for (k, v) in draft { merged[k] = v }
+        values[selectedSeq] = merged
+        Task {
+            do {
+                _ = try await repo.createVariant(defID: defID, name: name,
+                                                 values: values, actor: actorName, at: Date())
+                await reloadLists()
+            } catch {
+                errorMessage = "Could not save the variant: \(error)"
+            }
+        }
+    }
+
+    private func renameRun(_ run: WCDocument) {
+        guard let repo = appState.workCenter else { return }
+        let name = clientName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != run.title else { return }
+        Task {
+            try? await repo.rename(runID: run.id, title: name, at: Date())
+            await reloadRun(run.id)
+            await reloadLists()
+        }
     }
 
     // MARK: Auto-save / auto-complete
@@ -1012,18 +1251,31 @@ public struct WorkCenterView: View {
         guard let repo = appState.workCenter else { return }
         runs = (try? await repo.runs()) ?? []
         allDocuments = (try? await repo.allDocuments()) ?? []
+        var byDef: [String: [WCDocument]] = [:]
+        for def in WCCatalog.all {
+            byDef[def.defID] = (try? await repo.variants(defID: def.defID)) ?? []
+        }
+        variantsByDef = byDef
     }
 
-    private func start(_ def: WCWorkflowDefinition) {
+    private func start(_ def: WCWorkflowDefinition, variant: WCDocument? = nil) {
         guard let repo = appState.workCenter else { return }
         errorMessage = nil
         Task {
             do {
-                let run = try await repo.createRun(
+                var run = try await repo.createRun(
                     defID: def.defID,
-                    title: def.name,
+                    title: variant?.title ?? def.name,
                     actor: actorName,
                     at: Date())
+                // Pre-fill every step from the variant's saved entries.
+                if let variant {
+                    for (seq, values) in variant.fieldValues {
+                        try await repo.saveFields(runID: run.id, seq: seq,
+                                                  values: values, at: Date())
+                    }
+                    if let refreshed = try await repo.run(run.id) { run = refreshed }
+                }
                 open(run)
                 showIntro = !introSeen(def)
             } catch {
@@ -1035,6 +1287,7 @@ public struct WorkCenterView: View {
     private func open(_ run: WCDocument) {
         activeRun = run
         persistedRunID = run.id.uuidString
+        clientName = run.title
         justPosted = nil
         errorMessage = nil
         if let def = run.defID.flatMap(WCCatalog.definition) {
@@ -1045,6 +1298,10 @@ public struct WorkCenterView: View {
         }
         draft = run.fieldValues[selectedSeq] ?? [:]
         draftDirty = false
+        if let def = run.defID.flatMap(WCCatalog.definition),
+           let op = def.operations.first(where: { $0.seq == selectedSeq }) {
+            prefill(op, run: run)
+        }
         Task { await reloadRun(run.id) }
     }
 
@@ -1061,10 +1318,15 @@ public struct WorkCenterView: View {
         autoTask?.cancel()
         if draftDirty { save(run, seq: selectedSeq) }
         selectedSeq = seq
-        draft = (activeRun ?? run).fieldValues[seq] ?? [:]
+        let current = activeRun ?? run
+        draft = current.fieldValues[seq] ?? [:]
         draftDirty = false
         justPosted = nil
         errorMessage = nil
+        if let def = current.defID.flatMap(WCCatalog.definition),
+           let op = def.operations.first(where: { $0.seq == seq }) {
+            prefill(op, run: current)
+        }
     }
 
     private func save(_ run: WCDocument, seq: Int) {
