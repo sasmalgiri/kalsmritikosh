@@ -13,6 +13,8 @@
 //
 
 import SwiftUI
+import Charts
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -53,6 +55,13 @@ public struct DataLabView: View {
     @State private var showQuality = false
 
     @State private var errorMessage: String?
+
+    // Interop — Excel/Word/PDF exports (each posts a numbered EXP document),
+    // CSV import, and the chart panel.
+    @State private var showImporter = false
+    @State private var lastExportNumber: String?
+    @State private var chartValueField: String?
+    @State private var chartLabelField: String?
 
     public init() {}
 
@@ -107,6 +116,16 @@ public struct DataLabView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty || selectedWorkspace == nil)
                         .help("Creates an empty dataset in this workspace — add fields and rows, or let a persona job prepare one")
+                    Button {
+                        showImporter = true
+                    } label: { Label("Import CSV", systemImage: "square.and.arrow.down") }
+                        .disabled(selectedWorkspace == nil)
+                        .help("Turn a spreadsheet into a dataset — export it from Excel/Numbers as CSV first; the header row becomes the fields")
+                }
+                .fileImporter(isPresented: $showImporter,
+                              allowedContentTypes: [.commaSeparatedText, .plainText],
+                              allowsMultipleSelection: false) { result in
+                    if case .success(let urls) = result, let url = urls.first { importCSV(url) }
                 }
 
                 if let message = errorMessage { errorBanner(message) }
@@ -202,13 +221,35 @@ public struct DataLabView: View {
                     Task { await loadQuality(rec) }
                 } label: { Label("Quality", systemImage: "stethoscope").font(.caption) }
                 .help("Check this dataset for missing values, stale sources, unreviewed scenario values and more")
-                Button { exportCSV(rec) } label: { Label("Export CSV", systemImage: "square.and.arrow.up").font(.caption) }
-                .help("Save the current view (including an active scenario) as a CSV file")
+                Menu {
+                    Button("CSV — spreadsheet interchange") { export(rec, format: .csv) }
+                    Button("Excel workbook (.xlsx)") { export(rec, format: .xlsx) }
+                    Button("Word report (.docx)") { export(rec, format: .docx) }
+                    Button("PDF report") { export(rec, format: .pdf) }
+                } label: {
+                    Label("Export", systemImage: "square.and.arrow.up").font(.caption)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Save the current view (including an active scenario) for Excel, Word or print — every export posts a numbered Export document in the Work Center register")
             }
             Text("\(rec.fields.count) fields · \(rec.rows.count) rows · revision \(rec.dataset.revision)"
                  + (activeScenario.map { " · scenario: \($0.scenario.title)" } ?? "")
                  + (projectionLabel.map { " · view: \($0)" } ?? ""))
                 .font(.caption).foregroundStyle(.secondary)
+            if let number = lastExportNumber {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                    Text("Exported — document ").font(.caption)
+                        + Text(number).font(.caption.monospaced().weight(.bold))
+                        + Text(" posted. Quote it anywhere; find it in Work Center ▸ Documents.").font(.caption)
+                    Spacer()
+                    Button { lastExportNumber = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain)
+                }
+                .padding(8)
+                .background(.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
             if let message = errorMessage { errorBanner(message) }
             if showQuality, let quality { qualityPanel(quality, mode: rec.dataset.mode) }
         }
@@ -329,6 +370,8 @@ public struct DataLabView: View {
                 }
 
                 analysesPanel(rec, caps: caps)
+
+                chartPanel(rec)
 
                 if caps.exposes(.scenarioBuilder) {
                     scenarioPanel(rec)
@@ -826,15 +869,176 @@ public struct DataLabView: View {
         showQuality = quality != nil
     }
 
-    private func exportCSV(_ rec: WorkbenchDatasetRecord) {
+    // MARK: Chart (see the numbers, Tableau-style — provenance-backed data only)
+
+    @ViewBuilder
+    private func chartPanel(_ rec: WorkbenchDatasetRecord) -> some View {
+        let numericFields = rec.fields
+            .sorted { $0.ordinal < $1.ordinal }
+            .filter { $0.valueShape == .number || $0.valueShape == .money || $0.valueShape == .duration }
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Chart")
+            if let agg = aggregateResult, !agg.groups.isEmpty {
+                // Chart the analysis result — one bar per group.
+                Chart(Array(agg.groups.enumerated()), id: \.offset) { _, group in
+                    BarMark(
+                        x: .value("Group", group.resultKey ?? "all"),
+                        y: .value(agg.function.rawValue, numeric(group.value) ?? 0))
+                    .foregroundStyle(.tint)
+                }
+                .frame(height: 160)
+                Text("Charting the \(agg.function.rawValue) result above.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else if numericFields.isEmpty {
+                Text("Add a number field (or run an analysis) to chart this dataset.")
+                    .font(.caption).foregroundStyle(.tertiary)
+            } else {
+                let textFields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+                    .filter { $0.valueShape != .number && $0.valueShape != .money }
+                fieldPicker("Value", $chartValueField, numericFields.map(\.name))
+                fieldPicker("Label", $chartLabelField, textFields.map(\.name))
+                let points = chartPoints(rec, valueField: chartValueField, labelField: chartLabelField)
+                if points.isEmpty {
+                    Text("Pick a value field to draw the chart.")
+                        .font(.caption).foregroundStyle(.tertiary)
+                } else {
+                    Chart(Array(points.enumerated()), id: \.offset) { _, point in
+                        BarMark(x: .value("Row", point.label),
+                                y: .value(chartValueField ?? "Value", point.value))
+                        .foregroundStyle(.tint)
+                    }
+                    .frame(height: 160)
+                }
+            }
+        }
+    }
+
+    private func chartPoints(_ rec: WorkbenchDatasetRecord,
+                             valueField: String?, labelField: String?) -> [(label: String, value: Double)] {
+        guard let valueName = valueField,
+              let vField = rec.fields.first(where: { $0.name == valueName }) else { return [] }
+        let lField = labelField.flatMap { name in rec.fields.first { $0.name == name } }
+        let projection = activeProjection()
+        var rows = rec.rows.sorted { $0.ordinal < $1.ordinal }
+        if let projection { rows = rows.filter { !projection.excludedRows.contains($0.id) } }
+        var cellByKey: [String: WorkbenchCell] = [:]
+        for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
+        return rows.enumerated().compactMap { index, row in
+            let raw = projection?.projectedValue(rowID: row.id, fieldID: vField.id)
+                ?? cellByKey["\(row.id.uuidString)|\(vField.id.uuidString)"]?.value
+            guard let raw, let value = Double(raw.replacingOccurrences(of: ",", with: "")) else { return nil }
+            let label = lField.flatMap { lf in
+                projection?.projectedValue(rowID: row.id, fieldID: lf.id)
+                    ?? cellByKey["\(row.id.uuidString)|\(lf.id.uuidString)"]?.value
+            } ?? "Row \(index + 1)"
+            return (label, value)
+        }
+    }
+
+    private func numeric(_ value: WorkbenchValue) -> Double? {
+        if case .number(let d) = value { return d }
+        return nil
+    }
+
+    // MARK: Import (Excel/Numbers → CSV → dataset)
+
+    private func importCSV(_ url: URL) {
+        guard let repo = appState.workbenchDatasets, let wsID = selectedWorkspace else { return }
+        errorMessage = nil
+        Task {
+            do {
+                let gotAccess = url.startAccessingSecurityScopedResource()
+                defer { if gotAccess { url.stopAccessingSecurityScopedResource() } }
+                let text = try String(contentsOf: url, encoding: .utf8)
+                let grid = WorkbenchCSV.parse(text)
+                guard let header = grid.first, !header.isEmpty else {
+                    errorMessage = "The file has no header row — the first row must name the columns."
+                    return
+                }
+                let title = url.deletingPathExtension().lastPathComponent
+                var rec = try await repo.createDataset(workspaceID: wsID, title: title,
+                                                       mode: .simple, actor: actorName, at: Date())
+                var fieldIDs: [UUID] = []
+                for name in header {
+                    let clean = name.trimmingCharacters(in: .whitespaces)
+                    rec = try await repo.addField(datasetID: rec.dataset.id,
+                                                  name: clean.isEmpty ? "Column \(fieldIDs.count + 1)" : clean,
+                                                  valueShape: .text,
+                                                  expectedRevision: rec.dataset.revision,
+                                                  actor: actorName, at: Date())
+                    if let field = rec.fields.max(by: { $0.ordinal < $1.ordinal }) { fieldIDs.append(field.id) }
+                }
+                for line in grid.dropFirst() {
+                    rec = try await repo.addRow(datasetID: rec.dataset.id,
+                                                expectedRevision: rec.dataset.revision,
+                                                actor: actorName, at: Date())
+                    guard let row = rec.rows.max(by: { $0.ordinal < $1.ordinal }) else { continue }
+                    for (i, fieldID) in fieldIDs.enumerated() where i < line.count && !line[i].isEmpty {
+                        rec = try await repo.setCell(datasetID: rec.dataset.id, rowID: row.id, fieldID: fieldID,
+                                                     kind: .userEntered, value: line[i], status: .sourceAsserted,
+                                                     expectedRevision: rec.dataset.revision,
+                                                     actor: actorName, at: Date())
+                    }
+                }
+                record = rec
+                await loadSatellites(rec.dataset.id)
+            } catch { errorMessage = "Could not import the file: \(error)" }
+        }
+    }
+
+    // MARK: Export (CSV / Excel / Word / PDF — every export posts an EXP document)
+
+    private enum ExportFormat: String { case csv, xlsx, docx, pdf }
+
+    private func export(_ rec: WorkbenchDatasetRecord, format: ExportFormat) {
         #if os(macOS)
-        let csv = WorkbenchCSV.render(rec, projection: activeProjection())
+        errorMessage = nil
+        let projection = activeProjection()
+        let data: Data?
+        switch format {
+        case .csv:
+            data = WorkbenchCSV.render(rec, projection: projection).data(using: .utf8)
+        case .xlsx:
+            data = DocumentExporter.xlsx(grid: WorkbenchCSV.grid(rec, projection: projection))
+        case .docx:
+            data = DocumentExporter.docx([reportRecord(rec, projection: projection)])
+        case .pdf:
+            data = DocumentExporter.pdf([reportRecord(rec, projection: projection)])
+        }
+        guard let data else { errorMessage = "Could not build the \(format.rawValue.uppercased()) file."; return }
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = rec.dataset.title.replacingOccurrences(of: "/", with: "-") + ".csv"
+        panel.nameFieldStringValue = rec.dataset.title.replacingOccurrences(of: "/", with: "-")
+            + "." + format.rawValue
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            try csv.data(using: .utf8)?.write(to: url)
-        } catch { errorMessage = "Could not write the CSV: \(error)" }
+            try data.write(to: url)
+        } catch {
+            errorMessage = "Could not write the file: \(error)"
+            return
+        }
+        // The SAP habit: what left the app gets a number you can quote.
+        Task {
+            if let workCenter = appState.workCenter {
+                let doc = try? await workCenter.capture(
+                    type: "EXP",
+                    title: "\(rec.dataset.title) — \(format.rawValue.uppercased()) export",
+                    values: ["Dataset": rec.dataset.title,
+                             "Format": format.rawValue.uppercased(),
+                             "Rows": String(rec.rows.count),
+                             "Revision": String(rec.dataset.revision),
+                             "Scenario": activeScenario?.scenario.title ?? "",
+                             "File": url.lastPathComponent],
+                    actor: actorName, at: Date())
+                lastExportNumber = doc?.docNumber
+            }
+        }
         #endif
+    }
+
+    private func reportRecord(_ rec: WorkbenchDatasetRecord,
+                              projection: WorkbenchScenarioProjection?) -> ExportRecord {
+        ExportRecord(title: rec.dataset.title,
+                     sourceType: "dataset",
+                     text: WorkbenchReport.render(rec, projection: projection, quality: quality))
     }
 }

@@ -470,6 +470,26 @@ struct WorkCenterRepositoryTests {
         #expect(try await repo.runs().isEmpty)
     }
 
+    @Test("Universal capture — a standalone EXP document with its own number and facts")
+    func universalCapture() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let doc = try await repo.capture(type: "EXP", title: "Premiums — XLSX export",
+                                         values: ["Format": "XLSX", "Rows": "12"],
+                                         actor: "Tester", at: Date())
+        #expect(doc.docType == "EXP")
+        #expect(doc.docNumber.hasPrefix("EXP-"))
+        #expect(doc.status == .confirmed)
+        #expect(doc.runID == nil && doc.defID == nil && doc.stepSeq == nil,
+                "captures stand alone — no run, no recipe, no step")
+        #expect(doc.fieldValues[1]?["Format"] == "XLSX")
+        let second = try await repo.capture(type: "EXP", title: "again", values: [:],
+                                            actor: "Tester", at: Date())
+        #expect(second.docNumber != doc.docNumber, "the EXP number range advances")
+        // Captures appear in the register but never in the runs list.
+        #expect(try await repo.runs().isEmpty)
+        #expect(try await repo.allDocuments().count == 2)
+    }
+
     @Test("Rename — the client/matter name replaces the run title")
     func renameRun() async throws {
         let (repo, _, _) = try await makeRepo()
