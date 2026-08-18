@@ -23,6 +23,51 @@ struct WorkbenchCSVTests {
         #expect(WorkbenchCSV.escape("") == "")
     }
 
+    @Test("Parsing — quotes, escaped quotes, CRLF, embedded newlines; render round-trips")
+    func parsing() {
+        #expect(WorkbenchCSV.parse("a,b\r\n1,2\r\n") == [["a", "b"], ["1", "2"]])
+        #expect(WorkbenchCSV.parse("a,b\n1,2") == [["a", "b"], ["1", "2"]],
+                "bare LF and no trailing newline both parse")
+        #expect(WorkbenchCSV.parse("\"x,y\",\"say \"\"hi\"\"\"\r\n") == [["x,y", "say \"hi\""]])
+        #expect(WorkbenchCSV.parse("\"two\nlines\",b\r\n") == [["two\nlines", "b"]])
+        #expect(WorkbenchCSV.parse("") == [])
+        // Round trip: values with every awkward character survive.
+        let grid = [["Name", "Note"], ["Home, contents", "say \"hi\"\nnew line"]]
+        let rendered = grid.map { row in row.map(WorkbenchCSV.escape).joined(separator: ",") }
+            .joined(separator: "\r\n") + "\r\n"
+        #expect(WorkbenchCSV.parse(rendered) == grid)
+    }
+
+    @Test("Report — table content, provenance counts, quality warnings, no reserved keys")
+    func report() async throws {
+        let url = MigrationFixtureBuilder.newTemporaryURL()
+        let db = try await MigrationFixtureBuilder.database(atVersion: 0, at: url)
+        try await SchemaMigrations.migrate(db)
+        let workspaces = WorkspaceRepository(database: db)
+        let ws = Workspace(title: "Test")
+        try await workspaces.upsert(ws)
+        let repo = WorkbenchDatasetRepository(database: db)
+        var rec = try await repo.createDataset(workspaceID: ws.id, title: "Premiums",
+                                               mode: .simple, actor: "T", at: Date())
+        rec = try await repo.addField(datasetID: rec.dataset.id, name: "Policy", valueShape: .text,
+                                      expectedRevision: rec.dataset.revision, actor: "T", at: Date())
+        rec = try await repo.addRow(datasetID: rec.dataset.id,
+                                    expectedRevision: rec.dataset.revision, actor: "T", at: Date())
+        let row = try #require(rec.rows.first)
+        let field = try #require(rec.fields.first)
+        rec = try await repo.setCell(datasetID: rec.dataset.id, rowID: row.id, fieldID: field.id,
+                                     kind: .userEntered, value: "Home", status: .humanConfirmed,
+                                     expectedRevision: rec.dataset.revision, actor: "T", at: Date())
+        let quality = WorkbenchDataQualityEvaluator.evaluate(record: rec)
+        let text = WorkbenchReport.render(rec, quality: quality)
+        #expect(text.contains("DATASET: Premiums"))
+        #expect(text.contains("Fields: Policy"))
+        #expect(text.contains("Rows: 1"))
+        #expect(text.contains("Home"))
+        #expect(text.contains("0 source-bound") && text.contains("1 entered"))
+        #expect(text.contains("QUALITY"))
+    }
+
     /// Build a real dataset through the repository, export it, and check the
     /// exact CSV — order comes from field/row ordinals, not insertion luck.
     @Test("A repository-built dataset renders in ordinal order with values")

@@ -175,6 +175,38 @@ public actor WorkCenterRepository {
         return (stepDoc, try await requireRun(runID))
     }
 
+    // MARK: - Universal capture (SAP: anything that leaves the app gets a number)
+
+    /// Post a standalone numbered document outside any run — the "universal
+    /// capture" of the source system: an export, a produced artifact, any
+    /// completed piece of work becomes a quotable TYPE-YEAR-#### record in
+    /// the register, with its facts riding in fields_json.
+    public func capture(type: String, title: String, values: [String: String],
+                        actor: String, at date: Date) async throws -> WCDocument {
+        let id = UUID()
+        let sp = "wccap_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
+        do {
+            try await database.exec("SAVEPOINT \(sp);")
+            let number = try await issueNumber(type: type, at: date)
+            try await database.exec("""
+                INSERT INTO work_center_documents
+                    (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
+                     fields_json, confirmed_seqs, actor, created_at, updated_at)
+                VALUES (?,?,?,NULL,NULL,NULL,?,?,?,?,?,?,?);
+                """, [.uuid(id), .text(number), .text(type), .text(title),
+                      .text(WCRunStatus.confirmed.rawValue),
+                      .text(Self.encodeFields([1: values])), .text(""),
+                      .text(actor), .real(date.timeIntervalSince1970),
+                      .real(date.timeIntervalSince1970)])
+            try await database.exec("RELEASE SAVEPOINT \(sp);")
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
+            try? await database.exec("RELEASE SAVEPOINT \(sp);")
+            throw error
+        }
+        return try await requireRun(id)
+    }
+
     // MARK: - Variants & rename
 
     /// Rename a run (the "Client / matter" name) so it's findable later.
