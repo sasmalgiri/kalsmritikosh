@@ -52,9 +52,12 @@ public struct WorkCenterView: View {
     @State private var showFileImporter = false
     @State private var derivedKeys: Set<String> = []
 
-    // Auto-save / auto-complete (both default ON, like the source system).
+    // Auto-save defaults ON; auto-complete defaults OFF (owner decision
+    // 2026-08-18, matching how the owner runs the source system) — steps are
+    // finalized with an explicit Confirm unless the user opts in via the
+    // automation menu.
     @AppStorage("kalsmritikosh.wc.autoSave") private var autoSave = true
-    @AppStorage("kalsmritikosh.wc.autoComplete") private var autoComplete = true
+    @AppStorage("kalsmritikosh.wc.autoComplete") private var autoComplete = false
     /// Steps whose fields the user actually touched this session — the
     /// engagement guard so auto-complete never fires on untouched values.
     @State private var touchedSeqs: Set<Int> = []
