@@ -175,6 +175,57 @@ public actor WorkCenterRepository {
         return (stepDoc, try await requireRun(runID))
     }
 
+    // MARK: - Variants & rename
+
+    /// Rename a run (the "Client / matter" name) so it's findable later.
+    public func rename(runID: UUID, title: String, at date: Date) async throws {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        _ = try await requireRun(runID)
+        try await database.exec(
+            "UPDATE work_center_documents SET title = ?, updated_at = ? WHERE id = ?;",
+            [.text(clean), .real(date.timeIntervalSince1970), .uuid(runID)])
+    }
+
+    /// Save a run's entries as a reusable VARIANT (SAP master data): a
+    /// numbered VAR- document holding the field values, minus reserved
+    /// system keys — a variant is a template, not a specific run's record.
+    public func createVariant(defID: String, name: String, values: [Int: [String: String]],
+                              actor: String, at date: Date) async throws -> WCDocument {
+        guard WCCatalog.definition(defID) != nil else { throw WorkCenterError.unknownDefinition(defID) }
+        let clean = values.mapValues { $0.filter { !WCReservedKey.isReserved($0.key) } }
+            .filter { !$0.value.isEmpty }
+        let id = UUID()
+        let sp = "wcvar_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
+        do {
+            try await database.exec("SAVEPOINT \(sp);")
+            let number = try await issueNumber(type: "VAR", at: date)
+            try await database.exec("""
+                INSERT INTO work_center_documents
+                    (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
+                     fields_json, confirmed_seqs, actor, created_at, updated_at)
+                VALUES (?,?,?,NULL,?,NULL,?,?,?,?,?,?,?);
+                """, [.uuid(id), .text(number), .text("VAR"), .text(defID),
+                      .text(name), .text(WCRunStatus.confirmed.rawValue),
+                      .text(Self.encodeFields(clean)), .text(""), .text(actor),
+                      .real(date.timeIntervalSince1970), .real(date.timeIntervalSince1970)])
+            try await database.exec("RELEASE SAVEPOINT \(sp);")
+        } catch {
+            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
+            try? await database.exec("RELEASE SAVEPOINT \(sp);")
+            throw error
+        }
+        return try await requireRun(id)
+    }
+
+    /// Saved variants for one workflow definition, newest first.
+    public func variants(defID: String) async throws -> [WCDocument] {
+        let rows = try await database.query(
+            "\(select) WHERE doc_type = 'VAR' AND def_id = ? ORDER BY created_at DESC;",
+            [.text(defID)])
+        return rows.compactMap(Self.decode)
+    }
+
     // MARK: - Queries
 
     public func run(_ id: UUID) async throws -> WCDocument? {

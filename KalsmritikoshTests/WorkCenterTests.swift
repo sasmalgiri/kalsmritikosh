@@ -240,6 +240,58 @@ struct WorkCenterEngineTests {
         #expect(!text.contains("seq"), "no engine jargon in the stakeholder summary")
     }
 
+    @Test("Step refs — JSON codec round-trips, garbage decodes empty")
+    func stepRefsCodec() {
+        let refs = [WCStepRef(id: "a", title: "ledger.pdf", detail: "/Users/x/Documents"),
+                    WCStepRef(id: "b", title: "receipt.jpg", detail: "")]
+        let json = WCStepRef.encodeList(refs)
+        #expect(WCStepRef.decodeList(json) == refs)
+        #expect(WCStepRef.decodeList(nil) == [])
+        #expect(WCStepRef.decodeList("not json") == [])
+    }
+
+    @Test("Attached evidence is searchable in the documents register")
+    func refsSearchable() {
+        let doc = WCDocument(
+            id: UUID(), docNumber: "WF-2026-0009", docType: "WF", runID: nil,
+            defID: "builtin.individual.records", stepSeq: nil,
+            title: "Records", status: .released,
+            fieldValues: [1: [WCReservedKey.refs: WCStepRef.encodeList(
+                [WCStepRef(id: "a", title: "insurance-policy.pdf", detail: "/tmp")])]],
+            confirmedSeqs: [1], actor: "Tester",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(WCDocumentFilter.matches(doc, query: "insurance-policy"))
+    }
+
+    @Test("Field derivation — examiner fills reviewer, matter identity carries over, never overwrites")
+    func fieldDerivation() {
+        let assemble = WCCatalog.production.operations[0]   // matter (carry-over) + reviewer (examiner)
+        let prior = WCDocument(
+            id: UUID(), docNumber: "WF-2026-0001", docType: "WF", runID: nil,
+            defID: WCCatalog.production.defID, stepSeq: nil,
+            title: "Earlier run", status: .confirmed,
+            fieldValues: [1: ["matter": "Acme v. Roe"]],
+            confirmedSeqs: [1], actor: "T",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let derived = WCFieldDerivation.derive(for: assemble, examiner: "R. Reviewer", priorRuns: [prior])
+        #expect(derived["matter"] == "Acme v. Roe")
+        #expect(derived["reviewer"] == "R. Reviewer")
+        // Non-carry-over keys are never invented; findings never carry over.
+        let report = WCCatalog.evidenceIntake.operations[4]
+        #expect(WCFieldDerivation.derive(for: report, examiner: "X", priorRuns: [prior]).isEmpty)
+        // Blank prior values don't count.
+        let blankPrior = WCDocument(
+            id: UUID(), docNumber: "WF-2026-0002", docType: "WF", runID: nil,
+            defID: WCCatalog.production.defID, stepSeq: nil,
+            title: "t", status: .open, fieldValues: [1: ["matter": "  "]],
+            confirmedSeqs: [], actor: "T",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(WCFieldDerivation.derive(for: assemble, examiner: "", priorRuns: [blankPrior]).isEmpty)
+    }
+
     @Test("Field-map JSON encoding round-trips")
     func fieldsRoundTrip() {
         let values: [Int: [String: String]] = [
@@ -275,6 +327,8 @@ struct WorkCenterRepositoryTests {
             case .bool:   values[field.key] = "Yes"
             case .number: values[field.key] = "1"
             case .text, .longText: values[field.key] = "test value"
+            case .date: values[field.key] = "2026-08-17"
+            case .dateRange: values[field.key] = "2026-07-18 → 2026-08-17"
             }
         }
         return values
@@ -390,6 +444,41 @@ struct WorkCenterRepositoryTests {
         #expect(docs.count == def.operations.compactMap(\.postsDocType).count)
         let all = try await repo.allDocuments()
         #expect(Set(all.map(\.docNumber)).count == all.count, "document numbers must be unique")
+    }
+
+    @Test("Variants — numbered VAR document, reserved keys stripped, listed per definition")
+    func variants() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let defID = WCCatalog.production.defID
+        let values: [Int: [String: String]] = [
+            1: ["matter": "Acme v. Roe", "reviewer": "R. Reviewer",
+                WCReservedKey.confirmedAt: "1700000000", WCReservedKey.confirmedBy: "X"],
+            3: [WCReservedKey.note: "internal only"],
+        ]
+        let variant = try await repo.createVariant(
+            defID: defID, name: "Acme template", values: values, actor: "Tester", at: Date())
+        #expect(variant.docType == "VAR")
+        #expect(variant.docNumber.hasPrefix("VAR-"))
+        #expect(variant.title == "Acme template")
+        #expect(variant.fieldValues[1] == ["matter": "Acme v. Roe", "reviewer": "R. Reviewer"],
+                "a variant is master data — attestations don't ride along")
+        #expect(variant.fieldValues[3] == nil, "steps left with only reserved keys drop out")
+        let listed = try await repo.variants(defID: defID)
+        #expect(listed.map(\.id) == [variant.id])
+        #expect(try await repo.variants(defID: WCCatalog.lifeRecords.defID).isEmpty)
+        // Variants never appear in the runs list.
+        #expect(try await repo.runs().isEmpty)
+    }
+
+    @Test("Rename — the client/matter name replaces the run title")
+    func renameRun() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let run = try await repo.createRun(defID: WCCatalog.storyBuild.defID,
+                                           title: "Story Build", actor: "T", at: Date())
+        try await repo.rename(runID: run.id, title: "Panama files", at: Date())
+        #expect(try await repo.run(run.id)?.title == "Panama files")
+        try await repo.rename(runID: run.id, title: "   ", at: Date())
+        #expect(try await repo.run(run.id)?.title == "Panama files", "blank names are ignored")
     }
 
     @Test("confirmStep stamps the who/when attestation into the step's values")

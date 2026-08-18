@@ -24,7 +24,7 @@ import Foundation
 // MARK: - Fields
 
 public nonisolated struct WCField: Identifiable, Equatable, Sendable {
-    public enum Kind: String, Equatable, Sendable { case text, longText, number, choice, bool }
+    public enum Kind: String, Equatable, Sendable { case text, longText, number, choice, bool, date, dateRange }
     public var id: String { key }
     public let key: String
     public let label: String
@@ -138,6 +138,7 @@ public nonisolated enum WCDocType {
         case "PUB": return "Publication Package"
         case "EDN": return "Edition"
         case "ARC": return "Archive Pack"
+        case "VAR": return "Variant"
         default:    return code
         }
     }
@@ -151,6 +152,7 @@ public nonisolated enum WCDocType {
         case "PUB": return "newspaper"
         case "EDN": return "text.book.closed"
         case "ARC": return "archivebox"
+        case "VAR": return "square.stack.3d.up"
         default:    return "doc"
         }
     }
@@ -206,6 +208,8 @@ public nonisolated enum WCCatalog {
                 f("sourceLocation", "Source location", .text,
                   "Where the data resided — folder, device, mailbox, cloud tenant.",
                   placeholder: "Shared drive / Documents"),
+                f("receivedOn", "Received on", .date,
+                  "The date the material came into your custody — anchors the chain."),
                 f("purpose", "Purpose of collection", .longText,
                   "Why this evidence is being collected — the authority or request behind it."),
                ]),
@@ -367,6 +371,8 @@ public nonisolated enum WCCatalog {
                   required: true),
                 f("criteria", "Inclusion criteria", .longText,
                   "What qualifies a source for this review."),
+                f("window", "Records window", .dateRange,
+                  "The period this review covers — sources outside it are out of scope."),
                ]),
             op(2, "screen", "Screen Corpus",
                "Screen sources in/out by the recorded criteria.",
