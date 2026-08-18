@@ -63,6 +63,15 @@ public struct DataLabView: View {
     @State private var chartValueField: String?
     @State private var chartLabelField: String?
 
+    // Advanced — formula columns, filter predicates, scenario promotion.
+    @State private var formulaName = ""
+    @State private var formulaShape: FactSchemaRegistry.ValueShape = .number
+    @State private var formulaText = ""
+    @State private var filterText = ""
+    @State private var reviewingOpID: UUID?
+    @State private var reviewDestination: WorkbenchScenarioPromotionDestination = .userCorrection
+    @State private var reviewReason = ""
+
     public init() {}
 
     public var body: some View {
@@ -371,6 +380,10 @@ public struct DataLabView: View {
 
                 analysesPanel(rec, caps: caps)
 
+                if caps.exposes(.formulaEditor) {
+                    formulaPanel(rec)
+                }
+
                 chartPanel(rec)
 
                 if caps.exposes(.scenarioBuilder) {
@@ -540,6 +553,96 @@ public struct DataLabView: View {
         Binding(get: { value ?? "" }, set: { setter($0.isEmpty ? nil : $0) })
     }
 
+    // MARK: Formula columns + filter predicates (Advanced — the =formula tools)
+
+    /// Live parse feedback for a formula: nil = empty, .success lists the
+    /// fields it reads, .failure explains the problem before anything runs.
+    private func formulaFeedback(_ source: String) -> Result<[String], Error>? {
+        let trimmed = source.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        do { return .success(try WorkbenchExpressionParser.parse(trimmed).referencedFields) }
+        catch { return .failure(error) }
+    }
+
+    private func formulaPanel(_ rec: WorkbenchDatasetRecord) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("Formula column — like =… in Excel, with lineage")
+            HStack(spacing: 6) {
+                TextField("New column name", text: $formulaName)
+                    .textFieldStyle(.roundedBorder)
+                Picker("", selection: $formulaShape) {
+                    ForEach([FactSchemaRegistry.ValueShape.number, .text, .money, .boolean, .date],
+                            id: \.rawValue) { shape in
+                        Text(shape.rawValue).tag(shape)
+                    }
+                }
+                .labelsHidden().frame(width: 90)
+            }
+            TextField("Formula — e.g. Premium * 0.18  or  IF(Amount > 1000, \"high\", \"low\")",
+                      text: $formulaText, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+                .lineLimit(1...3)
+            switch formulaFeedback(formulaText) {
+            case .success(let fields):
+                Label(fields.isEmpty ? "Valid — uses no columns"
+                      : "Valid — reads: \(fields.joined(separator: ", "))",
+                      systemImage: "checkmark.circle")
+                    .font(.caption2).foregroundStyle(.green)
+            case .failure(let error):
+                Label(String(describing: error), systemImage: "exclamationmark.circle")
+                    .font(.caption2).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            case nil:
+                EmptyView()
+            }
+            Button("Add calculated column") {
+                let spec = WorkbenchTransformSpec.calculatedColumn(
+                    newField: formulaName.trimmingCharacters(in: .whitespaces),
+                    shape: formulaShape,
+                    formula: formulaText.trimmingCharacters(in: .whitespaces))
+                runTransform(spec, rec: rec, label: "formula")
+                formulaName = ""; formulaText = ""
+            }
+            .controlSize(.small).buttonStyle(.borderedProminent)
+            .disabled(formulaName.trimmingCharacters(in: .whitespaces).isEmpty
+                      || !isValidFormula(formulaText))
+            .help("Computes one value per row and saves the column — every derived cell records exactly which cells fed it")
+
+            Divider()
+            Text("KEEP ROWS WHERE…").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("Condition — e.g. Amount > 1000 AND Status = \"open\"",
+                      text: $filterText)
+                .textFieldStyle(.roundedBorder)
+                .font(.caption.monospaced())
+            if case .failure(let error) = formulaFeedback(filterText) {
+                Label(String(describing: error), systemImage: "exclamationmark.circle")
+                    .font(.caption2).foregroundStyle(.orange)
+            }
+            Button("Apply filter view") {
+                runTransform(.filter(predicate: filterText.trimmingCharacters(in: .whitespaces)),
+                             rec: rec, label: "filter: \(filterText)")
+            }
+            .controlSize(.small)
+            .disabled(!isValidFormula(filterText))
+            .help("Shows only matching rows — a view, not a deletion; clear it any time")
+
+            DisclosureGroup {
+                Text("Operators: + − * /  ·  = <> < <= > >=  ·  AND OR NOT  ·  & (join text)\nFunctions: IF, COALESCE, ISBLANK, ABS, ROUND, FLOOR, CEIL, SQRT, MOD, MIN, MAX, NUMBER, LEN, UPPER, LOWER, TRIM, CONCAT, CONTAINS, STARTSWITH, ENDSWITH, TEXT, PERCENT, DATEDIFF, YEAR, MONTH, DAY\nRefer to columns by name; quote text values.")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } label: {
+                Text("Formula reference").font(.caption2)
+            }
+        }
+    }
+
+    private func isValidFormula(_ source: String) -> Bool {
+        if case .success = formulaFeedback(source) { return true }
+        return false
+    }
+
     private func scenarioPanel(_ rec: WorkbenchDatasetRecord) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Scenarios — what-if, never touching the base")
@@ -561,6 +664,7 @@ public struct DataLabView: View {
                 if !diff.isEmpty {
                     Text("\(diff.count) value(s) differ from the base").font(.caption2).foregroundStyle(.orange)
                 }
+                promotionSection(rec, active: active)
             } else {
                 HStack(spacing: 6) {
                     TextField("New scenario title", text: $scenarioTitle)
@@ -578,6 +682,107 @@ public struct DataLabView: View {
                     .buttonStyle(.plain).foregroundStyle(.tint)
                 }
             }
+        }
+    }
+
+    // MARK: Scenario promotion — a what-if only becomes real through a review
+
+    @ViewBuilder
+    private func promotionSection(_ rec: WorkbenchDatasetRecord, active: WorkbenchScenarioRecord) -> some View {
+        let applied = active.appliedOperations
+        let reviewedOps = Set(active.reviews.map(\.operationID))
+        if !applied.isEmpty {
+            DisclosureGroup {
+                ForEach(applied) { op in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: reviewedOps.contains(op.id)
+                                  ? "checkmark.seal" : "square.stack.3d.up")
+                                .font(.caption2)
+                                .foregroundStyle(reviewedOps.contains(op.id) ? .green : .orange)
+                            Text(operationSummary(op, rec: rec))
+                                .font(.caption2)
+                                .lineLimit(2)
+                            Spacer()
+                            if !reviewedOps.contains(op.id) {
+                                Button("Review…") {
+                                    reviewingOpID = reviewingOpID == op.id ? nil : op.id
+                                    reviewReason = ""
+                                } .controlSize(.mini)
+                                .help("Decide whether this what-if becomes a recorded correction or finding — the human decision is what makes it real")
+                            }
+                        }
+                        if reviewingOpID == op.id {
+                            reviewForm(active: active, op: op)
+                        }
+                    }
+                }
+                ForEach(active.reviews) { review in
+                    HStack(spacing: 6) {
+                        Image(systemName: review.decision == .accepted ? "checkmark.circle.fill" : "xmark.circle")
+                            .font(.caption2)
+                            .foregroundStyle(review.decision == .accepted ? .green : .red)
+                        Text("\(review.decision.rawValue) → \(review.destination.rawValue) by \(review.reviewer)")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            } label: {
+                Text("Promote what-ifs (\(applied.count) change\(applied.count == 1 ? "" : "s"), \(active.reviews.count) reviewed)")
+                    .font(.caption2)
+            }
+        }
+    }
+
+    private func operationSummary(_ op: WorkbenchScenarioOperation, rec: WorkbenchDatasetRecord) -> String {
+        let fieldName = op.fieldID.flatMap { fid in rec.fields.first { $0.id == fid }?.name }
+        switch op.kind {
+        case .rowExclusion: return "Excluded a row\(op.reason.map { " — \($0)" } ?? "")"
+        case .rowInclusion: return "Re-included a row"
+        default:
+            let change = "\(op.beforeValue ?? "—") → \(op.afterValue ?? "—")"
+            return "\(fieldName ?? "?"): \(change)\(op.reason.map { " — \($0)" } ?? "")"
+        }
+    }
+
+    private func reviewForm(active: WorkbenchScenarioRecord, op: WorkbenchScenarioOperation) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Becomes", selection: $reviewDestination) {
+                Text("User correction").tag(WorkbenchScenarioPromotionDestination.userCorrection)
+                Text("Working finding").tag(WorkbenchScenarioPromotionDestination.workingFinding)
+                Text("Method-run input").tag(WorkbenchScenarioPromotionDestination.methodRunInput)
+                Text("Claim review").tag(WorkbenchScenarioPromotionDestination.claimReview)
+                Text("Work-product input").tag(WorkbenchScenarioPromotionDestination.workProductInput)
+            }
+            .font(.caption2)
+            TextField("Why? (required — this reason goes on the record)", text: $reviewReason)
+                .textFieldStyle(.roundedBorder).font(.caption)
+            HStack {
+                Button("Accept") { promote(active: active, op: op, decision: .accepted) }
+                    .controlSize(.mini).buttonStyle(.borderedProminent)
+                    .disabled(reviewReason.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Reject") { promote(active: active, op: op, decision: .rejected) }
+                    .controlSize(.mini)
+                    .disabled(reviewReason.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(6)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func promote(active: WorkbenchScenarioRecord, op: WorkbenchScenarioOperation,
+                         decision: WorkbenchScenarioReviewDecision) {
+        guard let repo = appState.workbenchScenarios else { return }
+        errorMessage = nil
+        let reason = reviewReason.trimmingCharacters(in: .whitespaces)
+        Task {
+            do {
+                activeScenario = try await repo.promoteThroughReview(
+                    scenarioID: active.scenario.id, operationID: op.id,
+                    destination: reviewDestination, decision: decision,
+                    reviewer: actorName, reason: reason, resultingReference: nil,
+                    expectedRevision: active.scenario.revision, at: Date())
+                reviewingOpID = nil
+            } catch { errorMessage = "Could not record the review: \(error)" }
         }
     }
 
