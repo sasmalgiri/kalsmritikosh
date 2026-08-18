@@ -139,6 +139,7 @@ public nonisolated enum WCDocType {
         case "EDN": return "Edition"
         case "ARC": return "Archive Pack"
         case "VAR": return "Variant"
+        case "EXP": return "Export"
         default:    return code
         }
     }
@@ -153,6 +154,7 @@ public nonisolated enum WCDocType {
         case "EDN": return "text.book.closed"
         case "ARC": return "archivebox"
         case "VAR": return "square.stack.3d.up"
+        case "EXP": return "square.and.arrow.up"
         default:    return "doc"
         }
     }
