@@ -466,6 +466,13 @@ public struct RootView: View {
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
+        // FIRST-RUN-CURVE — empty states everywhere carry an "Add your files"
+        // (or similar) button; they post this notification and RootView jumps.
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
+            if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
+                navigate(to: dest)
+            }
+        }
         .task {
             // ENGINE POWER — refresh the semantic-index backlog caption.
             while !Task.isCancelled {

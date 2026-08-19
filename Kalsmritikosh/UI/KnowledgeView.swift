@@ -94,9 +94,9 @@ private struct KnowledgeListView: View {
     var body: some View {
         VStack {
             if rows.isEmpty && excluded.isEmpty {
-                Text("Nothing here yet. Ingest sources to populate this list.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                FirstRunNudge(icon: "books.vertical",
+                              title: "Nothing here yet",
+                              message: "Add your files and the people, places, and events found in them appear here — unified across every document.")
             } else {
                 List {
                     Section {

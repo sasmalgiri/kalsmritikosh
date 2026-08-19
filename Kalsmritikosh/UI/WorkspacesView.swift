@@ -314,6 +314,11 @@ public struct WorkspacesView: View {
             Text("Create one to organize a case, investigation, project, or personal matter as a focused view over your archive.")
                 .font(.caption).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            Button {
+                newTitle = ""; newDescription = ""; newTemplate = .general
+                showingNew = true
+            } label: { Label("Create workspace", systemImage: "folder.badge.plus") }
+                .buttonStyle(.borderedProminent)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

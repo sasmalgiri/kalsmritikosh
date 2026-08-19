@@ -89,11 +89,15 @@ public struct LibraryView: View {
                     .font(.system(size: 36))
                     .foregroundStyle(.tint)
                 Text("No topics yet.").font(.title3.weight(.medium))
-                Text("Topic communities form once your archive has been classified and the summarizer has run. Ingest more data or wait for the next scheduled pass.")
+                Text("Topics form on their own once your files have been read and classified — add files and check back after the background pass.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 480)
+                Button {
+                    SurfaceOpener.open(.sources)
+                } label: { Label("Add your files", systemImage: "folder") }
+                    .buttonStyle(.borderedProminent)
             }
             .padding(40)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -86,6 +86,15 @@ public struct ReviewView: View {
         VStack(spacing: 10) {
             Image(systemName: symbol).font(.system(size: 34)).foregroundStyle(.green)
             Text(text).font(.title3.weight(.medium)).foregroundStyle(.secondary)
+            // A green tick on an EMPTY archive would be a false all-clear —
+            // say what has to happen before this screen means anything.
+            Text("Contradictions and gaps are found as your files are read and questions are asked — an empty archive has nothing to disagree yet.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            Button("Add your files") { SurfaceOpener.open(.sources) }
+                .controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

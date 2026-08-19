@@ -48,6 +48,10 @@ public struct ConnectionFinderView: View {
             EntityPickerField(label: "First entity", selection: $entityA)
             EntityPickerField(label: "Second entity", selection: $entityB)
 
+            if entityA == nil && entityB == nil {
+                FirstRunHint(message: "People and organizations appear in these pickers as your files are read. Nothing to pick yet?")
+            }
+
             Button {
                 run()
             } label: {

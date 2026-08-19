@@ -104,14 +104,9 @@ public struct CompletenessView: View {
     @ViewBuilder
     private var content: some View {
         if rows.isEmpty && !loading {
-            VStack(spacing: 8) {
-                Image(systemName: "tray")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("No KnowledgeObjects yet.")
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            FirstRunNudge(icon: "tray",
+                          title: "Nothing processed yet",
+                          message: "Add your files and this screen shows how fully each one has been read, structured, and indexed.")
         } else {
             List(rows.filter { filter.matches($0) }) { row in
                 rowView(row)

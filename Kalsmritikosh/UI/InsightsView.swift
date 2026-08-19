@@ -156,9 +156,11 @@ public struct InsightsView: View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.seal")
                 .foregroundStyle(.secondary)
-            Text("No gaps detected yet — tap Scan.")
+            Text("No gaps detected yet — tap Scan. Gaps can only be found once your files have been read, so add files first if the archive is empty.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            Button("Add your files") { SurfaceOpener.open(.sources) }
+                .controlSize(.small)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 8)
