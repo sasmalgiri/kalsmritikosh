@@ -23,6 +23,13 @@ public nonisolated enum PersonaJobCatalogComposer {
         try JournalistPersonaPackage.register(into: &builder)
         try IndividualPersonaPackage.register(into: &builder)
         try LawyerPersonaPackage.register(into: &builder)
+        // Buyer-research personas (2026-08-19) — the four segments that buy
+        // evidence software today, each a vocabulary lens over the same
+        // shared engines (no forked services, no new stores).
+        try SIUPersonaPackage.register(into: &builder)
+        try ForensicAccountantPersonaPackage.register(into: &builder)
+        try CompliancePersonaPackage.register(into: &builder)
+        try GenealogistPersonaPackage.register(into: &builder)
         return try builder.build()
     }
 
@@ -36,6 +43,10 @@ public nonisolated enum PersonaJobCatalogComposer {
         case JournalistPersonaPackage.applicationID:   return JournalistPersonaPackage.jobs
         case IndividualPersonaPackage.applicationID:   return IndividualPersonaPackage.jobs
         case LawyerPersonaPackage.applicationID:       return LawyerPersonaPackage.jobs
+        case SIUPersonaPackage.applicationID:          return SIUPersonaPackage.jobs
+        case ForensicAccountantPersonaPackage.applicationID: return ForensicAccountantPersonaPackage.jobs
+        case CompliancePersonaPackage.applicationID:   return CompliancePersonaPackage.jobs
+        case GenealogistPersonaPackage.applicationID:  return GenealogistPersonaPackage.jobs
         default: return []
         }
     }
