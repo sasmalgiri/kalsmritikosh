@@ -33,12 +33,15 @@ struct PersonaJobsModelTests {
         return (model, h)
     }
 
-    @Test("The model discovers all five personas and enumerates each persona's real jobs")
+    @Test("The model discovers all registered personas and enumerates each persona's real jobs")
     func discoversAndEnumerates() async throws {
         let (model, _) = try await makeModel()
         await model.load()
-        #expect(model.personas.count == 5)
+        // Five core personas + the four buyer-research personas (2026-08-19).
+        #expect(model.personas.count == 9)
         #expect(model.personas.contains { $0.id == InvestigatorPersonaPackage.applicationID })
+        #expect(model.personas.contains { $0.id == SIUPersonaPackage.applicationID })
+        #expect(model.personas.contains { $0.id == GenealogistPersonaPackage.applicationID })
         // Default selection enumerates a real, non-empty job set with an intake job.
         #expect(!model.jobs.isEmpty)
         // Switching persona re-enumerates. (PJOB-MAX: Researcher now covers
