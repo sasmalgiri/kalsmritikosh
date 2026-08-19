@@ -16,6 +16,8 @@ import AppKit
 public struct SourcesView: View {
     @Environment(AppState.self) private var appState
     @State private var recents: [KnowledgeObjectSummaryRow] = []
+    /// The recently-ingested document whose insights panel is open.
+    @State private var expandedDocID: KnowledgeObject.ID?
     @State private var fileCount: Int = 0
     @State private var ingesting = false
     /// ING-002 — the last bulk ingest's outcome; drives the failure banner.
@@ -219,24 +221,40 @@ public struct SourcesView: View {
                     .padding(.vertical, 8)
             } else {
                 ForEach(recents) { row in
-                    HStack(alignment: .top) {
-                        Image(systemName: icon(for: row.sourceType))
-                            .foregroundStyle(Theme.brand)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.sourceFile.lastPathComponent)
-                                .font(.body)
-                            Text(row.preview)
-                                .font(.caption)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .top) {
+                            Image(systemName: icon(for: row.sourceType))
+                                .foregroundStyle(Theme.brand)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.sourceFile.lastPathComponent)
+                                    .font(.body)
+                                Text(row.preview)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Text(row.sourceType.rawValue.uppercased())
+                                .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
-                                .lineLimit(2)
+                            Image(systemName: expandedDocID == row.id ? "chevron.down" : "chevron.right")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
-                        Spacer()
-                        Text(row.sourceType.rawValue.uppercased())
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                expandedDocID = expandedDocID == row.id ? nil : row.id
+                            }
+                        }
+                        // COMPETITOR-DNA — who's named here + what else to read.
+                        if expandedDocID == row.id {
+                            DocumentInsightsPanel(objectID: row.id)
+                                .padding(.top, 8)
+                        }
                     }
                     .padding(12)
                     .cardSurface(cornerRadius: 12)
+                    .help("Click to see who is named in this document and related documents")
                 }
             }
         }
