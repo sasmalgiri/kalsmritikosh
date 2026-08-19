@@ -8,6 +8,12 @@
 //  the reviewer record an append-only, reversible decision through the shared
 //  review ledger. Absence is never labelled as proof (§10.4).
 //
+//  COMPETITOR-DNA (2026-08-19) — the review-queue pattern the eDiscovery
+//  veterans converged on (Relativity Review Center's "Start review →
+//  decide → Save and Next", Everlaw's single-keystroke coding): one item
+//  at a time, numbered keys apply a decision and auto-advance, progress
+//  always visible. The list stays for browsing; the queue is for clearing.
+//
 
 import SwiftUI
 
@@ -24,8 +30,21 @@ public struct ReviewView: View {
     @State private var gaps: [GapNode] = []
     /// targetID → latest recorded decision raw value.
     @State private var decisionByTarget: [String: String] = [:]
+    /// Review queue position (nil = browsing the list).
+    @State private var queuePosition: Int? = nil
 
     public init() {}
+
+    /// The ids of the current mode's items, queue order.
+    private var queueIDs: [String] {
+        switch mode {
+        case .contradictions: return contradictions.map { $0.id.uuidString }
+        case .gaps:           return gaps.map { $0.id.uuidString }
+        }
+    }
+    private var reviewedCount: Int {
+        queueIDs.filter { decisionByTarget[$0] != nil }.count
+    }
 
     public var body: some View {
         VStack(spacing: 0) {
@@ -57,20 +76,171 @@ public struct ReviewView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .onChange(of: mode) { _, _ in queuePosition = nil }
+
+            if !queueIDs.isEmpty {
+                HStack(spacing: 10) {
+                    if let position = queuePosition {
+                        ProgressView(value: Double(reviewedCount), total: Double(queueIDs.count))
+                            .tint(.green)
+                            .frame(maxWidth: 240)
+                        Text("Item \(position + 1) of \(queueIDs.count) · \(reviewedCount) reviewed")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Spacer()
+                        Text("←/→ move · 1–9 decide")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                        Button("Exit queue") { queuePosition = nil }
+                            .controlSize(.small)
+                    } else {
+                        Button {
+                            queuePosition = firstUnreviewed() ?? 0
+                        } label: {
+                            Label("Start review queue (\(queueIDs.count - reviewedCount) to go)",
+                                  systemImage: "play.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(queueIDs.count == reviewedCount)
+                        .help("Work through items one at a time — decide with the number keys, and it advances for you")
+                        if reviewedCount > 0 {
+                            Text("\(reviewedCount) of \(queueIDs.count) reviewed")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                }
+            }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
     }
 
+    // MARK: - Queue engine
+
+    private func firstUnreviewed() -> Int? {
+        queueIDs.firstIndex { decisionByTarget[$0] == nil }
+    }
+
+    /// After a queue decision: advance to the next unreviewed item (wrapping),
+    /// or exit with everything done.
+    private func advanceQueue(from position: Int) {
+        let ids = queueIDs
+        guard !ids.isEmpty else { queuePosition = nil; return }
+        let order = Array(position + 1 ..< ids.count) + Array(0 ... position)
+        if let next = order.first(where: { decisionByTarget[ids[$0]] == nil }) {
+            queuePosition = next
+        } else {
+            queuePosition = nil   // queue cleared
+        }
+    }
+
+    private func moveQueue(_ delta: Int) {
+        guard let position = queuePosition, !queueIDs.isEmpty else { return }
+        queuePosition = min(max(position + delta, 0), queueIDs.count - 1)
+    }
+
+    /// Hidden buttons carrying the queue's keyboard: ←/→ (and j/k) move,
+    /// 1–9 apply the matching decision and auto-advance.
     @ViewBuilder
-    private var content: some View {
+    private var queueKeyboard: some View {
+        if let position = queuePosition {
+            Group {
+                Button("") { moveQueue(-1) }.keyboardShortcut(.leftArrow, modifiers: [])
+                Button("") { moveQueue(1) }.keyboardShortcut(.rightArrow, modifiers: [])
+                Button("") { moveQueue(-1) }.keyboardShortcut("k", modifiers: [])
+                Button("") { moveQueue(1) }.keyboardShortcut("j", modifiers: [])
+                ForEach(0..<9, id: \.self) { slot in
+                    Button("") { applyQueueDecision(slot: slot, position: position) }
+                        .keyboardShortcut(KeyEquivalent(Character("\(slot + 1)")), modifiers: [])
+                }
+            }
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func applyQueueDecision(slot: Int, position: Int) {
         switch mode {
         case .contradictions:
-            if contradictions.isEmpty { empty("No contradictions detected", "checkmark.seal") }
-            else { list { ForEach(contradictions) { contradictionCard($0) } } }
+            guard position < contradictions.count else { return }
+            let c = contradictions[position]
+            let options = ContradictionReviewDecision.allCases
+            guard slot < options.count else { return }
+            let prior = decisionByTarget[c.id.uuidString]
+                .flatMap(ContradictionReviewDecision.init(rawValue:)) ?? .unresolved
+            Task {
+                await recordContradiction(c, decision: options[slot], prior: prior)
+                advanceQueue(from: position)
+            }
         case .gaps:
-            if gaps.isEmpty { empty("No missing-evidence gaps flagged", "checkmark.seal") }
-            else { list { ForEach(gaps) { gapCard($0) } } }
+            guard position < gaps.count else { return }
+            let g = gaps[position]
+            let options = GapReviewDecision.allCases
+            guard slot < options.count else { return }
+            let prior = decisionByTarget[g.id.uuidString]
+                .flatMap(GapReviewDecision.init(rawValue:)) ?? (g.dismissed ? .dismissed : .open)
+            Task {
+                await recordGap(g, decision: options[slot], prior: prior)
+                advanceQueue(from: position)
+            }
         }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let position = queuePosition {
+            queueView(position)
+        } else {
+            switch mode {
+            case .contradictions:
+                if contradictions.isEmpty { empty("No contradictions detected", "checkmark.seal") }
+                else { list { ForEach(contradictions) { contradictionCard($0) } } }
+            case .gaps:
+                if gaps.isEmpty { empty("No missing-evidence gaps flagged", "checkmark.seal") }
+                else { list { ForEach(gaps) { gapCard($0) } } }
+            }
+        }
+    }
+
+    /// One item at a time: the full card plus numbered decision buttons —
+    /// press the number (or click) and the queue advances itself.
+    @ViewBuilder
+    private func queueView(_ position: Int) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                switch mode {
+                case .contradictions:
+                    if position < contradictions.count {
+                        contradictionCard(contradictions[position])
+                        numberedDecisions(ContradictionReviewDecision.allCases.map(\.displayName)) { slot in
+                            applyQueueDecision(slot: slot, position: position)
+                        }
+                    }
+                case .gaps:
+                    if position < gaps.count {
+                        gapCard(gaps[position])
+                        numberedDecisions(GapReviewDecision.allCases.map(\.displayName)) { slot in
+                            applyQueueDecision(slot: slot, position: position)
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: 820, alignment: .leading)
+        }
+        .scrollContentBackground(.hidden)
+        .background(queueKeyboard)
+    }
+
+    private func numberedDecisions(_ titles: [String], apply: @escaping (Int) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("DECIDE — press the number or click")
+                .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            FlowingDecisionButtons(titles: titles, apply: apply)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.tint.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func list<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -246,6 +416,30 @@ public struct ReviewView: View {
         }
         await appState.contradictions?.setStatus(c.id, status)
         await reload()
+    }
+
+    fileprivate struct FlowingDecisionButtons: View {
+        let titles: [String]
+        let apply: (Int) -> Void
+        var body: some View {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 8)], alignment: .leading, spacing: 8) {
+                ForEach(Array(titles.enumerated()), id: \.offset) { index, title in
+                    Button {
+                        apply(index)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("\(index + 1)")
+                                .font(.caption.monospacedDigit().weight(.bold))
+                                .frame(width: 18, height: 18)
+                                .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                            Text(title).font(.callout).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
     }
 
     private func recordGap(_ g: GapNode, decision: GapReviewDecision, prior: GapReviewDecision) async {
