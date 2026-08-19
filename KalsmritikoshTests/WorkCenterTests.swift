@@ -470,6 +470,68 @@ struct WorkCenterRepositoryTests {
         #expect(try await repo.runs().isEmpty)
     }
 
+    @Test("Number uniqueness under concurrent burst — 120 documents, three ranges, zero duplicates, zero gaps")
+    func numbersUniqueUnderBurst() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        // Hammer the number ranges from many concurrent tasks: 40 EXP
+        // captures, 40 RPT captures, and 40 WF runs, all racing into the
+        // one repository actor. The actor serializes, the counter upsert is
+        // atomic, and the schema's UNIQUE would reject any slip — this test
+        // proves the composition holds end to end.
+        let numbers = try await withThrowingTaskGroup(of: String.self) { group in
+            for i in 0..<40 {
+                group.addTask {
+                    try await repo.capture(type: "EXP", title: "burst \(i)", values: [:],
+                                           actor: "T", at: when).docNumber
+                }
+                group.addTask {
+                    try await repo.capture(type: "RPT", title: "burst \(i)", values: [:],
+                                           actor: "T", at: when).docNumber
+                }
+                group.addTask {
+                    try await repo.createRun(defID: WCCatalog.lifeRecords.defID,
+                                             title: "burst \(i)", actor: "T", at: when).docNumber
+                }
+            }
+            var collected: [String] = []
+            for try await number in group { collected.append(number) }
+            return collected
+        }
+        #expect(numbers.count == 120)
+        #expect(Set(numbers).count == 120, "every issued number must be globally unique")
+
+        // Each type's range is gapless: exactly 1...40, no skips, no repeats.
+        let year = Calendar(identifier: .gregorian).component(.year, from: when)
+        for type in ["EXP", "RPT", "WF"] {
+            let seqs = numbers.filter { $0.hasPrefix("\(type)-") }
+                .compactMap { Int($0.split(separator: "-").last ?? "") }
+                .sorted()
+            #expect(seqs == Array(1...40), "\(type)-\(year) range must be gapless 1...40, got \(seqs.count) values")
+        }
+
+        // And the register agrees with itself.
+        let all = try await repo.allDocuments(limit: 500)
+        #expect(Set(all.map(\.docNumber)).count == all.count)
+    }
+
+    @Test("A failed issue rolls back its number — no gaps from errors")
+    func failedIssueLeavesNoGap() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        let first = try await repo.capture(type: "EXP", title: "ok", values: [:], actor: "T", at: when)
+        // A failing insert (blank title violates the CHECK) must roll back
+        // the counter increment inside the same savepoint…
+        await #expect(throws: (any Error).self) {
+            _ = try await repo.capture(type: "EXP", title: "   ", values: [:], actor: "T", at: when)
+        }
+        // …so the NEXT number continues the sequence with no gap.
+        let second = try await repo.capture(type: "EXP", title: "ok again", values: [:], actor: "T", at: when)
+        let seq = { (n: String) in Int(n.split(separator: "-").last ?? "") ?? -1 }
+        #expect(seq(second.docNumber) == seq(first.docNumber) + 1,
+                "gapless after rollback: \(first.docNumber) then \(second.docNumber)")
+    }
+
     @Test("Universal capture — a standalone EXP document with its own number and facts")
     func universalCapture() async throws {
         let (repo, _, _) = try await makeRepo()
