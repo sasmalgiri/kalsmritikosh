@@ -204,10 +204,36 @@ public struct HomeView: View {
             Text("Pick the lens that fits your work — every path answers only from what you ingest.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Divider()
+            // The four promises — each one answers the loudest complaint
+            // users voice about the incumbent tools (subscription shock,
+            // cloud exposure, export lock-in, weeks-long learning curves).
+            HStack(alignment: .top, spacing: 16) {
+                promise("lock.shield", "100% on your Mac",
+                        "Nothing ever leaves this computer — no cloud, no account, works offline forever.")
+                promise("creditcard", "Yours once",
+                        "One purchase. No subscription, no per-page fees, no surprise renewal.")
+                promise("square.and.arrow.up", "No lock-in",
+                        "Export everything — Word, Excel, PDF, CSV — any time. Your data stays yours.")
+                promise("checkmark.seal", "Answers you can check",
+                        "Every answer cites the exact document behind it — click and see the source.")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .cardSurface(cornerRadius: 16, tint: Theme.brand)
+    }
+
+    private func promise(_ icon: String, _ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+            Text(detail)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func personaCard(_ p: GuidePersona) -> some View {
