@@ -51,16 +51,21 @@ public actor WorkCenterRepository {
 
     // MARK: - Number ranges (transactional)
 
-    /// Issue the next TYPE-YEAR-#### number. Runs inside the caller's
-    /// savepoint when composed; standalone it is a single UPDATE-or-INSERT
-    /// plus read on the serialized database actor.
-    private func issueNumber(type: String, at date: Date) async throws -> String {
+    /// Issue the next TYPE-YEAR-#### number — SYNCHRONOUS, called only from
+    /// inside a `database.withSavepoint` isolated closure. Actors are
+    /// re-entrant across `await`, so the async increment-then-read version
+    /// could interleave two callers between the two statements and hand out
+    /// the SAME number (caught by the concurrent-burst test; the schema's
+    /// UNIQUE then rejected the insert). Zero suspension points here means
+    /// zero interleaving window.
+    private nonisolated static func issueNumber(_ db: isolated Database,
+                                                type: String, at date: Date) throws -> String {
         let year = Calendar(identifier: .gregorian).component(.year, from: date)
-        try await database.exec("""
+        try db.exec("""
             INSERT INTO work_center_counters (doc_type, year, next_seq) VALUES (?,?,2)
             ON CONFLICT(doc_type, year) DO UPDATE SET next_seq = next_seq + 1;
             """, [.text(type), .integer(Int64(year))])
-        let rows = try await database.query(
+        let rows = try db.query(
             "SELECT next_seq FROM work_center_counters WHERE doc_type = ? AND year = ?;",
             [.text(type), .integer(Int64(year))])
         let next = Int(rows.first?.int(0) ?? 2)
@@ -73,11 +78,9 @@ public actor WorkCenterRepository {
     public func createRun(defID: String, title: String, actor: String, at date: Date) async throws -> WCDocument {
         guard WCCatalog.definition(defID) != nil else { throw WorkCenterError.unknownDefinition(defID) }
         let id = UUID()
-        let sp = "wcrun_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let number = try await issueNumber(type: "WF", at: date)
-            try await database.exec("""
+        try await database.withSavepoint("wcrun_\(id.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let number = try Self.issueNumber(db, type: "WF", at: date)
+            try db.exec("""
                 INSERT INTO work_center_documents
                     (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
                      fields_json, confirmed_seqs, actor, created_at, updated_at)
@@ -86,23 +89,25 @@ public actor WorkCenterRepository {
                       .text(title), .text(WCRunStatus.open.rawValue),
                       .text("{}"), .text(""), .text(actor), .real(date.timeIntervalSince1970),
                       .real(date.timeIntervalSince1970)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireRun(id)
     }
 
     /// Save (or update) the captured field values for one step of a run.
+    /// Read-modify-write of fields_json runs inside ONE isolated closure so
+    /// a concurrent save can never clobber another step's just-saved values.
     public func saveFields(runID: UUID, seq: Int, values: [String: String], at date: Date) async throws {
-        let run = try await requireRun(runID)
-        var all = run.fieldValues
-        all[seq] = values
-        try await database.exec(
-            "UPDATE work_center_documents SET fields_json = ?, updated_at = ? WHERE id = ?;",
-            [.text(Self.encodeFields(all)), .real(date.timeIntervalSince1970), .uuid(runID)])
+        _ = try await requireRun(runID)   // friendly not-found error first
+        try await database.withSavepoint("wcsave_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)") { db in
+            let rows = try db.query(
+                "SELECT fields_json FROM work_center_documents WHERE id = ? LIMIT 1;", [.uuid(runID)])
+            guard let json = rows.first?.string(0) else { throw WorkCenterError.runNotFound(runID) }
+            var all = Self.decodeFields(json)
+            all[seq] = values
+            try db.exec(
+                "UPDATE work_center_documents SET fields_json = ?, updated_at = ? WHERE id = ?;",
+                [.text(Self.encodeFields(all)), .real(date.timeIntervalSince1970), .uuid(runID)])
+        }
     }
 
     /// Confirm a step: re-validates required fields + gates (fail-closed),
@@ -124,54 +129,68 @@ public actor WorkCenterRepository {
             confirmed: run.confirmedSeqs, fieldValues: run.fieldValues))
         guard locked.isEmpty else { throw WorkCenterError.gatesLocked(locked) }
 
-        // Stamp the attestation (who/when) into the step's value map — the
-        // reserved keys ride inside fields_json so both the run and the
-        // posted document carry the record with no extra table.
-        var stamped = values
-        stamped[WCReservedKey.confirmedAt] = String(date.timeIntervalSince1970)
-        stamped[WCReservedKey.confirmedBy] = actor
-        var allFields = run.fieldValues
-        allFields[seq] = stamped
+        // The write section runs as ONE isolated closure — no suspension
+        // points, so number issue + step-doc insert + run update can never
+        // interleave with another confirm/save. Authoritative state (fields,
+        // confirmed set) is RE-READ inside the barrier; the friendly checks
+        // above are advisory, the closure is the enforcement.
+        let opTitle = op.title
+        let postsType = op.postsDocType
+        let totalOps = def.operations.count
+        let stepDocID: UUID? = try await database.withSavepoint(
+            "wcstep_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)") { db in
+            let rows = try db.query("""
+                SELECT fields_json, confirmed_seqs, title FROM work_center_documents
+                WHERE id = ? LIMIT 1;
+                """, [.uuid(runID)])
+            guard let row = rows.first, let json = row.string(0),
+                  let confirmedRaw = row.string(1), let runTitle = row.string(2) else {
+                throw WorkCenterError.runNotFound(runID)
+            }
+            var confirmed = Set(confirmedRaw.split(separator: ",").compactMap { Int($0) })
+            guard !confirmed.contains(seq) else { throw WorkCenterError.stepAlreadyConfirmed(seq) }
 
-        var stepDoc: WCDocument?
-        let sp = "wcstep_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            if let type = op.postsDocType {
+            // Stamp the attestation (who/when) into the step's value map — the
+            // reserved keys ride inside fields_json so both the run and the
+            // posted document carry the record with no extra table.
+            var allFields = Self.decodeFields(json)
+            var stamped = allFields[seq] ?? [:]
+            stamped[WCReservedKey.confirmedAt] = String(date.timeIntervalSince1970)
+            stamped[WCReservedKey.confirmedBy] = actor
+            allFields[seq] = stamped
+
+            var stepID: UUID?
+            if let type = postsType {
                 let id = UUID()
-                let number = try await issueNumber(type: type, at: date)
-                try await database.exec("""
+                let number = try Self.issueNumber(db, type: type, at: date)
+                try db.exec("""
                     INSERT INTO work_center_documents
                         (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
                          fields_json, confirmed_seqs, actor, created_at, updated_at)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
                     """, [.uuid(id), .text(number), .text(type), .uuid(runID), .text(defID),
-                          .integer(Int64(seq)), .text("\(op.title) — \(run.title)"),
+                          .integer(Int64(seq)), .text("\(opTitle) — \(runTitle)"),
                           .text(WCRunStatus.confirmed.rawValue),
                           .text(Self.encodeFields([seq: stamped])), .text("\(seq)"),
                           .text(actor), .real(date.timeIntervalSince1970),
                           .real(date.timeIntervalSince1970)])
-                stepDoc = try await requireRun(id)
+                stepID = id
             }
-            var confirmed = run.confirmedSeqs
             confirmed.insert(seq)
             let joined = confirmed.sorted().map(String.init).joined(separator: ",")
             // The run auto-advances open -> released on first confirmation, and
             // released -> confirmed when every operation is done (the SAP
             // lifecycle; statuses only ever move forward).
-            let allDone = confirmed.count == def.operations.count
-            let newStatus: WCRunStatus = allDone ? .confirmed : .released
-            try await database.exec("""
+            let newStatus: WCRunStatus = confirmed.count == totalOps ? .confirmed : .released
+            try db.exec("""
                 UPDATE work_center_documents
                 SET confirmed_seqs = ?, status = ?, fields_json = ?, updated_at = ? WHERE id = ?;
                 """, [.text(joined), .text(newStatus.rawValue), .text(Self.encodeFields(allFields)),
                       .real(date.timeIntervalSince1970), .uuid(runID)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
+            return stepID
         }
+        var stepDoc: WCDocument?
+        if let stepDocID { stepDoc = try await self.run(stepDocID) }
         return (stepDoc, try await requireRun(runID))
     }
 
@@ -184,11 +203,9 @@ public actor WorkCenterRepository {
     public func capture(type: String, title: String, values: [String: String],
                         actor: String, at date: Date) async throws -> WCDocument {
         let id = UUID()
-        let sp = "wccap_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let number = try await issueNumber(type: type, at: date)
-            try await database.exec("""
+        try await database.withSavepoint("wccap_\(id.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let number = try Self.issueNumber(db, type: type, at: date)
+            try db.exec("""
                 INSERT INTO work_center_documents
                     (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
                      fields_json, confirmed_seqs, actor, created_at, updated_at)
@@ -198,11 +215,6 @@ public actor WorkCenterRepository {
                       .text(Self.encodeFields([1: values])), .text(""),
                       .text(actor), .real(date.timeIntervalSince1970),
                       .real(date.timeIntervalSince1970)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireRun(id)
     }
@@ -228,11 +240,9 @@ public actor WorkCenterRepository {
         let clean = values.mapValues { $0.filter { !WCReservedKey.isReserved($0.key) } }
             .filter { !$0.value.isEmpty }
         let id = UUID()
-        let sp = "wcvar_\(id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(sp);")
-            let number = try await issueNumber(type: "VAR", at: date)
-            try await database.exec("""
+        try await database.withSavepoint("wcvar_\(id.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let number = try Self.issueNumber(db, type: "VAR", at: date)
+            try db.exec("""
                 INSERT INTO work_center_documents
                     (id, doc_number, doc_type, run_id, def_id, step_seq, title, status,
                      fields_json, confirmed_seqs, actor, created_at, updated_at)
@@ -241,11 +251,6 @@ public actor WorkCenterRepository {
                       .text(name), .text(WCRunStatus.confirmed.rawValue),
                       .text(Self.encodeFields(clean)), .text(""), .text(actor),
                       .real(date.timeIntervalSince1970), .real(date.timeIntervalSince1970)])
-            try await database.exec("RELEASE SAVEPOINT \(sp);")
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(sp);")
-            try? await database.exec("RELEASE SAVEPOINT \(sp);")
-            throw error
         }
         return try await requireRun(id)
     }
