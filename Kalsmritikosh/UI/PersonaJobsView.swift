@@ -135,8 +135,21 @@ public final class PersonaJobsModel {
         jobs = await service.jobs(forPersona: id)
     }
 
+    /// First run: no workspace exists yet — create the default one rather
+    /// than dead-ending a brand-new user on a disabled button.
+    public func ensureWorkspace() async {
+        guard selectedWorkspace == nil else { return }
+        if workspaceList.isEmpty {
+            let ws = Workspace(title: "General")
+            try? await workspaces.upsert(ws)
+            workspaceList = (try? await workspaces.all(includeArchived: false)) ?? [ws]
+        }
+        selectedWorkspace = workspaceList.first?.id
+    }
+
     /// Open a matter by launching the selected persona's intake job in the chosen workspace.
     public func startMatter(actor: String, at date: Date) async {
+        await ensureWorkspace()
         guard let intake = intakeJob, let wsID = selectedWorkspace else {
             lastError = "Choose a workspace and a persona first."; return
         }
@@ -344,15 +357,23 @@ public struct PersonaJobsView: View {
                 }
                 HStack(spacing: 10) {
                     TextField("Matter title", text: $model.matterTitle).textFieldStyle(.roundedBorder).frame(maxWidth: 280)
-                    Picker("Workspace", selection: $model.selectedWorkspace) {
-                        ForEach(model.workspaceList, id: \.id) { ws in Text(ws.title).tag(Optional(ws.id)) }
-                    }.frame(maxWidth: 220)
+                    if !model.workspaceList.isEmpty {
+                        Picker("Workspace", selection: $model.selectedWorkspace) {
+                            ForEach(model.workspaceList, id: \.id) { ws in Text(ws.title).tag(Optional(ws.id)) }
+                        }.frame(maxWidth: 220)
+                    }
                     Button {
                         Task { await model.startMatter(actor: "me", at: Date()) }
                     } label: { Label("Start matter", systemImage: "play.fill") }
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.brand)
-                    .disabled(model.busy || model.intakeJob == nil || model.selectedWorkspace == nil)
+                    .disabled(model.busy || model.intakeJob == nil
+                              || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if model.workspaceList.isEmpty {
+                    Text("No workspace yet — starting your first matter creates one named \u{201C}General\u{201D} automatically.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(14)

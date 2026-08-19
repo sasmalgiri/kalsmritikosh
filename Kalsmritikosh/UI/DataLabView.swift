@@ -123,12 +123,11 @@ public struct DataLabView: View {
                     .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 170)
                     Button("Create") { createDataset() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty || selectedWorkspace == nil)
+                        .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
                         .help("Creates an empty dataset in this workspace — add fields and rows, or let a persona job prepare one")
                     Button {
                         showImporter = true
                     } label: { Label("Import CSV", systemImage: "square.and.arrow.down") }
-                        .disabled(selectedWorkspace == nil)
                         .help("Turn a spreadsheet into a dataset — export it from Excel/Numbers as CSV first; the header row becomes the fields")
                 }
                 .fileImporter(isPresented: $showImporter,
@@ -870,6 +869,18 @@ public struct DataLabView: View {
         await loadDatasets()
     }
 
+    /// First run: no workspace exists yet — create the default one rather
+    /// than dead-ending on a disabled Create/Import button.
+    private func ensureWorkspace() async -> Workspace.ID? {
+        if let id = selectedWorkspace { return id }
+        guard let repo = appState.workspaces else { return nil }
+        let ws = Workspace(title: "General")
+        try? await repo.upsert(ws)
+        workspaces = (try? await repo.all(includeArchived: false)) ?? [ws]
+        selectedWorkspace = workspaces.first?.id
+        return selectedWorkspace
+    }
+
     private func loadDatasets() async {
         guard let repo = appState.workbenchDatasets, let wsID = selectedWorkspace else { return }
         let ids = (try? await repo.datasetIDs(workspaceID: wsID)) ?? []
@@ -881,11 +892,12 @@ public struct DataLabView: View {
     }
 
     private func createDataset() {
-        guard let repo = appState.workbenchDatasets, let wsID = selectedWorkspace else { return }
+        guard let repo = appState.workbenchDatasets else { return }
         let title = newTitle.trimmingCharacters(in: .whitespaces)
         errorMessage = nil
         Task {
             do {
+                guard let wsID = await ensureWorkspace() else { return }
                 let rec = try await repo.createDataset(workspaceID: wsID, title: title,
                                                        mode: newMode, actor: actorName, at: Date())
                 newTitle = ""
@@ -1148,10 +1160,11 @@ public struct DataLabView: View {
     // MARK: Import (Excel/Numbers → CSV → dataset)
 
     private func importCSV(_ url: URL) {
-        guard let repo = appState.workbenchDatasets, let wsID = selectedWorkspace else { return }
+        guard let repo = appState.workbenchDatasets else { return }
         errorMessage = nil
         Task {
             do {
+                guard let wsID = await ensureWorkspace() else { return }
                 let gotAccess = url.startAccessingSecurityScopedResource()
                 defer { if gotAccess { url.stopAccessingSecurityScopedResource() } }
                 let text = try String(contentsOf: url, encoding: .utf8)
