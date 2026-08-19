@@ -60,6 +60,11 @@ public struct SearchView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
+            Button {
+                SurfaceOpener.open(.sources)
+            } label: { Label("Add your files", systemImage: "folder") }
+                .buttonStyle(.borderedProminent)
+                .help("Nothing to search yet? Point the app at a folder — search works the moment files are read")
             Spacer()
         }
         .frame(maxWidth: .infinity)

@@ -108,11 +108,15 @@ public struct AssertionsView: View {
                 .foregroundStyle(.tint)
             Text("No assertions yet")
                 .font(.title3.weight(.medium))
-            Text("User assertions land here when you add them in the Explore tab. Future LLM extractions will populate this substrate automatically.")
+            Text("Claims extracted from your files land here, each with its supporting evidence. You can also add your own from the Explore tab.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 520)
+            Button {
+                SurfaceOpener.open(.explore)
+            } label: { Label("Open Explore", systemImage: "point.3.connected.trianglepath.dotted") }
+                .buttonStyle(.borderedProminent)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

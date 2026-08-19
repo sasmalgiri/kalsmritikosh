@@ -31,8 +31,11 @@ public struct CaseStoryView: View {
             } else if let markdown {
                 result(markdown)
             } else if didRun {
-                Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
-                      systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Nothing about that in your archive yet. Try the patent number, a party name, or a keyword from the documents.",
+                          systemImage: "questionmark.circle").font(.callout).foregroundStyle(.secondary)
+                    FirstRunHint(message: "If the archive is still empty, add your files first — stories are built only from what's been read.")
+                }
                 Spacer()
             } else {
                 Spacer()

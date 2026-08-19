@@ -164,11 +164,15 @@ public struct TimelineView: View {
             }
             Text("Your timeline")
                 .font(Theme.display(24, .bold))
-            Text("Ingest a folder and Kalsmritikosh reconstructs dated events into a timeline here.")
+            Text("Add your files and every dated event in them — payments, letters, filings — lines up here in order, automatically.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
+            Button {
+                SurfaceOpener.open(.sources)
+            } label: { Label("Add your files", systemImage: "folder") }
+                .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

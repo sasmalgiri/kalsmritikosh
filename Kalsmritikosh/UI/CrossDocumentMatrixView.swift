@@ -86,11 +86,22 @@ public struct CrossDocumentMatrixView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             Image(systemName: "square.grid.3x3.topleft.filled")
                 .font(.system(size: 34)).foregroundStyle(.secondary)
             Text(didRun ? "No document mentions that." : "Enter a topic to see what each document says.")
                 .foregroundStyle(.secondary)
+            Text(didRun
+                 ? "Try a person, an amount, or a phrase that appears in the files — or add more files."
+                 : "Ask one question across every document at once — e.g. a party name, a clause, a payment.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 420)
+            Button {
+                SurfaceOpener.open(.sources)
+            } label: { Label("Add your files", systemImage: "folder") }
+                .controlSize(.small)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
