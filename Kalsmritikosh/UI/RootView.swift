@@ -252,6 +252,8 @@ public struct RootView: View {
     @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
+    /// "?" keyboard cheat-sheet visibility.
+    @State private var showShortcutHelp: Bool = false
     /// Text in the always-visible header search box.
     @State private var headerSearch: String = ""
     /// Chosen persona (GuidePersona.id). Empty = not yet picked → first-run
@@ -465,6 +467,7 @@ public struct RootView: View {
         .frame(minWidth: 880, minHeight: 620)
         .background(shortcutButtons)
         .overlay(paletteOverlay)
+        .overlay(shortcutHelpOverlay)
         .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
         // FIRST-RUN-CURVE — empty states everywhere carry an "Add your files"
         // (or similar) button; they post this notification and RootView jumps.
@@ -1000,6 +1003,10 @@ public struct RootView: View {
                 .keyboardShortcut("k", modifiers: .command)
             Button("") { navigate(to: previousSelection) }
                 .keyboardShortcut("\\", modifiers: .command)
+            // "?" opens the shortcut cheat-sheet — the discoverability
+            // pattern the mature review platforms train users on.
+            Button("") { showShortcutHelp.toggle() }
+                .keyboardShortcut("?", modifiers: [])
             ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
                 Button("") { navigate(to: item.dest) }
                     .keyboardShortcut(item.key, modifiers: .command)
@@ -1008,6 +1015,50 @@ public struct RootView: View {
         .opacity(0)
         .frame(width: 0, height: 0)
         .accessibilityHidden(true)
+    }
+
+    /// The "?" cheat-sheet: every window shortcut on one card.
+    @ViewBuilder
+    private var shortcutHelpOverlay: some View {
+        if showShortcutHelp {
+            ZStack {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .onTapGesture { showShortcutHelp = false }
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Label("Keyboard shortcuts", systemImage: "keyboard")
+                            .font(.headline)
+                        Spacer()
+                        Button { showShortcutHelp = false } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    shortcutRow("⌘K", "Command palette — jump anywhere, run anything")
+                    shortcutRow("⌘\\", "Swap back to the previous screen")
+                    shortcutRow("⌘[  ⌘]", "Back / forward through your location history")
+                    ForEach(Array(Destination.quickShortcuts.enumerated()), id: \.offset) { _, item in
+                        shortcutRow("⌘\(item.key.character)", item.dest.title)
+                    }
+                    shortcutRow("?", "Show this card")
+                }
+                .padding(18)
+                .frame(width: 420)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .shadow(radius: 24)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private func shortcutRow(_ keys: String, _ what: String) -> some View {
+        HStack(spacing: 12) {
+            Text(keys)
+                .font(.callout.monospaced().weight(.semibold))
+                .frame(width: 70, alignment: .leading)
+            Text(what).font(.callout).foregroundStyle(.secondary)
+            Spacer()
+        }
     }
 
     @ViewBuilder

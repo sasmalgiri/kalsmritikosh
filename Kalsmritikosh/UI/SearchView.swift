@@ -5,8 +5,25 @@
 //  Faceted + FTS5 search over chunks. M4 covers chunk hits;
 //  M5 adds entity/event filters.
 //
+//  COMPETITOR-DNA (2026-08-19) — Batch search, the pattern ICIJ's Datashare
+//  proved on the Pandora Papers: search a whole LIST at once (every name on
+//  a roster, every account number) and see hits-per-query at a glance,
+//  instead of running hundreds of single searches and missing the ones you
+//  didn't think to try.
+//
 
 import SwiftUI
+
+/// Pure parsing of a pasted batch list — one query per line, trimmed,
+/// blanks dropped, duplicates removed (first occurrence wins).
+public nonisolated enum BatchSearchParser {
+    public static func parse(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+}
 
 public struct SearchView: View {
     @Environment(AppState.self) private var appState
@@ -16,13 +33,28 @@ public struct SearchView: View {
     /// Chunks the user soft-excluded this session (greyed with a Restore).
     @State private var excludedIDs: Set<Chunk.ID> = []
 
+    // Batch search (the Datashare pattern).
+    @State private var batchMode = false
+    @State private var batchInput = ""
+    @State private var batchResults: [(query: String, count: Int)] = []
+    @State private var batchRunning = false
+    @State private var batchProgress = 0
+
     public init() {}
 
     public var body: some View {
         VStack(spacing: 0) {
-            // The search box lives in the always-visible app header now;
-            // this screen just renders results for the current query.
-            if hits.isEmpty {
+            Picker("", selection: $batchMode) {
+                Text("Search").tag(false)
+                Text("Batch list").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 240)
+            .padding(.top, 10)
+            .help("Batch list searches many terms at once — every name on a roster, every account number — and shows hits per term")
+            if batchMode {
+                batchPanel
+            } else if hits.isEmpty {
                 emptyState
             } else {
                 resultsList
@@ -31,6 +63,102 @@ public struct SearchView: View {
         .background(AuroraBackdrop(intensity: 0.6))
         .onAppear { consumePendingQuery() }
         .onChange(of: appState.pendingSearchQuery) { _, _ in consumePendingQuery() }
+    }
+
+    // MARK: Batch search
+
+    private var batchPanel: some View {
+        HSplitView {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("One search per line")
+                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                TextEditor(text: $batchInput)
+                    .font(.callout.monospaced())
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                Text("Paste a whole list — names, companies, account or policy numbers — and search them all at once. You'll see which ones your archive actually mentions, including the ones you'd never have searched by hand.")
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button {
+                        runBatch()
+                    } label: {
+                        Label(batchRunning
+                              ? "Searching… \(batchProgress)/\(BatchSearchParser.parse(batchInput).count)"
+                              : "Search all", systemImage: "text.magnifyingglass")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(batchRunning || BatchSearchParser.parse(batchInput).isEmpty)
+                    if !batchResults.isEmpty {
+                        Text("\(batchResults.filter { $0.count > 0 }.count) of \(batchResults.count) terms found")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(14)
+            .frame(minWidth: 280, idealWidth: 340)
+
+            VStack(alignment: .leading, spacing: 6) {
+                if batchResults.isEmpty {
+                    Spacer()
+                    Text("Results appear here — one row per term, hits at a glance.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 4) {
+                            ForEach(batchResults.sorted { $0.count > $1.count }, id: \.query) { row in
+                                HStack(spacing: 10) {
+                                    Circle()
+                                        .fill(row.count > 0 ? Color.green : Color.secondary.opacity(0.4))
+                                        .frame(width: 7, height: 7)
+                                    Text(row.query).font(.callout).lineLimit(1)
+                                    Spacer()
+                                    Text(row.count >= batchCountCap ? "\(batchCountCap)+" : "\(row.count)")
+                                        .font(.callout.monospacedDigit().weight(.semibold))
+                                        .foregroundStyle(row.count > 0 ? .primary : .tertiary)
+                                    Button("Open") {
+                                        batchMode = false
+                                        query = row.query
+                                        runSearch()
+                                    }
+                                    .controlSize(.small)
+                                    .disabled(row.count == 0)
+                                    .help("See the actual passages for this term")
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 7))
+                            }
+                        }
+                        .padding(14)
+                    }
+                }
+            }
+            .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private var batchCountCap: Int { 200 }
+
+    private func runBatch() {
+        let queries = BatchSearchParser.parse(batchInput)
+        guard !queries.isEmpty, let chunks = appState.chunks else { return }
+        batchRunning = true
+        batchProgress = 0
+        batchResults = []
+        Task {
+            var rows: [(String, Int)] = []
+            for q in queries {
+                let results = (try? await chunks.searchFTS(q, limit: batchCountCap)) ?? []
+                let visible = await appState.screenAuthorizer?.filterChunks(results, boundary: .globalOwner) ?? []
+                rows.append((q, visible.count))
+                await MainActor.run {
+                    batchProgress += 1
+                    batchResults = rows
+                }
+            }
+            await MainActor.run { batchRunning = false }
+        }
     }
 
     /// Pick up a query typed into the always-visible header search box.
