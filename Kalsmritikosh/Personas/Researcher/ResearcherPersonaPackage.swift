@@ -50,11 +50,11 @@ public nonisolated enum ResearcherPersonaPackage {
         return [
             job("protocol",           "Research protocol",            "Define the research question, scope, and authorized corpus.", .caseIntake),
             job("corpus-catalogue",   "Corpus catalogue",             "Catalogue every authorized source with provenance.", .dataLab),
-            job("metadata",           "Metadata",                     "Record structured metadata per source, cited to the source.", .dataLab),
+            job("metadata",           "Metadata & finding aid",       "Record structured metadata per source — your working finding aid, cited to the source.", .dataLab),
             job("transcription",      "Transcription & coding",       "Code passages into structured findings with locators.", .analysis),
             job("authority-control",  "Authority control",            "Unify names/terms to canonical authorities (reversible, human-reviewed).", .identityResolution),
             job("source-criticism",   "Source criticism",             "Assess origin, bias, and reliability of sources.", .sourceReliability),
-            job("screening",          "Literature screening",         "Screen documents in/out by recorded, reversible criteria.", .analysis),
+            job("screening",          "Screening (include / exclude)", "Screen sources in or out by recorded, reversible criteria — PRISMA-style.", .analysis),
             job("extraction",         "Extraction & coding",          "Extract coded findings, each citing an evidence block.", .analysis),
             job("chronology",         "Chronology & periodisation",   "Build a periodised timeline (undated labelled, cited).", .linkage),
             job("prosopography",      "Prosopography",                "Compile a collective biography of a group, each cell cited.", .subjectDossier),

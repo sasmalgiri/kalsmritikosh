@@ -51,17 +51,17 @@ public nonisolated enum InvestigatorPersonaPackage {
             job("ask",                   "Ask (case-scoped)",        "Answer a question over the case's authorized evidence only.", .ask),
             job("methods",               "Professional methods",     "Run a professional method over case-authorized evidence.", .methods),
             job("data-lab",              "DataLab",                  "Prepare authorized-only datasets over the shared Workbench.", .dataLab),
-            job("subject-dossier",       "Subject dossier",          "Assemble a subject dossier citing exact in-scope evidence.", .subjectDossier),
+            job("subject-dossier",       "Subject workup",           "Work up a subject — the background dossier, citing exact in-scope evidence.", .subjectDossier),
             job("identity-resolution",   "Identity resolution",      "Resolve identity via the shared reversible merge, human-gated.", .identityResolution),
             job("analysis",              "Analysis worksheet",       "Brainstorm, 5W1H, evidence plan, and hypothesis matrix.", .analysis),
             job("source-reliability",    "Source reliability",       "Assess case source reliability (rating ≠ fact).", .sourceReliability),
             job("contradiction-gap",     "Contradiction & gap desk", "Review in-scope contradictions and gaps (absence ≠ proof).", .contradictionGap),
             job("causal-analysis",       "Causal analysis",          "Five Whys / Fishbone / Root-cause over the shared method engine.", .causalAnalysis),
-            job("linkage",               "Timeline & linkage",       "Timeline, relationship graph, and transaction/asset flow.", .linkage),
+            job("linkage",               "Timeline & link analysis", "Timeline, link chart (people–objects–locations–events), and transaction/asset flow.", .linkage),
             job("capa-register",         "CAPA register",            "Corrective/preventive action register (human-closed).", .capaRegister),
             job("effectiveness-review",  "Effectiveness review",     "Review CAPA effectiveness (human decision required).", .effectivenessReview),
-            job("evidence-custody",      "Evidence vault & custody", "The case evidence/custody manifest over authorized versions.", .evidenceCustody),
-            job("findings",              "Findings & export",        "Assemble case-scoped findings and a sealed receipt.", .findings),
+            job("evidence-custody",      "Chain of custody",         "The evidence locker — the case custody manifest over authorized versions.", .evidenceCustody),
+            job("findings",              "Case report & export",     "Assemble the case report — findings with a sealed receipt.", .findings),
             job("closure",              "Closure & reopen",          "Close or reopen the case by an explicit human decision.", .closure)
         ]
     }

@@ -41,17 +41,17 @@ public nonisolated enum LawyerPersonaPackage {
         return [
             job("matter-intake",     "Matter intake",              "Open the matter and set its authorized, privilege-sensitive scope.", .caseIntake),
             job("parties-issues",    "Parties & issues",           "Identify parties and issues linked to canonical objects.", .subjectDossier),
-            job("fact-chronology",   "Fact chronology",            "Build the fact chronology (undated labelled, each fact cited).", .linkage),
+            job("fact-chronology",   "Case chronology",            "Build the case chronology — the spine of the matter (undated labelled, each fact cited).", .linkage),
             job("fact-evidence",     "Fact–evidence matrix",       "Map facts to evidence — both sides preserved, cites reopen.", .contradictionGap),
             job("witness-profiles",  "Witness profiles",           "Profile witnesses; contradictions cite both sides.", .subjectDossier),
             job("document-coding",   "Document coding",            "Code documents by recorded, reversible decisions.", .analysis),
-            job("privilege",         "Privilege candidates",       "Record privilege candidates — privilege is NEVER auto-established.", .analysis),
+            job("privilege",         "Privilege log",              "Build the privilege log — candidates recorded with basis; privilege is NEVER auto-established.", .analysis),
             job("obligations",       "Obligations & clauses",      "Compare obligations/clauses, each cell citing a clause locator.", .dataLab),
             job("damages",           "Damages ledger",             "Build a damages ledger; amounts cite source cells.", .dataLab),
             job("deadlines",         "Deadlines",                  "Track deadlines — a candidate until a human confirms it.", .analysis),
             job("deposition",        "Deposition outline",         "Draft a deposition outline; questions cite the record.", .analysis),
-            job("exhibit-binder",    "Exhibit binder",             "Assemble the exhibit binder; each exhibit cites its source version.", .evidenceCustody),
-            job("production",        "Production / export",        "Produce the export package — report==receipt with custody hashes.", .findings),
+            job("exhibit-binder",    "Exhibit list & binder",      "Assemble the exhibit list and trial binder; each exhibit cites its source version.", .evidenceCustody),
+            job("production",        "Document production",        "Produce the export set — every document carries a Bates-style number; report == receipt with custody hashes.", .findings),
             job("redaction",         "Redaction validation",       "Validate text + visual redaction before production.", .findings),
             // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
             // surfaced with matter framing. Same persona-neutral router, no fork.

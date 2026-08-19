@@ -42,11 +42,11 @@ public nonisolated enum IndividualPersonaPackage {
             job("insurance",           "Insurance",                "Keep a register of insurance policies.", .dataLab),
             job("health-scope",        "Health-record scope",      "Summarize health records you choose to include.", .analysis),
             job("applications",        "Applications & cases",     "Track applications and open cases.", .analysis),
-            job("reminders",           "Confirmed reminders",      "Keep a list of confirmed important dates.", .analysis),
-            job("emergency-pack",      "Emergency pack",           "Assemble an emergency information package.", .findings),
-            job("secure-share",        "Secure share / redaction", "Prepare a redacted package to share safely.", .findings),
+            job("reminders",           "Important dates & renewals", "Keep the confirmed dates that matter — renewals, expiries, deadlines.", .analysis),
+            job("emergency-pack",      "Emergency binder (ICE)",   "Assemble your in-case-of-emergency binder — what loved ones need, in one place.", .findings),
+            job("secure-share",        "Share safely (redacted)",  "Prepare a redacted copy to share — sensitive details masked.", .findings),
             job("personal-chronology", "Personal chronology",      "See your personal timeline (undated labelled).", .linkage),
-            job("legacy-archive",      "Legacy archive",           "Assemble a legacy archive with a sealed receipt.", .findings),
+            job("legacy-archive",      "Legacy binder",            "Assemble the legacy binder — your records for the next generation, with a sealed receipt.", .findings),
             // PJOB-MAX — full 16-kind coverage: the remaining shared capabilities
             // surfaced in plain personal language. Same persona-neutral router, no fork.
             job("ask",                 "Ask my records",           "Ask a question over your records — every answer cites its document.", .ask),
