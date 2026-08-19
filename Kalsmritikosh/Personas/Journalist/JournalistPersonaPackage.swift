@@ -36,15 +36,15 @@ public nonisolated enum JournalistPersonaPackage {
         }
         return [
             job("story-intake",       "Story intake",           "Define the story question, scope, and authorized sources.", .caseIntake),
-            job("claim-board",        "Claim board",            "Track claims and their verification status.", .analysis),
+            job("claim-board",        "Fact-check board",       "Track every claim and its verification status — checked, unchecked, disputed.", .analysis),
             job("source-map",         "Source map",             "Map sources, people, and relationships.", .linkage),
             job("source-reliability", "Source reliability",     "Assess source reliability and independence.", .sourceReliability),
             job("interview-plan",     "Interview plan",         "Identify reporting gaps to fill by interview.", .contradictionGap),
             job("quote-book",         "Quote book",             "Collect quotes cited to their exact source.", .analysis),
             job("transcript",         "Transcript correction",  "Correct transcripts with locators; unheard words never asserted.", .analysis),
-            job("chronology",         "Chronology",             "Build the story timeline (undated labelled, cited).", .linkage),
+            job("chronology",         "Tick-tock (timeline)",   "Build the story's tick-tock — the reconstructed timeline (undated labelled, cited).", .linkage),
             job("fact-verification",  "Fact verification",      "Verify claims; conflicting accounts preserved.", .contradictionGap),
-            job("reporting-gap",      "Reporting-gap register", "Record unanswered questions (absence ≠ proof).", .contradictionGap),
+            job("reporting-gap",      "Open questions",         "The open-questions list — what's still unanswered (absence ≠ proof).", .contradictionGap),
             job("right-of-reply",     "Right of reply",         "Log subjects and their responses.", .subjectDossier),
             job("publication",        "Publication decision",   "Record the human publication decision (never automated).", .closure),
             job("correction-history", "Correction history",     "Track post-publication corrections.", .analysis),

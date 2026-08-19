@@ -48,10 +48,10 @@ public enum PersonaTemplateCatalog {
         case .general:
             return ["Timeline", "Findings", "Contradictions", "Missing Evidence"]
         case .legalMatter:
-            return ["Chronology", "Witness dossiers", "Issue views", "Privilege candidates",
-                    "Potential exhibits", "Contradictions", "Missing documents"]
+            return ["Case chronology", "Witness profiles", "Issue views", "Privilege log",
+                    "Exhibit list", "Contradictions", "Missing documents"]
         case .investigation:
-            return ["Subject dossier", "Connection map", "Chronology", "Contradictions",
+            return ["Subject workup", "Link chart", "Chronology", "Contradictions",
                     "Unresolved leads", "Evidence inventory", "Technical custody log"]
         case .journalism:
             return ["Findings and sources", "Single-source claims", "Needs response",

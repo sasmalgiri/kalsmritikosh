@@ -24,7 +24,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "INV-02",
             persona: "Investigator",
-            name: "Subject dossier",
+            name: "Subject workup",
             workflow: "Assemble everything known about a subject",
             requiredInputs: ["Subject identity", "sources"],
             methods: ["select evidence", "review"],
@@ -184,7 +184,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "INV-18",
             persona: "Investigator",
-            name: "Evidence vault & custody",
+            name: "Chain of custody",
             workflow: "Maintain custody chain for exhibits",
             requiredInputs: ["Sources", "custody events"],
             methods: ["review", "form"],
@@ -234,7 +234,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "RES-03",
             persona: "Researcher",
-            name: "Metadata",
+            name: "Metadata & finding aid",
             workflow: "Record structured metadata per source",
             requiredInputs: ["Sources"],
             methods: ["form"],
@@ -274,7 +274,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "RES-07",
             persona: "Researcher",
-            name: "Literature screening",
+            name: "Screening (include / exclude)",
             workflow: "Screen documents in/out by criteria",
             requiredInputs: ["Corpus", "criteria"],
             methods: ["form", "table"],
@@ -364,7 +364,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "JRN-02",
             persona: "Journalist",
-            name: "Claim board",
+            name: "Fact-check board",
             workflow: "Track each story claim + support",
             requiredInputs: ["Claims", "sources"],
             methods: ["matrix", "review"],
@@ -424,7 +424,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "JRN-08",
             persona: "Journalist",
-            name: "Chronology",
+            name: "Tick-tock (timeline)",
             workflow: "Build cited story timeline",
             requiredInputs: ["Events", "dates"],
             methods: ["timeline analysis"],
@@ -444,7 +444,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "JRN-10",
             persona: "Journalist",
-            name: "Reporting-gap register",
+            name: "Open questions",
             workflow: "Track what is not yet known",
             requiredInputs: ["Gaps"],
             methods: ["gap analysis"],
@@ -574,7 +574,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "IND-09",
             persona: "Individual",
-            name: "Confirmed reminders",
+            name: "Important dates & renewals",
             workflow: "Turn dated obligations into confirmed reminders",
             requiredInputs: ["Documents with dates"],
             methods: ["review", "form"],
@@ -584,7 +584,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "IND-10",
             persona: "Individual",
-            name: "Emergency pack",
+            name: "Emergency binder (ICE)",
             workflow: "Assemble emergency document pack",
             requiredInputs: ["Key documents"],
             methods: ["work-product build"],
@@ -594,7 +594,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "IND-11",
             persona: "Individual",
-            name: "Secure share / redaction",
+            name: "Share safely (redacted)",
             workflow: "Share with verified redaction",
             requiredInputs: ["Documents", "recipients"],
             methods: ["review", "work-product build"],
@@ -614,7 +614,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "IND-13",
             persona: "Individual",
-            name: "Legacy archive",
+            name: "Legacy binder",
             workflow: "Assemble durable legacy archive + receipt",
             requiredInputs: ["Selected documents"],
             methods: ["work-product build"],
@@ -644,7 +644,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "LAW-03",
             persona: "Lawyer",
-            name: "Fact chronology",
+            name: "Case chronology",
             workflow: "Build a cited statement-of-facts timeline",
             requiredInputs: ["Events", "dates"],
             methods: ["timeline analysis"],
@@ -684,7 +684,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "LAW-07",
             persona: "Lawyer",
-            name: "Privilege candidates",
+            name: "Privilege log",
             workflow: "Flag candidate-privileged documents for review",
             requiredInputs: ["Documents"],
             methods: ["review", "decision"],
@@ -734,7 +734,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "LAW-12",
             persona: "Lawyer",
-            name: "Exhibit binder",
+            name: "Exhibit list & binder",
             workflow: "Assemble exhibit list/binder with index",
             requiredInputs: ["Selected documents"],
             methods: ["work-product build"],
@@ -744,7 +744,7 @@ enum JobDocumentationGenerated {
         JobDocumentation(
             jobID: "LAW-13",
             persona: "Lawyer",
-            name: "Production / export",
+            name: "Document production",
             workflow: "Produce cited export set with manifest + receipt",
             requiredInputs: ["Selected docs", "scope"],
             methods: ["work-product build"],
