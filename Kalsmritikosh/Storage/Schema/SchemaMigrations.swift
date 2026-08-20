@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 105
+    public static let latestVersion = 106
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -456,7 +456,11 @@ public enum SchemaMigrations {
             "work_center_documents": ["id", "doc_number", "doc_type", "run_id", "def_id", "step_seq",
                                       "title", "status", "fields_json", "confirmed_seqs", "actor",
                                       "created_at", "updated_at"],
-            "work_center_counters": ["doc_type", "year", "next_seq"]
+            "work_center_counters": ["doc_type", "year", "next_seq"],
+            // v106 — REGISTERS: append-only edit log making captured documents editable
+            // WITH HISTORY (one NEW table; its presence distinguishes v106 from v105). NEWEST marker.
+            "work_center_record_edits": ["id", "doc_id", "field_key", "old_value", "new_value",
+                                         "editor", "note", "edited_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -597,7 +601,8 @@ public enum SchemaMigrations {
         (102, v102),
         (103, v103),
         (104, v104),
-        (105, v105)
+        (105, v105),
+        (106, v106)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5462,6 +5467,28 @@ public enum SchemaMigrations {
     );
     CREATE UNIQUE INDEX idx_app_navigation_entries_ordinal ON app_navigation_entries(session_id, ordinal);
     CREATE INDEX idx_app_navigation_entries_session ON app_navigation_entries(session_id);
+    """
+
+    private static let v106: String = """
+    -- REGISTERS (owner request 2026-08-20) — the day-to-day repeating-record tools
+    -- (interview/statement logs, records-request/FOIA trackers, research logs). These
+    -- reuse work_center_documents as the numbered store (INT/REQ/LOG doc types) but,
+    -- unlike confirm-once workflow steps, their records are EDITABLE. This append-only
+    -- log seals every field change so an edited record still carries who-changed-what-
+    -- when — the human-input-with-history contract. One row per changed field per edit;
+    -- rows are never rewritten or deleted (edits are corrected by further edits).
+    CREATE TABLE work_center_record_edits (
+        id         TEXT PRIMARY KEY,
+        doc_id     TEXT NOT NULL REFERENCES work_center_documents(id) ON DELETE CASCADE,
+        field_key  TEXT NOT NULL,
+        old_value  TEXT NOT NULL DEFAULT '',
+        new_value  TEXT NOT NULL DEFAULT '',
+        editor     TEXT NOT NULL,
+        note       TEXT NOT NULL DEFAULT '',
+        edited_at  REAL NOT NULL,
+        CHECK(length(trim(field_key)) > 0)
+    );
+    CREATE INDEX idx_wc_record_edits_doc ON work_center_record_edits(doc_id, edited_at);
     """
 
     private static let v105: String = """

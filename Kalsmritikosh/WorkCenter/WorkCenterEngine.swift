@@ -140,6 +140,9 @@ public nonisolated enum WCDocType {
         case "ARC": return "Archive Pack"
         case "VAR": return "Variant"
         case "EXP": return "Export"
+        case "INT": return "Interview / Statement"
+        case "REQ": return "Records Request"
+        case "LOG": return "Research Log Entry"
         default:    return code
         }
     }
@@ -155,6 +158,9 @@ public nonisolated enum WCDocType {
         case "ARC": return "archivebox"
         case "VAR": return "square.stack.3d.up"
         case "EXP": return "square.and.arrow.up"
+        case "INT": return "person.wave.2"
+        case "REQ": return "envelope.badge.clock"
+        case "LOG": return "magnifyingglass.circle"
         default:    return "doc"
         }
     }

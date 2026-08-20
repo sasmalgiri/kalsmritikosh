@@ -44,6 +44,19 @@ public nonisolated struct WCDocument: Sendable, Identifiable, Equatable {
     public let updatedAt: Date
 }
 
+/// One sealed field change to an editable register record (migration v106).
+/// Append-only: corrections are further edits, never rewrites of this row.
+public nonisolated struct WCRecordEdit: Sendable, Identifiable, Equatable {
+    public let id: UUID
+    public let docID: UUID
+    public let fieldKey: String
+    public let oldValue: String
+    public let newValue: String
+    public let editor: String
+    public let note: String
+    public let editedAt: Date
+}
+
 public actor WorkCenterRepository {
     private let database: Database
 
@@ -261,6 +274,83 @@ public actor WorkCenterRepository {
             "\(select) WHERE doc_type = 'VAR' AND def_id = ? ORDER BY created_at DESC;",
             [.text(defID)])
         return rows.compactMap(Self.decode)
+    }
+
+    // MARK: - Registers (editable records with a change history)
+
+    /// Create a register record — a numbered, editable document of `type`
+    /// (INT/REQ/LOG). Reuses the transactional `capture` path; the record's
+    /// field values ride under seq 1, exactly like a captured document.
+    public func createRecord(type: String, title: String, values: [String: String],
+                             actor: String, at date: Date) async throws -> WCDocument {
+        try await capture(type: type, title: title, values: values, actor: actor, at: date)
+    }
+
+    /// Edit a register record in place, sealing every changed field to the
+    /// append-only edit log (v106). Title is re-derived by the caller (which
+    /// knows the register schema) and passed in. Read-modify-write + the diff
+    /// insert happen in ONE isolated closure so a concurrent edit can't
+    /// interleave — the same zero-suspension discipline as issueNumber.
+    /// Returns the number of fields actually changed (0 = no-op, nothing logged).
+    @discardableResult
+    public func updateRecord(docID: UUID, title: String, values: [String: String],
+                             editor: String, note: String, at date: Date) async throws -> Int {
+        _ = try await requireRun(docID)   // fail-closed: the record must exist
+        return try await database.withSavepoint(
+            "wcedit_\(docID.uuidString.replacingOccurrences(of: "-", with: ""))") { db in
+            let rows = try db.query(
+                "SELECT fields_json FROM work_center_documents WHERE id = ? LIMIT 1;", [.uuid(docID)])
+            guard let json = rows.first?.string(0) else { throw WorkCenterError.runNotFound(docID) }
+            let old = Self.decodeFields(json)[1] ?? [:]
+
+            // The union of keys present before or after — captures adds, edits, clears.
+            let keys = Set(old.keys).union(values.keys)
+            var changed = 0
+            for key in keys.sorted() {
+                let before = old[key] ?? ""
+                let after = values[key] ?? ""
+                guard before != after else { continue }
+                try db.exec("""
+                    INSERT INTO work_center_record_edits
+                        (id, doc_id, field_key, old_value, new_value, editor, note, edited_at)
+                    VALUES (?,?,?,?,?,?,?,?);
+                    """, [.uuid(UUID()), .uuid(docID), .text(key), .text(before), .text(after),
+                          .text(editor), .text(note), .real(date.timeIntervalSince1970)])
+                changed += 1
+            }
+            guard changed > 0 else { return 0 }
+            try db.exec("""
+                UPDATE work_center_documents
+                SET fields_json = ?, title = ?, updated_at = ? WHERE id = ?;
+                """, [.text(Self.encodeFields([1: values])), .text(title),
+                      .real(date.timeIntervalSince1970), .uuid(docID)])
+            return changed
+        }
+    }
+
+    /// Every record of one register type, newest first.
+    public func records(type: String, limit: Int = 500) async throws -> [WCDocument] {
+        let rows = try await database.query(
+            "\(select) WHERE doc_type = ? ORDER BY created_at DESC LIMIT ?;",
+            [.text(type), .integer(Int64(limit))])
+        return rows.compactMap(Self.decode)
+    }
+
+    /// The change history for a record, newest edit first.
+    public func editHistory(docID: UUID) async throws -> [WCRecordEdit] {
+        let rows = try await database.query("""
+            SELECT id, doc_id, field_key, old_value, new_value, editor, note, edited_at
+            FROM work_center_record_edits WHERE doc_id = ? ORDER BY edited_at DESC;
+            """, [.uuid(docID)])
+        return rows.compactMap { r in
+            guard let id = r.uuid(0), let docID = r.uuid(1), let key = r.string(2),
+                  let editor = r.string(5), let at = r.double(7) else { return nil }
+            return WCRecordEdit(
+                id: id, docID: docID, fieldKey: key,
+                oldValue: r.string(3) ?? "", newValue: r.string(4) ?? "",
+                editor: editor, note: r.string(6) ?? "",
+                editedAt: Date(timeIntervalSince1970: at))
+        }
     }
 
     // MARK: - Queries
