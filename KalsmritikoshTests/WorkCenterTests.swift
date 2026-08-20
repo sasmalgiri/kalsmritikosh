@@ -303,6 +303,44 @@ struct WorkCenterEngineTests {
         #expect(WorkCenterRepository.decodeFields("not json") == [:])
         #expect(WorkCenterRepository.decodeFields("{}") == [:])
     }
+
+    @Test("Register catalog integrity — unique 3-letter types, every field has help, keys resolve, choices have options")
+    func registerCatalogIntegrity() {
+        let regs = WCRegisterCatalog.all
+        #expect(regs.count == 3)
+        #expect(Set(regs.map(\.docType)).count == regs.count, "register doc-types must be unique")
+        for reg in regs {
+            #expect(reg.docType.count == 3, "\(reg.docType): SAP-style 3-letter type code")
+            #expect(WCRegisterCatalog.isRegisterType(reg.docType))
+            #expect(!reg.fields.isEmpty)
+            let keys = reg.fields.map(\.key)
+            #expect(Set(keys).count == keys.count, "\(reg.docType): field keys unique")
+            #expect(keys.contains(reg.titleKey), "\(reg.docType): titleKey must be a field")
+            #expect(reg.fields.map(\.required).contains(true), "\(reg.docType): a record needs at least one required field")
+            if let statusKey = reg.statusKey {
+                let statusKind = reg.fields.first(where: { $0.key == statusKey }).map(\.kind)
+                #expect(statusKind == .choice, "\(reg.docType): statusKey must point to a choice field")
+            }
+            for field in reg.fields {
+                #expect(!field.help.isEmpty, "\(reg.docType).\(field.key): help text is the contract")
+                if field.kind == .choice { #expect(!field.options.isEmpty, "\(reg.docType).\(field.key): choice needs options") }
+            }
+        }
+        // Register types are disjoint from the workflow/step doc-types.
+        for workflowType in ["WF", "IMP", "PRS", "RPT", "PRD", "PUB", "EDN", "ARC", "VAR", "EXP"] {
+            #expect(!WCRegisterCatalog.isRegisterType(workflowType), "\(workflowType) must not be a register type")
+        }
+    }
+
+    @Test("Register title derivation — titleKey wins, falls back to first non-empty field")
+    func registerTitleDerivation() {
+        let interview = WCRegisterCatalog.interviewLog
+        #expect(interview.title(for: ["interviewee": "Jane Roe"]) == "Jane Roe")
+        #expect(interview.title(for: ["account": "she said x"]) == "she said x", "falls back to a filled field")
+        #expect(interview.title(for: [:]) == interview.name, "empty record falls back to the register name")
+        #expect(interview.missingRequired([:]).contains("Person interviewed"))
+        #expect(interview.missingRequired(["interviewee": "J", "account": "a"]).isEmpty)
+    }
 }
 
 // MARK: - Repository (over migration v105)
@@ -603,13 +641,87 @@ struct WorkCenterRepositoryTests {
         #expect(restored.fieldValues[1]?["scope"] == "Insurance & property papers")
     }
 
-    @Test("Migration v105 reaches the new tables from a v104 database")
+    @Test("Migration reaches the Work Center tables (v105) and the register edit log (v106) from v104")
     func migrationReach() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 104)
         #expect(try await !MigrationFixtureBuilder.tableExists(db, "work_center_documents"))
         try await SchemaMigrations.migrate(db)
-        #expect(try await db.currentUserVersion() == 105)
+        #expect(try await db.currentUserVersion() == SchemaMigrations.latestVersion)
         #expect(try await MigrationFixtureBuilder.tableExists(db, "work_center_documents"))
         #expect(try await MigrationFixtureBuilder.tableExists(db, "work_center_counters"))
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "work_center_record_edits"))
+    }
+
+    // MARK: - Registers (editable records with a change history, v106)
+
+    @Test("A register record is created numbered, then edited in place with every field change sealed to history")
+    func recordEditableWithHistory() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let reg = WCRegisterCatalog.interviewLog
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+
+        // Create — numbered INT record, values under seq 1.
+        let rec = try await repo.createRecord(
+            type: reg.docType, title: "Jane Roe",
+            values: ["interviewee": "Jane Roe", "account": "Saw the delivery at 3pm.",
+                     "consistency": "Consistent"],
+            actor: "Examiner", at: when)
+        #expect(rec.docType == "INT")
+        #expect(rec.docNumber.hasPrefix("INT-"))
+        #expect(rec.fieldValues[1]?["interviewee"] == "Jane Roe")
+        #expect(try await repo.editHistory(docID: rec.id).isEmpty, "a fresh record has no edits")
+
+        // Edit — change one field, add another, leave a note.
+        let changed = try await repo.updateRecord(
+            docID: rec.id, title: "Jane Roe",
+            values: ["interviewee": "Jane Roe", "account": "Saw the delivery at 4pm, not 3pm.",
+                     "consistency": "Minor discrepancies", "followUp": "Confirm the time with the log."],
+            editor: "Examiner", note: "Corrected the time after checking the CCTV log.",
+            at: when.addingTimeInterval(3600))
+        #expect(changed == 3, "account changed + consistency changed + followUp added")
+
+        // The record now reflects the edit.
+        let after = try #require(try await repo.run(rec.id))
+        #expect(after.fieldValues[1]?["account"] == "Saw the delivery at 4pm, not 3pm.")
+        #expect(after.updatedAt > after.createdAt)
+
+        // The history seals old→new for exactly the changed fields, newest first.
+        let history = try await repo.editHistory(docID: rec.id)
+        #expect(history.count == 3)
+        #expect(Set(history.map(\.fieldKey)) == ["account", "consistency", "followUp"])
+        let accountEdit = try #require(history.first { $0.fieldKey == "account" })
+        #expect(accountEdit.oldValue == "Saw the delivery at 3pm.")
+        #expect(accountEdit.newValue == "Saw the delivery at 4pm, not 3pm.")
+        #expect(accountEdit.note == "Corrected the time after checking the CCTV log.")
+        #expect(accountEdit.editor == "Examiner")
+
+        // A no-op edit logs nothing.
+        let noop = try await repo.updateRecord(
+            docID: rec.id, title: "Jane Roe", values: after.fieldValues[1] ?? [:],
+            editor: "Examiner", note: "", at: when.addingTimeInterval(7200))
+        #expect(noop == 0)
+        #expect(try await repo.editHistory(docID: rec.id).count == 3, "no-op adds no history")
+    }
+
+    @Test("records(type:) lists a register's records newest-first and never leaks another register's rows")
+    func recordsQueryIsolatesByType() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        _ = try await repo.createRecord(type: "INT", title: "A",
+                                        values: ["interviewee": "A", "account": "x"], actor: "T", at: when)
+        _ = try await repo.createRecord(type: "REQ", title: "Clerk",
+                                        values: ["recipient": "Clerk", "subject": "permits"], actor: "T",
+                                        at: when.addingTimeInterval(10))
+        _ = try await repo.createRecord(type: "LOG", title: "Census",
+                                        values: ["objective": "birth", "sourceSearched": "1880 census"],
+                                        actor: "T", at: when.addingTimeInterval(20))
+        #expect(try await repo.records(type: "INT").count == 1)
+        #expect(try await repo.records(type: "REQ").count == 1)
+        #expect(try await repo.records(type: "LOG").count == 1)
+        let intTypes = try await repo.records(type: "INT").map(\.docType)
+        #expect(intTypes == ["INT"])
+        // Register records share the global number space but stay unique.
+        let all = try await repo.allDocuments()
+        #expect(Set(all.map(\.docNumber)).count == all.count)
     }
 }
