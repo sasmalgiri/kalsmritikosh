@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 #if canImport(AppKit)
 import AppKit
@@ -205,6 +206,8 @@ public struct OnboardingView: View {
         .frame(maxWidth: 520)
     }
 
+    @State private var showFolderPicker = false
+
     private var folderStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Pick your first folder").font(.headline)
@@ -213,13 +216,18 @@ public struct OnboardingView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520, alignment: .leading)
             Button {
-                pickFolder()
+                showFolderPicker = true
             } label: {
                 Label("Choose folder…", systemImage: "folder.badge.plus")
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
             }
             .buttonStyle(.borderedProminent)
+            .fileImporter(isPresented: $showFolderPicker,
+                          allowedContentTypes: [.folder],
+                          allowsMultipleSelection: false) { result in
+                if case .success(let urls) = result, let url = urls.first { registerFolder(url) }
+            }
             // Phase L — App Store reviewer affordance. Lets a
             // reviewer (or a curious user) ingest the bundled
             // ProjectDelta fixture in one click instead of having
@@ -302,16 +310,12 @@ public struct OnboardingView: View {
         }
     }
 
-    private func pickFolder() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+    /// .fileImporter hands back a security-scoped folder URL — start access
+    /// before creating the security-scoped bookmark.
+    private func registerFolder(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         try? appState.bookmarks.register(url: url)
-        #endif
     }
 
     private func loadProfile() async {

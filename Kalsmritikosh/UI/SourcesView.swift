@@ -20,6 +20,7 @@ public struct SourcesView: View {
     @State private var expandedDocID: KnowledgeObject.ID?
     @State private var fileCount: Int = 0
     @State private var ingesting = false
+    @State private var showFolderPicker = false
     /// ING-002 — the last bulk ingest's outcome; drives the failure banner.
     @State private var ingestSummary: IngestBatchSummary?
     /// UX-002 / ING-007 — LIVE ingest activity (parse/embed progress), NOT durable readiness.
@@ -159,6 +160,11 @@ public struct SourcesView: View {
             .disabled(ingesting || appState.bookmarks.roots.isEmpty)
             Button(action: pickFolder) {
                 Label("Add Folder…", systemImage: "plus")
+            }
+            .fileImporter(isPresented: $showFolderPicker,
+                          allowedContentTypes: [.folder],
+                          allowsMultipleSelection: false) { result in
+                if case .success(let urls) = result, let url = urls.first { registerFolder(url) }
             }
         }
         .padding()
@@ -408,16 +414,14 @@ public struct SourcesView: View {
         return handled
     }
 
-    private func pickFolder() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select Folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+    private func pickFolder() { showFolderPicker = true }
+
+    /// .fileImporter hands back a security-scoped folder URL — start access
+    /// before creating the security-scoped bookmark.
+    private func registerFolder(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try appState.bookmarks.register(url: url) }
-        catch { print("Bookmark registration failed: \(error)") }
-        #endif
+        catch { KalsmritikoshLog.ui.error("Bookmark registration failed: \(error.localizedDescription, privacy: .public)") }
     }
 }

@@ -263,6 +263,8 @@ public struct RootView: View {
     @State private var showEngineSwitchConfirm = false
     /// Presents the native "Add files" importer (SwiftUI-managed, sizes correctly).
     @State private var showAddFiles = false
+    /// Presents the add-folder importer (from the ⌘K palette).
+    @State private var showAddFolder = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// "?" keyboard cheat-sheet visibility.
@@ -570,6 +572,16 @@ public struct RootView: View {
                               allowsMultipleSelection: true) { result in
                     if case .success(let urls) = result {
                         Task { await appState.ingestFiles(urls) }
+                    }
+                }
+                .fileImporter(isPresented: $showAddFolder,
+                              allowedContentTypes: [.folder],
+                              allowsMultipleSelection: false) { result in
+                    if case .success(let urls) = result, let url = urls.first {
+                        let scoped = url.startAccessingSecurityScopedResource()
+                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                        try? appState.bookmarks.register(url: url)
+                        navigate(to: .sources)
                     }
                 }
                 // Simple / Advanced interface toggle. Simple shows one primary screen per group;
@@ -1184,18 +1196,7 @@ public struct RootView: View {
 
     /// Open a folder picker directly from the palette, register it, and jump
     /// to Sources — the whole "add source" flow in one keyboard-driven pass.
-    private func addFolderFromPalette() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select Folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? appState.bookmarks.register(url: url)
-        navigate(to: .sources)
-        #endif
-    }
+    private func addFolderFromPalette() { showAddFolder = true }
 
     // MARK: Detail router
 
