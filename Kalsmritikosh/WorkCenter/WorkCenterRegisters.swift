@@ -79,7 +79,7 @@ public nonisolated struct WCRegister: Identifiable, Equatable, Sendable {
 
 public nonisolated enum WCRegisterCatalog {
 
-    public static var all: [WCRegister] { [interviewLog, requestTracker, researchLog] }
+    public static var all: [WCRegister] { [interviewLog, requestTracker, researchLog, contentCalendar] }
 
     public static func register(_ docType: String) -> WCRegister? {
         all.first { $0.docType == docType }
@@ -192,4 +192,37 @@ public nonisolated enum WCRegisterCatalog {
               placeholder: "Check county birth index"),
         ],
         titleKey: "objective", statusKey: "result")
+
+    // Editorial / Content Calendar — Content Creator (and anyone running a
+    // publishing pipeline). The stages a piece moves through from idea to
+    // published, with the platform, publish date, angle, and the sources it
+    // rests on — editable as the piece progresses, each change kept.
+    public static let contentCalendar = WCRegister(
+        docType: "CAL", name: "Content Calendar",
+        persona: "Content Creator",
+        purpose: "Plan and track each piece from idea to published — its stage, platform, publish date, angle, and the sources it rests on. Editable as the piece moves, with the full change history kept.",
+        fields: [
+            f("workingTitle", "Working title", .text,
+              "What you're calling this piece for now — it can change before publish.",
+              placeholder: "Why the permit was denied — explained", required: true),
+            f("format", "Format", .choice,
+              "The kind of piece — sets how much research and production it needs.",
+              options: ["Video", "Short / Reel", "Podcast episode", "Article / blog", "Newsletter", "Social post", "Livestream"]),
+            f("stage", "Stage", .choice,
+              "Where this piece is in the pipeline right now — move it forward as you go.",
+              options: ["Idea", "Researching", "Scripting / drafting", "Editing", "Scheduled", "Published", "Shelved"]),
+            f("platform", "Platform / channel", .text,
+              "Where it will go out — the channel or publication.",
+              placeholder: "YouTube / Substack"),
+            f("publishDate", "Target / publish date", .date,
+              "When it's slated to go out — the date the calendar sorts and reminds on."),
+            f("angle", "Angle / hook", .longText,
+              "The thesis or hook — what this piece says and why it's worth the audience's time."),
+            f("sourcesNote", "Sources & rights", .longText,
+              "The key sources this piece rests on and whether clips or quotes are cleared to use — so rights aren't a last-minute scramble."),
+            f("nextAction", "Next action", .text,
+              "The next concrete step to move it forward.",
+              placeholder: "Record the interview"),
+        ],
+        titleKey: "workingTitle", statusKey: "stage")
 }
