@@ -670,6 +670,13 @@ public struct RootView: View {
                             navigate(to: group.simplePrimary)
                         }
                     }
+                    // Even in Simple mode, keep the professional workflow surfaces one
+                    // click away — jobs run their guided workflows in the Work Center.
+                    ForEach([Destination.work, .workCenter], id: \.self) { dest in
+                        SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                            navigate(to: dest)
+                        }
+                    }
                 } else {
                     // Advanced mode: every screen, grouped and collapsible (groups start expanded).
                     ForEach(Destination.Group.allCases) { group in

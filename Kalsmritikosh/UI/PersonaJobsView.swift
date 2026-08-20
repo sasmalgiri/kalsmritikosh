@@ -546,39 +546,21 @@ public struct PersonaJobsView: View {
                         Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                         Spacer(minLength: 0)
                         HStack(spacing: 8) {
-                            Button {
-                                Task { await model.run(job, actor: "me", at: Date()) }
-                            } label: { Label("Run", systemImage: "arrow.right.circle") }
-                            .buttonStyle(.bordered)
-                            .disabled(model.busy || model.activeCaseID == nil)
-                            // GUIDED WORKFLOW — every job (documented or not) can run
-                            // as a full-rigor Work Center flow: gated steps, typed
-                            // fields, a numbered document per confirmed step.
+                            // ONE action per job (owner decision 2026-08-20): open the
+                            // guided Work Center workflow — gated steps, typed fields,
+                            // and a numbered document per confirmed step. Replaces the
+                            // separate instant-Run and Guide buttons.
                             Button {
                                 if let def = WCCatalog.jobWorkflow(forJob: job) {
                                     appState.pendingWorkCenterDefID = def.defID
                                 }
-                            } label: { Label("Workflow", systemImage: "list.bullet.clipboard") }
-                            .buttonStyle(.borderless)
-                            .help("Run this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
-                            // JOB-RUN — the guided step-by-step walkthrough of this
-                            // job's documented workflow (Previous/Next/Save/progress).
-                            if let doc = JobDocumentationCatalog.doc(
-                                personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
-                                jobTitle: job.title) {
-                                Button { runnerJob = job } label: {
-                                    Label("Guide", systemImage: "signpost.right")
-                                }
-                                .buttonStyle(.borderless)
-                                .help("Walk this job step by step — your place is saved.")
-                                if let saved = JobRunnerProgress.savedStep(jobID: doc.jobID) {
-                                    Text("step \(saved + 1)/\(JobRunnerView.steps(of: doc).count)")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                        .help("Guided walkthrough in progress — reopen Guide to resume.")
-                                }
+                            } label: {
+                                Label("Run workflow", systemImage: "list.bullet.clipboard")
                             }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.brand)
+                            .controlSize(.small)
+                            .help("Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
                         }
                     }
                     .padding(12)
