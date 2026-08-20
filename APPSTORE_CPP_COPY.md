@@ -1,6 +1,6 @@
 # App Store Custom Product Pages — copy pack (2026-08-19)
 
-One app, nine storefronts: create one Custom Product Page per persona in
+One app, ten storefronts: create one Custom Product Page per persona in
 App Store Connect (Features ▸ Custom Product Pages; limit 70). Each CPP gets
 its own URL (use it in that persona's landing page and any ads), its own
 promotional text (≤170 chars — lengths verified below), and its own
@@ -22,12 +22,13 @@ Screenshot pool (already in ~/Downloads/Kalsmritikosh-AppStore-Screenshots):
 | 7 | Researchers | From protocol to annotated edition: PRISMA-style screening, source criticism, cited chronologies. Honest uncertainty. (118) | 04-knowledge, 02-timeline, 01-ask | systematic review, PRISMA, archival research, source criticism, historian |
 | 8 | Genealogists | Research to the Genealogical Proof Standard: research log, conflicting records resolved, a written proof argument. (115) | 04-knowledge, 02-timeline, 01-ask | genealogy, family history, proof standard, ancestor research, citations |
 | 9 | Everyone | Your papers, finally in order: emergency binder, legacy binder, important dates — private by construction, nothing uploaded. (124) | 05-sources, 01-ask, 02-timeline | document organizer, emergency binder, family records, private AI, offline |
+| 10 | Content creators | Research your video, podcast or newsletter: fact-check board, source vetting, guest background, a source & rights locker. On-device. (131) | 06-search, 10-jobs, 01-ask | content research, fact check, source vetting, show notes, creator |
 
 Matching site landing pages (live after merge, link each CPP URL from its page):
 /for/lawyers.html · /for/investigators.html · /for/siu.html ·
 /for/forensic-accountants.html · /for/compliance-hr.html ·
 /for/journalists.html · /for/researchers.html · /for/genealogists.html ·
-/for/everyone.html
+/for/everyone.html · /for/content-creators.html
 
 Why CPPs and not nine apps: App Review Guideline 4.3 (Spam) rejects
 multiple bundle IDs of the same app and can terminate the developer

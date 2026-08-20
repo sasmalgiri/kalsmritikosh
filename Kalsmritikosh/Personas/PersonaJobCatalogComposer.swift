@@ -30,6 +30,10 @@ public nonisolated enum PersonaJobCatalogComposer {
         try ForensicAccountantPersonaPackage.register(into: &builder)
         try CompliancePersonaPackage.register(into: &builder)
         try GenealogistPersonaPackage.register(into: &builder)
+        // Content Creator (2026-08-20) — the steady researched-content pipeline
+        // segment; a vocabulary lens over the same shared engines, distinct
+        // from the Journalist's verification-for-publication job.
+        try ContentCreatorPersonaPackage.register(into: &builder)
         return try builder.build()
     }
 
@@ -47,6 +51,7 @@ public nonisolated enum PersonaJobCatalogComposer {
         case ForensicAccountantPersonaPackage.applicationID: return ForensicAccountantPersonaPackage.jobs
         case CompliancePersonaPackage.applicationID:   return CompliancePersonaPackage.jobs
         case GenealogistPersonaPackage.applicationID:  return GenealogistPersonaPackage.jobs
+        case ContentCreatorPersonaPackage.applicationID: return ContentCreatorPersonaPackage.jobs
         default: return []
         }
     }

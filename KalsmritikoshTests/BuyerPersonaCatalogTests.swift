@@ -2,17 +2,18 @@
 //  BuyerPersonaCatalogTests.swift
 //  KalsmritikoshTests
 //
-//  The four buyer-research personas (SIU, Forensic Accountant,
-//  Compliance/HR, Genealogist) — vocabulary lenses over the shared engines.
-//  Locks the same contract PJOB-MAX locks for the core five: discoverable,
-//  resolvable, unique job ids, an intake path, and full 16-kind capability
-//  coverage — without touching the pinned five-persona coverage matrix.
+//  The buyer-research personas (SIU, Forensic Accountant, Compliance/HR,
+//  Genealogist) plus the Content Creator (2026-08-20) — vocabulary lenses over
+//  the shared engines. Locks the same contract PJOB-MAX locks for the core
+//  five: discoverable, resolvable, unique job ids, an intake path, and full
+//  16-kind capability coverage — without touching the pinned five-persona
+//  coverage matrix.
 //
 
 import Testing
 @testable import Kalsmritikosh
 
-@Suite("BUYER-PERSONAS — SIU / Forensic Accountant / Compliance / Genealogist")
+@Suite("BUYER-PERSONAS — SIU / Forensic Accountant / Compliance / Genealogist / Content Creator")
 struct BuyerPersonaCatalogTests {
 
     private static let expected: [(id: ApplicationDefinitionID, label: String, jobs: [PersonaJob])] = [
@@ -20,9 +21,10 @@ struct BuyerPersonaCatalogTests {
         (ForensicAccountantPersonaPackage.applicationID, "Forensic Accountant", ForensicAccountantPersonaPackage.jobs),
         (CompliancePersonaPackage.applicationID, "Compliance / HR Investigator", CompliancePersonaPackage.jobs),
         (GenealogistPersonaPackage.applicationID, "Genealogist / Family Historian", GenealogistPersonaPackage.jobs),
+        (ContentCreatorPersonaPackage.applicationID, "Content Creator", ContentCreatorPersonaPackage.jobs),
     ]
 
-    @Test("All four register, resolve, and cover every capability kind with 16 unique jobs")
+    @Test("All register, resolve, and cover every capability kind with 16 unique jobs")
     func catalogContract() throws {
         let catalog = try PersonaJobCatalogComposer.composeProduction()
         for persona in Self.expected {
