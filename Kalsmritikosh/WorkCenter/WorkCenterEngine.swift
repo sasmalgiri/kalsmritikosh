@@ -1458,8 +1458,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("assemble", "Assemble the records", "Which statements/ledgers this schedule spans (attach any not ingested).", opens: "sources", [
                     f("scope", "What this covers", .text, "The records indexed.", required: true),
                 ]),
-                Step("build", "Build the schedule", "Index each transaction.", opens: "dataLab", [
-                    f("columns", "Columns & notes", .longText, "Date, payer, payee, amount, source doc — every cell cited."),
+                Step("build", "Build the tracing schedule", "Build it in DataLab (the app's spreadsheet) — one row per transaction, exactly as you would in Excel.", opens: "dataLab", [
+                    f("columns", "Schedule columns", .longText, "The columns a forensic tracing schedule uses: Date · From (payer / account) · To (payee / account) · Amount · Currency · Running balance · Transaction type · Source-document reference · Characterization (legitimate / commingled / suspect) · Notes. Every cell cites its source.", required: true),
                 ]),
                 Step("reconcile", "Reconcile & note variances", "Tie to bank/ledger totals.", opens: "dataLab", [
                     f("reconcile", "Reconciliation", .longText, "Ties and variances."),
@@ -1721,8 +1721,8 @@ public nonisolated enum WCAuthoredWorkflows {
         "gen.research-log": build(
             "Keep the classic research log — every search, where, and what it yielded (including negative results).",
             [
-                Step("searches", "Record each search", "What you searched and where.", opens: "dataLab", [
-                    f("searches", "Searches", .longText, "Repository, source, date, terms — one per line.", required: true),
+                Step("searches", "Record each search", "The classic research-log columns, one row per search (as you would on paper or in Excel).", opens: "dataLab", [
+                    f("searches", "Research-log columns", .longText, "Date searched · Repository / website · Source (title, call number / URL) · Search terms & scope · Result (found / NIL) · Citation of anything found · Next step. Record NIL results too — they prove the search was reasonably exhaustive.", required: true),
                 ]),
                 Step("results", "Record results", "What each search yielded.", opens: "dataLab", [
                     f("results", "Results", .longText, "Include negative results — they matter."),
@@ -3735,8 +3735,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("identify", "Identify candidates", "Documents that may be privileged.", opens: "review", [
                     f("candidates", "Candidates", .longText, "One per line.", required: true),
                 ]),
-                Step("basis", "Record the basis", "The ground for each — attorney-client / work product.", opens: "matrix", [
-                    f("basis", "Basis per document", .longText, "Annotated — privilege is never auto-established."),
+                Step("basis", "Build the privilege log", "The standard privilege-log columns, one row per withheld or redacted document (as you would in Excel).", opens: "matrix", [
+                    f("basis", "Privilege log columns", .longText, "Bates / Doc ID · Date · Author (From) · Recipients (To / Cc / Bcc) · Document type · Privilege asserted (Attorney-Client / Work Product / Both) · Description (enough to justify the claim without waiving it) · Withheld vs Redacted. Privilege is never auto-established.", required: true),
                 ]),
                 Step("complete", "Complete the log (your decision)", "Confirm every candidate is annotated.", [
                     f("logComplete", "Privilege log complete?", .choice, "Only when every candidate has a basis.", required: true, options: ["Complete", "Incomplete"]),
