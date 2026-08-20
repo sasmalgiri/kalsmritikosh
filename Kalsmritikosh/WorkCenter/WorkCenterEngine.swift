@@ -3650,8 +3650,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("parties", "Identify the parties", "Every party to the matter.", opens: "dossier", [
                     f("parties", "Parties", .longText, "One per line with role.", required: true),
                 ]),
-                Step("issues", "Map the issues", "Link issues to parties and evidence.", opens: "matrix", [
-                    f("issues", "Issues", .longText, "Each issue and who it touches — cited."),
+                Step("issues", "Map the issues", "One row per issue, as you would in an issues matrix.", opens: "matrix", [
+                    f("issues", "Issues matrix columns", .longText, "Issue / legal element · Party it touches · Burden of proof · Supporting evidence (cited) · Opposing evidence (cited) · Status. Each cell reopens its source.", required: true),
                 ]),
                 Step("confirm", "Confirm (your decision)", "Confirm parties and issues.", [
                     f("basis", "Confirmation", .longText, "What you confirm.", required: true),
@@ -3664,8 +3664,8 @@ public nonisolated enum WCAuthoredWorkflows {
         "law.fact-chronology": build(
             "Build the case chronology — the spine of the matter (undated labelled, each fact cited).",
             [
-                Step("events", "Collect the facts", "Each dated fact with its source.", opens: "timeline", [
-                    f("events", "Facts", .longText, "Date (or 'undated'), fact, source.", required: true),
+                Step("events", "Collect the facts", "One row per fact — the spine of the matter.", opens: "timeline", [
+                    f("events", "Chronology columns", .longText, "Date (or 'undated / circa') · Fact / event · Actor(s) · Source document (cited) · Disputed? (Y/N) · Significance.", required: true),
                 ]),
                 Step("order", "Order & link", "Sequence and connect the facts.", opens: "connections", [
                     f("links", "Links", .longText, "How facts and parties relate."),
@@ -3684,8 +3684,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("facts", "List the facts", "The facts at issue.", opens: "findings", [
                     f("facts", "Facts", .longText, "One per line.", required: true),
                 ]),
-                Step("map", "Map to evidence", "Evidence for and against each fact.", opens: "matrix", [
-                    f("matrix", "Fact–evidence matrix", .longText, "Both sides preserved; each cite reopens."),
+                Step("map", "Map to evidence", "One row per fact, both sides preserved.", opens: "matrix", [
+                    f("matrix", "Fact–evidence matrix columns", .longText, "Fact · Element it proves · Evidence FOR (cited) · Evidence AGAINST (cited) · Weight · Open dispute? Each cite reopens.", required: true),
                 ]),
                 Step("confirm", "Confirm (your decision)", "Confirm the mapping.", [
                     f("basis", "Confirmation", .longText, "What you confirm.", required: true),
@@ -3701,8 +3701,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("identify", "Identify the witnesses", "Who they are.", opens: "dossier", [
                     f("witnesses", "Witnesses", .longText, "One per line.", required: true),
                 ]),
-                Step("compile", "Compile each profile", "What each says, cited.", opens: "dossier", [
-                    f("profiles", "Profiles", .longText, "Contradictions cite both sides."),
+                Step("compile", "Compile each profile", "One profile per witness.", opens: "dossier", [
+                    f("profiles", "Per-witness fields", .longText, "Name & role · Relationship to parties · What they can speak to · Prior statements (cited) · Credibility notes · Contradictions (both sides cited).", required: true),
                 ]),
                 Step("confirm", "Confirm (your decision)", "Confirm the profiles.", [
                     f("basis", "Confirmation", .longText, "What you confirm.", required: true),
@@ -3718,8 +3718,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("set", "Scope the set", "The documents under review.", opens: "sources", [
                     f("scope", "Set", .text, "What's being coded.", required: true),
                 ]),
-                Step("code", "Code the documents", "Responsive / non-responsive, issues, confidentiality.", opens: "review", [
-                    f("coding", "Coding", .longText, "Decisions recorded and reversible."),
+                Step("code", "Code the documents", "One coding row per document.", opens: "review", [
+                    f("coding", "Coding fields", .longText, "Bates / Doc ID · Responsive (Y/N) · Issue tags · Confidentiality (None / Confidential / AEO) · Privilege candidate? · Reviewer · Notes. Reversible.", required: true),
                 ]),
                 Step("qc", "Quality-check the coding (your decision)", "Confirm the coding is consistent.", [
                     f("basis", "QC", .longText, "What you confirm.", required: true),
@@ -3753,8 +3753,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("assemble", "Assemble the documents", "The contracts/policies to compare.", opens: "sources", [
                     f("scope", "What this covers", .text, "The documents compared.", required: true),
                 ]),
-                Step("build", "Build the comparison", "Each obligation, per document.", opens: "dataLab", [
-                    f("columns", "Obligations", .longText, "Every cell cites a clause locator."),
+                Step("build", "Build the comparison", "One row per obligation, as in a clause-comparison sheet.", opens: "dataLab", [
+                    f("columns", "Obligations comparison columns", .longText, "Obligation / clause · Document & clause locator · Party bound · Trigger / condition · Deadline · Remedy on breach · Notes. Every cell cites its clause.", required: true),
                 ]),
                 Step("confirm", "Confirm (your decision)", "Confirm the comparison.", [
                     f("basis", "Confirmation", .longText, "What you confirm.", required: true),
@@ -3770,8 +3770,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("assemble", "Assemble the records", "The financial records.", opens: "sources", [
                     f("scope", "What this covers", .text, "The records in scope.", required: true),
                 ]),
-                Step("build", "Build the ledger", "Each amount, cited.", opens: "dataLab", [
-                    f("columns", "Damages ledger", .longText, "Every amount cites its source cell."),
+                Step("build", "Build the ledger", "One row per damages item, as in a damages spreadsheet.", opens: "dataLab", [
+                    f("columns", "Damages ledger columns", .longText, "Category (special / general / consequential) · Description · Amount · Date incurred · Source document (cited) · Calculation / basis · Mitigation · Running total. Every amount cites its source cell.", required: true),
                 ]),
                 Step("confirm", "Confirm the totals (your decision)", "Confirm the ledger ties out.", [
                     f("basis", "Confirmation", .longText, "What you confirm.", required: true),
@@ -3784,8 +3784,8 @@ public nonisolated enum WCAuthoredWorkflows {
         "law.deadlines": build(
             "Track deadlines — a candidate until a human confirms it.",
             [
-                Step("gather", "Find the dates", "Dated obligations in the record.", opens: "timeline", [
-                    f("dates", "Candidate deadlines", .longText, "Each with its source.", required: true),
+                Step("gather", "Find the dates", "One row per deadline — a candidate until you confirm it.", opens: "timeline", [
+                    f("dates", "Deadline columns", .longText, "Deadline / event · Trigger (rule / order / contract) · Due date · Computed how · Owner · Source (cited) · Status.", required: true),
                 ]),
                 Step("confirm", "Confirm each (your decision)", "Confirm each deadline — a candidate until you do.", [
                     f("confirmed", "Confirmed deadlines", .longText, "Only confirmed dates are relied on.", required: true),
@@ -3801,8 +3801,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("focus", "Set the objectives", "What the deposition must establish.", opens: "ask", [
                     f("focus", "Objectives", .longText, "The points to cover.", required: true),
                 ]),
-                Step("questions", "Draft the outline", "Questions grouped by topic, each citing the record.", opens: "matrix", [
-                    f("questions", "Outline", .longText, "Record-anchored questions.", required: true),
+                Step("questions", "Draft the outline", "By topic — the standard deposition-outline sections.", opens: "matrix", [
+                    f("questions", "Outline sections", .longText, "Per topic: Objective · Foundation questions · Key questions · Exhibits to introduce (cited) · Anticipated answers & follow-ups. Every question anchored to the record.", required: true),
                 ]),
                 Step("produce", "Produce the outline", "Assemble the deposition outline.", opens: "handoff", posts: "RPT", [
                     f("title", "Title", .text, "Name this outline.", required: true),
@@ -3812,8 +3812,8 @@ public nonisolated enum WCAuthoredWorkflows {
         "law.exhibit-binder": build(
             "Assemble the exhibit list and trial binder; each exhibit cites its source version.",
             [
-                Step("register", "Register the exhibits", "Each exhibit with its source version (attach).", opens: "audit", [
-                    f("exhibits", "Exhibits", .longText, "What each exhibit is and its source.", required: true),
+                Step("register", "Register the exhibits", "One row per exhibit, as in an exhibit list (attach the source versions).", opens: "audit", [
+                    f("exhibits", "Exhibit list columns", .longText, "Exhibit no. · Description · Date · Source document / Bates · Sponsoring witness · Purpose / issue · Objections anticipated · Admitted? Each cites its source version.", required: true),
                 ]),
                 Step("integrity", "Record integrity", "Hash/verify each.", opens: "audit", [
                     f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/scan transfer"]),
