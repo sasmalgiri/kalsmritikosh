@@ -1100,5 +1100,1148 @@ public nonisolated enum WCAuthoredWorkflows {
                     f("title", "Title", .text, "Name this closure record.", required: true),
                 ]),
             ]),
+
+        // MARK: Insurance Fraud (SIU) (2026-08-20)
+
+        "siu.claim-intake": build(
+            "Open a claim file for investigation: record the claim, fix the referral basis and scope, set the documents in scope, then open the file. Intake never concludes fraud.",
+            [
+                Step("claim", "Record the claim", "Capture the claim as presented at FNOL.", opens: "sources", [
+                    f("claimNo", "Claim number", .text, "The insurer's claim reference.", required: true),
+                    f("dateOfLoss", "Date of loss", .date, "When the loss is said to have occurred."),
+                    f("policyNo", "Policy number", .text, "The policy the claim is made under."),
+                    f("summary", "The claim", .longText, "Loss type, amount claimed, parties — as presented.", required: true),
+                ]),
+                Step("scope", "Referral basis & scope", "Why this claim is under investigation, and what the investigation covers.", opens: "sources", [
+                    f("basis", "Referral basis", .choice, "What put this claim into SIU.", required: true, options: ["Red flags at FNOL", "Adjuster referral", "SIU trigger/rule", "Regulatory", "Other"]),
+                    f("scope", "Scope statement", .longText, "What is in and out of scope for this investigation.", required: true),
+                ]),
+                Step("inscope", "Set the documents in scope", "Authorize the claim file, policy, prior claims and statements.", opens: "sources", [
+                    f("sources", "Documents in scope", .longText, "The authorized document set — the evidence boundary."),
+                ]),
+                Step("confirm", "Confirm scope (your decision)", "A human confirms scope before work begins.", [
+                    f("decision", "Scope confirmed?", .choice, "Confirm only when correct.", required: true, options: ["Confirmed", "Needs revision"]),
+                    f("note", "Note", .longText, "Anything to record about the decision."),
+                ]),
+                Step("open", "Open the claim file", "Open the numbered file the rest of the jobs run against.", opens: "handoff", posts: "IMP", [
+                    f("caseName", "File name", .text, "A findable name for this claim file.", required: true),
+                ]),
+            ]),
+
+        "siu.ask": build(
+            "Ask a question over the claim's authorized documents and keep the cited answer on the record.",
+            [
+                Step("ask", "Ask the claim file", "Ask in plain language — the answer cites the claim's evidence.", opens: "ask", [
+                    f("question", "Your question", .longText, "What you need to know from the claim file.", required: true),
+                ]),
+                Step("record", "Keep the cited answer", "Save the answer that matters to the investigation.", opens: "answers", posts: "RPT", [
+                    f("why", "Why it matters", .longText, "How this answer bears on the exposure."),
+                ]),
+            ]),
+
+        "siu.red-flags": build(
+            "Record fraud indicators with 5W1H and cite what supports each — red flags are indicators, never proof.",
+            [
+                Step("list", "List the indicators", "Every red flag observed in the file.", opens: "findings", [
+                    f("indicators", "Indicators", .longText, "One indicator per line.", required: true),
+                ]),
+                Step("frame", "Frame each (5W1H)", "Who/what/when/where/how for each indicator.", opens: "matrix", [
+                    f("fiveW", "5W1H per indicator", .longText, "The specifics behind each red flag."),
+                ]),
+                Step("cite", "Cite what supports each", "Tie each indicator to the document that raised it.", opens: "findings", [
+                    f("evidence", "Evidence per indicator", .longText, "The document behind each indicator."),
+                ]),
+                Step("weigh", "Weigh the pattern (your decision)", "What the indicators collectively suggest — never conclude fraud here.", posts: "ALG", [
+                    f("assessment", "Assessment", .longText, "Which indicators hold up and what they point to.", required: true),
+                ]),
+            ]),
+
+        "siu.claimant-workup": build(
+            "Work up the claimant/provider from cited in-scope evidence, and confirm the identity/associations.",
+            [
+                Step("identify", "Identify the subject", "Who you're working up and why.", opens: "dossier", [
+                    f("subject", "Subject", .text, "Claimant, provider, or associate.", required: true),
+                ]),
+                Step("compile", "Compile the workup", "Background, prior history, relationships — each cited.", opens: "dossier", [
+                    f("profile", "Workup", .longText, "Only what the in-scope evidence supports."),
+                ]),
+                Step("confirm", "Confirm (your decision)", "Confirm identity and associations, with basis.", [
+                    f("basis", "Confirmation & basis", .longText, "What you confirm and how you know.", required: true),
+                ]),
+                Step("produce", "Produce the workup", "Assemble the workup for the file.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this workup.", required: true),
+                ]),
+            ]),
+
+        "siu.identity": build(
+            "Decide whether names/aliases/entities are the same party: gather identifiers, compare, rule out look-alikes, then confirm or reject — reversible, human-gated.",
+            [
+                Step("gather", "Gather identifiers", "Names, aliases, entities, accounts that may be one party.", opens: "knowledge", [
+                    f("identifiers", "Candidate identifiers", .longText, "One per line.", required: true),
+                ]),
+                Step("compare", "Compare across evidence", "How each identifier appears across the file.", opens: "knowledge", [
+                    f("comparison", "Signals", .longText, "Matching and conflicting signals."),
+                ]),
+                Step("ruleout", "Rule out look-alikes", "Exclude coincidental matches, with reason.", opens: "review", [
+                    f("ruledOut", "Excluded", .longText, "Candidates ruled out and why."),
+                ]),
+                Step("decide", "Confirm or reject (your decision)", "A human decides identity. Never automatic.", [
+                    f("decision", "Decision", .choice, "Reversible later.", required: true, options: ["Confirm same party", "Reject — different parties", "Insufficient evidence"]),
+                    f("basis", "Basis", .longText, "The evidence behind it.", required: true),
+                ]),
+                Step("record", "Record the resolution", "Post the reversible identity decision.", opens: "handoff", posts: "RPT", [
+                    f("recordName", "Record name", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        "siu.loss-chronology": build(
+            "Build the loss chronology with relationship links and payment flow, flagging gaps and conflicts.",
+            [
+                Step("events", "Collect dated events", "From FNOL to now, each event cited.", opens: "timeline", [
+                    f("events", "Events", .longText, "Date, event, source — one per line.", required: true),
+                ]),
+                Step("links", "Order & link parties", "How claimants, providers and prior claims connect.", opens: "connections", [
+                    f("links", "Links", .longText, "Relationships across the file."),
+                ]),
+                Step("payments", "Trace the payment flow", "Payments and settlements, dated and cited.", opens: "dataLab", [
+                    f("payments", "Payment flow", .longText, "Where money moved and when."),
+                ]),
+                Step("gaps", "Flag gaps & conflicts", "Missing periods and conflicting dates.", opens: "review", [
+                    f("gaps", "Gaps & conflicts", .longText, "Kept, not averaged."),
+                ]),
+                Step("produce", "Produce the chronology", "Assemble the cited chronology.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this chronology.", required: true),
+                ]),
+            ]),
+
+        "siu.prior-claims": build(
+            "Register prior and related claims with cited cells, and note any pattern.",
+            [
+                Step("assemble", "Assemble the claims", "Which prior/related claims to index (attach any not ingested).", opens: "sources", [
+                    f("scope", "What this covers", .text, "The claims this register spans.", required: true),
+                ]),
+                Step("register", "Build the register", "Index each claim.", opens: "dataLab", [
+                    f("columns", "Columns & notes", .longText, "Date, insurer, loss type, amount, outcome — cited."),
+                ]),
+                Step("pattern", "Note the pattern", "Repetition or links worth flagging.", opens: "dataLab", [
+                    f("pattern", "Pattern", .longText, "What the register reveals — an observation, not a conclusion."),
+                ]),
+                Step("produce", "Produce the register", "Assemble the prior-claims register.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this register.", required: true),
+                ]),
+            ]),
+
+        "siu.statements": build(
+            "Compare statements point by point, preserving conflicting accounts rather than averaging them.",
+            [
+                Step("collect", "Collect the statements", "Each statement, attributed and cited (attach recordings/notes).", opens: "findings", [
+                    f("accounts", "Statements", .longText, "Each account.", required: true),
+                ]),
+                Step("compare", "Compare point by point", "On each disputed point.", opens: "matrix", [
+                    f("comparison", "Agreement & conflict", .longText, "Both sides preserved."),
+                ]),
+                Step("conflicts", "Record unresolved conflicts", "Conflicts left open.", opens: "review", [
+                    f("conflicts", "Open conflicts", .longText, "Never averaged."),
+                ]),
+                Step("produce", "Produce the comparison", "Assemble the comparison.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this comparison.", required: true),
+                ]),
+            ]),
+
+        "siu.source-vetting": build(
+            "Assess the reliability and independence of statements and documents — a rating is a judgement, not a fact.",
+            [
+                Step("list", "List the sources", "Each statement/document to vet.", opens: "review", [
+                    f("sources", "Sources", .longText, "One per line.", required: true),
+                ]),
+                Step("assess", "Assess each", "Consistency, corroboration, bias, provenance.", opens: "review", [
+                    f("factors", "Factors", .longText, "What strengthens or weakens each."),
+                    f("rating", "Reliability rating", .longText, "High / Medium / Low — a judgement."),
+                ]),
+                Step("decide", "Own the ratings (your decision)", "These are your judgements.", [
+                    f("basis", "Basis", .longText, "Confirm the ratings, noting they're judgements.", required: true),
+                ]),
+                Step("produce", "Produce the assessment", "Assemble the vetting.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this assessment.", required: true),
+                ]),
+            ]),
+
+        "siu.euo-prep": build(
+            "Prepare an examination under oath grounded in the record: what to establish, sworn-exam questions, and logistics.",
+            [
+                Step("review", "Review the record", "What the EUO must establish or resolve.", opens: "ask", [
+                    f("focus", "What to establish", .longText, "The points to cover.", required: true),
+                ]),
+                Step("questions", "Draft the questions", "Evidence-anchored questions for the examination.", opens: "matrix", [
+                    f("questions", "Questions", .longText, "Grouped by topic.", required: true),
+                ]),
+                Step("logistics", "Plan logistics", "Notice, counsel, oath, scheduling.", opens: "handoff", [
+                    f("logistics", "Logistics", .longText, "Arrangements and any rights/notice."),
+                ]),
+                Step("produce", "Produce the EUO plan", "Assemble the examination plan.", opens: "handoff", posts: "INT", [
+                    f("title", "Title", .text, "Name this plan.", required: true),
+                ]),
+            ]),
+
+        "siu.causation": build(
+            "Trace how the loss occurred: Five Whys, Fishbone, then a human determination — never state fraud as a conclusion here.",
+            [
+                Step("problem", "State the loss", "The loss to explain, precisely.", opens: "findings", [
+                    f("problem", "Problem statement", .longText, "Specific and evidence-based.", required: true),
+                ]),
+                Step("whys", "Five Whys", "Cause to cause; stop where evidence stops.", opens: "connections", [
+                    f("whys", "Why chain", .longText, "Each link supported."),
+                ]),
+                Step("fishbone", "Fishbone — categorize", "Sort candidate causes.", opens: "matrix", [
+                    f("categories", "Categories", .longText, "e.g. mechanism, timing, opportunity, documentation."),
+                ]),
+                Step("determine", "Determination (your decision)", "A human determines how the loss occurred.", [
+                    f("determination", "Determination & basis", .longText, "How the loss occurred, on the evidence.", required: true),
+                ]),
+                Step("produce", "Produce the analysis", "Assemble the causation analysis.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this analysis.", required: true),
+                ]),
+            ]),
+
+        "siu.custody": build(
+            "Keep a defensible evidence locker: register exhibits, record acquisition and integrity, log transfers, then seal the manifest.",
+            [
+                Step("register", "Register the exhibits", "Each item collected, with source (attach originals).", opens: "audit", [
+                    f("exhibits", "Exhibits", .longText, "What each item is and where it came from.", required: true),
+                ]),
+                Step("acquire", "Acquisition & integrity", "How each item entered custody unaltered.", opens: "audit", [
+                    f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/device transfer"]),
+                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
+                ]),
+                Step("transfers", "Log custody transfers", "Who held what, when.", opens: "audit", [
+                    f("transfers", "Transfers", .longText, "Each hand-off."),
+                ]),
+                Step("seal", "Seal the manifest", "Post the sealed custody manifest.", opens: "handoff", posts: "PRS", [
+                    f("title", "Title", .text, "Name this manifest.", required: true),
+                ]),
+            ]),
+
+        "siu.referral-report": build(
+            "Assemble a referral-ready SIU report: recap, marshal the evidence, assess, recommend — a referral is a recommendation, never a finding of guilt.",
+            [
+                Step("recap", "Recap the claim & indicators", "Claim, scope, and the indicators found.", opens: "findings", [
+                    f("recap", "Recap", .longText, "The picture so far.", required: true),
+                ]),
+                Step("marshal", "Marshal the evidence", "Evidence for and against material misrepresentation (attach exhibits).", opens: "findings", [
+                    f("evidence", "Evidence", .longText, "What the record supports — and what it doesn't."),
+                ]),
+                Step("assess", "Assess the exposure", "What the evidence establishes.", opens: "matrix", [
+                    f("assessment", "Assessment", .longText, "Strengths and gaps."),
+                ]),
+                Step("decide", "Recommendation (your decision)", "Recommend a disposition — not a finding of guilt.", [
+                    f("recommendation", "Recommendation", .choice, "Your recommendation.", required: true, options: ["Refer (SIU/NICB/DOI)", "Do not refer", "Continue investigation"]),
+                    f("basis", "Basis", .longText, "The basis for the recommendation.", required: true),
+                ]),
+                Step("produce", "Produce the SIU report", "Assemble the report with its sealed receipt.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this report.", required: true),
+                ]),
+            ]),
+
+        "siu.recovery-actions": build(
+            "Track recovery, referral and follow-up actions to closure.",
+            [
+                Step("link", "Link actions to the exposure", "What each action addresses.", opens: "findings", [
+                    f("links", "Action ↔ exposure", .longText, "Which finding/exposure each action responds to.", required: true),
+                ]),
+                Step("define", "Define the actions", "Action, owner, due date, type.", opens: "handoff", [
+                    f("actions", "Actions", .longText, "Recovery/referral/follow-up — with owner and due date.", required: true),
+                ]),
+                Step("assign", "Agree owners & dates (your decision)", "Confirm each is agreed.", [
+                    f("basis", "Confirmation", .longText, "Confirm owners and dates.", required: true),
+                ]),
+                Step("produce", "Produce the actions register", "Assemble the register.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this register.", required: true),
+                ]),
+            ]),
+
+        "siu.action-review": build(
+            "Verify a completed action actually resolved the exposure — never declare it resolved without evidence.",
+            [
+                Step("select", "Select the action", "Which completed action you're reviewing.", opens: "handoff", [
+                    f("action", "Action", .text, "The action under review.", required: true),
+                ]),
+                Step("evidence", "Gather evidence", "Evidence of the outcome (attach it).", opens: "findings", [
+                    f("evidence", "Evidence", .longText, "What happened since."),
+                ]),
+                Step("judge", "Judge effectiveness (your decision)", "On the evidence.", [
+                    f("verdict", "Verdict", .choice, "Evidence-based.", required: true, options: ["Effective", "Partially effective", "Not effective"]),
+                    f("basis", "Basis", .longText, "Why.", required: true),
+                ]),
+                Step("produce", "Produce the review", "Assemble the review.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this review.", required: true),
+                ]),
+            ]),
+
+        "siu.closure": build(
+            "Close the claim file by an explicit human decision — unresolved items retained, reopening preserves the prior closure.",
+            [
+                Step("recap", "Confirm outcome", "Report, actions, and any items left open.", opens: "handoff", [
+                    f("recap", "Recap", .longText, "State of the file."),
+                ]),
+                Step("retention", "Retention & confidentiality", "Where the file is kept and who may access it.", opens: "handoff", [
+                    f("retention", "Retention & access", .longText, "Storage, retention, access."),
+                ]),
+                Step("decide", "Closure decision (your decision)", "A human closes or keeps the file open.", [
+                    f("decision", "Decision", .choice, "Close only when complete.", required: true, options: ["Close the file", "Keep open"]),
+                    f("reason", "Reason", .longText, "Why — reopening preserves this closure.", required: true),
+                ]),
+                Step("produce", "Produce the closure record", "Post the closure record and receipt.", opens: "handoff", posts: "EXP", [
+                    f("title", "Title", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        // MARK: Forensic Accountant (2026-08-20)
+
+        "fa.engagement": build(
+            "Open a forensic engagement: record the mandate, fix scope and standards, set records in scope, then open the engagement.",
+            [
+                Step("record", "Record the engagement", "What you're engaged to do.", opens: "sources", [
+                    f("ref", "Engagement number", .text, "Your engagement/matter reference.", required: true),
+                    f("client", "Retaining party", .text, "Who retained you (counsel, company, court)."),
+                    f("mandate", "Mandate", .longText, "The question to answer — trace funds, quantify loss, opine.", required: true),
+                ]),
+                Step("scope", "Scope & standards", "The boundary and the standards you'll work to.", opens: "sources", [
+                    f("scope", "Scope statement", .longText, "In and out of scope.", required: true),
+                    f("standards", "Standards", .choice, "The professional standards this work follows.", options: ["AICPA / consulting standards", "Court-directed", "Internal policy", "Other"]),
+                ]),
+                Step("inscope", "Set records in scope", "Authorize ledgers, bank statements, invoices.", opens: "sources", [
+                    f("sources", "Records in scope", .longText, "The authorized records — the evidence boundary."),
+                ]),
+                Step("confirm", "Confirm scope (your decision)", "A human confirms scope before work.", [
+                    f("decision", "Scope confirmed?", .choice, "Confirm only when correct.", required: true, options: ["Confirmed", "Needs revision"]),
+                    f("note", "Note", .longText, "Anything to record."),
+                ]),
+                Step("open", "Open the engagement", "Open the numbered engagement.", opens: "handoff", posts: "IMP", [
+                    f("caseName", "Engagement name", .text, "A findable name.", required: true),
+                ]),
+            ]),
+
+        "fa.ask": build(
+            "Ask a question over the engagement's records and keep the cited answer on the record.",
+            [
+                Step("ask", "Ask the records", "The answer cites the engagement's evidence.", opens: "ask", [
+                    f("question", "Your question", .longText, "What you need from the records.", required: true),
+                ]),
+                Step("record", "Keep the cited answer", "Save the answer that matters.", opens: "answers", posts: "RPT", [
+                    f("why", "Why it matters", .longText, "How it bears on the mandate."),
+                ]),
+            ]),
+
+        "fa.funds-tracing": build(
+            "Follow the money: identify accounts and parties, trace the transactions, map the flow, flag gaps and commingling, then produce the flow.",
+            [
+                Step("accounts", "Identify accounts & parties", "The accounts and entities in the flow.", opens: "connections", [
+                    f("accounts", "Accounts & parties", .longText, "One per line.", required: true),
+                ]),
+                Step("trace", "Trace the transactions", "Source→destination movements, dated and cited.", opens: "dataLab", [
+                    f("transactions", "Transactions", .longText, "Each movement traced to its source document."),
+                ]),
+                Step("map", "Map the flow & links", "How money moved between parties.", opens: "connections", [
+                    f("flow", "Flow", .longText, "The path of the funds."),
+                ]),
+                Step("gaps", "Flag gaps & commingling", "Missing statements, commingled funds, unexplained transfers.", opens: "review", [
+                    f("gaps", "Gaps", .longText, "Absence is not proof."),
+                ]),
+                Step("produce", "Produce the flow", "Assemble the funds-flow work product.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "fa.tracing-schedule": build(
+            "Build tracing schedules where every cell cites its source, and reconcile to the ledgers.",
+            [
+                Step("assemble", "Assemble the records", "Which statements/ledgers this schedule spans (attach any not ingested).", opens: "sources", [
+                    f("scope", "What this covers", .text, "The records indexed.", required: true),
+                ]),
+                Step("build", "Build the schedule", "Index each transaction.", opens: "dataLab", [
+                    f("columns", "Columns & notes", .longText, "Date, payer, payee, amount, source doc — every cell cited."),
+                ]),
+                Step("reconcile", "Reconcile & note variances", "Tie to bank/ledger totals.", opens: "dataLab", [
+                    f("reconcile", "Reconciliation", .longText, "Ties and variances."),
+                ]),
+                Step("produce", "Produce the schedule", "Assemble the tracing schedule.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this schedule.", required: true),
+                ]),
+            ]),
+
+        "fa.payee-workup": build(
+            "Work up a payee, vendor or counterparty from cited in-scope evidence, and confirm the entity.",
+            [
+                Step("identify", "Identify the entity", "Who/what you're working up.", opens: "dossier", [
+                    f("subject", "Entity", .text, "Payee, vendor, counterparty.", required: true),
+                ]),
+                Step("compile", "Compile the workup", "Registration, ownership, relationships — each cited.", opens: "dossier", [
+                    f("profile", "Workup", .longText, "Only what the evidence supports."),
+                ]),
+                Step("confirm", "Confirm (your decision)", "Confirm the entity and associations.", [
+                    f("basis", "Confirmation & basis", .longText, "What you confirm and how.", required: true),
+                ]),
+                Step("produce", "Produce the workup", "Assemble the workup.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this workup.", required: true),
+                ]),
+            ]),
+
+        "fa.entity-resolution": build(
+            "Resolve shell names and aliases to one entity: gather identifiers, compare, rule out look-alikes, then confirm or reject — reversible, human-gated.",
+            [
+                Step("gather", "Gather identifiers", "Names, aliases, registrations that may be one entity.", opens: "knowledge", [
+                    f("identifiers", "Candidate identifiers", .longText, "One per line.", required: true),
+                ]),
+                Step("compare", "Compare across evidence", "How each appears across the records.", opens: "knowledge", [
+                    f("comparison", "Signals", .longText, "Matching and conflicting signals."),
+                ]),
+                Step("ruleout", "Rule out look-alikes", "Exclude coincidental matches.", opens: "review", [
+                    f("ruledOut", "Excluded", .longText, "With reason."),
+                ]),
+                Step("decide", "Confirm or reject (your decision)", "A human decides. Never automatic.", [
+                    f("decision", "Decision", .choice, "Reversible later.", required: true, options: ["Confirm same entity", "Reject — different entities", "Insufficient evidence"]),
+                    f("basis", "Basis", .longText, "The evidence behind it.", required: true),
+                ]),
+                Step("record", "Record the resolution", "Post the reversible decision.", opens: "handoff", posts: "RPT", [
+                    f("recordName", "Record name", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        "fa.discrepancies": build(
+            "Surface where the records disagree or are absent — absence is not proof.",
+            [
+                Step("collect", "Collect the records", "The records in question.", opens: "findings", [
+                    f("items", "Records", .longText, "What you're comparing.", required: true),
+                ]),
+                Step("compare", "Compare", "Where the records disagree.", opens: "matrix", [
+                    f("comparison", "Discrepancies", .longText, "Each disagreement, cited."),
+                ]),
+                Step("missing", "Note missing records", "What should exist but doesn't.", opens: "review", [
+                    f("missing", "Missing", .longText, "Absence noted, not concluded from."),
+                ]),
+                Step("produce", "Produce the schedule", "Assemble the discrepancy schedule.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this schedule.", required: true),
+                ]),
+            ]),
+
+        "fa.doc-reliability": build(
+            "Assess the origin and reliability of ledgers, invoices and statements — a rating is a judgement, not a fact.",
+            [
+                Step("list", "List the records", "Each record to assess.", opens: "review", [
+                    f("sources", "Records", .longText, "One per line.", required: true),
+                ]),
+                Step("assess", "Assess each", "Origin, custody, corroboration.", opens: "review", [
+                    f("factors", "Factors", .longText, "What strengthens or weakens each."),
+                    f("rating", "Reliability rating", .longText, "High / Medium / Low — a judgement."),
+                ]),
+                Step("decide", "Own the ratings (your decision)", "These are your judgements.", [
+                    f("basis", "Basis", .longText, "Confirm the ratings.", required: true),
+                ]),
+                Step("produce", "Produce the assessment", "Assemble the assessment.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this assessment.", required: true),
+                ]),
+            ]),
+
+        "fa.analysis": build(
+            "Frame hypotheses and the evidence plan for the engagement (5W1H).",
+            [
+                Step("hypotheses", "State the hypotheses", "The explanations to test.", opens: "findings", [
+                    f("hypotheses", "Hypotheses", .longText, "Each testable, one per line.", required: true),
+                ]),
+                Step("fiveW", "5W1H", "Over the engagement question.", opens: "matrix", [
+                    f("fiveW", "5W1H", .longText, "Who/what/when/where/why/how."),
+                ]),
+                Step("plan", "Plan the evidence", "What each hypothesis needs.", opens: "review", [
+                    f("plan", "Evidence plan", .longText, "Requests and tests per hypothesis."),
+                ]),
+                Step("produce", "Produce the worksheet", "Assemble the analysis worksheet.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this worksheet.", required: true),
+                ]),
+            ]),
+
+        "fa.methods": build(
+            "Run a structured method over the cited record — a method flags, it doesn't conclude.",
+            [
+                Step("pick", "Pick the method", "Which structured method.", opens: "matrix", [
+                    f("method", "Method", .text, "e.g. Benford's law, ratio/variance analysis.", required: true),
+                ]),
+                Step("run", "Run it", "Inputs and what it surfaced.", opens: "dataLab", [
+                    f("runNote", "Result", .longText, "What the method flagged — an indicator, not a conclusion."),
+                ]),
+                Step("produce", "Produce the method run", "Assemble the result.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this run.", required: true),
+                ]),
+            ]),
+
+        "fa.root-cause": build(
+            "Trace how the loss or misstatement occurred: Five Whys, Fishbone, then a human determination.",
+            [
+                Step("problem", "State the problem", "The loss/misstatement to explain.", opens: "findings", [
+                    f("problem", "Problem statement", .longText, "Specific and evidence-based.", required: true),
+                ]),
+                Step("whys", "Five Whys", "Cause to cause; stop where evidence stops.", opens: "connections", [
+                    f("whys", "Why chain", .longText, "Each link supported."),
+                ]),
+                Step("fishbone", "Fishbone — categorize", "Sort candidate causes.", opens: "matrix", [
+                    f("categories", "Categories", .longText, "Controls, process, people, systems."),
+                ]),
+                Step("determine", "Determination (your decision)", "A human determines the root cause.", [
+                    f("determination", "Determination & basis", .longText, "The root cause(s), on the evidence.", required: true),
+                ]),
+                Step("produce", "Produce the analysis", "Assemble the analysis.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this analysis.", required: true),
+                ]),
+            ]),
+
+        "fa.workpapers": build(
+            "Keep custody-tracked workpapers: register originals, record acquisition and integrity, index, then seal.",
+            [
+                Step("register", "Register the originals", "Each source document, with provenance (attach).", opens: "audit", [
+                    f("originals", "Originals", .longText, "What each item is and where it came from.", required: true),
+                ]),
+                Step("acquire", "Acquisition & integrity", "How each entered custody unaltered.", opens: "audit", [
+                    f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/device transfer"]),
+                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
+                ]),
+                Step("index", "Index the workpapers", "Cross-reference workpapers to the report.", opens: "audit", [
+                    f("index", "Index", .longText, "Workpaper references."),
+                ]),
+                Step("seal", "Seal the workpaper set", "Post the sealed manifest.", opens: "handoff", posts: "PRS", [
+                    f("title", "Title", .text, "Name this set.", required: true),
+                ]),
+            ]),
+
+        "fa.expert-report": build(
+            "Assemble the expert report: restate the assignment, summarize methodology, marshal exhibits, state opinions, note assumptions and limitations, then produce — opine only within your expertise.",
+            [
+                Step("assignment", "Restate the assignment", "The question and scope you were engaged to opine on.", opens: "findings", [
+                    f("assignment", "Assignment", .longText, "Precisely what you were asked.", required: true),
+                ]),
+                Step("methodology", "Summarize methodology", "The methods you applied and why.", opens: "matrix", [
+                    f("methodology", "Methodology", .longText, "Approach and standards."),
+                ]),
+                Step("exhibits", "Marshal the exhibits", "The schedules and documents the opinion rests on (attach).", opens: "findings", [
+                    f("exhibits", "Exhibits", .longText, "Each exhibit and what it shows."),
+                ]),
+                Step("opinions", "State opinions (your decision)", "Your opinions, each tied to exhibits.", [
+                    f("opinions", "Opinions", .longText, "Within your expertise only — each supported.", required: true),
+                ]),
+                Step("limits", "Assumptions & limitations", "What you relied on and what you didn't reach.", opens: "review", [
+                    f("limitations", "Assumptions & limits", .longText, "Data limitations and matters outside scope."),
+                ]),
+                Step("produce", "Produce the expert report", "Assemble the report with its sealed receipt.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this report.", required: true),
+                ]),
+            ]),
+
+        "fa.recovery": build(
+            "Track recovery and remediation actions to closure.",
+            [
+                Step("link", "Link actions to findings", "What each action addresses.", opens: "findings", [
+                    f("links", "Action ↔ finding", .longText, "Which finding each action responds to.", required: true),
+                ]),
+                Step("define", "Define the actions", "Action, owner, due date.", opens: "handoff", [
+                    f("actions", "Actions", .longText, "Recovery/remediation — with owner and due date.", required: true),
+                ]),
+                Step("assign", "Agree owners & dates (your decision)", "Confirm each is agreed.", [
+                    f("basis", "Confirmation", .longText, "Confirm owners and dates.", required: true),
+                ]),
+                Step("produce", "Produce the register", "Assemble the actions register.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this register.", required: true),
+                ]),
+            ]),
+
+        "fa.recovery-review": build(
+            "Verify a completed action actually recovered or remediated — never declare success without evidence.",
+            [
+                Step("select", "Select the action", "Which completed action.", opens: "handoff", [
+                    f("action", "Action", .text, "The action under review.", required: true),
+                ]),
+                Step("evidence", "Gather evidence", "Evidence of the outcome (attach it).", opens: "findings", [
+                    f("evidence", "Evidence", .longText, "What happened since."),
+                ]),
+                Step("judge", "Judge effectiveness (your decision)", "On the evidence.", [
+                    f("verdict", "Verdict", .choice, "Evidence-based.", required: true, options: ["Effective", "Partially effective", "Not effective"]),
+                    f("basis", "Basis", .longText, "Why.", required: true),
+                ]),
+                Step("produce", "Produce the review", "Assemble the review.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this review.", required: true),
+                ]),
+            ]),
+
+        "fa.closure": build(
+            "Close the engagement by an explicit human decision — unresolved items retained, reopening preserves the prior closure.",
+            [
+                Step("recap", "Confirm deliverables", "Report, schedules, and any items left open.", opens: "handoff", [
+                    f("recap", "Recap", .longText, "State of the engagement."),
+                ]),
+                Step("retention", "Retention & confidentiality", "Where the workpapers are kept and who may access them.", opens: "handoff", [
+                    f("retention", "Retention & access", .longText, "Storage, retention, access."),
+                ]),
+                Step("decide", "Closure decision (your decision)", "A human closes or keeps the engagement open.", [
+                    f("decision", "Decision", .choice, "Close only when complete.", required: true, options: ["Close the engagement", "Keep open"]),
+                    f("reason", "Reason", .longText, "Why — reopening preserves this closure.", required: true),
+                ]),
+                Step("produce", "Produce the closure record", "Post the closure record and receipt.", opens: "handoff", posts: "EXP", [
+                    f("title", "Title", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        // MARK: Genealogist / Family Historian — GPS (2026-08-20)
+
+        "gen.research-plan": build(
+            "Fix the research question and record scope before searching — the start of the Genealogical Proof Standard.",
+            [
+                Step("question", "State the research question", "The specific question — a person, event, or relationship.", opens: "sources", [
+                    f("question", "Research question", .longText, "Specific and answerable.", required: true),
+                ]),
+                Step("known", "Known facts & scope", "What you already know and its sources; the time/place scope.", opens: "sources", [
+                    f("known", "Known facts", .longText, "With sources."),
+                    f("window", "Time & place", .dateRange, "The period this covers."),
+                ]),
+                Step("plan", "Plan the search", "Record types and repositories — reasonably exhaustive.", opens: "sources", [
+                    f("plan", "Search plan", .longText, "Where to look and for what."),
+                ]),
+                Step("open", "Open the research question", "Open the numbered question to work.", opens: "handoff", posts: "IMP", [
+                    f("caseName", "Question name", .text, "A findable name.", required: true),
+                ]),
+            ]),
+
+        "gen.ask": build(
+            "Ask a question over your family records and keep the cited answer.",
+            [
+                Step("ask", "Ask the records", "The answer cites its document.", opens: "ask", [
+                    f("question", "Your question", .longText, "What you want to know.", required: true),
+                ]),
+                Step("record", "Keep the cited answer", "Save the answer that matters.", opens: "answers", posts: "RPT", [
+                    f("why", "Why it matters", .longText, "How it bears on the research question."),
+                ]),
+            ]),
+
+        "gen.research-log": build(
+            "Keep the classic research log — every search, where, and what it yielded (including negative results).",
+            [
+                Step("searches", "Record each search", "What you searched and where.", opens: "dataLab", [
+                    f("searches", "Searches", .longText, "Repository, source, date, terms — one per line.", required: true),
+                ]),
+                Step("results", "Record results", "What each search yielded.", opens: "dataLab", [
+                    f("results", "Results", .longText, "Include negative results — they matter."),
+                ]),
+                Step("next", "Note next searches", "Leads and gaps to pursue.", opens: "review", [
+                    f("next", "Next", .longText, "What to search next."),
+                ]),
+                Step("produce", "Produce the log entry", "Post the research log entry.", opens: "handoff", posts: "LOG", [
+                    f("title", "Title", .text, "Name this log entry.", required: true),
+                ]),
+            ]),
+
+        "gen.ancestor-profile": build(
+            "Compile everything known about one ancestor, each fact cited.",
+            [
+                Step("identify", "Identify the ancestor", "Who this profile is about.", opens: "dossier", [
+                    f("subject", "Ancestor", .text, "Name and rough dates.", required: true),
+                ]),
+                Step("compile", "Compile the profile", "Life events, relationships, places — each cited.", opens: "dossier", [
+                    f("profile", "Profile", .longText, "Only what the evidence supports."),
+                ]),
+                Step("confirm", "Confirm the facts (your decision)", "Confirm each fact is evidenced.", [
+                    f("basis", "Confirmation & basis", .longText, "What you confirm and how.", required: true),
+                ]),
+                Step("produce", "Produce the profile", "Assemble the ancestor profile.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this profile.", required: true),
+                ]),
+            ]),
+
+        "gen.same-person": build(
+            "Decide whether name variants are one person: gather them, compare across records, rule out look-alikes, then decide — reversible, you decide.",
+            [
+                Step("gather", "Gather the variants", "Every spelling/variant that may be one person.", opens: "knowledge", [
+                    f("identifiers", "Name variants", .longText, "One per line.", required: true),
+                ]),
+                Step("compare", "Compare across records", "How each appears across the records.", opens: "knowledge", [
+                    f("comparison", "Signals", .longText, "Matching and conflicting signals (dates, places, kin)."),
+                ]),
+                Step("ruleout", "Rule out look-alikes", "Same-name different-person is common — exclude them.", opens: "review", [
+                    f("ruledOut", "Excluded", .longText, "With reason."),
+                ]),
+                Step("decide", "Confirm or reject (your decision)", "You decide identity. Never automatic.", [
+                    f("decision", "Decision", .choice, "Reversible later.", required: true, options: ["Confirm same person", "Reject — different people", "Insufficient evidence"]),
+                    f("basis", "Basis", .longText, "The evidence behind it.", required: true),
+                ]),
+                Step("record", "Record the resolution", "Post the reversible decision.", opens: "handoff", posts: "RPT", [
+                    f("recordName", "Record name", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        "gen.family-lines": build(
+            "Build family relationships and life timelines, correlate the evidence, every event cited.",
+            [
+                Step("events", "Collect dated events", "Births, marriages, deaths, moves — cited.", opens: "timeline", [
+                    f("events", "Events", .longText, "Date, event, source — one per line.", required: true),
+                ]),
+                Step("links", "Establish relationships", "Parent/child/spouse links, each on evidence.", opens: "connections", [
+                    f("relations", "Relationships", .longText, "Each link and its evidence."),
+                ]),
+                Step("conflicts", "Note conflicts", "Dates or relationships that disagree — both kept.", opens: "review", [
+                    f("conflicts", "Conflicts", .longText, "What disagrees."),
+                ]),
+                Step("correlate", "Correlate the evidence", "How independent sources fit together.", opens: "matrix", [
+                    f("correlate", "Correlation", .longText, "Where sources agree."),
+                ]),
+                Step("produce", "Produce the family lines", "Assemble the lines & timeline.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "gen.conflicts": build(
+            "Resolve records that disagree — both kept on file (GPS element 4).",
+            [
+                Step("collect", "Collect the conflicting records", "The records that disagree.", opens: "findings", [
+                    f("items", "Records", .longText, "What conflicts.", required: true),
+                ]),
+                Step("compare", "Compare them", "How they disagree — both preserved.", opens: "matrix", [
+                    f("comparison", "Comparison", .longText, "The conflict, side by side."),
+                ]),
+                Step("resolve", "Resolve (your decision)", "Your reasoned resolution — both records stay on file.", [
+                    f("resolution", "Resolution & reasoning", .longText, "Which you favor and why.", required: true),
+                ]),
+                Step("produce", "Produce the resolution", "Assemble the conflict resolution.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "gen.source-analysis": build(
+            "Classify each source — original or derivative, primary or secondary information, direct or indirect evidence (a classification is a judgement).",
+            [
+                Step("list", "List the sources", "Each source to analyze.", opens: "review", [
+                    f("sources", "Sources", .longText, "One per line.", required: true),
+                ]),
+                Step("classify", "Classify each", "Original/derivative; primary/secondary; direct/indirect.", opens: "review", [
+                    f("classify", "Classification", .longText, "For each source, on the GPS axes."),
+                ]),
+                Step("decide", "Own the classification (your decision)", "These are your judgements.", [
+                    f("basis", "Basis", .longText, "Confirm the classifications.", required: true),
+                ]),
+                Step("produce", "Produce the analysis", "Assemble the source analysis.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this analysis.", required: true),
+                ]),
+            ]),
+
+        "gen.evidence-notes": build(
+            "Correlate evidence across records with 5W1H worksheets.",
+            [
+                Step("gather", "Gather the evidence", "The records bearing on the question.", opens: "findings", [
+                    f("items", "Evidence", .longText, "What you're correlating.", required: true),
+                ]),
+                Step("fiveW", "5W1H", "Across the records.", opens: "matrix", [
+                    f("fiveW", "5W1H", .longText, "Who/what/when/where/why/how."),
+                ]),
+                Step("correlate", "Correlate", "Where independent sources agree.", opens: "review", [
+                    f("correlate", "Correlation", .longText, "The picture the evidence supports."),
+                ]),
+                Step("produce", "Produce the notes", "Assemble the correlation notes.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "gen.methods": build(
+            "Work a structured checklist toward reasonably exhaustive research.",
+            [
+                Step("pick", "Pick the checklist", "Which method/checklist.", opens: "matrix", [
+                    f("method", "Checklist", .text, "e.g. record-type coverage, locality guide.", required: true),
+                ]),
+                Step("run", "Work through it", "What you covered and found.", opens: "review", [
+                    f("runNote", "Coverage", .longText, "What's covered and what remains."),
+                ]),
+                Step("produce", "Produce the checklist", "Assemble the result.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this checklist.", required: true),
+                ]),
+            ]),
+
+        "gen.migration": build(
+            "Trace why an ancestor moved or changed names — Five Whys / Fishbone over cited records, then a human determination.",
+            [
+                Step("problem", "State what to explain", "The move or change to explain.", opens: "findings", [
+                    f("problem", "Problem statement", .longText, "Specific and evidence-based.", required: true),
+                ]),
+                Step("whys", "Trace the causes", "Cause to cause; stop where the records stop.", opens: "connections", [
+                    f("whys", "Why chain", .longText, "Each link supported (economic, legal, family)."),
+                ]),
+                Step("weigh", "Weigh the candidates", "Evidence for and against each explanation.", opens: "review", [
+                    f("weighing", "For / against", .longText, "What supports or rules out each."),
+                ]),
+                Step("determine", "Determination (your decision)", "Your reasoned explanation — never presented as certain beyond the evidence.", [
+                    f("determination", "Determination & basis", .longText, "The most likely cause(s), on the evidence.", required: true),
+                ]),
+                Step("produce", "Produce the analysis", "Assemble the analysis.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this analysis.", required: true),
+                ]),
+            ]),
+
+        "gen.originals": build(
+            "Keep custody-tracked originals and write full citations so every citation reopens its exact source.",
+            [
+                Step("register", "Register the originals", "Each source with provenance (attach the images/records).", opens: "audit", [
+                    f("originals", "Originals", .longText, "What each item is and where it came from.", required: true),
+                ]),
+                Step("integrity", "Record integrity", "Hash/verify the originals.", opens: "audit", [
+                    f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from archive/service", "Physical/scan transfer"]),
+                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
+                ]),
+                Step("cite", "Write full citations", "A complete citation per source.", opens: "audit", [
+                    f("citations", "Citations", .longText, "So each reopens its exact source."),
+                ]),
+                Step("seal", "Seal the source list", "Post the sealed citation/originals manifest.", opens: "handoff", posts: "PRS", [
+                    f("title", "Title", .text, "Name this manifest.", required: true),
+                ]),
+            ]),
+
+        "gen.proof-argument": build(
+            "Write the Genealogical Proof Standard argument: state the question and conclusion, summarize the evidence, show reasonably exhaustive research, resolve conflicts, write the reasoned conclusion, then produce.",
+            [
+                Step("question", "Question & conclusion", "The question and the conclusion you'll argue.", opens: "findings", [
+                    f("question", "Question & conclusion", .longText, "Both stated up front.", required: true),
+                ]),
+                Step("evidence", "Summarize the evidence", "The relevant evidence, cited.", opens: "findings", [
+                    f("evidence", "Evidence", .longText, "What supports the conclusion."),
+                ]),
+                Step("exhaustive", "Reasonably exhaustive research", "Show the search was thorough.", opens: "review", [
+                    f("exhaustive", "Coverage", .longText, "Why the research is reasonably exhaustive."),
+                ]),
+                Step("resolve", "Resolve conflicts", "Conflicting evidence and how resolved.", opens: "matrix", [
+                    f("conflicts", "Conflict resolution", .longText, "Both sides, and your resolution."),
+                ]),
+                Step("conclusion", "Write the conclusion (your decision)", "The soundly-reasoned, written conclusion.", [
+                    f("conclusion", "Conclusion", .longText, "Your reasoned proof.", required: true),
+                ]),
+                Step("produce", "Produce the proof argument", "Assemble the argument with its sealed receipt.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this proof argument.", required: true),
+                ]),
+            ]),
+
+        "gen.to-do": build(
+            "Track follow-up searches and record orders to closure.",
+            [
+                Step("link", "Link to-dos to the question", "What each search will answer.", opens: "findings", [
+                    f("links", "To-do ↔ question", .longText, "Which gap each addresses.", required: true),
+                ]),
+                Step("define", "Define the to-dos", "Search/record order, where, priority.", opens: "handoff", [
+                    f("todos", "To-dos", .longText, "Each with repository and priority.", required: true),
+                ]),
+                Step("produce", "Produce the to-do list", "Assemble the research to-dos.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this list.", required: true),
+                ]),
+            ]),
+
+        "gen.to-do-review": build(
+            "Verify a completed search actually answered the question — never assume it did.",
+            [
+                Step("select", "Select the completed search", "Which to-do you're reviewing.", opens: "handoff", [
+                    f("action", "Search", .text, "The completed search.", required: true),
+                ]),
+                Step("evidence", "What it yielded", "The result and whether it answered the question.", opens: "findings", [
+                    f("evidence", "Result", .longText, "What the search produced."),
+                ]),
+                Step("judge", "Did it answer? (your decision)", "On the result.", [
+                    f("verdict", "Verdict", .choice, "Did it answer the question?", required: true, options: ["Answered", "Partially", "Did not answer"]),
+                    f("basis", "Basis", .longText, "Why.", required: true),
+                ]),
+                Step("produce", "Produce the review", "Assemble the review.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this review.", required: true),
+                ]),
+            ]),
+
+        "gen.close-question": build(
+            "Close or reopen the research question by explicit decision — the conclusion and its evidence retained.",
+            [
+                Step("recap", "Confirm the proof", "Conclusion, evidence, and any open leads.", opens: "handoff", [
+                    f("recap", "Recap", .longText, "State of the question."),
+                ]),
+                Step("decide", "Closure decision (your decision)", "You close or keep the question open.", [
+                    f("decision", "Decision", .choice, "Close only when the proof holds.", required: true, options: ["Close the question", "Keep open"]),
+                    f("reason", "Reason", .longText, "Why — reopening preserves this closure.", required: true),
+                ]),
+                Step("produce", "Produce the closure record", "Post the closure record and receipt.", opens: "handoff", posts: "EXP", [
+                    f("title", "Title", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        // MARK: Content Creator (2026-08-20)
+
+        "cc.project-intake": build(
+            "Open a content project and set which sources it may draw on.",
+            [
+                Step("frame", "Frame the project", "What this piece is about.", opens: "sources", [
+                    f("title", "Working title", .text, "The piece's working title.", required: true),
+                    f("premise", "Premise", .longText, "What it's about and for whom.", required: true),
+                ]),
+                Step("sources", "Set the sources in scope", "Which research/sources it may use.", opens: "sources", [
+                    f("sources", "Sources in scope", .longText, "The authorized source set."),
+                ]),
+                Step("confirm", "Confirm scope (your decision)", "Confirm what the piece can draw on.", [
+                    f("decision", "Scope confirmed?", .choice, "Confirm only when correct.", required: true, options: ["Confirmed", "Needs revision"]),
+                ]),
+                Step("open", "Open the project", "Open the numbered project.", opens: "handoff", posts: "IMP", [
+                    f("caseName", "Project name", .text, "A findable name.", required: true),
+                ]),
+            ]),
+
+        "cc.ask": build(
+            "Ask a question across the project's sources and keep the cited answer.",
+            [
+                Step("ask", "Ask your research", "The answer cites its source.", opens: "ask", [
+                    f("question", "Your question", .longText, "What you want to know.", required: true),
+                ]),
+                Step("record", "Keep the cited answer", "Save the answer that matters.", opens: "answers", posts: "RPT", [
+                    f("why", "Why it matters", .longText, "How it serves the piece."),
+                ]),
+            ]),
+
+        "cc.angle": build(
+            "Shape the hook and outline from what the sources actually support.",
+            [
+                Step("angle", "Find the angle", "The hook — what's new/interesting and supported.", opens: "findings", [
+                    f("angle", "Angle", .longText, "The hook, grounded in the sources.", required: true),
+                ]),
+                Step("outline", "Outline (5W1H)", "Section outline, each point evidence-anchored.", opens: "matrix", [
+                    f("outline", "Outline", .longText, "The structure of the piece."),
+                ]),
+                Step("check", "Check against the sources", "Anything the outline claims the sources don't yet support.", opens: "review", [
+                    f("check", "Unsupported claims", .longText, "Gaps to fill before writing."),
+                ]),
+                Step("produce", "Produce the outline", "Assemble the angle & outline.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this outline.", required: true),
+                ]),
+            ]),
+
+        "cc.script-prep": build(
+            "Draft interview questions and talking points over the cited record.",
+            [
+                Step("focus", "What to cover", "What the script/interview needs to establish.", opens: "ask", [
+                    f("focus", "Focus", .longText, "The points to cover.", required: true),
+                ]),
+                Step("questions", "Draft questions & talking points", "Open, non-leading, evidence-anchored.", opens: "matrix", [
+                    f("questions", "Questions / points", .longText, "Grouped by topic.", required: true),
+                ]),
+                Step("logistics", "Plan the shoot/interview", "Guest, format, timing.", opens: "handoff", [
+                    f("logistics", "Logistics", .longText, "Practical arrangements."),
+                ]),
+                Step("produce", "Produce the script/prep", "Assemble the prep.", opens: "handoff", posts: "INT", [
+                    f("title", "Title", .text, "Name this prep.", required: true),
+                ]),
+            ]),
+
+        "cc.guest-workup": build(
+            "Background a guest or subject before you feature them, citing exact evidence.",
+            [
+                Step("identify", "Identify the guest/subject", "Who you're backgrounding.", opens: "dossier", [
+                    f("subject", "Guest / subject", .text, "Name and role.", required: true),
+                ]),
+                Step("compile", "Compile the background", "Bio, prior statements, relationships — each cited.", opens: "dossier", [
+                    f("profile", "Background", .longText, "Only what the evidence supports."),
+                ]),
+                Step("confirm", "Confirm (your decision)", "Confirm the key facts before you feature them.", [
+                    f("basis", "Confirmation & basis", .longText, "What you confirm and how.", required: true),
+                ]),
+                Step("produce", "Produce the background", "Assemble the workup.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this workup.", required: true),
+                ]),
+            ]),
+
+        "cc.identity": build(
+            "Confirm names, handles and entities are the same party: gather, compare, rule out, then decide — reversible, human-gated.",
+            [
+                Step("gather", "Gather the handles", "Names, handles, accounts that may be one party.", opens: "knowledge", [
+                    f("identifiers", "Candidate identifiers", .longText, "One per line.", required: true),
+                ]),
+                Step("compare", "Compare across sources", "How each appears across the research.", opens: "knowledge", [
+                    f("comparison", "Signals", .longText, "Matching and conflicting signals."),
+                ]),
+                Step("ruleout", "Rule out look-alikes", "Exclude coincidental matches.", opens: "review", [
+                    f("ruledOut", "Excluded", .longText, "With reason."),
+                ]),
+                Step("decide", "Confirm or reject (your decision)", "You decide. Never automatic.", [
+                    f("decision", "Decision", .choice, "Reversible later.", required: true, options: ["Confirm same party", "Reject — different parties", "Insufficient evidence"]),
+                    f("basis", "Basis", .longText, "The evidence behind it.", required: true),
+                ]),
+                Step("record", "Record the decision", "Post the reversible decision.", opens: "handoff", posts: "RPT", [
+                    f("recordName", "Record name", .text, "Name this record.", required: true),
+                ]),
+            ]),
+
+        "cc.research-table": build(
+            "Build a data-backed table for the piece — every cell drills to its source.",
+            [
+                Step("assemble", "Assemble the sources", "What this table is built from (attach any not ingested).", opens: "sources", [
+                    f("scope", "What this covers", .text, "The data this table spans.", required: true),
+                ]),
+                Step("build", "Build the table", "Each row/column cited.", opens: "dataLab", [
+                    f("columns", "Columns & notes", .longText, "What each column is and its source."),
+                ]),
+                Step("check", "Check the numbers", "Sanity-check totals and outliers.", opens: "dataLab", [
+                    f("check", "Checks", .longText, "Anything a reader should be warned about."),
+                ]),
+                Step("produce", "Produce the table", "Assemble the research table.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this table.", required: true),
+                ]),
+            ]),
+
+        "cc.timeline": build(
+            "Build the story's timeline and how the people and orgs connect.",
+            [
+                Step("events", "Collect the events", "Dated events, each cited.", opens: "timeline", [
+                    f("events", "Events", .longText, "Date, event, source — one per line.", required: true),
+                ]),
+                Step("links", "Map the connections", "How people and orgs relate.", opens: "connections", [
+                    f("links", "Connections", .longText, "Each link and its evidence."),
+                ]),
+                Step("produce", "Produce the timeline", "Assemble the timeline & connections.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "cc.fact-check": build(
+            "Check each claim against evidence — conflicting accounts preserved, never averaged.",
+            [
+                Step("collect", "List the claims", "Each claim the piece makes.", opens: "findings", [
+                    f("claims", "Claims", .longText, "One per line.", required: true),
+                ]),
+                Step("verify", "Verify each claim", "Evidence and status per claim.", opens: "matrix", [
+                    f("verify", "Verification", .longText, "Supported / unsupported / disputed — with the source."),
+                ]),
+                Step("conflicts", "Preserve conflicts", "Conflicting accounts, kept side by side.", opens: "review", [
+                    f("conflicts", "Conflicts", .longText, "Never averaged."),
+                ]),
+                Step("produce", "Produce the fact-check", "Assemble the fact-check board.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this board.", required: true),
+                ]),
+            ]),
+
+        "cc.source-vetting": build(
+            "Assess how reliable and independent each source is before you rely on it — a rating is a judgement, not a fact.",
+            [
+                Step("list", "List the sources", "Each source to vet.", opens: "review", [
+                    f("sources", "Sources", .longText, "One per line.", required: true),
+                ]),
+                Step("assess", "Assess each", "Independence, track record, corroboration.", opens: "review", [
+                    f("factors", "Factors", .longText, "What strengthens or weakens each."),
+                    f("rating", "Reliability rating", .longText, "High / Medium / Low — a judgement."),
+                ]),
+                Step("decide", "Own the ratings (your decision)", "These are your judgements.", [
+                    f("basis", "Basis", .longText, "Confirm the ratings.", required: true),
+                ]),
+                Step("produce", "Produce the vetting", "Assemble the source vetting.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this vetting.", required: true),
+                ]),
+            ]),
+
+        "cc.explainer": build(
+            "Explain how something came about — Five Whys / Fishbone over cited evidence, then a human takeaway.",
+            [
+                Step("problem", "What to explain", "The thing to explain.", opens: "findings", [
+                    f("problem", "Question", .longText, "Specific and evidence-based.", required: true),
+                ]),
+                Step("whys", "Five Whys", "Cause to cause; stop where evidence stops.", opens: "connections", [
+                    f("whys", "Why chain", .longText, "Each link supported."),
+                ]),
+                Step("fishbone", "Fishbone — categorize", "Sort candidate causes.", opens: "matrix", [
+                    f("categories", "Categories", .longText, "The factors at play."),
+                ]),
+                Step("takeaway", "Write the takeaway (your decision)", "The explanation you'll present — grounded, not overstated.", [
+                    f("takeaway", "Takeaway & basis", .longText, "How it came about, on the evidence.", required: true),
+                ]),
+                Step("produce", "Produce the explainer", "Assemble the explainer.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this explainer.", required: true),
+                ]),
+            ]),
+
+        "cc.rights-locker": build(
+            "Keep sources and clips with integrity hashes and their rights/clearance status.",
+            [
+                Step("register", "Register the sources & clips", "Each item with provenance (attach originals).", opens: "audit", [
+                    f("items", "Items", .longText, "What each item is and where it came from.", required: true),
+                ]),
+                Step("integrity", "Record integrity", "Hash/verify each item.", opens: "audit", [
+                    f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from platform/service", "Physical/device transfer"]),
+                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
+                ]),
+                Step("rights", "Record rights/clearance", "Clearance status per item.", opens: "audit", [
+                    f("rights", "Rights status", .longText, "Owned / licensed / fair-use / pending — per item."),
+                ]),
+                Step("seal", "Seal the locker", "Post the sealed rights/custody manifest.", opens: "handoff", posts: "PRS", [
+                    f("title", "Title", .text, "Name this manifest.", required: true),
+                ]),
+            ]),
+
+        "cc.publish-package": build(
+            "Assemble the cited, rights-cleared package: assemble the piece, verify every claim is cited, confirm rights cleared, choose the export format, then produce.",
+            [
+                Step("assemble", "Assemble the piece", "The near-final piece with its citations.", opens: "findings", [
+                    f("assemble", "The piece", .longText, "Draft with citations.", required: true),
+                ]),
+                Step("verify", "Verify every claim is cited", "Each claim maps to a vetted source.", opens: "matrix", [
+                    f("verify", "Citation check", .longText, "Any claim not yet cited."),
+                ]),
+                Step("rights", "Confirm rights cleared (your decision)", "Everything used is cleared.", [
+                    f("rights", "Rights", .choice, "Clearance status.", required: true, options: ["All cleared", "Outstanding items"]),
+                    f("note", "Note", .longText, "Any outstanding clearances."),
+                ]),
+                Step("format", "Choose export format", "How to export the package.", opens: "handoff", [
+                    f("format", "Export format", .choice, "The deliverable format.", options: ["Word (.docx)", "PDF", "Both"]),
+                ]),
+                Step("produce", "Produce the package", "Assemble the cited package and export.", opens: "handoff", posts: "PUB", [
+                    f("title", "Title", .text, "Name this package.", required: true),
+                ]),
+            ]),
+
+        "cc.corrections": build(
+            "Track corrections, rights clearances and follow-ups through to done.",
+            [
+                Step("link", "Link items to the issue", "What each correction/clearance addresses.", opens: "findings", [
+                    f("links", "Item ↔ issue", .longText, "Which claim or clip each addresses.", required: true),
+                ]),
+                Step("define", "Define the items", "Correction/clearance/follow-up, owner, due.", opens: "handoff", [
+                    f("items", "Items", .longText, "Each with owner and due date.", required: true),
+                ]),
+                Step("produce", "Produce the tracker", "Assemble the corrections tracker.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this tracker.", required: true),
+                ]),
+            ]),
+
+        "cc.performance": build(
+            "Verify a correction or clearance actually resolved the issue it was for.",
+            [
+                Step("select", "Select the item", "Which correction/clearance you're reviewing.", opens: "handoff", [
+                    f("action", "Item", .text, "The item under review.", required: true),
+                ]),
+                Step("evidence", "Gather evidence", "Evidence the issue is resolved.", opens: "findings", [
+                    f("evidence", "Evidence", .longText, "What changed since."),
+                ]),
+                Step("judge", "Resolved? (your decision)", "On the evidence.", [
+                    f("verdict", "Verdict", .choice, "Evidence-based.", required: true, options: ["Resolved", "Partially", "Not resolved"]),
+                    f("basis", "Basis", .longText, "Why.", required: true),
+                ]),
+                Step("produce", "Produce the review", "Assemble the review.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this review.", required: true),
+                ]),
+            ]),
+
+        "cc.wrap": build(
+            "Archive or wrap the project by an explicit human decision — sources and package retained.",
+            [
+                Step("recap", "Confirm the package", "Published package, corrections, and any open items.", opens: "handoff", [
+                    f("recap", "Recap", .longText, "State of the project."),
+                ]),
+                Step("retention", "Retention & rights", "Where sources/clips are kept and their rights status.", opens: "handoff", [
+                    f("retention", "Retention & rights", .longText, "Storage, retention, clearances."),
+                ]),
+                Step("decide", "Wrap decision (your decision)", "You wrap or keep the project open.", [
+                    f("decision", "Decision", .choice, "Wrap only when done.", required: true, options: ["Archive / wrap", "Keep open"]),
+                    f("reason", "Reason", .longText, "Why — reopening preserves this wrap.", required: true),
+                ]),
+                Step("produce", "Produce the wrap record", "Post the wrap record and receipt.", opens: "handoff", posts: "EXP", [
+                    f("title", "Title", .text, "Name this record.", required: true),
+                ]),
+            ]),
     ]
 }
