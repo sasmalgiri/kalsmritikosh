@@ -457,7 +457,7 @@ public struct AskView: View {
         // Only offer the formats the app can actually read end to end.
         panel.allowedContentTypes = SourceType.attachableContentTypes
         panel.prompt = "Attach"
-        panel.message = "Attach a supported file — \(SourceType.attachableSummary) It's ingested into your private archive and becomes citable evidence."
+        panel.message = "Attach a supported document, spreadsheet, email, image, audio or video — it's ingested into your private archive and becomes citable evidence."
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
             let attachment = AskAttachment(url: url, state: .ingesting)
