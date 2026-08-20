@@ -144,6 +144,8 @@ public nonisolated enum WCDocType {
         case "REQ": return "Records Request"
         case "LOG": return "Research Log Entry"
         case "CAL": return "Content Calendar Entry"
+        case "SVL": return "Surveillance Log Entry"
+        case "ALG": return "Allegation & Finding"
         default:    return code
         }
     }
@@ -163,6 +165,8 @@ public nonisolated enum WCDocType {
         case "REQ": return "envelope.badge.clock"
         case "LOG": return "magnifyingglass.circle"
         case "CAL": return "calendar.badge.clock"
+        case "SVL": return "binoculars"
+        case "ALG": return "scalemass"
         default:    return "doc"
         }
     }
