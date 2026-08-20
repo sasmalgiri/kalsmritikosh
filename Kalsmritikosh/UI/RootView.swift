@@ -479,7 +479,11 @@ public struct RootView: View {
         .navigationSplitViewStyle(.balanced)
         .tint(Theme.brand)
         .preferredColorScheme(.light)
-        .frame(minWidth: 880, minHeight: 620)
+        // Keep the window wide enough that .balanced ALWAYS docks the sidebar
+        // beside the detail — below this, a content-dense detail (e.g. the Work
+        // Center run screen) makes the split view float the sidebar as a clipped
+        // overlay. 1040 = sidebar (ideal 244) + a comfortable detail.
+        .frame(minWidth: 1040, minHeight: 640)
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .overlay(shortcutHelpOverlay)
