@@ -261,6 +261,8 @@ public struct RootView: View {
     /// silently — so the switch never strands in-flight work without a choice.
     @State private var pendingEnginePower: Bool?
     @State private var showEngineSwitchConfirm = false
+    /// Presents the native "Add files" importer (SwiftUI-managed, sizes correctly).
+    @State private var showAddFiles = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// "?" keyboard cheat-sheet visibility.
@@ -540,24 +542,6 @@ public struct RootView: View {
             })
     }
 
-    /// Pick supported files and ingest them into the archive (files only —
-    /// folders are added as watched roots from Sources). Reuses the shared
-    /// AppState pipeline so the live panel shows progress.
-    private func addFiles() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = SourceType.attachableContentTypes
-        panel.prompt = "Add"
-        panel.message = "Add supported files to your private archive — the app reads them so you can ask and cite. Supported: \(SourceType.attachableSummary)"
-        guard panel.runModal() == .OK else { return }
-        let urls = panel.urls
-        Task { await appState.ingestFiles(urls) }
-        #endif
-    }
-
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
@@ -571,7 +555,7 @@ public struct RootView: View {
                 // files and the app reads them into your archive (folders are added
                 // from Sources). Complements the auto-watched folders.
                 Button {
-                    addFiles()
+                    showAddFiles = true
                 } label: {
                     Label("Add files", systemImage: "plus.rectangle.on.folder")
                         .frame(maxWidth: .infinity)
@@ -581,6 +565,13 @@ public struct RootView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
                 .help("Ingest files into your private archive so you can ask and cite over them. Supported: \(SourceType.attachableSummary)")
+                .fileImporter(isPresented: $showAddFiles,
+                              allowedContentTypes: SourceType.attachableContentTypes,
+                              allowsMultipleSelection: true) { result in
+                    if case .success(let urls) = result {
+                        Task { await appState.ingestFiles(urls) }
+                    }
+                }
                 // Simple / Advanced interface toggle. Simple shows one primary screen per group;
                 // everything else stays reachable via the header search + ⌘K.
                 Picker("Interface", selection: $simpleMode) {
