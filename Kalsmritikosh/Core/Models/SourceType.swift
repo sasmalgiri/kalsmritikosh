@@ -210,8 +210,8 @@ public extension SourceType {
         "sqlite", "sqlite3", "db",
         // Spreadsheets
         "xlsx", "csv", "ods",
-        // Presentations
-        "pptx", "key",
+        // Presentations (Keynote omitted — its loader is a metadata-only stub)
+        "pptx",
         // Email
         "mbox", "eml", "emlx",
         // Images

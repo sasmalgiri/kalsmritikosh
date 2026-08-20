@@ -88,6 +88,9 @@ public struct WorkCenterView: View {
     @State private var docTo = Date()
     @State private var expandedDocID: UUID?
 
+    // Browse-all-jobs search over the 183 generated job workflows.
+    @State private var catalogSearch = ""
+
     public init(onNavigate: @escaping (Destination) -> Void) {
         self.onNavigate = onNavigate
     }
@@ -169,6 +172,8 @@ public struct WorkCenterView: View {
                     ForEach(WCCatalog.all) { def in recipeCard(def) }
                 }
 
+                recentSection
+                allJobsBrowser
                 documentsRegister
             }
             .padding(24)
@@ -254,6 +259,83 @@ public struct WorkCenterView: View {
     private func postedTypes(_ def: WCWorkflowDefinition) -> String {
         let types = def.operations.compactMap(\.postsDocType)
         return types.isEmpty ? "—" : types.map(WCDocType.displayName).joined(separator: ", ")
+    }
+
+    // MARK: - Recent jobs + browse-all-jobs (searchable)
+
+    /// The most recently completed runs — a quick way back to finished jobs
+    /// (in-progress ones are already under "Resume where you left off").
+    @ViewBuilder
+    private var recentSection: some View {
+        let recent = runs.filter { $0.status == .confirmed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionLabel("Recently completed")
+                VStack(spacing: 8) { ForEach(recent.prefix(6)) { run in resumeRow(run) } }
+            }
+        }
+    }
+
+    /// Search across EVERY saved job workflow (all 10 personas, 183 jobs) and
+    /// start any as its own guided run — the curated recipes above are the
+    /// highlights; this is the full library.
+    @ViewBuilder
+    private var allJobsBrowser: some View {
+        let q = catalogSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let matches = q.isEmpty ? [] : WCCatalog.jobWorkflows.filter {
+            $0.name.lowercased().contains(q) || $0.persona.lowercased().contains(q)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("All jobs")
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search \(WCCatalog.jobWorkflows.count) jobs by name or persona…", text: $catalogSearch)
+                    .textFieldStyle(.plain)
+                if !catalogSearch.isEmpty {
+                    Button { catalogSearch = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .help("Clear search")
+                }
+            }
+            .padding(8)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            if q.isEmpty {
+                Text("Type to search all \(WCCatalog.jobWorkflows.count) job workflows across every persona, then Start one — it gets its own numbered run.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if matches.isEmpty {
+                Text("No jobs match \u{201C}\(catalogSearch)\u{201D}.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("\(matches.count) match\(matches.count == 1 ? "" : "es")")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                LazyVStack(spacing: 6) {
+                    ForEach(matches.prefix(60)) { def in jobWorkflowRow(def) }
+                }
+                if matches.count > 60 {
+                    Text("Showing the first 60 — refine your search to narrow.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private func jobWorkflowRow(_ def: WCWorkflowDefinition) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "list.bullet.clipboard").foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(def.name).font(.callout.weight(.medium))
+                Text("\(def.persona) · \(def.operations.count) steps")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Start") { start(def) }
+                .buttonStyle(.bordered).controlSize(.small)
+                .help("Start this job as a guided run — gated steps and a numbered document per step.")
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Documents register (search + date filter + detail)

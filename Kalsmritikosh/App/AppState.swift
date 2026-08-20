@@ -376,6 +376,32 @@ public final class AppState {
         scanContinuePromptPending = false
     }
 
+    // MARK: - Add files (user-initiated ingest)
+
+    /// Ingest user-picked files (from an "Add files" button) into the private
+    /// archive with the full pipeline, tracked on the live panel so the user sees
+    /// progress. Picker URLs are sandbox security-scoped, so access is started per
+    /// file for the read. Folders are handled by the Sources watcher, not here.
+    public func ingestFiles(_ urls: [URL]) async {
+        guard let ingest, !urls.isEmpty else { return }
+        let activity = beginProcess("Adding \(urls.count) file(s)…", total: urls.count)
+        defer { finishProcess(activity); ingestCurrentFile = nil }
+        var done = 0
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            ingestCurrentFile = url.lastPathComponent
+            do {
+                _ = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
+                ingestLastFile = url.lastPathComponent
+            } catch {
+                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+            done += 1
+            updateProcess(activity, done: done)
+        }
+    }
+
     // MARK: - Device-suitable model install (consent-gated)
 
     /// User declined the suggested lighter model — hide the prompt for this session.
