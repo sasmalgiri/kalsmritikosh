@@ -461,6 +461,16 @@ public struct DataLabView: View {
             Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
                 .controlSize(.small)
                 .disabled(rec.fields.isEmpty)
+
+            Divider().padding(.vertical, 2)
+            sectionLabel("Templates")
+            Button { applyNetWorthTemplate(rec) } label: {
+                Label("Net-worth workpaper", systemImage: "dollarsign.arrow.circlepath").font(.caption)
+            }
+            .controlSize(.small)
+            .help("Set up the net-worth method: adds the input columns (assets, liabilities, opening net worth, reported income, known expenditures) and the derived columns (net worth, increase, funds applied, income from unknown sources). Fill inputs from source documents.")
+            Text("An unexplained increase is a lead, not proof.")
+                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 
@@ -956,6 +966,41 @@ public struct DataLabView: View {
                                                  expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
                 newFieldName = ""
             } catch { errorMessage = "Could not add the field: \(error)" }
+        }
+    }
+
+    /// Apply the forensic net-worth workpaper: add any missing input columns,
+    /// then apply the derived formula columns in order. Each mutation bumps the
+    /// dataset revision, so the latest record is threaded through (addField
+    /// returns it; applyTransform is followed by a fetch). Idempotent — columns
+    /// that already exist are skipped, so re-running never duplicates.
+    private func applyNetWorthTemplate(_ rec: WorkbenchDatasetRecord) {
+        guard let datasets = appState.workbenchDatasets,
+              let transforms = appState.workbenchTransforms else { return }
+        errorMessage = nil
+        Task {
+            do {
+                var current = rec
+                for col in ForensicNetWorthTemplate.inputColumns
+                where !current.fields.contains(where: { $0.name == col.name }) {
+                    current = try await datasets.addField(
+                        datasetID: current.dataset.id, name: col.name, valueShape: col.shape,
+                        expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                }
+                for spec in ForensicNetWorthTemplate.transformSpecs {
+                    if case .calculatedColumn(let name, _, _) = spec,
+                       current.fields.contains(where: { $0.name == name }) { continue }
+                    _ = try await transforms.applyTransform(
+                        datasetID: current.dataset.id, spec: spec,
+                        expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                    if let refreshed = try await datasets.fetch(datasetID: current.dataset.id) {
+                        current = refreshed
+                    }
+                }
+                record = current
+            } catch {
+                errorMessage = "Could not apply the net-worth workpaper: \(error)"
+            }
         }
     }
 
