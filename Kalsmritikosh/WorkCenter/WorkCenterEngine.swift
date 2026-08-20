@@ -493,6 +493,13 @@ public nonisolated enum WCJobWorkflowFactory {
     /// JobDocumentation row, otherwise SYNTHESIZED from its own title/detail/kind
     /// — so every persona job gets a real step-by-step flow.
     public static func make(_ job: PersonaJob) -> WCWorkflowDefinition {
+        // 1) Hand-authored, faithful-to-the-real-process steps win when present.
+        if let a = WCAuthoredWorkflows.workflow(forJobID: job.id) {
+            return WCWorkflowDefinition(defID: defID(forJobKey: job.id), name: job.title,
+                                        persona: personaLabel(job.persona),
+                                        purpose: a.purpose, operations: a.ops)
+        }
+        // 2) Otherwise the coverage-matrix documentation, 3) else a generic shell.
         if let doc = doc(for: job) { return makeRich(job: job, doc: doc) }
         return makeFromDescriptor(job)
     }
@@ -742,4 +749,356 @@ public nonisolated enum WCJobWorkflowFactory {
         if l.contains("receipt") || l.contains("export") { return "EXP" }
         return "RPT"
     }
+}
+
+// MARK: - Authored (faithful) job workflows
+
+/// Hand-authored, profession-accurate workflows for specific jobs — the real
+/// ordered steps a practitioner follows by hand, digitized here. Keyed by
+/// PersonaJob.id; when present these OVERRIDE both the coverage-matrix build and
+/// the generic shell (see WCJobWorkflowFactory.make). Depth is adaptive: quick
+/// jobs stay short, complex ones expand. Every step also gets the runner's
+/// shared per-step Note + Attach-files affordances, so nothing here restates them.
+public nonisolated enum WCAuthoredWorkflows {
+
+    public static func workflow(forJobID id: String) -> (purpose: String, ops: [WCOperation])? {
+        guard let a = catalog[id] else { return nil }
+        return (a.purpose, a.ops)
+    }
+
+    // MARK: builders
+
+    private struct Authored { let purpose: String; let ops: [WCOperation] }
+
+    /// A step spec; the sequence number and the "finish the previous step first"
+    /// gate are assigned automatically by `build`.
+    private struct Step {
+        let key: String; let title: String; let hint: String
+        let opens: String?; let posts: String?; let fields: [WCField]
+        init(_ key: String, _ title: String, _ hint: String,
+             opens: String? = nil, posts: String? = nil, _ fields: [WCField] = []) {
+            self.key = key; self.title = title; self.hint = hint
+            self.opens = opens; self.posts = posts; self.fields = fields
+        }
+    }
+
+    private static func build(_ purpose: String, _ steps: [Step]) -> Authored {
+        var ops: [WCOperation] = []
+        for (i, s) in steps.enumerated() {
+            let seq = i + 1
+            let gates: [WCGate] = seq <= 1 ? [] :
+                [WCGate(rule: .operationConfirmed(seq: seq - 1), reason: "Finish step \(seq - 1) first.")]
+            ops.append(WCOperation(seq: seq, key: s.key, title: s.title, hint: s.hint,
+                                   postsDocType: s.posts, launchesSurface: s.opens,
+                                   fields: s.fields, gates: gates))
+        }
+        return Authored(purpose: purpose, ops: ops)
+    }
+
+    private static func f(_ key: String, _ label: String, _ kind: WCField.Kind, _ help: String,
+                          required: Bool = false, placeholder: String = "",
+                          options: [String] = []) -> WCField {
+        WCField(key: key, label: label, kind: kind, help: help,
+                placeholder: placeholder, required: required, options: options)
+    }
+
+    // MARK: Compliance / HR Investigator (2026-08-20)
+
+    private static let catalog: [String: Authored] = [
+
+        "hr.complaint-intake": build(
+            "Open a workplace/compliance case: record the complaint, fix the scope and authority, set the evidence in scope, then open the case file. An intake never decides the merits.",
+            [
+                Step("complaint", "Record the complaint", "Capture the complaint as received — in the complainant's own words.", opens: "sources", [
+                    f("ref", "Complaint reference", .text, "Your own case/complaint number.", required: true, placeholder: "HR-2026-0001"),
+                    f("receivedOn", "Received on", .date, "When the complaint came in — anchors the timeline."),
+                    f("from", "Received from / how", .text, "Complainant and channel (hotline, email, manager)."),
+                    f("summary", "What is alleged", .longText, "The allegation(s) in the complainant's words — not your assessment.", required: true),
+                ]),
+                Step("scope", "Define scope & authority", "Fix what this investigation covers and under whose authority.", opens: "sources", [
+                    f("authority", "Authority", .choice, "The mandate this investigation runs under.", required: true, options: ["Company policy", "Regulatory requirement", "Management directive", "Legal instruction", "Other"]),
+                    f("scope", "Scope statement", .longText, "What is in and out of scope — the boundary to stay within.", required: true),
+                    f("window", "Time window", .dateRange, "The period the investigation covers."),
+                ]),
+                Step("inscope", "Set the evidence in scope", "Point the case at the authorized documents (mailboxes, drives, records).", opens: "sources", [
+                    f("sources", "Sources in scope", .longText, "Which document sets are authorized — the hard evidence boundary."),
+                ]),
+                Step("confirm", "Confirm scope (your decision)", "A human confirms scope and authority before any work. The app never decides the merits.", [
+                    f("decision", "Scope confirmed?", .choice, "Confirm only when scope and authority are correct.", required: true, options: ["Confirmed", "Needs revision"]),
+                    f("basis", "Note", .longText, "Anything to record about the scope decision."),
+                ]),
+                Step("open", "Open the case file", "Open the numbered case the rest of the jobs run against.", opens: "handoff", posts: "IMP", [
+                    f("caseName", "Case name", .text, "A findable name for this case.", required: true),
+                ]),
+            ]),
+
+        "hr.ask": build(
+            "Ask a question over the case's authorized documents and keep the cited answer on the record.",
+            [
+                Step("ask", "Ask the record", "Ask in plain language — the answer is grounded in the case's authorized evidence and cites it.", opens: "ask", [
+                    f("question", "Your question", .longText, "What you need to know from the case file.", required: true),
+                ]),
+                Step("record", "Keep the cited answer", "Save the answer that matters so it's quotable later.", opens: "answers", posts: "RPT", [
+                    f("why", "Why it matters", .longText, "How this answer bears on the allegations."),
+                ]),
+            ]),
+
+        "hr.allegations": build(
+            "Frame each allegation with 5W1H, link the evidence, and record its status — an allegation is unproven until found.",
+            [
+                Step("list", "List the allegations", "Break the complaint into distinct, testable allegations.", opens: "findings", [
+                    f("allegations", "Allegations", .longText, "One allegation per line — each specific enough to test.", required: true),
+                ]),
+                Step("frame", "Frame each with 5W1H", "For each allegation: who, what, when, where, why, how.", opens: "matrix", [
+                    f("fiveW", "5W1H per allegation", .longText, "Who did what, to whom, when and where, and how you know.", required: true),
+                ]),
+                Step("evidence", "Link the evidence", "Attach or cite the documents that speak to each allegation.", opens: "findings", [
+                    f("evidenceNote", "Evidence per allegation", .longText, "Which documents support or rebut each allegation."),
+                ]),
+                Step("status", "Record status (your decision)", "Record a status per allegation with its basis — never state a finding you can't support.", posts: "ALG", [
+                    f("status", "Status per allegation", .longText, "Substantiated / not substantiated / unfounded / inconclusive — with basis for each.", required: true),
+                ]),
+            ]),
+
+        "hr.parties": build(
+            "Profile the complainant, respondent(s) and witnesses from cited evidence, and confirm each identity.",
+            [
+                Step("identify", "Identify the parties", "List everyone the case involves and their role.", opens: "dossier", [
+                    f("parties", "Parties", .longText, "Complainant, respondent(s), witnesses — one per line with role.", required: true),
+                ]),
+                Step("profile", "Compile each profile", "Build each profile only from cited evidence.", opens: "dossier", [
+                    f("profiles", "Profiles", .longText, "For each party: role, relationships, relevant cited facts."),
+                ]),
+                Step("confirm", "Confirm identities (your decision)", "Confirm each profile maps to the right real person.", [
+                    f("basis", "Confirmation & basis", .longText, "Confirm each identity, or flag any you cannot — with basis.", required: true),
+                ]),
+                Step("produce", "Produce party profiles", "Assemble the profiles for the case file.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this work product.", required: true),
+                ]),
+            ]),
+
+        "hr.name-resolution": build(
+            "Decide whether names/accounts are the same person: gather identifiers, compare across evidence, rule out look-alikes, then confirm or reject — reversible, never automatic.",
+            [
+                Step("gather", "Gather the identifiers", "Collect every name, email, username or account ID that might be the same person.", opens: "knowledge", [
+                    f("identifiers", "Candidate identifiers", .longText, "All the identifiers in play — one per line.", required: true),
+                ]),
+                Step("compare", "Compare across the evidence", "See how each identifier appears across the documents.", opens: "knowledge", [
+                    f("comparison", "Matching & conflicting signals", .longText, "Where the identifiers co-occur, and where they conflict."),
+                ]),
+                Step("ruleout", "Rule out coincidental matches", "Consider look-alikes (common names, shared devices) and exclude them.", opens: "review", [
+                    f("ruledOut", "Look-alikes excluded", .longText, "Candidates you considered and ruled out, with the reason."),
+                ]),
+                Step("decide", "Confirm or reject (your decision)", "A human decides identity. The app never auto-merges.", [
+                    f("decision", "Decision", .choice, "Your identity decision — reversible later.", required: true, options: ["Confirm same person", "Reject — different people", "Insufficient evidence"]),
+                    f("basis", "Basis", .longText, "The evidence behind your decision.", required: true),
+                ]),
+                Step("record", "Record the resolution", "Post the reversible identity decision to the case file.", opens: "handoff", posts: "RPT", [
+                    f("recordName", "Record name", .text, "Name this resolution record.", required: true),
+                ]),
+            ]),
+
+        "hr.incident-timeline": build(
+            "Build the incident chronology with relationship links, flagging gaps and conflicts — absence is not proof.",
+            [
+                Step("collect", "Collect dated events", "Gather every dated event, each with its source.", opens: "timeline", [
+                    f("events", "Events", .longText, "Each event: date, what happened, source — one per line.", required: true),
+                ]),
+                Step("link", "Order & link", "Put events in order and link the parties involved.", opens: "connections", [
+                    f("links", "Links", .longText, "Who was involved in what, and how events relate."),
+                ]),
+                Step("gaps", "Flag gaps & conflicts", "Note missing periods and conflicting dates — keep both sides.", opens: "review", [
+                    f("gaps", "Gaps & conflicts", .longText, "Where the record is silent or accounts disagree."),
+                ]),
+                Step("produce", "Produce the chronology", "Assemble the cited chronology.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this chronology.", required: true),
+                ]),
+            ]),
+
+        "hr.evidence-register": build(
+            "Register the documentary evidence (emails, records, policies) with cited cells, and check it for gaps.",
+            [
+                Step("assemble", "Assemble the documents", "Gather the documents this register covers (attach any not yet ingested).", opens: "sources", [
+                    f("scope", "What this covers", .text, "The document set this register indexes.", required: true),
+                ]),
+                Step("register", "Build the register", "Index each document with the columns that matter.", opens: "dataLab", [
+                    f("columns", "Register columns & notes", .longText, "Date, author, type, relevance — every cell traceable to its source."),
+                ]),
+                Step("quality", "Check quality & gaps", "Flag missing, undated or unauthenticated items.", opens: "dataLab", [
+                    f("quality", "Quality issues", .longText, "Anything missing or unverified a reviewer should know."),
+                ]),
+                Step("produce", "Produce the register", "Assemble the evidence register.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this register.", required: true),
+                ]),
+            ]),
+
+        "hr.statements": build(
+            "Compare the parties' accounts point by point, preserving conflicts rather than averaging them — due process depends on it.",
+            [
+                Step("collect", "Collect the accounts", "Gather each party's statement (attach interview notes/recordings).", opens: "findings", [
+                    f("accounts", "Accounts", .longText, "Each account, attributed and cited.", required: true),
+                ]),
+                Step("compare", "Compare point by point", "Line up the accounts on each disputed point.", opens: "matrix", [
+                    f("comparison", "Agreement & conflict", .longText, "Where accounts agree, and where they conflict — keep both sides."),
+                ]),
+                Step("conflicts", "Record unresolved conflicts", "Note conflicts that remain open — never resolved by averaging.", opens: "review", [
+                    f("conflicts", "Open conflicts", .longText, "Conflicts still unresolved, and why."),
+                ]),
+                Step("produce", "Produce the comparison", "Assemble the statement comparison.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this comparison.", required: true),
+                ]),
+            ]),
+
+        "hr.credibility": build(
+            "Assess the reliability and independence of each account — a rating is a judgement, never a fact.",
+            [
+                Step("list", "List the accounts", "List each account/source you'll assess.", opens: "review", [
+                    f("sources", "Accounts", .longText, "Each account/source, one per line.", required: true),
+                ]),
+                Step("assess", "Assess each account", "Weigh consistency, corroboration, bias and opportunity to observe.", opens: "review", [
+                    f("factors", "Assessment factors", .longText, "For each account: what strengthens or weakens its reliability."),
+                    f("rating", "Reliability rating", .longText, "High / Medium / Low per account — a judgement, not proof."),
+                ]),
+                Step("decide", "Record your judgement (your decision)", "Own the ratings as your assessment.", [
+                    f("basis", "Basis", .longText, "Confirm the ratings and note these are judgements, not findings.", required: true),
+                ]),
+                Step("produce", "Produce the assessment", "Assemble the credibility assessment.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this assessment.", required: true),
+                ]),
+            ]),
+
+        "hr.interview-prep": build(
+            "Prepare an interview grounded in the record: what to establish, non-leading questions tied to evidence, and the logistics and rights.",
+            [
+                Step("review", "Review the record", "See what the evidence already shows and what's missing.", opens: "ask", [
+                    f("focus", "What to establish", .longText, "The points this interview needs to clarify or confirm.", required: true),
+                ]),
+                Step("questions", "Draft the questions", "Open, non-leading questions, each tied to specific evidence.", opens: "matrix", [
+                    f("questions", "Questions", .longText, "The question list — grouped by topic, evidence-anchored.", required: true),
+                ]),
+                Step("logistics", "Plan logistics & rights", "Who, when, support person, and any notice/rights to state.", opens: "handoff", [
+                    f("logistics", "Logistics & rights", .longText, "Arrangements and the rights/notice to give the interviewee."),
+                ]),
+                Step("produce", "Produce the interview plan", "Assemble the interview plan.", opens: "handoff", posts: "INT", [
+                    f("title", "Title", .text, "Name this interview plan.", required: true),
+                ]),
+            ]),
+
+        "hr.root-cause": build(
+            "Find why it happened: Five Whys down the causal chain, Fishbone across cause categories, weigh the candidates, then record the human root-cause determination — the app never confirms a cause.",
+            [
+                Step("problem", "State the problem", "Define the confirmed issue precisely.", opens: "findings", [
+                    f("problem", "Problem statement", .longText, "The issue to explain — specific and evidence-based.", required: true),
+                ]),
+                Step("whys", "Five Whys", "Trace cause to cause; stop where the evidence stops.", opens: "connections", [
+                    f("whys", "Why chain", .longText, "Why → because → why → because … each link supported."),
+                ]),
+                Step("fishbone", "Fishbone — categorize", "Sort candidate causes by category.", opens: "matrix", [
+                    f("categories", "Cause categories", .longText, "People / process / policy / systems / environment."),
+                ]),
+                Step("weigh", "Weigh the candidates", "Evidence for and against each candidate cause.", opens: "review", [
+                    f("weighing", "For / against", .longText, "What supports or rules out each candidate cause."),
+                ]),
+                Step("determine", "Root-cause determination (your decision)", "A human determines the root cause(s). The app never confirms one.", [
+                    f("determination", "Determination & basis", .longText, "The root cause(s) you determine, and why.", required: true),
+                ]),
+                Step("produce", "Produce the analysis", "Assemble the root-cause analysis.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this analysis.", required: true),
+                ]),
+            ]),
+
+        "hr.evidence-custody": build(
+            "Keep a defensible chain of custody: register each exhibit, record acquisition and integrity, log transfers, then seal the manifest.",
+            [
+                Step("register", "Register the exhibits", "List each item collected, with where it came from (attach the originals).", opens: "audit", [
+                    f("exhibits", "Exhibits", .longText, "Each exhibit: what it is and its source.", required: true),
+                ]),
+                Step("acquire", "Acquisition & integrity", "Record how each item entered custody without being altered.", opens: "audit", [
+                    f("method", "Acquisition method", .choice, "How the material was taken into custody.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/device transfer"]),
+                    f("integrity", "Integrity verified", .bool, "Turn on after running Verify integrity on the Audit screen."),
+                ]),
+                Step("transfers", "Log custody transfers", "Who held what, and when.", opens: "audit", [
+                    f("transfers", "Custody transfers", .longText, "Each hand-off: from, to, when, why."),
+                ]),
+                Step("seal", "Seal the custody manifest", "Post the sealed custody manifest.", opens: "handoff", posts: "PRS", [
+                    f("title", "Title", .text, "Name this manifest.", required: true),
+                ]),
+            ]),
+
+        "hr.findings-memo": build(
+            "Reach findings on the balance of probabilities: recap scope, marshal the evidence per allegation, apply the standard, record findings with basis, note limitations, then produce the memo — never assert an unproven finding.",
+            [
+                Step("recap", "Restate scope & allegations", "Anchor the memo in the case's scope and allegations.", opens: "findings", [
+                    f("recap", "Scope & allegations", .longText, "The allegations being decided and the scope they're decided within.", required: true),
+                ]),
+                Step("marshal", "Marshal the evidence", "For each allegation, line up the evidence for and against (attach key exhibits).", opens: "findings", [
+                    f("evidence", "Evidence per allegation", .longText, "The cited evidence bearing on each allegation."),
+                ]),
+                Step("standard", "Apply the standard of proof", "Balance of probabilities — is each allegation more likely than not?", opens: "matrix", [
+                    f("reasoning", "Reasoning", .longText, "How the evidence meets or falls short of the standard, per allegation."),
+                ]),
+                Step("findings", "Record findings (your decision)", "The human finding for each allegation, with its basis.", [
+                    f("findings", "Findings", .longText, "Substantiated / not substantiated per allegation — with basis. Do not assert findings the evidence doesn't support.", required: true),
+                ]),
+                Step("limits", "Note limitations", "Record gaps, refusals and unresolved conflicts — honest closure.", opens: "review", [
+                    f("limitations", "Limitations", .longText, "What remains uncertain or was outside reach."),
+                ]),
+                Step("produce", "Produce the findings memo", "Assemble the findings memo with its sealed receipt.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this memo.", required: true),
+                ]),
+            ]),
+
+        "hr.corrective-actions": build(
+            "Turn findings and root causes into tracked corrective and preventive actions with owners and due dates.",
+            [
+                Step("link", "Link actions to causes", "Tie each planned action to the finding or root cause it addresses.", opens: "findings", [
+                    f("links", "Action ↔ cause", .longText, "Which finding/root cause each action responds to.", required: true),
+                ]),
+                Step("define", "Define the actions", "Specify each action, its type, owner and due date.", opens: "handoff", [
+                    f("actions", "Actions", .longText, "Each action: description, corrective vs preventive, owner, due date.", required: true),
+                ]),
+                Step("assign", "Agree owners & dates (your decision)", "Confirm each owner and due date is agreed.", [
+                    f("basis", "Confirmation", .longText, "Confirm owners and dates, or note what's still open.", required: true),
+                ]),
+                Step("produce", "Produce the CAPA register", "Assemble the corrective-actions register.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this register.", required: true),
+                ]),
+            ]),
+
+        "hr.action-review": build(
+            "Verify a completed action actually fixed the issue — never declare it effective without evidence.",
+            [
+                Step("select", "Select the action", "Pick the completed action you're reviewing.", opens: "handoff", [
+                    f("action", "Action under review", .text, "Which corrective/preventive action.", required: true),
+                ]),
+                Step("evidence", "Gather post-action evidence", "Collect evidence of whether the issue recurred (attach it).", opens: "findings", [
+                    f("evidence", "Post-action evidence", .longText, "What has (or hasn't) happened since the action."),
+                ]),
+                Step("judge", "Judge effectiveness (your decision)", "Decide, on the evidence, whether the action worked.", [
+                    f("verdict", "Verdict", .choice, "Your evidence-based verdict.", required: true, options: ["Effective", "Partially effective", "Not effective"]),
+                    f("basis", "Basis", .longText, "The evidence behind the verdict.", required: true),
+                ]),
+                Step("produce", "Produce the review", "Assemble the effectiveness review.", opens: "handoff", posts: "RPT", [
+                    f("title", "Title", .text, "Name this review.", required: true),
+                ]),
+            ]),
+
+        "hr.closure": build(
+            "Close the case by an explicit human decision — unresolved items retained, and reopening preserves the prior closure.",
+            [
+                Step("recap", "Confirm findings & actions", "Check findings are approved and actions tracked to closure.", opens: "handoff", [
+                    f("recap", "Closure recap", .longText, "State of findings, actions, and any items left open."),
+                ]),
+                Step("retention", "Retention & confidentiality", "Record where the file is kept and who may access it.", opens: "handoff", [
+                    f("retention", "Retention & access", .longText, "Storage, retention period, and access restrictions."),
+                ]),
+                Step("decide", "Closure decision (your decision)", "A human closes or keeps the case open. The app never closes on its own.", [
+                    f("decision", "Decision", .choice, "Close only when it's genuinely complete.", required: true, options: ["Close the case", "Keep open"]),
+                    f("reason", "Reason", .longText, "Why — reopening later preserves this closure.", required: true),
+                ]),
+                Step("produce", "Produce the closure record", "Post the closure record and sealed receipt.", opens: "handoff", posts: "EXP", [
+                    f("title", "Title", .text, "Name this closure record.", required: true),
+                ]),
+            ]),
+    ]
 }
