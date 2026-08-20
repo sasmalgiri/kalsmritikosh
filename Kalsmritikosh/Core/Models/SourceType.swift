@@ -198,22 +198,24 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
 // MARK: - Attachable formats (user-initiated attach → ingest → answer)
 
 public extension SourceType {
-    /// The file extensions a user may ATTACH for on-demand ingest — the formats
-    /// the app confidently reads end to end. The binary-legacy / deferred stubs
-    /// (.doc/.xls/.ppt/.pst/.msg/.nsf/.rar/.7z) are deliberately excluded so we
-    /// never invite a file we can't actually read. Chat/browser DB formats are
-    /// omitted too (they're path-pattern sources, not hand-picked documents).
+    /// The file extensions a user may ATTACH for on-demand ingest — every format
+    /// the app extracts content from. Legacy-binary Office (.doc/.xls/.ppt) and
+    /// Outlook mail (.msg/.pst) are INCLUDED (owner decision 2026-08-20): their
+    /// loaders do extract real content, though the legacy-binary ones can be
+    /// partial. Still excluded are the true no-read stubs — .nsf, .rar, .7z and
+    /// Keynote (decoder pending) — and the path-pattern chat/browser DBs, which
+    /// aren't hand-picked documents.
     nonisolated static let attachableExtensions: [String] = [
-        // Documents
-        "pdf", "docx", "txt", "md", "markdown", "rtf", "odt", "epub",
+        // Documents (incl. legacy .doc — partial OLE2 extraction)
+        "pdf", "docx", "doc", "txt", "md", "markdown", "rtf", "odt", "epub",
         "html", "htm", "xhtml", "json", "jsonl", "ndjson", "xml", "plist", "log",
         "sqlite", "sqlite3", "db",
-        // Spreadsheets
-        "xlsx", "csv", "ods",
-        // Presentations (Keynote omitted — its loader is a metadata-only stub)
-        "pptx",
-        // Email
-        "mbox", "eml", "emlx",
+        // Spreadsheets (incl. legacy .xls — partial OLE2 extraction)
+        "xlsx", "xls", "csv", "ods",
+        // Presentations (incl. legacy .ppt — partial; Keynote omitted, stub)
+        "pptx", "ppt",
+        // Email (incl. Outlook .msg / .pst)
+        "mbox", "eml", "emlx", "msg", "pst",
         // Images
         "png", "jpg", "jpeg", "heic", "tiff", "tif", "webp",
         // Audio
@@ -232,5 +234,5 @@ public extension SourceType {
 
     /// One-line, human-readable summary of the supported formats for tooltips.
     nonisolated static let attachableSummary =
-        "PDF, Word (.docx), Excel (.xlsx), CSV, PowerPoint (.pptx), Keynote, RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml), images, audio and video."
+        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video."
 }
