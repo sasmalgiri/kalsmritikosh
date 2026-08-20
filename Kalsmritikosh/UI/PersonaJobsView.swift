@@ -216,7 +216,15 @@ public struct PersonaJobsView: View {
                                 job: job, doc: doc,
                                 canRun: !model.busy && model.activeCaseID != nil,
                                 onRun: { Task { await model.run(job, actor: "me", at: Date()) } },
-                                onClose: { runnerJob = nil })
+                                onClose: { runnerJob = nil },
+                                onStartWorkflow: {
+                                    // Hand off to the Work Center as a full guided
+                                    // workflow; RootView navigates there and it starts.
+                                    runnerJob = nil
+                                    if let def = WCCatalog.jobWorkflow(forJob: job) {
+                                        appState.pendingWorkCenterDefID = def.defID
+                                    }
+                                })
                         }
                     }
             } else if appState.personaJobs != nil {
@@ -543,6 +551,16 @@ public struct PersonaJobsView: View {
                             } label: { Label("Run", systemImage: "arrow.right.circle") }
                             .buttonStyle(.bordered)
                             .disabled(model.busy || model.activeCaseID == nil)
+                            // GUIDED WORKFLOW — every job (documented or not) can run
+                            // as a full-rigor Work Center flow: gated steps, typed
+                            // fields, a numbered document per confirmed step.
+                            Button {
+                                if let def = WCCatalog.jobWorkflow(forJob: job) {
+                                    appState.pendingWorkCenterDefID = def.defID
+                                }
+                            } label: { Label("Workflow", systemImage: "list.bullet.clipboard") }
+                            .buttonStyle(.borderless)
+                            .help("Run this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
                             // JOB-RUN — the guided step-by-step walkthrough of this
                             // job's documented workflow (Previous/Next/Save/progress).
                             if let doc = JobDocumentationCatalog.doc(

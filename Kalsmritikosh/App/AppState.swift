@@ -625,6 +625,11 @@ public final class AppState {
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.
     public var pendingAskQuestion: String?
+    /// Set by a persona job's guided runner to hand off into the Work Center:
+    /// the generated workflow's defID (e.g. "job.inv-01"). RootView navigates to
+    /// the Work Center when this is set; WorkCenterView starts/opens that run and
+    /// clears it. Lets a lazy user turn any job into its step-by-step workflow.
+    public var pendingWorkCenterDefID: String?
 
     // MARK: - Self-check (auto, zero-touch)
     /// Result of the fast self-check (deterministic logic + all Convert

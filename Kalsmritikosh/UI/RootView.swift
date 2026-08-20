@@ -486,6 +486,11 @@ public struct RootView: View {
                 navigate(to: dest)
             }
         }
+        // A persona job asked to run as a guided workflow — jump to the Work
+        // Center, which starts that run and clears the channel.
+        .onChange(of: appState.pendingWorkCenterDefID) { _, newValue in
+            if newValue != nil { navigate(to: .workCenter) }
+        }
         .task {
             // ENGINE POWER — refresh the semantic-index backlog caption.
             while !Task.isCancelled {

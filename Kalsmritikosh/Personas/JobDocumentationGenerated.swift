@@ -10,7 +10,7 @@
 import Foundation
 
 enum JobDocumentationGenerated {
-    static let all: [JobDocumentation] = [
+    nonisolated static let all: [JobDocumentation] = [
         JobDocumentation(
             jobID: "INV-01",
             persona: "Investigator",

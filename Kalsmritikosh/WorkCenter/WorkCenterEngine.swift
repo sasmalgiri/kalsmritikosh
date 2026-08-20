@@ -180,8 +180,23 @@ public nonisolated enum WCCatalog {
         [evidenceIntake, production, storyBuild, systematicReview, lifeRecords]
     }
 
+    /// EVERY documented persona job as a full-rigor guided workflow, generated
+    /// deterministically from its JobDocumentation row (no per-job authoring).
+    /// Kept OUT of `all` so the Work Center home still shows the five curated
+    /// recipes; these are launched from the job itself and resolved on demand.
+    /// One guided workflow for EVERY launchable persona job (all 10 personas).
+    public static let jobWorkflows: [WCWorkflowDefinition] =
+        PersonaJobCatalogComposer.allJobs.map(WCJobWorkflowFactory.make)
+
+    /// Resolve a definition by id — a curated recipe OR a generated job workflow.
     public static func definition(_ defID: String) -> WCWorkflowDefinition? {
-        all.first { $0.defID == defID }
+        all.first { $0.defID == defID } ?? jobWorkflows.first { $0.defID == defID }
+    }
+
+    /// The generated guided workflow for a launchable persona job.
+    public static func jobWorkflow(forJob job: PersonaJob) -> WCWorkflowDefinition? {
+        let id = WCJobWorkflowFactory.defID(forJobKey: job.id)
+        return jobWorkflows.first { $0.defID == id }
     }
 
     // Builders (same helpers as the source system).
@@ -453,4 +468,278 @@ public nonisolated enum WCCatalog {
                 f("packName", "Pack name", .text, "What to call this pack.", required: true),
                ]),
         ])
+}
+
+// MARK: - Generated per-job workflows
+
+/// Turns each self-describing `JobDocumentation` row (the SAP-style coverage
+/// matrix) into a FULL-RIGOR guided workflow so every documented job gains a
+/// step-by-step Work Center flow with no per-job hand authoring:
+///  • the job's ordered `workflow` becomes "open the tool and do it" steps,
+///  • its `requiredInputs` become typed fields captured up front,
+///  • its `humanDecisions` become REQUIRED confirm-gates (the app never makes
+///    the call for the user), and
+///  • its `workProducts` are posted as a numbered document at the end, gated on
+///    those decisions being made.
+/// Deterministic and persona-neutral — identical input always yields the same
+/// definition, so it stays in lockstep with the coverage matrix.
+public nonisolated enum WCJobWorkflowFactory {
+
+    /// Stable definition id, keyed by the launchable PersonaJob id
+    /// (e.g. "job.inv.case-intake").
+    public static func defID(forJobKey jobID: String) -> String { "job.\(jobID)" }
+
+    /// One guided workflow per launchable job: RICH when the job has a
+    /// JobDocumentation row, otherwise SYNTHESIZED from its own title/detail/kind
+    /// — so every persona job gets a real step-by-step flow.
+    public static func make(_ job: PersonaJob) -> WCWorkflowDefinition {
+        if let doc = doc(for: job) { return makeRich(job: job, doc: doc) }
+        return makeFromDescriptor(job)
+    }
+
+    private static func makeRich(job: PersonaJob, doc: JobDocumentation) -> WCWorkflowDefinition {
+        var ops: [WCOperation] = []
+        let workSteps = steps(of: doc.workflow)
+
+        // 1) The "do the work" steps, each opening the real surface for it.
+        for (i, text) in workSteps.enumerated() {
+            let seq = i + 1
+            var fields: [WCField] = []
+            if i == 0 {
+                // Capture the job's required inputs up front (first one required).
+                for (j, input) in doc.requiredInputs.enumerated() {
+                    fields.append(WCField(
+                        key: "in\(j)", label: input, kind: inputKind(input),
+                        help: "Have this ready — the job needs it.", required: j == 0))
+                }
+            }
+            fields.append(WCField(
+                key: "notes\(seq)", label: "What you did", kind: .longText,
+                help: "Optional — note what you did in this step; it's saved on the run."))
+            ops.append(WCOperation(
+                seq: seq, key: "s\(seq)", title: title(text),
+                hint: stepHint(text, methods: doc.methods, first: i == 0),
+                postsDocType: nil, launchesSurface: surface(for: text, methods: doc.methods),
+                fields: fields, gates: afterPrevious(seq)))
+        }
+
+        // 2) The human decision(s) — the calls the app must never make.
+        let decisions = doc.humanDecisions.isEmpty ? ["I've reviewed this job's steps"] : doc.humanDecisions
+        let decideSeq = ops.count + 1
+        let neverNote = doc.prohibitedConclusions.isEmpty ? ""
+            : " This job never: \(doc.prohibitedConclusions.joined(separator: " · "))."
+        ops.append(WCOperation(
+            seq: decideSeq, key: "decide", title: "Your decision",
+            hint: "These calls are yours — the app won't make them for you.\(neverNote)",
+            postsDocType: nil, launchesSurface: nil,
+            fields: decisions.enumerated().map { j, d in
+                WCField(key: "decision\(j)", label: d, kind: .bool,
+                        help: "A human-in-the-loop decision — turn on once you've made this call.",
+                        required: true)
+            },
+            gates: afterPrevious(decideSeq)))
+
+        // 3) Produce the work product — posts a numbered document, gated on the
+        //    decisions above actually being made.
+        let produceSeq = decideSeq + 1
+        let code = docCode(for: doc.workProducts)
+        let productLabel = doc.workProducts.first ?? "Work product"
+        var produceGates = afterPrevious(produceSeq)
+        for (j, d) in decisions.enumerated() {
+            produceGates.append(WCGate(
+                rule: .fieldEquals(seq: decideSeq, key: "decision\(j)", value: "Yes"),
+                reason: "Make your decision first: \(d)."))
+        }
+        ops.append(WCOperation(
+            seq: produceSeq, key: "produce", title: "Produce: \(productLabel)",
+            hint: "Assemble the work product for the record. Posts a numbered \(WCDocType.displayName(code)) document.",
+            postsDocType: code, launchesSurface: "handoff",
+            fields: [
+                WCField(key: "productName", label: "\(productLabel) name", kind: .text,
+                        help: "Name this so it's findable in the Documents register.", required: true),
+                WCField(key: "summary", label: "Summary", kind: .longText,
+                        help: "What this work product concludes — written for the record, cited to your evidence."),
+            ],
+            gates: produceGates))
+
+        return WCWorkflowDefinition(
+            defID: defID(forJobKey: job.id), name: job.title,
+            persona: doc.persona, purpose: purpose(doc), operations: ops)
+    }
+
+    /// Synthesized workflow for a job with NO JobDocumentation row: do the work
+    /// (the job's own description) → your decision → produce a numbered document.
+    private static func makeFromDescriptor(_ job: PersonaJob) -> WCWorkflowDefinition {
+        var ops: [WCOperation] = []
+        ops.append(WCOperation(
+            seq: 1, key: "s1", title: job.title,
+            hint: "\(job.detail) Open the tool and do the work, then confirm this step.",
+            postsDocType: nil, launchesSurface: surface(forKind: job.kind),
+            fields: [WCField(key: "notes1", label: "What you did", kind: .longText,
+                             help: "Optional — note what you did; it's saved on the run.")],
+            gates: []))
+        let decideSeq = 2
+        let decisionLabel = decision(forKind: job.kind)
+        ops.append(WCOperation(
+            seq: decideSeq, key: "decide", title: "Your decision",
+            hint: "This call is yours — the app won't make it for you.",
+            postsDocType: nil, launchesSurface: nil,
+            fields: [WCField(key: "decision0", label: decisionLabel, kind: .bool,
+                             help: "A human-in-the-loop decision — turn on once you've made this call.",
+                             required: true)],
+            gates: afterPrevious(decideSeq)))
+        let produceSeq = 3
+        let code = docCode(forKind: job.kind)
+        ops.append(WCOperation(
+            seq: produceSeq, key: "produce", title: "Produce: \(job.title) record",
+            hint: "Assemble the work product for the record. Posts a numbered \(WCDocType.displayName(code)) document.",
+            postsDocType: code, launchesSurface: "handoff",
+            fields: [
+                WCField(key: "productName", label: "Record name", kind: .text,
+                        help: "Name this so it's findable in the Documents register.", required: true),
+                WCField(key: "summary", label: "Summary", kind: .longText,
+                        help: "What this concludes — written for the record, cited to your evidence."),
+            ],
+            gates: afterPrevious(produceSeq) + [
+                WCGate(rule: .fieldEquals(seq: decideSeq, key: "decision0", value: "Yes"),
+                       reason: "Make your decision first: \(decisionLabel).")
+            ]))
+        return WCWorkflowDefinition(
+            defID: defID(forJobKey: job.id), name: job.title,
+            persona: personaLabel(job.persona), purpose: job.detail, operations: ops)
+    }
+
+    /// Find the JobDocumentation row for a launchable job. The persona label is
+    /// embedded in the applicationID (…persona.investigator); titles match the
+    /// coverage-matrix name.
+    private static func doc(for job: PersonaJob) -> JobDocumentation? {
+        let appID = job.persona.lowercased()
+        return JobDocumentationCatalog.all.first { d in
+            appID.contains(personaKey(d.persona))
+                && d.name.caseInsensitiveCompare(job.title) == .orderedSame
+        }
+    }
+
+    private static func personaKey(_ label: String) -> String {
+        (label.split(separator: "/").first.map(String.init) ?? label)
+            .trimmingCharacters(in: .whitespaces).lowercased()
+            .replacingOccurrences(of: " ", with: "")
+    }
+
+    /// Best-effort readable persona label from the id's last component.
+    private static func personaLabel(_ applicationID: String) -> String {
+        let last = applicationID.split(separator: ".").last.map(String.init) ?? applicationID
+        return last.prefix(1).uppercased() + last.dropFirst()
+    }
+
+    /// Default surface per capability kind (a RootView Destination rawValue).
+    private static func surface(forKind kind: PersonaJobKind) -> String {
+        switch kind {
+        case .caseIntake:          return "sources"
+        case .ask:                 return "ask"
+        case .methods:             return "matrix"
+        case .dataLab:             return "dataLab"
+        case .subjectDossier:      return "dossier"
+        case .identityResolution:  return "knowledge"
+        case .analysis:            return "matrix"
+        case .sourceReliability:   return "review"
+        case .contradictionGap:    return "review"
+        case .causalAnalysis:      return "connections"
+        case .linkage:             return "connections"
+        case .capaRegister:        return "handoff"
+        case .effectivenessReview: return "review"
+        case .evidenceCustody:     return "audit"
+        case .findings:            return "handoff"
+        case .closure:             return "handoff"
+        }
+    }
+
+    private static func decision(forKind kind: PersonaJobKind) -> String {
+        switch kind {
+        case .findings:   return "Approve this work product for the record"
+        case .closure:    return "Confirm closure (a human decision)"
+        case .caseIntake: return "Confirm the scope"
+        default:          return "Confirm the result before producing"
+        }
+    }
+
+    private static func docCode(forKind kind: PersonaJobKind) -> String {
+        switch kind {
+        case .evidenceCustody: return "PRS"
+        case .closure:         return "EXP"
+        default:               return "RPT"
+        }
+    }
+
+    // MARK: helpers
+
+    /// Split the documented workflow ("a; b; c") into ordered steps; a single
+    /// phrase with no separators is one step.
+    static func steps(of workflow: String) -> [String] {
+        let parts = workflow.split(separator: ";")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? [workflow.trimmingCharacters(in: .whitespaces)] : parts
+    }
+
+    private static func title(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.uppercased() + text.dropFirst()
+    }
+
+    /// The default sequential gate: each step waits on the one before it.
+    private static func afterPrevious(_ seq: Int) -> [WCGate] {
+        seq <= 1 ? [] : [WCGate(rule: .operationConfirmed(seq: seq - 1),
+                                reason: "Finish step \(seq - 1) first.")]
+    }
+
+    private static func stepHint(_ text: String, methods: [String], first: Bool) -> String {
+        let m = methods.isEmpty ? "" : " Methods: \(methods.joined(separator: ", "))."
+        return first
+            ? "Capture what the job needs, then open the tool to do the work.\(m)"
+            : "Do this in the app, then confirm the step.\(m)"
+    }
+
+    private static func inputKind(_ input: String) -> WCField.Kind {
+        let l = input.lowercased()
+        if l.contains("date range") || l.contains("range") { return .dateRange }
+        if l.contains("date") { return .date }
+        return .text
+    }
+
+    private static func purpose(_ doc: JobDocumentation) -> String {
+        let produces = doc.workProducts.isEmpty ? "" : " Produces \(doc.workProducts.joined(separator: ", "))."
+        return "\(doc.workflow).\(produces)"
+    }
+
+    /// Map a step to the real surface where its work happens (a RootView
+    /// Destination rawValue). Best-effort by keyword; a wrong guess only opens a
+    /// different screen — it never blocks the step.
+    private static func surface(for text: String, methods: [String]) -> String {
+        let l = (text + " " + methods.joined(separator: " ")).lowercased()
+        func has(_ ks: [String]) -> Bool { ks.contains { l.contains($0) } }
+        if has(["custody", "preserve", "integrity", "chain", "audit"]) { return "audit" }
+        if has(["timeline", "chronolog", "tick", "period"]) { return "timeline" }
+        if has(["relationship", "graph", "network", "prosopograph", "linkage", "source map"]) { return "connections" }
+        if has(["transaction", "asset", "flow", "calcul"]) { return "dataLab" }
+        if has(["contradiction", "gap", "conflict", "reconcile", "reply", "response"]) { return "review" }
+        if has(["search", "lead", "screen", "catalogue"]) { return "search" }
+        if has(["5w1h", "worksheet", "matrix", "hypothes", "compare", "interpret", "synthes", "score"]) { return "matrix" }
+        if has(["verify", "fact", "claim", "criticism", "reliab", "extract", "quote"]) { return "findings" }
+        if has(["identity", "authority", "unify", "resolve", "entities", "metadata", "knowledge", "organize", "label"]) { return "knowledge" }
+        if has(["report", "produce", "publish", "package", "edition", "export", "closure", "close", "pack", "binder", "assemble", "deliver", "handoff", "decision"]) { return "handoff" }
+        return "sources"
+    }
+
+    /// Choose an existing document-type code for the job's work product.
+    private static func docCode(for products: [String]) -> String {
+        let l = products.joined(separator: " ").lowercased()
+        if l.contains("pack") || l.contains("binder") || l.contains("archive") { return "ARC" }
+        if l.contains("publication") || l.contains("package") { return "PUB" }
+        if l.contains("edition") { return "EDN" }
+        if l.contains("interview") || l.contains("statement") { return "INT" }
+        if l.contains("request") || l.contains("foia") { return "REQ" }
+        if l.contains("receipt") || l.contains("export") { return "EXP" }
+        return "RPT"
+    }
 }

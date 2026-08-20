@@ -124,6 +124,13 @@ public struct WorkCenterView: View {
 
     private func restoreAndReload() async {
         await reloadLists()
+        // Handoff from a persona job — start that job's generated guided workflow
+        // (takes precedence over resuming a prior run).
+        if let defID = appState.pendingWorkCenterDefID, let def = WCCatalog.definition(defID) {
+            appState.pendingWorkCenterDefID = nil
+            start(def)
+            return
+        }
         // Resume the run that was open when the user jumped out to a tool.
         if activeRun == nil, let id = UUID(uuidString: persistedRunID),
            let repo = appState.workCenter, let run = try? await repo.run(id),

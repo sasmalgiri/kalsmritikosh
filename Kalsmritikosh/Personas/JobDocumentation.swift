@@ -78,5 +78,5 @@ public enum JobDocumentationCatalog {
 
     // GENERATED from PERSONA_JOB_COVERAGE_MATRIX.csv by scripts/generate-job-docs.sh.
     // Do not hand-edit; edit the CSV and regenerate (JobDocumentationDriftTests enforces parity).
-    public static let all: [JobDocumentation] = JobDocumentationGenerated.all
+    public nonisolated static let all: [JobDocumentation] = JobDocumentationGenerated.all
 }

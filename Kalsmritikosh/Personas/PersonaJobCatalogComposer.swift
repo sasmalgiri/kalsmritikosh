@@ -37,6 +37,22 @@ public nonisolated enum PersonaJobCatalogComposer {
         return try builder.build()
     }
 
+    /// Every launchable job across ALL registered personas — the static, nonisolated
+    /// enumeration used to generate one guided workflow per job (WCCatalog.jobWorkflows).
+    /// Same order as composeProduction() so coverage is discoverable and stable.
+    public static var allJobs: [PersonaJob] {
+        InvestigatorPersonaPackage.jobs
+            + ResearcherPersonaPackage.jobs
+            + JournalistPersonaPackage.jobs
+            + IndividualPersonaPackage.jobs
+            + LawyerPersonaPackage.jobs
+            + SIUPersonaPackage.jobs
+            + ForensicAccountantPersonaPackage.jobs
+            + CompliancePersonaPackage.jobs
+            + GenealogistPersonaPackage.jobs
+            + ContentCreatorPersonaPackage.jobs
+    }
+
     /// The launchable jobs a persona declares, keyed by application id. This is the enumeration source the
     /// live consumer uses; it is defined ONCE here so discovery (the catalog) and enumeration (this table)
     /// never diverge.
