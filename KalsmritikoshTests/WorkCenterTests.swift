@@ -307,7 +307,7 @@ struct WorkCenterEngineTests {
     @Test("Register catalog integrity — unique 3-letter types, every field has help, keys resolve, choices have options")
     func registerCatalogIntegrity() {
         let regs = WCRegisterCatalog.all
-        #expect(regs.count == 3)
+        #expect(regs.count == 4)
         #expect(Set(regs.map(\.docType)).count == regs.count, "register doc-types must be unique")
         for reg in regs {
             #expect(reg.docType.count == 3, "\(reg.docType): SAP-style 3-letter type code")
@@ -701,6 +701,36 @@ struct WorkCenterRepositoryTests {
             editor: "Examiner", note: "", at: when.addingTimeInterval(7200))
         #expect(noop == 0)
         #expect(try await repo.editHistory(docID: rec.id).count == 3, "no-op adds no history")
+    }
+
+    @Test("Content calendar entry moves through stages, each stage change sealed to history")
+    func contentCalendarStagesTracked() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let cal = WCRegisterCatalog.contentCalendar
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        let rec = try await repo.createRecord(
+            type: cal.docType, title: "Permit explainer",
+            values: ["workingTitle": "Permit explainer", "format": "Video", "stage": "Idea"],
+            actor: "Creator", at: when)
+        #expect(rec.docType == "CAL")
+        #expect(rec.docNumber.hasPrefix("CAL-"))
+
+        // Advance the stage twice — each is one sealed field change.
+        _ = try await repo.updateRecord(
+            docID: rec.id, title: "Permit explainer",
+            values: ["workingTitle": "Permit explainer", "format": "Video", "stage": "Researching"],
+            editor: "Creator", note: "", at: when.addingTimeInterval(3600))
+        _ = try await repo.updateRecord(
+            docID: rec.id, title: "Permit explainer",
+            values: ["workingTitle": "Permit explainer", "format": "Video", "stage": "Scheduled",
+                     "publishDate": "2026-09-01"],
+            editor: "Creator", note: "Locked the publish date.", at: when.addingTimeInterval(7200))
+
+        let after = try #require(try await repo.run(rec.id))
+        #expect(after.fieldValues[1]?["stage"] == "Scheduled")
+        let stageEdits = try await repo.editHistory(docID: rec.id).filter { $0.fieldKey == "stage" }
+        #expect(stageEdits.count == 2, "two stage transitions recorded")
+        #expect(stageEdits.map(\.newValue) == ["Scheduled", "Researching"], "newest edit first")
     }
 
     @Test("records(type:) lists a register's records newest-first and never leaks another register's rows")

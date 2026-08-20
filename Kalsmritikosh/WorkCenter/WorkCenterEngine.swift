@@ -143,6 +143,7 @@ public nonisolated enum WCDocType {
         case "INT": return "Interview / Statement"
         case "REQ": return "Records Request"
         case "LOG": return "Research Log Entry"
+        case "CAL": return "Content Calendar Entry"
         default:    return code
         }
     }
@@ -161,6 +162,7 @@ public nonisolated enum WCDocType {
         case "INT": return "person.wave.2"
         case "REQ": return "envelope.badge.clock"
         case "LOG": return "magnifyingglass.circle"
+        case "CAL": return "calendar.badge.clock"
         default:    return "doc"
         }
     }
