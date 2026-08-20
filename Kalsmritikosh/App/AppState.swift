@@ -346,6 +346,36 @@ public final class AppState {
         }
     }
 
+    /// True while any background task the user could want to halt is in flight:
+    /// the bulk (re)ingest pass (running / paused / stopping), the embedding
+    /// drain that rides it, or the idle maintenance scan. Drives the always-
+    /// visible "Stop all" control and the mode-switch confirmation — the button
+    /// only appears while there is actually something to stop.
+    public var hasStoppableBackgroundWork: Bool {
+        ingestRunState == .running
+            || ingestRunState == .paused
+            || ingestRunState == .stopping
+            || idleMaintenanceScan != nil
+    }
+
+    /// STOP ALL — one action that halts every stoppable background task at its
+    /// next safe checkpoint: the bulk ingest pass, its background embedding
+    /// drain, and the idle maintenance scan. Nothing in flight is force-killed
+    /// (a document's atomic commit always finishes, so the ledger is never left
+    /// half-written); already-finished work stays and a later run resumes the
+    /// remainder via content-hash dedup. Idempotent — safe to call when idle.
+    public func stopAllBackgroundWork() {
+        // Only drive the ingest stop when a bulk pass owns the run state, so its
+        // `defer { ingestRunState = .idle }` resets us. Calling it while idle
+        // would strand the UI at "Stopping…" with nothing to reset it.
+        if ingestRunState == .running || ingestRunState == .paused {
+            stopIngest()
+        }
+        idleMaintenanceScan?.cancel()
+        idleMaintenanceScan = nil
+        scanContinuePromptPending = false
+    }
+
     // MARK: - Device-suitable model install (consent-gated)
 
     /// User declined the suggested lighter model — hide the prompt for this session.

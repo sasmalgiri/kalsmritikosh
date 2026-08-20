@@ -254,6 +254,12 @@ public struct RootView: View {
     /// — drives the caption under the Engine picker so Lightning's deferred
     /// indexing is never silent.
     @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
+    /// Engine-switch confirmation. When the user flips Full power ↔ Lightning
+    /// while background work is running, we hold the desired value here and
+    /// raise a Stop all / Keep running / Cancel dialog instead of flipping
+    /// silently — so the switch never strands in-flight work without a choice.
+    @State private var pendingEnginePower: Bool?
+    @State private var showEngineSwitchConfirm = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// "?" keyboard cheat-sheet visibility.
@@ -510,6 +516,24 @@ public struct RootView: View {
         }
     }
 
+    /// Engine picker binding. If background work is in flight, a change is held
+    /// as `pendingEnginePower` and the confirmation dialog decides what happens;
+    /// otherwise it flips immediately. The getter always returns the committed
+    /// `fullPower`, so the segmented control stays put until the user confirms.
+    private var enginePowerBinding: Binding<Bool> {
+        Binding(
+            get: { fullPower },
+            set: { newValue in
+                guard newValue != fullPower else { return }
+                if appState.hasStoppableBackgroundWork {
+                    pendingEnginePower = newValue
+                    showEngineSwitchConfirm = true
+                } else {
+                    fullPower = newValue
+                }
+            })
+    }
+
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
@@ -534,7 +558,7 @@ public struct RootView: View {
                 // Lightning answers from structure + full-text alone: fastest,
                 // lowest energy, still evidence-cited. Lossless flip: vectors
                 // resume backfilling the moment Full power returns.
-                Picker("Engine", selection: $fullPower) {
+                Picker("Engine", selection: enginePowerBinding) {
                     Label("Full power", systemImage: "brain").tag(true)
                     Label("Lightning", systemImage: "bolt.fill").tag(false)
                 }
@@ -543,6 +567,24 @@ public struct RootView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
                 .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
+                .confirmationDialog(
+                    "Background work is running",
+                    isPresented: $showEngineSwitchConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Stop all and switch", role: .destructive) {
+                        appState.stopAllBackgroundWork()
+                        if let p = pendingEnginePower { fullPower = p }
+                        pendingEnginePower = nil
+                    }
+                    Button("Keep running and switch") {
+                        if let p = pendingEnginePower { fullPower = p }
+                        pendingEnginePower = nil
+                    }
+                    Button("Cancel", role: .cancel) { pendingEnginePower = nil }
+                } message: {
+                    Text("Ingesting, relationship extraction and semantic indexing are still in progress. Switching the engine loses nothing — the work pauses and resumes automatically. Choose Stop all to halt it now instead.")
+                }
                 // ENGINE POWER visibility — the one honest caveat of the flip:
                 // content ingested during Lightning has no semantic index yet.
                 // Surface the backlog so catch-up is never silent.
@@ -560,6 +602,26 @@ public struct RootView: View {
                     .help(fullPower
                           ? "New content becomes semantically searchable as the background index catches up. Exact and structured search already covers everything."
                           : "Lightning skips semantic indexing. Everything stays searchable by structure and full text; the semantic index resumes when you switch to Full power.")
+                }
+                // STOP ALL — always reachable while any background task is in flight
+                // (bulk ingest, relationship extraction, semantic indexing, the idle
+                // maintenance scan). Halts them at the next safe checkpoint; finished
+                // work is kept and a later run resumes the rest. Hidden when idle so
+                // the sidebar stays calm.
+                if appState.hasStoppableBackgroundWork {
+                    Button(role: .destructive) {
+                        appState.stopAllBackgroundWork()
+                    } label: {
+                        Label("Stop all background work", systemImage: "stop.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .help("Halt ingesting, relationship extraction and semantic indexing now. Finished work is kept; a later run resumes the rest.")
                 }
                 onboardingTip
                 personaSection
