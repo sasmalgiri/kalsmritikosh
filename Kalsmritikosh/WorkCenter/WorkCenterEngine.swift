@@ -1438,8 +1438,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("accounts", "Identify accounts & parties", "The accounts and entities in the flow.", opens: "connections", [
                     f("accounts", "Accounts & parties", .longText, "One per line.", required: true),
                 ]),
-                Step("trace", "Trace the transactions", "Source→destination movements, dated and cited.", opens: "dataLab", [
-                    f("transactions", "Transactions", .longText, "Each movement traced to its source document."),
+                Step("trace", "Trace the transactions", "One row per movement, as in a funds-flow spreadsheet.", opens: "dataLab", [
+                    f("transactions", "Transaction columns", .longText, "Date · From (account / party) · To (account / party) · Amount · Currency · Instrument (wire / cheque / cash / transfer) · Source document (cited) · Running balance · Characterization.", required: true),
                 ]),
                 Step("map", "Map the flow & links", "How money moved between parties.", opens: "connections", [
                     f("flow", "Flow", .longText, "The path of the funds."),
@@ -1513,8 +1513,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("collect", "Collect the records", "The records in question.", opens: "findings", [
                     f("items", "Records", .longText, "What you're comparing.", required: true),
                 ]),
-                Step("compare", "Compare", "Where the records disagree.", opens: "matrix", [
-                    f("comparison", "Discrepancies", .longText, "Each disagreement, cited."),
+                Step("compare", "Compare", "One row per discrepancy.", opens: "matrix", [
+                    f("comparison", "Discrepancy columns", .longText, "Item · What record A says (cited) · What record B says (cited) · Difference / amount · Possible explanation · Follow-up needed.", required: true),
                 ]),
                 Step("missing", "Note missing records", "What should exist but doesn't.", opens: "review", [
                     f("missing", "Missing", .longText, "Absence noted, not concluded from."),
@@ -1603,8 +1603,8 @@ public nonisolated enum WCAuthoredWorkflows {
                     f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/device transfer"]),
                     f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
                 ]),
-                Step("index", "Index the workpapers", "Cross-reference workpapers to the report.", opens: "audit", [
-                    f("index", "Index", .longText, "Workpaper references."),
+                Step("index", "Index the workpapers", "One row per workpaper, cross-referenced to the report.", opens: "audit", [
+                    f("index", "Workpaper index columns", .longText, "WP ref · Title · Purpose · Preparer · Reviewer · Report section supported · Source documents (cited).", required: true),
                 ]),
                 Step("seal", "Seal the workpaper set", "Post the sealed manifest.", opens: "handoff", posts: "PRS", [
                     f("title", "Title", .text, "Name this set.", required: true),
@@ -1620,8 +1620,8 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("methodology", "Summarize methodology", "The methods you applied and why.", opens: "matrix", [
                     f("methodology", "Methodology", .longText, "Approach and standards."),
                 ]),
-                Step("exhibits", "Marshal the exhibits", "The schedules and documents the opinion rests on (attach).", opens: "findings", [
-                    f("exhibits", "Exhibits", .longText, "Each exhibit and what it shows."),
+                Step("exhibits", "Marshal the exhibits", "One row per exhibit the opinion rests on (attach).", opens: "findings", [
+                    f("exhibits", "Exhibit schedule columns", .longText, "Exhibit no. · Title · What it shows · Source (cited) · Which opinion it supports.", required: true),
                 ]),
                 Step("opinions", "State opinions (your decision)", "Your opinions, each tied to exhibits.", [
                     f("opinions", "Opinions", .longText, "Within your expertise only — each supported.", required: true),
