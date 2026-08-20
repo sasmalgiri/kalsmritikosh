@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Documents
@@ -192,4 +193,44 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case document, spreadsheet, presentation, email, image, audio, video,
              archive, chat, browserHistory, unknown
     }
+}
+
+// MARK: - Attachable formats (user-initiated attach → ingest → answer)
+
+public extension SourceType {
+    /// The file extensions a user may ATTACH for on-demand ingest — the formats
+    /// the app confidently reads end to end. The binary-legacy / deferred stubs
+    /// (.doc/.xls/.ppt/.pst/.msg/.nsf/.rar/.7z) are deliberately excluded so we
+    /// never invite a file we can't actually read. Chat/browser DB formats are
+    /// omitted too (they're path-pattern sources, not hand-picked documents).
+    nonisolated static let attachableExtensions: [String] = [
+        // Documents
+        "pdf", "docx", "txt", "md", "markdown", "rtf", "odt", "epub",
+        "html", "htm", "xhtml", "json", "jsonl", "ndjson", "xml", "plist", "log",
+        "sqlite", "sqlite3", "db",
+        // Spreadsheets
+        "xlsx", "csv", "ods",
+        // Presentations
+        "pptx", "key",
+        // Email
+        "mbox", "eml", "emlx",
+        // Images
+        "png", "jpg", "jpeg", "heic", "tiff", "tif", "webp",
+        // Audio
+        "mp3", "wav", "m4a", "aac", "aiff", "aif", "aifc", "caf", "flac", "3gp", "3gpp",
+        // Video
+        "mp4", "mov",
+        // Archives
+        "zip",
+    ]
+
+    /// The attachable set as `UTType`s for SwiftUI `.fileImporter` /
+    /// `NSOpenPanel.allowedContentTypes` (unknown extensions are dropped).
+    nonisolated static var attachableContentTypes: [UTType] {
+        attachableExtensions.compactMap { UTType(filenameExtension: $0) }
+    }
+
+    /// One-line, human-readable summary of the supported formats for tooltips.
+    nonisolated static let attachableSummary =
+        "PDF, Word (.docx), Excel (.xlsx), CSV, PowerPoint (.pptx), Keynote, RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml), images, audio and video."
 }

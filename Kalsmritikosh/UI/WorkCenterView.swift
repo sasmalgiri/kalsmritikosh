@@ -21,6 +21,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 #if os(macOS)
 import AppKit
 #endif
@@ -51,6 +52,10 @@ public struct WorkCenterView: View {
     // Attach-evidence + derivation-notice state.
     @State private var showFileImporter = false
     @State private var derivedKeys: Set<String> = []
+    /// Per-attachment ingest status (keyed by WCStepRef.id) so the user sees the
+    /// app actually READING each attached file, not just recording its path.
+    @State private var refIngesting: Set<String> = []
+    @State private var refFailed: Set<String> = []
 
     // Auto-save defaults ON; auto-complete defaults OFF (owner decision
     // 2026-08-18, matching how the owner runs the source system) — steps are
@@ -105,7 +110,7 @@ public struct WorkCenterView: View {
             Text("Reuse this run's field entries next time by starting from this variant.")
         }
         .fileImporter(isPresented: $showFileImporter,
-                      allowedContentTypes: [.item],
+                      allowedContentTypes: SourceType.attachableContentTypes,
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { attachFiles(urls) }
         }
@@ -959,12 +964,13 @@ public struct WorkCenterView: View {
                         showFileImporter = true
                     } label: { Label("Attach files", systemImage: "paperclip") }
                     .controlSize(.small)
-                    .help("Attach the files this step rests on — they ride with the record and are searchable")
+                    .help("Attach the files this step rests on — the app reads them into your archive so they're searchable and citable. Supported: \(SourceType.attachableSummary)")
                 }
             }
             if stepRefs().isEmpty {
-                Text("Nothing attached — optional, but attached files make the record self-explanatory later.")
+                Text("Attach a supported file and the app reads it — so this step can cite and answer over it. Supported: \(SourceType.attachableSummary)")
                     .font(.caption).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(stepRefs()) { ref in
                 HStack(spacing: 6) {
@@ -972,6 +978,19 @@ public struct WorkCenterView: View {
                     Text(ref.title).font(.caption)
                     if !ref.detail.isEmpty {
                         Text(ref.detail).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                    // The app is READING the file — surface it, don't leave it silent.
+                    if refIngesting.contains(ref.id) {
+                        ProgressView().controlSize(.mini)
+                        Text("reading…").font(.caption2).foregroundStyle(.secondary)
+                    } else if refFailed.contains(ref.id) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange).imageScale(.small)
+                        Text("couldn't read").font(.caption2).foregroundStyle(.orange)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green).imageScale(.small)
+                            .help("Read into your archive — searchable and citable.")
                     }
                     Spacer()
                     if !disabled {
@@ -994,6 +1013,25 @@ public struct WorkCenterView: View {
                       detail: $0.deletingLastPathComponent().path)
         }
         setRefs(stepRefs() + new, run: run, op: op)
+        // READ each attached file into the private archive (fast intent: custody +
+        // searchable text now, structure as a background upgrade) so this step's
+        // evidence is actually answerable — the same path Ask uses. The importer
+        // hands back security-scoped URLs, so access must be started to read them.
+        for (url, ref) in zip(urls, new) {
+            refIngesting.insert(ref.id)
+            Task {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    guard let ingest = appState.ingest else { throw CocoaError(.featureUnsupported) }
+                    _ = try await ingest.ingest(fileAt: url, intent: .initialFast)
+                    await MainActor.run { _ = refIngesting.remove(ref.id) }
+                } catch {
+                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    await MainActor.run { refIngesting.remove(ref.id); refFailed.insert(ref.id) }
+                }
+            }
+        }
     }
 
     private func setRefs(_ refs: [WCStepRef], run: WCDocument, op: WCOperation) {
