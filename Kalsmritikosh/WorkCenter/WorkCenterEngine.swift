@@ -807,25 +807,57 @@ public nonisolated enum WCAuthoredWorkflows {
     private static let catalog: [String: Authored] = [
 
         "hr.complaint-intake": build(
-            "Open a workplace/compliance case: record the complaint, fix the scope and authority, set the evidence in scope, then open the case file. An intake never decides the merits.",
+            "Open a workplace/compliance case the way an investigator actually does it — receive and log the complaint, triage immediate risk, clear conflicts, fix authority and scope, issue the preservation hold, plan the investigation, get sign-off, then open the case file. Intake never decides the merits.",
             [
-                Step("complaint", "Record the complaint", "Capture the complaint as received — in the complainant's own words.", opens: "sources", [
-                    f("ref", "Complaint reference", .text, "Your own case/complaint number.", required: true, placeholder: "HR-2026-0001"),
-                    f("receivedOn", "Received on", .date, "When the complaint came in — anchors the timeline."),
-                    f("from", "Received from / how", .text, "Complainant and channel (hotline, email, manager)."),
-                    f("summary", "What is alleged", .longText, "The allegation(s) in the complainant's words — not your assessment.", required: true),
+                Step("receive", "Receive & log the complaint", "Log it exactly as received — verbatim, before any assessment.", opens: "sources", [
+                    f("ref", "Complaint reference", .text, "Your case/complaint number.", required: true, placeholder: "HR-2026-0001"),
+                    f("receivedOn", "Date received", .date, "When it came in — anchors every deadline."),
+                    f("complainant", "Complainant", .text, "Who raised it (or 'anonymous')."),
+                    f("channel", "Channel", .choice, "How it arrived.", options: ["Hotline", "Email", "Manager referral", "HR walk-in", "Regulator", "Other"]),
+                    f("verbatim", "Allegation (verbatim)", .longText, "The complaint in the complainant's own words — not your summary.", required: true),
                 ]),
-                Step("scope", "Define scope & authority", "Fix what this investigation covers and under whose authority.", opens: "sources", [
-                    f("authority", "Authority", .choice, "The mandate this investigation runs under.", required: true, options: ["Company policy", "Regulatory requirement", "Management directive", "Legal instruction", "Other"]),
-                    f("scope", "Scope statement", .longText, "What is in and out of scope — the boundary to stay within.", required: true),
-                    f("window", "Time window", .dateRange, "The period the investigation covers."),
+                Step("triage", "Triage risk & interim measures", "Before anything else, decide if urgent safeguards are needed.", opens: "review", [
+                    f("risk", "Risk level", .choice, "How urgent/serious on its face.", required: true, options: ["Low", "Medium", "High", "Critical — immediate action"]),
+                    f("interim", "Interim measures", .longText, "e.g. separation of parties, suspension (neutral), access revocation, safety steps — and the basis."),
+                    f("mandatory", "Mandatory report needed?", .choice, "Does law/policy require external reporting (regulator, police, safeguarding)?", options: ["No", "Yes — noted below", "Unsure — escalate"]),
                 ]),
-                Step("inscope", "Set the evidence in scope", "Point the case at the authorized documents (mailboxes, drives, records).", opens: "sources", [
-                    f("sources", "Sources in scope", .longText, "Which document sets are authorized — the hard evidence boundary."),
+                Step("conflicts", "Clear conflicts & independence", "Confirm the investigator is impartial and qualified.", opens: "handoff", [
+                    f("investigator", "Assigned investigator", .text, "Who will run the investigation.", required: true),
+                    f("conflicts", "Conflicts of interest", .choice, "Any relationship to the parties?", required: true, options: ["None", "Managed — noted", "Yes — reassign"]),
+                    f("conflictNote", "Note", .longText, "How any conflict is managed."),
                 ]),
-                Step("confirm", "Confirm scope (your decision)", "A human confirms scope and authority before any work. The app never decides the merits.", [
-                    f("decision", "Scope confirmed?", .choice, "Confirm only when scope and authority are correct.", required: true, options: ["Confirmed", "Needs revision"]),
-                    f("basis", "Note", .longText, "Anything to record about the scope decision."),
+                Step("authority", "Determine authority & policy", "The mandate and the rules this runs under.", opens: "sources", [
+                    f("authority", "Authority", .choice, "Under whose mandate.", required: true, options: ["Company policy", "Regulatory requirement", "Management directive", "Legal/counsel instruction", "Other"]),
+                    f("policies", "Applicable policies / law", .longText, "The specific policies, code sections, or laws in play."),
+                    f("privilege", "Legal privilege?", .choice, "Is this conducted at counsel's direction (privileged)?", options: ["No", "Yes — at counsel's direction"]),
+                ]),
+                Step("allegations", "Break down the allegations", "Split the complaint into distinct, testable allegations.", opens: "findings", [
+                    f("allegations", "Allegations", .longText, "One discrete allegation per line — each specific enough to prove or disprove.", required: true),
+                ]),
+                Step("scope", "Define scope & window", "The boundary the investigation must stay within.", opens: "sources", [
+                    f("scope", "Scope statement", .longText, "What is in and out of scope.", required: true),
+                    f("window", "Time window", .dateRange, "The period under investigation."),
+                ]),
+                Step("hold", "Issue the preservation / legal hold", "Stop relevant evidence being deleted — before collection.", opens: "audit", [
+                    f("holdScope", "Hold scope", .longText, "Mailboxes, drives, chat, devices, CCTV, physical files to preserve.", required: true),
+                    f("holdIssued", "Hold issued", .bool, "Turn on once custodians/IT are notified in writing."),
+                    f("holdDate", "Hold date", .date, "When the hold was issued."),
+                ]),
+                Step("custodians", "Identify sources & custodians", "Who holds the evidence, and which sets are authorized.", opens: "sources", [
+                    f("custodians", "Custodians", .longText, "People/systems holding relevant material.", required: true),
+                    f("sources", "Sources in scope", .longText, "The authorized document sets — the hard evidence boundary."),
+                ]),
+                Step("confidentiality", "Confidentiality & data-protection plan", "Who may know, and how personal data is handled.", opens: "handoff", [
+                    f("needToKnow", "Need-to-know list", .longText, "Who is informed, and why."),
+                    f("dataProtection", "Data-protection note", .longText, "Lawful basis, minimisation, retention, special-category data handling."),
+                    f("antiRetaliation", "Anti-retaliation reminder", .bool, "Complainant/witnesses reminded that retaliation is prohibited."),
+                ]),
+                Step("plan", "Draft the investigation plan", "The route: who to interview, what to collect, in what order.", opens: "handoff", [
+                    f("plan", "Investigation plan", .longText, "Interview order (usually complainant → witnesses → respondent), documents to collect, methods, and target dates.", required: true),
+                ]),
+                Step("signoff", "Confirm scope & plan (your decision)", "A human signs off before any evidence is worked. The app never decides the merits.", [
+                    f("decision", "Approve to proceed?", .choice, "Confirm only when scope, authority, hold and plan are right.", required: true, options: ["Approved", "Needs revision"]),
+                    f("approver", "Approved by", .text, "Who signed off."),
                 ]),
                 Step("open", "Open the case file", "Open the numbered case the rest of the jobs run against.", opens: "handoff", posts: "IMP", [
                     f("caseName", "Case name", .text, "A findable name for this case.", required: true),
