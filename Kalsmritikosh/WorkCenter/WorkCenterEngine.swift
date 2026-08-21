@@ -3241,15 +3241,29 @@ public nonisolated enum WCAuthoredWorkflows {
         "fields" : [
           {
             "help" : "Only what the evidence supports.",
-            "key" : "profile",
+            "key" : "vitals",
             "kind" : "longText",
-            "label" : "Profile"
+            "label" : "Vital facts"
           }
         ],
-        "hint" : "Life events, relationships, places — each cited.",
-        "key" : "compile",
+        "hint" : "Birth, marriage, death, residence — each cited.",
+        "key" : "vitals",
         "opens" : "dossier",
-        "title" : "Compile the profile"
+        "title" : "Record the vital facts"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Each link and its source.",
+            "key" : "relationships",
+            "kind" : "longText",
+            "label" : "Relationships"
+          }
+        ],
+        "hint" : "Parents, spouse(s), children — on evidence.",
+        "key" : "relationships",
+        "opens" : "connections",
+        "title" : "Relationships"
       },
       {
         "fields" : [
@@ -3284,7 +3298,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.ask" : {
-    "purpose" : "Ask a question over your family records and keep the cited answer.",
+    "purpose" : "Ask a question over your family records — every answer cites its document, so you stop re-reading old files.",
     "steps" : [
       {
         "fields" : [
@@ -3296,10 +3310,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites its document.",
+        "hint" : "Plain language; the answer cites its source.",
         "key" : "ask",
         "opens" : "ask",
-        "title" : "Ask the records"
+        "title" : "Ask the family records"
       },
       {
         "fields" : [
@@ -3310,7 +3324,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the question file cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -3338,6 +3352,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Storage and how it's shared.",
+            "key" : "retention",
+            "kind" : "longText",
+            "label" : "Retention"
+          }
+        ],
+        "hint" : "Where the conclusion and sources live.",
+        "key" : "retention",
+        "opens" : "handoff",
+        "title" : "Retention & sharing"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Close only when the proof holds.",
             "key" : "decision",
             "kind" : "choice",
@@ -3356,7 +3384,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "You close or keep the question open.",
+        "hint" : "You close or keep it open.",
         "key" : "decide",
         "title" : "Closure decision (your decision)"
       },
@@ -3507,7 +3535,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.family-lines" : {
-    "purpose" : "Build family relationships and life timelines, correlate the evidence, every event cited.",
+    "purpose" : "Build family relationships and life timelines, correlate the evidence, every event cited — the app assembles dated events for you.",
     "steps" : [
       {
         "fields" : [
@@ -3565,6 +3593,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "correlate",
         "opens" : "matrix",
         "title" : "Correlate the evidence"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The family lines the evidence supports.",
+            "key" : "tree",
+            "kind" : "longText",
+            "label" : "Lines"
+          }
+        ],
+        "hint" : "Assemble the tree/lines from confirmed links.",
+        "key" : "build",
+        "opens" : "connections",
+        "title" : "Build the lines"
       },
       {
         "fields" : [
@@ -3635,7 +3677,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.migration" : {
-    "purpose" : "Trace why an ancestor moved or changed names — Five Whys / Fishbone over cited records, then a human determination.",
+    "purpose" : "Trace why an ancestor moved or changed names — over cited records, then a human determination (never certain beyond the evidence).",
     "steps" : [
       {
         "fields" : [
@@ -3655,30 +3697,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each link supported (economic, legal, family).",
-            "key" : "whys",
+            "help" : "Possible reasons to test.",
+            "key" : "candidates",
             "kind" : "longText",
-            "label" : "Why chain"
+            "label" : "Candidate drivers"
           }
         ],
-        "hint" : "Cause to cause; stop where the records stop.",
-        "key" : "whys",
-        "opens" : "connections",
-        "title" : "Trace the causes"
+        "hint" : "Economic, legal, family, conflict, opportunity.",
+        "key" : "candidates",
+        "opens" : "matrix",
+        "title" : "Consider the drivers"
       },
       {
         "fields" : [
           {
-            "help" : "What supports or rules out each.",
-            "key" : "weighing",
+            "help" : "What the records show at each step.",
+            "key" : "trace",
             "kind" : "longText",
-            "label" : "For / against"
+            "label" : "Trace"
           }
         ],
-        "hint" : "Evidence for and against each explanation.",
-        "key" : "weigh",
-        "opens" : "review",
-        "title" : "Weigh the candidates"
+        "hint" : "Follow the ancestor through the records.",
+        "key" : "trace",
+        "opens" : "connections",
+        "title" : "Trace over records"
       },
       {
         "fields" : [
@@ -3690,7 +3732,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Your reasoned explanation — never presented as certain beyond the evidence.",
+        "hint" : "Your reasoned explanation.",
         "key" : "determine",
         "title" : "Determination (your decision)"
       },
@@ -3774,6 +3816,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Any citation that doesn't resolve.",
+            "key" : "verify",
+            "kind" : "longText",
+            "label" : "Verification"
+          }
+        ],
+        "hint" : "Open each citation to its source.",
+        "key" : "verify",
+        "opens" : "audit",
+        "title" : "Verify each reopens"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Name this manifest.",
             "key" : "title",
             "kind" : "text",
@@ -3790,7 +3846,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.proof-argument" : {
-    "purpose" : "Write the Genealogical Proof Standard argument: state the question and conclusion, summarize the evidence, show reasonably exhaustive research, resolve conflicts, write the reasoned conclusion, then produce.",
+    "purpose" : "Write the Genealogical Proof Standard argument: question & conclusion, evidence summary, reasonably-exhaustive research, resolve conflicts, write the reasoned conclusion, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -3830,7 +3886,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Coverage"
           }
         ],
-        "hint" : "Show the search was thorough.",
+        "hint" : "Show the search was thorough — the log backs this.",
         "key" : "exhaustive",
         "opens" : "review",
         "title" : "Reasonably exhaustive research"
@@ -3882,19 +3938,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.research-log" : {
-    "purpose" : "Keep the classic research log — every search, where, and what it yielded (including negative results).",
+    "purpose" : "Keep the classic research log — every search, where, and what it yielded (including negative results). The app timestamps and cites each result for you.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Date searched · Repository / website · Source (title, call number / URL) · Search terms & scope · Result (found / NIL) · Citation of anything found · Next step. Record NIL results too — they prove the search was reasonably exhaustive.",
+            "help" : "Date searched · Repository / website · Source (title, call number / URL) · Search terms & scope · Result (found / NIL) · Citation of anything found · Next step.",
             "key" : "searches",
             "kind" : "longText",
             "label" : "Research-log columns",
             "required" : true
           }
         ],
-        "hint" : "The classic research-log columns, one row per search (as you would on paper or in Excel).",
+        "hint" : "The classic research-log columns, one row per search (as on paper or in Excel).",
         "key" : "searches",
         "opens" : "dataLab",
         "title" : "Record each search"
@@ -3902,16 +3958,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Include negative results — they matter.",
+            "help" : "Include NIL results — they prove the search was reasonably exhaustive.",
             "key" : "results",
             "kind" : "longText",
             "label" : "Results"
           }
         ],
-        "hint" : "What each search yielded.",
+        "hint" : "Attach or link what you found.",
         "key" : "results",
-        "opens" : "dataLab",
-        "title" : "Record results"
+        "opens" : "findings",
+        "title" : "Record what each yielded"
       },
       {
         "fields" : [
@@ -3946,7 +4002,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.research-plan" : {
-    "purpose" : "Fix the research question and record scope before searching — the start of the Genealogical Proof Standard.",
+    "purpose" : "Fix the research question, known facts, candidates and search plan before searching — the start of the Genealogical Proof Standard.",
     "steps" : [
       {
         "fields" : [
@@ -3986,6 +4042,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Possible answers you'll test.",
+            "key" : "candidates",
+            "kind" : "longText",
+            "label" : "Candidates"
+          }
+        ],
+        "hint" : "Candidate answers to test.",
+        "key" : "candidates",
+        "opens" : "findings",
+        "title" : "Working hypotheses"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Where to look and for what.",
             "key" : "plan",
             "kind" : "longText",
@@ -4007,7 +4077,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Open the numbered question to work.",
+        "hint" : "Open the numbered question.",
         "key" : "open",
         "opens" : "handoff",
         "posts" : "IMP",
@@ -4016,7 +4086,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.same-person" : {
-    "purpose" : "Decide whether name variants are one person: gather them, compare across records, rule out look-alikes, then decide — reversible, you decide.",
+    "purpose" : "Decide whether name variants are one person — reversible, you decide. Same-name different-person is the classic trap.",
     "steps" : [
       {
         "fields" : [
@@ -4036,13 +4106,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Matching and conflicting signals (dates, places, kin).",
+            "help" : "Matching and conflicting signals.",
             "key" : "comparison",
             "kind" : "longText",
             "label" : "Signals"
           }
         ],
-        "hint" : "How each appears across the records.",
+        "hint" : "How each appears — dates, places, kin.",
         "key" : "compare",
         "opens" : "knowledge",
         "title" : "Compare across records"
@@ -4056,7 +4126,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Excluded"
           }
         ],
-        "hint" : "Same-name different-person is common — exclude them.",
+        "hint" : "Exclude coincidental same-name people.",
         "key" : "ruleout",
         "opens" : "review",
         "title" : "Rule out look-alikes"
@@ -4083,7 +4153,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "You decide identity. Never automatic.",
+        "hint" : "You decide identity.",
         "key" : "decide",
         "title" : "Confirm or reject (your decision)"
       },
@@ -4126,13 +4196,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "For each source, on the GPS axes.",
+            "help" : "Original/derivative · primary/secondary · direct/indirect — per source.",
             "key" : "classify",
             "kind" : "longText",
             "label" : "Classification"
           }
         ],
-        "hint" : "Original/derivative; primary/secondary; direct/indirect.",
+        "hint" : "On the GPS axes.",
         "key" : "classify",
         "opens" : "review",
         "title" : "Classify each"
@@ -4147,7 +4217,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "These are your judgements.",
+        "hint" : "These are judgements.",
         "key" : "decide",
         "title" : "Own the classification (your decision)"
       },
@@ -4201,6 +4271,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "define",
         "opens" : "handoff",
         "title" : "Define the to-dos"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Ordered / received / done.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
