@@ -8612,8 +8612,22 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.ask" : {
-    "purpose" : "Ask a question over the story's sources and keep the cited answer.",
+    "purpose" : "Ask a question over the story's sources and keep the cited answer — the app reads it all and answers with citations, no manual file-hunting.",
     "steps" : [
+      {
+        "fields" : [
+          {
+            "help" : "The specific thing you need.",
+            "key" : "need",
+            "kind" : "longText",
+            "label" : "What you're establishing"
+          }
+        ],
+        "hint" : "Framing sharpens the answer.",
+        "key" : "frame",
+        "opens" : "ask",
+        "title" : "Decide what you need"
+      },
       {
         "fields" : [
           {
@@ -8624,7 +8638,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites its source.",
+        "hint" : "Plain language; cited answer.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask the story file"
@@ -8638,7 +8652,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the story file cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -8725,7 +8739,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.chronology" : {
-    "purpose" : "Build the story's tick-tock — the reconstructed timeline (undated labelled, cited).",
+    "purpose" : "Build the story's tick-tock — the app assembles dated events from your material; you order and confirm.",
     "steps" : [
       {
         "fields" : [
@@ -8737,7 +8751,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each event with its source.",
+        "hint" : "Each event with its source — auto-pulled.",
         "key" : "events",
         "opens" : "timeline",
         "title" : "Collect dated events"
@@ -8789,7 +8803,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.claim-board" : {
-    "purpose" : "Track every claim and its verification status — checked, unchecked, disputed.",
+    "purpose" : "Track every claim and its verification status — the app pulls candidate claims from your material so nothing slips through.",
     "steps" : [
       {
         "fields" : [
@@ -8823,7 +8837,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What supports each.",
+            "help" : "What supports each — the app links the source.",
             "key" : "evidence",
             "kind" : "longText",
             "label" : "Evidence"
@@ -8833,6 +8847,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "evidence",
         "opens" : "findings",
         "title" : "Cite the support"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What must be nailed before publishing.",
+            "key" : "priority",
+            "kind" : "longText",
+            "label" : "Priorities"
+          }
+        ],
+        "hint" : "Which unchecked claims are load-bearing.",
+        "key" : "prioritize",
+        "opens" : "review",
+        "title" : "Prioritize what to check"
       },
       {
         "fields" : [
@@ -8876,14 +8904,27 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Each with owner and due date.",
             "key" : "actions",
             "kind" : "longText",
-            "label" : "Actions",
-            "required" : true
+            "label" : "Actions"
           }
         ],
         "hint" : "Action, owner, due.",
         "key" : "define",
         "opens" : "handoff",
         "title" : "Define the actions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / done per action.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -8904,7 +8945,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.correction-history" : {
-    "purpose" : "Track post-publication corrections — the record is never rewritten silently.",
+    "purpose" : "Track post-publication corrections transparently — the record is never rewritten silently.",
     "steps" : [
       {
         "fields" : [
@@ -8930,7 +8971,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Correction history"
           }
         ],
-        "hint" : "What changed and when.",
+        "hint" : "What changed, when, and why.",
         "key" : "record",
         "opens" : "review",
         "title" : "Record each transparently"
@@ -9044,7 +9085,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.data-desk" : {
-    "purpose" : "Build datasets over documents (logs, filings) with cited cells.",
+    "purpose" : "Build datasets over documents (logs, filings) with cited cells — DataLab keeps every cell linked to its source, unlike a loose spreadsheet.",
     "steps" : [
       {
         "fields" : [
@@ -9078,13 +9119,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What was normalized; outliers flagged.",
+            "key" : "clean",
+            "kind" : "longText",
+            "label" : "Cleaning notes"
+          }
+        ],
+        "hint" : "Standardize formats, flag anomalies.",
+        "key" : "clean",
+        "opens" : "dataLab",
+        "title" : "Clean & normalize"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Anything to warn a reader about.",
             "key" : "check",
             "kind" : "longText",
             "label" : "Checks"
           }
         ],
-        "hint" : "Totals and outliers.",
+        "hint" : "Sanity-check totals and outliers.",
         "key" : "check",
         "opens" : "dataLab",
         "title" : "Check the numbers"
@@ -9142,6 +9197,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Independent confirmation per claim.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "At least two independent sources for load-bearing claims.",
+        "key" : "corroborate",
+        "opens" : "review",
+        "title" : "Corroborate independently"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Never averaged.",
             "key" : "conflicts",
             "kind" : "longText",
@@ -9172,7 +9241,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.interview-plan" : {
-    "purpose" : "Identify reporting gaps and plan the interviews to fill them.",
+    "purpose" : "Identify reporting gaps and plan interviews to fill them.",
     "steps" : [
       {
         "fields" : [
@@ -9192,16 +9261,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Open and evidence-anchored — never assert the answers.",
+            "help" : "Never assert the answers.",
             "key" : "questions",
             "kind" : "longText",
             "label" : "Questions"
           }
         ],
-        "hint" : "Questions tied to each gap.",
+        "hint" : "Open, non-leading, tied to each gap and the evidence.",
         "key" : "questions",
         "opens" : "matrix",
         "title" : "Draft the questions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "How you'll approach and record the interview.",
+            "key" : "logistics",
+            "kind" : "longText",
+            "label" : "Approach"
+          }
+        ],
+        "hint" : "On/off record, timing, safety.",
+        "key" : "logistics",
+        "opens" : "handoff",
+        "title" : "Plan the approach"
       },
       {
         "fields" : [
@@ -9242,16 +9325,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What it works on.",
+            "key" : "inputs",
+            "kind" : "longText",
+            "label" : "Inputs"
+          }
+        ],
+        "hint" : "Point it at the material — already indexed.",
+        "key" : "inputs",
+        "opens" : "matrix",
+        "title" : "Set the inputs"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What it surfaced.",
             "key" : "runNote",
             "kind" : "longText",
             "label" : "Result"
           }
         ],
-        "hint" : "Inputs and result.",
+        "hint" : "Work through it.",
         "key" : "run",
         "opens" : "matrix",
-        "title" : "Run it"
+        "title" : "Run & read"
       },
       {
         "fields" : [
@@ -9272,21 +9369,49 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.publication" : {
-    "purpose" : "Record the human publication decision — never automated.",
+    "purpose" : "Record the human publication decision — never automated. Verification, legal, and harm all checked first.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "What's checked, what's outstanding.",
+            "help" : "Load-bearing claims and their status.",
             "key" : "recap",
             "kind" : "longText",
-            "label" : "Recap"
+            "label" : "Verification status"
           }
         ],
-        "hint" : "Verification status and any legal review.",
-        "key" : "recap",
+        "hint" : "What's checked, what's outstanding.",
+        "key" : "verification",
         "opens" : "handoff",
-        "title" : "Recap verification & legal"
+        "title" : "Recap verification"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Legal review outcome.",
+            "key" : "legal",
+            "kind" : "longText",
+            "label" : "Legal notes"
+          }
+        ],
+        "hint" : "Defamation, privacy, contempt — flags and clearances.",
+        "key" : "legal",
+        "opens" : "review",
+        "title" : "Legal review"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Who could be harmed, and the public-interest justification.",
+            "key" : "harm",
+            "kind" : "longText",
+            "label" : "Harm assessment"
+          }
+        ],
+        "hint" : "Weigh public interest against harm to individuals.",
+        "key" : "harm",
+        "opens" : "review",
+        "title" : "Ethical / harm check"
       },
       {
         "fields" : [
@@ -9333,7 +9458,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.publication-package" : {
-    "purpose" : "Assemble the verified publication package: verify every claim is cited, confirm right of reply, then produce the package.",
+    "purpose" : "Assemble the verified, rights-cleared package: every claim cited, right of reply in, legal signed off, credits/rights set, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -9386,7 +9511,35 @@ public nonisolated enum WCAuthoredWorkflows {
         ],
         "hint" : "Everyone named adversely was offered a reply.",
         "key" : "reply",
-        "title" : "Confirm right of reply (your decision)"
+        "title" : "Right-of-reply check (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Cleared / conditions.",
+            "key" : "legal",
+            "kind" : "longText",
+            "label" : "Legal sign-off"
+          }
+        ],
+        "hint" : "Final legal clearance before it ships.",
+        "key" : "legal",
+        "opens" : "review",
+        "title" : "Legal sign-off"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Cleared usage and attribution.",
+            "key" : "rights",
+            "kind" : "longText",
+            "label" : "Rights & credits"
+          }
+        ],
+        "hint" : "Bylines, image/clip rights, embargo.",
+        "key" : "rights",
+        "opens" : "handoff",
+        "title" : "Credits & rights"
       },
       {
         "fields" : [
@@ -9407,7 +9560,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.quote-book" : {
-    "purpose" : "Collect quotes cited to their exact source — a quote is never altered.",
+    "purpose" : "Collect quotes cited to their exact source — a quote is never altered. The app anchors each quote to its document/timecode automatically.",
     "steps" : [
       {
         "fields" : [
@@ -9419,7 +9572,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each quote with its speaker and context.",
+        "hint" : "Each quote with speaker and context.",
         "key" : "collect",
         "opens" : "findings",
         "title" : "Collect the quotes"
@@ -9448,9 +9601,9 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Confirm quote and context.",
+        "hint" : "Guard against out-of-context use.",
         "key" : "confirm",
-        "title" : "Confirm (your decision)"
+        "title" : "Confirm quote & context (your decision)"
       },
       {
         "fields" : [
@@ -9521,7 +9674,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.right-of-reply" : {
-    "purpose" : "Log subjects named adversely and their responses — publishing without offering a reply is the gap that sinks the story.",
+    "purpose" : "Give everyone named adversely a fair chance to respond — publishing without it is the gap that sinks a story. The app tracks each outreach and reply against the specific allegations.",
     "steps" : [
       {
         "fields" : [
@@ -9541,16 +9694,31 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Channel, date, and deadline given.",
-            "key" : "contact",
+            "help" : "Specific enough that they can respond meaningfully.",
+            "key" : "allegations",
+            "kind" : "longText",
+            "label" : "Allegations put",
+            "required" : true
+          }
+        ],
+        "hint" : "List, per subject, exactly what you'll say about them.",
+        "key" : "allegations",
+        "opens" : "findings",
+        "title" : "Put the specific allegations"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Channel, date, deadline per subject.",
+            "key" : "outreach",
             "kind" : "longText",
             "label" : "Outreach"
           }
         ],
-        "hint" : "How and when each was offered a chance to respond.",
-        "key" : "contact",
+        "hint" : "How and when each was contacted, and the deadline given.",
+        "key" : "send",
         "opens" : "review",
-        "title" : "Record the outreach"
+        "title" : "Send & log the outreach"
       },
       {
         "fields" : [
@@ -9585,7 +9753,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.source-map" : {
-    "purpose" : "Map sources, people, and relationships.",
+    "purpose" : "Map sources, people, and relationships — the app has already linked who appears with whom, so you refine rather than draw from scratch.",
     "steps" : [
       {
         "fields" : [
@@ -9605,16 +9773,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each link, on evidence — protect confidential sources.",
+            "help" : "Each link, on evidence.",
             "key" : "links",
             "kind" : "longText",
             "label" : "Relationships"
           }
         ],
-        "hint" : "How they connect and what each supports.",
+        "hint" : "How they connect and what each supports — app-proposed edges.",
         "key" : "map",
         "opens" : "connections",
         "title" : "Map the relationships"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confidential-source handling — never expose a protected source.",
+            "key" : "protect",
+            "kind" : "longText",
+            "label" : "Protection"
+          }
+        ],
+        "hint" : "Which sources are confidential and how they're shielded.",
+        "key" : "protect",
+        "opens" : "review",
+        "title" : "Note source protection"
       },
       {
         "fields" : [
@@ -9664,13 +9846,27 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "High / Medium / Low — a judgement.",
             "key" : "rating",
             "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Rating"
           }
         ],
         "hint" : "Track record, independence, motive.",
         "key" : "assess",
         "opens" : "review",
         "title" : "Assess each"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Who independently confirms what.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "Independent confirmation — the app flags overlaps.",
+        "key" : "corroborate",
+        "opens" : "matrix",
+        "title" : "Check corroboration"
       },
       {
         "fields" : [
@@ -9705,7 +9901,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.source-vault" : {
-    "purpose" : "Keep a custody-tracked vault for source documents with integrity hashes.",
+    "purpose" : "Keep a custody-tracked vault for source documents with integrity hashes — and protect confidential sources.",
     "steps" : [
       {
         "fields" : [
@@ -9752,16 +9948,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How confidential sources are protected.",
+            "help" : "Redaction/aliasing of protected sources.",
             "key" : "protect",
             "kind" : "longText",
             "label" : "Protection"
           }
         ],
-        "hint" : "Confidential-source handling.",
+        "hint" : "How confidential sources are shielded in the vault.",
         "key" : "protect",
         "opens" : "audit",
-        "title" : "Note source protection"
+        "title" : "Source protection"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Access restrictions.",
+            "key" : "access",
+            "kind" : "longText",
+            "label" : "Access"
+          }
+        ],
+        "hint" : "Who can open what.",
+        "key" : "access",
+        "opens" : "audit",
+        "title" : "Access control"
       },
       {
         "fields" : [
@@ -9782,7 +9992,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.story-intake" : {
-    "purpose" : "Define the story question, scope, and authorized sources, then open the story file.",
+    "purpose" : "Frame the story the way a reporter does: premise, the angle and why it matters, scope and sources, early legal/safety/source-protection flags, a reporting plan, then open the story file.",
     "steps" : [
       {
         "fields" : [
@@ -9794,10 +10004,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The story question and why it matters.",
+        "hint" : "What the story is about, in a line.",
         "key" : "premise",
         "opens" : "sources",
-        "title" : "Frame the story"
+        "title" : "Frame the premise"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Why this matters now.",
+            "key" : "angle",
+            "kind" : "longText",
+            "label" : "Angle"
+          }
+        ],
+        "hint" : "The hook and the public interest.",
+        "key" : "angle",
+        "opens" : "findings",
+        "title" : "Angle & why it matters"
       },
       {
         "fields" : [
@@ -9823,20 +10047,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Confirm only when framed.",
-            "key" : "decision",
-            "kind" : "choice",
-            "label" : "Confirmed?",
-            "options" : [
-              "Confirmed",
-              "Needs revision"
-            ],
-            "required" : true
+            "help" : "Legal, safety, and source-protection concerns to manage.",
+            "key" : "risks",
+            "kind" : "longText",
+            "label" : "Risks"
           }
         ],
-        "hint" : "A human confirms the framing — intake never decides the story's truth.",
-        "key" : "confirm",
-        "title" : "Confirm the premise (your decision)"
+        "hint" : "Spot the landmines early — defamation, safety, protecting confidential sources.",
+        "key" : "risks",
+        "opens" : "review",
+        "title" : "Flag legal/safety/source risks"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The reporting route and rough timeline.",
+            "key" : "plan",
+            "kind" : "longText",
+            "label" : "Plan"
+          }
+        ],
+        "hint" : "Who to talk to, what to obtain, in what order.",
+        "key" : "plan",
+        "opens" : "handoff",
+        "title" : "Reporting plan"
       },
       {
         "fields" : [
@@ -9857,7 +10091,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.transcript" : {
-    "purpose" : "Correct transcripts with locators — unheard words are never asserted.",
+    "purpose" : "Correct transcripts with locators — the app gives you a speech-to-text draft to fix, so you edit not type. Unheard words are never asserted.",
     "steps" : [
       {
         "fields" : [
@@ -9886,7 +10120,21 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Fix the transcript against the audio.",
         "key" : "correct",
         "opens" : "findings",
-        "title" : "Correct with locators"
+        "title" : "Correct the draft"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "So each line reopens its exact moment.",
+            "key" : "locators",
+            "kind" : "longText",
+            "label" : "Timecodes"
+          }
+        ],
+        "hint" : "Anchor passages to the recording.",
+        "key" : "locators",
+        "opens" : "findings",
+        "title" : "Add timecodes"
       },
       {
         "fields" : [
@@ -9921,7 +10169,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.whos-who" : {
-    "purpose" : "Unify names and aliases to one subject — reversible, human-reviewed.",
+    "purpose" : "Unify names and aliases to one subject — reversible, human-reviewed. The app proposes matches; you decide.",
     "steps" : [
       {
         "fields" : [
@@ -9937,6 +10185,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "gather",
         "opens" : "knowledge",
         "title" : "Gather the names"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Variants folded together.",
+            "key" : "normalized",
+            "kind" : "longText",
+            "label" : "Notes"
+          }
+        ],
+        "hint" : "Fold spelling/handle variants.",
+        "key" : "normalize",
+        "opens" : "knowledge",
+        "title" : "Normalize"
       },
       {
         "fields" : [
