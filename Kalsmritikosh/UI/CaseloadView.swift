@@ -172,3 +172,11 @@ public struct CaseloadView: View {
         loading = false
     }
 }
+
+#if DEBUG
+#Preview("Caseload — empty") {
+    CaseloadView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

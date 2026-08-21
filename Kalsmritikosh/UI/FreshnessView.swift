@@ -167,3 +167,11 @@ public struct FreshnessView: View {
         loading = false
     }
 }
+
+#if DEBUG
+#Preview("Freshness — empty") {
+    FreshnessView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

@@ -135,3 +135,11 @@ public struct TrendsView: View {
         k.rawValue.replacingOccurrences(of: "([a-z])([A-Z])", with: "$1 $2", options: .regularExpression).capitalized
     }
 }
+
+#if DEBUG
+#Preview("Trends — empty") {
+    TrendsView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

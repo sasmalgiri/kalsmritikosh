@@ -117,3 +117,11 @@ public struct CitationBuilderView: View {
 #if canImport(AppKit)
 import AppKit
 #endif
+
+#if DEBUG
+#Preview("Citations — book") {
+    CitationBuilderView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

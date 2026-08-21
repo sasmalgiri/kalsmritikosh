@@ -272,3 +272,11 @@ public struct RedactionView: View {
         running = false
     }
 }
+
+#if DEBUG
+#Preview("Redaction — empty") {
+    RedactionView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

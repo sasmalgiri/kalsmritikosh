@@ -179,3 +179,11 @@ public struct AuthenticityView: View {
         running = false
     }
 }
+
+#if DEBUG
+#Preview("Authenticity — empty") {
+    AuthenticityView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

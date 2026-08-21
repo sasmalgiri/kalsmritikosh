@@ -224,3 +224,11 @@ public struct FundFlowView: View {
         loading = false
     }
 }
+
+#if DEBUG
+#Preview("Fund flow — empty") {
+    FundFlowView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif

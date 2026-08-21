@@ -163,3 +163,11 @@ public struct EmailThreadsView: View {
         loading = false
     }
 }
+
+#if DEBUG
+#Preview("Email threads — empty") {
+    EmailThreadsView()
+        .environment(AppState())
+        .frame(width: 940, height: 720)
+}
+#endif
