@@ -1522,3 +1522,11 @@ public struct WorkCenterView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Work Center") {
+    WorkCenterView(onNavigate: { _ in })
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif

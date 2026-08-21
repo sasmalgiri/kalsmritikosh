@@ -646,3 +646,11 @@ private struct JobDocumentationDetail: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Professional Jobs") {
+    PersonaJobsView()
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif
