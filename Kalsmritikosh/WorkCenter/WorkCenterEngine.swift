@@ -2827,6 +2827,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "gaps",
             "kind" : "longText",
             "label" : "Gaps"
+          },
+          {
+            "help" : "List every missing statement or period. A trace with silent gaps looks complete but misleads — naming the gaps is what makes it court-ready.",
+            "key" : "completeness",
+            "kind" : "longText",
+            "label" : "Missing records"
           }
         ],
         "hint" : "Missing statements, commingled funds, unexplained transfers.",
@@ -8011,6 +8017,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "window",
             "kind" : "dateRange",
             "label" : "Time window"
+          },
+          {
+            "help" : "Confirm every planned method is lawful and licensed — no pretexting, no unauthorised access, no trespass. Illegally obtained evidence is worthless and exposes you.",
+            "key" : "legality",
+            "kind" : "longText",
+            "label" : "Method legality"
           }
         ],
         "hint" : "The boundary and the period.",
@@ -8737,6 +8749,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "evidence",
             "kind" : "longText",
             "label" : "Evidence per question"
+          },
+          {
+            "help" : "Mark each item as observed fact or your inference. A report that blurs the two is easily impeached; keeping them separate is what makes it hold up.",
+            "key" : "obsinference",
+            "kind" : "longText",
+            "label" : "Observation vs inference"
           }
         ],
         "hint" : "The cited evidence for each question (attach exhibits).",
@@ -14066,6 +14084,12 @@ public nonisolated enum WCAuthoredWorkflows {
               "Needs revision"
             ],
             "required" : true
+          },
+          {
+            "help" : "Timestamp and lock this protocol before screening (PROSPERO / OSF). Freezing questions and criteria up front is what prevents outcome-switching and makes the review trustworthy.",
+            "key" : "prereg",
+            "kind" : "longText",
+            "label" : "Pre-registration"
           }
         ],
         "hint" : "Lock it before screening — changes after this are logged as amendments.",
