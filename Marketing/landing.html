@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalsmritikosh — your archive, made answerable. Fully on-device.</title>
+<meta name="description" content="Turn your whole document and email archive into answers you can trust — timelines, dossiers, cited datasets. Every fact drills back to its source. Runs entirely on your Mac.">
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --ink:#e6edf3; --muted:#9aa7b4;
+    --brand:#6ea8fe; --brand2:#8f7dff; --line:#232b36; --ok:#3fb950;
+    --radius:14px; --maxw:1080px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--brand);text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px}
+  header{position:sticky;top:0;background:rgba(13,17,23,.8);backdrop-filter:saturate(160%) blur(10px);border-bottom:1px solid var(--line);z-index:10}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .logo{font-weight:700;letter-spacing:.2px}
+  .logo span{background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  nav a{color:var(--muted);margin-left:22px;font-size:14px}
+  nav a:hover{color:var(--ink)}
+  .btn{display:inline-block;background:linear-gradient(90deg,var(--brand),var(--brand2));color:#08111f;
+    font-weight:700;padding:12px 20px;border-radius:999px;border:0;cursor:pointer}
+  .btn.secondary{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .hero{padding:96px 0 64px;text-align:center}
+  .hero h1{font-size:clamp(34px,6vw,58px);line-height:1.05;margin:0 0 18px;letter-spacing:-.5px}
+  .hero h1 span{background:linear-gradient(90deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:720px;margin:0 auto 28px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .pill{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:13px;border:1px solid var(--line);padding:6px 12px;border-radius:999px;margin-top:26px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+  section{padding:56px 0;border-top:1px solid var(--line)}
+  h2{font-size:clamp(24px,3.4vw,34px);margin:0 0 8px;letter-spacing:-.3px}
+  .lead{color:var(--muted);max-width:680px;margin:0 0 34px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+  .card h3{margin:0 0 6px;font-size:18px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin-bottom:12px;
+    background:linear-gradient(135deg,rgba(110,168,254,.18),rgba(143,125,255,.18));font-size:18px}
+  .split{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:center}
+  @media(max-width:780px){.split{grid-template-columns:1fr}}
+  .shot{background:var(--panel);border:1px dashed var(--line);border-radius:var(--radius);
+    aspect-ratio:16/10;display:grid;place-items:center;color:var(--muted);font-size:14px;text-align:center;padding:20px}
+  ul.checks{list-style:none;padding:0;margin:0}
+  ul.checks li{padding:8px 0 8px 28px;position:relative;color:var(--muted)}
+  ul.checks li:before{content:"✓";position:absolute;left:0;color:var(--ok);font-weight:700}
+  footer{padding:40px 0;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+  footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  .disclaimer{font-size:12.5px;color:#7d8896;max-width:760px;margin:22px auto 0;text-align:center}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="logo">Kalsmriti<span>kosh</span></div>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#honesty">Honesty</a>
+    <a class="btn" href="[APP_STORE_OR_DOWNLOAD_URL]">Download</a>
+  </nav>
+</div></header>
+
+<main>
+  <div class="hero wrap">
+    <h1>Your archive, <span>made answerable.</span></h1>
+    <p>Kalsmritikosh turns your entire document and email archive into a structured,
+       answerable knowledge base — timelines, dossiers, cited datasets — where every
+       fact drills back to its source. Runs <strong>entirely on your Mac</strong>.</p>
+    <div class="cta">
+      <a class="btn" href="[APP_STORE_OR_DOWNLOAD_URL]">Download for Mac</a>
+      <a class="btn secondary" href="#features">See how it works</a>
+    </div>
+    <div class="pill"><span class="dot"></span> On-device · no cloud · no telemetry</div>
+  </div>
+
+  <section id="features" class="wrap">
+    <h2>Not chat-with-your-files. A real ledger.</h2>
+    <p class="lead">It builds people, dated events, relationships, a timeline and distilled
+       memory from your documents — then answers through specialist experts behind an evidence gate.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">💬</div><h3>Ask, with evidence</h3><p>Plain-language answers that cite their sources, show confidence, and name what's missing.</p></div>
+      <div class="card"><div class="ico">🕘</div><h3>Timelines & dossiers</h3><p>Reconstruct what happened and everything known about a person or entity.</p></div>
+      <div class="card"><div class="ico">▦</div><h3>DataLab</h3><p>Build cited datasets over your evidence — or generate them from what you've ingested. Every cell drills to its source.</p></div>
+      <div class="card"><div class="ico">🧭</div><h3>Work Center</h3><p>Step-by-step workflows for real professional jobs, gated and guided.</p></div>
+      <div class="card"><div class="ico">🖊️</div><h3>Real redaction</h3><p>Removes the text — not a black box you can undo. The output is re-checked to prove it's gone.</p></div>
+      <div class="card"><div class="ico">🔗</div><h3>Provenance everywhere</h3><p>Fund-flow, communications, conflicts, missing evidence — each row tied to the record behind it.</p></div>
+    </div>
+  </section>
+
+  <section id="privacy" class="wrap">
+    <div class="split">
+      <div>
+        <h2>Private by design.</h2>
+        <p class="lead">Your documents, the knowledge it builds, and your questions never leave your Mac.</p>
+        <ul class="checks">
+          <li>Runs fully on-device — no cloud processing</li>
+          <li>No analytics, no telemetry, no tracking</li>
+          <li>Delete everything by removing the app's data</li>
+          <li>The only optional network use is a one-time model download — never your documents</li>
+        </ul>
+      </div>
+      <div class="shot">[ Screenshot: Settings → Legal &amp; Privacy ]</div>
+    </div>
+  </section>
+
+  <section id="honesty" class="wrap">
+    <h2>Honest by design.</h2>
+    <p class="lead">Kalsmritikosh shows what's proven, what's inferred, and what's missing —
+       and tells you when it isn't sure. It's a tool, not professional advice.</p>
+    <div class="grid">
+      <div class="card"><h3>Shows its work</h3><p>Confidence, evidence counts, timeliness and conflicts on every answer.</p></div>
+      <div class="card"><h3>Conflicts, not averages</h3><p>Disagreeing sources are surfaced with both sources — never averaged away.</p></div>
+      <div class="card"><h3>No overclaiming</h3><p>Authenticity signals are leads, not verdicts. Redaction is scoped and verified.</p></div>
+    </div>
+  </section>
+
+  <section class="wrap" style="text-align:center">
+    <h2>Bring your archive. Keep it yours.</h2>
+    <p class="lead" style="margin:0 auto 24px">One-time purchase, on your Mac, private forever.</p>
+    <a class="btn" href="[APP_STORE_OR_DOWNLOAD_URL]">Download for Mac</a>
+    <p class="disclaimer">Kalsmritikosh is a tool, not legal, financial, medical, or other professional advice,
+      and its output must not be the sole basis for any decision, filing, or publication. Built with Llama.</p>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <div>© [YEAR] [Your legal entity]. All rights reserved.</div>
+  <div>
+    <a href="/privacy">Privacy</a> &nbsp;·&nbsp;
+    <a href="/eula">EULA</a> &nbsp;·&nbsp;
+    <a href="/terms">Terms</a> &nbsp;·&nbsp;
+    <a href="mailto:[support@yourdomain.com]">Support</a>
+  </div>
+</div></footer>
+</body>
+</html>
