@@ -38,6 +38,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
     case sources, convert, completeness, live
+    case redaction
     case guide, settings
 
     public var id: String { rawValue }
@@ -77,6 +78,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
         case .live:         return "Live"
+        case .redaction:    return "Redaction"
         case .guide:        return "Guide"
         case .settings:     return "Settings"
         }
@@ -117,6 +119,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
         case .live:         return "waveform.path.ecg"
+        case .redaction:    return "eye.slash"
         case .guide:        return "book"
         case .settings:     return "gearshape"
         }
@@ -173,6 +176,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
         case .live:         return "Live pipeline and background activity"
+        case .redaction:    return "Remove text from a PDF for real — flattened and verified, not just a black box"
         case .guide:        return "What every screen does, and how facts are graded"
         case .settings:     return "Modes, privacy, models and diagnostics"
         }
@@ -192,7 +196,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
             case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
-            case .workspace:   return [.sources, .convert, .completeness, .live]
+            case .workspace:   return [.sources, .convert, .completeness, .live, .redaction]
             case .system:      return [.guide, .settings]
             }
         }
@@ -361,7 +365,8 @@ public struct RootView: View {
         case .home:                                                   return .home
         case .ask, .search, .answers, .saved:                         return .answers
         case .work, .workCenter, .registers:                          return .jobs
-        case .sources, .convert, .live, .completeness, .workspaces:   return .sources
+        case .sources, .convert, .live, .completeness, .workspaces,
+             .redaction:                                              return .sources
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
              .transcripts:                                            return .entities
@@ -1249,6 +1254,7 @@ public struct RootView: View {
         case .convert:      ConvertView()
         case .completeness: CompletenessView()
         case .live:         LiveDashboardView()
+        case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
         case .settings:     SettingsView()
         }
