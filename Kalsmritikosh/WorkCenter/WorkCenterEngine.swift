@@ -4132,14 +4132,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which corrective/preventive action.",
+            "help" : "The action under review.",
             "key" : "action",
             "kind" : "text",
-            "label" : "Action under review",
+            "label" : "Action",
             "required" : true
           }
         ],
-        "hint" : "Pick the completed action you're reviewing.",
+        "hint" : "Which completed action.",
         "key" : "select",
         "opens" : "handoff",
         "title" : "Select the action"
@@ -4147,13 +4147,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What has (or hasn't) happened since the action.",
+            "help" : "What has (or hasn't) happened since.",
             "key" : "evidence",
             "kind" : "longText",
-            "label" : "Post-action evidence"
+            "label" : "Evidence"
           }
         ],
-        "hint" : "Collect evidence of whether the issue recurred (attach it).",
+        "hint" : "Recurrence? The app surfaces anything new since.",
         "key" : "evidence",
         "opens" : "findings",
         "title" : "Gather post-action evidence"
@@ -4161,7 +4161,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Your evidence-based verdict.",
+            "help" : "Evidence-based.",
             "key" : "verdict",
             "kind" : "choice",
             "label" : "Verdict",
@@ -4173,14 +4173,14 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "The evidence behind the verdict.",
+            "help" : "Why.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
             "required" : true
           }
         ],
-        "hint" : "Decide, on the evidence, whether the action worked.",
+        "hint" : "On the evidence.",
         "key" : "judge",
         "title" : "Judge effectiveness (your decision)"
       },
@@ -4203,12 +4203,12 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.allegations" : {
-    "purpose" : "Frame each allegation with 5W1H, link the evidence, and record its status — an allegation is unproven until found.",
+    "purpose" : "Frame each allegation with 5W1H, link the evidence, and record a preliminary status — an allegation is unproven until found.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "One allegation per line — each specific enough to test.",
+            "help" : "One per line — each specific enough to prove or disprove.",
             "key" : "allegations",
             "kind" : "longText",
             "label" : "Allegations",
@@ -4223,14 +4223,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Who did what, to whom, when and where, and how you know.",
+            "help" : "The specifics behind each.",
             "key" : "fiveW",
             "kind" : "longText",
             "label" : "5W1H per allegation",
             "required" : true
           }
         ],
-        "hint" : "For each allegation: who, what, when, where, why, how.",
+        "hint" : "Who did what, to whom, when and where, and how you know.",
         "key" : "frame",
         "opens" : "matrix",
         "title" : "Frame each with 5W1H"
@@ -4238,13 +4238,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which documents support or rebut each allegation.",
+            "help" : "The rule engaged by each allegation.",
+            "key" : "policy",
+            "kind" : "longText",
+            "label" : "Policy mapping"
+          }
+        ],
+        "hint" : "Which policy or standard each allegation would breach.",
+        "key" : "policy",
+        "opens" : "findings",
+        "title" : "Map to policy/rule breached"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Support and rebuttal.",
             "key" : "evidenceNote",
             "kind" : "longText",
             "label" : "Evidence per allegation"
           }
         ],
-        "hint" : "Attach or cite the documents that speak to each allegation.",
+        "hint" : "The documents that speak to each — the app surfaces relevant mentions.",
         "key" : "evidence",
         "opens" : "findings",
         "title" : "Link the evidence"
@@ -4252,48 +4266,48 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Substantiated / not substantiated / unfounded / inconclusive — with basis for each.",
+            "help" : "Under investigation / needs evidence — with basis.",
             "key" : "status",
             "kind" : "longText",
             "label" : "Status per allegation",
             "required" : true
           }
         ],
-        "hint" : "Record a status per allegation with its basis — never state a finding you can't support.",
+        "hint" : "A working status per allegation — never a finding yet.",
         "key" : "status",
         "posts" : "ALG",
-        "title" : "Record status (your decision)"
+        "title" : "Record preliminary status (your decision)"
       }
     ]
   },
   "hr.ask" : {
-    "purpose" : "Ask a question over the case's authorized documents and keep the cited answer on the record.",
+    "purpose" : "Ask a question over the case's authorized documents and keep the cited answer — the app reads the whole file so you don't hunt through emails and PDFs.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "What you need to know from the case file.",
+            "help" : "What you need to know.",
             "key" : "question",
             "kind" : "longText",
             "label" : "Your question",
             "required" : true
           }
         ],
-        "hint" : "Ask in plain language — the answer is grounded in the case's authorized evidence and cites it.",
+        "hint" : "Plain language; the answer cites the case's evidence.",
         "key" : "ask",
         "opens" : "ask",
-        "title" : "Ask the record"
+        "title" : "Ask the case file"
       },
       {
         "fields" : [
           {
-            "help" : "How this answer bears on the allegations.",
+            "help" : "How it bears on the case.",
             "key" : "why",
             "kind" : "longText",
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters so it's quotable later.",
+        "hint" : "Lands in the case file already cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -4302,18 +4316,18 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.closure" : {
-    "purpose" : "Close the case by an explicit human decision — unresolved items retained, and reopening preserves the prior closure.",
+    "purpose" : "Close the case by an explicit human decision — parties notified with procedural fairness, unresolved items retained, reopening preserves the prior closure.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "State of findings, actions, and any items left open.",
+            "help" : "State of the case.",
             "key" : "recap",
             "kind" : "longText",
             "label" : "Closure recap"
           }
         ],
-        "hint" : "Check findings are approved and actions tracked to closure.",
+        "hint" : "Findings approved, actions tracked, open items retained.",
         "key" : "recap",
         "opens" : "handoff",
         "title" : "Confirm findings & actions"
@@ -4321,13 +4335,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Storage, retention period, and access restrictions.",
+            "help" : "Who is informed, and of what.",
+            "key" : "notify",
+            "kind" : "longText",
+            "label" : "Notifications"
+          }
+        ],
+        "hint" : "What complainant and respondent are told, consistent with confidentiality and fairness.",
+        "key" : "notify",
+        "opens" : "handoff",
+        "title" : "Notify the parties"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Storage, retention, access.",
             "key" : "retention",
             "kind" : "longText",
             "label" : "Retention & access"
           }
         ],
-        "hint" : "Record where the file is kept and who may access it.",
+        "hint" : "Where the file is kept and who may access it.",
         "key" : "retention",
         "opens" : "handoff",
         "title" : "Retention & confidentiality"
@@ -4335,7 +4363,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Close only when it's genuinely complete.",
+            "help" : "Close only when complete.",
             "key" : "decision",
             "kind" : "choice",
             "label" : "Decision",
@@ -4346,28 +4374,28 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "Why — reopening later preserves this closure.",
+            "help" : "Why — reopening preserves this closure.",
             "key" : "reason",
             "kind" : "longText",
             "label" : "Reason",
             "required" : true
           }
         ],
-        "hint" : "A human closes or keeps the case open. The app never closes on its own.",
+        "hint" : "A human closes or keeps the case open.",
         "key" : "decide",
         "title" : "Closure decision (your decision)"
       },
       {
         "fields" : [
           {
-            "help" : "Name this closure record.",
+            "help" : "Name this record.",
             "key" : "title",
             "kind" : "text",
             "label" : "Title",
             "required" : true
           }
         ],
-        "hint" : "Post the closure record and sealed receipt.",
+        "hint" : "Post the closure record and receipt.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "EXP",
@@ -4709,46 +4737,60 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which finding/root cause each action responds to.",
+            "help" : "Which finding/root cause each responds to.",
             "key" : "links",
             "kind" : "longText",
-            "label" : "Action ↔ cause",
+            "label" : "Action ↔ finding",
             "required" : true
           }
         ],
-        "hint" : "Tie each planned action to the finding or root cause it addresses.",
+        "hint" : "What each action addresses.",
         "key" : "link",
         "opens" : "findings",
-        "title" : "Link actions to causes"
+        "title" : "Link actions to findings/causes"
       },
       {
         "fields" : [
           {
-            "help" : "Each action: description, corrective vs preventive, owner, due date.",
+            "help" : "Each with owner and due date.",
             "key" : "actions",
             "kind" : "longText",
             "label" : "Actions",
             "required" : true
           }
         ],
-        "hint" : "Specify each action, its type, owner and due date.",
+        "hint" : "Action, type (corrective/preventive), owner, due date.",
         "key" : "define",
         "opens" : "handoff",
-        "title" : "Define the actions"
+        "title" : "Define each action"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm owners and dates, or note what's still open.",
+            "help" : "Owners and dates agreed.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
             "required" : true
           }
         ],
-        "hint" : "Confirm each owner and due date is agreed.",
+        "hint" : "Confirm each is agreed.",
         "key" : "assign",
         "title" : "Agree owners & dates (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / in progress / done.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -4760,7 +4802,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Assemble the corrective-actions register.",
+        "hint" : "Assemble the register.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -4769,56 +4811,64 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.credibility" : {
-    "purpose" : "Assess the reliability and independence of each account — a rating is a judgement, never a fact.",
+    "purpose" : "Assess the reliability and independence of each account — a rating is a judgement, and demeanour alone is never decisive.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Each account/source, one per line.",
+            "help" : "One per line.",
             "key" : "sources",
             "kind" : "longText",
             "label" : "Accounts",
             "required" : true
           }
         ],
-        "hint" : "List each account/source you'll assess.",
+        "hint" : "Each account you'll assess.",
         "key" : "list",
         "opens" : "review",
-        "title" : "List the accounts"
+        "title" : "List each account/source"
       },
       {
         "fields" : [
           {
-            "help" : "For each account: what strengthens or weakens its reliability.",
+            "help" : "What strengthens or weakens each.",
             "key" : "factors",
             "kind" : "longText",
-            "label" : "Assessment factors"
-          },
+            "label" : "Factors"
+          }
+        ],
+        "hint" : "Consistency, corroboration, motive, opportunity to observe — content over demeanour.",
+        "key" : "factors",
+        "opens" : "review",
+        "title" : "Weigh the factors"
+      },
+      {
+        "fields" : [
           {
-            "help" : "High / Medium / Low per account — a judgement, not proof.",
+            "help" : "A judgement, not proof.",
             "key" : "rating",
             "kind" : "longText",
             "label" : "Reliability rating"
           }
         ],
-        "hint" : "Weigh consistency, corroboration, bias and opportunity to observe.",
-        "key" : "assess",
+        "hint" : "High / Medium / Low per account.",
+        "key" : "rate",
         "opens" : "review",
-        "title" : "Assess each account"
+        "title" : "Rate reliability"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm the ratings and note these are judgements, not findings.",
+            "help" : "Confirm the ratings; demeanour alone is never decisive.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
             "required" : true
           }
         ],
-        "hint" : "Own the ratings as your assessment.",
+        "hint" : "These are judgements.",
         "key" : "decide",
-        "title" : "Record your judgement (your decision)"
+        "title" : "Own the ratings (your decision)"
       },
       {
         "fields" : [
@@ -4839,19 +4889,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.evidence-custody" : {
-    "purpose" : "Keep a defensible chain of custody: register each exhibit, record acquisition and integrity, log transfers, then seal the manifest.",
+    "purpose" : "Keep a defensible chain of custody: register exhibits, record acquisition and integrity, log transfers, then seal.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Each exhibit: what it is and its source.",
+            "help" : "What each item is and where it came from.",
             "key" : "exhibits",
             "kind" : "longText",
             "label" : "Exhibits",
             "required" : true
           }
         ],
-        "hint" : "List each item collected, with where it came from (attach the originals).",
+        "hint" : "Each item collected, with source (attach originals).",
         "key" : "register",
         "opens" : "audit",
         "title" : "Register the exhibits"
@@ -4859,7 +4909,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How the material was taken into custody.",
+            "help" : "How it was taken in.",
             "key" : "method",
             "kind" : "choice",
             "label" : "Acquisition method",
@@ -4872,13 +4922,13 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "Turn on after running Verify integrity on the Audit screen.",
+            "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
             "label" : "Integrity verified"
           }
         ],
-        "hint" : "Record how each item entered custody without being altered.",
+        "hint" : "How each entered custody unaltered.",
         "key" : "acquire",
         "opens" : "audit",
         "title" : "Acquisition & integrity"
@@ -4886,13 +4936,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each hand-off: from, to, when, why.",
+            "help" : "Each hand-off.",
             "key" : "transfers",
             "kind" : "longText",
-            "label" : "Custody transfers"
+            "label" : "Transfers"
           }
         ],
-        "hint" : "Who held what, and when.",
+        "hint" : "Who held what, when.",
         "key" : "transfers",
         "opens" : "audit",
         "title" : "Log custody transfers"
@@ -4907,7 +4957,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Post the sealed custody manifest.",
+        "hint" : "Post the sealed manifest.",
         "key" : "seal",
         "opens" : "handoff",
         "posts" : "PRS",
@@ -4916,19 +4966,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.evidence-register" : {
-    "purpose" : "Register the documentary evidence (emails, records, policies) with cited cells, and check it for gaps.",
+    "purpose" : "Register the documentary evidence with cited cells, and check it for relevance, privilege and gaps.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The document set this register indexes.",
+            "help" : "The document set.",
             "key" : "scope",
             "kind" : "text",
             "label" : "What this covers",
             "required" : true
           }
         ],
-        "hint" : "Gather the documents this register covers (attach any not yet ingested).",
+        "hint" : "Which emails/records/policies this covers (attach any not ingested).",
         "key" : "assemble",
         "opens" : "sources",
         "title" : "Assemble the documents"
@@ -4936,13 +4986,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Date, author, type, relevance — every cell traceable to its source.",
+            "help" : "Date · author · type · relevance · source — every cell cited.",
             "key" : "columns",
             "kind" : "longText",
-            "label" : "Register columns & notes"
+            "label" : "Register columns"
           }
         ],
-        "hint" : "Index each document with the columns that matter.",
+        "hint" : "Index each document.",
         "key" : "register",
         "opens" : "dataLab",
         "title" : "Build the register"
@@ -4950,13 +5000,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Anything missing or unverified a reviewer should know.",
+            "help" : "What needs restricted handling.",
+            "key" : "privilege",
+            "kind" : "longText",
+            "label" : "Sensitivity flags"
+          }
+        ],
+        "hint" : "Mark anything privileged, medical, or special-category.",
+        "key" : "privilege",
+        "opens" : "review",
+        "title" : "Flag privileged/sensitive"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What a reviewer should know.",
             "key" : "quality",
             "kind" : "longText",
             "label" : "Quality issues"
           }
         ],
-        "hint" : "Flag missing, undated or unauthenticated items.",
+        "hint" : "Missing, undated, or unauthenticated items.",
         "key" : "quality",
         "opens" : "dataLab",
         "title" : "Check quality & gaps"
@@ -4980,19 +5044,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.findings-memo" : {
-    "purpose" : "Reach findings on the balance of probabilities: recap scope, marshal the evidence per allegation, apply the standard, record findings with basis, note limitations, then produce the memo — never assert an unproven finding.",
+    "purpose" : "Reach findings on the balance of probabilities: recap scope, marshal evidence per allegation, assess reliability, apply the standard, record findings, note mitigation, note limitations, then produce — never assert an unproven finding.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The allegations being decided and the scope they're decided within.",
+            "help" : "The allegations being decided and within what scope.",
             "key" : "recap",
             "kind" : "longText",
             "label" : "Scope & allegations",
             "required" : true
           }
         ],
-        "hint" : "Anchor the memo in the case's scope and allegations.",
+        "hint" : "Anchor the memo.",
         "key" : "recap",
         "opens" : "findings",
         "title" : "Restate scope & allegations"
@@ -5000,13 +5064,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The cited evidence bearing on each allegation.",
+            "help" : "The cited evidence.",
             "key" : "evidence",
             "kind" : "longText",
             "label" : "Evidence per allegation"
           }
         ],
-        "hint" : "For each allegation, line up the evidence for and against (attach key exhibits).",
+        "hint" : "For each allegation, evidence for and against (attach exhibits).",
         "key" : "marshal",
         "opens" : "findings",
         "title" : "Marshal the evidence"
@@ -5014,13 +5078,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How the evidence meets or falls short of the standard, per allegation.",
+            "help" : "Corroboration, credibility, unresolved conflicts.",
+            "key" : "reliability",
+            "kind" : "longText",
+            "label" : "Reliability"
+          }
+        ],
+        "hint" : "Weight of each piece; how conflicts resolve.",
+        "key" : "reliability",
+        "opens" : "review",
+        "title" : "Assess reliability & conflicts"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "How the evidence meets or falls short, per allegation.",
             "key" : "reasoning",
             "kind" : "longText",
             "label" : "Reasoning"
           }
         ],
-        "hint" : "Balance of probabilities — is each allegation more likely than not?",
+        "hint" : "Balance of probabilities — more likely than not?",
         "key" : "standard",
         "opens" : "matrix",
         "title" : "Apply the standard of proof"
@@ -5028,27 +5106,41 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Substantiated / not substantiated per allegation — with basis. Do not assert findings the evidence doesn't support.",
+            "help" : "Substantiated / not substantiated — with basis. Never assert findings the evidence doesn't support.",
             "key" : "findings",
             "kind" : "longText",
             "label" : "Findings",
             "required" : true
           }
         ],
-        "hint" : "The human finding for each allegation, with its basis.",
+        "hint" : "The human finding per allegation.",
         "key" : "findings",
         "title" : "Record findings (your decision)"
       },
       {
         "fields" : [
           {
-            "help" : "What remains uncertain or was outside reach.",
+            "help" : "Context for the decision-maker.",
+            "key" : "mitigation",
+            "kind" : "longText",
+            "label" : "Mitigating / aggravating"
+          }
+        ],
+        "hint" : "Factors bearing on any recommended outcome (kept separate from findings).",
+        "key" : "mitigation",
+        "opens" : "review",
+        "title" : "Note mitigation / aggravation"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What remains uncertain.",
             "key" : "limitations",
             "kind" : "longText",
             "label" : "Limitations"
           }
         ],
-        "hint" : "Record gaps, refusals and unresolved conflicts — honest closure.",
+        "hint" : "Gaps, refusals, unresolved items — honest closure.",
         "key" : "limits",
         "opens" : "review",
         "title" : "Note limitations"
@@ -5063,7 +5155,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Assemble the findings memo with its sealed receipt.",
+        "hint" : "Assemble the memo with its sealed receipt.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -5072,33 +5164,33 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.incident-timeline" : {
-    "purpose" : "Build the incident chronology with relationship links, flagging gaps and conflicts — absence is not proof.",
+    "purpose" : "Build the incident chronology with relationship links, flagging gaps and conflicts — the app assembles dated events for you.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Each event: date, what happened, source — one per line.",
+            "help" : "Date, event, source — one per line.",
             "key" : "events",
             "kind" : "longText",
             "label" : "Events",
             "required" : true
           }
         ],
-        "hint" : "Gather every dated event, each with its source.",
-        "key" : "collect",
+        "hint" : "Each with its source — auto-pulled.",
+        "key" : "events",
         "opens" : "timeline",
         "title" : "Collect dated events"
       },
       {
         "fields" : [
           {
-            "help" : "Who was involved in what, and how events relate.",
+            "help" : "Who was involved in what.",
             "key" : "links",
             "kind" : "longText",
             "label" : "Links"
           }
         ],
-        "hint" : "Put events in order and link the parties involved.",
+        "hint" : "Order events and link the parties involved.",
         "key" : "link",
         "opens" : "connections",
         "title" : "Order & link"
@@ -5106,13 +5198,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Where the record is silent or accounts disagree.",
+            "help" : "Independent support per key event.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "What independently supports the pivotal events.",
+        "key" : "corroborate",
+        "opens" : "review",
+        "title" : "Corroborate key events"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Absence is not proof.",
             "key" : "gaps",
             "kind" : "longText",
             "label" : "Gaps & conflicts"
           }
         ],
-        "hint" : "Note missing periods and conflicting dates — keep both sides.",
+        "hint" : "Missing periods and conflicting accounts — both kept.",
         "key" : "gaps",
         "opens" : "review",
         "title" : "Flag gaps & conflicts"
@@ -5136,19 +5242,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.interview-prep" : {
-    "purpose" : "Prepare an interview grounded in the record: what to establish, non-leading questions tied to evidence, and the logistics and rights.",
+    "purpose" : "Prepare an interview grounded in the record: what to establish, non-leading questions, and the logistics and rights (support person, right to be accompanied).",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The points this interview needs to clarify or confirm.",
+            "help" : "The points to clarify or confirm.",
             "key" : "focus",
             "kind" : "longText",
             "label" : "What to establish",
             "required" : true
           }
         ],
-        "hint" : "See what the evidence already shows and what's missing.",
+        "hint" : "What the evidence shows and what's missing — the app answers over the file.",
         "key" : "review",
         "opens" : "ask",
         "title" : "Review the record"
@@ -5156,14 +5262,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The question list — grouped by topic, evidence-anchored.",
+            "help" : "Grouped by topic, evidence-anchored.",
             "key" : "questions",
             "kind" : "longText",
             "label" : "Questions",
             "required" : true
           }
         ],
-        "hint" : "Open, non-leading questions, each tied to specific evidence.",
+        "hint" : "Open, non-leading, tied to specific evidence.",
         "key" : "questions",
         "opens" : "matrix",
         "title" : "Draft the questions"
@@ -5171,28 +5277,42 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Arrangements and the rights/notice to give the interviewee.",
-            "key" : "logistics",
+            "help" : "Procedural fairness: what the interviewee is entitled to.",
+            "key" : "rights",
             "kind" : "longText",
-            "label" : "Logistics & rights"
+            "label" : "Rights & logistics"
           }
         ],
-        "hint" : "Who, when, support person, and any notice/rights to state.",
-        "key" : "logistics",
+        "hint" : "Notice, support person/companion, confidentiality, and (for respondent) the allegations in advance.",
+        "key" : "rights",
         "opens" : "handoff",
-        "title" : "Plan logistics & rights"
+        "title" : "Rights & logistics"
       },
       {
         "fields" : [
           {
-            "help" : "Name this interview plan.",
+            "help" : "Who, when, and why in that order.",
+            "key" : "order",
+            "kind" : "longText",
+            "label" : "Order"
+          }
+        ],
+        "hint" : "Usually complainant → witnesses → respondent.",
+        "key" : "order",
+        "opens" : "handoff",
+        "title" : "Sequence the interviews"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Name this plan.",
             "key" : "title",
             "kind" : "text",
             "label" : "Title",
             "required" : true
           }
         ],
-        "hint" : "Assemble the interview plan.",
+        "hint" : "Assemble the plan.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "INT",
@@ -5201,19 +5321,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.name-resolution" : {
-    "purpose" : "Decide whether names/accounts are the same person: gather identifiers, compare across evidence, rule out look-alikes, then confirm or reject — reversible, never automatic.",
+    "purpose" : "Decide whether names/accounts are the same person — reversible, human-gated. The app proposes matches; you decide.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "All the identifiers in play — one per line.",
+            "help" : "One per line.",
             "key" : "identifiers",
             "kind" : "longText",
             "label" : "Candidate identifiers",
             "required" : true
           }
         ],
-        "hint" : "Collect every name, email, username or account ID that might be the same person.",
+        "hint" : "Names, emails, usernames, IDs that may be one person.",
         "key" : "gather",
         "opens" : "knowledge",
         "title" : "Gather the identifiers"
@@ -5221,13 +5341,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Where the identifiers co-occur, and where they conflict.",
+            "help" : "Matching and conflicting signals.",
             "key" : "comparison",
             "kind" : "longText",
-            "label" : "Matching & conflicting signals"
+            "label" : "Signals"
           }
         ],
-        "hint" : "See how each identifier appears across the documents.",
+        "hint" : "How each appears — the app lines them up.",
         "key" : "compare",
         "opens" : "knowledge",
         "title" : "Compare across the evidence"
@@ -5235,54 +5355,54 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Candidates you considered and ruled out, with the reason.",
+            "help" : "With reason.",
             "key" : "ruledOut",
             "kind" : "longText",
-            "label" : "Look-alikes excluded"
+            "label" : "Excluded"
           }
         ],
-        "hint" : "Consider look-alikes (common names, shared devices) and exclude them.",
+        "hint" : "Exclude coincidental same-name matches.",
         "key" : "ruleout",
         "opens" : "review",
-        "title" : "Rule out coincidental matches"
+        "title" : "Rule out look-alikes"
       },
       {
         "fields" : [
           {
-            "help" : "Your identity decision — reversible later.",
+            "help" : "Reversible later.",
             "key" : "decision",
             "kind" : "choice",
             "label" : "Decision",
             "options" : [
               "Confirm same person",
-              "Reject — different people",
+              "Reject — different",
               "Insufficient evidence"
             ],
             "required" : true
           },
           {
-            "help" : "The evidence behind your decision.",
+            "help" : "The evidence behind it.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
             "required" : true
           }
         ],
-        "hint" : "A human decides identity. The app never auto-merges.",
+        "hint" : "A human decides. Reversible.",
         "key" : "decide",
         "title" : "Confirm or reject (your decision)"
       },
       {
         "fields" : [
           {
-            "help" : "Name this resolution record.",
+            "help" : "Name this record.",
             "key" : "recordName",
             "kind" : "text",
             "label" : "Record name",
             "required" : true
           }
         ],
-        "hint" : "Post the reversible identity decision to the case file.",
+        "hint" : "Post the reversible identity decision.",
         "key" : "record",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -5291,19 +5411,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.parties" : {
-    "purpose" : "Profile the complainant, respondent(s) and witnesses from cited evidence, and confirm each identity.",
+    "purpose" : "Profile complainant, respondent(s) and witnesses from cited evidence, and confirm each identity.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Complainant, respondent(s), witnesses — one per line with role.",
+            "help" : "Complainant, respondent(s), witnesses — with role.",
             "key" : "parties",
             "kind" : "longText",
             "label" : "Parties",
             "required" : true
           }
         ],
-        "hint" : "List everyone the case involves and their role.",
+        "hint" : "Everyone the case involves and their role.",
         "key" : "identify",
         "opens" : "dossier",
         "title" : "Identify the parties"
@@ -5311,13 +5431,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "For each party: role, relationships, relevant cited facts.",
+            "help" : "Power dynamics, who reports to whom.",
+            "key" : "roles",
+            "kind" : "longText",
+            "label" : "Relationships"
+          }
+        ],
+        "hint" : "Reporting lines and relationships that bear on the case.",
+        "key" : "roles",
+        "opens" : "connections",
+        "title" : "Roles & relationships"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Role, relevant facts — each cited.",
             "key" : "profiles",
             "kind" : "longText",
             "label" : "Profiles"
           }
         ],
-        "hint" : "Build each profile only from cited evidence.",
+        "hint" : "Only from cited evidence.",
         "key" : "profile",
         "opens" : "dossier",
         "title" : "Compile each profile"
@@ -5325,14 +5459,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Confirm each identity, or flag any you cannot — with basis.",
+            "help" : "What you confirm.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation & basis",
             "required" : true
           }
         ],
-        "hint" : "Confirm each profile maps to the right real person.",
+        "hint" : "Each profile maps to the right person.",
         "key" : "confirm",
         "title" : "Confirm identities (your decision)"
       },
@@ -5346,7 +5480,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Assemble the profiles for the case file.",
+        "hint" : "Assemble the profiles.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -5355,19 +5489,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "hr.root-cause" : {
-    "purpose" : "Find why it happened: Five Whys down the causal chain, Fishbone across cause categories, weigh the candidates, then record the human root-cause determination — the app never confirms a cause.",
+    "purpose" : "Find why it happened: Five Whys, Fishbone, weigh candidates, then a human determination of systemic cause — the app never confirms a cause.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The issue to explain — specific and evidence-based.",
+            "help" : "Specific and evidence-based.",
             "key" : "problem",
             "kind" : "longText",
             "label" : "Problem statement",
             "required" : true
           }
         ],
-        "hint" : "Define the confirmed issue precisely.",
+        "hint" : "The confirmed issue, precisely.",
         "key" : "problem",
         "opens" : "findings",
         "title" : "State the problem"
@@ -5375,13 +5509,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Why → because → why → because … each link supported.",
+            "help" : "Each link supported.",
             "key" : "whys",
             "kind" : "longText",
             "label" : "Why chain"
           }
         ],
-        "hint" : "Trace cause to cause; stop where the evidence stops.",
+        "hint" : "Cause to cause; stop where evidence stops.",
         "key" : "whys",
         "opens" : "connections",
         "title" : "Five Whys"
@@ -5389,13 +5523,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "People / process / policy / systems / environment.",
+            "help" : "Candidate systemic causes.",
             "key" : "categories",
             "kind" : "longText",
-            "label" : "Cause categories"
+            "label" : "Categories"
           }
         ],
-        "hint" : "Sort candidate causes by category.",
+        "hint" : "People / process / policy / systems / culture.",
         "key" : "fishbone",
         "opens" : "matrix",
         "title" : "Fishbone — categorize"
@@ -5403,13 +5537,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What supports or rules out each candidate cause.",
+            "help" : "What supports or rules out each.",
             "key" : "weighing",
             "kind" : "longText",
             "label" : "For / against"
           }
         ],
-        "hint" : "Evidence for and against each candidate cause.",
+        "hint" : "Evidence for and against each.",
         "key" : "weigh",
         "opens" : "review",
         "title" : "Weigh the candidates"
@@ -5417,16 +5551,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The root cause(s) you determine, and why.",
+            "help" : "On the evidence.",
             "key" : "determination",
             "kind" : "longText",
             "label" : "Determination & basis",
             "required" : true
           }
         ],
-        "hint" : "A human determines the root cause(s). The app never confirms one.",
+        "hint" : "A human determines the root cause(s).",
         "key" : "determine",
-        "title" : "Root-cause determination (your decision)"
+        "title" : "Determination (your decision)"
       },
       {
         "fields" : [
@@ -5452,14 +5586,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each account, attributed and cited.",
+            "help" : "Each account.",
             "key" : "accounts",
             "kind" : "longText",
             "label" : "Accounts",
             "required" : true
           }
         ],
-        "hint" : "Gather each party's statement (attach interview notes/recordings).",
+        "hint" : "Each statement, attributed and cited (attach interview notes).",
         "key" : "collect",
         "opens" : "findings",
         "title" : "Collect the accounts"
@@ -5467,13 +5601,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Where accounts agree, and where they conflict — keep both sides.",
+            "help" : "Both sides preserved.",
             "key" : "comparison",
             "kind" : "longText",
             "label" : "Agreement & conflict"
           }
         ],
-        "hint" : "Line up the accounts on each disputed point.",
+        "hint" : "On each disputed point.",
         "key" : "compare",
         "opens" : "matrix",
         "title" : "Compare point by point"
@@ -5481,13 +5615,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Conflicts still unresolved, and why.",
+            "help" : "Where each account is corroborated or contradicted.",
+            "key" : "consistency",
+            "kind" : "longText",
+            "label" : "Consistency"
+          }
+        ],
+        "hint" : "Internal consistency and fit with other evidence.",
+        "key" : "assess",
+        "opens" : "review",
+        "title" : "Assess consistency"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What remains unresolved and why.",
             "key" : "conflicts",
             "kind" : "longText",
             "label" : "Open conflicts"
           }
         ],
-        "hint" : "Note conflicts that remain open — never resolved by averaging.",
+        "hint" : "Conflicts left open — never averaged.",
         "key" : "conflicts",
         "opens" : "review",
         "title" : "Record unresolved conflicts"
