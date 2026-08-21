@@ -33,6 +33,7 @@ public struct DataLabView: View {
     @State private var record: WorkbenchDatasetRecord?
     @State private var selectedCell: (rowID: UUID, fieldID: UUID)?
     @State private var cellEditor = ""
+    @FocusState private var focusedCellKey: String?
     @State private var newFieldName = ""
     @State private var newFieldShape: FactSchemaRegistry.ValueShape = .text
 
@@ -299,8 +300,10 @@ public struct DataLabView: View {
 
     // MARK: Grid
 
-    private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
-        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+    /// The rows currently visible in the grid, with projection filtering and
+    /// any active sort/filter view applied — the same order the grid shows, so
+    /// inline-edit "move to next row" matches what the user sees.
+    private func orderedVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
         var rows = rec.rows.sorted { $0.ordinal < $1.ordinal }
         if let projection = activeProjection() {
             rows = rows.filter { !projection.excludedRows.contains($0.id) }
@@ -309,6 +312,12 @@ public struct DataLabView: View {
             let index = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
             rows = rows.filter { index[$0.id] != nil }.sorted { (index[$0.id] ?? 0) < (index[$1.id] ?? 0) }
         }
+        return rows
+    }
+
+    private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
+        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+        let rows = orderedVisibleRows(rec)
         var cellByKey: [String: WorkbenchCell] = [:]
         for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
 
@@ -334,42 +343,74 @@ public struct DataLabView: View {
                 }
             }
             if rows.isEmpty {
-                Text("No rows yet — add one from the panel on the right.")
+                Text("No rows yet — add rows or paste a table from the panel on the right.")
                     .font(.caption).foregroundStyle(.tertiary).padding(8)
+            } else if !fields.isEmpty {
+                Text("Tip: click a cell and type; press Return to drop to the next row.")
+                    .font(.caption2).foregroundStyle(.tertiary).padding(.leading, 6).padding(.top, 4)
             }
         }
     }
 
+    /// A cell you can type into directly: empty cells and hand-entered kinds.
+    /// Source-bound values and derived (formula) values stay read-only, and
+    /// inline editing is suppressed while a scenario is active (use Override).
+    private func isInlineEditable(_ cell: WorkbenchCell?, overridden: Bool) -> Bool {
+        if activeScenario != nil || overridden { return false }
+        guard let cell else { return true }   // empty → becomes user-entered
+        switch cell.kind {
+        case .userEntered, .userCorrected, .modelProposal, .reviewed: return true
+        case .sourceValue, .deterministicCalculation: return false
+        }
+    }
+
+    @ViewBuilder
     private func gridCell(row: WorkbenchRow, field: WorkbenchField,
                           cell: WorkbenchCell?, rec: WorkbenchDatasetRecord) -> some View {
+        let key = "\(row.id.uuidString)|\(field.id.uuidString)"
         let projection = activeProjection()
-        let overridden = projection?.cellOverrides["\(row.id.uuidString)|\(field.id.uuidString)"] != nil
+        let overridden = projection?.cellOverrides[key] != nil
         let display = projection?.projectedValue(rowID: row.id, fieldID: field.id) ?? cell?.value
         let selected = selectedCell?.rowID == row.id && selectedCell?.fieldID == field.id
-        return Button {
-            selectedCell = (row.id, field.id)
-            cellEditor = display ?? ""
-        } label: {
-            HStack(spacing: 4) {
-                if let cell {
-                    Circle()
-                        .fill(provenanceColor(cell, rec: rec, overridden: overridden))
-                        .frame(width: 6, height: 6)
+        let editable = isInlineEditable(cell, overridden: overridden)
+
+        if selected && editable {
+            TextField("", text: $cellEditor)
+                .textFieldStyle(.plain)
+                .font(.caption)
+                .focused($focusedCellKey, equals: key)
+                .onSubmit { commitInline(rec, selection: (row.id, field.id)) }
+                .padding(6)
+                .frame(width: 150)
+                .background(.tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.tint, lineWidth: 1))
+        } else {
+            Button {
+                selectedCell = (row.id, field.id)
+                cellEditor = display ?? ""
+                if editable { focusedCellKey = key }
+            } label: {
+                HStack(spacing: 4) {
+                    if let cell {
+                        Circle()
+                            .fill(provenanceColor(cell, rec: rec, overridden: overridden))
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(display ?? "")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(display ?? "")
-                    .font(.caption)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+                .frame(width: 150)
+                .background(selected ? AnyShapeStyle(.tint.opacity(0.15))
+                            : overridden ? AnyShapeStyle(.orange.opacity(0.10))
+                            : AnyShapeStyle(.quaternary.opacity(0.2)))
+                .contentShape(Rectangle())
             }
-            .padding(6)
-            .frame(width: 150)
-            .background(selected ? AnyShapeStyle(.tint.opacity(0.15))
-                        : overridden ? AnyShapeStyle(.orange.opacity(0.10))
-                        : AnyShapeStyle(.quaternary.opacity(0.2)))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .help(cellHelp(cell, rec: rec, overridden: overridden))
         }
-        .buttonStyle(.plain)
-        .help(cellHelp(cell, rec: rec, overridden: overridden))
     }
 
     private func provenanceColor(_ cell: WorkbenchCell, rec: WorkbenchDatasetRecord, overridden: Bool) -> Color {
@@ -491,9 +532,19 @@ public struct DataLabView: View {
                     .disabled(newFieldName.trimmingCharacters(in: .whitespaces).isEmpty)
                     .help("Add a field (column)")
             }
-            Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
-                .controlSize(.small)
-                .disabled(rec.fields.isEmpty)
+            HStack(spacing: 6) {
+                Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                Button { addRows(5, rec) } label: { Text("+5") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                    .help("Add five empty rows at once")
+                Button { pasteTable(rec) } label: { Label("Paste table", systemImage: "doc.on.clipboard") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                    .help("Paste a block of cells copied from Excel or Numbers — it fills new rows across your columns, left to right. Values are recorded as hand-entered.")
+            }
 
             Divider().padding(.vertical, 2)
             sectionLabel("Templates")
@@ -1107,6 +1158,100 @@ public struct DataLabView: View {
                                                 value: value.isEmpty ? nil : value, status: .humanConfirmed,
                                                 expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
             } catch { errorMessage = "Could not save the cell: \(error)" }
+        }
+    }
+
+    /// Inline-grid commit: save the typed value, then move selection + focus to
+    /// the same column of the next visible row (spreadsheet-style Return).
+    private func commitInline(_ rec: WorkbenchDatasetRecord, selection: (rowID: UUID, fieldID: UUID)) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let value = cellEditor
+        let visible = orderedVisibleRows(rec)
+        let nextRowID: UUID? = visible.firstIndex(where: { $0.id == selection.rowID })
+            .flatMap { idx in idx + 1 < visible.count ? visible[idx + 1].id : nil }
+        Task {
+            do {
+                let updated = try await repo.setCell(
+                    datasetID: rec.dataset.id, rowID: selection.rowID, fieldID: selection.fieldID,
+                    kind: .userEntered, value: value.isEmpty ? nil : value, status: .humanConfirmed,
+                    expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
+                record = updated
+                if let nid = nextRowID {
+                    selectedCell = (nid, selection.fieldID)
+                    cellEditor = updated.cells.first { $0.rowID == nid && $0.fieldID == selection.fieldID }?.value ?? ""
+                    focusedCellKey = "\(nid.uuidString)|\(selection.fieldID.uuidString)"
+                } else {
+                    selectedCell = nil
+                    focusedCellKey = nil
+                }
+            } catch { errorMessage = "Could not save the cell: \(error)" }
+        }
+    }
+
+    /// Add several empty rows in one action (revision threaded through each).
+    private func addRows(_ n: Int, _ rec: WorkbenchDatasetRecord) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        Task {
+            do {
+                var current = rec
+                for _ in 0..<max(1, n) {
+                    current = try await repo.addRow(datasetID: current.dataset.id,
+                                                    expectedRevision: current.dataset.revision,
+                                                    actor: actorName, at: Date())
+                }
+                record = current
+            } catch { errorMessage = "Could not add rows: \(error)" }
+        }
+    }
+
+    /// Paste a block of cells copied from Excel/Numbers (tab- or comma-separated)
+    /// into new rows, mapped left-to-right onto the existing columns. Values are
+    /// recorded as hand-entered — source binding stays a separate, explicit step.
+    private func pasteTable(_ rec: WorkbenchDatasetRecord) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+        guard !fields.isEmpty else { errorMessage = "Add columns before pasting."; return }
+        #if os(macOS)
+        let raw = NSPasteboard.general.string(forType: .string) ?? ""
+        #else
+        let raw = ""
+        #endif
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Clipboard is empty — copy a block of cells from Excel/Numbers first."
+            return
+        }
+        let table = DataLabPasteParser.parse(raw)
+        guard !table.isEmpty else { return }
+        let maxCells = 2000
+        Task {
+            do {
+                var current = rec
+                var placed = 0
+                outer: for cols in table {
+                    current = try await repo.addRow(datasetID: current.dataset.id,
+                                                    expectedRevision: current.dataset.revision,
+                                                    actor: actorName, at: Date())
+                    guard let newRow = current.rows.max(by: { $0.ordinal < $1.ordinal }) else { continue }
+                    for (i, field) in fields.enumerated() {
+                        guard i < cols.count else { break }
+                        let v = cols[i]
+                        if v.isEmpty { continue }
+                        if placed >= maxCells { break outer }
+                        current = try await repo.setCell(
+                            datasetID: current.dataset.id, rowID: newRow.id, fieldID: field.id,
+                            kind: .userEntered, value: v, status: .humanConfirmed,
+                            expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                        placed += 1
+                    }
+                }
+                record = current
+                if placed >= maxCells {
+                    errorMessage = "Pasted the first \(maxCells) values — paste the rest in a second block."
+                }
+            } catch { errorMessage = "Could not paste the table: \(error)" }
         }
     }
 

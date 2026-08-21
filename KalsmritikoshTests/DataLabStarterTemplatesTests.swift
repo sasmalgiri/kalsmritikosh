@@ -105,6 +105,32 @@ struct DataLabStarterTemplatesTests {
         #expect(rec.fields.count == template.inputColumns.count)
     }
 
+    // MARK: - Paste parsing (modern data entry)
+
+    @Test("Paste parser handles tab-separated Excel blocks with CRLF line endings")
+    func pasteParserTabs() {
+        let raw = "Alice\t100\t2024-01-01\r\nBob\t250\t2024-02-15\r\n"
+        let table = DataLabPasteParser.parse(raw)
+        #expect(table.count == 2)
+        #expect(table[0] == ["Alice", "100", "2024-01-01"])
+        #expect(table[1] == ["Bob", "250", "2024-02-15"])
+    }
+
+    @Test("Paste parser falls back to commas and trims whitespace")
+    func pasteParserCommas() {
+        let raw = "Item A, 10 ,  Bank\nItem B,20,Broker"
+        let table = DataLabPasteParser.parse(raw)
+        #expect(table.count == 2)
+        #expect(table[0] == ["Item A", "10", "Bank"])
+        #expect(table[1] == ["Item B", "20", "Broker"])
+    }
+
+    @Test("Paste parser returns empty for blank input")
+    func pasteParserEmpty() {
+        #expect(DataLabPasteParser.parse("").isEmpty)
+        #expect(DataLabPasteParser.parse("\n\n").isEmpty)
+    }
+
     @Test("A money/date-heavy template (inventory) applies with correct value shapes")
     func applyMoneyDateTemplate() async throws {
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)

@@ -48,6 +48,25 @@ public struct DataLabStarterTemplate: Identifiable, Sendable {
     }
 }
 
+/// Parses a clipboard block (copied from Excel / Numbers / a CSV) into rows of
+/// trimmed cells, so DataLab can paste-fill a table. Tab-separated when any tab
+/// is present (the spreadsheet default), otherwise comma-separated. Pure and
+/// deterministic so it can be unit-tested without the pasteboard.
+public enum DataLabPasteParser {
+    public static func parse(_ raw: String) -> [[String]] {
+        let normalized = raw
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        guard !lines.isEmpty else { return [] }
+        let separator: Character = raw.contains("\t") ? "\t" : ","
+        return lines.map { line in
+            line.split(separator: separator, omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+    }
+}
+
 public enum DataLabStarterTemplates {
 
     public static let all: [DataLabStarterTemplate] = [
