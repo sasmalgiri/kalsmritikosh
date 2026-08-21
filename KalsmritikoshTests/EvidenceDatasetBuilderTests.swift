@@ -154,4 +154,83 @@ struct EvidenceDatasetBuilderTests {
         #expect(values.contains("4"))       // times observed (weight)
         #expect(values.contains("2"))       // source documents (evidence count)
     }
+
+    @Test("Communications build binds From & To parties to their entities")
+    func communicationsBuild() async throws {
+        let (db, wsID, koID) = try await seededLedger()
+        let a = UUID(), b = UUID()
+        for (id, value) in [(a, "Alice"), (b, "Bob")] {
+            try await db.exec("""
+            INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
+            VALUES (?, 'person', ?, ?, ?, 0.8, '{}');
+            """, [.uuid(id), .text(value), .text(value.lowercased()), .uuid(koID)])
+        }
+        try await db.exec("""
+        INSERT INTO relationships (id, kind, from_entity_id, to_entity_id, via_event_id,
+                                   source_object_id, confidence, attributes_json, weight, evidence_object_ids_json)
+        VALUES (?, 'emailed', ?, ?, NULL, ?, 0.8, '{}', 7, ?);
+        """, [.uuid(UUID()), .uuid(a), .uuid(b), .uuid(koID), .text("[\"\(koID.uuidString)\"]")])
+
+        let builder = EvidenceDatasetBuilder(
+            datasets: WorkbenchDatasetRepository(database: db),
+            events: EventsRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
+        let result = try await builder.buildCommunications(
+            workspaceID: wsID, title: "Communications", actor: "Tester", at: t0)
+
+        #expect(result.rowsAdded == 1)
+        #expect(result.record.fields.map(\.name) == ["From", "To", "Messages", "Source documents"])
+        #expect(result.boundCells == 2)
+        #expect(result.record.bindings.allSatisfy { $0.targetKind == .entity })
+        #expect(result.record.isFullyProvenanced)
+    }
+
+    @Test("Conflicts build binds each conflict to its contradiction record")
+    func conflictsBuild() async throws {
+        let (db, wsID, _) = try await seededLedger()
+        let repo = ContradictionsRepository(database: db)
+        await repo.insert(Contradiction(description: "Conflicting dates for kickoff",
+                                        claimA: "1 Jan 2024", claimB: "2 Feb 2024"))
+
+        let builder = EvidenceDatasetBuilder(
+            datasets: WorkbenchDatasetRepository(database: db),
+            events: EventsRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
+        let result = try await builder.buildContradictions(
+            contradictions: repo, workspaceID: wsID, title: "Conflicts", actor: "Tester", at: t0)
+
+        #expect(result.rowsAdded == 1)
+        #expect(result.record.fields.map(\.name) == ["Conflict", "Claim A", "Claim B", "Severity", "Status"])
+        #expect(result.boundCells == 1)
+        #expect(result.record.bindings.allSatisfy { $0.targetKind == .contradiction })
+        #expect(result.record.isFullyProvenanced)
+        let values = Set(result.record.cells.compactMap { $0.value })
+        #expect(values.contains("Conflicting dates for kickoff"))
+        #expect(values.contains("1 Jan 2024"))
+    }
+
+    @Test("Missing-evidence build binds each gap to its gap record")
+    func gapsBuild() async throws {
+        let (db, wsID, _) = try await seededLedger()
+        let repo = GapNodeRepository(database: db)
+        await repo.insert(GapNode(kind: .danglingReference,
+                                  description: "Invoice #42 referenced but missing",
+                                  reason: "Referenced in an email, never ingested"))
+
+        let builder = EvidenceDatasetBuilder(
+            datasets: WorkbenchDatasetRepository(database: db),
+            events: EventsRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
+        let result = try await builder.buildGaps(
+            gaps: repo, workspaceID: wsID, title: "Missing evidence", actor: "Tester", at: t0)
+
+        #expect(result.rowsAdded == 1)
+        #expect(result.record.fields.map(\.name) == ["Gap", "Why it matters", "Near", "Status"])
+        #expect(result.boundCells == 1)
+        #expect(result.record.bindings.allSatisfy { $0.targetKind == .gap })
+        #expect(result.record.isFullyProvenanced)
+    }
 }

@@ -32,6 +32,9 @@ public actor EvidenceDatasetBuilder {
         case timeline
         case peopleAndOrganizations
         case payments
+        case communications
+        case conflicts
+        case missingEvidence
     }
 
     private let datasets: WorkbenchDatasetRepository
@@ -149,22 +152,22 @@ public actor EvidenceDatasetBuilder {
         return BuildResult(record: rec, rowsAdded: picked.count, boundCells: bound)
     }
 
-    // MARK: - Payments (from payer→payee relationships)
+    // MARK: - Relationship tables (payments, communications)
 
-    /// One row per payment relationship (payer → payee), with both parties
-    /// drill-through bound to their entity. The ledger holds who-paid-whom and
-    /// how well-corroborated it is, but not a reliable per-edge amount — so this
-    /// records corroboration weight + source-document count, not a dollar figure
-    /// (honest; the Fund Flow view makes the same distinction).
-    public func buildPayments(workspaceID: UUID, title: String, limit: Int = 500,
-                              actor: String, at date: Date) async throws -> BuildResult {
-        let edges = try await relationships.fundFlowEdges(limit: limit)
+    /// One row per relationship edge of the given kinds, both parties
+    /// drill-through bound to their entity, plus corroboration weight and
+    /// source-document count as honest summary figures (no invented amount).
+    private func buildEdgeTable(kinds: [Relationship.Kind],
+                                fromName: String, toName: String, countName: String,
+                                workspaceID: UUID, title: String, limit: Int,
+                                actor: String, at date: Date) async throws -> BuildResult {
+        let edges = try await relationships.fundFlowEdges(kinds: kinds, limit: limit)
 
         var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
                                                    mode: .advanced, actor: actor, at: date)
         let id = rec.dataset.id
         let fields: [(String, FactSchemaRegistry.ValueShape)] = [
-            ("Payer", .text), ("Payee", .text), ("Times observed", .number), ("Source documents", .number)
+            (fromName, .text), (toName, .text), (countName, .number), ("Source documents", .number)
         ]
         var fieldID: [String: UUID] = [:]
         for (name, shape) in fields {
@@ -178,10 +181,9 @@ public actor EvidenceDatasetBuilder {
             rec = try await datasets.addRow(datasetID: id, expectedRevision: rec.dataset.revision, actor: actor, at: date)
             guard let row = rec.rows.last else { continue }
 
-            // Payer / Payee: source cells drill through to the party entity.
             let parties: [(field: String, label: String, entityID: UUID)] = [
-                ("Payer", edge.fromLabel, edge.fromID),
-                ("Payee", edge.toLabel, edge.toID)
+                (fromName, edge.fromLabel, edge.fromID),
+                (toName, edge.toLabel, edge.toID)
             ]
             for party in parties {
                 guard let fid = fieldID[party.field], !party.label.isEmpty else { continue }
@@ -194,8 +196,7 @@ public actor EvidenceDatasetBuilder {
                                                     expectedRevision: rec.dataset.revision, actor: actor, at: date)
                 bound += 1
             }
-            // Corroboration figures — summaries, not bound source cells.
-            if let wf = fieldID["Times observed"] {
+            if let wf = fieldID[countName] {
                 rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: wf,
                                                  kind: .userEntered, value: String(edge.weight), status: .sourceAsserted,
                                                  expectedRevision: rec.dataset.revision, actor: actor, at: date)
@@ -207,5 +208,107 @@ public actor EvidenceDatasetBuilder {
             }
         }
         return BuildResult(record: rec, rowsAdded: edges.count, boundCells: bound)
+    }
+
+    /// Payments: payer → payee (Forensic / SIU daily work).
+    public func buildPayments(workspaceID: UUID, title: String, limit: Int = 500,
+                              actor: String, at date: Date) async throws -> BuildResult {
+        try await buildEdgeTable(kinds: [.paid], fromName: "Payer", toName: "Payee",
+                                 countName: "Times observed", workspaceID: workspaceID, title: title,
+                                 limit: limit, actor: actor, at: date)
+    }
+
+    /// Communications: who contacted whom (Investigator / Journalist daily work).
+    public func buildCommunications(workspaceID: UUID, title: String, limit: Int = 500,
+                                    actor: String, at date: Date) async throws -> BuildResult {
+        try await buildEdgeTable(kinds: [.emailed, .sent, .received], fromName: "From", toName: "To",
+                                 countName: "Messages", workspaceID: workspaceID, title: title,
+                                 limit: limit, actor: actor, at: date)
+    }
+
+    // MARK: - Review-desk tables (conflicts, missing evidence)
+
+    /// Conflicts to resolve: one row per detected contradiction, the conflict
+    /// cell drill-through bound to the contradiction record.
+    public func buildContradictions(contradictions repo: ContradictionsRepository,
+                                    workspaceID: UUID, title: String, limit: Int = 500,
+                                    actor: String, at date: Date) async throws -> BuildResult {
+        let items = await repo.all(limit: limit)
+        var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
+                                                   mode: .advanced, actor: actor, at: date)
+        let id = rec.dataset.id
+        for (name, shape) in [("Conflict", FactSchemaRegistry.ValueShape.text), ("Claim A", .text),
+                              ("Claim B", .text), ("Severity", .text), ("Status", .text)] {
+            rec = try await datasets.addField(datasetID: id, name: name, valueShape: shape,
+                                              expectedRevision: rec.dataset.revision, actor: actor, at: date)
+        }
+        func fid(_ n: String) -> UUID? { rec.fields.first { $0.name == n }?.id }
+        var bound = 0
+        for c in items {
+            rec = try await datasets.addRow(datasetID: id, expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            guard let row = rec.rows.last else { continue }
+            let anchor = c.description.isEmpty ? c.kind.rawValue : c.description
+            if let f = fid("Conflict") {
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: f,
+                                                 kind: .sourceValue, value: anchor, status: .directlyObserved,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                if let cell = rec.cells.first(where: { $0.rowID == row.id && $0.fieldID == f }) {
+                    rec = try await datasets.bindSource(cellID: cell.id, targetKind: .contradiction,
+                                                        targetID: c.id.uuidString, sourceVersionID: nil, locator: nil,
+                                                        expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                    bound += 1
+                }
+            }
+            for (name, value) in [("Claim A", c.claimA), ("Claim B", c.claimB),
+                                  ("Severity", c.severity.rawValue), ("Status", c.status.rawValue)] {
+                guard let f = fid(name), !value.isEmpty else { continue }
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: f,
+                                                 kind: .userEntered, value: value, status: .sourceAsserted,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            }
+        }
+        return BuildResult(record: rec, rowsAdded: items.count, boundCells: bound)
+    }
+
+    /// Missing evidence / follow-ups: one row per gap, the gap cell
+    /// drill-through bound to the gap record.
+    public func buildGaps(gaps repo: GapNodeRepository,
+                          workspaceID: UUID, title: String, limit: Int = 500,
+                          actor: String, at date: Date) async throws -> BuildResult {
+        let items = await repo.all(includeDismissed: false, limit: limit)
+        var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
+                                                   mode: .advanced, actor: actor, at: date)
+        let id = rec.dataset.id
+        for (name, shape) in [("Gap", FactSchemaRegistry.ValueShape.text), ("Why it matters", .text),
+                              ("Near", .text), ("Status", .text)] {
+            rec = try await datasets.addField(datasetID: id, name: name, valueShape: shape,
+                                              expectedRevision: rec.dataset.revision, actor: actor, at: date)
+        }
+        func fid(_ n: String) -> UUID? { rec.fields.first { $0.name == n }?.id }
+        var bound = 0
+        for g in items {
+            rec = try await datasets.addRow(datasetID: id, expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            guard let row = rec.rows.last else { continue }
+            let anchor = g.description.isEmpty ? g.kind.rawValue : g.description
+            if let f = fid("Gap") {
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: f,
+                                                 kind: .sourceValue, value: anchor, status: .directlyObserved,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                if let cell = rec.cells.first(where: { $0.rowID == row.id && $0.fieldID == f }) {
+                    rec = try await datasets.bindSource(cellID: cell.id, targetKind: .gap,
+                                                        targetID: g.id.uuidString, sourceVersionID: nil, locator: nil,
+                                                        expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                    bound += 1
+                }
+            }
+            for (name, value) in [("Why it matters", g.reason), ("Near", g.nearEntity ?? ""),
+                                  ("Status", g.dismissed ? "dismissed" : "open")] {
+                guard let f = fid(name), !value.isEmpty else { continue }
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: f,
+                                                 kind: .userEntered, value: value, status: .sourceAsserted,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            }
+        }
+        return BuildResult(record: rec, rowsAdded: items.count, boundCells: bound)
     }
 }

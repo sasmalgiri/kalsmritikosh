@@ -191,7 +191,11 @@ public struct DataLabView: View {
                     Menu {
                         Button("Timeline — from dated events") { buildFromEvidence(.timeline) }
                         Button("People & organizations — from entities") { buildFromEvidence(.peopleAndOrganizations) }
-                        Button("Payments — payer → payee from evidence") { buildFromEvidence(.payments) }
+                        Button("Payments — payer → payee") { buildFromEvidence(.payments) }
+                        Button("Communications — who contacted whom") { buildFromEvidence(.communications) }
+                        Divider()
+                        Button("Conflicts to resolve") { buildFromEvidence(.conflicts) }
+                        Button("Missing evidence / follow-ups") { buildFromEvidence(.missingEvidence) }
                     } label: {
                         Label("Build from evidence", systemImage: "sparkles.rectangle.stack")
                             .font(.caption).lineLimit(1)
@@ -1129,6 +1133,21 @@ public struct DataLabView: View {
                 case .payments:
                     result = try await builder.buildPayments(
                         workspaceID: wsID, title: "Payments from evidence", actor: actorName, at: Date())
+                case .communications:
+                    result = try await builder.buildCommunications(
+                        workspaceID: wsID, title: "Communications from evidence", actor: actorName, at: Date())
+                case .conflicts:
+                    guard let repo = appState.contradictions else {
+                        errorMessage = "Contradictions aren't available yet."; return
+                    }
+                    result = try await builder.buildContradictions(
+                        contradictions: repo, workspaceID: wsID, title: "Conflicts to resolve", actor: actorName, at: Date())
+                case .missingEvidence:
+                    guard let repo = appState.gapNodes else {
+                        errorMessage = "Gaps aren't available yet."; return
+                    }
+                    result = try await builder.buildGaps(
+                        gaps: repo, workspaceID: wsID, title: "Missing evidence", actor: actorName, at: Date())
                 }
                 record = result.record
                 await loadSatellites(result.record.dataset.id)
