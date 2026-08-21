@@ -63,6 +63,11 @@ public struct DataLabView: View {
     // Persona starter template chosen on the create panel (optional).
     @State private var selectedStarter: DataLabStarterTemplate?
 
+    // One-click "bind this cell to a source document" (manual cells).
+    @State private var bindingActive = false
+    @State private var bindCandidates: [KnowledgeObjectSummaryRow] = []
+    @State private var bindQuery = ""
+
     // Interop — Excel/Word/PDF exports (each posts a numbered EXP document),
     // CSV import, and the chart panel.
     @State private var showImporter = false
@@ -556,6 +561,53 @@ public struct DataLabView: View {
                         Button("Override in scenario") { applyOverride(rec, selection: selection) }
                             .controlSize(.small)
                             .help("Records a what-if value in the scenario — the base cell stays untouched")
+                    }
+                }
+
+                // Existing bindings on this (now-source) cell, if any.
+                if let cell, !rec.bindings(forCell: cell.id).isEmpty {
+                    ForEach(rec.bindings(forCell: cell.id)) { binding in
+                        Label("\(binding.targetKind.rawValue) \(binding.targetID.prefix(8))…", systemImage: "link")
+                            .font(.caption2).foregroundStyle(.tint)
+                    }
+                }
+
+                Divider().padding(.vertical, 2)
+                Button {
+                    bindQuery = ""
+                    bindingActive.toggle()
+                    if bindingActive { Task { await loadBindCandidates() } }
+                } label: {
+                    Label(bindingActive ? "Cancel" : "Bind to a source document…", systemImage: "link")
+                        .font(.caption)
+                }
+                .controlSize(.small)
+                .help("Tie this hand-entered value to the document it came from, so it drills through like sourced data (turns the cell green + citable).")
+                if bindingActive {
+                    TextField("Filter documents", text: $bindQuery)
+                        .textFieldStyle(.roundedBorder).controlSize(.small)
+                    if bindCandidates.isEmpty {
+                        Text("No ingested documents yet.").font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 3) {
+                                ForEach(filteredBindCandidates) { doc in
+                                    Button {
+                                        bindCell(rec, selection: selection, objectID: doc.id)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(doc.sourceFile.lastPathComponent).font(.caption).lineLimit(1)
+                                            Text(doc.preview).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, 2)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 180)
                     }
                 }
             }
@@ -1285,6 +1337,52 @@ public struct DataLabView: View {
                 record = try await repo.addRow(datasetID: rec.dataset.id,
                                                expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
             } catch { errorMessage = "Could not add the row: \(error)" }
+        }
+    }
+
+    // MARK: One-click source binding for manual cells
+
+    private var filteredBindCandidates: [KnowledgeObjectSummaryRow] {
+        let q = bindQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return bindCandidates }
+        return bindCandidates.filter {
+            $0.sourceFile.lastPathComponent.lowercased().contains(q) || $0.preview.lowercased().contains(q)
+        }
+    }
+
+    private func loadBindCandidates() async {
+        if let repo = appState.objects {
+            bindCandidates = (try? await repo.recent(limit: 200)) ?? []
+        } else {
+            bindCandidates = []
+        }
+    }
+
+    /// Convert a hand-entered cell into a source cell bound to a document, so it
+    /// drills through like built data. setCell replaces the cell (new id), so we
+    /// bind the refreshed cell.
+    private func bindCell(_ rec: WorkbenchDatasetRecord, selection: (rowID: UUID, fieldID: UUID), objectID: UUID) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let value = cellEditor
+        Task {
+            do {
+                var updated = try await repo.setCell(
+                    datasetID: rec.dataset.id, rowID: selection.rowID, fieldID: selection.fieldID,
+                    kind: .sourceValue, value: value.isEmpty ? nil : value, status: .directlyObserved,
+                    expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
+                guard let cell = updated.cells.first(where: { $0.rowID == selection.rowID && $0.fieldID == selection.fieldID }) else {
+                    errorMessage = "Could not locate the cell to bind."; return
+                }
+                updated = try await repo.bindSource(
+                    cellID: cell.id, targetKind: .knowledgeObject, targetID: objectID.uuidString,
+                    sourceVersionID: nil, locator: nil,
+                    expectedRevision: updated.dataset.revision, actor: actorName, at: Date())
+                record = updated
+                bindingActive = false
+            } catch {
+                errorMessage = "Could not bind to the source: \(error)"
+            }
         }
     }
 

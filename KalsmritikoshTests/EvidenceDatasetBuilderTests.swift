@@ -211,6 +211,37 @@ struct EvidenceDatasetBuilderTests {
         #expect(values.contains("1 Jan 2024"))
     }
 
+    @Test("Manual cell can be bound to a source document (hand-typed → drillable)")
+    func manualCellBinding() async throws {
+        let (db, wsID, koID) = try await seededLedger()
+        let repo = WorkbenchDatasetRepository(database: db)
+        var rec = try await repo.createDataset(workspaceID: wsID, title: "Privilege log",
+                                               mode: .advanced, actor: "Tester", at: t0)
+        rec = try await repo.addField(datasetID: rec.dataset.id, name: "Description", valueShape: .text,
+                                      expectedRevision: rec.dataset.revision, actor: "Tester", at: t0)
+        let fieldID = rec.fields.first { $0.name == "Description" }!.id
+        rec = try await repo.addRow(datasetID: rec.dataset.id, expectedRevision: rec.dataset.revision, actor: "Tester", at: t0)
+        let rowID = rec.rows.first!.id
+
+        // Hand-enter a value (unsourced → grey, not provenanced).
+        rec = try await repo.setCell(datasetID: rec.dataset.id, rowID: rowID, fieldID: fieldID,
+                                     kind: .userEntered, value: "Memo re strategy", status: .humanConfirmed,
+                                     expectedRevision: rec.dataset.revision, actor: "Tester", at: t0)
+        #expect(rec.cells.first?.kind == .userEntered)
+
+        // The finisher's sequence: convert to source cell + bind to the document.
+        rec = try await repo.setCell(datasetID: rec.dataset.id, rowID: rowID, fieldID: fieldID,
+                                     kind: .sourceValue, value: "Memo re strategy", status: .directlyObserved,
+                                     expectedRevision: rec.dataset.revision, actor: "Tester", at: t0)
+        let cell = rec.cells.first { $0.rowID == rowID && $0.fieldID == fieldID }!
+        rec = try await repo.bindSource(cellID: cell.id, targetKind: .knowledgeObject, targetID: koID.uuidString,
+                                        sourceVersionID: nil, locator: nil,
+                                        expectedRevision: rec.dataset.revision, actor: "Tester", at: t0)
+
+        #expect(rec.bindings.contains { $0.targetKind == .knowledgeObject && $0.targetID == koID.uuidString })
+        #expect(rec.isFullyProvenanced, "the bound cell must now drill through")
+    }
+
     @Test("Missing-evidence build binds each gap to its gap record")
     func gapsBuild() async throws {
         let (db, wsID, _) = try await seededLedger()
