@@ -56,6 +56,9 @@ public struct DataLabView: View {
 
     @State private var errorMessage: String?
 
+    // Persona starter template chosen on the create panel (optional).
+    @State private var selectedStarter: DataLabStarterTemplate?
+
     // Interop — Excel/Word/PDF exports (each posts a numbered EXP document),
     // CSV import, and the chart panel.
     @State private var showImporter = false
@@ -90,6 +93,15 @@ public struct DataLabView: View {
         return name.isEmpty ? "Owner" : name
     }
 
+    /// Header summary line, built as a plain string so the ViewBuilder doesn't
+    /// have to type-check a long `Text(...) + optional + optional` chain.
+    private func datasetSummary(_ rec: WorkbenchDatasetRecord) -> String {
+        var s = "\(rec.fields.count) fields · \(rec.rows.count) rows · revision \(rec.dataset.revision)"
+        if let sc = activeScenario { s += " · scenario: \(sc.scenario.title)" }
+        if let p = projectionLabel { s += " · view: \(p)" }
+        return s
+    }
+
     // MARK: - Catalog
 
     private var catalogScreen: some View {
@@ -121,10 +133,22 @@ public struct DataLabView: View {
                         Text("Advanced").tag(WorkbenchDatasetMode.advanced)
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 170)
+                    Menu {
+                        Button("Blank table") { selectedStarter = nil }
+                        Divider()
+                        ForEach(DataLabStarterTemplates.all) { t in
+                            Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                        }
+                    } label: {
+                        Label(selectedStarter?.displayName ?? "Start from a template", systemImage: "square.grid.2x2")
+                            .font(.caption).lineLimit(1)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .help("Optionally start from a ready-made table for your profession — privilege log, surveillance log, research log, transaction ledger, and more. You can still add or remove columns after.")
                     Button("Create") { createDataset() }
                         .buttonStyle(.borderedProminent)
                         .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .help("Creates an empty dataset in this workspace — add fields and rows, or let a persona job prepare one")
+                        .help("Creates a dataset in this workspace — blank, or pre-filled with the columns of the chosen template")
                     Button {
                         showImporter = true
                     } label: { Label("Import CSV", systemImage: "square.and.arrow.down") }
@@ -134,6 +158,17 @@ public struct DataLabView: View {
                               allowedContentTypes: [.commaSeparatedText, .plainText],
                               allowsMultipleSelection: false) { result in
                     if case .success(let urls) = result, let url = urls.first { importCSV(url) }
+                }
+
+                if let starter = selectedStarter {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Template: \(starter.displayName) — \(starter.purpose)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(starter.note)
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 620, alignment: .leading)
                 }
 
                 if let message = errorMessage { errorBanner(message) }
@@ -241,9 +276,7 @@ public struct DataLabView: View {
                 .fixedSize()
                 .help("Save the current view (including an active scenario) for Excel, Word or print — every export posts a numbered Export document in the Work Center register")
             }
-            Text("\(rec.fields.count) fields · \(rec.rows.count) rows · revision \(rec.dataset.revision)"
-                 + (activeScenario.map { " · scenario: \($0.scenario.title)" } ?? "")
-                 + (projectionLabel.map { " · view: \($0)" } ?? ""))
+            Text(datasetSummary(rec))
                 .font(.caption).foregroundStyle(.secondary)
             if let number = lastExportNumber {
                 HStack(spacing: 6) {
@@ -471,6 +504,18 @@ public struct DataLabView: View {
             .help("Set up the net-worth method: adds the input columns (assets, liabilities, opening net worth, reported income, known expenditures) and the derived columns (net worth, increase, funds applied, income from unknown sources). Fill inputs from source documents.")
             Text("An unexplained increase is a lead, not proof.")
                 .font(.caption2).foregroundStyle(.secondary)
+
+            Menu {
+                ForEach(DataLabStarterTemplates.all) { t in
+                    Button("\(t.displayName) · \(t.profession)") {
+                        Task { await applyStarter(t, to: rec) }
+                    }
+                }
+            } label: {
+                Label("Apply a profession template", systemImage: "square.grid.2x2").font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .help("Add the columns of a ready-made table for your profession to this dataset — existing columns are kept, so it's safe to apply.")
         }
     }
 
@@ -913,6 +958,10 @@ public struct DataLabView: View {
                 newTitle = ""
                 record = rec
                 await loadSatellites(rec.dataset.id)
+                if let starter = selectedStarter {
+                    await applyStarter(starter, to: rec)
+                    selectedStarter = nil
+                }
             } catch { errorMessage = "Could not create the dataset: \(error)" }
         }
     }
@@ -1001,6 +1050,38 @@ public struct DataLabView: View {
             } catch {
                 errorMessage = "Could not apply the net-worth workpaper: \(error)"
             }
+        }
+    }
+
+    /// Apply a persona starter template: add any missing input columns, then
+    /// apply derived formula columns in order. Threads the latest record through
+    /// each revision bump. Idempotent — existing columns are skipped, so
+    /// applying the same template twice never duplicates. Shared by the create
+    /// panel (any mode) and the Advanced structure panel.
+    private func applyStarter(_ template: DataLabStarterTemplate, to rec: WorkbenchDatasetRecord) async {
+        guard let datasets = appState.workbenchDatasets,
+              let transforms = appState.workbenchTransforms else { return }
+        do {
+            var current = rec
+            for col in template.inputColumns
+            where !current.fields.contains(where: { $0.name == col.name }) {
+                current = try await datasets.addField(
+                    datasetID: current.dataset.id, name: col.name, valueShape: col.shape,
+                    expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+            }
+            for spec in template.transformSpecs {
+                if case .calculatedColumn(let name, _, _) = spec,
+                   current.fields.contains(where: { $0.name == name }) { continue }
+                _ = try await transforms.applyTransform(
+                    datasetID: current.dataset.id, spec: spec,
+                    expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                if let refreshed = try await datasets.fetch(datasetID: current.dataset.id) {
+                    current = refreshed
+                }
+            }
+            record = current
+        } catch {
+            errorMessage = "Could not apply the \(template.displayName) template: \(error)"
         }
     }
 
@@ -1305,3 +1386,11 @@ public struct DataLabView: View {
                      text: WorkbenchReport.render(rec, projection: projection, quality: quality))
     }
 }
+
+#if DEBUG
+#Preview("DataLab — catalog") {
+    DataLabView()
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif
