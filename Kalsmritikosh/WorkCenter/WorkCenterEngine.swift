@@ -1467,7 +1467,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.publish-package" : {
-    "purpose" : "Assemble the cited, rights-cleared package: assemble, verify every claim is cited, confirm rights, add disclosures, choose the export format, then produce.",
+    "purpose" : "Assemble the cited, rights-cleared package: assemble, verify every claim is cited, confirm rights, disclose material connections (FTC), choose the export format, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -1525,16 +1525,22 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Required disclosures and accessibility done.",
-            "key" : "disclosure",
+            "help" : "Every relationship that could affect credibility — paid / gift / discount / affiliate / family.",
+            "key" : "connections",
             "kind" : "longText",
-            "label" : "Disclosures"
+            "label" : "Material connections"
+          },
+          {
+            "help" : "Exact wording and placement — unavoidable; in-video audio + visual if applicable.",
+            "key" : "placement",
+            "kind" : "longText",
+            "label" : "How & where disclosed"
           }
         ],
-        "hint" : "Sponsorship/ad disclosure, captions, alt text.",
-        "key" : "disclosure",
+        "hint" : "Any paid, gifted, discounted or affiliate relationship is a 'material connection' and must be disclosed clearly & conspicuously in the content itself — in video, both on-screen and spoken. #ad, platform tags, profile-only, or a hyperlink alone are not enough.",
+        "key" : "disclose",
         "opens" : "handoff",
-        "title" : "Disclosures & accessibility"
+        "title" : "Disclose material connections (FTC)"
       },
       {
         "fields" : [
@@ -8531,7 +8537,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.evidence-custody" : {
-    "purpose" : "Maintain a defensible evidence locker: identify and seize, register each exhibit, record the acquisition method, hash and verify integrity, label and store, log every transfer, then seal the manifest.",
+    "purpose" : "Maintain a defensible evidence locker: identify and seize, register each exhibit, acquire in order of volatility, hash and verify integrity, label and store, log every transfer, then seal the manifest.",
     "steps" : [
       {
         "fields" : [
@@ -8543,7 +8549,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "What is taken into evidence, and from where.",
+        "hint" : "What is taken into evidence, and from where. For live systems, act before data is lost.",
         "key" : "identify",
         "opens" : "audit",
         "title" : "Identify & seize"
@@ -8570,18 +8576,25 @@ public nonisolated enum WCAuthoredWorkflows {
             "kind" : "choice",
             "label" : "Acquisition method",
             "options" : [
+              "Live capture (memory/network) — first",
               "In-place ingest (watched folder)",
               "Copy into vault",
               "Export from system/service",
               "Physical/device transfer"
             ],
             "required" : true
+          },
+          {
+            "help" : "For live systems: which volatile data was captured first, and when.",
+            "key" : "volatility",
+            "kind" : "longText",
+            "label" : "Order-of-volatility note"
           }
         ],
-        "hint" : "How each entered custody without alteration.",
+        "hint" : "NIST SP 800-86 Collection: capture the most volatile data first — RAM and live network state — before powering down, then disk/files. Record how each entered custody unaltered.",
         "key" : "acquire",
         "opens" : "audit",
-        "title" : "Record acquisition method"
+        "title" : "Acquire in order of volatility"
       },
       {
         "fields" : [
@@ -14823,7 +14836,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.custody" : {
-    "purpose" : "Keep a defensible evidence locker: register exhibits, record acquisition and integrity, log transfers, then seal.",
+    "purpose" : "Keep a defensible evidence locker: register exhibits, acquire in order of volatility, record integrity, log transfers, then seal.",
     "steps" : [
       {
         "fields" : [
@@ -14848,6 +14861,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "kind" : "choice",
             "label" : "Acquisition method",
             "options" : [
+              "Live capture (memory/network) — first",
               "In-place ingest (watched folder)",
               "Copy into vault",
               "Export from system/service",
@@ -14862,10 +14876,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Integrity verified"
           }
         ],
-        "hint" : "How each entered custody unaltered.",
+        "hint" : "NIST SP 800-86: for any device/live system, capture volatile data first (memory, live connections) before power-down; then record how each entered custody unaltered.",
         "key" : "acquire",
         "opens" : "audit",
-        "title" : "Acquisition & integrity"
+        "title" : "Acquire in order of volatility & record integrity"
       },
       {
         "fields" : [
