@@ -30,9 +30,15 @@ public struct PDFRedactionResult: Sendable {
     public let redactedPageCount: Int
     public let matchCount: Int
     /// Verified true when a re-parse of the output finds none of the protected
-    /// terms. This is always true on a returned result — a failed verification
-    /// throws instead, so a leaking file is never handed back.
+    /// terms in its EXTRACTABLE TEXT — a failed verification throws instead, so a
+    /// text-leaking file is never handed back. This does NOT cover text that
+    /// lives inside a scanned image (see `scannedPageCount`).
     public let verified: Bool
+    /// Pages with no extractable text (likely scanned images). Text-based
+    /// redaction cannot see or remove a term that appears only inside an image,
+    /// so a non-zero count here is a legal caveat the caller must surface: the
+    /// page needs OCR or manual review before the document can be certified.
+    public let scannedPageCount: Int
 }
 
 public enum PDFRedactionError: Error, LocalizedError, Sendable {
@@ -110,8 +116,14 @@ public struct PDFRedactionService: Sendable {
             throw PDFRedactionError.renderFailed
         }
 
+        var scannedPages = 0
         for i in 0..<doc.pageCount {
             guard let page = doc.page(at: i) else { continue }
+            // A page with no extractable text is likely a scanned image; a term
+            // could hide there unseen by text search. Count it as a caveat.
+            if (page.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                scannedPages += 1
+            }
             let box = page.bounds(for: .mediaBox)
             let info = pageInfo(box)
             ctx.beginPDFPage(info)
@@ -139,7 +151,8 @@ public struct PDFRedactionService: Sendable {
             pageCount: doc.pageCount,
             redactedPageCount: rectsByPage.keys.count,
             matchCount: matchCount,
-            verified: true
+            verified: true,
+            scannedPageCount: scannedPages
         )
     }
 

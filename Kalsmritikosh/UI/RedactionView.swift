@@ -166,7 +166,7 @@ public struct RedactionView: View {
     private func resultCard(_ r: PDFRedactionResult) -> some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Verified clean", systemImage: "checkmark.seal.fill")
+                Label("Verified — no matching text remains", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green)
                     .font(.headline)
                 HStack(spacing: 24) {
@@ -174,9 +174,27 @@ public struct RedactionView: View {
                     stat("\(r.redactedPageCount)", "pages flattened")
                     stat("\(r.pageCount)", "pages total")
                 }
-                Text("A re-parse of the output found none of the protected terms. Save it above.")
+                Text("A re-parse of the output found none of the protected terms in its extractable text. Save it above.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if r.scannedPageCount > 0 {
+                    Divider()
+                    Label {
+                        Text("\(r.scannedPageCount) page(s) contain no extractable text — likely scanned images. Text redaction cannot see or remove a term hidden inside an image. Before certifying this document, OCR or manually review those pages.")
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                Text("Note: this removes the terms you listed. It does not strip document metadata (author, title) or remove attachments — check those separately before a legal production.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
