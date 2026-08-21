@@ -55,6 +55,9 @@ public struct DataLabView: View {
     @State private var quality: WorkbenchDataQualityReport?
     @State private var showQuality = false
 
+    // Show every generic analysis, not just this persona's curated set.
+    @State private var showAllAnalyses = false
+
     @State private var errorMessage: String?
 
     // Persona starter template chosen on the create panel (optional).
@@ -92,6 +95,20 @@ public struct DataLabView: View {
     private var actorName: String {
         let name = NSFullUserName()
         return name.isEmpty ? "Owner" : name
+    }
+
+    // MARK: Persona scoping — DataLab shows the tools this workspace's
+    // profession actually uses; the rest stay reachable behind "Other…".
+
+    /// The persona (workspace template) for a dataset being edited.
+    private func personaTemplate(_ rec: WorkbenchDatasetRecord) -> WorkspaceTemplate {
+        workspaces.first { $0.id == rec.dataset.workspaceID }?.template ?? .general
+    }
+
+    /// The persona for the create panel (the selected/only workspace).
+    private var createPersona: WorkspaceTemplate {
+        if let id = selectedWorkspace, let ws = workspaces.first(where: { $0.id == id }) { return ws.template }
+        return workspaces.first?.template ?? .general
     }
 
     /// Header summary line, built as a plain string so the ViewBuilder doesn't
@@ -136,16 +153,33 @@ public struct DataLabView: View {
                     .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 170)
                     Menu {
                         Button("Blank table") { selectedStarter = nil }
-                        Divider()
-                        ForEach(DataLabStarterTemplates.all) { t in
-                            Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                        let suggested = DataLabStarterTemplates.suggested(for: createPersona)
+                        let suggestedIDs = Set(suggested.map(\.id))
+                        let others = DataLabStarterTemplates.all.filter { !suggestedIDs.contains($0.id) }
+                        if createPersona != .general, !suggested.isEmpty {
+                            Divider()
+                            ForEach(suggested) { t in
+                                Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                            }
+                            if !others.isEmpty {
+                                Menu("Other professions…") {
+                                    ForEach(others) { t in
+                                        Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                                    }
+                                }
+                            }
+                        } else {
+                            Divider()
+                            ForEach(DataLabStarterTemplates.all) { t in
+                                Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                            }
                         }
                     } label: {
                         Label(selectedStarter?.displayName ?? "Start from a template", systemImage: "square.grid.2x2")
                             .font(.caption).lineLimit(1)
                     }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .help("Optionally start from a ready-made table for your profession — privilege log, surveillance log, research log, transaction ledger, and more. You can still add or remove columns after.")
+                    .help("Start from a ready-made table for your profession. This workspace's tools come first; other professions are under \u{201C}Other professions\u{2026}\u{201D}.")
                     Button("Create") { createDataset() }
                         .buttonStyle(.borderedProminent)
                         .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -557,23 +591,47 @@ public struct DataLabView: View {
                 .font(.caption2).foregroundStyle(.secondary)
 
             Menu {
-                ForEach(DataLabStarterTemplates.all) { t in
-                    Button("\(t.displayName) · \(t.profession)") {
-                        Task { await applyStarter(t, to: rec) }
+                let persona = personaTemplate(rec)
+                let suggested = DataLabStarterTemplates.suggested(for: persona)
+                let suggestedIDs = Set(suggested.map(\.id))
+                let others = DataLabStarterTemplates.all.filter { !suggestedIDs.contains($0.id) }
+                if persona != .general, !suggested.isEmpty {
+                    ForEach(suggested) { t in
+                        Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
+                    }
+                    if !others.isEmpty {
+                        Menu("Other professions…") {
+                            ForEach(others) { t in
+                                Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(DataLabStarterTemplates.all) { t in
+                        Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
                     }
                 }
             } label: {
                 Label("Apply a profession template", systemImage: "square.grid.2x2").font(.caption)
             }
             .menuStyle(.borderlessButton)
-            .help("Add the columns of a ready-made table for your profession to this dataset — existing columns are kept, so it's safe to apply.")
+            .help("Add the columns of a ready-made table to this dataset — this workspace's profession first. Existing columns are kept, so it's safe to apply.")
         }
+    }
+
+    /// The analyses shown for this dataset: the persona's curated set (unless
+    /// the user opted to see them all, or the workspace is General).
+    private func curatedPresets(_ rec: WorkbenchDatasetRecord) -> [WorkbenchAnalysisPreset] {
+        if showAllAnalyses { return WorkbenchModePresetCatalog.simplePresets }
+        let kinds = Set(DataLabStarterTemplates.analyses(for: personaTemplate(rec)))
+        let filtered = WorkbenchModePresetCatalog.simplePresets.filter { kinds.contains($0.kind) }
+        return filtered.isEmpty ? WorkbenchModePresetCatalog.simplePresets : filtered
     }
 
     private func analysesPanel(_ rec: WorkbenchDatasetRecord, caps: WorkbenchModeCapabilities) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Analyses — plain language, records provenance")
-            ForEach(WorkbenchModePresetCatalog.simplePresets) { preset in
+            ForEach(curatedPresets(rec)) { preset in
                 Button {
                     activePreset = activePreset?.id == preset.id ? nil : preset
                     presetParams = WorkbenchPresetParameters()
@@ -591,6 +649,14 @@ public struct DataLabView: View {
                 if activePreset?.id == preset.id {
                     presetForm(preset, rec: rec)
                 }
+            }
+            if personaTemplate(rec) != .general {
+                Button { showAllAnalyses.toggle() } label: {
+                    Label(showAllAnalyses ? "Show fewer — just this profession's" : "Show all analyses",
+                          systemImage: showAllAnalyses ? "line.3.horizontal.decrease.circle" : "ellipsis.circle")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
             }
             if let agg = aggregateResult {
                 VStack(alignment: .leading, spacing: 3) {

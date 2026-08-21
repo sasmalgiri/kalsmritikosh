@@ -46,6 +46,12 @@ public struct DataLabStarterTemplate: Identifiable, Sendable {
             }
         }
     }
+
+    /// The analyses this profession actually runs on this table — so DataLab
+    /// shows those, not the full generic menu. Derived from the profession.
+    public var analyses: [WorkbenchAnalysisPresetKind] {
+        DataLabStarterTemplates.analysisKinds(forProfession: profession)
+    }
 }
 
 /// Parses a clipboard block (copied from Excel / Numbers / a CSV) into rows of
@@ -243,6 +249,51 @@ public enum DataLabStarterTemplates {
             ],
             note: "Flag material connections (FTC) and re-check source currency before it goes out.")
     ]
+
+    /// Canonical analysis order (mirrors WorkbenchModePresetCatalog.simplePresets).
+    static let allAnalysesOrdered: [WorkbenchAnalysisPresetKind] = [
+        .totalByCategory, .countByCategory, .averageByCategory,
+        .keepRowsAbove, .keepRowsBelow, .sortLowToHigh, .sortHighToLow,
+        .runningTotal, .removeDuplicates
+    ]
+
+    /// The analyses a profession genuinely uses on its table — curated so the
+    /// Analyses panel shows what's needed, not the full generic list.
+    static func analysisKinds(forProfession profession: String) -> [WorkbenchAnalysisPresetKind] {
+        switch profession {
+        case "Lawyer":
+            return [.countByCategory, .sortLowToHigh, .removeDuplicates]
+        case "Investigator":
+            return [.sortLowToHigh, .countByCategory]
+        case "SIU / Insurance":
+            return [.countByCategory, .sortHighToLow, .keepRowsAbove]
+        case "Forensic Accountant":
+            return [.totalByCategory, .runningTotal, .sortHighToLow, .removeDuplicates]
+        case "HR / Compliance":
+            return [.countByCategory, .sortLowToHigh]
+        case "Researcher":
+            return [.averageByCategory, .countByCategory, .sortLowToHigh]
+        case "Journalist":
+            return [.countByCategory, .keepRowsBelow, .sortLowToHigh]
+        case "Genealogist":
+            return [.countByCategory, .sortLowToHigh]
+        case "Individual":
+            return [.totalByCategory, .sortHighToLow]
+        case "Content Creator":
+            return [.countByCategory, .sortLowToHigh]
+        default:
+            return allAnalysesOrdered
+        }
+    }
+
+    /// The analyses to surface for a workspace's persona — the union across its
+    /// suggested templates, in canonical order. `.general` → the full set.
+    public static func analyses(for template: WorkspaceTemplate) -> [WorkbenchAnalysisPresetKind] {
+        if template == .general { return allAnalysesOrdered }
+        let wanted = Set(suggested(for: template).flatMap { $0.analyses })
+        let ordered = allAnalysesOrdered.filter { wanted.contains($0) }
+        return ordered.isEmpty ? allAnalysesOrdered : ordered
+    }
 
     /// Templates whose profession best matches a workspace template, so the
     /// most relevant ones can be surfaced first. Falls back to all.

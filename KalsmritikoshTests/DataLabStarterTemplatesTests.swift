@@ -105,6 +105,46 @@ struct DataLabStarterTemplatesTests {
         #expect(rec.fields.count == template.inputColumns.count)
     }
 
+    // MARK: - Persona-scoped analyses
+
+    @Test("Every template curates a non-empty, valid analysis set")
+    func templateAnalyses() {
+        let valid = Set(DataLabStarterTemplates.allAnalysesOrdered)
+        for t in DataLabStarterTemplates.all {
+            #expect(!t.analyses.isEmpty, "\(t.id) has no analyses")
+            #expect(t.analyses.allSatisfy { valid.contains($0) }, "\(t.id) has an unknown analysis")
+        }
+    }
+
+    @Test("Analyses are scoped per persona; General gets the full set; never empty")
+    func analysesForPersona() {
+        let all = DataLabStarterTemplates.allAnalysesOrdered
+
+        // General → everything.
+        #expect(DataLabStarterTemplates.analyses(for: .general).count == all.count)
+
+        // Lawyer (legalMatter): count/sort/dedupe, and NOT running total.
+        let legal = DataLabStarterTemplates.analyses(for: .legalMatter)
+        #expect(legal.contains(.countByCategory))
+        #expect(legal.contains(.removeDuplicates))
+        #expect(!legal.contains(.runningTotal))
+        // Curated, not the whole menu.
+        #expect(legal.count < all.count)
+
+        // Forensic (investigation union) includes running total (a ledger balance).
+        let invUnion = DataLabStarterTemplates.analyses(for: .investigation)
+        #expect(invUnion.contains(.runningTotal))
+        #expect(invUnion.contains(.totalByCategory))
+
+        // Canonical ordering preserved (subset of the ordered list).
+        for wt in WorkspaceTemplate.allCases {
+            let a = DataLabStarterTemplates.analyses(for: wt)
+            #expect(!a.isEmpty)
+            let indices = a.compactMap { all.firstIndex(of: $0) }
+            #expect(indices == indices.sorted(), "\(wt) analyses not in canonical order")
+        }
+    }
+
     // MARK: - Paste parsing (modern data entry)
 
     @Test("Paste parser handles tab-separated Excel blocks with CRLF line endings")
