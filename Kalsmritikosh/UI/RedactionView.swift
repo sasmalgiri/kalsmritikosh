@@ -61,6 +61,8 @@ public struct RedactionView: View {
                 if let errorMessage { errorCard(errorMessage) }
 
                 explainer
+
+                LegalDisclaimer(text: "Redaction removes the terms you list from extractable text; it is not a certification of disclosure. Review scanned pages, metadata, and attachments yourself. This is a tool, not legal advice.")
             }
             .padding(24)
             .frame(maxWidth: 720, alignment: .leading)

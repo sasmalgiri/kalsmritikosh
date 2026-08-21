@@ -29,6 +29,8 @@ public struct AuthenticityView: View {
                 if let errorMessage { errorCard(errorMessage) }
                 if let report { reportCard(report) }
                 disclaimer
+
+                LegalDisclaimer(text: "These signals are investigative leads, not proof, and not admissible expert opinion on their own. This is a tool, not legal advice.")
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)

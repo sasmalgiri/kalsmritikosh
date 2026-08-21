@@ -45,6 +45,8 @@ public struct CitationBuilderView: View {
                       "The bibliography form — author inverted, period-separated.")
 
                 explainer
+
+                LegalDisclaimer(text: "A formatting aid following the Evidence Explained model — verify each citation against the current edition and your style requirements. This is a tool, not legal advice.")
             }
             .padding(24)
             .frame(maxWidth: 760, alignment: .leading)
