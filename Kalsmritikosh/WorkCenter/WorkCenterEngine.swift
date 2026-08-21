@@ -7097,7 +7097,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.capa-register" : {
-    "purpose" : "Record corrective/preventive actions linked to causes, tracked to a human close.",
+    "purpose" : "Record corrective/preventive actions linked to causes, tracked to a human close — the app keeps each action tied to the finding that prompted it.",
     "steps" : [
       {
         "fields" : [
@@ -7142,6 +7142,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Confirm each is agreed.",
         "key" : "assign",
         "title" : "Agree owners & dates (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / in progress / done per action.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each action's status current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -7382,7 +7396,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.causal-analysis" : {
-    "purpose" : "Trace how something came about: Five Whys, Fishbone, weigh candidates, then a human determination.",
+    "purpose" : "Trace how something came about: Five Whys down the chain, Fishbone across categories, weigh the candidates, test against evidence, then a human determination — the app never confirms a cause.",
     "steps" : [
       {
         "fields" : [
@@ -7394,7 +7408,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The issue to explain.",
+        "hint" : "The issue to explain, precisely.",
         "key" : "problem",
         "opens" : "findings",
         "title" : "State the problem"
@@ -7408,7 +7422,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why chain"
           }
         ],
-        "hint" : "Cause to cause; stop where evidence stops.",
+        "hint" : "Cause to cause; stop where the evidence stops.",
         "key" : "whys",
         "opens" : "connections",
         "title" : "Five Whys"
@@ -7416,16 +7430,44 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The factors at play.",
+            "help" : "People / process / systems / environment.",
             "key" : "categories",
             "kind" : "longText",
             "label" : "Categories"
           }
         ],
-        "hint" : "Sort candidate causes.",
+        "hint" : "Sort candidate causes by category.",
         "key" : "fishbone",
         "opens" : "matrix",
         "title" : "Fishbone — categorize"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What supports or rules out each.",
+            "key" : "weighing",
+            "kind" : "longText",
+            "label" : "For / against"
+          }
+        ],
+        "hint" : "Evidence for and against each candidate cause.",
+        "key" : "weigh",
+        "opens" : "review",
+        "title" : "Weigh the candidates"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Facts the cause explains — and any it doesn't.",
+            "key" : "test",
+            "kind" : "longText",
+            "label" : "Consistency check"
+          }
+        ],
+        "hint" : "Check the leading cause explains all the facts.",
+        "key" : "test",
+        "opens" : "matrix",
+        "title" : "Test against the evidence"
       },
       {
         "fields" : [
@@ -7437,7 +7479,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "A human determines the cause. The app never confirms one.",
+        "hint" : "A human determines the cause.",
         "key" : "determine",
         "title" : "Determination (your decision)"
       },
@@ -7471,7 +7513,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Recap"
           }
         ],
-        "hint" : "Report, actions, open items.",
+        "hint" : "Report approved, actions tracked, open items retained.",
         "key" : "recap",
         "opens" : "handoff",
         "title" : "Confirm the outcome"
@@ -7489,6 +7531,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "retention",
         "opens" : "handoff",
         "title" : "Retention & confidentiality"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Who is informed — within confidentiality limits.",
+            "key" : "notify",
+            "kind" : "longText",
+            "label" : "Notifications"
+          }
+        ],
+        "hint" : "Who is told of the outcome, and how.",
+        "key" : "notify",
+        "opens" : "handoff",
+        "title" : "Notify the parties (as appropriate)"
       },
       {
         "fields" : [
@@ -7525,7 +7581,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Post the closure record and receipt.",
+        "hint" : "Post the closure record and receipt — sealed and tamper-evident, unlike a Word doc.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "EXP",
@@ -7534,7 +7590,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.contradiction-gap" : {
-    "purpose" : "Review in-scope contradictions and gaps — both sides preserved, and absence is not proof.",
+    "purpose" : "Review in-scope contradictions and gaps — both sides preserved, absence never treated as proof. The app already flags where accounts conflict, so you review rather than hunt.",
     "steps" : [
       {
         "fields" : [
@@ -7546,7 +7602,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The claims under review.",
+        "hint" : "The claims under review — the app assembles them from the evidence.",
         "key" : "collect",
         "opens" : "findings",
         "title" : "Collect the claims"
@@ -7560,10 +7616,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Contradictions"
           }
         ],
-        "hint" : "Where claims conflict.",
+        "hint" : "Where claims conflict — surfaced automatically.",
         "key" : "contradictions",
         "opens" : "matrix",
-        "title" : "Surface contradictions"
+        "title" : "Review contradictions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Which is better supported, and why — or 'unresolved'.",
+            "key" : "assessment",
+            "kind" : "longText",
+            "label" : "Assessment"
+          }
+        ],
+        "hint" : "Weigh the conflicting accounts on the evidence.",
+        "key" : "assess",
+        "opens" : "review",
+        "title" : "Assess which account holds"
       },
       {
         "fields" : [
@@ -7574,10 +7644,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Gaps"
           }
         ],
-        "hint" : "Missing evidence.",
+        "hint" : "Missing evidence needed to resolve.",
         "key" : "gaps",
         "opens" : "review",
-        "title" : "Surface gaps"
+        "title" : "List the gaps"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Requests/interviews to resolve each gap.",
+            "key" : "plan",
+            "kind" : "longText",
+            "label" : "Follow-up plan"
+          }
+        ],
+        "hint" : "What to collect or ask next.",
+        "key" : "close",
+        "opens" : "handoff",
+        "title" : "Plan to close the gaps"
       },
       {
         "fields" : [
@@ -7598,8 +7682,23 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.data-lab" : {
-    "purpose" : "Prepare an authorized-only dataset over the shared Workbench, with cited cells and a quality check.",
+    "purpose" : "Build an authorized-only dataset in DataLab (the app's spreadsheet). Unlike Excel, every cell keeps a live link to its source document — no manual copy-paste, no lost provenance.",
     "steps" : [
+      {
+        "fields" : [
+          {
+            "help" : "What you want the table to show.",
+            "key" : "question",
+            "kind" : "longText",
+            "label" : "Dataset question",
+            "required" : true
+          }
+        ],
+        "hint" : "What the dataset needs to answer.",
+        "key" : "question",
+        "opens" : "dataLab",
+        "title" : "Define the question"
+      },
       {
         "fields" : [
           {
@@ -7610,7 +7709,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Which authorized records this dataset draws on.",
+        "hint" : "Which authorized records feed it.",
         "key" : "assemble",
         "opens" : "sources",
         "title" : "Assemble the data"
@@ -7618,16 +7717,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What each column is and its source.",
+            "help" : "Each column and what it holds.",
             "key" : "columns",
             "kind" : "longText",
-            "label" : "Columns & notes"
+            "label" : "Columns"
           }
         ],
-        "hint" : "Columns and derived values, each cited.",
-        "key" : "build",
+        "hint" : "Set the header before filling — like laying out a spreadsheet.",
+        "key" : "columns",
         "opens" : "dataLab",
-        "title" : "Build the dataset"
+        "title" : "Define the columns"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "How rows were derived; anything estimated is flagged.",
+            "key" : "fillNote",
+            "kind" : "longText",
+            "label" : "Population notes"
+          }
+        ],
+        "hint" : "Pull values from your documents — the app cites each cell automatically, so you skip the data-entry and keep the source.",
+        "key" : "fill",
+        "opens" : "dataLab",
+        "title" : "Fill from evidence"
       },
       {
         "fields" : [
@@ -7662,7 +7775,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.effectiveness-review" : {
-    "purpose" : "Review whether a CAPA action worked — never declare it effective without evidence.",
+    "purpose" : "Review whether a CAPA action worked — never declare it effective without evidence. The app surfaces anything new that's arrived since the action.",
     "steps" : [
       {
         "fields" : [
@@ -7691,7 +7804,7 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Evidence of the outcome (attach it).",
         "key" : "evidence",
         "opens" : "findings",
-        "title" : "Gather evidence"
+        "title" : "Gather post-action evidence"
       },
       {
         "fields" : [
@@ -8005,7 +8118,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.identity-resolution" : {
-    "purpose" : "Resolve identity via the shared reversible merge: gather identifiers, compare, rule out look-alikes, then confirm or reject — human-gated, never automatic.",
+    "purpose" : "Resolve identity via the shared reversible merge. The app proposes matches by comparing attributes across every document; you make the call — never automatic.",
     "steps" : [
       {
         "fields" : [
@@ -8025,16 +8138,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Matching and conflicting signals.",
+            "help" : "Variants folded together (e.g. 'Bob'/'Robert').",
+            "key" : "normalized",
+            "kind" : "longText",
+            "label" : "Notes"
+          }
+        ],
+        "hint" : "Standardize spellings/formats so real matches surface — the app does this pass for you.",
+        "key" : "normalize",
+        "opens" : "knowledge",
+        "title" : "Normalize the identifiers"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Matching and conflicting signals the app surfaced.",
             "key" : "comparison",
             "kind" : "longText",
             "label" : "Signals"
           }
         ],
-        "hint" : "How each appears across the case.",
+        "hint" : "How each appears across the case — dates, places, contacts.",
         "key" : "compare",
         "opens" : "knowledge",
-        "title" : "Compare across evidence"
+        "title" : "Compare attributes"
       },
       {
         "fields" : [
@@ -8045,7 +8172,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Excluded"
           }
         ],
-        "hint" : "Exclude coincidental matches.",
+        "hint" : "Exclude coincidental same-name matches.",
         "key" : "ruleout",
         "opens" : "review",
         "title" : "Rule out look-alikes"
@@ -8086,7 +8213,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Post the reversible decision.",
+        "hint" : "Post the reversible decision — the merge updates everywhere at once, unlike hand-editing each file.",
         "key" : "record",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -8095,7 +8222,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.linkage" : {
-    "purpose" : "Build the timeline, link chart, and transaction/asset flow, flagging gaps and conflicts.",
+    "purpose" : "Build the timeline, link chart, and transaction/asset flow. The app auto-assembles dated events and co-occurrence links from your evidence — you analyze instead of drawing charts by hand.",
     "steps" : [
       {
         "fields" : [
@@ -8107,10 +8234,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each event with its source.",
+        "hint" : "Each event with its source — auto-pulled from the documents.",
         "key" : "events",
         "opens" : "timeline",
         "title" : "Collect dated events"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The nodes for the link chart.",
+            "key" : "entities",
+            "kind" : "longText",
+            "label" : "Entities"
+          }
+        ],
+        "hint" : "People, orgs, objects, locations in play.",
+        "key" : "entities",
+        "opens" : "connections",
+        "title" : "Gather the entities"
       },
       {
         "fields" : [
@@ -8121,7 +8262,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Links"
           }
         ],
-        "hint" : "People, objects, locations, events.",
+        "hint" : "Connect the entities — the app proposes edges from co-occurrence.",
         "key" : "links",
         "opens" : "connections",
         "title" : "Build the link chart"
@@ -8143,13 +8284,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Central entities, clusters, and what they suggest.",
+            "key" : "key",
+            "kind" : "longText",
+            "label" : "Key nodes"
+          }
+        ],
+        "hint" : "Who/what sits at the center.",
+        "key" : "key",
+        "opens" : "matrix",
+        "title" : "Identify key nodes & patterns"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Kept, not averaged.",
             "key" : "gaps",
             "kind" : "longText",
             "label" : "Gaps & conflicts"
           }
         ],
-        "hint" : "Missing periods and conflicts.",
+        "hint" : "Missing links or conflicting dates.",
         "key" : "gaps",
         "opens" : "review",
         "title" : "Flag gaps & conflicts"
@@ -8173,22 +8328,44 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.methods" : {
-    "purpose" : "Run a professional method over case-authorized evidence — a method structures analysis, it doesn't conclude.",
+    "purpose" : "Run a professional method over case-authorized evidence — a method structures the analysis, it doesn't conclude. The app pulls the inputs from your ingested evidence, so you skip the manual data-gathering.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "e.g. 5W1H, hypothesis matrix, link analysis.",
+            "help" : "The method to run.",
             "key" : "method",
-            "kind" : "text",
+            "kind" : "choice",
             "label" : "Method",
+            "options" : [
+              "5W1H",
+              "Hypothesis matrix (ACH)",
+              "Link analysis",
+              "Timeline",
+              "Five Whys",
+              "Fishbone"
+            ],
             "required" : true
           }
         ],
-        "hint" : "Which structured method to run.",
+        "hint" : "Which structured method fits the question.",
         "key" : "pick",
         "opens" : "matrix",
         "title" : "Pick the method"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The claims/entities/events this method works on.",
+            "key" : "inputs",
+            "kind" : "longText",
+            "label" : "Inputs"
+          }
+        ],
+        "hint" : "Point the method at the evidence — the app already has it indexed, so you select rather than re-type.",
+        "key" : "inputs",
+        "opens" : "matrix",
+        "title" : "Set the inputs"
       },
       {
         "fields" : [
@@ -8199,10 +8376,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Result"
           }
         ],
-        "hint" : "Inputs and what it produced.",
+        "hint" : "Work through the method.",
         "key" : "run",
         "opens" : "matrix",
-        "title" : "Run it"
+        "title" : "Run & read the result"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you take from it — the method never concludes for you.",
+            "key" : "reading",
+            "kind" : "longText",
+            "label" : "Your reading",
+            "required" : true
+          }
+        ],
+        "hint" : "The method organizes; you draw the conclusion.",
+        "key" : "confirm",
+        "title" : "Confirm the reading (your decision)"
       },
       {
         "fields" : [
@@ -8223,7 +8414,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.source-reliability" : {
-    "purpose" : "Assess the reliability of each case source — a rating is a judgement, never a fact.",
+    "purpose" : "Rate case sources on the Admiralty scale — source reliability (A–F) and information credibility (1–6). Ratings are judgements, never facts; the app keeps each rating tied to the source it came from.",
     "steps" : [
       {
         "fields" : [
@@ -8235,7 +8426,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each source/custodian to assess.",
+        "hint" : "Each source/custodian — the app already lists who provided what.",
         "key" : "list",
         "opens" : "review",
         "title" : "List the sources"
@@ -8243,36 +8434,58 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What strengthens or weakens each.",
-            "key" : "factors",
+            "help" : "A (reliable) … F (cannot judge), with reason.",
+            "key" : "reliability",
             "kind" : "longText",
-            "label" : "Factors"
-          },
-          {
-            "help" : "High / Medium / Low — a judgement.",
-            "key" : "rating",
-            "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Reliability per source"
           }
         ],
-        "hint" : "Reliability and independence factors.",
-        "key" : "assess",
+        "hint" : "How dependable the source itself is.",
+        "key" : "reliability",
         "opens" : "review",
-        "title" : "Assess each"
+        "title" : "Rate reliability (A–F)"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm the ratings.",
+            "help" : "1 (confirmed) … 6 (cannot judge), with reason.",
+            "key" : "credibility",
+            "kind" : "longText",
+            "label" : "Credibility per item"
+          }
+        ],
+        "hint" : "How well the information itself holds up.",
+        "key" : "credibility",
+        "opens" : "review",
+        "title" : "Rate credibility (1–6)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Independent support/conflict.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "What independently confirms or contradicts each — the app flags overlaps for you.",
+        "key" : "corroborate",
+        "opens" : "matrix",
+        "title" : "Check corroboration"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confirm the ratings; they are judgements, not facts.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
             "required" : true
           }
         ],
-        "hint" : "These are your judgements.",
+        "hint" : "Own the ratings as judgements.",
         "key" : "decide",
-        "title" : "Own the ratings (your decision)"
+        "title" : "Record the ratings (your decision)"
       },
       {
         "fields" : [
@@ -8293,7 +8506,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.subject-dossier" : {
-    "purpose" : "Work up a subject from cited in-scope evidence, and confirm the identity.",
+    "purpose" : "Work up a subject from cited in-scope evidence. Instead of trawling every file, the app surfaces everywhere the subject appears — you review and confirm.",
     "steps" : [
       {
         "fields" : [
@@ -8313,30 +8526,72 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Only what the evidence supports.",
-            "key" : "profile",
+            "help" : "Which names/accounts you've confirmed are this subject.",
+            "key" : "identityNote",
             "kind" : "longText",
-            "label" : "Dossier"
+            "label" : "Identity basis"
           }
         ],
-        "hint" : "Background, relationships, relevant facts — each cited.",
-        "key" : "compile",
-        "opens" : "dossier",
-        "title" : "Compile the dossier"
+        "hint" : "Make sure mentions are the same person before you build — the app clusters aliases for you to approve.",
+        "key" : "resolve",
+        "opens" : "knowledge",
+        "title" : "Confirm identity"
       },
       {
         "fields" : [
           {
-            "help" : "What you confirm and how.",
-            "key" : "basis",
+            "help" : "Only what the evidence supports.",
+            "key" : "bio",
             "kind" : "longText",
-            "label" : "Confirmation & basis",
-            "required" : true
+            "label" : "Background"
           }
         ],
-        "hint" : "Confirm the dossier maps to the right subject.",
-        "key" : "confirm",
-        "title" : "Confirm identity (your decision)"
+        "hint" : "Biographical facts, each cited.",
+        "key" : "bio",
+        "opens" : "dossier",
+        "title" : "Gather the background"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Key associates and the evidence for each.",
+            "key" : "relationships",
+            "kind" : "longText",
+            "label" : "Relationships"
+          }
+        ],
+        "hint" : "Who the subject connects to — the app has already linked co-occurrences.",
+        "key" : "relationships",
+        "opens" : "connections",
+        "title" : "Map relationships & associations"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Key dated events for this subject.",
+            "key" : "timeline",
+            "kind" : "longText",
+            "label" : "Timeline notes"
+          }
+        ],
+        "hint" : "The subject's relevant events in order — auto-assembled from dated mentions.",
+        "key" : "timeline",
+        "opens" : "timeline",
+        "title" : "Build the subject timeline"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Questions the dossier can't yet answer — absence is not proof.",
+            "key" : "gaps",
+            "kind" : "longText",
+            "label" : "Open items"
+          }
+        ],
+        "hint" : "What's still unknown.",
+        "key" : "gaps",
+        "opens" : "review",
+        "title" : "Note open items & gaps"
       },
       {
         "fields" : [
