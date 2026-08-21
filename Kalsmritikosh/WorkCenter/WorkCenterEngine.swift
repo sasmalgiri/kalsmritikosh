@@ -13786,7 +13786,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Which completed action you're reviewing.",
+        "hint" : "Which completed action.",
         "key" : "select",
         "opens" : "handoff",
         "title" : "Select the action"
@@ -13850,19 +13850,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.ask" : {
-    "purpose" : "Ask a question over the claim's authorized documents and keep the cited answer on the record.",
+    "purpose" : "Ask a question over the claim's documents and keep the cited answer — the app reads the whole claim file for you.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "What you need to know from the claim file.",
+            "help" : "What you need to know.",
             "key" : "question",
             "kind" : "longText",
             "label" : "Your question",
             "required" : true
           }
         ],
-        "hint" : "Ask in plain language — the answer cites the claim's evidence.",
+        "hint" : "Plain language; cited answer.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask the claim file"
@@ -13870,13 +13870,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How this answer bears on the exposure.",
+            "help" : "How it bears on the exposure.",
             "key" : "why",
             "kind" : "longText",
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters to the investigation.",
+        "hint" : "Lands in the file cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -13885,7 +13885,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.causation" : {
-    "purpose" : "Trace how the loss occurred: Five Whys, Fishbone, then a human determination — never state fraud as a conclusion here.",
+    "purpose" : "Trace how the loss occurred: mechanism, Five Whys, Fishbone, then a human determination — never state fraud as a conclusion here.",
     "steps" : [
       {
         "fields" : [
@@ -13905,6 +13905,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "The chain of events that produced the loss.",
+            "key" : "mechanism",
+            "kind" : "longText",
+            "label" : "Mechanism"
+          }
+        ],
+        "hint" : "How the loss physically/financially came about.",
+        "key" : "mechanism",
+        "opens" : "connections",
+        "title" : "Establish the mechanism"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Each link supported.",
             "key" : "whys",
             "kind" : "longText",
@@ -13919,7 +13933,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "e.g. mechanism, timing, opportunity, documentation.",
+            "help" : "Mechanism, timing, opportunity, documentation.",
             "key" : "categories",
             "kind" : "longText",
             "label" : "Categories"
@@ -13933,7 +13947,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How the loss occurred, on the evidence.",
+            "help" : "On the evidence.",
             "key" : "determination",
             "kind" : "longText",
             "label" : "Determination & basis",
@@ -13963,7 +13977,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.claim-intake" : {
-    "purpose" : "Open a claim file for investigation: record the claim, fix the referral basis and scope, set the documents in scope, then open the file. Intake never concludes fraud.",
+    "purpose" : "Open a claim for investigation the way an SIU examiner does: record the claim, fix the referral basis, check coverage, set scope, issue the preservation hold, identify custodians, plan, then open. Intake never concludes fraud.",
     "steps" : [
       {
         "fields" : [
@@ -13981,13 +13995,13 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Date of loss"
           },
           {
-            "help" : "The policy the claim is made under.",
+            "help" : "The policy in play.",
             "key" : "policyNo",
             "kind" : "text",
             "label" : "Policy number"
           },
           {
-            "help" : "Loss type, amount claimed, parties — as presented.",
+            "help" : "Loss type, amount, parties — as presented.",
             "key" : "summary",
             "kind" : "longText",
             "label" : "The claim",
@@ -14002,81 +14016,121 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What put this claim into SIU.",
+            "help" : "What put this into SIU.",
             "key" : "basis",
             "kind" : "choice",
             "label" : "Referral basis",
             "options" : [
               "Red flags at FNOL",
               "Adjuster referral",
-              "SIU trigger/rule",
+              "SIU rule/trigger",
               "Regulatory",
               "Other"
             ],
             "required" : true
           },
           {
-            "help" : "What is in and out of scope for this investigation.",
+            "help" : "The indicators that triggered referral — indicators, not proof.",
+            "key" : "triggers",
+            "kind" : "longText",
+            "label" : "Red flags noted"
+          }
+        ],
+        "hint" : "Why this went to SIU.",
+        "key" : "basis",
+        "opens" : "review",
+        "title" : "Referral basis & red-flag trigger"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Policy in force at date of loss; exclusions relevant.",
+            "key" : "coverage",
+            "kind" : "longText",
+            "label" : "Coverage notes"
+          }
+        ],
+        "hint" : "Confirm the policy, period, and coverage in force.",
+        "key" : "coverage",
+        "opens" : "sources",
+        "title" : "Coverage & policy check"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "In and out of scope.",
             "key" : "scope",
             "kind" : "longText",
             "label" : "Scope statement",
             "required" : true
           }
         ],
-        "hint" : "Why this claim is under investigation, and what the investigation covers.",
+        "hint" : "What the investigation covers.",
         "key" : "scope",
         "opens" : "sources",
-        "title" : "Referral basis & scope"
+        "title" : "Define the scope"
       },
       {
         "fields" : [
           {
-            "help" : "The authorized document set — the evidence boundary.",
-            "key" : "sources",
+            "help" : "What to preserve.",
+            "key" : "holdScope",
             "kind" : "longText",
-            "label" : "Documents in scope"
-          }
-        ],
-        "hint" : "Authorize the claim file, policy, prior claims and statements.",
-        "key" : "inscope",
-        "opens" : "sources",
-        "title" : "Set the documents in scope"
-      },
-      {
-        "fields" : [
-          {
-            "help" : "Confirm only when correct.",
-            "key" : "decision",
-            "kind" : "choice",
-            "label" : "Scope confirmed?",
-            "options" : [
-              "Confirmed",
-              "Needs revision"
-            ],
+            "label" : "Hold scope",
             "required" : true
           },
           {
-            "help" : "Anything to record about the decision.",
-            "key" : "note",
-            "kind" : "longText",
-            "label" : "Note"
+            "help" : "Turn on once notified.",
+            "key" : "holdIssued",
+            "kind" : "bool",
+            "label" : "Hold issued"
           }
         ],
-        "hint" : "A human confirms scope before work begins.",
-        "key" : "confirm",
-        "title" : "Confirm scope (your decision)"
+        "hint" : "Preserve claim file, recorded statements, and related records.",
+        "key" : "hold",
+        "opens" : "audit",
+        "title" : "Issue the preservation hold"
       },
       {
         "fields" : [
           {
-            "help" : "A findable name for this claim file.",
+            "help" : "The evidence boundary.",
+            "key" : "sources",
+            "kind" : "longText",
+            "label" : "Documents in scope",
+            "required" : true
+          }
+        ],
+        "hint" : "Authorize the claim file, policy, prior claims, statements.",
+        "key" : "custodians",
+        "opens" : "sources",
+        "title" : "Identify sources & custodians"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "How the claim will be worked.",
+            "key" : "plan",
+            "kind" : "longText",
+            "label" : "Plan"
+          }
+        ],
+        "hint" : "EUO, records to obtain, experts, timeline.",
+        "key" : "plan",
+        "opens" : "handoff",
+        "title" : "Investigation plan"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "A findable name.",
             "key" : "caseName",
             "kind" : "text",
             "label" : "File name",
             "required" : true
           }
         ],
-        "hint" : "Open the numbered file the rest of the jobs run against.",
+        "hint" : "Open the numbered file.",
         "key" : "open",
         "opens" : "handoff",
         "posts" : "IMP",
@@ -14085,7 +14139,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.claimant-workup" : {
-    "purpose" : "Work up the claimant/provider from cited in-scope evidence, and confirm the identity/associations.",
+    "purpose" : "Work up the claimant/provider from cited in-scope evidence, and confirm identity and associations.",
     "steps" : [
       {
         "fields" : [
@@ -14097,7 +14151,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Who you're working up and why.",
+        "hint" : "Who you're working up.",
         "key" : "identify",
         "opens" : "dossier",
         "title" : "Identify the subject"
@@ -14105,28 +14159,42 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Only what the in-scope evidence supports.",
-            "key" : "profile",
+            "help" : "Only what the evidence supports.",
+            "key" : "background",
             "kind" : "longText",
-            "label" : "Workup"
+            "label" : "Background"
           }
         ],
-        "hint" : "Background, prior history, relationships — each cited.",
-        "key" : "compile",
+        "hint" : "Relevant history from in-scope evidence.",
+        "key" : "background",
         "opens" : "dossier",
-        "title" : "Compile the workup"
+        "title" : "Background & prior history"
       },
       {
         "fields" : [
           {
-            "help" : "What you confirm and how you know.",
+            "help" : "Key links and the evidence for each.",
+            "key" : "associations",
+            "kind" : "longText",
+            "label" : "Associations"
+          }
+        ],
+        "hint" : "Links to providers, vendors, other claimants — the app surfaces co-occurrences.",
+        "key" : "associations",
+        "opens" : "connections",
+        "title" : "Associations"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you confirm and how.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation & basis",
             "required" : true
           }
         ],
-        "hint" : "Confirm identity and associations, with basis.",
+        "hint" : "Confirm identity and associations.",
         "key" : "confirm",
         "title" : "Confirm (your decision)"
       },
@@ -14140,7 +14208,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Assemble the workup for the file.",
+        "hint" : "Assemble the workup.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -14160,10 +14228,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Recap"
           }
         ],
-        "hint" : "Report, actions, and any items left open.",
+        "hint" : "Report, recommendation, actions, open items.",
         "key" : "recap",
         "opens" : "handoff",
         "title" : "Confirm outcome"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What was reported, to whom, when.",
+            "key" : "regulatory",
+            "kind" : "longText",
+            "label" : "Notifications"
+          }
+        ],
+        "hint" : "Any mandatory reporting completed (DOI/NICB).",
+        "key" : "regulatory",
+        "opens" : "handoff",
+        "title" : "Regulatory notifications"
       },
       {
         "fields" : [
@@ -14174,7 +14256,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Retention & access"
           }
         ],
-        "hint" : "Where the file is kept and who may access it.",
+        "hint" : "Where the file is kept and access.",
         "key" : "retention",
         "opens" : "handoff",
         "title" : "Retention & confidentiality"
@@ -14223,7 +14305,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.custody" : {
-    "purpose" : "Keep a defensible evidence locker: register exhibits, record acquisition and integrity, log transfers, then seal the manifest.",
+    "purpose" : "Keep a defensible evidence locker: register exhibits, record acquisition and integrity, log transfers, then seal.",
     "steps" : [
       {
         "fields" : [
@@ -14262,7 +14344,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Integrity verified"
           }
         ],
-        "hint" : "How each item entered custody unaltered.",
+        "hint" : "How each entered custody unaltered.",
         "key" : "acquire",
         "opens" : "audit",
         "title" : "Acquisition & integrity"
@@ -14300,7 +14382,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.euo-prep" : {
-    "purpose" : "Prepare an examination under oath grounded in the record: what to establish, sworn-exam questions, and logistics.",
+    "purpose" : "Prepare the examination under oath: what to establish, exhibits to put, sworn-exam questions, and logistics (oath, counsel, notice).",
     "steps" : [
       {
         "fields" : [
@@ -14312,10 +14394,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "What the EUO must establish or resolve.",
+        "hint" : "What the EUO must establish or resolve — the app answers over the file.",
         "key" : "review",
         "opens" : "ask",
         "title" : "Review the record"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The topic sequence.",
+            "key" : "topics",
+            "kind" : "longText",
+            "label" : "Topics"
+          }
+        ],
+        "hint" : "Group by topic in a logical order.",
+        "key" : "topics",
+        "opens" : "matrix",
+        "title" : "Organize the topics"
       },
       {
         "fields" : [
@@ -14327,7 +14423,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Evidence-anchored questions for the examination.",
+        "hint" : "Evidence-anchored questions per topic.",
         "key" : "questions",
         "opens" : "matrix",
         "title" : "Draft the questions"
@@ -14335,16 +14431,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Arrangements and any rights/notice.",
+            "help" : "Exhibit → question mapping.",
+            "key" : "exhibits",
+            "kind" : "longText",
+            "label" : "Exhibits"
+          }
+        ],
+        "hint" : "Which documents to put to the examinee.",
+        "key" : "exhibits",
+        "opens" : "findings",
+        "title" : "Line up exhibits"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Arrangements and rights/notice.",
             "key" : "logistics",
             "kind" : "longText",
             "label" : "Logistics"
           }
         ],
-        "hint" : "Notice, counsel, oath, scheduling.",
+        "hint" : "Oath, counsel, notice, recording.",
         "key" : "logistics",
         "opens" : "handoff",
-        "title" : "Plan logistics"
+        "title" : "Logistics"
       },
       {
         "fields" : [
@@ -14365,7 +14475,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.identity" : {
-    "purpose" : "Decide whether names/aliases/entities are the same party: gather identifiers, compare, rule out look-alikes, then confirm or reject — reversible, human-gated.",
+    "purpose" : "Decide whether names/aliases/entities are the same party — reversible, human-gated.",
     "steps" : [
       {
         "fields" : [
@@ -14377,7 +14487,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Names, aliases, entities, accounts that may be one party.",
+        "hint" : "Names, aliases, entities, accounts.",
         "key" : "gather",
         "opens" : "knowledge",
         "title" : "Gather identifiers"
@@ -14391,7 +14501,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Signals"
           }
         ],
-        "hint" : "How each identifier appears across the file.",
+        "hint" : "How each appears across the file.",
         "key" : "compare",
         "opens" : "knowledge",
         "title" : "Compare across evidence"
@@ -14399,13 +14509,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Candidates ruled out and why.",
+            "help" : "With reason.",
             "key" : "ruledOut",
             "kind" : "longText",
             "label" : "Excluded"
           }
         ],
-        "hint" : "Exclude coincidental matches, with reason.",
+        "hint" : "Exclude coincidental matches.",
         "key" : "ruleout",
         "opens" : "review",
         "title" : "Rule out look-alikes"
@@ -14419,7 +14529,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Decision",
             "options" : [
               "Confirm same party",
-              "Reject — different parties",
+              "Reject — different",
               "Insufficient evidence"
             ],
             "required" : true
@@ -14432,7 +14542,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "A human decides identity. Never automatic.",
+        "hint" : "A human decides. Reversible.",
         "key" : "decide",
         "title" : "Confirm or reject (your decision)"
       },
@@ -14446,7 +14556,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Post the reversible identity decision.",
+        "hint" : "Post the reversible decision.",
         "key" : "record",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -14455,7 +14565,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.loss-chronology" : {
-    "purpose" : "Build the loss chronology with relationship links and payment flow, flagging gaps and conflicts.",
+    "purpose" : "Build the loss chronology with relationship links and payment flow, flagging gaps and conflicts — the app assembles dated events for you.",
     "steps" : [
       {
         "fields" : [
@@ -14467,7 +14577,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "From FNOL to now, each event cited.",
+        "hint" : "From FNOL to now, each cited.",
         "key" : "events",
         "opens" : "timeline",
         "title" : "Collect dated events"
@@ -14481,7 +14591,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Links"
           }
         ],
-        "hint" : "How claimants, providers and prior claims connect.",
+        "hint" : "How claimants, providers, prior claims connect.",
         "key" : "links",
         "opens" : "connections",
         "title" : "Order & link parties"
@@ -14503,13 +14613,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What confirms each key event.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "Independent support for the pivotal events.",
+        "key" : "corroborate",
+        "opens" : "review",
+        "title" : "Corroborate key events"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Kept, not averaged.",
             "key" : "gaps",
             "kind" : "longText",
             "label" : "Gaps & conflicts"
           }
         ],
-        "hint" : "Missing periods and conflicting dates.",
+        "hint" : "Missing periods and conflicting dates — both kept.",
         "key" : "gaps",
         "opens" : "review",
         "title" : "Flag gaps & conflicts"
@@ -14538,7 +14662,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The claims this register spans.",
+            "help" : "The claims spanned.",
             "key" : "scope",
             "kind" : "text",
             "label" : "What this covers",
@@ -14553,10 +14677,10 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Date, insurer, loss type, amount, outcome — cited.",
+            "help" : "Date · insurer · loss type · amount · outcome — cited.",
             "key" : "columns",
             "kind" : "longText",
-            "label" : "Columns & notes"
+            "label" : "Columns"
           }
         ],
         "hint" : "Index each claim.",
@@ -14567,16 +14691,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What the register reveals — an observation, not a conclusion.",
+            "help" : "An observation, not a conclusion.",
             "key" : "pattern",
             "kind" : "longText",
             "label" : "Pattern"
           }
         ],
-        "hint" : "Repetition or links worth flagging.",
+        "hint" : "Repetition, shared providers/addresses, timing.",
         "key" : "pattern",
         "opens" : "dataLab",
-        "title" : "Note the pattern"
+        "title" : "Cross-claim pattern"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you confirm.",
+            "key" : "basis",
+            "kind" : "longText",
+            "label" : "Confirmation",
+            "required" : true
+          }
+        ],
+        "hint" : "Confirm the register is accurate.",
+        "key" : "confirm",
+        "title" : "Confirm (your decision)"
       },
       {
         "fields" : [
@@ -14602,7 +14740,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which finding/exposure each action responds to.",
+            "help" : "Which finding/exposure each responds to.",
             "key" : "links",
             "kind" : "longText",
             "label" : "Action ↔ exposure",
@@ -14617,14 +14755,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Recovery/referral/follow-up — with owner and due date.",
+            "help" : "Each with owner and due date.",
             "key" : "actions",
             "kind" : "longText",
             "label" : "Actions",
             "required" : true
           }
         ],
-        "hint" : "Action, owner, due date, type.",
+        "hint" : "Recovery / referral / follow-up, owner, due.",
         "key" : "define",
         "opens" : "handoff",
         "title" : "Define the actions"
@@ -14632,7 +14770,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Confirm owners and dates.",
+            "help" : "Owners and dates.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -14642,6 +14780,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Confirm each is agreed.",
         "key" : "assign",
         "title" : "Agree owners & dates (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / done per action.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -14662,19 +14814,19 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.red-flags" : {
-    "purpose" : "Record fraud indicators with 5W1H and cite what supports each — red flags are indicators, never proof.",
+    "purpose" : "Record fraud indicators with 5W1H, cite what supports each, and cross-check known schemes — red flags are indicators, never proof.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "One indicator per line.",
+            "help" : "One per line.",
             "key" : "indicators",
             "kind" : "longText",
             "label" : "Indicators",
             "required" : true
           }
         ],
-        "hint" : "Every red flag observed in the file.",
+        "hint" : "Every red flag in the file.",
         "key" : "list",
         "opens" : "findings",
         "title" : "List the indicators"
@@ -14682,13 +14834,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The specifics behind each red flag.",
+            "help" : "Who/what/when/where/how.",
             "key" : "fiveW",
             "kind" : "longText",
             "label" : "5W1H per indicator"
           }
         ],
-        "hint" : "Who/what/when/where/how for each indicator.",
+        "hint" : "The specifics behind each indicator.",
         "key" : "frame",
         "opens" : "matrix",
         "title" : "Frame each (5W1H)"
@@ -14696,16 +14848,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The document behind each indicator.",
+            "help" : "The source behind each.",
             "key" : "evidence",
             "kind" : "longText",
             "label" : "Evidence per indicator"
           }
         ],
-        "hint" : "Tie each indicator to the document that raised it.",
+        "hint" : "Tie each to the document that raised it.",
         "key" : "cite",
         "opens" : "findings",
         "title" : "Cite what supports each"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Staged loss, inflation, provider mill, etc. — a pattern, not a finding.",
+            "key" : "schemes",
+            "kind" : "longText",
+            "label" : "Scheme fit"
+          }
+        ],
+        "hint" : "Do the indicators fit a recognized fraud pattern?",
+        "key" : "schemes",
+        "opens" : "matrix",
+        "title" : "Cross-check known schemes"
       },
       {
         "fields" : [
@@ -14725,7 +14891,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.referral-report" : {
-    "purpose" : "Assemble a referral-ready SIU report: recap, marshal the evidence, assess, recommend — a referral is a recommendation, never a finding of guilt.",
+    "purpose" : "Assemble the referral-ready SIU report: recap, marshal the evidence, assess material misrepresentation, recommend — a referral is a recommendation, never a finding of guilt.",
     "steps" : [
       {
         "fields" : [
@@ -14759,16 +14925,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Strengths and gaps.",
-            "key" : "assessment",
+            "help" : "Statement · truth · materiality · what the evidence shows.",
+            "key" : "misrep",
             "kind" : "longText",
-            "label" : "Assessment"
+            "label" : "Materiality analysis"
           }
         ],
-        "hint" : "What the evidence establishes.",
-        "key" : "assess",
+        "hint" : "Was there a false statement material to the claim?",
+        "key" : "misrep",
         "opens" : "matrix",
-        "title" : "Assess the exposure"
+        "title" : "Assess material misrepresentation"
       },
       {
         "fields" : [
@@ -14779,13 +14945,14 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Recommendation",
             "options" : [
               "Refer (SIU/NICB/DOI)",
-              "Do not refer",
+              "Deny (per policy)",
+              "Pay",
               "Continue investigation"
             ],
             "required" : true
           },
           {
-            "help" : "The basis for the recommendation.",
+            "help" : "The basis for it.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
@@ -14795,6 +14962,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Recommend a disposition — not a finding of guilt.",
         "key" : "decide",
         "title" : "Recommendation (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Completeness and accuracy.",
+            "key" : "qc",
+            "kind" : "longText",
+            "label" : "QC"
+          }
+        ],
+        "hint" : "Check every assertion is cited and defensible.",
+        "key" : "qc",
+        "opens" : "review",
+        "title" : "QC the report"
       },
       {
         "fields" : [
@@ -14844,7 +15025,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "High / Medium / Low — a judgement.",
             "key" : "rating",
             "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Rating"
           }
         ],
         "hint" : "Consistency, corroboration, bias, provenance.",
@@ -14855,14 +15036,28 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Confirm the ratings, noting they're judgements.",
+            "help" : "Who independently confirms what.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "Independent support — the app flags overlaps.",
+        "key" : "corroborate",
+        "opens" : "matrix",
+        "title" : "Corroborate"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confirm the ratings.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Basis",
             "required" : true
           }
         ],
-        "hint" : "These are your judgements.",
+        "hint" : "These are judgements.",
         "key" : "decide",
         "title" : "Own the ratings (your decision)"
       },
@@ -14885,7 +15080,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.statements" : {
-    "purpose" : "Compare statements point by point, preserving conflicting accounts rather than averaging them.",
+    "purpose" : "Compare statements (recorded statements, EUO) point by point, preserving conflicts rather than averaging them.",
     "steps" : [
       {
         "fields" : [
@@ -14919,13 +15114,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Never averaged.",
+            "help" : "Corroborated or contradicted where?",
+            "key" : "consistency",
+            "kind" : "longText",
+            "label" : "Consistency"
+          }
+        ],
+        "hint" : "Internal consistency and fit with physical/documentary evidence.",
+        "key" : "assess",
+        "opens" : "review",
+        "title" : "Assess consistency"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What remains unresolved.",
             "key" : "conflicts",
             "kind" : "longText",
             "label" : "Open conflicts"
           }
         ],
-        "hint" : "Conflicts left open.",
+        "hint" : "Left open, never averaged.",
         "key" : "conflicts",
         "opens" : "review",
         "title" : "Record unresolved conflicts"
