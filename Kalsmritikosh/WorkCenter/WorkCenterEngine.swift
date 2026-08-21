@@ -1080,6 +1080,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "verify",
             "kind" : "longText",
             "label" : "Verification"
+          },
+          {
+            "help" : "Is each source still current? Flag anything that may be outdated before it goes out.",
+            "key" : "currency",
+            "kind" : "longText",
+            "label" : "Currency check"
           }
         ],
         "hint" : "Evidence and status per claim.",
@@ -4902,6 +4908,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "kind" : "longText",
             "label" : "Allegation (verbatim)",
             "required" : true
+          },
+          {
+            "help" : "Record what was said and observed — behaviours, not labels or conclusions (write 'raised voice, pointed finger', not 'he was aggressive'). Subjective notes become a bias argument later.",
+            "key" : "objectivity",
+            "kind" : "longText",
+            "label" : "Note discipline"
           }
         ],
         "hint" : "Log it exactly as received — verbatim, before any assessment.",
@@ -5289,6 +5301,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "factors",
             "kind" : "longText",
             "label" : "Factors"
+          },
+          {
+            "help" : "Record what was said and observed — behaviours, not labels or conclusions (write 'raised voice, pointed finger', not 'he was aggressive'). Subjective notes become a bias argument later.",
+            "key" : "objectivity",
+            "kind" : "longText",
+            "label" : "Note discipline"
           }
         ],
         "hint" : "Consistency, corroboration, motive, opportunity to observe — content over demeanour.",
@@ -6045,6 +6063,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "kind" : "longText",
             "label" : "Accounts",
             "required" : true
+          },
+          {
+            "help" : "Record what was said and observed — behaviours, not labels or conclusions (write 'raised voice, pointed finger', not 'he was aggressive'). Subjective notes become a bias argument later.",
+            "key" : "objectivity",
+            "kind" : "longText",
+            "label" : "Note discipline"
           }
         ],
         "hint" : "Each statement, attributed and cited (attach interview notes).",
@@ -6628,6 +6652,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "layout",
             "kind" : "longText",
             "label" : "Layout"
+          },
+          {
+            "help" : "List where each original is kept and which trusted person can reach it — so it's findable in an emergency, not locked away where no one can get it.",
+            "key" : "locations",
+            "kind" : "longText",
+            "label" : "Where things live & who can access"
           }
         ],
         "hint" : "Organize it clearly for a stranger to follow.",
@@ -7024,6 +7054,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "layout",
             "kind" : "longText",
             "label" : "Layout & notes"
+          },
+          {
+            "help" : "List where each original is kept and which trusted person can reach it — so it's findable in an emergency, not locked away where no one can get it.",
+            "key" : "locations",
+            "kind" : "longText",
+            "label" : "Where things live & who can access"
           }
         ],
         "hint" : "Organize with notes for whoever inherits it.",
@@ -9880,6 +9916,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "verify",
             "kind" : "longText",
             "label" : "Verification"
+          },
+          {
+            "help" : "Is each source still current? Flag anything that may be outdated before it goes out.",
+            "key" : "currency",
+            "kind" : "longText",
+            "label" : "Currency check"
           }
         ],
         "hint" : "Against the evidence.",
@@ -11744,6 +11786,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "window",
             "kind" : "dateRange",
             "label" : "Time window"
+          },
+          {
+            "help" : "Keep discovery proportionate to what's at stake — scope review to the case's value and issues, to avoid runaway cost.",
+            "key" : "proportionality",
+            "kind" : "longText",
+            "label" : "Proportionality"
           }
         ],
         "hint" : "The boundary and period, mindful of privilege.",
@@ -12224,6 +12272,26 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "assemble",
         "opens" : "sources",
         "title" : "Assemble the set"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Is a 502(d) order in place?",
+            "key" : "status",
+            "kind" : "choice",
+            "label" : "502(d) order status",
+            "options" : [
+              "Entered",
+              "Agreed — pending entry",
+              "Not yet — flagged",
+              "N/A (non-US)"
+            ]
+          }
+        ],
+        "hint" : "The strongest and most under-used privilege protection: a court order that inadvertent production doesn't waive privilege — even in other cases — so review can move fast. Seek it early with opposing counsel.",
+        "key" : "clawback",
+        "opens" : "handoff",
+        "title" : "Agree an FRE 502(d) clawback order"
       },
       {
         "fields" : [
@@ -14594,6 +14662,18 @@ public nonisolated enum WCAuthoredWorkflows {
             "kind" : "longText",
             "label" : "Scope statement",
             "required" : true
+          },
+          {
+            "help" : "Triage by exposure so effort matches impact.",
+            "key" : "priority",
+            "kind" : "choice",
+            "label" : "Priority / exposure",
+            "options" : [
+              "Low",
+              "Medium",
+              "High",
+              "Critical"
+            ]
           }
         ],
         "hint" : "What the investigation covers.",
