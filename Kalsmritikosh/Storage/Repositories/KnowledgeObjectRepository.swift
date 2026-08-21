@@ -322,6 +322,18 @@ public struct KnowledgeObjectSummaryRow: Identifiable, Sendable, Hashable {
     public let createdAt: Date
 }
 
+/// One email message's header digest, for dedup + threading.
+public struct EmailDigestRow: Identifiable, Sendable, Hashable {
+    public let id: KnowledgeObject.ID
+    public let sourceFile: URL
+    public let subject: String
+    public let from: String
+    public let date: Date?
+    public let contentHash: String
+    public let preview: String
+    public let createdAt: Date
+}
+
 /// Per-file ingest health row used by the Completeness panel. All
 /// fields come from KO metadata stamped by the loaders.
 public struct CompletenessRow: Identifiable, Sendable, Hashable {
@@ -386,6 +398,72 @@ extension KnowledgeObjectRepository {
             ))
         }
         return out
+    }
+
+    /// Email messages with their header digest (subject / from / date) pulled
+    /// from KO metadata, plus the source file's content hash for exact-duplicate
+    /// detection. Used by the email dedup + threading view. Filtered to objects
+    /// whose metadata carries a Subject/From header, newest first.
+    public func emailDigests(limit: Int = 3000) async throws -> [EmailDigestRow] {
+        let rows = try await database.query("""
+        SELECT k.id, k.content, k.metadata_json, k.created_at, f.url, f.content_hash
+        FROM knowledge_objects k
+        JOIN files f ON f.id = k.file_id
+        WHERE k.metadata_json LIKE '%ubject%' OR k.metadata_json LIKE '%"from"%' OR k.metadata_json LIKE '%"From"%'
+        ORDER BY k.created_at DESC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+
+        var out: [EmailDigestRow] = []
+        out.reserveCapacity(rows.count)
+        for row in rows {
+            guard
+                let id = row.uuid(0),
+                let content = row.string(1),
+                let metaJSON = row.string(2),
+                let created = row.date(3),
+                let urlString = row.string(4),
+                let url = URL(string: urlString) ?? URL(string: urlString.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")
+            else { continue }
+            let meta = parseMetadataBag(metaJSON)
+            let subject = meta.first(where: { $0.key.lowercased() == "subject" })?.value ?? ""
+            let from = meta.first(where: { $0.key.lowercased() == "from" })?.value ?? ""
+            let dateRaw = meta.first(where: { $0.key.lowercased() == "date" })?.value
+            // Only keep rows that actually look like email (have a subject or from).
+            guard !subject.isEmpty || !from.isEmpty else { continue }
+            out.append(EmailDigestRow(
+                id: id,
+                sourceFile: url,
+                subject: subject,
+                from: from,
+                date: Self.parseEmailDate(dateRaw),
+                contentHash: row.string(5) ?? "",
+                preview: String(content.prefix(160)),
+                createdAt: created))
+        }
+        return out
+    }
+
+    /// Best-effort parse of an email Date header across common formats.
+    nonisolated static func parseEmailDate(_ raw: String?) -> Date? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        if let d = iso.date(from: raw) { return d }
+        let formats = [
+            "EEE, d MMM yyyy HH:mm:ss Z",
+            "EEE, d MMM yyyy HH:mm:ss",
+            "d MMM yyyy HH:mm:ss Z",
+            "yyyy-MM-dd HH:mm:ss Z",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd"
+        ]
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        for fmt in formats {
+            df.dateFormat = fmt
+            if let d = df.date(from: raw) { return d }
+        }
+        return nil
     }
 
     /// Flatten the JSON metadata blob to a plain [String: String] —

@@ -32,7 +32,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case workspaces
     case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
-    case fundFlow
+    case fundFlow, emailThreads
     case review
     case handoff
     case transcripts
@@ -65,6 +65,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .matrix:       return "Cross-Doc Matrix"
         case .connections:  return "Connections"
         case .fundFlow:     return "Fund Flow"
+        case .emailThreads: return "Email Threads"
         case .story:        return "Case Story"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
@@ -112,6 +113,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .matrix:       return "square.grid.3x3.topleft.filled"
         case .connections:  return "point.topleft.down.to.point.bottomright.curvepath"
         case .fundFlow:     return "arrow.triangle.branch"
+        case .emailThreads: return "envelope.badge.person.crop"
         case .story:        return "book.pages"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
@@ -175,6 +177,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .matrix:       return "Ask one question across every document — what each source says, cited"
         case .connections:  return "Find the shortest chain of relationships linking two people or organizations"
         case .fundFlow:     return "See how money moved between parties — payer to payee — drawn from your evidence"
+        case .emailThreads: return "A big email dump, deduplicated and grouped into conversations"
         case .story:        return "The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
@@ -214,7 +217,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .settings]
@@ -390,7 +393,7 @@ public struct RootView: View {
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
              .transcripts, .authenticity, .citations,
-             .freshness, .trends:                                     return .entities
+             .freshness, .trends, .emailThreads:                      return .entities
         case .dataLab:                                                return .dataLab
         case .connections, .explore, .matrix, .fundFlow:              return .relationships
         case .findings, .notebook, .dossier, .story, .review,
@@ -1260,6 +1263,7 @@ public struct RootView: View {
         case .matrix:       CrossDocumentMatrixView()
         case .connections:  ConnectionFinderView()
         case .fundFlow:     FundFlowView()
+        case .emailThreads: EmailThreadsView()
         case .story:        CaseStoryView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
