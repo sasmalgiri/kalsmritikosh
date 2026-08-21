@@ -188,6 +188,15 @@ public struct DataLabView: View {
                         showImporter = true
                     } label: { Label("Import CSV", systemImage: "square.and.arrow.down") }
                         .help("Turn a spreadsheet into a dataset — export it from Excel/Numbers as CSV first; the header row becomes the fields")
+                    Menu {
+                        Button("Timeline — from dated events") { buildFromEvidence(.timeline) }
+                        Button("People & organizations — from entities") { buildFromEvidence(.peopleAndOrganizations) }
+                    } label: {
+                        Label("Build from evidence", systemImage: "sparkles.rectangle.stack")
+                            .font(.caption).lineLimit(1)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .help("Build a table straight from what you've ingested — one row per event or entity, every value drill-through bound to its source (no re-keying).")
                 }
                 .fileImporter(isPresented: $showImporter,
                               allowedContentTypes: [.commaSeparatedText, .plainText],
@@ -1080,6 +1089,47 @@ public struct DataLabView: View {
                     selectedStarter = nil
                 }
             } catch { errorMessage = "Could not create the dataset: \(error)" }
+        }
+    }
+
+    /// KnowledgeObject ids belonging to the workspace's sources, so an evidence
+    /// build can be scoped to this matter. nil = no sources yet (build from all).
+    private func allowedObjectIDs(_ workspaceID: UUID) async -> Set<UUID>? {
+        guard let wsRepo = appState.workspaces, let objs = appState.objects else { return nil }
+        let fileIDs = (try? await wsRepo.sourceIDs(in: workspaceID)) ?? []
+        guard !fileIDs.isEmpty else { return nil }
+        let set = (try? await objs.objectIDs(inFileIDs: fileIDs)) ?? []
+        return set.isEmpty ? nil : set
+    }
+
+    /// Build a sourced dataset from the ingested ledger and open it.
+    private func buildFromEvidence(_ shape: EvidenceDatasetBuilder.Shape) {
+        guard let datasets = appState.workbenchDatasets,
+              let eventsRepo = appState.events,
+              let entitiesRepo = appState.entities else { return }
+        errorMessage = nil
+        Task {
+            do {
+                guard let wsID = await ensureWorkspace() else { return }
+                let builder = EvidenceDatasetBuilder(datasets: datasets, events: eventsRepo, entities: entitiesRepo)
+                let result: EvidenceDatasetBuilder.BuildResult
+                switch shape {
+                case .timeline:
+                    let allowed = await allowedObjectIDs(wsID)
+                    result = try await builder.buildTimeline(
+                        workspaceID: wsID, title: "Timeline from evidence",
+                        allowedObjectIDs: allowed, actor: actorName, at: Date())
+                case .peopleAndOrganizations:
+                    result = try await builder.buildEntities(
+                        workspaceID: wsID, title: "People & organizations",
+                        kinds: [.person, .organization, .vendor, .client], actor: actorName, at: Date())
+                }
+                record = result.record
+                await loadSatellites(result.record.dataset.id)
+                if result.rowsAdded == 0 {
+                    errorMessage = "No matching evidence yet — ingest documents (and process them), then build again."
+                }
+            } catch { errorMessage = "Could not build from evidence: \(error)" }
         }
     }
 
