@@ -840,10 +840,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Unsupported claims"
           }
         ],
-        "hint" : "Anything the outline claims the sources don't yet support.",
+        "hint" : "Anything the outline claims the sources don't yet support — the app flags unsupported claims.",
         "key" : "check",
         "opens" : "review",
         "title" : "Check against the sources"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Beats in order.",
+            "key" : "structure",
+            "kind" : "longText",
+            "label" : "Structure"
+          }
+        ],
+        "hint" : "Sequence for the hook/retention on your format.",
+        "key" : "structure",
+        "opens" : "matrix",
+        "title" : "Order for the platform"
       },
       {
         "fields" : [
@@ -864,7 +878,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.ask" : {
-    "purpose" : "Ask a question across the project's sources and keep the cited answer.",
+    "purpose" : "Ask a question across the project's sources — the app reads everything and answers with citations, so research is minutes not hours.",
     "steps" : [
       {
         "fields" : [
@@ -876,7 +890,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites its source.",
+        "hint" : "Plain language; the answer cites its source.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask your research"
@@ -890,7 +904,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the project cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -930,6 +944,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "define",
         "opens" : "handoff",
         "title" : "Define the items"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / done per item.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -1005,7 +1033,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The explanation you'll present — grounded, not overstated.",
+        "hint" : "Grounded, not overstated.",
         "key" : "takeaway",
         "title" : "Write the takeaway (your decision)"
       },
@@ -1028,7 +1056,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.fact-check" : {
-    "purpose" : "Check each claim against evidence — conflicting accounts preserved, never averaged.",
+    "purpose" : "Check each claim against evidence — conflicting accounts preserved, never averaged. This is what keeps you out of trouble.",
     "steps" : [
       {
         "fields" : [
@@ -1040,7 +1068,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each claim the piece makes.",
+        "hint" : "Each claim the piece makes — the app can extract them from your draft.",
         "key" : "collect",
         "opens" : "findings",
         "title" : "List the claims"
@@ -1058,6 +1086,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "verify",
         "opens" : "matrix",
         "title" : "Verify each claim"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Independent confirmation per key claim.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "At least two independent sources for the big claims.",
+        "key" : "corroborate",
+        "opens" : "review",
+        "title" : "Corroborate the load-bearing ones"
       },
       {
         "fields" : [
@@ -1126,6 +1168,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Claims to verify before airing; potential harm.",
+            "key" : "flags",
+            "kind" : "longText",
+            "label" : "Sensitivities"
+          }
+        ],
+        "hint" : "Anything legally or reputationally sensitive to handle with care.",
+        "key" : "flags",
+        "opens" : "review",
+        "title" : "Note sensitivities"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What you confirm and how.",
             "key" : "basis",
             "kind" : "longText",
@@ -1156,7 +1212,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.identity" : {
-    "purpose" : "Confirm names, handles and entities are the same party: gather, compare, rule out, then decide — reversible, human-gated.",
+    "purpose" : "Confirm names, handles and entities are the same party — reversible, human-gated.",
     "steps" : [
       {
         "fields" : [
@@ -1210,7 +1266,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Decision",
             "options" : [
               "Confirm same party",
-              "Reject — different parties",
+              "Reject — different",
               "Insufficient evidence"
             ],
             "required" : true
@@ -1223,7 +1279,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "You decide. Never automatic.",
+        "hint" : "You decide. Reversible.",
         "key" : "decide",
         "title" : "Confirm or reject (your decision)"
       },
@@ -1334,7 +1390,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "What it's about and for whom.",
+            "help" : "What it's about and the point.",
             "key" : "premise",
             "kind" : "longText",
             "label" : "Premise",
@@ -1345,6 +1401,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "frame",
         "opens" : "sources",
         "title" : "Frame the project"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Platform, length, tone.",
+            "key" : "audience",
+            "kind" : "longText",
+            "label" : "Audience & format"
+          }
+        ],
+        "hint" : "Who it's for and the format/length/platform.",
+        "key" : "audience",
+        "opens" : "findings",
+        "title" : "Audience & format"
       },
       {
         "fields" : [
@@ -1397,7 +1467,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.publish-package" : {
-    "purpose" : "Assemble the cited, rights-cleared package: assemble the piece, verify every claim is cited, confirm rights cleared, choose the export format, then produce.",
+    "purpose" : "Assemble the cited, rights-cleared package: assemble, verify every claim is cited, confirm rights, add disclosures, choose the export format, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -1455,6 +1525,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Required disclosures and accessibility done.",
+            "key" : "disclosure",
+            "kind" : "longText",
+            "label" : "Disclosures"
+          }
+        ],
+        "hint" : "Sponsorship/ad disclosure, captions, alt text.",
+        "key" : "disclosure",
+        "opens" : "handoff",
+        "title" : "Disclosures & accessibility"
+      },
+      {
+        "fields" : [
+          {
             "help" : "The deliverable format.",
             "key" : "format",
             "kind" : "choice",
@@ -1490,7 +1574,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.research-table" : {
-    "purpose" : "Build a data-backed table for the piece — every cell drills to its source.",
+    "purpose" : "Build a data-backed table for the piece — every cell drills to its source, unlike a loose spreadsheet.",
     "steps" : [
       {
         "fields" : [
@@ -1524,7 +1608,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Anything a reader should be warned about.",
+            "help" : "Anything a viewer should be warned about.",
             "key" : "check",
             "kind" : "longText",
             "label" : "Checks"
@@ -1534,6 +1618,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "check",
         "opens" : "dataLab",
         "title" : "Check the numbers"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Any cell not yet sourced.",
+            "key" : "cite",
+            "kind" : "longText",
+            "label" : "Sourcing"
+          }
+        ],
+        "hint" : "Every figure opens its document — no unsourced stats on screen.",
+        "key" : "cite",
+        "opens" : "audit",
+        "title" : "Confirm each cell's source"
       },
       {
         "fields" : [
@@ -1615,6 +1713,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Attribution and restrictions to honor.",
+            "key" : "license",
+            "kind" : "longText",
+            "label" : "License notes"
+          }
+        ],
+        "hint" : "Any required credit or usage limits.",
+        "key" : "license",
+        "opens" : "audit",
+        "title" : "License terms & attribution"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Name this manifest.",
             "key" : "title",
             "kind" : "text",
@@ -1662,6 +1774,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "questions",
         "opens" : "matrix",
         "title" : "Draft questions & talking points"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Cues tied to points — and where each asset comes from.",
+            "key" : "visuals",
+            "kind" : "longText",
+            "label" : "Visuals plan"
+          }
+        ],
+        "hint" : "What footage, graphics or docs to show.",
+        "key" : "visuals",
+        "opens" : "findings",
+        "title" : "Plan visuals / b-roll"
       },
       {
         "fields" : [
@@ -1725,13 +1851,27 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "High / Medium / Low — a judgement.",
             "key" : "rating",
             "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Rating"
           }
         ],
         "hint" : "Independence, track record, corroboration.",
         "key" : "assess",
         "opens" : "review",
         "title" : "Assess each"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Who independently confirms what.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "Independent confirmation.",
+        "key" : "corroborate",
+        "opens" : "matrix",
+        "title" : "Check corroboration"
       },
       {
         "fields" : [
@@ -1743,7 +1883,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "These are your judgements.",
+        "hint" : "These are judgements.",
         "key" : "decide",
         "title" : "Own the ratings (your decision)"
       },
@@ -1766,7 +1906,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "cc.timeline" : {
-    "purpose" : "Build the story's timeline and how the people and orgs connect.",
+    "purpose" : "Build the story's timeline and how the people and orgs connect — the app assembles dated events for you.",
     "steps" : [
       {
         "fields" : [
@@ -1796,6 +1936,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "links",
         "opens" : "connections",
         "title" : "Map the connections"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you confirm.",
+            "key" : "basis",
+            "kind" : "longText",
+            "label" : "Confirmation",
+            "required" : true
+          }
+        ],
+        "hint" : "Confirm the timeline — never invent dates.",
+        "key" : "confirm",
+        "title" : "Confirm inclusion (your decision)"
       },
       {
         "fields" : [
