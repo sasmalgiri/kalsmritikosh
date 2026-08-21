@@ -2322,12 +2322,15 @@ public nonisolated enum WCAuthoredWorkflows {
             ]),
 
         "inv.ask": build(
-            "Ask a question over the case's authorized evidence and keep the cited answer.",
+            "Ask a question over the case's authorized evidence and keep the cited answer — instead of digging through files by hand, the app reads every in-scope document and answers with citations.",
             [
-                Step("ask", "Ask (case-scoped)", "The answer is grounded in the case's authorized evidence only.", opens: "ask", [
+                Step("frame", "Decide what you need", "A moment to frame the question sharpens the answer.", opens: "ask", [
+                    f("need", "What you're trying to establish", .longText, "The specific thing you need to know."),
+                ]),
+                Step("ask", "Ask (case-scoped)", "Type it in plain language — the app searches every authorized document for you and answers with citations, so there's no manual file-hunting.", opens: "ask", [
                     f("question", "Your question", .longText, "What you need to know.", required: true),
                 ]),
-                Step("record", "Keep the cited answer", "Save the answer that matters.", opens: "answers", posts: "RPT", [
+                Step("record", "Keep the cited answer", "The answer lands in the case file already cited — no copy-paste, no lost source.", opens: "answers", posts: "RPT", [
                     f("why", "Why it matters", .longText, "How it bears on the case."),
                 ]),
             ]),
