@@ -1890,7 +1890,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.analysis" : {
-    "purpose" : "Frame hypotheses and the evidence plan for the engagement (5W1H).",
+    "purpose" : "Frame hypotheses and the evidence plan for the engagement (5W1H), and the tests you'll run.",
     "steps" : [
       {
         "fields" : [
@@ -1938,6 +1938,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What each test would show.",
+            "key" : "tests",
+            "kind" : "longText",
+            "label" : "Tests"
+          }
+        ],
+        "hint" : "Analytical tests to run (ratios, Benford, cut-off).",
+        "key" : "tests",
+        "opens" : "dataLab",
+        "title" : "Design the tests"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Name this worksheet.",
             "key" : "title",
             "kind" : "text",
@@ -1954,7 +1968,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.ask" : {
-    "purpose" : "Ask a question over the engagement's records and keep the cited answer on the record.",
+    "purpose" : "Ask a question over the engagement's records and keep the cited answer — the app reads every ledger and statement for you.",
     "steps" : [
       {
         "fields" : [
@@ -1966,7 +1980,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites the engagement's evidence.",
+        "hint" : "Plain language; cited answer.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask the records"
@@ -1980,7 +1994,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the engagement cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -2014,7 +2028,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Retention & access"
           }
         ],
-        "hint" : "Where the workpapers are kept and who may access them.",
+        "hint" : "Where the workpapers are kept and access.",
         "key" : "retention",
         "opens" : "handoff",
         "title" : "Retention & confidentiality"
@@ -2033,14 +2047,14 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "Why — reopening preserves this closure.",
+            "help" : "Why — reopening preserves history.",
             "key" : "reason",
             "kind" : "longText",
             "label" : "Reason",
             "required" : true
           }
         ],
-        "hint" : "A human closes or keeps the engagement open.",
+        "hint" : "A human closes or keeps it open.",
         "key" : "decide",
         "title" : "Closure decision (your decision)"
       },
@@ -2112,6 +2126,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Requests to close each discrepancy.",
+            "key" : "followup",
+            "kind" : "longText",
+            "label" : "Follow-up"
+          }
+        ],
+        "hint" : "Records to request to resolve.",
+        "key" : "followup",
+        "opens" : "handoff",
+        "title" : "Plan follow-up"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Name this schedule.",
             "key" : "title",
             "kind" : "text",
@@ -2157,10 +2185,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "High / Medium / Low — a judgement.",
             "key" : "rating",
             "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Rating"
           }
         ],
-        "hint" : "Origin, custody, corroboration.",
+        "hint" : "Origin, custody, corroboration, alteration signs.",
         "key" : "assess",
         "opens" : "review",
         "title" : "Assess each"
@@ -2175,7 +2203,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "These are your judgements.",
+        "hint" : "These are judgements.",
         "key" : "decide",
         "title" : "Own the ratings (your decision)"
       },
@@ -2198,12 +2226,12 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.engagement" : {
-    "purpose" : "Open a forensic engagement: record the mandate, fix scope and standards, set records in scope, then open the engagement.",
+    "purpose" : "Open a forensic engagement the way a practitioner does: record the mandate, confirm independence & conflicts, fix scope & standards, set records in scope, plan, then open.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Your engagement/matter reference.",
+            "help" : "Your reference.",
             "key" : "ref",
             "kind" : "text",
             "label" : "Engagement number",
@@ -2224,9 +2252,29 @@ public nonisolated enum WCAuthoredWorkflows {
           }
         ],
         "hint" : "What you're engaged to do.",
-        "key" : "record",
+        "key" : "mandate",
         "opens" : "sources",
         "title" : "Record the engagement"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Result.",
+            "key" : "independence",
+            "kind" : "choice",
+            "label" : "Independence check",
+            "options" : [
+              "Independent — cleared",
+              "Managed — noted",
+              "Conflict — decline"
+            ],
+            "required" : true
+          }
+        ],
+        "hint" : "Confirm you're independent and free of conflicts.",
+        "key" : "independence",
+        "opens" : "handoff",
+        "title" : "Independence & conflicts"
       },
       {
         "fields" : [
@@ -2238,12 +2286,12 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "The professional standards this work follows.",
+            "help" : "Standards followed.",
             "key" : "standards",
             "kind" : "choice",
             "label" : "Standards",
             "options" : [
-              "AICPA / consulting standards",
+              "AICPA / consulting",
               "Court-directed",
               "Internal policy",
               "Other"
@@ -2258,40 +2306,31 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The authorized records — the evidence boundary.",
+            "help" : "The evidence boundary.",
             "key" : "sources",
             "kind" : "longText",
-            "label" : "Records in scope"
+            "label" : "Records in scope",
+            "required" : true
           }
         ],
         "hint" : "Authorize ledgers, bank statements, invoices.",
-        "key" : "inscope",
+        "key" : "records",
         "opens" : "sources",
         "title" : "Set records in scope"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm only when correct.",
-            "key" : "decision",
-            "kind" : "choice",
-            "label" : "Scope confirmed?",
-            "options" : [
-              "Confirmed",
-              "Needs revision"
-            ],
-            "required" : true
-          },
-          {
-            "help" : "Anything to record.",
-            "key" : "note",
+            "help" : "How the engagement will run.",
+            "key" : "plan",
             "kind" : "longText",
-            "label" : "Note"
+            "label" : "Plan"
           }
         ],
-        "hint" : "A human confirms scope before work.",
-        "key" : "confirm",
-        "title" : "Confirm scope (your decision)"
+        "hint" : "Procedures, data requests, timeline.",
+        "key" : "plan",
+        "opens" : "handoff",
+        "title" : "Engagement plan"
       },
       {
         "fields" : [
@@ -2312,7 +2351,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.entity-resolution" : {
-    "purpose" : "Resolve shell names and aliases to one entity: gather identifiers, compare, rule out look-alikes, then confirm or reject — reversible, human-gated.",
+    "purpose" : "Resolve shell names and aliases to one entity — reversible, human-gated.",
     "steps" : [
       {
         "fields" : [
@@ -2366,7 +2405,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Decision",
             "options" : [
               "Confirm same entity",
-              "Reject — different entities",
+              "Reject — different",
               "Insufficient evidence"
             ],
             "required" : true
@@ -2379,7 +2418,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "A human decides. Never automatic.",
+        "hint" : "A human decides. Reversible.",
         "key" : "decide",
         "title" : "Confirm or reject (your decision)"
       },
@@ -2402,7 +2441,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.expert-report" : {
-    "purpose" : "Assemble the expert report: restate the assignment, summarize methodology, marshal exhibits, state opinions, note assumptions and limitations, then produce — opine only within your expertise.",
+    "purpose" : "Assemble the expert report: restate the assignment, state scope & assumptions, summarize methodology, marshal exhibits, state opinions, give the bases & reliability, note limitations, then produce — opine only within your expertise.",
     "steps" : [
       {
         "fields" : [
@@ -2422,13 +2461,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Approach and standards.",
+            "help" : "Instructions, assumed facts, data relied on.",
+            "key" : "assumptions",
+            "kind" : "longText",
+            "label" : "Assumptions"
+          }
+        ],
+        "hint" : "What you assumed and relied upon.",
+        "key" : "assumptions",
+        "opens" : "review",
+        "title" : "Scope & assumptions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Approach and standards — defensible under scrutiny.",
             "key" : "methodology",
             "kind" : "longText",
             "label" : "Methodology"
           }
         ],
-        "hint" : "The methods you applied and why.",
+        "hint" : "The methods applied and why (reliable, applied reliably).",
         "key" : "methodology",
         "opens" : "matrix",
         "title" : "Summarize methodology"
@@ -2439,8 +2492,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Exhibit no. · Title · What it shows · Source (cited) · Which opinion it supports.",
             "key" : "exhibits",
             "kind" : "longText",
-            "label" : "Exhibit schedule columns",
-            "required" : true
+            "label" : "Exhibit schedule columns"
           }
         ],
         "hint" : "One row per exhibit the opinion rests on (attach).",
@@ -2465,13 +2517,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Data limitations and matters outside scope.",
-            "key" : "limitations",
+            "help" : "Opinion → basis → supporting exhibits.",
+            "key" : "bases",
             "kind" : "longText",
-            "label" : "Assumptions & limits"
+            "label" : "Bases"
           }
         ],
-        "hint" : "What you relied on and what you didn't reach.",
+        "hint" : "The basis for each opinion and why the method is reliable.",
+        "key" : "bases",
+        "opens" : "matrix",
+        "title" : "Bases & reliability"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you did and didn't reach.",
+            "key" : "limitations",
+            "kind" : "longText",
+            "label" : "Limitations"
+          }
+        ],
+        "hint" : "Data limitations and matters outside scope.",
         "key" : "limits",
         "opens" : "review",
         "title" : "Assumptions & limitations"
@@ -2495,7 +2561,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.funds-tracing" : {
-    "purpose" : "Follow the money: identify accounts and parties, trace the transactions, map the flow, flag gaps and commingling, then produce the flow.",
+    "purpose" : "Follow the money: identify accounts and parties, trace the transactions, map the flow, apply a tracing method, flag gaps and commingling, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -2515,7 +2581,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Date · From (account / party) · To (account / party) · Amount · Currency · Instrument (wire / cheque / cash / transfer) · Source document (cited) · Running balance · Characterization.",
+            "help" : "Date · From (account/party) · To · Amount · Currency · Instrument · Source document (cited) · Running balance · Characterization.",
             "key" : "transactions",
             "kind" : "longText",
             "label" : "Transaction columns",
@@ -2540,6 +2606,27 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "map",
         "opens" : "connections",
         "title" : "Map the flow & links"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "How commingled funds are attributed.",
+            "key" : "method",
+            "kind" : "choice",
+            "label" : "Tracing method",
+            "options" : [
+              "Lowest intermediate balance",
+              "LIFO",
+              "FIFO",
+              "Pro rata",
+              "Direct tracing"
+            ]
+          }
+        ],
+        "hint" : "State the method where funds are commingled.",
+        "key" : "method",
+        "opens" : "matrix",
+        "title" : "Apply a tracing method"
       },
       {
         "fields" : [
@@ -2594,6 +2681,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "The data the method runs on.",
+            "key" : "inputs",
+            "kind" : "longText",
+            "label" : "Inputs"
+          }
+        ],
+        "hint" : "Point it at the ledger data — the app already has it.",
+        "key" : "inputs",
+        "opens" : "dataLab",
+        "title" : "Set the inputs"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What the method flagged — an indicator, not a conclusion.",
             "key" : "runNote",
             "kind" : "longText",
@@ -2644,16 +2745,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Only what the evidence supports.",
-            "key" : "profile",
+            "help" : "What the records show.",
+            "key" : "registration",
             "kind" : "longText",
-            "label" : "Workup"
+            "label" : "Registration"
           }
         ],
-        "hint" : "Registration, ownership, relationships — each cited.",
-        "key" : "compile",
+        "hint" : "Corporate registration, beneficial owners — from in-scope evidence.",
+        "key" : "registration",
         "opens" : "dossier",
-        "title" : "Compile the workup"
+        "title" : "Registration & ownership"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Key links, cited.",
+            "key" : "relationships",
+            "kind" : "longText",
+            "label" : "Relationships"
+          }
+        ],
+        "hint" : "Links to the subject, insiders, other payees — app-surfaced.",
+        "key" : "relationships",
+        "opens" : "connections",
+        "title" : "Relationships"
       },
       {
         "fields" : [
@@ -2693,7 +2808,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which finding each action responds to.",
+            "help" : "Which finding each responds to.",
             "key" : "links",
             "kind" : "longText",
             "label" : "Action ↔ finding",
@@ -2723,7 +2838,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Confirm owners and dates.",
+            "help" : "Owners and dates.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -2733,6 +2848,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "hint" : "Confirm each is agreed.",
         "key" : "assign",
         "title" : "Agree owners & dates (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / done per action.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -2829,7 +2958,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.root-cause" : {
-    "purpose" : "Trace how the loss or misstatement occurred: Five Whys, Fishbone, then a human determination.",
+    "purpose" : "Trace how the loss or misstatement occurred: Five Whys, Fishbone, weigh, then a human determination.",
     "steps" : [
       {
         "fields" : [
@@ -2863,13 +2992,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Controls, process, people, systems.",
+            "help" : "Candidate causes.",
             "key" : "categories",
             "kind" : "longText",
             "label" : "Categories"
           }
         ],
-        "hint" : "Sort candidate causes.",
+        "hint" : "Controls, process, people, systems.",
         "key" : "fishbone",
         "opens" : "matrix",
         "title" : "Fishbone — categorize"
@@ -2877,7 +3006,21 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The root cause(s), on the evidence.",
+            "help" : "What supports or rules out each.",
+            "key" : "weigh",
+            "kind" : "longText",
+            "label" : "For / against"
+          }
+        ],
+        "hint" : "For and against each.",
+        "key" : "weigh",
+        "opens" : "review",
+        "title" : "Weigh the candidates"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "On the evidence.",
             "key" : "determination",
             "kind" : "longText",
             "label" : "Determination & basis",
@@ -2927,14 +3070,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The columns a forensic tracing schedule uses: Date · From (payer / account) · To (payee / account) · Amount · Currency · Running balance · Transaction type · Source-document reference · Characterization (legitimate / commingled / suspect) · Notes. Every cell cites its source.",
+            "help" : "Date · From (payer/account) · To (payee/account) · Amount · Currency · Running balance · Transaction type · Source-document reference · Characterization · Notes. Every cell cites its source.",
             "key" : "columns",
             "kind" : "longText",
             "label" : "Schedule columns",
             "required" : true
           }
         ],
-        "hint" : "Build it in DataLab (the app's spreadsheet) — one row per transaction, exactly as you would in Excel.",
+        "hint" : "Build it in DataLab (the app's spreadsheet) — one row per transaction, as in Excel.",
         "key" : "build",
         "opens" : "dataLab",
         "title" : "Build the tracing schedule"
@@ -2952,6 +3095,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "reconcile",
         "opens" : "dataLab",
         "title" : "Reconcile & note variances"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Any figure not yet sourced.",
+            "key" : "tie",
+            "kind" : "longText",
+            "label" : "Tie-out"
+          }
+        ],
+        "hint" : "Confirm each amount opens its document.",
+        "key" : "tie",
+        "opens" : "audit",
+        "title" : "Tie every figure to source"
       },
       {
         "fields" : [
@@ -2977,7 +3134,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What each item is and where it came from.",
+            "help" : "What each is and where it came from.",
             "key" : "originals",
             "kind" : "longText",
             "label" : "Originals",
@@ -3022,14 +3179,27 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "WP ref · Title · Purpose · Preparer · Reviewer · Report section supported · Source documents (cited).",
             "key" : "index",
             "kind" : "longText",
-            "label" : "Workpaper index columns",
-            "required" : true
+            "label" : "Workpaper index columns"
           }
         ],
         "hint" : "One row per workpaper, cross-referenced to the report.",
         "key" : "index",
         "opens" : "audit",
         "title" : "Index the workpapers"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Reviewer and result.",
+            "key" : "review",
+            "kind" : "longText",
+            "label" : "Review"
+          }
+        ],
+        "hint" : "Second-person review of the workpapers.",
+        "key" : "review",
+        "opens" : "audit",
+        "title" : "Reviewer sign-off"
       },
       {
         "fields" : [
