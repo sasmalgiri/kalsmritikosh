@@ -63,7 +63,8 @@ struct EvidenceDatasetBuilderTests {
         let builder = EvidenceDatasetBuilder(
             datasets: WorkbenchDatasetRepository(database: db),
             events: EventsRepository(database: db),
-            entities: EntitiesRepository(database: db))
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
 
         let result = try await builder.buildTimeline(
             workspaceID: wsID, title: "Timeline", allowedObjectIDs: nil, actor: "Tester", at: t0)
@@ -84,7 +85,8 @@ struct EvidenceDatasetBuilderTests {
         let builder = EvidenceDatasetBuilder(
             datasets: WorkbenchDatasetRepository(database: db),
             events: EventsRepository(database: db),
-            entities: EntitiesRepository(database: db))
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
         // An allowed set that excludes this event's source object → nothing eligible.
         let result = try await builder.buildTimeline(
             workspaceID: wsID, title: "Timeline", allowedObjectIDs: [UUID()], actor: "Tester", at: t0)
@@ -101,7 +103,8 @@ struct EvidenceDatasetBuilderTests {
         let builder = EvidenceDatasetBuilder(
             datasets: WorkbenchDatasetRepository(database: db),
             events: EventsRepository(database: db),
-            entities: EntitiesRepository(database: db))
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
 
         let result = try await builder.buildEntities(
             workspaceID: wsID, title: "People", kinds: [.person, .organization], actor: "Tester", at: t0)
@@ -111,5 +114,44 @@ struct EvidenceDatasetBuilderTests {
         #expect(result.boundCells == 2)                       // one Name binding per entity
         #expect(result.record.bindings.allSatisfy { $0.targetKind == .entity })
         #expect(result.record.isFullyProvenanced, "Name source cells must drill through")
+    }
+
+    @Test("Payments build binds payer & payee to their entities, fully provenanced")
+    func paymentsBuild() async throws {
+        let (db, wsID, koID) = try await seededLedger()
+        let payer = UUID(), payee = UUID()
+        for (id, kind, value) in [(payer, "organization", "Acme Corp"), (payee, "vendor", "Vendor X")] {
+            try await db.exec("""
+            INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
+            VALUES (?,?,?,?,?,?, '{}');
+            """, [.uuid(id), .text(kind), .text(value), .text(value.lowercased()), .uuid(koID), .real(0.8)])
+        }
+        try await db.exec("""
+        INSERT INTO relationships (id, kind, from_entity_id, to_entity_id, via_event_id,
+                                   source_object_id, confidence, attributes_json, weight, evidence_object_ids_json)
+        VALUES (?, 'paid', ?, ?, NULL, ?, 0.8, '{}', 4, ?);
+        """, [.uuid(UUID()), .uuid(payer), .uuid(payee), .uuid(koID),
+              .text("[\"\(koID.uuidString)\",\"other\"]")])
+
+        let builder = EvidenceDatasetBuilder(
+            datasets: WorkbenchDatasetRepository(database: db),
+            events: EventsRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            relationships: RelationshipsRepository(database: db))
+
+        let result = try await builder.buildPayments(
+            workspaceID: wsID, title: "Payments", actor: "Tester", at: t0)
+
+        #expect(result.rowsAdded == 1)
+        #expect(result.record.fields.map(\.name) == ["Payer", "Payee", "Times observed", "Source documents"])
+        #expect(result.boundCells == 2)   // Payer + Payee bound to entities
+        #expect(result.record.bindings.allSatisfy { $0.targetKind == .entity })
+        #expect(result.record.isFullyProvenanced, "party cells must drill through")
+
+        let values = Set(result.record.cells.compactMap { $0.value })
+        #expect(values.contains("Acme Corp"))
+        #expect(values.contains("Vendor X"))
+        #expect(values.contains("4"))       // times observed (weight)
+        #expect(values.contains("2"))       // source documents (evidence count)
     }
 }

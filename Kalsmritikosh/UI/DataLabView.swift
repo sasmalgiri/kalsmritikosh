@@ -191,6 +191,7 @@ public struct DataLabView: View {
                     Menu {
                         Button("Timeline — from dated events") { buildFromEvidence(.timeline) }
                         Button("People & organizations — from entities") { buildFromEvidence(.peopleAndOrganizations) }
+                        Button("Payments — payer → payee from evidence") { buildFromEvidence(.payments) }
                     } label: {
                         Label("Build from evidence", systemImage: "sparkles.rectangle.stack")
                             .font(.caption).lineLimit(1)
@@ -1106,12 +1107,14 @@ public struct DataLabView: View {
     private func buildFromEvidence(_ shape: EvidenceDatasetBuilder.Shape) {
         guard let datasets = appState.workbenchDatasets,
               let eventsRepo = appState.events,
-              let entitiesRepo = appState.entities else { return }
+              let entitiesRepo = appState.entities,
+              let relationshipsRepo = appState.relationships else { return }
         errorMessage = nil
         Task {
             do {
                 guard let wsID = await ensureWorkspace() else { return }
-                let builder = EvidenceDatasetBuilder(datasets: datasets, events: eventsRepo, entities: entitiesRepo)
+                let builder = EvidenceDatasetBuilder(datasets: datasets, events: eventsRepo,
+                                                     entities: entitiesRepo, relationships: relationshipsRepo)
                 let result: EvidenceDatasetBuilder.BuildResult
                 switch shape {
                 case .timeline:
@@ -1123,6 +1126,9 @@ public struct DataLabView: View {
                     result = try await builder.buildEntities(
                         workspaceID: wsID, title: "People & organizations",
                         kinds: [.person, .organization, .vendor, .client], actor: actorName, at: Date())
+                case .payments:
+                    result = try await builder.buildPayments(
+                        workspaceID: wsID, title: "Payments from evidence", actor: actorName, at: Date())
                 }
                 record = result.record
                 await loadSatellites(result.record.dataset.id)

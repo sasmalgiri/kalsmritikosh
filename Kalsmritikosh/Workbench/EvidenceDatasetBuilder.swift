@@ -31,16 +31,20 @@ public actor EvidenceDatasetBuilder {
     public enum Shape: String, Sendable, CaseIterable {
         case timeline
         case peopleAndOrganizations
+        case payments
     }
 
     private let datasets: WorkbenchDatasetRepository
     private let events: EventsRepository
     private let entities: EntitiesRepository
+    private let relationships: RelationshipsRepository
 
-    public init(datasets: WorkbenchDatasetRepository, events: EventsRepository, entities: EntitiesRepository) {
+    public init(datasets: WorkbenchDatasetRepository, events: EventsRepository,
+                entities: EntitiesRepository, relationships: RelationshipsRepository) {
         self.datasets = datasets
         self.events = events
         self.entities = entities
+        self.relationships = relationships
     }
 
     private nonisolated var isoFormatter: ISO8601DateFormatter { ISO8601DateFormatter() }
@@ -143,5 +147,65 @@ public actor EvidenceDatasetBuilder {
             }
         }
         return BuildResult(record: rec, rowsAdded: picked.count, boundCells: bound)
+    }
+
+    // MARK: - Payments (from payer→payee relationships)
+
+    /// One row per payment relationship (payer → payee), with both parties
+    /// drill-through bound to their entity. The ledger holds who-paid-whom and
+    /// how well-corroborated it is, but not a reliable per-edge amount — so this
+    /// records corroboration weight + source-document count, not a dollar figure
+    /// (honest; the Fund Flow view makes the same distinction).
+    public func buildPayments(workspaceID: UUID, title: String, limit: Int = 500,
+                              actor: String, at date: Date) async throws -> BuildResult {
+        let edges = try await relationships.fundFlowEdges(limit: limit)
+
+        var rec = try await datasets.createDataset(workspaceID: workspaceID, title: title,
+                                                   mode: .advanced, actor: actor, at: date)
+        let id = rec.dataset.id
+        let fields: [(String, FactSchemaRegistry.ValueShape)] = [
+            ("Payer", .text), ("Payee", .text), ("Times observed", .number), ("Source documents", .number)
+        ]
+        var fieldID: [String: UUID] = [:]
+        for (name, shape) in fields {
+            rec = try await datasets.addField(datasetID: id, name: name, valueShape: shape,
+                                              expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            fieldID[name] = rec.fields.first { $0.name == name }?.id
+        }
+
+        var bound = 0
+        for edge in edges {
+            rec = try await datasets.addRow(datasetID: id, expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            guard let row = rec.rows.last else { continue }
+
+            // Payer / Payee: source cells drill through to the party entity.
+            let parties: [(field: String, label: String, entityID: UUID)] = [
+                ("Payer", edge.fromLabel, edge.fromID),
+                ("Payee", edge.toLabel, edge.toID)
+            ]
+            for party in parties {
+                guard let fid = fieldID[party.field], !party.label.isEmpty else { continue }
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: fid,
+                                                 kind: .sourceValue, value: party.label, status: .directlyObserved,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                guard let cell = rec.cells.first(where: { $0.rowID == row.id && $0.fieldID == fid }) else { continue }
+                rec = try await datasets.bindSource(cellID: cell.id, targetKind: .entity,
+                                                    targetID: party.entityID.uuidString, sourceVersionID: nil, locator: nil,
+                                                    expectedRevision: rec.dataset.revision, actor: actor, at: date)
+                bound += 1
+            }
+            // Corroboration figures — summaries, not bound source cells.
+            if let wf = fieldID["Times observed"] {
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: wf,
+                                                 kind: .userEntered, value: String(edge.weight), status: .sourceAsserted,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            }
+            if let sf = fieldID["Source documents"] {
+                rec = try await datasets.setCell(datasetID: id, rowID: row.id, fieldID: sf,
+                                                 kind: .userEntered, value: String(edge.evidenceCount), status: .sourceAsserted,
+                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+            }
+        }
+        return BuildResult(record: rec, rowsAdded: edges.count, boundCells: bound)
     }
 }
