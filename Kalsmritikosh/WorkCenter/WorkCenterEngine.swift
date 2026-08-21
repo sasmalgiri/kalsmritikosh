@@ -5511,7 +5511,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.applications" : {
-    "purpose" : "Track applications and open cases.",
+    "purpose" : "Track applications and open cases with their documents and deadlines.",
     "steps" : [
       {
         "fields" : [
@@ -5531,21 +5531,21 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each with its documents — cited.",
+            "help" : "Each with its documents.",
             "key" : "detail",
             "kind" : "longText",
             "label" : "Details"
           }
         ],
-        "hint" : "Submissions, references, deadlines.",
+        "hint" : "Submissions, references, deadlines — the app spots dates for you.",
         "key" : "detail",
         "opens" : "dataLab",
-        "title" : "Add the documents & dates"
+        "title" : "Add documents & dates"
       },
       {
         "fields" : [
           {
-            "help" : "Anything to note — the app never submits for you.",
+            "help" : "The app never submits for you.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -5575,7 +5575,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.ask" : {
-    "purpose" : "Ask a question over your records — every answer cites its document.",
+    "purpose" : "Ask a question over your records — every answer cites its document. No more digging through folders to find that one letter.",
     "steps" : [
       {
         "fields" : [
@@ -5587,7 +5587,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Ask in plain language.",
+        "hint" : "Ask in plain language; the app searches everything for you.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask my records"
@@ -5601,7 +5601,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Save the answer that matters — already cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -5610,7 +5610,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.career-education" : {
-    "purpose" : "Summarize your career and education over time.",
+    "purpose" : "A clean record of your career and education. The app lays your roles and qualifications on a timeline from the documents you have.",
     "steps" : [
       {
         "fields" : [
@@ -5636,15 +5636,15 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Timeline"
           }
         ],
-        "hint" : "Roles and qualifications by date.",
+        "hint" : "Roles and qualifications by date — auto-built.",
         "key" : "timeline",
         "opens" : "timeline",
-        "title" : "Lay out the timeline"
+        "title" : "See the timeline"
       },
       {
         "fields" : [
           {
-            "help" : "Anything to note — never invent credentials.",
+            "help" : "Never invent credentials.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -5674,7 +5674,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.close-matter" : {
-    "purpose" : "Close a personal matter — sealed, reopenable with history.",
+    "purpose" : "Close a personal matter — sealed, reopenable with its history.",
     "steps" : [
       {
         "fields" : [
@@ -5734,7 +5734,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.conflicts-gaps" : {
-    "purpose" : "See where your records disagree or are missing — absence is not proof.",
+    "purpose" : "See where your records disagree or are missing — the app flags conflicts for you; absence is not proof.",
     "steps" : [
       {
         "fields" : [
@@ -5760,10 +5760,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Conflicts"
           }
         ],
-        "hint" : "Where they conflict.",
+        "hint" : "Where they conflict — surfaced automatically.",
         "key" : "compare",
         "opens" : "matrix",
-        "title" : "Spot the disagreements"
+        "title" : "See the disagreements"
       },
       {
         "fields" : [
@@ -5778,6 +5778,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "gaps",
         "opens" : "review",
         "title" : "Note what's missing"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Which is current, with reason — both stay on file.",
+            "key" : "decision",
+            "kind" : "longText",
+            "label" : "Your call",
+            "required" : true
+          }
+        ],
+        "hint" : "Where records disagree, which do you rely on.",
+        "key" : "decide",
+        "title" : "Decide which is current (your decision)"
       },
       {
         "fields" : [
@@ -5798,7 +5812,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.doc-reliability" : {
-    "purpose" : "Assess how reliable a document or its source is — a judgement, not a fact.",
+    "purpose" : "Weigh how reliable a document or its source is — a judgement, not a fact.",
     "steps" : [
       {
         "fields" : [
@@ -5862,7 +5876,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.document-vault" : {
-    "purpose" : "Keep a custody-tracked vault for your originals with integrity hashes.",
+    "purpose" : "Keep a tamper-evident vault for your originals — hashed so you can prove they're unaltered, unlike a plain folder.",
     "steps" : [
       {
         "fields" : [
@@ -5900,7 +5914,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Integrity verified"
           }
         ],
-        "hint" : "Hash/verify them.",
+        "hint" : "The app hashes each so tampering is detectable.",
         "key" : "integrity",
         "opens" : "audit",
         "title" : "Protect & verify"
@@ -5924,12 +5938,12 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.document-versions" : {
-    "purpose" : "Track versions of official documents so you always know which is current.",
+    "purpose" : "Always know which copy is current. The app dates every version it finds, so you keep the old ones on file without confusion.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "e.g. passport, licences.",
+            "help" : "e.g. passport, licence, contract.",
             "key" : "scope",
             "kind" : "text",
             "label" : "What this covers",
@@ -5944,16 +5958,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Old and new — keep the old ones on file.",
+            "help" : "Old and new — keep the old ones.",
             "key" : "versions",
             "kind" : "longText",
             "label" : "Versions"
           }
         ],
-        "hint" : "Each version with its date.",
-        "key" : "build",
+        "hint" : "The app lists each version by date.",
+        "key" : "versions",
         "opens" : "dataLab",
-        "title" : "List the versions"
+        "title" : "See the versions"
       },
       {
         "fields" : [
@@ -5965,8 +5979,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Which version is current.",
-        "key" : "confirm",
+        "hint" : "Which version is in force now.",
+        "key" : "current",
         "title" : "Mark the current one (your decision)"
       },
       {
@@ -6008,13 +6022,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "How it's organized for a stranger to follow.",
+            "help" : "How it's organized.",
             "key" : "layout",
             "kind" : "longText",
             "label" : "Layout"
           }
         ],
-        "hint" : "Put them together clearly.",
+        "hint" : "Organize it clearly for a stranger to follow.",
         "key" : "assemble",
         "opens" : "handoff",
         "title" : "Assemble the binder"
@@ -6052,7 +6066,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.family-records" : {
-    "purpose" : "Organize family members and relationships.",
+    "purpose" : "Organize family members and their documents. The app links relationships it finds so you don't map them by hand.",
     "steps" : [
       {
         "fields" : [
@@ -6078,10 +6092,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Details"
           }
         ],
-        "hint" : "Documents and relationships, each cited.",
+        "hint" : "Each person's papers and links — cited.",
         "key" : "compile",
         "opens" : "dossier",
-        "title" : "Add the details"
+        "title" : "Add documents & relationships"
       },
       {
         "fields" : [
@@ -6093,7 +6107,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Check the relationships are right.",
+        "hint" : "Check they're right.",
         "key" : "confirm",
         "title" : "Confirm relationships (your decision)"
       },
@@ -6150,6 +6164,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Open / done per item.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Name this list.",
             "key" : "title",
             "kind" : "text",
@@ -6166,7 +6194,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.fix-review" : {
-    "purpose" : "Verify a completed fix actually resolved the problem.",
+    "purpose" : "Check a completed fix actually resolved the problem.",
     "steps" : [
       {
         "fields" : [
@@ -6242,7 +6270,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.health-scope" : {
-    "purpose" : "Summarize the health records you choose to include — under strict, private scope.",
+    "purpose" : "Summarize the health records you choose to include — under strict, private scope. The app never diagnoses.",
     "steps" : [
       {
         "fields" : [
@@ -6262,16 +6290,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Facts from your records — the app never diagnoses.",
+            "help" : "The app summarizes; it never diagnoses.",
             "key" : "summary",
             "kind" : "longText",
             "label" : "Summary"
           }
         ],
-        "hint" : "A plain summary of what's there.",
+        "hint" : "A plain summary of what's there — facts from your records.",
         "key" : "summarize",
         "opens" : "findings",
-        "title" : "Summarize"
+        "title" : "See a plain summary"
       },
       {
         "fields" : [
@@ -6306,7 +6334,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.insurance" : {
-    "purpose" : "Keep a register of insurance policies, renewals and claims.",
+    "purpose" : "Track policies, renewals and claims — the app reads renewal dates off the policies so you never miss one.",
     "steps" : [
       {
         "fields" : [
@@ -6326,13 +6354,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Cover, premium, renewal — cited.",
+            "help" : "Each policy and its dates.",
             "key" : "items",
             "kind" : "longText",
             "label" : "Policies"
           }
         ],
-        "hint" : "Each policy with key dates.",
+        "hint" : "Cover, premium, renewal — key dates auto-extracted.",
         "key" : "build",
         "opens" : "dataLab",
         "title" : "Build the register"
@@ -6370,7 +6398,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.legacy-archive" : {
-    "purpose" : "Assemble the legacy binder — your records for the next generation, with a sealed receipt.",
+    "purpose" : "Assemble the legacy binder — your records for the next generation, with a sealed receipt so it can't be tampered with.",
     "steps" : [
       {
         "fields" : [
@@ -6434,12 +6462,12 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.methods" : {
-    "purpose" : "Work through a guided, structured method over your records.",
+    "purpose" : "Work through a guided, step-by-step method over your records.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "e.g. a 5W1H worksheet or checklist.",
+            "help" : "e.g. a checklist or 5W1H worksheet.",
             "key" : "method",
             "kind" : "text",
             "label" : "Method",
@@ -6460,7 +6488,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Result"
           }
         ],
-        "hint" : "Fill it in from your records.",
+        "hint" : "Fill it in — the app pulls what it can from your records.",
         "key" : "run",
         "opens" : "matrix",
         "title" : "Work through it"
@@ -6484,7 +6512,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.name-resolution" : {
-    "purpose" : "Confirm two names are the same person or company — reversible, you decide.",
+    "purpose" : "Confirm two names are the same person or company — reversible, you decide. The app spots likely matches across your papers.",
     "steps" : [
       {
         "fields" : [
@@ -6510,7 +6538,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Signals"
           }
         ],
-        "hint" : "How each name appears.",
+        "hint" : "How each name appears — the app lines them up.",
         "key" : "compare",
         "opens" : "knowledge",
         "title" : "Compare across your records"
@@ -6560,7 +6588,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.personal-chronology" : {
-    "purpose" : "See your personal timeline (undated events labelled).",
+    "purpose" : "See your personal timeline — the app assembles dated events from your records automatically.",
     "steps" : [
       {
         "fields" : [
@@ -6572,10 +6600,24 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Life events with dates.",
+        "hint" : "Life events with dates — auto-built.",
         "key" : "events",
         "opens" : "timeline",
-        "title" : "Collect the events"
+        "title" : "See the timeline"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Anything to fix or label.",
+            "key" : "review",
+            "kind" : "longText",
+            "label" : "Notes"
+          }
+        ],
+        "hint" : "Adjust and label as needed.",
+        "key" : "review",
+        "opens" : "timeline",
+        "title" : "Review & tidy"
       },
       {
         "fields" : [
@@ -6610,36 +6652,50 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.personal-records" : {
-    "purpose" : "Bring in and organize your documents — point the app at your records, sort them, confirm, then open the collection.",
+    "purpose" : "Bring your documents into one place and organize them. Point the app at your folders and it reads and sorts everything — no manual filing, and you can find anything later by just asking.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The records this is about (e.g. household papers).",
+            "help" : "e.g. household papers, IDs, bills.",
             "key" : "what",
             "kind" : "text",
             "label" : "What this covers",
             "required" : true
           }
         ],
-        "hint" : "Point the app at the folders/files with your documents (attach or add sources).",
+        "hint" : "Add the folders/files with your documents — the app reads them all for you.",
         "key" : "gather",
         "opens" : "sources",
-        "title" : "Bring in your records"
+        "title" : "Point the app at your records"
       },
       {
         "fields" : [
           {
-            "help" : "How you're grouping them.",
+            "help" : "How they're grouped.",
             "key" : "categories",
             "kind" : "longText",
             "label" : "Categories"
           }
         ],
-        "hint" : "Group them so they're easy to find.",
+        "hint" : "The app groups by type and date; adjust the groups if you like.",
         "key" : "organize",
         "opens" : "knowledge",
-        "title" : "Organize by category"
+        "title" : "Let it sort, then tidy"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you still need to add.",
+            "key" : "missing",
+            "kind" : "longText",
+            "label" : "Missing items"
+          }
+        ],
+        "hint" : "See gaps (e.g. no current passport scan).",
+        "key" : "missing",
+        "opens" : "review",
+        "title" : "Spot what's missing"
       },
       {
         "fields" : [
@@ -6651,7 +6707,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Check nothing sensitive is exposed and categories are right.",
+        "hint" : "Check nothing sensitive is exposed and categories fit.",
         "key" : "confirm",
         "title" : "Confirm it looks right (your decision)"
       },
@@ -6674,7 +6730,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.property" : {
-    "purpose" : "Keep a register of property and assets.",
+    "purpose" : "Keep a register of property and assets, each backed by its papers.",
     "steps" : [
       {
         "fields" : [
@@ -6694,13 +6750,13 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What you own and the papers that show it — cited.",
+            "help" : "What you own and the papers that show it.",
             "key" : "items",
             "kind" : "longText",
             "label" : "Items"
           }
         ],
-        "hint" : "Each item with its documents.",
+        "hint" : "Each item with its documents — the app links each to its source.",
         "key" : "build",
         "opens" : "dataLab",
         "title" : "Build the register"
@@ -6708,7 +6764,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Anything to note — the app doesn't assert legal title.",
+            "help" : "The app doesn't assert legal title.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -6738,22 +6794,22 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.reminders" : {
-    "purpose" : "Turn dated obligations into confirmed reminders — renewals, expiries, deadlines.",
+    "purpose" : "Turn dated obligations into confirmed reminders. The app finds the dates buried in your documents — you just confirm the ones that matter.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "Renewals, expiries, deadlines — with source.",
+            "help" : "With source — nothing hand-typed.",
             "key" : "dates",
             "kind" : "longText",
             "label" : "Dated obligations",
             "required" : true
           }
         ],
-        "hint" : "Documents with dates that matter.",
+        "hint" : "Renewals, expiries, deadlines — pulled from your documents automatically.",
         "key" : "gather",
         "opens" : "timeline",
-        "title" : "Find the dates"
+        "title" : "Let the app find the dates"
       },
       {
         "fields" : [
@@ -6788,7 +6844,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "ind.secure-share" : {
-    "purpose" : "Prepare a redacted copy to share — sensitive details masked and validated first.",
+    "purpose" : "Prepare a redacted copy to share — sensitive details masked and checked first, so nothing private leaks.",
     "steps" : [
       {
         "fields" : [
@@ -6814,7 +6870,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Redactions"
           }
         ],
-        "hint" : "Mask what shouldn't leave.",
+        "hint" : "Mask what shouldn't leave — the app suggests likely sensitive fields.",
         "key" : "redact",
         "opens" : "handoff",
         "title" : "Redact the sensitive parts"
