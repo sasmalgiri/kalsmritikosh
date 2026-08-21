@@ -140,21 +140,27 @@
 <style>
   .ways{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
   @media(max-width:820px){.ways{grid-template-columns:1fr}}
-  .way{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px}
+  .way{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column}
   .way.ai{border-color:rgba(109,124,255,.4);background:rgba(109,124,255,.05)}
   .way .tag{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
   .way h3{margin:6px 0 2px;font-size:21px}
+  .way .time{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:700;
+    color:var(--brand2);background:rgba(34,193,166,.10);border:1px solid rgba(34,193,166,.32);border-radius:999px;padding:4px 12px;align-self:flex-start}
+  .way.ai .time{color:#aeb6ff;background:rgba(109,124,255,.12);border-color:rgba(109,124,255,.4)}
   .way ul{list-style:none;margin:14px 0 0;padding:0}
   .way li{position:relative;padding:7px 0 7px 26px;color:var(--muted);font-size:15px}
   .way li:before{content:"✓";position:absolute;left:0;color:var(--brand2);font-weight:700}
+  .way .btn{margin-top:18px;align-self:flex-start}
+  .ways-note{margin-top:18px;font-size:13.5px;color:var(--muted)}
 </style>
 <section id="two-ways"><div class="wrap">
   <h2>Two ways to work, <span class="grad">side by side.</span></h2>
   <p class="lead">The whole app works without any AI — fast and deterministic. The private AI is there when you want it, never in the way. Same evidence, your choice.</p>
   <div class="ways">
     <div class="way">
-      <div class="tag">⚡ No AI needed</div>
+      <div class="tag">⚡ Lightning — no AI needed</div>
       <h3>Instant &amp; deterministic</h3>
+      <div class="time">⏱ Answers in seconds</div>
       <ul>
         <li>Full-text search across every document and email</li>
         <li>Timelines, logs &amp; registers, cross-document matrix</li>
@@ -163,19 +169,23 @@
         <li>Step-by-step workflows for 10 professions</li>
         <li>Every result traceable to its source — nothing invented</li>
       </ul>
+      <a class="btn ghost" href="#get">⚡ Get answers in seconds</a>
     </div>
     <div class="way ai">
-      <div class="tag">🔒 On-device AI</div>
-      <h3>Private AI, when you want it</h3>
+      <div class="tag">🔒 Full power — on-device AI</div>
+      <h3>Deeper answers, when you want them</h3>
+      <div class="time">⏱ Seconds per answer · deep pass over a large archive: minutes–hours</div>
       <ul>
         <li>Ask in plain language; answers cite their evidence</li>
         <li>Confidence, timeliness and conflicts on every answer</li>
-        <li>Refuses rather than guesses when the evidence isn't there</li>
+        <li>Reads, extracts, cross-checks &amp; embeds every source — that's the time</li>
         <li>Runs 100% on your Mac — no accounts, no uploads</li>
-        <li>Switch it off entirely and keep every other feature</li>
+        <li>Runs in the background; use Lightning meanwhile, switch AI off anytime</li>
       </ul>
+      <a class="btn primary" href="#get">🧠 Deeper answers — minutes to hours</a>
     </div>
   </div>
+  <p class="ways-note">Times scale with your archive size and your Mac. Lightning is instant because it skips AI and embeddings; Full power is slower because it actually reads, extracts and cites every source. The app shows a live time estimate before any long task, and you can stop it anytime.</p>
 </div></section>
 
 <!-- PROBLEM -->
