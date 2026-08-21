@@ -10329,8 +10329,22 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.ask" : {
-    "purpose" : "Ask a question over the matter's record and keep the cited answer.",
+    "purpose" : "Ask a question over the matter's record and keep the cited answer — the app reviews the whole record for you and answers with pin cites.",
     "steps" : [
+      {
+        "fields" : [
+          {
+            "help" : "The specific thing you need.",
+            "key" : "need",
+            "kind" : "longText",
+            "label" : "What you're establishing"
+          }
+        ],
+        "hint" : "Framing sharpens the answer.",
+        "key" : "frame",
+        "opens" : "ask",
+        "title" : "Decide what you need"
+      },
       {
         "fields" : [
           {
@@ -10341,7 +10355,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites the record.",
+        "hint" : "Plain language; cited answer.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask the case file"
@@ -10355,7 +10369,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the matter cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -10442,7 +10456,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.damages" : {
-    "purpose" : "Build a damages ledger; amounts cite source cells.",
+    "purpose" : "Build a damages ledger; amounts cite source cells. The app pulls figures from the records with their source, so totals are auditable, not hand-keyed.",
     "steps" : [
       {
         "fields" : [
@@ -10462,17 +10476,31 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Category (special / general / consequential) · Description · Amount · Date incurred · Source document (cited) · Calculation / basis · Mitigation · Running total. Every amount cites its source cell.",
+            "help" : "Category (special / general / consequential) · Description · Amount · Date incurred · Source document (cited) · Calculation / basis · Mitigation · Running total.",
             "key" : "columns",
             "kind" : "longText",
             "label" : "Damages ledger columns",
             "required" : true
           }
         ],
-        "hint" : "One row per damages item, as in a damages spreadsheet.",
+        "hint" : "One row per item.",
         "key" : "build",
         "opens" : "dataLab",
         "title" : "Build the ledger"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Subtotals per head.",
+            "key" : "heads",
+            "kind" : "longText",
+            "label" : "Heads of loss"
+          }
+        ],
+        "hint" : "Group amounts under each claimed head.",
+        "key" : "heads",
+        "opens" : "dataLab",
+        "title" : "Organize by head of loss"
       },
       {
         "fields" : [
@@ -10507,7 +10535,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.deadlines" : {
-    "purpose" : "Track deadlines — a candidate until a human confirms it.",
+    "purpose" : "Track deadlines — a candidate until a human confirms it. The app finds dated obligations in the record for you.",
     "steps" : [
       {
         "fields" : [
@@ -10519,7 +10547,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "One row per deadline — a candidate until you confirm it.",
+        "hint" : "One row per deadline — app-surfaced from the record.",
         "key" : "gather",
         "opens" : "timeline",
         "title" : "Find the dates"
@@ -10534,7 +10562,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Confirm each deadline — a candidate until you do.",
+        "hint" : "Confirm each — a candidate until you do.",
         "key" : "confirm",
         "title" : "Confirm each (your decision)"
       },
@@ -10570,24 +10598,52 @@ public nonisolated enum WCAuthoredWorkflows {
           }
         ],
         "hint" : "What the deposition must establish.",
-        "key" : "focus",
+        "key" : "objectives",
         "opens" : "ask",
         "title" : "Set the objectives"
       },
       {
         "fields" : [
           {
-            "help" : "Per topic: Objective · Foundation questions · Key questions · Exhibits to introduce (cited) · Anticipated answers & follow-ups. Every question anchored to the record.",
+            "help" : "The topic sequence.",
+            "key" : "topics",
+            "kind" : "longText",
+            "label" : "Topics"
+          }
+        ],
+        "hint" : "Group by topic in logical order.",
+        "key" : "topics",
+        "opens" : "matrix",
+        "title" : "Organize the topics"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Per topic: Objective · Foundation questions · Key questions · Exhibits to introduce (cited) · Anticipated answers & follow-ups.",
             "key" : "questions",
             "kind" : "longText",
             "label" : "Outline sections",
             "required" : true
           }
         ],
-        "hint" : "By topic — the standard deposition-outline sections.",
+        "hint" : "Record-anchored questions per topic.",
         "key" : "questions",
         "opens" : "matrix",
-        "title" : "Draft the outline"
+        "title" : "Draft the questions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Exhibit → question mapping.",
+            "key" : "exhibits",
+            "kind" : "longText",
+            "label" : "Exhibits"
+          }
+        ],
+        "hint" : "Which exhibits to introduce, in order.",
+        "key" : "exhibits",
+        "opens" : "findings",
+        "title" : "Line up the exhibits"
       },
       {
         "fields" : [
@@ -10608,7 +10664,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.document-coding" : {
-    "purpose" : "Code documents by recorded, reversible decisions.",
+    "purpose" : "Code documents by recorded, reversible decisions — the app clusters near-duplicates and threads so review is faster than doc-by-doc.",
     "steps" : [
       {
         "fields" : [
@@ -10628,17 +10684,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Bates / Doc ID · Responsive (Y/N) · Issue tags · Confidentiality (None / Confidential / AEO) · Privilege candidate? · Reviewer · Notes. Reversible.",
-            "key" : "coding",
+            "help" : "Coding decisions — reversible.",
+            "key" : "responsive",
             "kind" : "longText",
-            "label" : "Coding fields",
-            "required" : true
+            "label" : "Responsiveness"
           }
         ],
-        "hint" : "One coding row per document.",
-        "key" : "code",
+        "hint" : "Responsive / non-responsive to the request.",
+        "key" : "responsive",
         "opens" : "review",
-        "title" : "Code the documents"
+        "title" : "First pass: responsiveness"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Per document.",
+            "key" : "issues",
+            "kind" : "longText",
+            "label" : "Issue tags"
+          }
+        ],
+        "hint" : "Tag issues and confidentiality (None / Confidential / AEO).",
+        "key" : "issues",
+        "opens" : "review",
+        "title" : "Issue-code & confidentiality"
       },
       {
         "fields" : [
@@ -10678,14 +10747,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Exhibit no. · Description · Date · Source document / Bates · Sponsoring witness · Purpose / issue · Objections anticipated · Admitted? Each cites its source version.",
+            "help" : "Exhibit no. · Description · Date · Source document / Bates · Sponsoring witness · Purpose / issue · Objections anticipated · Admitted?",
             "key" : "exhibits",
             "kind" : "longText",
             "label" : "Exhibit list columns",
             "required" : true
           }
         ],
-        "hint" : "One row per exhibit, as in an exhibit list (attach the source versions).",
+        "hint" : "One row per exhibit (attach the source versions).",
         "key" : "register",
         "opens" : "audit",
         "title" : "Register the exhibits"
@@ -10712,7 +10781,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Integrity verified"
           }
         ],
-        "hint" : "Hash/verify each.",
+        "hint" : "Hash/verify each exhibit.",
         "key" : "integrity",
         "opens" : "audit",
         "title" : "Record integrity"
@@ -10720,16 +10789,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The binder order and numbering.",
+            "help" : "Sequence and numbering.",
             "key" : "order",
             "kind" : "longText",
             "label" : "Exhibit order"
           }
         ],
-        "hint" : "The exhibit sequence.",
+        "hint" : "The binder order and numbering.",
         "key" : "order",
         "opens" : "audit",
-        "title" : "Order the binder"
+        "title" : "Order & number"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Anticipated objections and responses.",
+            "key" : "objections",
+            "kind" : "longText",
+            "label" : "Objections"
+          }
+        ],
+        "hint" : "Foundation/authenticity/hearsay per exhibit.",
+        "key" : "objections",
+        "opens" : "review",
+        "title" : "Anticipate objections"
       },
       {
         "fields" : [
@@ -10750,7 +10833,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.fact-chronology" : {
-    "purpose" : "Build the case chronology — the spine of the matter (undated labelled, each fact cited).",
+    "purpose" : "Build the case chronology — the spine of the matter. The app assembles dated facts from the record; you order and cite.",
     "steps" : [
       {
         "fields" : [
@@ -10762,7 +10845,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "One row per fact — the spine of the matter.",
+        "hint" : "One row per fact.",
         "key" : "events",
         "opens" : "timeline",
         "title" : "Collect the facts"
@@ -10834,14 +10917,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Fact · Element it proves · Evidence FOR (cited) · Evidence AGAINST (cited) · Weight · Open dispute? Each cite reopens.",
+            "help" : "Fact · Element it proves · Evidence FOR (cited) · Evidence AGAINST (cited) · Weight · Open dispute?",
             "key" : "matrix",
             "kind" : "longText",
             "label" : "Fact–evidence matrix columns",
             "required" : true
           }
         ],
-        "hint" : "One row per fact, both sides preserved.",
+        "hint" : "One row per fact.",
         "key" : "map",
         "opens" : "matrix",
         "title" : "Map to evidence"
@@ -10898,16 +10981,16 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Storage, retention, access.",
+            "help" : "Storage, retention, access, hold release.",
             "key" : "retention",
             "kind" : "longText",
-            "label" : "Retention & access"
+            "label" : "Retention & hold"
           }
         ],
-        "hint" : "Where the file is kept and access.",
+        "hint" : "Where the file is kept, access, and whether the litigation hold can be released.",
         "key" : "retention",
         "opens" : "handoff",
-        "title" : "Retention & confidentiality"
+        "title" : "Retention & hold release"
       },
       {
         "fields" : [
@@ -10953,7 +11036,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.matter-intake" : {
-    "purpose" : "Open the matter and set its authorized, privilege-sensitive scope, then open the matter file.",
+    "purpose" : "Open the matter the way a litigator does: record matter & issues, clear conflicts, fix scope, issue the litigation hold, identify custodians, plan, then open. Privilege-sensitive throughout.",
     "steps" : [
       {
         "fields" : [
@@ -10971,10 +11054,30 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Issues"
           }
         ],
-        "hint" : "The matter and the issues in dispute.",
+        "hint" : "The matter, parties and issues in dispute.",
         "key" : "matter",
         "opens" : "sources",
         "title" : "Record the matter"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Result of the conflicts search.",
+            "key" : "conflicts",
+            "kind" : "choice",
+            "label" : "Conflicts check",
+            "options" : [
+              "Cleared",
+              "Waiver obtained",
+              "Conflict — decline"
+            ],
+            "required" : true
+          }
+        ],
+        "hint" : "Confirm no conflict of interest before acting.",
+        "key" : "conflicts",
+        "opens" : "handoff",
+        "title" : "Clear conflicts"
       },
       {
         "fields" : [
@@ -10992,48 +11095,66 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Time window"
           }
         ],
-        "hint" : "The boundary, mindful of privilege.",
+        "hint" : "The boundary and period, mindful of privilege.",
         "key" : "scope",
         "opens" : "sources",
-        "title" : "Scope (privilege-sensitive)"
+        "title" : "Scope & window (privilege-sensitive)"
       },
       {
         "fields" : [
+          {
+            "help" : "Custodians, systems, and data types preserved.",
+            "key" : "holdScope",
+            "kind" : "longText",
+            "label" : "Hold scope",
+            "required" : true
+          },
+          {
+            "help" : "Turn on once custodians are notified in writing.",
+            "key" : "holdIssued",
+            "kind" : "bool",
+            "label" : "Hold issued"
+          }
+        ],
+        "hint" : "Suspend routine deletion of relevant ESI — before collection.",
+        "key" : "hold",
+        "opens" : "audit",
+        "title" : "Issue the litigation hold"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Key custodians.",
+            "key" : "custodians",
+            "kind" : "longText",
+            "label" : "Custodians"
+          },
           {
             "help" : "The authorized record — the evidence boundary.",
             "key" : "sources",
             "kind" : "longText",
-            "label" : "Record in scope"
+            "label" : "Record in scope",
+            "required" : true
           }
         ],
-        "hint" : "Authorize the document set.",
-        "key" : "inscope",
+        "hint" : "Who holds relevant material, and the authorized set.",
+        "key" : "custodians",
         "opens" : "sources",
-        "title" : "Set the record in scope"
+        "title" : "Identify custodians & sources"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm only when correct.",
-            "key" : "decision",
-            "kind" : "choice",
-            "label" : "Scope confirmed?",
-            "options" : [
-              "Confirmed",
-              "Needs revision"
-            ],
-            "required" : true
-          },
-          {
-            "help" : "Anything to record.",
-            "key" : "note",
+            "help" : "How the matter will be worked.",
+            "key" : "plan",
             "kind" : "longText",
-            "label" : "Note"
+            "label" : "Plan"
           }
         ],
-        "hint" : "A human confirms scope before work.",
-        "key" : "confirm",
-        "title" : "Confirm scope (your decision)"
+        "hint" : "Scope of review, order, and rough timeline.",
+        "key" : "plan",
+        "opens" : "handoff",
+        "title" : "Discovery/review plan"
       },
       {
         "fields" : [
@@ -11074,16 +11195,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What it works on.",
+            "key" : "inputs",
+            "kind" : "longText",
+            "label" : "Inputs"
+          }
+        ],
+        "hint" : "Point it at the record — already indexed.",
+        "key" : "inputs",
+        "opens" : "matrix",
+        "title" : "Set the inputs"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What it surfaced.",
             "key" : "runNote",
             "kind" : "longText",
             "label" : "Result"
           }
         ],
-        "hint" : "Inputs and result.",
+        "hint" : "Work through it.",
         "key" : "run",
         "opens" : "matrix",
-        "title" : "Run it"
+        "title" : "Run & read"
       },
       {
         "fields" : [
@@ -11124,14 +11259,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Obligation / clause · Document & clause locator · Party bound · Trigger / condition · Deadline · Remedy on breach · Notes. Every cell cites its clause.",
+            "help" : "Obligation / clause · Document & clause locator · Party bound · Trigger / condition · Deadline · Remedy on breach · Notes.",
             "key" : "columns",
             "kind" : "longText",
             "label" : "Obligations comparison columns",
             "required" : true
           }
         ],
-        "hint" : "One row per obligation, as in a clause-comparison sheet.",
+        "hint" : "One row per obligation.",
         "key" : "build",
         "opens" : "dataLab",
         "title" : "Build the comparison"
@@ -11189,14 +11324,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Issue / legal element · Party it touches · Burden of proof · Supporting evidence (cited) · Opposing evidence (cited) · Status. Each cell reopens its source.",
+            "help" : "Issue / legal element · Party · Burden of proof · Supporting evidence (cited) · Opposing evidence (cited) · Status.",
             "key" : "issues",
             "kind" : "longText",
             "label" : "Issues matrix columns",
             "required" : true
           }
         ],
-        "hint" : "One row per issue, as you would in an issues matrix.",
+        "hint" : "One row per issue.",
         "key" : "issues",
         "opens" : "matrix",
         "title" : "Map the issues"
@@ -11254,6 +11389,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Variants folded together.",
+            "key" : "normalized",
+            "kind" : "longText",
+            "label" : "Notes"
+          }
+        ],
+        "hint" : "Fold entity-name variants (Inc/LLC, d/b/a).",
+        "key" : "normalize",
+        "opens" : "knowledge",
+        "title" : "Normalize"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Matching and conflicting signals.",
             "key" : "comparison",
             "kind" : "longText",
@@ -11264,20 +11413,6 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "compare",
         "opens" : "knowledge",
         "title" : "Compare across the record"
-      },
-      {
-        "fields" : [
-          {
-            "help" : "With reason.",
-            "key" : "ruledOut",
-            "kind" : "longText",
-            "label" : "Excluded"
-          }
-        ],
-        "hint" : "Exclude coincidental matches.",
-        "key" : "ruleout",
-        "opens" : "review",
-        "title" : "Rule out look-alikes"
       },
       {
         "fields" : [
@@ -11324,7 +11459,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.privilege" : {
-    "purpose" : "Build the privilege log — candidates recorded with basis; privilege is NEVER auto-established.",
+    "purpose" : "Build the privilege log — candidates recorded with basis; privilege is NEVER auto-established. The app proposes likely-privileged docs (counsel names, legal terms) for your review.",
     "steps" : [
       {
         "fields" : [
@@ -11336,7 +11471,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Documents that may be privileged.",
+        "hint" : "Documents that may be privileged — app-flagged for review.",
         "key" : "identify",
         "opens" : "review",
         "title" : "Identify candidates"
@@ -11344,14 +11479,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Bates / Doc ID · Date · Author (From) · Recipients (To / Cc / Bcc) · Document type · Privilege asserted (Attorney-Client / Work Product / Both) · Description (enough to justify the claim without waiving it) · Withheld vs Redacted. Privilege is never auto-established.",
+            "help" : "Bates / Doc ID · Date · Author (From) · Recipients (To / Cc / Bcc) · Document type · Privilege asserted (Attorney-Client / Work Product / Both) · Description (justify without waiving) · Withheld vs Redacted.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Privilege log columns",
             "required" : true
           }
         ],
-        "hint" : "The standard privilege-log columns, one row per withheld or redacted document (as you would in Excel).",
+        "hint" : "One row per withheld/redacted document.",
         "key" : "basis",
         "opens" : "matrix",
         "title" : "Build the privilege log"
@@ -11359,26 +11494,35 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Only when every candidate has a basis.",
+            "help" : "Confirm each candidate's privilege, or release it.",
+            "key" : "reviewed",
+            "kind" : "longText",
+            "label" : "Review basis",
+            "required" : true
+          }
+        ],
+        "hint" : "A lawyer confirms each claim — never auto-established.",
+        "key" : "review",
+        "title" : "Privilege review (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Only when every candidate is logged.",
             "key" : "logComplete",
             "kind" : "choice",
-            "label" : "Privilege log complete?",
+            "label" : "Log complete?",
             "options" : [
               "Complete",
               "Incomplete"
             ],
             "required" : true
-          },
-          {
-            "help" : "Anything outstanding.",
-            "key" : "note",
-            "kind" : "longText",
-            "label" : "Note"
           }
         ],
-        "hint" : "Confirm every candidate is annotated.",
+        "hint" : "Every withheld/redacted doc has an entry.",
         "key" : "complete",
-        "title" : "Complete the log (your decision)"
+        "opens" : "review",
+        "title" : "Confirm the log is complete"
       },
       {
         "fields" : [
@@ -11454,14 +11598,27 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "The numbering applied.",
             "key" : "bates",
             "kind" : "text",
-            "label" : "Bates range",
-            "placeholder" : "ACME000001–ACME000500"
+            "label" : "Bates range"
           }
         ],
         "hint" : "Every document numbered.",
         "key" : "number",
         "opens" : "handoff",
         "title" : "Bates-number the set"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Completeness and accuracy checks passed.",
+            "key" : "qc",
+            "kind" : "longText",
+            "label" : "QC checks"
+          }
+        ],
+        "hint" : "Check load file, images, and privilege withholds.",
+        "key" : "qc",
+        "opens" : "review",
+        "title" : "QC the production"
       },
       {
         "fields" : [
@@ -11482,7 +11639,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.redaction" : {
-    "purpose" : "Validate text and visual redaction before production.",
+    "purpose" : "Validate text and visual redaction before production — hidden text is the classic leak.",
     "steps" : [
       {
         "fields" : [
@@ -11508,15 +11665,29 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Text validation"
           }
         ],
-        "hint" : "No hidden text remains.",
+        "hint" : "No selectable/hidden text remains under a black box.",
         "key" : "text",
         "opens" : "review",
-        "title" : "Validate text redaction"
+        "title" : "Validate text layer"
       },
       {
         "fields" : [
           {
-            "help" : "Confirm only when text + visual pass.",
+            "help" : "Rendered pages checked.",
+            "key" : "visualNote",
+            "kind" : "longText",
+            "label" : "Visual validation"
+          }
+        ],
+        "hint" : "Nothing legible shows through.",
+        "key" : "visual",
+        "opens" : "review",
+        "title" : "Validate visual layer"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confirm.",
             "key" : "validated",
             "kind" : "choice",
             "label" : "Redaction validated?",
@@ -11525,17 +11696,11 @@ public nonisolated enum WCAuthoredWorkflows {
               "Not yet"
             ],
             "required" : true
-          },
-          {
-            "help" : "Anything to record.",
-            "key" : "note",
-            "kind" : "longText",
-            "label" : "Note"
           }
         ],
-        "hint" : "Visual layer checked; confirm before production.",
-        "key" : "visual",
-        "title" : "Validate visual & confirm (your decision)"
+        "hint" : "Sign off only when text + visual pass.",
+        "key" : "confirm",
+        "title" : "Confirm before production (your decision)"
       },
       {
         "fields" : [
@@ -11579,8 +11744,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Each with owner and due date.",
             "key" : "actions",
             "kind" : "longText",
-            "label" : "Actions",
-            "required" : true
+            "label" : "Actions"
           }
         ],
         "hint" : "Action, owner, due date.",
@@ -11726,7 +11890,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "High / Medium / Low — a judgement.",
             "key" : "rating",
             "kind" : "longText",
-            "label" : "Reliability rating"
+            "label" : "Rating"
           }
         ],
         "hint" : "Reliability and independence.",
@@ -11790,8 +11954,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Name & role · Relationship to parties · What they can speak to · Prior statements (cited) · Credibility notes · Contradictions (both sides cited).",
             "key" : "profiles",
             "kind" : "longText",
-            "label" : "Per-witness fields",
-            "required" : true
+            "label" : "Per-witness fields"
           }
         ],
         "hint" : "One profile per witness.",
