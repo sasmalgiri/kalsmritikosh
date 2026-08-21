@@ -2595,7 +2595,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "fa.expert-report" : {
-    "purpose" : "Assemble the expert report: restate the assignment, state scope & assumptions, summarize methodology, marshal exhibits, state opinions, give the bases & reliability, note limitations, then produce — opine only within your expertise.",
+    "purpose" : "Assemble the expert report: restate the assignment, state scope & assumptions, summarize methodology, marshal exhibits, state opinions, give the bases & reliability, note limitations, add the required credentials & disclosures, then produce — opine only within your expertise.",
     "steps" : [
       {
         "fields" : [
@@ -2695,6 +2695,32 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "limits",
         "opens" : "review",
         "title" : "Assumptions & limitations"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "CV summary and publications from the last 10 years.",
+            "key" : "qualifications",
+            "kind" : "longText",
+            "label" : "Qualifications & publications"
+          },
+          {
+            "help" : "Cases where you testified as an expert (trial or deposition) in the last 4 years.",
+            "key" : "priorTestimony",
+            "kind" : "longText",
+            "label" : "Prior testimony (4 yrs)"
+          },
+          {
+            "help" : "Compensation for the study and testimony.",
+            "key" : "compensation",
+            "kind" : "text",
+            "label" : "Compensation"
+          }
+        ],
+        "hint" : "US federal expert reports (FRCP 26(a)(2)(B)) must also include these — attach or state each.",
+        "key" : "credentials",
+        "opens" : "handoff",
+        "title" : "Credentials & disclosures"
       },
       {
         "fields" : [
@@ -7552,7 +7578,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "inv.analysis" : {
-    "purpose" : "Work the analytical spine (Analysis of Competing Hypotheses): brainstorm leads, form hypotheses, answer 5W1H, plan and gather evidence, score each hypothesis for and against, identify the most consistent, then produce — never auto-won.",
+    "purpose" : "Work the analytical spine (Heuer's Analysis of Competing Hypotheses): brainstorm, form hypotheses, 5W1H, plan and gather evidence, build the matrix, examine critical assumptions, identify the least-contradicted hypothesis with confidence, set indicators to watch, then produce — disconfirmation over confirmation; never auto-won.",
     "steps" : [
       {
         "fields" : [
@@ -7572,14 +7598,14 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each a distinct, testable explanation.",
+            "help" : "Ideally if one is true the others are false.",
             "key" : "hypotheses",
             "kind" : "longText",
             "label" : "Hypotheses",
             "required" : true
           }
         ],
-        "hint" : "Turn leads into a set of explanations to test.",
+        "hint" : "A mutually-exclusive set to test (ACH step 1).",
         "key" : "hypotheses",
         "opens" : "findings",
         "title" : "Form the hypotheses"
@@ -7621,10 +7647,10 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Evidence log"
           }
         ],
-        "hint" : "Collect evidence and mark what it bears on.",
+        "hint" : "Collect evidence and mark what it bears on (ACH step 2).",
         "key" : "gather",
         "opens" : "findings",
-        "title" : "Gather & mark evidence"
+        "title" : "List the evidence"
       },
       {
         "fields" : [
@@ -7636,24 +7662,52 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Rate each item consistent / inconsistent / N-A per hypothesis.",
+        "hint" : "Rate each item consistent / inconsistent / N-A per hypothesis; drop non-diagnostic items (ACH steps 3-4).",
         "key" : "matrix",
         "opens" : "matrix",
-        "title" : "Score the hypothesis matrix"
+        "title" : "Build & refine the matrix"
       },
       {
         "fields" : [
           {
-            "help" : "The most-consistent explanation and the key diagnostics.",
+            "help" : "Which assumptions, if wrong, would flip the conclusion.",
+            "key" : "assumptions",
+            "kind" : "longText",
+            "label" : "Assumptions & sensitivity"
+          }
+        ],
+        "hint" : "Test the assumptions the leading read depends on, and how sensitive it is to a few key items (ACH step 6).",
+        "key" : "assumptions",
+        "opens" : "review",
+        "title" : "Examine critical assumptions"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "The least-contradicted explanation, the key diagnostics, and how confident you are.",
             "key" : "leading",
             "kind" : "longText",
-            "label" : "Leading hypothesis & basis",
+            "label" : "Leading hypothesis, basis & confidence",
             "required" : true
           }
         ],
-        "hint" : "Which hypothesis the evidence least contradicts — never auto-won.",
+        "hint" : "The most robust hypothesis, with your confidence — never auto-won (ACH steps 5,7).",
         "key" : "assess",
-        "title" : "Identify the most consistent (your decision)"
+        "title" : "Identify the least-contradicted (your decision)"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Signposts that would change the assessment.",
+            "key" : "indicators",
+            "kind" : "longText",
+            "label" : "Indicators"
+          }
+        ],
+        "hint" : "What future evidence would confirm or overturn the conclusion (ACH step 8).",
+        "key" : "indicators",
+        "opens" : "review",
+        "title" : "Set indicators to watch"
       },
       {
         "fields" : [
