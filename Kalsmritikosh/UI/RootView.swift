@@ -37,9 +37,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case transcripts
     case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
-    case authenticity, citations
+    case authenticity, citations, freshness, trends
     case sources, convert, completeness, live
-    case redaction
+    case redaction, caseload
     case guide, settings
 
     public var id: String { rawValue }
@@ -77,6 +77,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .saved:        return "Saved"
         case .authenticity: return "Authenticity"
         case .citations:    return "Citations"
+        case .freshness:    return "Freshness"
+        case .trends:       return "Trends"
+        case .caseload:     return "Caseload"
         case .sources:      return "Sources"
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
@@ -120,6 +123,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .saved:        return "bookmark"
         case .authenticity: return "checkmark.shield"
         case .citations:    return "quote.bubble"
+        case .freshness:    return "clock.badge.exclamationmark"
+        case .trends:       return "chart.xyaxis.line"
+        case .caseload:     return "square.stack.3d.up"
         case .sources:      return "folder"
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
@@ -179,6 +185,9 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .saved:        return "Your bookmarked questions"
         case .authenticity: return "Check a file's provenance — fingerprint, capture metadata, editing traces, PDF edit markers"
         case .citations:    return "Build layered Evidence Explained citations — full note, short note, bibliography"
+        case .freshness:    return "Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused"
+        case .trends:       return "Patterns across everything — activity over time, event types, entity makeup"
+        case .caseload:     return "Every matter triaged by how much attention it needs"
         case .sources:      return "Folders being watched and ingested"
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
@@ -202,8 +211,8 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
             case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
-            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations]
-            case .workspace:   return [.sources, .convert, .completeness, .live, .redaction]
+            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends]
+            case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .settings]
             }
         }
@@ -373,10 +382,11 @@ public struct RootView: View {
         case .ask, .search, .answers, .saved:                         return .answers
         case .work, .workCenter, .registers:                          return .jobs
         case .sources, .convert, .live, .completeness, .workspaces,
-             .redaction:                                              return .sources
+             .redaction, .caseload:                                   return .sources
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
-             .transcripts, .authenticity, .citations:                 return .entities
+             .transcripts, .authenticity, .citations,
+             .freshness, .trends:                                     return .entities
         case .dataLab:                                                return .dataLab
         case .connections, .explore, .matrix:                         return .relationships
         case .findings, .notebook, .dossier, .story, .review,
@@ -1259,6 +1269,9 @@ public struct RootView: View {
         case .saved:        SavedQueriesView()
         case .authenticity: AuthenticityView()
         case .citations:    CitationBuilderView()
+        case .freshness:    FreshnessView()
+        case .trends:       TrendsView()
+        case .caseload:     CaseloadView()
         case .sources:      SourcesView()
         case .convert:      ConvertView()
         case .completeness: CompletenessView()
