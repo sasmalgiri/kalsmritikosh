@@ -4000,7 +4000,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "gen.proof-argument" : {
-    "purpose" : "Write the Genealogical Proof Standard argument: question & conclusion, evidence summary, reasonably-exhaustive research, resolve conflicts, write the reasoned conclusion, then produce.",
+    "purpose" : "Write the Genealogical Proof Standard argument: question & conclusion, evidence summary, complete source citations, reasonably-exhaustive research, resolve conflicts, write the reasoned conclusion, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -4030,6 +4030,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "evidence",
         "opens" : "findings",
         "title" : "Summarize the evidence"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confirm every information item has a complete, accurate citation.",
+            "key" : "citations",
+            "kind" : "longText",
+            "label" : "Source citations"
+          }
+        ],
+        "hint" : "GPS component 2 — a complete, accurate citation for every fact. The app carries each citation, so you confirm rather than retype.",
+        "key" : "citations",
+        "opens" : "audit",
+        "title" : "Cite every information item"
       },
       {
         "fields" : [
@@ -10070,7 +10084,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "jrn.publication-package" : {
-    "purpose" : "Assemble the verified, rights-cleared package: every claim cited, right of reply in, legal signed off, credits/rights set, then produce.",
+    "purpose" : "Assemble the verified, rights-cleared package: every claim cited, right of reply in, legal signed off, credits/rights set, disclosures & labeling done, then produce.",
     "steps" : [
       {
         "fields" : [
@@ -10152,6 +10166,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "rights",
         "opens" : "handoff",
         "title" : "Credits & rights"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What's disclosed and how anything non-literal is labeled.",
+            "key" : "disclose",
+            "kind" : "longText",
+            "label" : "Disclosures"
+          }
+        ],
+        "hint" : "SPJ transparency: label sponsorship/advocacy, disclose conflicts, and clearly mark any illustration or re-enactment.",
+        "key" : "disclose",
+        "opens" : "handoff",
+        "title" : "Disclosures & labeling"
       },
       {
         "fields" : [
@@ -11592,7 +11620,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "law.matter-intake" : {
-    "purpose" : "Open the matter the way a litigator does: record matter & issues, clear conflicts, fix scope, issue the litigation hold, identify custodians, plan, then open. Privilege-sensitive throughout.",
+    "purpose" : "Open the matter the way a litigator does: record matter & issues, clear conflicts, fix scope, issue the litigation hold, identify custodians, collect & process the ESI, plan, then open. Privilege-sensitive throughout.",
     "steps" : [
       {
         "fields" : [
@@ -11697,6 +11725,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "custodians",
         "opens" : "sources",
         "title" : "Identify custodians & sources"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What was collected and any processing exceptions (corrupt/encrypted/oversized).",
+            "key" : "collect",
+            "kind" : "longText",
+            "label" : "Collection notes"
+          }
+        ],
+        "hint" : "EDRM collection + processing — the app ingests each source and de-duplicates/threads it for review, so this is done for you rather than by hand.",
+        "key" : "collect",
+        "opens" : "sources",
+        "title" : "Collect & process the ESI"
       },
       {
         "fields" : [
@@ -13976,6 +14018,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Second-reviewer results and how disagreements were resolved (note agreement if measured).",
+            "key" : "dual",
+            "kind" : "longText",
+            "label" : "Reviewer agreement"
+          }
+        ],
+        "hint" : "PRISMA best practice: a second reviewer screens independently; disagreements resolved by discussion or a third reviewer.",
+        "key" : "dual",
+        "opens" : "review",
+        "title" : "Second-reviewer check"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Sources passing.",
             "key" : "included",
             "kind" : "number",
@@ -14385,7 +14441,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "siu.claim-intake" : {
-    "purpose" : "Open a claim for investigation the way an SIU examiner does: record the claim, fix the referral basis, check coverage, set scope, issue the preservation hold, identify custodians, plan, then open. Intake never concludes fraud.",
+    "purpose" : "Open a claim for investigation the way an SIU examiner does: record the claim, establish predication, check coverage, set scope, issue the preservation hold, identify custodians, plan, then open. Intake never concludes fraud.",
     "steps" : [
       {
         "fields" : [
@@ -14424,10 +14480,10 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What put this into SIU.",
+            "help" : "What objectively justifies investigating.",
             "key" : "basis",
             "kind" : "choice",
-            "label" : "Referral basis",
+            "label" : "Predication / referral basis",
             "options" : [
               "Red flags at FNOL",
               "Adjuster referral",
@@ -14438,16 +14494,16 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           },
           {
-            "help" : "The indicators that triggered referral — indicators, not proof.",
+            "help" : "The indicators behind it — indicators, not proof.",
             "key" : "triggers",
             "kind" : "longText",
-            "label" : "Red flags noted"
+            "label" : "Indicators"
           }
         ],
-        "hint" : "Why this went to SIU.",
-        "key" : "basis",
+        "hint" : "The objective basis to investigate (ACFE) — re-evaluate it at each step; act on facts, not hunches.",
+        "key" : "predication",
         "opens" : "review",
-        "title" : "Referral basis & red-flag trigger"
+        "title" : "Establish predication"
       },
       {
         "fields" : [
@@ -14494,7 +14550,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Hold issued"
           }
         ],
-        "hint" : "Preserve claim file, recorded statements, and related records.",
+        "hint" : "Preserve claim file, recorded statements, and related records — assume litigation will follow.",
         "key" : "hold",
         "opens" : "audit",
         "title" : "Issue the preservation hold"
