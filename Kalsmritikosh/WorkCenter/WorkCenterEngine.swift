@@ -2279,23 +2279,42 @@ public nonisolated enum WCAuthoredWorkflows {
         // MARK: Investigator (2026-08-20)
 
         "inv.case-intake": build(
-            "Open a case and set its authorized evidence scope: record the mandate, fix scope and window, set the sources in scope, confirm, then open the case. Intake never decides the merits.",
+            "Open a case the way an investigator actually does: record the mandate and authority, assess urgency, clear conflicts, frame the questions, fix scope, issue the preservation hold, identify custodians, plan the investigation, get sign-off, then open the case. Intake never decides the merits.",
             [
-                Step("mandate", "Record the mandate", "The authority and the question this case answers.", opens: "sources", [
+                Step("mandate", "Record the mandate & authority", "Who tasked this and what it must resolve.", opens: "sources", [
                     f("caseNo", "Case number", .text, "Your case reference.", required: true),
-                    f("mandate", "Mandate", .longText, "The authority behind the case and what it must resolve.", required: true),
-                    f("custodian", "Custodian", .text, "Whose records/accounts the evidence comes from."),
+                    f("requestor", "Requestor", .text, "Who authorized/tasked the case."),
+                    f("mandate", "Mandate", .longText, "The authority behind the case and the objective.", required: true),
                 ]),
-                Step("scope", "Define scope & window", "The boundary and the period the case covers.", opens: "sources", [
+                Step("urgency", "Assess urgency & immediate actions", "Any time-critical safeguards before work begins.", opens: "review", [
+                    f("urgency", "Urgency", .choice, "How time-critical.", required: true, options: ["Routine", "Elevated", "Urgent", "Critical — act now"]),
+                    f("immediate", "Immediate actions", .longText, "Preservation triggers, safety, notifications, legal risk."),
+                ]),
+                Step("conflicts", "Clear conflicts & clearance", "Confirm the investigator is impartial and cleared.", opens: "handoff", [
+                    f("investigator", "Assigned investigator", .text, "Who runs the case.", required: true),
+                    f("conflicts", "Conflicts of interest", .choice, "Any relationship to subjects?", required: true, options: ["None", "Managed — noted", "Yes — reassign"]),
+                ]),
+                Step("questions", "Frame the questions", "What the case must answer, as discrete questions.", opens: "findings", [
+                    f("questions", "Investigative questions", .longText, "One per line — each answerable from evidence.", required: true),
+                ]),
+                Step("scope", "Define scope & window", "The boundary and the period.", opens: "sources", [
                     f("scope", "Scope statement", .longText, "In and out of scope.", required: true),
                     f("window", "Time window", .dateRange, "The period under investigation."),
                 ]),
-                Step("inscope", "Set the sources in scope", "Authorize the in-scope source set — the hard evidence boundary.", opens: "sources", [
-                    f("sources", "Sources in scope", .longText, "The authorized sources."),
+                Step("hold", "Issue the preservation hold", "Stop relevant evidence being lost before collection.", opens: "audit", [
+                    f("holdScope", "Hold scope", .longText, "Accounts, drives, devices, records to preserve.", required: true),
+                    f("holdIssued", "Hold issued", .bool, "Turn on once custodians/IT are notified."),
                 ]),
-                Step("confirm", "Confirm scope (your decision)", "A human confirms scope before work.", [
-                    f("decision", "Scope confirmed?", .choice, "Confirm only when correct.", required: true, options: ["Confirmed", "Needs revision"]),
-                    f("note", "Note", .longText, "Anything to record."),
+                Step("custodians", "Identify sources & custodians", "Who holds the evidence, and which sets are authorized.", opens: "sources", [
+                    f("custodians", "Custodians", .longText, "People/systems holding relevant material."),
+                    f("sources", "Sources in scope", .longText, "The authorized source set — the hard evidence boundary.", required: true),
+                ]),
+                Step("plan", "Draft the investigation plan", "Methods, sequence, and target dates.", opens: "handoff", [
+                    f("plan", "Investigation plan", .longText, "What to collect/analyze, in what order, by when.", required: true),
+                ]),
+                Step("confirm", "Confirm scope & plan (your decision)", "A human signs off before evidence is worked.", [
+                    f("decision", "Approve to proceed?", .choice, "Confirm only when scope, hold and plan are right.", required: true, options: ["Approved", "Needs revision"]),
+                    f("approver", "Approved by", .text, "Who signed off."),
                 ]),
                 Step("open", "Open the case", "Open the numbered case.", opens: "handoff", posts: "IMP", [
                     f("caseName", "Case name", .text, "A findable name.", required: true),
@@ -2383,10 +2402,13 @@ public nonisolated enum WCAuthoredWorkflows {
             ]),
 
         "inv.analysis": build(
-            "Work the analytical spine: brainstorm leads, answer 5W1H, plan the evidence, then score hypotheses for/against — never auto-won.",
+            "Work the analytical spine (Analysis of Competing Hypotheses): brainstorm leads, form hypotheses, answer 5W1H, plan and gather evidence, score each hypothesis for and against, identify the most consistent, then produce — never auto-won.",
             [
-                Step("brainstorm", "Brainstorm leads", "Ideas, hypotheses and leads to pursue.", opens: "findings", [
-                    f("ideas", "Leads & hypotheses", .longText, "One per line.", required: true),
+                Step("brainstorm", "Brainstorm leads", "Every idea and lead, before judging.", opens: "findings", [
+                    f("ideas", "Leads", .longText, "One per line — nothing filtered yet.", required: true),
+                ]),
+                Step("hypotheses", "Form the hypotheses", "Turn leads into a set of explanations to test.", opens: "findings", [
+                    f("hypotheses", "Hypotheses", .longText, "Each a distinct, testable explanation.", required: true),
                 ]),
                 Step("fiveW", "5W1H worksheet", "Answer each from evidence, or mark unknown.", opens: "matrix", [
                     f("fiveW", "5W1H", .longText, "Who/what/when/where/why/how — cited or unknown."),
@@ -2394,8 +2416,14 @@ public nonisolated enum WCAuthoredWorkflows {
                 Step("plan", "Evidence collection plan", "What evidence each hypothesis needs.", opens: "review", [
                     f("plan", "Evidence plan", .longText, "Requests per hypothesis — never assert evidence exists."),
                 ]),
-                Step("matrix", "Hypothesis matrix", "Score hypotheses on evidence for and against.", opens: "matrix", [
-                    f("matrixNote", "For / against", .longText, "The matrix — human-confirmed, never auto-won."),
+                Step("gather", "Gather & mark evidence", "Collect evidence and mark what it bears on.", opens: "findings", [
+                    f("evidence", "Evidence log", .longText, "Each item and which hypothesis it supports/undercuts (cited)."),
+                ]),
+                Step("matrix", "Score the hypothesis matrix", "Rate each item consistent / inconsistent / N-A per hypothesis.", opens: "matrix", [
+                    f("matrixNote", "Matrix", .longText, "Focus on what DISPROVES — the least-contradicted hypothesis leads.", required: true),
+                ]),
+                Step("assess", "Identify the most consistent (your decision)", "Which hypothesis the evidence least contradicts — never auto-won.", [
+                    f("leading", "Leading hypothesis & basis", .longText, "The most-consistent explanation and the key diagnostics.", required: true),
                 ]),
                 Step("produce", "Produce the worksheet", "Assemble the analysis worksheet.", opens: "handoff", posts: "RPT", [
                     f("title", "Title", .text, "Name this worksheet.", required: true),
@@ -2513,17 +2541,26 @@ public nonisolated enum WCAuthoredWorkflows {
             ]),
 
         "inv.evidence-custody": build(
-            "Maintain the evidence locker: register exhibits, record acquisition and integrity, log transfers, then seal.",
+            "Maintain a defensible evidence locker: identify and seize, register each exhibit, record the acquisition method, hash and verify integrity, label and store, log every transfer, then seal the manifest.",
             [
-                Step("register", "Register the exhibits", "Each item, with source (attach originals).", opens: "audit", [
-                    f("exhibits", "Exhibits", .longText, "What each item is and where it came from.", required: true),
+                Step("identify", "Identify & seize", "What is taken into evidence, and from where.", opens: "audit", [
+                    f("items", "Items", .longText, "Each item and the point of seizure (attach originals).", required: true),
                 ]),
-                Step("acquire", "Acquisition & integrity", "How each entered custody unaltered.", opens: "audit", [
+                Step("register", "Register the exhibits", "Give each an exhibit number and description.", opens: "audit", [
+                    f("exhibits", "Exhibit register", .longText, "Exhibit no. · description · source · collector · date/time."),
+                ]),
+                Step("acquire", "Record acquisition method", "How each entered custody without alteration.", opens: "audit", [
                     f("method", "Acquisition method", .choice, "How it was taken in.", required: true, options: ["In-place ingest (watched folder)", "Copy into vault", "Export from system/service", "Physical/device transfer"]),
-                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
                 ]),
-                Step("transfers", "Log transfers", "Who held what, when.", opens: "audit", [
-                    f("transfers", "Transfers", .longText, "Each hand-off."),
+                Step("hash", "Hash & verify integrity", "Fix the tamper-evident seal.", opens: "audit", [
+                    f("integrity", "Integrity verified", .bool, "Turn on after Verify integrity on Audit."),
+                    f("hashNote", "Hash / seal note", .longText, "Algorithm and where the value is recorded."),
+                ]),
+                Step("store", "Label & store", "Where the originals live and how access is controlled.", opens: "audit", [
+                    f("storage", "Storage & labelling", .longText, "Location, container, access controls."),
+                ]),
+                Step("transfers", "Log every transfer", "Unbroken chain — who held what, when, why.", opens: "audit", [
+                    f("transfers", "Custody transfers", .longText, "Each hand-off: from, to, date/time, purpose."),
                 ]),
                 Step("seal", "Seal the manifest", "Post the sealed custody manifest.", opens: "handoff", posts: "PRS", [
                     f("title", "Title", .text, "Name this manifest.", required: true),
@@ -2531,22 +2568,34 @@ public nonisolated enum WCAuthoredWorkflows {
             ]),
 
         "inv.findings": build(
-            "Assemble the case report: recap scope, marshal the evidence, assess, record findings, note limitations, then produce — never assert unproven findings.",
+            "Assemble the case report the way it's really written: restate the mandate and questions, summarize methodology, marshal the evidence per question, assess weight and reliability, apply the standard of proof, record findings, weigh alternative explanations, note limitations, add recommendations, then produce — never assert unproven findings.",
             [
-                Step("recap", "Recap scope & questions", "Anchor the report.", opens: "findings", [
-                    f("recap", "Scope & questions", .longText, "What's being reported and within what scope.", required: true),
+                Step("mandate", "Restate mandate & questions", "Anchor the report to what it set out to answer.", opens: "findings", [
+                    f("mandate", "Mandate & questions", .longText, "The objective, the questions, and the scope.", required: true),
+                ]),
+                Step("method", "Summarize methodology", "What you did and how — so the work is defensible.", opens: "matrix", [
+                    f("method", "Methodology", .longText, "Sources reviewed, methods used, period covered."),
                 ]),
                 Step("marshal", "Marshal the evidence", "The cited evidence for each question (attach exhibits).", opens: "findings", [
-                    f("evidence", "Evidence", .longText, "For and against each point."),
+                    f("evidence", "Evidence per question", .longText, "For and against each point."),
                 ]),
-                Step("assess", "Assess", "What the evidence supports.", opens: "matrix", [
-                    f("assessment", "Assessment", .longText, "Strengths and gaps."),
+                Step("weigh", "Assess weight & reliability", "How strong and how reliable each piece is.", opens: "review", [
+                    f("weight", "Weight & reliability", .longText, "Corroboration, source reliability, gaps."),
+                ]),
+                Step("standard", "Apply the standard of proof", "The threshold this case is judged against.", opens: "matrix", [
+                    f("standard", "Standard applied", .longText, "e.g. balance of probabilities / reasonable grounds — and whether each question meets it."),
                 ]),
                 Step("findings", "Record findings (your decision)", "The human findings, each supported.", [
-                    f("findings", "Findings", .longText, "Do not assert findings the evidence doesn't support.", required: true),
+                    f("findings", "Findings", .longText, "Per question — do not assert findings the evidence doesn't support.", required: true),
+                ]),
+                Step("alternatives", "Weigh alternative explanations", "Show you considered other readings.", opens: "review", [
+                    f("alternatives", "Alternatives considered", .longText, "Competing explanations and why the evidence favors the finding."),
                 ]),
                 Step("limits", "Note limitations", "Gaps and unresolved items — honest closure.", opens: "review", [
-                    f("limitations", "Limitations", .longText, "What remains uncertain."),
+                    f("limitations", "Limitations", .longText, "What remains uncertain or outside reach."),
+                ]),
+                Step("recommend", "Add recommendations", "Actions or referrals that follow from the findings.", opens: "handoff", [
+                    f("recommendations", "Recommendations", .longText, "What should happen next (kept separate from the findings)."),
                 ]),
                 Step("produce", "Produce the case report", "Assemble the report with its sealed receipt.", opens: "handoff", posts: "RPT", [
                     f("title", "Title", .text, "Name this report.", required: true),
