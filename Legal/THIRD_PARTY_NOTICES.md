@@ -28,7 +28,9 @@
   redistribution notice required beyond Apple's terms.
 
 ## Action items
-- [ ] Add `Legal/LICENSES/LLAMA_COMMUNITY_LICENSE.txt` (full text from Meta).
-- [ ] Add `Legal/LICENSES/LLAMA_ACCEPTABLE_USE_POLICY.txt`.
-- [ ] Add `Legal/LICENSES/BGE_MIT_LICENSE.txt`.
+- [x] `Legal/LICENSES/BGE_MIT_LICENSE.txt` added (verify the exact BGE variant).
+- [~] `Legal/LICENSES/LLAMA_LICENSE_README.md` added — pointer + obligations checklist.
+- [ ] Add `Legal/LICENSES/LLAMA_COMMUNITY_LICENSE.txt` (official text for your
+      bundled version — URLs in the README). **Owner action.**
+- [ ] Add `Legal/LICENSES/LLAMA_ACCEPTABLE_USE_POLICY.txt`. **Owner action.**
 - [ ] Confirm the in-app Acknowledgements screen lists all of the above.
