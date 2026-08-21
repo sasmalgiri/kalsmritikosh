@@ -106,6 +106,19 @@ public struct EECitation: Sendable {
 public enum EvidenceExplainedFormatter {
 
     public static func format(_ template: EETemplate, values: [String: String]) -> EECitation {
+        let raw = formatRaw(template, values: values)
+        func tidy(_ s: String) -> String {
+            var x = s
+            while x.contains("..") { x = x.replacingOccurrences(of: "..", with: ".") }
+            x = x.replacingOccurrences(of: " .", with: ".")
+                 .replacingOccurrences(of: " ,", with: ",")
+                 .replacingOccurrences(of: ",,", with: ",")
+            return x.trimmingCharacters(in: .whitespaces)
+        }
+        return EECitation(first: tidy(raw.first), subsequent: tidy(raw.subsequent), sourceList: tidy(raw.sourceList))
+    }
+
+    private static func formatRaw(_ template: EETemplate, values: [String: String]) -> EECitation {
         func v(_ key: String) -> String {
             (values[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }

@@ -173,14 +173,9 @@ public struct FileAuthenticityInspector: Sendable {
                                  detail: "The PDF has one %%EOF marker — no appended revisions after its original save.",
                                  severity: .info))
             }
-            if containsToken("/JavaScript", in: data) || containsToken("/JS", in: data) {
-                out.append(.init(title: "Embedded JavaScript",
-                                 detail: "The PDF contains JavaScript. Legitimate for some forms, but a common vector for hidden behaviour — review before trusting.",
-                                 severity: .warning))
-            }
-            if containsToken("/AA", in: data) {
-                out.append(.init(title: "Auto-action triggers",
-                                 detail: "The PDF defines automatic actions (/AA). Uncommon in ordinary documents.",
+            if containsToken("/JavaScript", in: data) {
+                out.append(.init(title: "Possible embedded JavaScript",
+                                 detail: "The token \"/JavaScript\" appears in the file's raw structure. Legitimate for some interactive forms, but also a vector for hidden behaviour. Note: this scans raw bytes, so on a compressed PDF it can occasionally be a false positive — confirm before relying on it.",
                                  severity: .notice))
             }
         }
