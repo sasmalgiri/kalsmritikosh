@@ -11514,7 +11514,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.alternative" : {
-    "purpose" : "Explore evidence-bounded counterfactuals — a scenario, never presented as fact, and never mutating the ledger.",
+    "purpose" : "Explore evidence-bounded counterfactuals — a scenario, never fact, and never mutating the ledger.",
     "steps" : [
       {
         "fields" : [
@@ -11578,8 +11578,22 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.ask" : {
-    "purpose" : "Ask a question over the authorized corpus and keep the cited answer.",
+    "purpose" : "Ask a question over the authorized corpus and keep the cited answer — the app reads the whole corpus for you and answers with citations, no manual re-reading.",
     "steps" : [
+      {
+        "fields" : [
+          {
+            "help" : "The specific thing you need.",
+            "key" : "need",
+            "kind" : "longText",
+            "label" : "What you're establishing"
+          }
+        ],
+        "hint" : "Framing sharpens the answer.",
+        "key" : "frame",
+        "opens" : "ask",
+        "title" : "Decide what you need"
+      },
       {
         "fields" : [
           {
@@ -11590,7 +11604,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The answer cites its source.",
+        "hint" : "Plain language; the answer cites its source.",
         "key" : "ask",
         "opens" : "ask",
         "title" : "Ask the corpus"
@@ -11604,7 +11618,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "label" : "Why it matters"
           }
         ],
-        "hint" : "Save the answer that matters.",
+        "hint" : "Lands in the matter already cited.",
         "key" : "record",
         "opens" : "answers",
         "posts" : "RPT",
@@ -11613,7 +11627,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.authority-control" : {
-    "purpose" : "Unify names/terms to canonical authorities — reversible and human-reviewed, never auto-unified.",
+    "purpose" : "Unify names/terms to canonical authorities — reversible and human-reviewed. The app clusters variants for you to approve; it never auto-unifies.",
     "steps" : [
       {
         "fields" : [
@@ -11629,6 +11643,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "gather",
         "opens" : "knowledge",
         "title" : "Gather the variants"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What was folded together.",
+            "key" : "normalized",
+            "kind" : "longText",
+            "label" : "Notes"
+          }
+        ],
+        "hint" : "Fold spelling/format variants — the app proposes the clusters.",
+        "key" : "normalize",
+        "opens" : "knowledge",
+        "title" : "Normalize"
       },
       {
         "fields" : [
@@ -11703,7 +11731,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.bibliography" : {
-    "purpose" : "Verify every citation reopens its exact source, and seal the bibliography.",
+    "purpose" : "Verify every citation reopens its exact source, fix what's broken, and seal the bibliography. The app resolves each cite for you instead of a manual link-check.",
     "steps" : [
       {
         "fields" : [
@@ -11723,16 +11751,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Which resolve and which are broken — never assert an unresolved cite.",
+            "help" : "Which resolve and which are broken.",
             "key" : "verifyNote",
             "kind" : "longText",
             "label" : "Verification"
           }
         ],
-        "hint" : "Open each citation to its exact source.",
+        "hint" : "Open each to its exact source — the app checks resolution automatically.",
         "key" : "verify",
         "opens" : "audit",
         "title" : "Verify each resolves"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What was corrected — never assert an unresolved cite.",
+            "key" : "fixes",
+            "kind" : "longText",
+            "label" : "Fixes"
+          }
+        ],
+        "hint" : "Repair or flag citations that don't resolve.",
+        "key" : "fix",
+        "opens" : "audit",
+        "title" : "Fix the broken ones"
       },
       {
         "fields" : [
@@ -11815,6 +11857,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What supports or rules out each.",
+            "key" : "weigh",
+            "kind" : "longText",
+            "label" : "For / against"
+          }
+        ],
+        "hint" : "For and against each.",
+        "key" : "weigh",
+        "opens" : "review",
+        "title" : "Weigh the candidates"
+      },
+      {
+        "fields" : [
+          {
             "help" : "On the evidence.",
             "key" : "determination",
             "kind" : "longText",
@@ -11845,7 +11901,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.chronology" : {
-    "purpose" : "Build a periodised timeline — undated events labelled, each cited.",
+    "purpose" : "Build a periodised timeline — undated events labelled, each cited. The app assembles dated events from the corpus automatically.",
     "steps" : [
       {
         "fields" : [
@@ -11857,7 +11913,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Each event with its source.",
+        "hint" : "Each event with its source — auto-pulled.",
         "key" : "events",
         "opens" : "timeline",
         "title" : "Collect dated events"
@@ -11879,6 +11935,20 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "How each is bounded — never invent a date.",
+            "key" : "undated",
+            "kind" : "longText",
+            "label" : "Undated handling"
+          }
+        ],
+        "hint" : "Bound undated events relative to fixed ones.",
+        "key" : "undated",
+        "opens" : "timeline",
+        "title" : "Place the undated"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What you confirm.",
             "key" : "basis",
             "kind" : "longText",
@@ -11886,7 +11956,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Confirm periods and inclusions — never invent dates.",
+        "hint" : "Confirm periods and inclusions.",
         "key" : "confirm",
         "title" : "Confirm inclusion (your decision)"
       },
@@ -11909,7 +11979,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.corpus-catalogue" : {
-    "purpose" : "Catalogue every authorized source with provenance.",
+    "purpose" : "Catalogue every authorized source with provenance — the app auto-extracts metadata as it ingests, so you verify rather than transcribe.",
     "steps" : [
       {
         "fields" : [
@@ -11921,7 +11991,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The sources to catalogue.",
+        "hint" : "Which sources to catalogue.",
         "key" : "assemble",
         "opens" : "sources",
         "title" : "Assemble the sources"
@@ -11929,28 +11999,42 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Provenance per source.",
+            "help" : "Title · author · date · repository · provenance · format.",
             "key" : "columns",
             "kind" : "longText",
             "label" : "Catalogue columns"
           }
         ],
-        "hint" : "Each source: origin, date, custody.",
-        "key" : "catalogue",
+        "hint" : "Each source: origin, date, custody — largely auto-filled from ingest.",
+        "key" : "describe",
         "opens" : "dataLab",
-        "title" : "Catalogue with provenance"
+        "title" : "Record provenance"
       },
       {
         "fields" : [
           {
-            "help" : "What you include and why — never assert authenticity you can't support.",
+            "help" : "What was merged, and why.",
+            "key" : "dupes",
+            "kind" : "longText",
+            "label" : "Duplicates"
+          }
+        ],
+        "hint" : "Merge duplicates and note editions/versions.",
+        "key" : "dedupe",
+        "opens" : "dataLab",
+        "title" : "De-duplicate"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What you include and why.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
             "required" : true
           }
         ],
-        "hint" : "Confirm each source belongs in the corpus.",
+        "hint" : "Confirm each source belongs — never assert authenticity you can't support.",
         "key" : "confirm",
         "title" : "Confirm inclusion (your decision)"
       },
@@ -11973,7 +12057,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.edition" : {
-    "purpose" : "Assemble an annotated edition: fix the protocol link, marshal sources, annotate, then produce the edition — source text never silently altered.",
+    "purpose" : "Assemble an annotated edition — protocol link, sources, established text, annotations and apparatus, human approval, then produce. Source text is never silently altered.",
     "steps" : [
       {
         "fields" : [
@@ -12007,13 +12091,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "Base text and how variants are handled.",
+            "key" : "text",
+            "kind" : "longText",
+            "label" : "Text & variants"
+          }
+        ],
+        "hint" : "Choose base text and record variants.",
+        "key" : "text",
+        "opens" : "matrix",
+        "title" : "Establish the text"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Source text preserved; annotations clearly yours.",
             "key" : "notes",
             "kind" : "longText",
             "label" : "Annotations"
           }
         ],
-        "hint" : "Your notes and apparatus.",
+        "hint" : "Your notes and apparatus, clearly distinct from the source.",
         "key" : "annotate",
         "opens" : "matrix",
         "title" : "Annotate"
@@ -12021,14 +12119,28 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What you approve — source text never silently altered.",
+            "help" : "The scholarly apparatus.",
+            "key" : "apparatus",
+            "kind" : "longText",
+            "label" : "Apparatus"
+          }
+        ],
+        "hint" : "Sigla, variant register, notes index.",
+        "key" : "apparatus",
+        "opens" : "matrix",
+        "title" : "Build the critical apparatus"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Source text never silently altered.",
             "key" : "approval",
             "kind" : "longText",
             "label" : "Approval & basis",
             "required" : true
           }
         ],
-        "hint" : "A human approves the edition.",
+        "hint" : "A human approves.",
         "key" : "approve",
         "title" : "Approve the edition (your decision)"
       },
@@ -12081,6 +12193,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "define",
         "opens" : "handoff",
         "title" : "Define the corrections"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Open / done per erratum.",
+            "key" : "status",
+            "kind" : "longText",
+            "label" : "Status"
+          }
+        ],
+        "hint" : "Keep each current.",
+        "key" : "track",
+        "opens" : "handoff",
+        "title" : "Track to status"
       },
       {
         "fields" : [
@@ -12177,12 +12303,12 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.extraction" : {
-    "purpose" : "Extract coded findings, each citing an evidence block.",
+    "purpose" : "Extract coded findings, each citing an evidence block — with a second-coder check for reliability.",
     "steps" : [
       {
         "fields" : [
           {
-            "help" : "The codes and their definitions.",
+            "help" : "Codes and their definitions.",
             "key" : "codebook",
             "kind" : "longText",
             "label" : "Codebook",
@@ -12197,7 +12323,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each finding cites its evidence block — never fabricated.",
+            "help" : "Each cites its evidence block — never fabricated.",
             "key" : "findings",
             "kind" : "longText",
             "label" : "Coded findings"
@@ -12207,6 +12333,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "extract",
         "opens" : "findings",
         "title" : "Extract & code"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Where coding agreed/diverged, and resolution.",
+            "key" : "check",
+            "kind" : "longText",
+            "label" : "Agreement"
+          }
+        ],
+        "hint" : "Re-code a sample to test reliability.",
+        "key" : "check",
+        "opens" : "matrix",
+        "title" : "Second-coder / consistency check"
       },
       {
         "fields" : [
@@ -12246,7 +12386,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each interpretation and its proponents.",
+            "help" : "Each reading and its proponents.",
             "key" : "interps",
             "kind" : "longText",
             "label" : "Interpretations",
@@ -12268,9 +12408,23 @@ public nonisolated enum WCAuthoredWorkflows {
           }
         ],
         "hint" : "How each fits the evidence.",
-        "key" : "compare",
+        "key" : "map",
         "opens" : "matrix",
-        "title" : "Compare on the evidence"
+        "title" : "Map to evidence"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "On the evidence, not preference.",
+            "key" : "weigh",
+            "kind" : "longText",
+            "label" : "Weighing"
+          }
+        ],
+        "hint" : "Where each is strong or weak.",
+        "key" : "weigh",
+        "opens" : "review",
+        "title" : "Weigh them"
       },
       {
         "fields" : [
@@ -12282,8 +12436,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Your interpretation, argued — never presented as the only one.",
-        "key" : "confirm",
+        "hint" : "Your interpretation, argued — never the only one.",
+        "key" : "decide",
         "title" : "Record your reading (your decision)"
       },
       {
@@ -12320,6 +12474,20 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "recap",
         "opens" : "handoff",
         "title" : "Confirm the outputs"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Storage and access.",
+            "key" : "retention",
+            "kind" : "longText",
+            "label" : "Retention"
+          }
+        ],
+        "hint" : "Where outputs live and how they're shared.",
+        "key" : "retention",
+        "opens" : "handoff",
+        "title" : "Retention & sharing"
       },
       {
         "fields" : [
@@ -12365,7 +12533,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.metadata" : {
-    "purpose" : "Record structured metadata per source — your working finding aid, cited to the source.",
+    "purpose" : "Record structured metadata per source — your finding aid, cited to the source. The app pre-fills what it can from the document, so you correct rather than key it all in.",
     "steps" : [
       {
         "fields" : [
@@ -12378,23 +12546,37 @@ public nonisolated enum WCAuthoredWorkflows {
           }
         ],
         "hint" : "Which sources to describe.",
-        "key" : "assemble",
+        "key" : "choose",
         "opens" : "sources",
         "title" : "Choose the sources"
       },
       {
         "fields" : [
           {
-            "help" : "Each field cited to the source — never invented.",
+            "help" : "Each field cited to the source — corrected, never invented.",
             "key" : "metadata",
             "kind" : "longText",
             "label" : "Metadata"
           }
         ],
-        "hint" : "Structured fields per source.",
-        "key" : "describe",
+        "hint" : "The app proposes fields from each document — check and fix them.",
+        "key" : "extract",
         "opens" : "dataLab",
-        "title" : "Record the metadata"
+        "title" : "Review the auto-extracted metadata"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Series/subseries or thematic grouping.",
+            "key" : "structure",
+            "kind" : "longText",
+            "label" : "Structure"
+          }
+        ],
+        "hint" : "Group and order for retrieval.",
+        "key" : "structure",
+        "opens" : "dataLab",
+        "title" : "Add finding-aid structure"
       },
       {
         "fields" : [
@@ -12449,16 +12631,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "What the method works on.",
+            "key" : "inputs",
+            "kind" : "longText",
+            "label" : "Inputs"
+          }
+        ],
+        "hint" : "Point it at the evidence — already indexed.",
+        "key" : "inputs",
+        "opens" : "matrix",
+        "title" : "Set the inputs"
+      },
+      {
+        "fields" : [
+          {
             "help" : "What it structured or surfaced.",
             "key" : "runNote",
             "kind" : "longText",
             "label" : "Result"
           }
         ],
-        "hint" : "Inputs and what it produced.",
+        "hint" : "Work through it.",
         "key" : "run",
         "opens" : "matrix",
-        "title" : "Run it"
+        "title" : "Run & read"
       },
       {
         "fields" : [
@@ -12484,7 +12680,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "The members and inclusion basis.",
+            "help" : "Members and inclusion basis.",
             "key" : "group",
             "kind" : "longText",
             "label" : "Group",
@@ -12499,13 +12695,27 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
+            "help" : "e.g. origin, office, dates, kin, wealth.",
+            "key" : "template",
+            "kind" : "longText",
+            "label" : "Fields"
+          }
+        ],
+        "hint" : "The attributes you'll record for everyone.",
+        "key" : "template",
+        "opens" : "dataLab",
+        "title" : "Set the template fields"
+      },
+      {
+        "fields" : [
+          {
             "help" : "Only what the evidence supports.",
             "key" : "entries",
             "kind" : "longText",
             "label" : "Entries"
           }
         ],
-        "hint" : "Each member's fields, cited.",
+        "hint" : "Each member's fields, cited — the app pulls known facts per person.",
         "key" : "compile",
         "opens" : "dossier",
         "title" : "Compile the entries"
@@ -12513,7 +12723,7 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What you confirm — never assert unknown biography.",
+            "help" : "Never assert unknown biography.",
             "key" : "basis",
             "kind" : "longText",
             "label" : "Confirmation",
@@ -12543,7 +12753,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.protocol" : {
-    "purpose" : "Fix the research question, scope, and authorized corpus before evidence is touched — the protocol that prevents drift.",
+    "purpose" : "Fix the research question, criteria, search strategy and corpus before touching evidence — the protocol that prevents drift.",
     "steps" : [
       {
         "fields" : [
@@ -12555,7 +12765,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "The question this review answers.",
+        "hint" : "The specific question this review answers.",
         "key" : "question",
         "opens" : "sources",
         "title" : "State the research question"
@@ -12563,22 +12773,57 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What's in and out.",
-            "key" : "criteria",
+            "help" : "Prior work and the gap this fills.",
+            "key" : "rationale",
             "kind" : "longText",
-            "label" : "Inclusion criteria"
+            "label" : "Background"
+          }
+        ],
+        "hint" : "Why it matters and what's already known.",
+        "key" : "rationale",
+        "opens" : "findings",
+        "title" : "Background & rationale"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What's in.",
+            "key" : "include",
+            "kind" : "longText",
+            "label" : "Inclusion",
+            "required" : true
           },
           {
-            "help" : "The period this covers.",
+            "help" : "What's out.",
+            "key" : "exclude",
+            "kind" : "longText",
+            "label" : "Exclusion"
+          },
+          {
+            "help" : "The period covered.",
             "key" : "window",
             "kind" : "dateRange",
             "label" : "Records window"
           }
         ],
-        "hint" : "What qualifies a source, and the period covered.",
+        "hint" : "What qualifies a source, and what disqualifies it.",
         "key" : "criteria",
         "opens" : "sources",
-        "title" : "Inclusion criteria & window"
+        "title" : "Inclusion / exclusion criteria"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Repositories, databases, and search terms.",
+            "key" : "strategy",
+            "kind" : "longText",
+            "label" : "Sources & terms"
+          }
+        ],
+        "hint" : "Where and how you'll search — the app indexes your corpus so the same search is instant and repeatable, not a manual re-read.",
+        "key" : "strategy",
+        "opens" : "search",
+        "title" : "Search strategy"
       },
       {
         "fields" : [
@@ -12586,13 +12831,32 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "The authorized corpus.",
             "key" : "corpus",
             "kind" : "longText",
-            "label" : "Corpus"
+            "label" : "Corpus",
+            "required" : true
           }
         ],
         "hint" : "The sources the review may draw on.",
         "key" : "corpus",
         "opens" : "sources",
         "title" : "Set the authorized corpus"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Confirm to fix the protocol.",
+            "key" : "decision",
+            "kind" : "choice",
+            "label" : "Protocol confirmed?",
+            "options" : [
+              "Confirmed",
+              "Needs revision"
+            ],
+            "required" : true
+          }
+        ],
+        "hint" : "Lock it before screening — changes after this are logged as amendments.",
+        "key" : "register",
+        "title" : "Register the protocol (your decision)"
       },
       {
         "fields" : [
@@ -12608,12 +12872,12 @@ public nonisolated enum WCAuthoredWorkflows {
         "key" : "open",
         "opens" : "handoff",
         "posts" : "IMP",
-        "title" : "Open the protocol"
+        "title" : "Open the review"
       }
     ]
   },
   "res.screening" : {
-    "purpose" : "Screen sources in or out by recorded, reversible criteria — PRISMA-style.",
+    "purpose" : "Screen sources in/out by recorded, reversible criteria — PRISMA-style, with the flow counts kept. Reversible screening beats deleting files you can't get back.",
     "steps" : [
       {
         "fields" : [
@@ -12633,30 +12897,64 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Each source in/out, with reason — reversible.",
-            "key" : "decisions",
-            "kind" : "longText",
-            "label" : "Screening decisions"
+            "help" : "Total before screening.",
+            "key" : "identified",
+            "kind" : "number",
+            "label" : "Records identified"
           }
         ],
-        "hint" : "Include/exclude each source.",
-        "key" : "screen",
+        "hint" : "How many records the search returned — the app counts your corpus for you.",
+        "key" : "identify",
         "opens" : "search",
-        "title" : "Screen the corpus"
+        "title" : "Identify the records"
       },
       {
         "fields" : [
           {
-            "help" : "What you confirm.",
-            "key" : "basis",
-            "kind" : "longText",
-            "label" : "Confirmation",
-            "required" : true
+            "help" : "How many.",
+            "key" : "removed",
+            "kind" : "number",
+            "label" : "Duplicates removed"
           }
         ],
-        "hint" : "Confirm the screen — never auto-exclude silently.",
-        "key" : "confirm",
-        "title" : "Confirm screening (your decision)"
+        "hint" : "De-duplicate before screening.",
+        "key" : "dedupe",
+        "opens" : "search",
+        "title" : "Remove duplicates"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Each in/out with reason — reversible.",
+            "key" : "screened",
+            "kind" : "longText",
+            "label" : "Screening decisions"
+          }
+        ],
+        "hint" : "Include or exclude on first pass.",
+        "key" : "screen",
+        "opens" : "search",
+        "title" : "Screen title/abstract"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Sources passing.",
+            "key" : "included",
+            "kind" : "number",
+            "label" : "Included",
+            "required" : true
+          },
+          {
+            "help" : "Full-text exclusions and why.",
+            "key" : "excluded",
+            "kind" : "longText",
+            "label" : "Excluded (with reason)"
+          }
+        ],
+        "hint" : "Check the shortlisted in full; never auto-exclude silently.",
+        "key" : "eligible",
+        "title" : "Full-text eligibility (your decision)"
       },
       {
         "fields" : [
@@ -12668,7 +12966,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "required" : true
           }
         ],
-        "hint" : "Assemble the screening log.",
+        "hint" : "Assemble the PRISMA-style log.",
         "key" : "produce",
         "opens" : "handoff",
         "posts" : "RPT",
@@ -12677,7 +12975,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.source-criticism" : {
-    "purpose" : "Assess origin, bias, and reliability of sources — never declare truth from a single source.",
+    "purpose" : "Assess sources with external and internal criticism — never declare truth from a single source.",
     "steps" : [
       {
         "fields" : [
@@ -12697,22 +12995,44 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "What strengthens or weakens each.",
-            "key" : "factors",
+            "help" : "Genuineness and provenance.",
+            "key" : "external",
             "kind" : "longText",
-            "label" : "Factors"
-          },
-          {
-            "help" : "Your assessment — a judgement.",
-            "key" : "rating",
-            "kind" : "longText",
-            "label" : "Assessment"
+            "label" : "External criticism"
           }
         ],
-        "hint" : "Origin, purpose, bias, reliability.",
-        "key" : "assess",
+        "hint" : "Origin, authenticity, provenance — is it what it claims to be?",
+        "key" : "external",
         "opens" : "review",
-        "title" : "Assess each"
+        "title" : "External criticism"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "What the author knew, intended, and may distort.",
+            "key" : "internal",
+            "kind" : "longText",
+            "label" : "Internal criticism"
+          }
+        ],
+        "hint" : "Bias, purpose, reliability of the content.",
+        "key" : "internal",
+        "opens" : "review",
+        "title" : "Internal criticism"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "Independent support/conflict.",
+            "key" : "corroboration",
+            "kind" : "longText",
+            "label" : "Corroboration"
+          }
+        ],
+        "hint" : "What independent sources confirm or contradict — the app flags overlaps.",
+        "key" : "corroborate",
+        "opens" : "matrix",
+        "title" : "Corroborate"
       },
       {
         "fields" : [
@@ -12747,7 +13067,7 @@ public nonisolated enum WCAuthoredWorkflows {
     ]
   },
   "res.transcription" : {
-    "purpose" : "Transcribe and code source text with locators — unheard words are never asserted.",
+    "purpose" : "Transcribe and code source text with locators — the app gives you an OCR/speech draft to correct, so you're editing not typing from scratch. Unheard words are never asserted.",
     "steps" : [
       {
         "fields" : [
@@ -12767,16 +13087,30 @@ public nonisolated enum WCAuthoredWorkflows {
       {
         "fields" : [
           {
-            "help" : "Mark anything uncertain — never assert unheard words.",
+            "help" : "Mark anything uncertain — never assert unheard/illegible words.",
             "key" : "transcript",
             "kind" : "longText",
-            "label" : "Transcript & codes"
+            "label" : "Transcript"
           }
         ],
-        "hint" : "Transcribe with locators and code passages.",
+        "hint" : "Fix the app's draft against the original.",
         "key" : "transcribe",
         "opens" : "findings",
-        "title" : "Transcribe & code"
+        "title" : "Correct the draft"
+      },
+      {
+        "fields" : [
+          {
+            "help" : "So each passage reopens its exact spot.",
+            "key" : "locators",
+            "kind" : "longText",
+            "label" : "Locators"
+          }
+        ],
+        "hint" : "Anchor passages to page/timecode.",
+        "key" : "locators",
+        "opens" : "findings",
+        "title" : "Add locators"
       },
       {
         "fields" : [
