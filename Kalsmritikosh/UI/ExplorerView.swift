@@ -102,6 +102,10 @@ public struct ExplorerView: View {
                 Task { await runSearch() }
             } label: { Image(systemName: "arrow.right.circle.fill") }
             .disabled(query.trimmingCharacters(in: .whitespaces).count < 2)
+            .guidance(GuidanceTip("Explore",
+                                  what: "Explores the graph of people, organizations and documents starting from your term — following the relationships in your evidence.",
+                                  enabledWhen: "Type at least two characters."),
+                      enabled: query.trimmingCharacters(in: .whitespaces).count >= 2)
         }
         .padding(10)
     }

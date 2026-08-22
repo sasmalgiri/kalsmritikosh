@@ -150,6 +150,10 @@ public struct InsightsView: View {
         .buttonStyle(.borderedProminent)
         .tint(Theme.brand)
         .disabled(scanning)
+        .guidance(GuidanceTip("Scan",
+                              what: "Scans your archive for gaps and contradictions — rule-based, no AI needed.",
+                              enabledWhen: "Available when a scan isn't already running."),
+                  enabled: !scanning)
     }
 
     private var emptyGaps: some View {

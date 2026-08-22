@@ -242,6 +242,10 @@ public struct ConvertView: View {
         }
         .buttonStyle(.pressable)
         .disabled(disabled)
+        .guidance(GuidanceTip("Convert",
+                              what: "Turns the loaded file into the chosen format, fully on-device — nothing is uploaded.",
+                              enabledWhen: "Choose a file and a target format first."),
+                  enabled: !disabled)
     }
 
     // MARK: - Inputs list

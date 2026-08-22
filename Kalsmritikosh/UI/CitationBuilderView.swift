@@ -91,6 +91,10 @@ public struct CitationBuilderView: View {
                     } label: { Label("Copy", systemImage: "doc.on.doc") }
                     .buttonStyle(.borderless)
                     .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines) == ".")
+                    .guidance(GuidanceTip("Copy citation",
+                                          what: "Copies the layered Evidence Explained citation (full note · short note · bibliography) built from the fields above.",
+                                          enabledWhen: "Fill in at least one field first."),
+                              enabled: text.trimmingCharacters(in: .whitespacesAndNewlines) != ".")
                 }
                 Text(text).font(.callout).textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)

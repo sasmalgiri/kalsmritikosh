@@ -151,6 +151,10 @@ public struct SavedQueriesView: View {
                     }
                 }
                 .disabled(appState.investigationRunner == nil || runningID != nil)
+                .guidance(GuidanceTip("Re-investigate",
+                                      what: "Runs this saved question again against the current ledger and refreshes its cited answer.",
+                                      enabledWhen: "Available once the engine is ready and no re-investigation is running."),
+                          enabled: appState.investigationRunner != nil && runningID == nil)
                 Button {
                     copyToClipboard(item)
                 } label: {

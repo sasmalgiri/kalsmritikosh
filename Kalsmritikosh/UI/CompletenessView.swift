@@ -58,6 +58,10 @@ public struct CompletenessView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(loading)
+                .guidance(GuidanceTip("Refresh",
+                                      what: "Recomputes how fully your archive has been processed — parsed, structured, embedded.",
+                                      enabledWhen: "Wait for the current check to finish."),
+                          enabled: !loading)
             }
             // Filter chips highlight the silent-failure cohorts.
             HStack(spacing: 8) {
