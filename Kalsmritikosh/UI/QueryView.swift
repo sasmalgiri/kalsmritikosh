@@ -38,12 +38,20 @@ public struct QueryView: View {
     @State private var showSQL = false
     @State private var showExporter = false
 
-    // "Describe your query" — plain language → fills the builder (deterministic,
-    // offline). This is the safe slot an optional on-device LLM plugs into.
+    // "Describe your query" — plain language → fills the builder. Deterministic
+    // and offline by default; when Full power is on, an on-device model reads
+    // the request first (and still only fills this same safe builder).
     @State private var nlText = ""
     @State private var interpreted: String?
+    @State private var aiThinking = false
 
     public init() {}
+
+    /// The AI reading is offered only when Full power is on AND a capability
+    /// provider is actually available. Otherwise the deterministic parser runs.
+    private var aiAvailable: Bool {
+        FeatureFlags.shared.fullPowerMode && appState.capabilities != nil
+    }
 
     private var subject: QuerySubject {
         LedgerQueryCatalog.subject(subjectID) ?? LedgerQueryCatalog.subjects[0]
@@ -93,13 +101,23 @@ public struct QueryView: View {
                           text: $nlText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { smartFill() }
-                Button { smartFill() } label: { Label("Build it", systemImage: "wand.and.stars") }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(nlText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(aiThinking)
+                Button { smartFill() } label: {
+                    if aiThinking {
+                        HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Reading…") }
+                    } else {
+                        Label("Build it", systemImage: "wand.and.stars")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(aiThinking || nlText.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             if let interpreted {
                 Text("Interpreted as — \(interpreted). Edit the filters below, then Run.")
                     .font(.caption).foregroundStyle(.secondary)
+            } else if aiAvailable {
+                Text("On-device AI reads your request and fills the builder — you stay in control, and it never writes SQL. Runs privately on this Mac.")
+                    .font(.caption2).foregroundStyle(.tertiary)
             } else {
                 Text("Type a plain-language question; it fills the builder below — you stay in control, and it works offline.")
                     .font(.caption2).foregroundStyle(.tertiary)
@@ -311,13 +329,36 @@ public struct QueryView: View {
     }
 
     private func smartFill() {
-        guard let p = QueryNaturalParser.parse(nlText) else { return }
+        let text = nlText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        // Full power: let the on-device model read it, fall back to the
+        // deterministic parser if it can't. Lightning / no model: deterministic.
+        if aiAvailable, let caps = appState.capabilities {
+            aiThinking = true
+            Task {
+                if let p = await QueryAIParser.interpret(text, capabilities: caps) {
+                    aiThinking = false
+                    apply(p, viaAI: true)
+                } else if let p = QueryNaturalParser.parse(text) {
+                    aiThinking = false
+                    apply(p, viaAI: false)
+                } else {
+                    aiThinking = false
+                }
+            }
+        } else if let p = QueryNaturalParser.parse(text) {
+            apply(p, viaAI: false)
+        }
+    }
+
+    private func apply(_ p: QueryNaturalParser.Parsed, viaAI: Bool) {
         subjectID = p.query.subjectID
         filters = p.query.filters
         sortFieldKey = p.query.sortFieldKey
         sortDescending = p.query.sortDescending
         limit = p.query.limit
-        interpreted = p.summary
+        interpreted = viaAI ? "\(p.summary) (read by on-device AI)" : p.summary
         run()
     }
 
