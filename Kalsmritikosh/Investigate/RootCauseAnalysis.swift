@@ -235,6 +235,7 @@ public enum RCAReportRenderer {
         // Problem
         out += "## 1. Problem under investigation\n\n"
         out += (rca.problemStatement.trimmed.isEmpty ? "_Not stated._" : rca.problemStatement) + "\n\n"
+        out += "**Method:** Structured root-cause analysis — brainstorming, the 5 Whys, and an Ishikawa (fishbone) cause-and-effect diagram; causes traced to evidence and the root cause confirmed by a human.\n\n"
 
         // Brainstorm
         out += "## 2. Brainstorm — possible causes considered\n\n"
@@ -279,8 +280,9 @@ public enum RCAReportRenderer {
             }
         }
 
-        // Conclusion
-        out += "## 5. Conclusion\n\n"
+        // Conclusion — the analyst's opinion, distinct from the observed steps above.
+        out += "## 5. Conclusion (analyst's opinion)\n\n"
+        out += "_Sections 2–4 record the observed evidence and analysis; the conclusion below is the investigator's professional judgement drawn from them._\n\n"
         out += "**Root cause:** " + (rca.conclusion.rootCause.trimmed.isEmpty ? "_Not stated._" : rca.conclusion.rootCause) + "\n\n"
         if !rca.conclusion.contributingFactors.isEmpty {
             out += "**Contributing factors:**\n"

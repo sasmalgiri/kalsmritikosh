@@ -180,6 +180,7 @@ public enum ACHReportRenderer {
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Analysis of Competing Hypotheses — \(a.title.trimmed.isEmpty ? "Untitled" : a.title)\n\n"
         out += "**Question:** \(a.question.trimmed.isEmpty ? "_Not stated._" : a.question)\n"
+        out += "**Method:** Analysis of Competing Hypotheses (Heuer, *Psychology of Intelligence Analysis*, 1999) — evidence rated for consistency against each hypothesis; the hypothesis with the fewest inconsistencies is preferred.\n"
         out += "**Generated:** \(df.string(from: generatedAt))\n\n---\n\n"
 
         // Hypotheses
@@ -225,8 +226,9 @@ public enum ACHReportRenderer {
             out += "\n"
         }
 
-        // Conclusion
-        out += "## Conclusion\n\n"
+        // Conclusion — clearly labelled as the analyst's opinion, distinct from the rated evidence above.
+        out += "## Analyst's assessment (opinion)\n\n"
+        out += "_The matrix and scores above are the evidence and its rating; the assessment below is the analyst's judgement drawn from them._\n\n"
         if let id = a.conclusion.leadingHypothesisID, let h = a.hypotheses.first(where: { $0.id == id }) {
             out += "**Leading hypothesis:** \(h.text)\n"
         } else {
