@@ -120,7 +120,7 @@ public enum DataLabStarterTemplates {
                 .init("Insured", .text, help: "Policyholder / claimant."),
                 .init("Loss date", .date, help: "Date of loss."),
                 .init("Amount", .money, help: "Claimed / reserved amount."),
-                .init("Indicators", .text, help: "Red flags observed — each a lead, not proof."),
+                .init("Indicators", .text, help: "Red flags observed — each a lead, not proof. \(SIUFraudIndicators.helpSummary)"),
                 .init("Priority", .text, help: "Low / Medium / High / Critical."),
                 .init("Referred", .boolean, help: "Referred for full investigation?"),
                 .init("Notes", .text, help: "Next step / rationale.")
