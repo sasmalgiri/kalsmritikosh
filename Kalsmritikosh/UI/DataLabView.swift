@@ -636,6 +636,10 @@ public struct DataLabView: View {
                 Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
                     .controlSize(.small)
                     .disabled(rec.fields.isEmpty)
+                    .guidance(GuidanceTip("Add row",
+                                          what: "Adds one empty row you can type into. Values you enter are recorded as hand-entered; bind any cell to a source to make it cited.",
+                                          enabledWhen: "Add at least one column (field) first — a row needs columns to hold its values."),
+                              enabled: !rec.fields.isEmpty)
                 Button { addRows(5, rec) } label: { Text("+5") }
                     .controlSize(.small)
                     .disabled(rec.fields.isEmpty)

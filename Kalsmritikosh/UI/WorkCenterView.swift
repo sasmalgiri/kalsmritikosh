@@ -857,6 +857,10 @@ public struct WorkCenterView: View {
                             Button("Save") { save(run, seq: op.seq) }
                                 .disabled(!draftDirty)
                                 .help("Store your entries for this step")
+                                .guidance(GuidanceTip("Save",
+                                                      what: "Stores your entries for this step without finalizing it — you can keep editing.",
+                                                      enabledWhen: "You have unsaved edits to store."),
+                                          enabled: draftDirty)
                         }
                         Button {
                             confirm(run, op: op)
@@ -868,6 +872,12 @@ public struct WorkCenterView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!locked.isEmpty)
                         .help("Finalize this step and record who did it and when")
+                        .guidance(GuidanceTip(op.postsDocType.map { "Confirm & post \(WCDocType.displayName($0))" } ?? "Confirm step",
+                                              what: op.postsDocType != nil
+                                                ? "Finalizes this step, records who did it and when, and posts its numbered document — quotable later from the Documents register."
+                                                : "Finalizes this step and records who did it and when. Nothing is uploaded.",
+                                              enabledWhen: locked.first ?? "Fill this step's required fields first."),
+                                  enabled: locked.isEmpty)
                     }
                 }
 
