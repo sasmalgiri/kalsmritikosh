@@ -361,7 +361,23 @@ public struct WorkProductHandoffView: View {
                     Text("• \(a.decision.rawValue) — \(a.rationale) (\(a.actor))").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            conformanceReadout(model, snap)
         }
+    }
+
+    /// Sūtra conformance (step 4) — proves the run satisfied its constitution:
+    /// standard of proof declared, open items surfaced, approval made.
+    private func conformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
+        let record = RunRecord(
+            completedPhaseKinds: [.findings],
+            standardOfProofDeclared: model.proofStandard != nil,
+            openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
+            humanDecisionsMade: snap.isApproved ? [.findings] : [])
+        let report = SutraConformance.verify(run: record, against: SutraCompiler.shared())
+        return Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
+            .font(.caption)
+            .foregroundStyle(report.isConformant ? Color.green : Color.orange)
+            .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
     }
 
     @ViewBuilder
