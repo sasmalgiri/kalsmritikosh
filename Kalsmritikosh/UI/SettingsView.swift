@@ -23,6 +23,8 @@ public struct SettingsView: View {
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var showIngestGuide = false
+    /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
+    @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -1119,6 +1121,18 @@ public struct SettingsView: View {
             Button("File-type ingest guide") { showIngestGuide = true }
                 .font(.caption)
                 .buttonStyle(.borderless)
+
+            Divider().padding(.vertical, 4)
+
+            Toggle(isOn: $preferClassicSurfaces) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prefer classic surfaces").font(.callout.weight(.medium))
+                    Text("Use the previous fixed Analyze launchers instead of the newer catalog-driven studio launchers. Both surfaces stay available; this only changes which the persona hub offers by default.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
         }
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }

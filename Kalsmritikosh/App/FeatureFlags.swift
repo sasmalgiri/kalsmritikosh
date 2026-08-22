@@ -265,6 +265,21 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kFullPower)
     }
 
+    /// SURFACE STYLE (owner request 2026-08-22). When ON, analytic jobs present
+    /// the previous CLASSIC launchers (the fixed Analyze-phase buttons) instead
+    /// of the newer catalog-driven studio launchers. Default OFF (new studios).
+    /// The switch is instant and lossless — both surfaces stay available.
+    public var preferClassicSurfaces: Bool {
+        get { Self.preferClassicSurfacesValue() }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kPreferClassicSurfaces) }
+    }
+    public nonisolated static func preferClassicSurfacesValue() -> Bool {
+        UserDefaults.standard.bool(forKey: kPreferClassicSurfaces)   // default false
+    }
+    /// The UserDefaults key, exposed so SwiftUI views can bind it via @AppStorage
+    /// (keeping the Settings toggle and the affected surfaces reactive + in sync).
+    public nonisolated static var preferClassicSurfacesKey: String { kPreferClassicSurfaces }
+
     /// MoE depth: after the brain drafts an answer, a critic pass checks it
     /// against the experts' findings and a refine pass fixes any gaps
     /// (draft → self-critique → refine). Raises faithfulness at ~2-3× the
@@ -407,6 +422,7 @@ public final class FeatureFlags {
     // MARK: - Storage keys
 
     private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
+    private nonisolated static let kPreferClassicSurfaces  = "kalsmritikosh.feature.preferClassicSurfaces"
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "kalsmritikosh.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "kalsmritikosh.feature.expertRelevanceGating"

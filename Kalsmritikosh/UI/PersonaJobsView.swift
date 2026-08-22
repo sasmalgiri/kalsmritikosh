@@ -194,6 +194,9 @@ public struct PersonaJobsView: View {
     @State private var model: PersonaJobsModel?
     @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
     @State private var runnerJob: PersonaJob?       // JOB-RUN: job whose guided walkthrough is open
+    /// SURFACE STYLE switch (Settings): classic fixed Analyze launchers vs the
+    /// newer catalog-driven ones. Reactive via the shared FeatureFlags key.
+    @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
 
     public init() {}
 
@@ -519,14 +522,28 @@ public struct PersonaJobsView: View {
                         }
                         Spacer()
                         if phase == .analyze {
-                            // The analytic canvases are DERIVED from the Sūtra tooling catalog
-                            // (JobToolingCatalog), not hard-coded — the constitution drives the UI.
-                            ForEach(analyticLaunchers, id: \.dest) { item in
-                                Button { SurfaceOpener.open(item.dest) } label: {
-                                    Label(item.dest.title, systemImage: item.dest.icon).font(.caption)
+                            if preferClassicSurfaces {
+                                // CLASSIC — the previous fixed Analyze launchers (Settings switch).
+                                Button { SurfaceOpener.open(.hypotheses) } label: {
+                                    Label("Hypotheses (ACH)", systemImage: "tablecells").font(.caption)
                                 }
                                 .buttonStyle(.bordered).controlSize(.small)
-                                .help(item.help)
+                                .help("Open the Analysis of Competing Hypotheses matrix — rate evidence against rival explanations and rank by fewest inconsistencies.")
+                                Button { SurfaceOpener.open(.reasoning) } label: {
+                                    Label("Reasoning Studio", systemImage: "brain.head.profile").font(.caption)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help("Open the Reasoning Studio — brainstorm, 5 Whys and a fishbone diagram to a root-cause conclusion and an approval-ready report.")
+                            } else {
+                                // NEW — the analytic canvases DERIVED from the Sūtra tooling catalog
+                                // (JobToolingCatalog), not hard-coded — the constitution drives the UI.
+                                ForEach(analyticLaunchers, id: \.dest) { item in
+                                    Button { SurfaceOpener.open(item.dest) } label: {
+                                        Label(item.dest.title, systemImage: item.dest.icon).font(.caption)
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .help(item.help)
+                                }
                             }
                         }
                         Text("\(done)/\(phaseJobs.count)")
