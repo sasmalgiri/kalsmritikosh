@@ -212,7 +212,7 @@ public enum DataLabStarterTemplates {
                 .init("Citation", .text, help: "Drafted source citation."),
                 .init("Next step", .text, help: "What this points to next.")
             ],
-            note: "Log negative results too — a documented nil search is what builds a reasonably-exhaustive search."),
+            note: "Log negative results too — a documented nil search is what builds a reasonably-exhaustive search. \(GenealogicalProofStandard.helpSummary) \(GenealogicalProofStandard.disciplineNote)"),
 
         // ── Individual — accounts & assets inventory ─────────────────────────
         DataLabStarterTemplate(
@@ -247,7 +247,7 @@ public enum DataLabStarterTemplates {
                 .init("Disclosure needed", .boolean, help: "Sponsored / material connection to disclose?"),
                 .init("Status", .text, help: "Draft / review / published.")
             ],
-            note: "Flag material connections (FTC) and re-check source currency before it goes out.")
+            note: "Flag material connections (FTC) and re-check source currency before it goes out. \(PublishReadiness.helpSummary) \(PublishReadiness.disciplineNote)")
     ]
 
     /// Canonical analysis order (mirrors WorkbenchModePresetCatalog.simplePresets).
