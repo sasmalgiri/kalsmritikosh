@@ -157,10 +157,10 @@ public enum DataLabStarterTemplates {
                 .init("Date", .date, help: "When the conduct occurred."),
                 .init("Policy", .text, help: "Which policy / rule it engages."),
                 .init("Evidence", .text, help: "Statements, documents, records supporting or contradicting."),
-                .init("Finding", .text, help: "Your reasoned conclusion."),
-                .init("Substantiated", .boolean, help: "Is the allegation substantiated on the evidence?")
+                .init("Finding", .text, help: "Your reasoned conclusion. \(FindingClassifications.helpSummary)"),
+                .init("Substantiated", .boolean, help: "Classify the finding: \(FindingClassifications.all.map(\.label).joined(separator: " / ")).")
             ],
-            note: "Describe behaviour and evidence, not labels — 'raised voice, pointed finger', not 'aggressive'. \(WorkplaceFairnessPrinciples.helpSummary) \(WorkplaceFairnessPrinciples.disciplineNote)"),
+            note: "Describe behaviour and evidence, not labels — 'raised voice, pointed finger', not 'aggressive'. \(WorkplaceFairnessPrinciples.helpSummary) \(WorkplaceFairnessPrinciples.disciplineNote) \(FindingClassifications.disciplineNote)"),
 
         // ── Researcher — systematic-review data extraction ───────────────────
         DataLabStarterTemplate(

@@ -51,7 +51,7 @@ An honest, sourced comparison of what the app actually produces against the reco
 | Balance of probabilities | In the standard-of-proof set | ✅ |
 | Procedural fairness | Fairness checklist surfaced | ✅ |
 | Credibility assessment | Source reliability (Admiralty) + both sides preserved | ◑ (inputs present; no single "credibility assessment" narrative) |
-| **Findings classification vocabulary** | `substantiated` boolean in the matrix; FactStatus (proven/inferred/contradicted) | ❌ (no explicit Substantiated / Unsubstantiated / **Inconclusive** per allegation in the report) |
+| **Findings classification vocabulary** | **Substantiated / Partially / Unsubstantiated / Inconclusive** surfaced in the allegation matrix (`FindingClassifications`), with "unsubstantiated ≠ dishonest" discipline | ✅ *(added)* |
 | **Executive summary** | WCStakeholderSummary (plain-language) | ◑ (exists as a separate summary, not a 1-min exec summary atop the report) |
 | Recommendations gated by mandate | Recommendations free-form | ❌ (not gated to the authorised scope) |
 
@@ -67,7 +67,7 @@ An honest, sourced comparison of what the app actually produces against the reco
 | Documented method (5 Whys + fishbone) | Both, plus brainstorm; **method now named** | ✅ |
 | Complete why-chain, evidence per step | 5 Whys with an evidence field per rung | ✅ |
 | Root cause verified not assumed | Human-confirmed; evidence per step | ◑ (no explicit "verified" flag) |
-| **Dual root cause (occurrence + escape)** | Single root cause | ❌ (no "why it wasn't caught sooner") |
+| **Dual root cause (occurrence + escape)** | **Root cause + "why it wasn't caught sooner (escape cause)"** in model, studio, and report | ✅ *(added)* |
 | Contributing factors + recommendations | Both | ✅ |
 | Recommendations **tied to each root cause** | Free-form list | ❌ (not linked cause→action) |
 | Opinion vs observation | **Conclusion now labelled "analyst's opinion"** | ✅ *(added)* |
@@ -88,9 +88,9 @@ An honest, sourced comparison of what the app actually produces against the reco
 **Closed this pass (zero-risk, in the renderers):** every studio report now (a) **names its methodology/recognized standard**, and (b) **separates the analyst's opinion from the observed evidence** — the two most-cited professional/ Daubert requirements. Plus the standard **disclaimer** on every exported report (prior pass).
 
 ## Prioritised remaining gaps (next work)
-1. **Findings classification vocabulary** — add Substantiated / Unsubstantiated / **Inconclusive** (+ partially) per allegation/finding, with "because X, supported by Y". *(workplace-critical)*
-2. **Dual root cause (escape)** + **cause→action linkage** in the RCA model/report. *(8D)*
-3. **"Materials relied upon"** list and a labelled **"Limitations"** section in the *findings export*. *(forensic/Daubert)*
+1. ✅ ~~Findings classification vocabulary~~ — **done** (`FindingClassifications`, allegation matrix).
+2. ✅ ~~Dual root cause (escape)~~ — **done** (`escapeRootCause` in model/studio/report). *(cause→action linkage still free-form.)*
+3. **"Materials relied upon"** list and a labelled **"Limitations"** section in the *findings export* (WorkProductComposer — backend). *(forensic/Daubert)*
 4. **Executive summary** block atop the findings report; **gate recommendations** to the authorised mandate.
 
-Each is additive and testable; none needs a schema migration. Recommend doing #1 and #2 next — they're the highest-signal for real professional reviewers.
+Each is additive and testable; none needs a schema migration. The top two professional-reviewer gaps are now closed; #3–#4 touch the backend findings composer and are the next candidates.

@@ -462,6 +462,13 @@ public struct ReasoningStudioView: View {
                 .font(.body).frame(minHeight: 70)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
 
+            Text("Why it wasn't caught sooner — escape cause (optional)").font(.callout.weight(.semibold))
+            TextEditor(text: rca.conclusion.escapeRootCause)
+                .font(.body).frame(minHeight: 56)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+            Text("The 8D “escape” cause: why existing checks didn't detect this earlier. Fixing it prevents recurrence, not just this instance.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+
             listEditor(title: "Contributing factors",
                        items: rca.conclusion.contributingFactors,
                        newText: $newFactor, placeholder: "Add a contributing factor")

@@ -57,10 +57,25 @@ public struct RCAFishboneCategory: Codable, Identifiable, Hashable, Sendable {
 
 public struct RCAConclusion: Codable, Hashable, Sendable {
     public var rootCause: String = ""
+    /// 8D "escape" cause — why existing checks didn't catch this sooner.
+    public var escapeRootCause: String = ""
     public var contributingFactors: [String] = []
     public var recommendations: [String] = []
     public var summary: String = ""
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case rootCause, escapeRootCause, contributingFactors, recommendations, summary
+    }
+    // Tolerant decode so analyses saved before `escapeRootCause` existed still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        rootCause = try c.decodeIfPresent(String.self, forKey: .rootCause) ?? ""
+        escapeRootCause = try c.decodeIfPresent(String.self, forKey: .escapeRootCause) ?? ""
+        contributingFactors = try c.decodeIfPresent([String].self, forKey: .contributingFactors) ?? []
+        recommendations = try c.decodeIfPresent([String].self, forKey: .recommendations) ?? []
+        summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+    }
 }
 
 public enum RCAApprovalStatus: String, Codable, Sendable, CaseIterable {
@@ -194,6 +209,7 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
             r.fishbone[i].causes = [RCAFishboneCause(text: "Legacy intake form without validation")]
         }
         r.conclusion.rootCause = "The claim-intake workflow has no step that reconciles the stated injury date against the medical record, so a transcription discrepancy went undetected."
+        r.conclusion.escapeRootCause = "No verification/QA check on the intake form meant the discrepancy was never flagged before the file advanced."
         r.conclusion.contributingFactors = ["Legacy intake form without date validation", "Manual re-keying"]
         r.conclusion.recommendations = [
             "Add a mandatory date-reconciliation step at intake, cross-checking the medical record.",
@@ -284,6 +300,9 @@ public enum RCAReportRenderer {
         out += "## 5. Conclusion (analyst's opinion)\n\n"
         out += "_Sections 2–4 record the observed evidence and analysis; the conclusion below is the investigator's professional judgement drawn from them._\n\n"
         out += "**Root cause:** " + (rca.conclusion.rootCause.trimmed.isEmpty ? "_Not stated._" : rca.conclusion.rootCause) + "\n\n"
+        if !rca.conclusion.escapeRootCause.trimmed.isEmpty {
+            out += "**Why it wasn't caught sooner (escape cause):** \(rca.conclusion.escapeRootCause)\n\n"
+        }
         if !rca.conclusion.contributingFactors.isEmpty {
             out += "**Contributing factors:**\n"
             for f in rca.conclusion.contributingFactors where !f.trimmed.isEmpty { out += "- \(f)\n" }
