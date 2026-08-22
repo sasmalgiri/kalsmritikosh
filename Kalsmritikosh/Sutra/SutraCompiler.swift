@@ -39,6 +39,57 @@ public nonisolated enum SutraCompiler {
                              "Findings (with standard of proof)", "Open items", "Sign-off & seal"])
     }
 
+    /// STEP 5 — a SECOND discipline, authored as a Sūtra alone (no new UI, no new
+    /// engine). Clinical differential diagnosis IS an Analysis of Competing
+    /// Hypotheses: diagnoses are the hypotheses, findings are the evidence, and
+    /// you rule out by disconfirming — so the differential phase reuses the exact
+    /// same ACH matrix ("hypotheses" surface) and the same conformance gates.
+    /// Illustrative only — not medical advice.
+    public static func clinicalDifferential() -> Sutra {
+        func phase(_ kind: PersonaJobKind, _ title: String,
+                   _ obligations: [String], _ human: [String], _ prohibited: [String]) -> SutraPhase {
+            let p = JobToolingCatalog.profile(for: kind)
+            return SutraPhase(kind: kind, title: title,
+                              tier: p?.tier ?? .capture, method: p?.method ?? .none, surface: p?.surface,
+                              obligations: obligations, humanDecisions: human, prohibitedConclusions: prohibited)
+        }
+        let phases = [
+            phase(.caseIntake, "Presenting complaint & scope",
+                  ["Record the presenting complaint and relevant history"], ["Frame the clinical question"],
+                  ["Anchor on the first diagnosis that comes to mind"]),
+            phase(.dataLab, "Findings register",
+                  ["Record labs, imaging and exam findings — each with its source"], [],
+                  ["Record a finding without its source"]),
+            phase(.analysis, "Differential diagnosis",
+                  ["List candidate diagnoses as hypotheses", "Rate each finding for consistency — rule out by disconfirming",
+                   "Rank by fewest inconsistencies"],
+                  ["Record the leading diagnosis and a certainty"],
+                  ["Rule a diagnosis out on absence of evidence alone", "Claim certainty the evidence doesn't support"]),
+            phase(.contradictionGap, "Discrepant findings",
+                  ["Preserve conflicting findings; reconcile each explicitly"], ["Reconcile each discrepancy"],
+                  ["Ignore a discrepant result"]),
+            phase(.methods, "Investigations plan",
+                  ["Order tests that would discriminate the differential"], [],
+                  ["Order tests that cannot change management"]),
+            phase(.findings, "Assessment & plan",
+                  ["State the working diagnosis with a certainty (GRADE)", "Surface unresolved findings"],
+                  ["Sign off the assessment"],
+                  ["Assert a diagnosis beyond the stated certainty"]),
+            phase(.closure, "Disposition",
+                  ["Record follow-up and safety-net advice"], ["Decide the disposition"],
+                  ["Discharge with unresolved red-flag findings"])
+        ]
+        return Sutra(
+            id: "sutra.clinical.differential", version: 1,
+            title: "Clinical differential diagnosis",
+            provenance: "Clinical reasoning framed as competing hypotheses — reuses the same ACH engine, the same conformance gates, and no new UI. Illustrative only; not medical advice.",
+            reliabilityScale: "GRADE — certainty of evidence (High / Moderate / Low / Very low)",
+            phases: phases,
+            standardsOfProof: [],   // clinical certainty is GRADE, not a legal standard
+            reportSections: ["Presenting complaint", "Findings", "Differential (ACH)",
+                             "Assessment & certainty", "Plan & safety-net", "Sign-off"])
+    }
+
     /// A persona's constitution. Personas are lenses over the shared doctrine, so
     /// this is the shared Sutra with the persona's title applied. (Vocabulary
     /// overrides and persona-specific prohibited conclusions can be layered here.)
