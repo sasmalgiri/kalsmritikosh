@@ -89,6 +89,20 @@ struct InvestigationReviewDeskServiceTests {
         }
     }
 
+    @Test("Rating on the Admiralty scale maps to the canonical rating and stamps the code into the rationale")
+    func admiraltyScaleStampsCode() async throws {
+        let rig = try await rig()
+        let code = AdmiraltyCode(reliability: .b, credibility: .two)   // B2
+        let (assessment, review) = try await rig.reliabilitySvc.assessAndConfirm(
+            caseID: rig.caseID, sourceVersionID: rig.vA, admiralty: code, independence: .independent,
+            rationale: "primary custodian", actor: "lead", at: t0)
+        #expect(assessment.reliability == .high)   // B → high (the canonical stored rating)
+        #expect(review.decision == .confirmed)
+        #expect(assessment.rationale?.hasPrefix(code.rationaleLine) == true)
+        #expect(assessment.rationale?.contains("B2") == true)
+        #expect(assessment.rationale?.contains("primary custodian") == true)
+    }
+
     // MARK: - INV-12 contradiction & gap desk
 
     @Test("Only in-scope contradictions appear; both sides are preserved; confirm/dismiss is case-scoped and leaves global status untouched")
