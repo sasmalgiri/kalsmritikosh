@@ -111,6 +111,12 @@ public struct QueryView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(aiThinking || nlText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .guidance(GuidanceTip("Build it",
+                                      what: aiAvailable
+                                        ? "Type a question in plain words; an on-device model reads it and fills the filters below. It never writes SQL — you can edit everything before running."
+                                        : "Type a question in plain words and it fills the filters below for you, matched by simple rules. Works offline.",
+                                      enabledWhen: "Type a description first."),
+                          enabled: !aiThinking && !nlText.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             if let interpreted {
                 Text("Interpreted as — \(interpreted). Edit the filters below, then Run.")
@@ -164,6 +170,10 @@ public struct QueryView: View {
                 } label: { Label("Add filter", systemImage: "plus") }
                     .controlSize(.small)
                     .disabled(filterableFields.isEmpty)
+                    .guidance(GuidanceTip("Add filter",
+                                          what: "Adds a condition that narrows your results — for example ‘confidence greater than 0.8’ or ‘name contains Alice’. Add as many as you like; they all must match.",
+                                          enabledWhen: "Choose a subject above that has filterable fields."),
+                              enabled: !filterableFields.isEmpty)
             }
             if filters.isEmpty {
                 Text("No filters — running now returns everything (up to the row limit).")
@@ -256,6 +266,10 @@ public struct QueryView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(running)
+            .guidance(GuidanceTip("Run",
+                                  what: "Runs your query against the on-device ledger and lists every matching row, up to the row limit. Nothing leaves this Mac, and it only ever reads — never changes your data.",
+                                  enabledWhen: "Available once the current run finishes."),
+                      enabled: !running)
         }
     }
 
@@ -268,6 +282,8 @@ public struct QueryView: View {
                 if !r.rows.isEmpty {
                     Button { showExporter = true } label: { Label("Export CSV", systemImage: "square.and.arrow.down") }
                         .controlSize(.small)
+                        .guidance(GuidanceTip("Export CSV",
+                                              what: "Saves these results as a .csv file you can open in Excel, Numbers or Google Sheets. Only the rows shown here are exported."))
                 }
             }
             if r.rows.isEmpty {
