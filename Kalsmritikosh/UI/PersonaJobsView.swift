@@ -377,6 +377,11 @@ public struct PersonaJobsView: View {
                     .tint(Theme.brand)
                     .disabled(model.busy || model.intakeJob == nil
                               || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .guidance(GuidanceTip("Start matter",
+                                          what: "Opens a new case for this persona and runs its intake job — the container every later job works against. It's created in the chosen workspace.",
+                                          enabledWhen: "Type a matter title first (a workspace is created automatically if you have none)."),
+                              enabled: !(model.busy || model.intakeJob == nil
+                                         || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
                 if model.workspaceList.isEmpty {
                     Text("No workspace yet — starting your first matter creates one named \u{201C}General\u{201D} automatically.")
@@ -503,6 +508,13 @@ public struct PersonaJobsView: View {
                                 .foregroundStyle(Theme.brand)
                         }
                         Spacer()
+                        if phase == .analyze {
+                            Button { SurfaceOpener.open(.reasoning) } label: {
+                                Label("Reasoning Studio", systemImage: "brain.head.profile").font(.caption)
+                            }
+                            .buttonStyle(.bordered).controlSize(.small)
+                            .help("Open the Reasoning Studio — brainstorm, 5 Whys and a fishbone diagram to a root-cause conclusion and an approval-ready report.")
+                        }
                         Text("\(done)/\(phaseJobs.count)")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }

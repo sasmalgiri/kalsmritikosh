@@ -159,6 +159,52 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
         let done = working.filter { isComplete($0) }.count
         return Double(done) / Double(working.count)
     }
+
+    /// A fully-worked example so users can click straight through the whole flow
+    /// (an SIU-style claim inconsistency). Everything here is illustrative.
+    public static func sample(now: Date) -> RootCauseAnalysis {
+        var r = RootCauseAnalysis(title: "Claim CL-2291 — inconsistent injury date", now: now)
+        r.problemStatement = "The claimant's stated date of injury differs across three documents in file CL-2291 (intake form, recorded statement, and treating-physician note), which affects coverage and reserve."
+        r.brainstorm = [
+            RCAIdea(text: "Adjuster transcription error at intake", category: "People"),
+            RCAIdea(text: "No verification step against the medical record", category: "Process"),
+            RCAIdea(text: "Claimant recollection changed over time"),
+            RCAIdea(text: "Two separate incidents conflated"),
+            RCAIdea(text: "Legacy intake form has no date-cross-check", category: "Equipment & Tools"),
+            RCAIdea(text: "Possible misrepresentation", parked: true)
+        ]
+        r.fiveWhys = [
+            RCAWhyStep(question: "Why is the injury date inconsistent across documents?",
+                       answer: "The intake form date was never checked against the medical record.",
+                       evidence: "intake-form.pdf · p.1"),
+            RCAWhyStep(question: "Why was it never checked against the medical record?",
+                       answer: "There is no verification step in the claim-intake workflow.",
+                       evidence: "SIU-SOP §4"),
+            RCAWhyStep(question: "Why is there no verification step?",
+                       answer: "The legacy intake form predates the cross-check requirement and was never updated.")
+        ]
+        if let i = r.fishbone.firstIndex(where: { $0.name == "Process" }) {
+            r.fishbone[i].causes = [RCAFishboneCause(text: "No date cross-check at intake", likely: true),
+                                    RCAFishboneCause(text: "Manual re-keying of the date")]
+        }
+        if let i = r.fishbone.firstIndex(where: { $0.name == "Information & Evidence" }) {
+            r.fishbone[i].causes = [RCAFishboneCause(text: "Conflicting medical records", likely: true)]
+        }
+        if let i = r.fishbone.firstIndex(where: { $0.name == "Equipment & Tools" }) {
+            r.fishbone[i].causes = [RCAFishboneCause(text: "Legacy intake form without validation")]
+        }
+        r.conclusion.rootCause = "The claim-intake workflow has no step that reconciles the stated injury date against the medical record, so a transcription discrepancy went undetected."
+        r.conclusion.contributingFactors = ["Legacy intake form without date validation", "Manual re-keying"]
+        r.conclusion.recommendations = [
+            "Add a mandatory date-reconciliation step at intake, cross-checking the medical record.",
+            "Retire the legacy intake form; add field validation.",
+            "Re-interview the claimant to resolve the specific date."
+        ]
+        r.conclusion.summary = "The inconsistency is best explained by a process gap at intake rather than misrepresentation on the current evidence. Recommend a verification step and a targeted re-interview before any coverage decision."
+        r.approval.preparedBy = "SIU Investigator"
+        r.approval.submittedTo = "SIU Manager"
+        return r
+    }
 }
 
 extension String {

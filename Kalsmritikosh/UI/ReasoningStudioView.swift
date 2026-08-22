@@ -101,12 +101,19 @@ public struct ReasoningStudioView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Button { newAnalysis() } label: {
-                    Label("New investigation", systemImage: "plus.circle.fill")
+                HStack(spacing: 10) {
+                    Button { newAnalysis() } label: {
+                        Label("New investigation", systemImage: "plus.circle.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .guidance(GuidanceTip("New investigation",
+                                          what: "Starts a fresh root-cause analysis. You'll frame the problem, then work through brainstorm, 5 Whys, and a fishbone diagram to a conclusion and a submittable report."))
+                    Button { loadSample() } label: {
+                        Label("Load a worked example", systemImage: "wand.and.stars")
+                    }
+                    .guidance(GuidanceTip("Load a worked example",
+                                          what: "Adds a fully worked sample investigation (an SIU claim-inconsistency case) so you can click straight through every stage and see the finished report."))
                 }
-                .buttonStyle(.borderedProminent)
-                .guidance(GuidanceTip("New investigation",
-                                      what: "Starts a fresh root-cause analysis. You'll frame the problem, then work through brainstorm, 5 Whys, and a fishbone diagram to a conclusion and a submittable report."))
 
                 if analyses.isEmpty {
                     ContentUnavailableView("No investigations yet",
@@ -160,6 +167,11 @@ public struct ReasoningStudioView: View {
         rca.approval.preparedBy = NSFullUserName()
         analyses.append(rca); persist()
         activeID = rca.id; stage = .frame
+    }
+    private func loadSample() {
+        let rca = RootCauseAnalysis.sample(now: Date())
+        analyses.append(rca); persist()
+        activeID = rca.id; stage = .fishbone   // open where the visual payoff is
     }
     private func delete(_ rca: RootCauseAnalysis) {
         analyses.removeAll { $0.id == rca.id }; persist()
