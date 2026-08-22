@@ -483,6 +483,16 @@ public struct PersonaJobsView: View {
         }
     }
 
+    /// The analytic canvases to offer in the Analyze phase — derived from the
+    /// Sūtra tooling catalog (analyze-tier jobs that name a real surface).
+    private var analyticLaunchers: [(dest: Destination, help: String)] {
+        JobToolingCatalog.analyticKinds.compactMap { kind in
+            guard let p = JobToolingCatalog.profile(for: kind),
+                  let s = p.surface, let d = Destination(rawValue: s) else { return nil }
+            return (d, p.rationale)
+        }
+    }
+
     private func jobGrid(_ model: PersonaJobsModel) -> some View {
         let phased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
             let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
@@ -509,16 +519,15 @@ public struct PersonaJobsView: View {
                         }
                         Spacer()
                         if phase == .analyze {
-                            Button { SurfaceOpener.open(.hypotheses) } label: {
-                                Label("Hypotheses (ACH)", systemImage: "tablecells").font(.caption)
+                            // The analytic canvases are DERIVED from the Sūtra tooling catalog
+                            // (JobToolingCatalog), not hard-coded — the constitution drives the UI.
+                            ForEach(analyticLaunchers, id: \.dest) { item in
+                                Button { SurfaceOpener.open(item.dest) } label: {
+                                    Label(item.dest.title, systemImage: item.dest.icon).font(.caption)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help(item.help)
                             }
-                            .buttonStyle(.bordered).controlSize(.small)
-                            .help("Open the Analysis of Competing Hypotheses matrix — rate evidence against rival explanations and rank by fewest inconsistencies.")
-                            Button { SurfaceOpener.open(.reasoning) } label: {
-                                Label("Reasoning Studio", systemImage: "brain.head.profile").font(.caption)
-                            }
-                            .buttonStyle(.bordered).controlSize(.small)
-                            .help("Open the Reasoning Studio — brainstorm, 5 Whys and a fishbone diagram to a root-cause conclusion and an approval-ready report.")
                         }
                         Text("\(done)/\(phaseJobs.count)")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
