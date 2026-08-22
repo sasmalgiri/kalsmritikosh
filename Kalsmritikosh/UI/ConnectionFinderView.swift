@@ -60,6 +60,10 @@ public struct ConnectionFinderView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(entityA == nil || entityB == nil || entityA?.id == entityB?.id || searching)
+            .guidance(GuidanceTip("Find the connection",
+                                  what: "Finds the shortest chain of relationships linking the two parties, drawn from your evidence — or the documents they share.",
+                                  enabledWhen: "Pick two different people or organizations first."),
+                      enabled: !(entityA == nil || entityB == nil || entityA?.id == entityB?.id || searching))
 
             Divider()
 

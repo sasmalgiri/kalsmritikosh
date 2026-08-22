@@ -79,6 +79,10 @@ public struct CrossDocumentMatrixView: View {
                 Button("Search all") { run() }
                     .buttonStyle(.borderedProminent)
                     .disabled(query.trimmingCharacters(in: .whitespaces).count < 2)
+                    .guidance(GuidanceTip("Search all",
+                                          what: "Asks your question across every document at once and returns one cited answer per source — the cross-document matrix.",
+                                          enabledWhen: "Type at least two characters to search for."),
+                              enabled: query.trimmingCharacters(in: .whitespaces).count >= 2)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.primary.opacity(0.05), in: Capsule())
