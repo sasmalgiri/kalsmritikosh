@@ -15,7 +15,7 @@
 
 import Foundation
 
-public nonisolated struct SutraPhase: Sendable, Identifiable, Equatable {
+public nonisolated struct SutraPhase: Sendable, Identifiable, Equatable, Codable {
     public var id: String { kind.rawValue }
     public let kind: PersonaJobKind
     public let title: String
@@ -27,7 +27,7 @@ public nonisolated struct SutraPhase: Sendable, Identifiable, Equatable {
     public let prohibitedConclusions: [String]  // what it must never assert
 }
 
-public nonisolated struct Sutra: Sendable, Equatable {
+public nonisolated struct Sutra: Sendable, Equatable, Codable {
     public let id: String
     public let version: Int
     public let title: String

@@ -11,14 +11,27 @@
 import SwiftUI
 
 public struct SutraView: View {
-    private let disciplines = SutraCompiler.builtInDisciplines
-    @State private var selectedID = "investigation"
+    @Environment(AppState.self) private var appState
 
+    @State private var selectedID = "investigation"
+    // Custom disciplines drafted from an SOP by the on-device AI (persisted).
+    @AppStorage("kalsmritikosh.sutra.customDrafts") private var draftsBlob = ""
+    @State private var customDrafts: [Sutra] = []
+    @State private var loaded = false
+    @State private var sopText = ""
+    @State private var drafting = false
+    @State private var draftNote: String?
+
+    private var disciplines: [(id: String, label: String, sutra: Sutra)] {
+        SutraCompiler.builtInDisciplines + customDrafts.map { ($0.id, $0.title + " (draft)", $0) }
+    }
     /// The SAME inspector renders a DIFFERENT discipline — proof that one engine
     /// serves many subjects, each authored as a Sūtra alone (roadmap step 5).
     private var sutra: Sutra {
         disciplines.first { $0.id == selectedID }?.sutra ?? SutraCompiler.shared()
     }
+    private var isDraft: Bool { customDrafts.contains { $0.id == selectedID } }
+    private var aiAvailable: Bool { FeatureFlags.shared.fullPowerMode && appState.capabilities != nil }
 
     public init() {}
 
@@ -26,15 +39,90 @@ public struct SutraView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                if isDraft { draftBanner }
                 ForEach(PhaseTier.allCases, id: \.self) { tier in
                     let phases = sutra.phases(inTier: tier)
                     if !phases.isEmpty { tierSection(tier, phases) }
                 }
                 proofSection
+                importSection
             }
             .padding(24).frame(maxWidth: 940, alignment: .leading).frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationTitle("Constitution")
+        .onAppear(perform: loadDrafts)
+    }
+
+    private var draftBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "wand.and.stars").foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Drafted from your SOP — review before relying on it.").font(.caption.weight(.semibold))
+                Text("The AI only mapped your steps onto known phases; the engine assigned the tooling. Ratify it by keeping it, or discard it.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button(role: .destructive) { discardDraft() } label: { Label("Discard", systemImage: "trash") }
+                .controlSize(.small)
+        }
+        .padding(10).background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var importSection: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Paste a discipline's SOP; the on-device AI drafts a Sūtra you can review. It can only map steps onto the app's known phases — it never invents tooling, and nothing is adopted until you keep it. Full power only; runs privately on this Mac.")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                TextEditor(text: $sopText)
+                    .font(.callout).frame(minHeight: 120)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                HStack(spacing: 10) {
+                    Button { Task { await draftFromSOP() } } label: {
+                        if drafting { HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Drafting…") } }
+                        else { Label("Draft from SOP (AI)", systemImage: "wand.and.stars") }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(drafting || !aiAvailable || sopText.trimmingCharacters(in: .whitespaces).count < 20)
+                    if !aiAvailable {
+                        Text("Turn on Full power in Settings to draft from an SOP.")
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                }
+                if let draftNote { Text(draftNote).font(.caption).foregroundStyle(.secondary) }
+            }
+            .padding(.top, 6)
+        } label: {
+            Label("Import a discipline from an SOP (AI)", systemImage: "square.and.arrow.down.on.square").font(.callout.weight(.semibold))
+        }
+        .padding(12).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    // MARK: - Draft persistence
+
+    private func loadDrafts() {
+        guard !loaded else { return }
+        loaded = true
+        if let data = draftsBlob.data(using: .utf8), let d = try? JSONDecoder().decode([Sutra].self, from: data) {
+            customDrafts = d
+        }
+    }
+    private func persistDrafts() {
+        if let data = try? JSONEncoder().encode(customDrafts), let s = String(data: data, encoding: .utf8) { draftsBlob = s }
+    }
+    private func discardDraft() {
+        customDrafts.removeAll { $0.id == selectedID }; persistDrafts(); selectedID = "investigation"
+    }
+    private func draftFromSOP() async {
+        guard let caps = appState.capabilities else { return }
+        drafting = true; draftNote = nil
+        let result = await SutraDraftParser.draft(fromSOP: sopText, capabilities: caps)
+        drafting = false
+        guard let s = result else { draftNote = "Couldn't draft a Sūtra from that — try a clearer, step-by-step SOP."; return }
+        // De-dupe by id; keep the newest.
+        customDrafts.removeAll { $0.id == s.id }
+        customDrafts.append(s); persistDrafts()
+        selectedID = s.id; sopText = ""
+        draftNote = "Drafted “\(s.title)” with \(s.phases.count) phases — review it above, then keep or discard."
     }
 
     private var header: some View {
@@ -128,5 +216,5 @@ public struct SutraView: View {
 }
 
 #if DEBUG
-#Preview("Constitution") { NavigationStack { SutraView() }.frame(width: 980, height: 760) }
+#Preview("Constitution") { NavigationStack { SutraView() }.environment(AppState()).frame(width: 980, height: 760) }
 #endif
