@@ -338,6 +338,10 @@ public struct AskView: View {
             .foregroundStyle(.secondary)
             .help("Attach files — they're ingested into your archive and become searchable, citable evidence for this and every future question.")
             .disabled(appState.ingest == nil)
+            .guidance(GuidanceTip("Attach files",
+                                  what: "Ingests files into your archive so they become searchable, citable evidence for this and every future question. Nothing is uploaded.",
+                                  enabledWhen: "Available once the archive has finished starting up."),
+                      enabled: appState.ingest != nil)
             Button {
                 Task { await saveCurrentQuestion() }
             } label: {
@@ -347,6 +351,10 @@ public struct AskView: View {
             .foregroundStyle(.secondary)
             .help("Save this question for later (visible in the Saved surface).")
             .disabled(appState.savedQueries == nil || isBlank)
+            .guidance(GuidanceTip("Save question",
+                                  what: "Bookmarks this question so you can return to it from the Saved surface.",
+                                  enabledWhen: "Type a question first."),
+                      enabled: appState.savedQueries != nil && !isBlank)
             Button {
                 startInvestigation()
             } label: {
@@ -360,6 +368,10 @@ public struct AskView: View {
             .foregroundStyle(.secondary)
             .help("Decompose this question into focused sub-questions and synthesize an answer.")
             .disabled(appState.investigationRunner == nil || investigationInFlight || isBlank)
+            .guidance(GuidanceTip("Investigate",
+                                  what: "Breaks a big question into focused sub-questions, answers each from your evidence, and synthesizes a cited result. Slower than Ask, but deeper.",
+                                  enabledWhen: "Type a question, and wait for any running investigation to finish."),
+                      enabled: appState.investigationRunner != nil && !investigationInFlight && !isBlank)
             Button(action: submit) {
                 ZStack {
                     Circle().fill(isBlank ? AnyShapeStyle(Color.secondary.opacity(0.25)) : AnyShapeStyle(Theme.brandGradient()))
@@ -375,6 +387,10 @@ public struct AskView: View {
             .buttonStyle(.pressable)
             .keyboardShortcut(.return, modifiers: [])
             .disabled(asking || isBlank)
+            .guidance(GuidanceTip("Send",
+                                  what: "Answers your question from your on-device evidence, with citations, a confidence read, and any conflicts. Press Return to send.",
+                                  enabledWhen: "Type a question first."),
+                      enabled: !asking && !isBlank)
             .animation(Theme.springFast, value: asking)
             .padding(.trailing, 6)
             .padding(.bottom, 4)
