@@ -38,7 +38,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case transcripts
     case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
-    case authenticity, citations, freshness, trends
+    case authenticity, citations, freshness, trends, query
     case sources, convert, completeness, live
     case redaction, caseload
     case guide, settings
@@ -82,6 +82,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .citations:    return "Citations"
         case .freshness:    return "Freshness"
         case .trends:       return "Trends"
+        case .query:        return "Query"
         case .caseload:     return "Caseload"
         case .sources:      return "Sources"
         case .convert:      return "Convert"
@@ -130,6 +131,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .citations:    return "quote.bubble"
         case .freshness:    return "clock.badge.exclamationmark"
         case .trends:       return "chart.xyaxis.line"
+        case .query:        return "line.3.horizontal.decrease.circle"
         case .caseload:     return "square.stack.3d.up"
         case .sources:      return "folder"
         case .convert:      return "arrow.right.doc.on.clipboard"
@@ -194,6 +196,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .citations:    return "Build layered Evidence Explained citations — full note, short note, bibliography"
         case .freshness:    return "Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused"
         case .trends:       return "Patterns across everything — activity over time, event types, entity makeup"
+        case .query:        return "Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want"
         case .caseload:     return "Every matter triaged by how much attention it needs"
         case .sources:      return "Folders being watched and ingested"
         case .convert:      return "Turn files between formats, back and forth"
@@ -218,7 +221,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
             case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
-            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends]
+            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .settings]
             }
@@ -393,7 +396,7 @@ public struct RootView: View {
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
              .transcripts, .authenticity, .citations,
-             .freshness, .trends, .emailThreads:                      return .entities
+             .freshness, .trends, .emailThreads, .query:              return .entities
         case .dataLab:                                                return .dataLab
         case .connections, .explore, .matrix, .fundFlow:              return .relationships
         case .findings, .notebook, .dossier, .story, .review,
@@ -1280,6 +1283,7 @@ public struct RootView: View {
         case .citations:    CitationBuilderView()
         case .freshness:    FreshnessView()
         case .trends:       TrendsView()
+        case .query:        QueryView()
         case .caseload:     CaseloadView()
         case .sources:      SourcesView()
         case .convert:      ConvertView()
