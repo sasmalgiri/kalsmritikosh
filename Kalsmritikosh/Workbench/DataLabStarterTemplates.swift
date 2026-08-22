@@ -160,7 +160,7 @@ public enum DataLabStarterTemplates {
                 .init("Finding", .text, help: "Your reasoned conclusion."),
                 .init("Substantiated", .boolean, help: "Is the allegation substantiated on the evidence?")
             ],
-            note: "Describe behaviour and evidence, not labels — 'raised voice, pointed finger', not 'aggressive'."),
+            note: "Describe behaviour and evidence, not labels — 'raised voice, pointed finger', not 'aggressive'. \(WorkplaceFairnessPrinciples.helpSummary) \(WorkplaceFairnessPrinciples.disciplineNote)"),
 
         // ── Researcher — systematic-review data extraction ───────────────────
         DataLabStarterTemplate(
