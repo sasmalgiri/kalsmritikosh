@@ -31,7 +31,10 @@ struct RootCauseAnalysisTests {
         }
         r.conclusion.rootCause = "The reorder point was never configured."
         r.conclusion.contributingFactors = ["Manual PO process"]
-        r.conclusion.recommendations = ["Set an automatic reorder trigger", "Add a weekly stock review"]
+        r.conclusion.recommendations = [
+            RCARecommendation(text: "Set an automatic reorder trigger", addresses: .rootCause),
+            RCARecommendation(text: "Add a weekly stock review", addresses: .contributing)
+        ]
         r.conclusion.summary = "A missing reorder trigger caused the delay."
         r.approval.preparedBy = "A. Investigator"
         r.approval.submittedTo = "Operations Director"

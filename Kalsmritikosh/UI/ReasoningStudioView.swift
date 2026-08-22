@@ -472,9 +472,7 @@ public struct ReasoningStudioView: View {
             listEditor(title: "Contributing factors",
                        items: rca.conclusion.contributingFactors,
                        newText: $newFactor, placeholder: "Add a contributing factor")
-            listEditor(title: "Recommendations",
-                       items: rca.conclusion.recommendations,
-                       newText: $newRecommendation, placeholder: "Add a recommendation", numbered: true)
+            recommendationsEditor(rca)
 
             Text("Summary (for the reader)").font(.callout.weight(.semibold))
             TextEditor(text: rca.conclusion.summary)
@@ -483,6 +481,37 @@ public struct ReasoningStudioView: View {
 
             nextButton(to: .report)
         }
+    }
+
+    /// Recommendations, each linked to the cause it addresses (8D cause→action).
+    private func recommendationsEditor(_ rca: Binding<RootCauseAnalysis>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Recommendations").font(.callout.weight(.semibold))
+            Text("Tie each action to the cause it addresses — including the escape cause, so it prevents recurrence, not just this instance.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            ForEach(rca.conclusion.recommendations) { $rec in
+                HStack(spacing: 8) {
+                    TextField("Action", text: $rec.text).textFieldStyle(.plain)
+                    Picker("", selection: $rec.addresses) {
+                        ForEach(RCACauseTarget.allCases, id: \.self) { Text($0.label).tag($0) }
+                    }.labelsHidden().fixedSize()
+                    Button { rca.wrappedValue.conclusion.recommendations.removeAll { $0.id == rec.id } } label: {
+                        Image(systemName: "xmark.circle")
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 8) {
+                TextField("Add a recommendation", text: $newRecommendation).textFieldStyle(.roundedBorder)
+                    .onSubmit { addRecommendation(rca) }
+                Button { addRecommendation(rca) } label: { Image(systemName: "plus") }
+                    .disabled(newRecommendation.trimmed.isEmpty)
+            }
+        }
+        .padding(10).background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+    }
+    private func addRecommendation(_ rca: Binding<RootCauseAnalysis>) {
+        let t = newRecommendation.trimmed; guard !t.isEmpty else { return }
+        rca.wrappedValue.conclusion.recommendations.append(RCARecommendation(text: t)); newRecommendation = ""
     }
 
     private func listEditor(title: String, items: Binding<[String]>, newText: Binding<String>,

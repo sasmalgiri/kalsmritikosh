@@ -83,7 +83,7 @@ An honest, sourced comparison of what the app actually produces against the reco
 | ACH product | ✅ strong |
 | Forensic expert report | ✅ substantial (materials, methods, limitations, standard-of-proof, cited exhibits) |
 | Workplace investigation report | ✅ classification vocabulary + fairness + exec summary + balance of probabilities |
-| Root-cause / 8D | ✅ named method + dual root cause + opinion separation (cause→action linkage the only nicety left) |
+| Root-cause / 8D | ✅ named method + dual root cause + opinion separation + **cause→action linkage** |
 
 **Closed this pass (zero-risk, in the renderers):** every studio report now (a) **names its methodology/recognized standard**, and (b) **separates the analyst's opinion from the observed evidence** — the two most-cited professional/ Daubert requirements. Plus the standard **disclaimer** on every exported report (prior pass).
 
@@ -93,6 +93,8 @@ An honest, sourced comparison of what the app actually produces against the reco
 3. ✅ ~~Materials relied upon + Limitations~~ — **already present** in the findings composer ("Materials reviewed" + "Limitations" sections); benchmark corrected.
 4. ✅ ~~Executive summary~~ — a new `InvestigationExecutiveSummaryComposer` now leads the findings report (registry composer, deterministic, prose-only so it can't trip the evidence gate; seal/report==receipt preserved).
 
-**Only genuinely open item:** cause→action linkage in the RCA report is still free-form (each recommendation doesn't yet name which root/escape cause it addresses) — a minor structural nicety, not a parity blocker. Recommendation-gating by mandate is N/A for the findings report (it has no recommendations section).
+5. ✅ ~~Cause→action linkage~~ — **done**: RCA recommendations are now structured (`RCARecommendation`), each tied to the cause it addresses (root / escape / contributing / general), rendered in the report and editable in the studio; legacy `[String]` data decodes gracefully.
+
+Recommendation-gating by mandate is N/A for the *findings* report (it has no recommendations section).
 
 **Net: the flagship artifacts are at professional structural parity** — methodology-named, opinion-separated, disclaimer-led, cited, standard-of-proof-gated, classification-precise, 8D-complete, with an executive summary, materials, and limitations. Admissibility of any specific output still depends on the evidence and the human who signs it.

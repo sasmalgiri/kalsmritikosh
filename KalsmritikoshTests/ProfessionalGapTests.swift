@@ -47,14 +47,28 @@ struct RCADualRootCauseTests {
 
     @Test("Analyses saved before the escape field still decode (back-compat)")
     func codableBackCompat() throws {
-        // A conclusion JSON WITHOUT escapeRootCause (the old schema).
-        let oldJSON = #"{"rootCause":"r","contributingFactors":["a"],"recommendations":["b"],"summary":"s"}"#
+        // A conclusion JSON WITHOUT escapeRootCause, and recommendations as LEGACY [String].
+        let oldJSON = #"{"rootCause":"r","contributingFactors":["a"],"recommendations":["b","c"],"summary":"s"}"#
         let c = try JSONDecoder().decode(RCAConclusion.self, from: Data(oldJSON.utf8))
         #expect(c.rootCause == "r")
-        #expect(c.escapeRootCause == "")          // defaulted, not a decode failure
-        // And the new field round-trips.
+        #expect(c.escapeRootCause == "")                       // defaulted, not a decode failure
+        // Legacy string recommendations become structured (defaulting to root cause).
+        #expect(c.recommendations.map(\.text) == ["b", "c"])
+        #expect(c.recommendations.allSatisfy { $0.addresses == .rootCause })
+        // And the new fields round-trip.
         var c2 = c; c2.escapeRootCause = "why not caught"
+        c2.recommendations = [RCARecommendation(text: "fix", addresses: .escapeCause)]
         let data = try JSONEncoder().encode(c2)
-        #expect(try JSONDecoder().decode(RCAConclusion.self, from: data).escapeRootCause == "why not caught")
+        let back = try JSONDecoder().decode(RCAConclusion.self, from: data)
+        #expect(back.escapeRootCause == "why not caught")
+        #expect(back.recommendations.first?.addresses == .escapeCause)
+    }
+
+    @Test("The report ties each recommendation to the cause it addresses")
+    func causeActionLinkage() {
+        let md = RCAReportRenderer.markdown(.sample(now: t0), generatedAt: t0)
+        #expect(md.contains("each tied to the cause it addresses"))
+        #expect(md.contains("addresses the root cause"))
+        #expect(md.contains("addresses the escape cause"))
     }
 }

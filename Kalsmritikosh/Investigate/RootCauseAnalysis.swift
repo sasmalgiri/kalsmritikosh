@@ -55,25 +55,56 @@ public struct RCAFishboneCategory: Codable, Identifiable, Hashable, Sendable {
     public init(name: String, causes: [RCAFishboneCause] = []) { self.name = name; self.causes = causes }
 }
 
+/// Which cause a corrective action addresses (8D: actions tie to causes).
+public enum RCACauseTarget: String, Codable, Sendable, CaseIterable, Equatable {
+    case rootCause, escapeCause, contributing, general
+    public var label: String {
+        switch self {
+        case .rootCause: return "root cause"
+        case .escapeCause: return "escape cause (detection)"
+        case .contributing: return "contributing factor"
+        case .general: return "general"
+        }
+    }
+}
+
+/// A corrective/preventive action linked to the cause it addresses.
+public struct RCARecommendation: Codable, Hashable, Sendable, Identifiable {
+    public var id: UUID = UUID()
+    public var text: String
+    public var addresses: RCACauseTarget = .rootCause
+    public init(text: String, addresses: RCACauseTarget = .rootCause) {
+        self.text = text; self.addresses = addresses
+    }
+}
+
 public struct RCAConclusion: Codable, Hashable, Sendable {
     public var rootCause: String = ""
     /// 8D "escape" cause — why existing checks didn't catch this sooner.
     public var escapeRootCause: String = ""
     public var contributingFactors: [String] = []
-    public var recommendations: [String] = []
+    /// Actions, each tied to the cause it addresses (8D cause→action linkage).
+    public var recommendations: [RCARecommendation] = []
     public var summary: String = ""
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case rootCause, escapeRootCause, contributingFactors, recommendations, summary
     }
-    // Tolerant decode so analyses saved before `escapeRootCause` existed still load.
+    // Tolerant decode: `escapeRootCause` may be absent (older data), and
+    // `recommendations` may be legacy `[String]` — both handled gracefully.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         rootCause = try c.decodeIfPresent(String.self, forKey: .rootCause) ?? ""
         escapeRootCause = try c.decodeIfPresent(String.self, forKey: .escapeRootCause) ?? ""
         contributingFactors = try c.decodeIfPresent([String].self, forKey: .contributingFactors) ?? []
-        recommendations = try c.decodeIfPresent([String].self, forKey: .recommendations) ?? []
+        if let structured = ((try? c.decodeIfPresent([RCARecommendation].self, forKey: .recommendations)) ?? nil) {
+            recommendations = structured
+        } else if let legacy = ((try? c.decodeIfPresent([String].self, forKey: .recommendations)) ?? nil) {
+            recommendations = legacy.map { RCARecommendation(text: $0) }
+        } else {
+            recommendations = []
+        }
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
     }
 }
@@ -212,9 +243,10 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
         r.conclusion.escapeRootCause = "No verification/QA check on the intake form meant the discrepancy was never flagged before the file advanced."
         r.conclusion.contributingFactors = ["Legacy intake form without date validation", "Manual re-keying"]
         r.conclusion.recommendations = [
-            "Add a mandatory date-reconciliation step at intake, cross-checking the medical record.",
-            "Retire the legacy intake form; add field validation.",
-            "Re-interview the claimant to resolve the specific date."
+            RCARecommendation(text: "Add a mandatory date-reconciliation step at intake, cross-checking the medical record.", addresses: .rootCause),
+            RCARecommendation(text: "Add a QA/verification check so intake discrepancies are flagged before the file advances.", addresses: .escapeCause),
+            RCARecommendation(text: "Retire the legacy intake form; add field validation.", addresses: .contributing),
+            RCARecommendation(text: "Re-interview the claimant to resolve the specific date.", addresses: .general)
         ]
         r.conclusion.summary = "The inconsistency is best explained by a process gap at intake rather than misrepresentation on the current evidence. Recommend a verification step and a targeted re-interview before any coverage decision."
         r.approval.preparedBy = "SIU Investigator"
@@ -308,9 +340,10 @@ public enum RCAReportRenderer {
             for f in rca.conclusion.contributingFactors where !f.trimmed.isEmpty { out += "- \(f)\n" }
             out += "\n"
         }
-        if !rca.conclusion.recommendations.isEmpty {
-            out += "**Recommendations:**\n"
-            for (i, r) in rca.conclusion.recommendations.enumerated() where !r.trimmed.isEmpty { out += "\(i + 1). \(r)\n" }
+        let recs = rca.conclusion.recommendations.filter { !$0.text.trimmed.isEmpty }
+        if !recs.isEmpty {
+            out += "**Recommendations (each tied to the cause it addresses):**\n"
+            for (i, r) in recs.enumerated() { out += "\(i + 1). \(r.text) — _addresses the \(r.addresses.label)_\n" }
             out += "\n"
         }
         if !rca.conclusion.summary.trimmed.isEmpty {
