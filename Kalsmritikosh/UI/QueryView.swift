@@ -38,6 +38,11 @@ public struct QueryView: View {
     @State private var showSQL = false
     @State private var showExporter = false
 
+    // "Describe your query" — plain language → fills the builder (deterministic,
+    // offline). This is the safe slot an optional on-device LLM plugs into.
+    @State private var nlText = ""
+    @State private var interpreted: String?
+
     public init() {}
 
     private var subject: QuerySubject {
@@ -50,6 +55,7 @@ public struct QueryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
+                describeBar
                 subjectPicker
                 filtersSection
                 controlsRow
@@ -76,6 +82,28 @@ public struct QueryView: View {
             Text("Ask a precise question of your own data — pick what you're looking at, add a few filters, and run. No formulas, no code. Every result comes straight from your on-device ledger.")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var describeBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").foregroundStyle(.tint)
+                TextField("Describe it — e.g. “documents added last month”, “organizations with confidence over 0.8”, “open conflicts”",
+                          text: $nlText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { smartFill() }
+                Button { smartFill() } label: { Label("Build it", systemImage: "wand.and.stars") }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(nlText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let interpreted {
+                Text("Interpreted as — \(interpreted). Edit the filters below, then Run.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("Type a plain-language question; it fills the builder below — you stay in control, and it works offline.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
         }
     }
 
@@ -280,6 +308,17 @@ public struct QueryView: View {
             get: { fmt.date(from: text.wrappedValue) ?? Date() },
             set: { text.wrappedValue = fmt.string(from: $0) }
         )
+    }
+
+    private func smartFill() {
+        guard let p = QueryNaturalParser.parse(nlText) else { return }
+        subjectID = p.query.subjectID
+        filters = p.query.filters
+        sortFieldKey = p.query.sortFieldKey
+        sortDescending = p.query.sortDescending
+        limit = p.query.limit
+        interpreted = p.summary
+        run()
     }
 
     private func run() {
