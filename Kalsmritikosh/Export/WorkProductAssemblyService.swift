@@ -111,7 +111,8 @@ public actor WorkProductAssemblyService {
                 requiresDisclosures: true)
         case .investigationFindings:
             return WorkProductTemplatePlan(
-                composerIDs: [WorkProductComposerID("investigation.findings"),
+                composerIDs: [WorkProductComposerID("investigation.execsummary"),
+                              WorkProductComposerID("investigation.findings"),
                               WorkProductComposerID("evidence.gaps-conflicts"),
                               WorkProductComposerID("investigation.limitations")],
                 requiresDisclosures: true)

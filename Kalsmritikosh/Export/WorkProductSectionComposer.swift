@@ -121,6 +121,7 @@ public struct WorkProductComposerRegistry: Sendable {
         try reg.register(ClaimMatrixComposer())
         try reg.register(GapsAndConflictsComposer())
         try reg.register(SourcedSummaryComposer())
+        try reg.register(InvestigationExecutiveSummaryComposer())
         try reg.register(InvestigationFindingsComposer())
         try reg.register(InvestigationLimitationsComposer())
         try reg.register(FactMemoComposer())

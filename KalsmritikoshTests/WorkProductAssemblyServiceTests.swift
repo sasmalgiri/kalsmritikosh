@@ -130,7 +130,7 @@ struct WorkProductAssemblyServiceTests {
         }
         #expect(ids(.chronology) == ["history.chronology"])
         #expect(ids(.generalSummary) == ["claims.sourced-summary", "history.chronology", "evidence.gaps-conflicts"])
-        #expect(ids(.investigationFindings) == ["investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
+        #expect(ids(.investigationFindings) == ["investigation.execsummary", "investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
         #expect(ids(.factMemo) == ["fact-memo.core"])
     }
 

@@ -24,8 +24,9 @@ struct InvestigationReportTests {
     private func hex(_ c: Character) -> String { String(repeating: c, count: 64) }
 
     /// The fixed section order the investigation plan must always produce:
-    /// investigation.findings (4) → evidence.gaps-conflicts (2) → investigation.limitations (1).
-    private let investigationOrder = ["Mandate / scope", "Materials reviewed", "Methods",
+    /// investigation.execsummary (1) → investigation.findings (4) → evidence.gaps-conflicts (2)
+    /// → investigation.limitations (1).
+    private let investigationOrder = ["Executive summary", "Mandate / scope", "Materials reviewed", "Methods",
                                       "Findings", "Conflicts", "Gaps", "Limitations"]
 
     // MARK: - Rig
@@ -161,7 +162,7 @@ struct InvestigationReportTests {
     @Test("The investigation template routes through the investigation registry composers")
     func templateIsRegistryBacked() {
         let ids = WorkProductAssemblyService.plan(for: .investigationFindings).composerIDs.map(\.rawValue)
-        #expect(ids == ["investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
+        #expect(ids == ["investigation.execsummary", "investigation.findings", "evidence.gaps-conflicts", "investigation.limitations"])
     }
 
     @Test("The investigation report assembles in the exact plan section order")

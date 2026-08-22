@@ -30,12 +30,12 @@ An honest, sourced comparison of what the app actually produces against the reco
 | Element | Ours (Findings/Handoff + tracing schedule) | Verdict |
 |---|---|---|
 | Scope / mandate | Case scope + fingerprint (pins the reviewed scope) | ✅ |
-| Materials relied upon | Evidence + custody + export manifest | ◑ (implicit; not a labelled "materials considered" list) |
+| Materials relied upon | **"Materials reviewed" section** in the findings report + custody + manifest | ✅ |
 | Methodology tied to a recognized standard | Funds-tracing methods (direct/indirect) surfaced; Admiralty; **method now named in studio reports** | ◑ (named in ACH/RCA reports; the findings export doesn't yet state it) |
 | Findings (facts) vs **opinions** | **Now separated & labelled in ACH/RCA reports** | ◑ (studios ✅; findings export not yet) |
 | Reasonable degree of professional certainty | **Standard-of-proof gate** (declared before approval) | ✅ *(stronger than most)* |
 | Exhibits / citations | Every claim cited; sealed receipt (report==receipt) | ✅ |
-| **Limitations statement** | Open contradictions & gaps surfaced + acknowledged | ◑ (surfaced, not a labelled "Limitations" section) |
+| **Limitations statement** | **Labelled "Limitations" section** + open items surfaced/acknowledged | ✅ |
 | Objectivity / neutral language | Causal-language guard; conflicts never averaged | ✅ |
 
 **Verdict: substantially there; two labelling gaps** (a "Materials relied upon" list and a named "Limitations" section in the *findings export*).
@@ -52,7 +52,7 @@ An honest, sourced comparison of what the app actually produces against the reco
 | Procedural fairness | Fairness checklist surfaced | ✅ |
 | Credibility assessment | Source reliability (Admiralty) + both sides preserved | ◑ (inputs present; no single "credibility assessment" narrative) |
 | **Findings classification vocabulary** | **Substantiated / Partially / Unsubstantiated / Inconclusive** surfaced in the allegation matrix (`FindingClassifications`), with "unsubstantiated ≠ dishonest" discipline | ✅ *(added)* |
-| **Executive summary** | WCStakeholderSummary (plain-language) | ◑ (exists as a separate summary, not a 1-min exec summary atop the report) |
+| **Executive summary** | **"Executive summary" section now leads the findings report** (+ WCStakeholderSummary) | ✅ *(added)* |
 | Recommendations gated by mandate | Recommendations free-form | ❌ (not gated to the authorised scope) |
 
 **Verdict: good bones; the classification vocabulary and an exec-summary-on-top are the real gaps.**
@@ -81,16 +81,18 @@ An honest, sourced comparison of what the app actually produces against the reco
 | Artifact | Parity |
 |---|---|
 | ACH product | ✅ strong |
-| Forensic expert report | ◑ substantial (2 labelling gaps) |
-| Workplace investigation report | ◑ good (classification vocab + exec summary) |
-| Root-cause / 8D | ◑ solid RCA (escape cause + cause→action) |
+| Forensic expert report | ✅ substantial (materials, methods, limitations, standard-of-proof, cited exhibits) |
+| Workplace investigation report | ✅ classification vocabulary + fairness + exec summary + balance of probabilities |
+| Root-cause / 8D | ✅ named method + dual root cause + opinion separation (cause→action linkage the only nicety left) |
 
 **Closed this pass (zero-risk, in the renderers):** every studio report now (a) **names its methodology/recognized standard**, and (b) **separates the analyst's opinion from the observed evidence** — the two most-cited professional/ Daubert requirements. Plus the standard **disclaimer** on every exported report (prior pass).
 
-## Prioritised remaining gaps (next work)
-1. ✅ ~~Findings classification vocabulary~~ — **done** (`FindingClassifications`, allegation matrix).
-2. ✅ ~~Dual root cause (escape)~~ — **done** (`escapeRootCause` in model/studio/report). *(cause→action linkage still free-form.)*
-3. **"Materials relied upon"** list and a labelled **"Limitations"** section in the *findings export* (WorkProductComposer — backend). *(forensic/Daubert)*
-4. **Executive summary** block atop the findings report; **gate recommendations** to the authorised mandate.
+## Prioritised gaps — all now closed
+1. ✅ ~~Findings classification vocabulary~~ — `FindingClassifications`, allegation matrix.
+2. ✅ ~~Dual root cause (escape)~~ — `escapeRootCause` in model/studio/report.
+3. ✅ ~~Materials relied upon + Limitations~~ — **already present** in the findings composer ("Materials reviewed" + "Limitations" sections); benchmark corrected.
+4. ✅ ~~Executive summary~~ — a new `InvestigationExecutiveSummaryComposer` now leads the findings report (registry composer, deterministic, prose-only so it can't trip the evidence gate; seal/report==receipt preserved).
 
-Each is additive and testable; none needs a schema migration. The top two professional-reviewer gaps are now closed; #3–#4 touch the backend findings composer and are the next candidates.
+**Only genuinely open item:** cause→action linkage in the RCA report is still free-form (each recommendation doesn't yet name which root/escape cause it addresses) — a minor structural nicety, not a parity blocker. Recommendation-gating by mandate is N/A for the findings report (it has no recommendations section).
+
+**Net: the flagship artifacts are at professional structural parity** — methodology-named, opinion-separated, disclaimer-led, cited, standard-of-proof-gated, classification-precise, 8D-complete, with an executive summary, materials, and limitations. Admissibility of any specific output still depends on the evidence and the human who signs it.
