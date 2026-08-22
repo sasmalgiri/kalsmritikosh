@@ -218,7 +218,8 @@ public enum RCAReportRenderer {
     public static func markdown(_ rca: RootCauseAnalysis, generatedAt: Date) -> String {
         let df = DateFormatter(); df.dateStyle = .long; df.timeStyle = .short
         func date(_ d: Date?) -> String { d.map { df.string(from: $0) } ?? "—" }
-        var out = "# Root-Cause Analysis — \(rca.title.trimmed.isEmpty ? "Untitled" : rca.title)\n\n"
+        var out = LegalNotice.reportDisclaimer + "\n\n"
+        out += "# Root-Cause Analysis — \(rca.title.trimmed.isEmpty ? "Untitled" : rca.title)\n\n"
 
         // Sign-off header
         out += "**Status:** \(rca.approval.status.label)\n"

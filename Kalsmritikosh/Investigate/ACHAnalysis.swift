@@ -177,7 +177,8 @@ public enum ACHReportRenderer {
 
     public static func markdown(_ a: ACHAnalysis, generatedAt: Date) -> String {
         let df = DateFormatter(); df.dateStyle = .long; df.timeStyle = .short
-        var out = "# Analysis of Competing Hypotheses — \(a.title.trimmed.isEmpty ? "Untitled" : a.title)\n\n"
+        var out = LegalNotice.reportDisclaimer + "\n\n"
+        out += "# Analysis of Competing Hypotheses — \(a.title.trimmed.isEmpty ? "Untitled" : a.title)\n\n"
         out += "**Question:** \(a.question.trimmed.isEmpty ? "_Not stated._" : a.question)\n"
         out += "**Generated:** \(df.string(from: generatedAt))\n\n---\n\n"
 
