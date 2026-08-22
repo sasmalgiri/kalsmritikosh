@@ -11,17 +11,13 @@
 import SwiftUI
 
 public struct SutraView: View {
-    private enum Discipline: String, CaseIterable, Identifiable {
-        case investigation, clinical
-        var id: String { rawValue }
-        var label: String { self == .investigation ? "Investigation" : "Clinical differential" }
-    }
-    @State private var discipline: Discipline = .investigation
+    private let disciplines = SutraCompiler.builtInDisciplines
+    @State private var selectedID = "investigation"
 
     /// The SAME inspector renders a DIFFERENT discipline — proof that one engine
     /// serves many subjects, each authored as a Sūtra alone (roadmap step 5).
     private var sutra: Sutra {
-        discipline == .investigation ? SutraCompiler.shared() : SutraCompiler.clinicalDifferential()
+        disciplines.first { $0.id == selectedID }?.sutra ?? SutraCompiler.shared()
     }
 
     public init() {}
@@ -47,11 +43,11 @@ public struct SutraView: View {
                 .font(.largeTitle.weight(.bold))
             Text("The doctrine the app runs on — every phase, the tooling it earns, its obligations, the decisions reserved for a human, and the conclusions it must never assert. Write this once for a discipline and the app becomes its practice.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Picker("Discipline", selection: $discipline) {
-                ForEach(Discipline.allCases) { Text($0.label).tag($0) }
+            Picker("Discipline", selection: $selectedID) {
+                ForEach(disciplines, id: \.id) { Text($0.label).tag($0.id) }
             }
-            .pickerStyle(.segmented).frame(maxWidth: 360).labelsHidden()
-            Text("The same engine, a different constitution — the clinical differential is authored as a Sūtra alone (no new screens) and its differential phase reuses the very same Competing-Hypotheses matrix.")
+            .pickerStyle(.segmented).frame(maxWidth: 520).labelsHidden()
+            Text("One engine, many subjects — each discipline is authored as a Sūtra alone (no new screens). Switch and watch the same inspector render a different constitution; the clinical differential's analysis phase reuses the very same Competing-Hypotheses matrix.")
                 .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
                 tag(sutra.title, "doc.text")
