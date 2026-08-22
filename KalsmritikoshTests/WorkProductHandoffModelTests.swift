@@ -70,8 +70,9 @@ struct WorkProductHandoffModelTests {
         await model.buildFindings(actor: "me", at: t0)
         #expect(model.built != nil)
         #expect(model.lastError == nil)
-        // Approve: requires a rationale, then the snapshot reflects the recorded approval.
+        // Approve: requires a rationale AND a declared standard of proof (INV-19 gap fix).
         model.rationale = "reviewed and ready"
+        model.proofStandard = .preponderance
         await model.approve(actor: "me", at: t0)
         #expect(model.lastError == nil)
         #expect(model.snapshot?.isApproved == true)
@@ -107,6 +108,61 @@ struct WorkProductHandoffModelTests {
         #expect(model.lastError != nil)
         #expect(model.snapshot?.isClosed == false)
         #expect(model.snapshot?.closureHistory.isEmpty == true)
+    }
+
+    @Test("Open contradictions are surfaced and block approval until the approver acknowledges them")
+    func openItemsGateApproval() async throws {
+        let h = try await PersonaAcceptanceHarness.make(seed: "handoff-open")
+        let a = try await h.seedFact(value: "OPEN finding \(UUID().uuidString)", hashChar: "c")
+        let wsID = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "Open Items Matter", template: .investigation))
+        try await h.workspaces.addSource(a.fileID, to: wsID)
+        try await WorkspaceMembershipDeriver(database: h.db, workspaces: h.workspaces).deriveMembership(for: wsID)
+        _ = try await h.producer.backfill(at: t0)
+        let created = try await h.cases.createCase(workspaceID: wsID, title: "Open Items Matter", actor: "me", at: t0)
+        _ = try await h.cases.includeSource(caseID: created.id, expectedRevision: created.revision,
+                                            sourceRef: a.svID.uuidString, sourceKind: .sourceVersion, actor: "me", at: t0)
+        let store = EvidenceStore(database: h.db)
+        let custody = InvestigationCustodyService(
+            cases: h.cases, resolver: CaseRetrievalScopeResolver(evidence: store),
+            evidence: store, custody: CustodyRepository(database: h.db), database: h.db)
+        let handoff = WorkProductHandoffService(cases: h.cases, findings: h.findings, closure: h.closure, custody: custody)
+        let desk = InvestigationContradictionGapService(
+            cases: h.cases, resolver: CaseRetrievalScopeResolver(evidence: store), evidence: store,
+            contradictions: ContradictionsRepository(database: h.db), gaps: GapNodeRepository(database: h.db),
+            reviews: InvestigationDeskReviewRepository(database: h.db))
+        let model = WorkProductHandoffModel(handoff: handoff, findings: h.findings, closure: h.closure,
+                                            contradictionGap: desk)
+
+        // Seed one UNDECIDED in-scope contradiction on the authorized source's KO.
+        let koRows = try await h.db.query("SELECT id FROM knowledge_objects WHERE file_id = ? LIMIT 1;", [.uuid(a.fileID)])
+        let koID = try #require(koRows.first?.uuid(0))
+        try await h.db.exec("""
+            INSERT INTO contradictions (id, description, claim_a, claim_b, evidence_a, evidence_b, severity, status, detected_at, kind)
+            VALUES (?,?,?,?,?,?,?,?,?,?);
+            """, [.uuid(UUID()), .text("Amounts disagree"), .text("paid 500"), .text("paid 600"),
+                  .uuid(koID), .null, .text("high"), .text("open"), .real(1), .text("amount")])
+
+        await model.load(caseID: created.id)
+        #expect(model.openContradictionCount >= 1)
+        #expect(model.hasOpenItems)
+
+        await model.buildFindings(actor: "me", at: t0)
+        try #require(model.built != nil)
+        model.rationale = "reviewed"
+        model.proofStandard = .preponderance
+
+        // Not acknowledged → approval is blocked (fail-closed), nothing recorded.
+        await model.approve(actor: "me", at: t0)
+        #expect(model.lastError != nil)
+        #expect(model.snapshot?.isApproved != true)
+
+        // Acknowledge → approval proceeds and the recorded rationale notes the open items.
+        model.acknowledgedOpenItems = true
+        await model.approve(actor: "me", at: t0)
+        #expect(model.lastError == nil)
+        #expect(model.snapshot?.isApproved == true)
+        #expect(model.snapshot?.approvalHistory.last?.rationale.contains("acknowledged") == true)
     }
 
     @Test("Built findings export to valid file bytes (DOCX/PDF) and honor optional redaction")

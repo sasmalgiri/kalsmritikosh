@@ -24,6 +24,8 @@ public final class WorkProductHandoffModel {
     private let handoff: WorkProductHandoffService
     private let findings: InvestigationFindingsService
     private let closure: InvestigationClosureService
+    /// INV-12 desk — used only to SURFACE undecided contradictions/gaps at report time (read-only here).
+    private let contradictionGap: InvestigationContradictionGapService?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -36,6 +38,14 @@ public final class WorkProductHandoffModel {
     /// The standard of proof these findings are declared to meet. Required before
     /// approval — findings can't be approved without a declared evidentiary bar.
     public var proofStandard: EvidentiaryStandard?
+
+    /// Undecided (open) in-scope contradictions/gaps at report time — surfaced so findings are never approved
+    /// while tensions remain quietly unresolved. Populated on load from the INV-12 desk.
+    public private(set) var openContradictionCount = 0
+    public private(set) var openGapCount = 0
+    /// The approver's explicit acknowledgment they've seen the open items — required to approve when any exist.
+    public var acknowledgedOpenItems = false
+    public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
 
@@ -43,8 +53,11 @@ public final class WorkProductHandoffModel {
     public private(set) var lastError: String?
     public private(set) var busy = false
 
-    public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService, closure: InvestigationClosureService) {
+    public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService,
+                closure: InvestigationClosureService,
+                contradictionGap: InvestigationContradictionGapService? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
+        self.contradictionGap = contradictionGap
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -55,6 +68,9 @@ public final class WorkProductHandoffModel {
             built = nil
             rationale = ""
             proofStandard = nil
+            openContradictionCount = 0
+            openGapCount = 0
+            acknowledgedOpenItems = false
             unresolvedText = ""
             exportRedactionTerms = ""
             exportFormat = .pdf
@@ -69,6 +85,13 @@ public final class WorkProductHandoffModel {
         guard let caseID else { return }
         do { snapshot = try await handoff.snapshot(caseID: caseID) }
         catch { lastError = "\(error)"; snapshot = nil }
+        // Surface undecided in-scope contradictions/gaps (review == nil = no case disposition yet).
+        if let desk = contradictionGap {
+            let cs = (try? await desk.contradictions(caseID: caseID)) ?? []
+            let gs = (try? await desk.gaps(caseID: caseID)) ?? []
+            openContradictionCount = cs.filter { $0.review == nil }.count
+            openGapCount = gs.filter { $0.review == nil }.count
+        }
     }
 
     /// Build the case's findings work product over the shared assembly engine (does not approve or close).
@@ -90,9 +113,16 @@ public final class WorkProductHandoffModel {
         guard let std = proofStandard else {
             lastError = "Choose the standard of proof these findings meet before approving."; return
         }
+        if hasOpenItems && !acknowledgedOpenItems {
+            lastError = "\(openContradictionCount) open contradiction(s) and \(openGapCount) open gap(s) are still undecided in scope. Review them, then tick the acknowledgment before approving."
+            return
+        }
+        let awareness = hasOpenItems
+            ? " Open items at approval: \(openContradictionCount) contradiction(s), \(openGapCount) gap(s) — acknowledged by approver."
+            : " No open contradictions or gaps at approval."
         await perform {
             _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
-                                                        rationale: why, actor: actor, at: date)
+                                                        rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
             return "Findings approved under \(std.label)."
         }
@@ -309,6 +339,23 @@ public struct WorkProductHandoffView: View {
                     Label("Withdraw", systemImage: "xmark.seal")
                 }.buttonStyle(.bordered).disabled(model.busy || model.built == nil || !snap.isApproved)
             }
+            // Open items at report time — findings can't be approved while these are undecided
+            // unless the approver explicitly acknowledges them.
+            if model.hasOpenItems {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("\(model.openContradictionCount) open contradiction(s) and \(model.openGapCount) open gap(s) are still undecided in this case's scope.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Resolve them on the Contradiction & Gap desk, or acknowledge that you're approving with them open.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Toggle("I've reviewed the open items and am approving with them recorded as open",
+                           isOn: $model.acknowledgedOpenItems)
+                        .font(.caption)
+                }
+                .padding(10)
+                .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            }
             if !snap.approvalHistory.isEmpty {
                 ForEach(snap.approvalHistory) { a in
                     Text("• \(a.decision.rawValue) — \(a.rationale) (\(a.actor))").font(.caption).foregroundStyle(.secondary)
@@ -411,7 +458,8 @@ public struct WorkProductHandoffView: View {
         guard let handoff = appState.workProductHandoff,
               let findings = appState.investigationFindings,
               let closure = appState.investigationClosure else { return }
-        let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure)
+        let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure,
+                                                 contradictionGap: appState.investigationContradictionGap)
         await m.load(caseID: id)
         model = m
     }
