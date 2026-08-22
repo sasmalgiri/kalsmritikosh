@@ -178,7 +178,7 @@ public enum DataLabStarterTemplates {
                 .init("Result", .text, help: "Effect size / finding."),
                 .init("Risk of bias", .text, help: "Low / some concerns / high.")
             ],
-            note: "One row per included study; dual-extract independently where you can, then reconcile."),
+            note: "One row per included study; dual-extract independently where you can, then reconcile. \(ResearchAppraisal.helpSummary) \(ResearchAppraisal.disciplineNote)"),
 
         // ── Journalist — claim & source tracker ──────────────────────────────
         DataLabStarterTemplate(
@@ -195,7 +195,7 @@ public enum DataLabStarterTemplates {
                 .init("Corroborations", .number, help: "How many independent sources confirm it."),
                 .init("Notes", .text, help: "Caveats, denials, open questions.")
             ],
-            note: "Presence in a database is not verification — corroborate independently, and note when a source declined."),
+            note: "Presence in a database is not verification — corroborate independently, and note when a source declined. \(JournalisticVerification.helpSummary) \(JournalisticVerification.disciplineNote)"),
 
         // ── Genealogist — research log (GPS) ─────────────────────────────────
         DataLabStarterTemplate(
