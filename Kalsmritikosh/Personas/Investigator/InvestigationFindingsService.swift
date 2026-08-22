@@ -74,6 +74,18 @@ public actor InvestigationFindingsService {
                                     rationale: rationale, actor: actor, at: date)
     }
 
+    /// Approve findings under an EXPLICIT standard of proof (INV-19 gap fix). The chosen standard is stamped
+    /// into the recorded rationale so the approval states, on its face, the evidentiary threshold applied — an
+    /// approval can never be recorded without one. Scope, receipt and fingerprint behaviour are unchanged; this
+    /// only composes the rationale and delegates to the base recorder.
+    @discardableResult
+    public func approveFindings(caseID: UUID, findings: InvestigationFindings, proofStandard: EvidentiaryStandard,
+                                rationale: String, actor: String, at date: Date) async throws -> InvestigationFindingsApproval {
+        let why = rationale.trimmingCharacters(in: .whitespacesAndNewlines)
+        let composed = why.isEmpty ? proofStandard.rationaleLine : "\(proofStandard.rationaleLine) \(why)"
+        return try await approveFindings(caseID: caseID, findings: findings, rationale: composed, actor: actor, at: date)
+    }
+
     /// Withdraw approval of a findings run (a new recorded decision; the prior approval is preserved).
     @discardableResult
     public func withdrawApproval(caseID: UUID, findings: InvestigationFindings, rationale: String,

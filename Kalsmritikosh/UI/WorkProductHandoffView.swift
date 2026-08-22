@@ -33,6 +33,9 @@ public final class WorkProductHandoffModel {
 
     /// Reviewer inputs.
     public var rationale: String = ""
+    /// The standard of proof these findings are declared to meet. Required before
+    /// approval — findings can't be approved without a declared evidentiary bar.
+    public var proofStandard: EvidentiaryStandard?
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
 
@@ -51,6 +54,7 @@ public final class WorkProductHandoffModel {
         if self.caseID != caseID {
             built = nil
             rationale = ""
+            proofStandard = nil
             unresolvedText = ""
             exportRedactionTerms = ""
             exportFormat = .pdf
@@ -83,10 +87,14 @@ public final class WorkProductHandoffModel {
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for approval."; return }
+        guard let std = proofStandard else {
+            lastError = "Choose the standard of proof these findings meet before approving."; return
+        }
         await perform {
-            _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, rationale: why, actor: actor, at: date)
+            _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
+                                                        rationale: why, actor: actor, at: date)
             await self.refresh()
-            return "Findings approved."
+            return "Findings approved under \(std.label)."
         }
     }
 
@@ -271,6 +279,21 @@ public struct WorkProductHandoffView: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 8) {
             Text("Findings").font(.headline)
+            // Standard of proof — findings can't be approved without a declared bar.
+            HStack(spacing: 8) {
+                Text("Standard of proof").font(.caption).foregroundStyle(.secondary)
+                Picker("Standard of proof", selection: $model.proofStandard) {
+                    Text("Choose…").tag(Optional<EvidentiaryStandard>.none)
+                    ForEach(EvidentiaryStandard.allCases, id: \.self) { s in Text(s.label).tag(Optional(s)) }
+                }
+                .labelsHidden().frame(maxWidth: 300)
+                .guidance(GuidanceTip("Standard of proof",
+                                      what: "The evidentiary bar these findings are declared to meet (e.g. balance of probabilities, clear and convincing, beyond reasonable doubt). It is stamped into the approval record so the report states the threshold it was tested against.",
+                                      enabledWhen: nil))
+            }
+            if let s = model.proofStandard {
+                Text(s.detail).font(.caption2).foregroundStyle(.secondary)
+            }
             HStack(spacing: 10) {
                 Button { Task { await model.buildFindings(actor: "me", at: Date()) } } label: {
                     Label("Build findings", systemImage: "doc.badge.gearshape")
@@ -278,6 +301,10 @@ public struct WorkProductHandoffView: View {
                 Button { Task { await model.approve(actor: "me", at: Date()) } } label: {
                     Label("Approve", systemImage: "checkmark.seal.fill")
                 }.buttonStyle(.borderedProminent).disabled(model.busy || model.built == nil)
+                    .guidance(GuidanceTip("Approve findings",
+                                          what: "Records your human approval of the built findings under the chosen standard of proof. Approval authorizes the report — it does not verify the world or close the matter.",
+                                          enabledWhen: "Build findings, choose a standard of proof, and enter a rationale (below) first."),
+                              enabled: !(model.busy || model.built == nil))
                 Button { Task { await model.withdraw(actor: "me", at: Date()) } } label: {
                     Label("Withdraw", systemImage: "xmark.seal")
                 }.buttonStyle(.bordered).disabled(model.busy || model.built == nil || !snap.isApproved)

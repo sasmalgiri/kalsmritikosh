@@ -175,6 +175,26 @@ struct InvestigationFindingsServiceTests {
         #expect(history.first?.workProductRunID == f.run.id)   // the prior approval is intact
     }
 
+    @Test("Approval under a standard of proof stamps the evidentiary bar into the recorded rationale")
+    func approvalStampsStandardOfProof() async throws {
+        let r = try await rig()
+        let a = try await seedFact(r, value: "fact \(UUID().uuidString)")
+        let ws = try await makeWorkspace(r, files: [a.fileID])
+        _ = try await r.producer.backfill(at: t0)
+        let c = try await makeCase(r, ws: ws.id, authorize: [a.svID])
+        let f = try await r.service.buildFindings(caseID: c.id, access: exportAccess(ws.id), actor: "lead", at: t0)
+
+        let approved = try await r.service.approveFindings(
+            caseID: c.id, findings: f, proofStandard: .clearAndConvincing,
+            rationale: "objectives met", actor: "lead", at: t0)
+        #expect(approved.decision == .approved)
+        // The recorded rationale names the threshold on its face, then the reviewer's words.
+        #expect(approved.rationale.hasPrefix(EvidentiaryStandard.clearAndConvincing.rationaleLine))
+        #expect(approved.rationale.contains("objectives met"))
+        let latest = try await r.service.latestApproval(caseID: c.id)
+        #expect(latest?.rationale.contains("Clear and convincing") == true)
+    }
+
     @Test("Report==receipt: the receipt is built from the SAME product, and the run reopens to the identical seal")
     func reportEqualsReceiptAndReopens() async throws {
         let r = try await rig()
