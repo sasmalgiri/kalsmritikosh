@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kalsmritikosh — private, lightning-fast evidence workbench (with or without AI)</title>
+<title>Kalsmritikosh — why can't you just ask your own documents? Now you can, privately.</title>
 <meta name="description" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Case chronology, privilege log, document review and Bates-style production for solo and small law firms — plus workflows for investigators, SIU insurance fraud, forensic accounting, workplace investigations, journalism, research, and genealogy (Genealogical Proof Standard). One-time price. Nothing is uploaded, ever." />
 <style>
   :root{
@@ -43,13 +43,13 @@
   header.hero::before{content:"";position:absolute;inset:-40% 0 auto 0;height:600px;
     background:radial-gradient(60% 60% at 50% 0%,rgba(109,124,255,.22),transparent 70%);pointer-events:none}
   h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:18px 0 10px;letter-spacing:-.02em;font-weight:800}
-  .sub{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:660px;margin:0 auto 26px}
+  .sub{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:680px;margin:0 auto 26px}
   .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
   .req{margin-top:14px;font-size:13px}
 
   section{padding:64px 0;border-top:1px solid var(--line)}
   h2{font-size:clamp(26px,4vw,38px);letter-spacing:-.02em;margin:0 0 10px;font-weight:800}
-  .lead{color:var(--muted);max-width:640px;margin:0 0 34px;font-size:18px}
+  .lead{color:var(--muted);max-width:660px;margin:0 0 34px;font-size:18px}
   .center{text-align:center;margin-left:auto;margin-right:auto}
 
   .grid{display:grid;gap:18px}
@@ -61,6 +61,27 @@
   .card p{margin:0;color:var(--muted);font-size:15px}
   .ic{width:40px;height:40px;border-radius:10px;background:rgba(109,124,255,.14);
     display:grid;place-items:center;font-size:20px;margin-bottom:6px}
+
+  /* ---- question-led narrative motif ---- */
+  .qnav{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:30px}
+  .qnav a{font-size:13.5px;font-weight:700;padding:9px 16px;border-radius:999px;
+    border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--muted)}
+  .qnav a:hover{color:var(--ink);border-color:rgba(141,160,255,.55)}
+  .qnav a .n{color:var(--brand2);margin-right:7px;font-weight:900}
+  .qhead{display:flex;gap:16px;align-items:flex-start}
+  .qbadge{flex:none;width:46px;height:46px;border-radius:13px;background:var(--grad);color:#08131a;
+    display:grid;place-items:center;font-weight:900;font-size:22px;margin-top:4px}
+  .qtag{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 4px}
+  .qhead h2{margin:0}
+  .ans{display:flex;gap:12px;align-items:flex-start;margin:22px 0 30px;max-width:760px}
+  .ans .amark{flex:none;font-weight:900;color:var(--brand2);font-size:15px;line-height:1.7;
+    border:1px solid rgba(34,193,166,.4);border-radius:8px;padding:0 8px}
+  .ans p{margin:0;color:var(--ink);font-size:18px;line-height:1.65}
+  .gap-line{margin:28px 0 0;padding:18px 20px;border-radius:14px;border:1px solid rgba(34,193,166,.32);
+    background:rgba(34,193,166,.06);font-size:16px;line-height:1.65}
+  .gap-line b{color:var(--ink)}
+  .subhead{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);margin:36px 0 14px}
 
   /* problem cards */
   .prob{border-left:3px solid var(--warn)}
@@ -94,59 +115,8 @@
   .disc{margin-top:20px;font-size:12.5px;color:#6b7488;max-width:760px}
   a.plink{display:block;text-decoration:none;color:inherit}
   a.plink:hover{border-color:rgba(141,160,255,.5)}
-</style>
-</head>
-<body>
 
-<nav><div class="wrap">
-  <div class="logo"><span class="mark"></span> Kalsmritikosh</div>
-  <div class="links">
-    <a href="#how">How it works</a>
-    <a href="#features">Features</a>
-    <a href="#why">Why it's different</a>
-    <a href="#privacy">Privacy</a>
-    <a href="#compare">Compare</a>
-    <a class="btn primary" href="#get">Get the app</a>
-  </div>
-</div></nav>
-
-<header class="hero"><div class="wrap">
-  <span class="pill">⚡ Lightning-fast · 🔒 100% on-device · works with or without AI</span>
-  <h1>Everything in your archive —<br><span class="grad">with or without AI.</span></h1>
-  <p class="sub">A lightning-fast, on-device evidence workbench — instant search, timelines, cited
-    datasets, real redaction, and step-by-step workflows for your profession, all deterministic
-    and traceable. Turn on a private on-device AI when you want plain-language answers that cite
-    their evidence. Nothing is uploaded, ever.</p>
-  <div class="cta">
-    <a class="btn primary" href="#get">Download for Mac</a>
-    <a class="btn ghost" href="#how">See how it works</a>
-  </div>
-  <div class="req muted">Requires macOS 15.6+. AI-written answers use Apple's on-device model (Apple Intelligence).</div>
-
-  <div class="demo wrap" style="margin-top:40px;max-width:720px">
-    <div class="q">“When was the first lot due, and was that date changed?”</div>
-    <div class="a">
-      The first lot of 8 units was originally due <b>2024-04-15</b> <span class="cite">contract.md · p.1</span>,
-      then rescheduled to <b>2024-05-28</b> by Amendment 7 <span class="cite">amendment-7.md · p.1</span>.
-      <div style="margin-top:10px">
-        <span class="badge">Proven by direct evidence</span>
-        <span class="cite">2 sources</span>
-      </div>
-    </div>
-    <div class="muted" style="font-size:13px">Every claim carries the exact evidence that supports it. If your documents don't say it, the answer says so — it won't guess.</div>
-  </div>
-
-  <p style="max-width:700px;margin:34px auto 0;font-size:15px;line-height:1.75;color:var(--muted)">
-    <b style="color:var(--ink)">Why it exists.</b> The tools that could finally answer questions about your own
-    documents wanted them uploaded to the cloud — and still invented facts with no source you could check.
-    Kalsmritikosh was built the opposite way: everything stays on your Mac, and it refuses to guess. It reads
-    your real files, turns them into a cited ledger, and shows the evidence behind every line — so you can hand
-    it the work you <i>can't</i> get wrong: the case, the claim, the report, the family history.
-  </p>
-</div></header>
-
-<!-- TWO WAYS -->
-<style>
+  /* two ways */
   .ways{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
   @media(max-width:820px){.ways{grid-template-columns:1fr}}
   .way{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;display:flex;flex-direction:column}
@@ -161,10 +131,163 @@
   .way li:before{content:"✓";position:absolute;left:0;color:var(--brand2);font-weight:700}
   .way .btn{margin-top:18px;align-self:flex-start}
   .ways-note{margin-top:18px;font-size:13.5px;color:var(--muted)}
+
+  /* features */
+  .feat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px}
+  .feat h3{margin:0 0 4px;font-size:19px}
+  .feat .sub2{color:var(--muted);font-size:14px;margin:0 0 6px}
+  .feat ul{list-style:none;margin:6px 0 0;padding:0}
+  .feat li{padding:9px 0;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
+  .feat li:first-of-type{border-top:0}
+  .feat li b{color:var(--ink)}
+  .loc{display:inline-block;font-size:11px;font-weight:700;color:var(--brand2);
+    border:1px solid rgba(34,193,166,.3);border-radius:6px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+
+  /* screenshots */
+  .shots-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  @media(max-width:820px){.shots-grid{grid-template-columns:1fr}}
+  figure.shot{margin:0}
+  figure.shot img{width:100%;height:auto;display:block;border:1px solid var(--line);
+    border-radius:14px;background:#0b0d12}
+  figure.shot figcaption{color:var(--muted);font-size:14px;margin-top:10px}
 </style>
-<section id="two-ways"><div class="wrap">
-  <h2>Two ways to work, <span class="grad">side by side.</span></h2>
-  <p class="lead">The whole app works without any AI — fast and deterministic. The private AI is there when you want it, never in the way. Same evidence, your choice.</p>
+</head>
+<body>
+
+<nav><div class="wrap">
+  <div class="logo"><span class="mark"></span> Kalsmritikosh</div>
+  <div class="links">
+    <a href="#why-exists">Why it exists</a>
+    <a href="#how">How it works</a>
+    <a href="#more">What more</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#compare">Compare</a>
+    <a class="btn primary" href="#get">Get the app</a>
+  </div>
+</div></nav>
+
+<!-- HERO = the opening question -->
+<header class="hero"><div class="wrap">
+  <span class="pill">⚡ Lightning-fast · 🔒 100% on-device · with or without AI</span>
+  <h1>Why can't you just<br><span class="grad">ask your own documents?</span></h1>
+  <p class="sub">The answers you need are already sitting in your files — but the tools that could
+    finally dig them out want your data in the cloud, and still invent facts you can't check.
+    Kalsmritikosh exists to close that gap. Let's walk through it as three questions.</p>
+  <div class="cta">
+    <a class="btn primary" href="#get">Download for Mac</a>
+    <a class="btn ghost" href="#why-exists">Start with “why”</a>
+  </div>
+  <div class="req muted">Requires macOS 15.6+. AI-written answers use Apple's on-device model (Apple Intelligence).</div>
+
+  <nav class="qnav" aria-label="The three questions">
+    <a href="#why-exists"><span class="n">1</span>Why does it exist?</a>
+    <a href="#how"><span class="n">2</span>How does it fill the gap?</a>
+    <a href="#more"><span class="n">3</span>What more is inside?</a>
+  </nav>
+
+  <div class="demo wrap" style="margin-top:44px;max-width:720px">
+    <div class="q">“When was the first lot due, and was that date changed?”</div>
+    <div class="a">
+      The first lot of 8 units was originally due <b>2024-04-15</b> <span class="cite">contract.md · p.1</span>,
+      then rescheduled to <b>2024-05-28</b> by Amendment 7 <span class="cite">amendment-7.md · p.1</span>.
+      <div style="margin-top:10px">
+        <span class="badge">Proven by direct evidence</span>
+        <span class="cite">2 sources</span>
+      </div>
+    </div>
+    <div class="muted" style="font-size:13px">Every claim carries the exact evidence that supports it. If your documents don't say it, the answer says so — it won't guess.</div>
+  </div>
+</div></header>
+
+<!-- Q1 — WHY IT EXISTS / THE GAP -->
+<section id="why-exists"><div class="wrap">
+  <div class="qhead">
+    <div class="qbadge">?</div>
+    <div>
+      <p class="qtag">Question 1</p>
+      <h2>Why does Kalsmritikosh exist?</h2>
+    </div>
+  </div>
+
+  <div class="ans">
+    <span class="amark">A</span>
+    <p>Because there was no honest way to ask questions of your <i>own</i> private archive.
+      Today's document AI has two problems — and between them sits a gap nobody was filling.</p>
+  </div>
+
+  <div class="grid g2">
+    <div class="card prob">
+      <div class="who">Problem 1 · it makes things up</div>
+      <h3>“Grounded” assistants still hallucinate</h3>
+      <p>Users report document AIs inventing contract clauses that aren't there, attributing claims to a vague “Source 3” with no page you can cite, and never flagging when two sources disagree. Convincing — and sometimes confidently wrong.</p>
+    </div>
+    <div class="card prob">
+      <div class="who">Problem 2 · it takes your data</div>
+      <h3>Your private files go to the cloud</h3>
+      <p>On popular chatbots, uploaded files can be used to train the model by default, are retained for weeks, can be caught by legal holds, and have leaked in past breaches. Confidential work doesn't belong on someone else's servers.</p>
+    </div>
+  </div>
+
+  <p class="gap-line">
+    <b>The gap it fills:</b> a place to ask your own documents that <b>stays entirely on your Mac</b> and
+    <b>refuses to guess</b> — every answer tied to the exact evidence, so you can hand it the work you
+    <i>can't</i> get wrong: the case, the claim, the report, the family history.
+  </p>
+</div></section>
+
+<!-- Q2 — HOW IT FILLS THE GAP -->
+<section id="how"><div class="wrap">
+  <div class="qhead">
+    <div class="qbadge">?</div>
+    <div>
+      <p class="qtag">Question 2</p>
+      <h2>How does it fill that gap?</h2>
+    </div>
+  </div>
+
+  <div class="ans">
+    <span class="amark">A</span>
+    <p>It's an <b>evidence ledger, not a chatbot</b>. Instead of a model guessing from a chat window,
+      the intelligence lives in a structured database it builds from your files — on your Mac, in three steps.</p>
+  </div>
+
+  <p class="subhead">The three steps</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans, audio. It reads everything in place; nothing leaves your device.</p></div>
+    <div class="card"><div class="ic">2</div><h3>It builds the ledger</h3><p>Formats fall away. Everything becomes cited facts, dated events, people, and relationships in one structured, searchable store.</p></div>
+    <div class="card"><div class="ic">3</div><h3>Ask, and verify</h3><p>Ask in plain language. Get an answer with its evidence, a confidence read, and any conflicts — every line traceable to a source.</p></div>
+  </div>
+
+  <p class="subhead">Why that design changes everything</p>
+  <div class="grid g3">
+    <div class="card"><div class="ic">📎</div><h3>Answers carry their sources</h3><p>Every claim is tied to the exact file, page, and byte range it came from. Click any citation to see the original — no hunting through a 40-page PDF.</p></div>
+    <div class="card"><div class="ic">🚫</div><h3>It won't guess</h3><p>An evidence gate decides: answer, water down, refuse, or show a conflict. If your documents don't support it, it tells you — instead of inventing a plausible clause.</p></div>
+    <div class="card"><div class="ic">⚖️</div><h3>Conflicts are surfaced, not averaged</h3><p>When two documents disagree, you see both sides with their sources — the exact thing other tools quietly paper over.</p></div>
+    <div class="card"><div class="ic">🕘</div><h3>A real timeline</h3><p>Dated facts across your whole archive are reconstructed into one chronology — with honest markers for what's proven vs. inferred.</p></div>
+    <div class="card"><div class="ic">📤</div><h3>Export with citations intact</h3><p>Turn findings into a work product — a chronology, a brief, a report — with the citations baked in. No walled garden.</p></div>
+    <div class="card"><div class="ic">🔐</div><h3>Private by design</h3><p>Runs 100% on your Mac using Apple's on-device model. No account, no uploads, no analytics. Erase everything in one click.</p></div>
+  </div>
+</div></section>
+
+<!-- Q3 — WHAT MORE IS INSIDE -->
+<section id="more"><div class="wrap">
+  <div class="qhead">
+    <div class="qbadge">?</div>
+    <div>
+      <p class="qtag">Question 3</p>
+      <h2>What more is inside?</h2>
+    </div>
+  </div>
+
+  <div class="ans">
+    <span class="amark">A</span>
+    <p>A lot — and most of it works <b>instantly, with no AI at all</b>. You choose the gear:
+      lightning-fast and deterministic, or a private on-device AI when you want deeper answers.
+      Here's the whole workbench, and exactly where each piece lives in the app.</p>
+  </div>
+
+  <!-- two ways -->
+  <p class="subhead">Two ways to work, side by side</p>
   <div class="ways">
     <div class="way">
       <div class="tag">⚡ Lightning — no AI needed</div>
@@ -195,65 +318,9 @@
     </div>
   </div>
   <p class="ways-note">Times scale with your archive size and your Mac. Lightning is instant because it skips AI and embeddings; Full power is slower because it actually reads, extracts and cites every source. The app shows a live time estimate before any long task, and you can stop it anytime.</p>
-</div></section>
 
-<!-- PROBLEM -->
-<section id="problem"><div class="wrap">
-  <h2>Today's AI has two problems with <span class="grad">your</span> documents.</h2>
-  <p class="lead">People love these tools in a demo and distrust them at work. Here's why.</p>
-  <div class="grid g2">
-    <div class="card prob">
-      <div class="who">It makes things up</div>
-      <h3>“Grounded” assistants still hallucinate</h3>
-      <p>Users report document AIs inventing contract clauses that aren't there, attributing claims to a vague “Source 3” with no page you can cite, and never flagging when two sources disagree. Convincing — and sometimes confidently wrong.</p>
-    </div>
-    <div class="card prob">
-      <div class="who">It takes your data</div>
-      <h3>Your private files go to the cloud</h3>
-      <p>On popular chatbots, uploaded files can be used to train the model by default, are retained for weeks, can be caught by legal holds, and have leaked in past breaches. Confidential work doesn't belong on someone else's servers.</p>
-    </div>
-  </div>
-</div></section>
-
-<!-- WHY DIFFERENT -->
-<section id="why"><div class="wrap">
-  <h2>Kalsmritikosh is an <span class="grad">evidence ledger</span>, not a chatbot.</h2>
-  <p class="lead">The intelligence lives in a structured database of your evidence — not in a model guessing from a chat window. That one difference changes everything.</p>
-  <div class="grid g3">
-    <div class="card"><div class="ic">📎</div><h3>Answers carry their sources</h3><p>Every claim is tied to the exact file, page, and byte range it came from. Click any citation to see the original — no hunting through a 40-page PDF.</p></div>
-    <div class="card"><div class="ic">🚫</div><h3>It won't guess</h3><p>An evidence gate decides: answer, water down, refuse, or show a conflict. If your documents don't support it, it tells you — instead of inventing a plausible clause.</p></div>
-    <div class="card"><div class="ic">⚖️</div><h3>Conflicts are surfaced, not averaged</h3><p>When two documents disagree, you see both sides with their sources — the exact thing other tools quietly paper over.</p></div>
-    <div class="card"><div class="ic">🕘</div><h3>A real timeline</h3><p>Dated facts across your whole archive are reconstructed into one chronology — with honest markers for what's proven vs. inferred.</p></div>
-    <div class="card"><div class="ic">📤</div><h3>Export with citations intact</h3><p>Turn findings into a work product — a chronology, a brief, a report — with the citations baked in. No walled garden.</p></div>
-    <div class="card"><div class="ic">🔐</div><h3>Private by design</h3><p>Runs 100% on your Mac using Apple's on-device model. No account, no uploads, no analytics. Erase everything in one click.</p></div>
-  </div>
-</div></section>
-
-<!-- HOW -->
-<section id="how"><div class="wrap">
-  <h2>Three steps. All on your Mac.</h2>
-  <div class="grid g3">
-    <div class="card"><div class="ic">1</div><h3>Add your documents</h3><p>Point it at a folder — PDFs, Word, Excel, email (EML/MBOX), scans, audio. It reads everything in place; nothing leaves your device.</p></div>
-    <div class="card"><div class="ic">2</div><h3>It builds the ledger</h3><p>Formats fall away. Everything becomes cited facts, dated events, people, and relationships in one structured, searchable store.</p></div>
-    <div class="card"><div class="ic">3</div><h3>Ask, and verify</h3><p>Ask in plain language. Get an answer with its evidence, a confidence read, and any conflicts — every line traceable to a source.</p></div>
-  </div>
-</div></section>
-
-<!-- FEATURES -->
-<style>
-  .feat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:22px 24px}
-  .feat h3{margin:0 0 4px;font-size:19px}
-  .feat .sub2{color:var(--muted);font-size:14px;margin:0 0 6px}
-  .feat ul{list-style:none;margin:6px 0 0;padding:0}
-  .feat li{padding:9px 0;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
-  .feat li:first-of-type{border-top:0}
-  .feat li b{color:var(--ink)}
-  .loc{display:inline-block;font-size:11px;font-weight:700;color:var(--brand2);
-    border:1px solid rgba(34,193,166,.3);border-radius:6px;padding:1px 8px;margin-left:6px;white-space:nowrap}
-</style>
-<section id="features"><div class="wrap">
-  <h2>Everything you can do — <span class="grad">and where to find it.</span></h2>
-  <p class="lead">Most of it works instantly, no AI required. Flip on Full power when you want the deep, AI-written answers. The tag after each feature is where it lives in the app.</p>
+  <!-- features -->
+  <p class="subhead">Everything you can do — and where to find it</p>
   <div class="grid g2">
 
     <div class="feat">
@@ -262,6 +329,7 @@
       <ul>
         <li><b>Ask</b> — a plain-language answer with its evidence, a confidence read, and any conflicts.<span class="loc">Ask</span></li>
         <li><b>Search</b> — instant full-text across every document and email.<span class="loc">Search</span></li>
+        <li><b>Query builder</b> — no-code questions over your ledger; describe it in plain words and it fills the filters. Shows the exact read-only SQL.<span class="loc">Query</span></li>
         <li><b>Cross-doc matrix</b> — one question asked across every source, each answer cited.<span class="loc">Matrix</span></li>
         <li><b>Saved questions &amp; answers</b> — replayable, auditable history.<span class="loc">Answers · Saved</span></li>
       </ul>
@@ -325,20 +393,9 @@
     </div>
 
   </div>
-</div></section>
 
-<!-- SCREENSHOTS -->
-<style>
-  .shots-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
-  @media(max-width:820px){.shots-grid{grid-template-columns:1fr}}
-  figure.shot{margin:0}
-  figure.shot img{width:100%;height:auto;display:block;border:1px solid var(--line);
-    border-radius:14px;background:#0b0d12}
-  figure.shot figcaption{color:var(--muted);font-size:14px;margin-top:10px}
-</style>
-<section id="look"><div class="wrap">
-  <h2>A look <span class="grad">inside.</span></h2>
-  <p class="lead">A calm, native Mac app — with the receipts always one click away.</p>
+  <!-- screenshots -->
+  <p class="subhead">A look inside</p>
   <div class="shots-grid">
     <figure class="shot"><img src="shots/ask.png" loading="lazy" alt="Ask — cited, evidence-gated answers"><figcaption>Ask in plain language — answers cited to your files, on-device.</figcaption></figure>
     <figure class="shot"><img src="shots/professional-jobs.png" loading="lazy" alt="Professional Jobs — workflows by profession"><figcaption>Professional Jobs — guided workflows tailored to your field.</figcaption></figure>
@@ -351,11 +408,9 @@
     <figure class="shot"><img src="shots/convert.png" loading="lazy" alt="Convert files between formats"><figcaption>Convert — any format to any format, on-device.</figcaption></figure>
     <figure class="shot"><img src="shots/settings.png" loading="lazy" alt="Private by design settings"><figcaption>Private by design — on-device, no accounts, nothing uploaded.</figcaption></figure>
   </div>
-</div></section>
 
-<!-- PERSONAS -->
-<section id="who"><div class="wrap">
-  <h2>Built for people who <span class="grad">can't afford to be wrong.</span></h2>
+  <!-- personas -->
+  <p class="subhead">Built for people who can't afford to be wrong</p>
   <p class="lead">Pick your focus on first launch — the app speaks your profession's own language and tailors the workspace to the jobs you actually do.</p>
   <div class="grid g3">
     <a class="card plink" href="for/lawyers.html"><div class="ic">⚖️</div><h3>Solo &amp; small-firm lawyers</h3><p>Case chronology, privilege log, exhibit list, Bates-style document production — the document-review workflow big-firm platforms charge per-gigabyte for, at a one-time price. No processing fees, ever.</p></a>
@@ -406,7 +461,7 @@
 
 <!-- FAQ -->
 <section class="faq"><div class="wrap">
-  <h2>Questions</h2>
+  <h2>More questions</h2>
   <details><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
   <details><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
   <details><summary>What can I feed it?</summary><p>PDF, Word, Excel/CSV, PowerPoint, EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP. Scans and images are read with on-device OCR; audio and video are transcribed on-device.</p></details>
