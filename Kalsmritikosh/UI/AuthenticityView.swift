@@ -74,6 +74,10 @@ public struct AuthenticityView: View {
                 Spacer()
                 if running { ProgressView().controlSize(.small) }
                 Button("Choose file…") { showImporter = true }.disabled(running)
+                    .guidance(GuidanceTip("Check authenticity",
+                                          what: "Examines a file's fingerprint and provenance — capture metadata, editing traces, PDF edit markers — surfaced as leads, not verdicts. Images and PDFs get the deepest checks.",
+                                          enabledWhen: "Wait for the current check to finish."),
+                              enabled: !running)
             }
         }
     }

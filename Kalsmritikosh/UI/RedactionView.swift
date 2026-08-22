@@ -152,6 +152,10 @@ public struct RedactionView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(running || sourceURL == nil || parsedTerms.isEmpty)
+            .guidance(GuidanceTip("Redact",
+                                  what: "Removes the matching text from the PDF for real — flattened and then verified gone, not just a black box over it.",
+                                  enabledWhen: "Choose a PDF and enter at least one term to redact first."),
+                      enabled: !(running || sourceURL == nil || parsedTerms.isEmpty))
 
             if let result, result.verified {
                 Button {
