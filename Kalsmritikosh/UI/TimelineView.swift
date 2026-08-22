@@ -124,6 +124,8 @@ public struct TimelineView: View {
                 Button("Refresh") {
                     Task { await refresh() }
                 }
+                .guidance(GuidanceTip("Refresh timeline",
+                                      what: "Rebuilds the chronology from the latest ledger — dated events across your whole archive, marked proven vs. inferred. Use it after ingesting new files."))
             }
             HStack {
                 Text("Zoom")
