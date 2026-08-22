@@ -496,6 +496,16 @@ public struct PersonaJobsView: View {
         }
     }
 
+    /// The analytic canvas a job earns, per the Sūtra tooling catalog — only
+    /// analyze-tier jobs that name a real surface. nil = a Work Center form/service
+    /// is the right depth. Honours the classic-surfaces switch (hidden when on).
+    private func analyticCanvas(_ kind: PersonaJobKind) -> Destination? {
+        guard !preferClassicSurfaces,
+              let p = JobToolingCatalog.profile(for: kind), p.tier == .analyze,
+              let s = p.surface, let d = Destination(rawValue: s) else { return nil }
+        return d
+    }
+
     private func jobGrid(_ model: PersonaJobsModel) -> some View {
         let phased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
             let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
@@ -604,6 +614,15 @@ public struct PersonaJobsView: View {
                             .tint(Theme.brand)
                             .controlSize(.small)
                             .help("Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
+                            // Analyze-tier jobs earn a direct canvas launch — decided by the
+                            // Sūtra tooling catalog, not hard-coded (Step 2).
+                            if let canvas = analyticCanvas(job.kind) {
+                                Button { SurfaceOpener.open(canvas) } label: {
+                                    Label(canvas.title, systemImage: canvas.icon).font(.caption)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help("This is an analysis job — open its canvas directly (\(canvas.title)). Derived from the tooling map.")
+                            }
                         }
                     }
                     .padding(12)
