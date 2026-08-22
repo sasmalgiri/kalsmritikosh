@@ -42,7 +42,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case authenticity, citations, freshness, trends, query
     case sources, convert, completeness, live
     case redaction, caseload
-    case guide, settings
+    case guide, settings, sutra
 
     public var id: String { rawValue }
 
@@ -93,6 +93,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .live:         return "Live"
         case .redaction:    return "Redaction"
         case .guide:        return "Guide"
+        case .sutra:        return "Constitution"
         case .settings:     return "Settings"
         }
     }
@@ -144,6 +145,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .live:         return "waveform.path.ecg"
         case .redaction:    return "eye.slash"
         case .guide:        return "book"
+        case .sutra:        return "building.columns"
         case .settings:     return "gearshape"
         }
     }
@@ -211,6 +213,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .live:         return "Live pipeline and background activity"
         case .redaction:    return "Remove text from a PDF for real — flattened and verified, not just a black box"
         case .guide:        return "What every screen does, and how facts are graded"
+        case .sutra:        return "The constitution the app runs on — every phase, the tooling it earns, its obligations, human decisions, and prohibited conclusions"
         case .settings:     return "Modes, privacy, models and diagnostics"
         }
     }
@@ -230,7 +233,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
-            case .system:      return [.guide, .settings]
+            case .system:      return [.guide, .sutra, .settings]
             }
         }
 
@@ -408,7 +411,7 @@ public struct RootView: View {
         case .connections, .explore, .matrix, .fundFlow:              return .relationships
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses:  return .reports
-        case .guide, .settings:                                       return .settings
+        case .guide, .settings, .sutra:                               return .settings
         }
     }
 
@@ -1300,6 +1303,7 @@ public struct RootView: View {
         case .live:         LiveDashboardView()
         case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
+        case .sutra:        SutraView()
         case .settings:     SettingsView()
         }
     }
