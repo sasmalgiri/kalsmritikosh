@@ -32,7 +32,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case workspaces
     case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
-    case reasoning
+    case reasoning, hypotheses
     case fundFlow, emailThreads
     case review
     case handoff
@@ -69,6 +69,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .emailThreads: return "Email Threads"
         case .story:        return "Case Story"
         case .reasoning:    return "Reasoning Studio"
+        case .hypotheses:   return "Competing Hypotheses"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
@@ -119,6 +120,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .emailThreads: return "envelope.badge.person.crop"
         case .story:        return "book.pages"
         case .reasoning:    return "brain.head.profile"
+        case .hypotheses:   return "tablecells"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
@@ -185,6 +187,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .emailThreads: return "A big email dump, deduplicated and grouped into conversations"
         case .story:        return "The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps"
         case .reasoning:    return "Run a root-cause investigation start to finish — brainstorm, 5 Whys, a fishbone diagram, a conclusion, and an approval-ready report"
+        case .hypotheses:   return "Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
@@ -224,7 +227,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .settings]
@@ -404,7 +407,7 @@ public struct RootView: View {
         case .dataLab:                                                return .dataLab
         case .connections, .explore, .matrix, .fundFlow:              return .relationships
         case .findings, .notebook, .dossier, .story, .review,
-             .handoff, .verifyReceipt, .audit, .reasoning:            return .reports
+             .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses:  return .reports
         case .guide, .settings:                                       return .settings
         }
     }
@@ -1273,6 +1276,7 @@ public struct RootView: View {
         case .emailThreads: EmailThreadsView()
         case .story:        CaseStoryView()
         case .reasoning:    ReasoningStudioView()
+        case .hypotheses:   ACHMatrixView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()

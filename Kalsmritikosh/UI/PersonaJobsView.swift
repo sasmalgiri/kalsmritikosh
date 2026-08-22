@@ -509,6 +509,11 @@ public struct PersonaJobsView: View {
                         }
                         Spacer()
                         if phase == .analyze {
+                            Button { SurfaceOpener.open(.hypotheses) } label: {
+                                Label("Hypotheses (ACH)", systemImage: "tablecells").font(.caption)
+                            }
+                            .buttonStyle(.bordered).controlSize(.small)
+                            .help("Open the Analysis of Competing Hypotheses matrix — rate evidence against rival explanations and rank by fewest inconsistencies.")
                             Button { SurfaceOpener.open(.reasoning) } label: {
                                 Label("Reasoning Studio", systemImage: "brain.head.profile").font(.caption)
                             }
