@@ -142,7 +142,7 @@ public enum DataLabStarterTemplates {
                 .init("Account", .text, help: "Which account / statement."),
                 .init("Source doc", .text, help: "The bank statement or record this row is tied to.")
             ],
-            note: "Tie every row to a source document; name any missing statement or period — a silent gap misleads."),
+            note: "Tie every row to a source document; name any missing statement or period — a silent gap misleads. \(FundsTracingMethods.helpSummary) \(FundsTracingMethods.disciplineNote)"),
 
         // ── HR / Compliance — allegation matrix ──────────────────────────────
         DataLabStarterTemplate(
