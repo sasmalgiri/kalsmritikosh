@@ -391,7 +391,9 @@ struct InvestigationReportTests {
         let access = SensitiveAccessContext(scope: SensitiveScope(
             workspaceID: wsID, maximumSensitivity: .restricted,
             permitsPrivilegedMaterial: false, purpose: .export))
-        await #expect(throws: WorkProductAssemblyError.missingComposer("investigation.findings")) {
+        // The exec summary now leads the findings plan, so it is the first
+        // composer the empty registry fails to resolve.
+        await #expect(throws: WorkProductAssemblyError.missingComposer("investigation.execsummary")) {
             try await service.compose(workspace: ws(wsID), template: .investigationFindings,
                                       subjectLabel: "WS", corpusSnapshotID: nil, access: access)
         }
