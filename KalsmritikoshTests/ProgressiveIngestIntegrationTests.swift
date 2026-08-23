@@ -33,7 +33,8 @@ struct ProgressiveIngestIntegrationTests {
             chunks: ChunksRepository(database: db), evidenceStore: EvidenceStore(database: db),
             ingestAttempts: IngestAttemptsRepository(database: db), sourceRelations: SourceRelationsRepository(database: db),
             evidenceVault: vault, readiness: SourceReadinessRepository(database: db),
-            containerInspection: ContainerInspectionRepository(database: db), intakeCoordinator: intake)
+            containerInspection: ContainerInspectionRepository(database: db), intakeCoordinator: intake,
+            custodyModeOverride: .referenced)
         let jobs = SourceUpgradeJobRepository(database: db)
         await c.configureUpgrades(database: db, jobs: jobs)
         return Rig(c: c, db: db, jobs: jobs, dir: dir)

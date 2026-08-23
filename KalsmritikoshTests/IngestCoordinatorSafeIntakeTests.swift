@@ -41,7 +41,7 @@ struct IngestCoordinatorSafeIntakeTests {
             files: files, objects: objects, chunks: chunks,
             evidenceStore: store,             ingestAttempts: IngestAttemptsRepository(database: db),
             sourceRelations: SourceRelationsRepository(database: db),
-            intakeCoordinator: intake)
+            intakeCoordinator: intake, custodyModeOverride: .referenced)
         return Rig(coordinator: coordinator, db: db, dir: dir)
     }
 
