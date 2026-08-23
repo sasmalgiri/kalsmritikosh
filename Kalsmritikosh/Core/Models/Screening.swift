@@ -134,7 +134,7 @@ public struct PRISMACounts: Sendable, Hashable {
     }
 
     /// Deterministic derivation from a record set. Same input → same counts.
-    public static func from(_ records: [ScreeningRecord]) -> PRISMACounts {
+    public nonisolated static func from(_ records: [ScreeningRecord]) -> PRISMACounts {
         var c = PRISMACounts()
         c.identified = records.count
         c.duplicatesRemoved = records.filter { $0.decision == .duplicate }.count

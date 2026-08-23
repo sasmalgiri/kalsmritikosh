@@ -12,10 +12,10 @@
 
 import Foundation
 
-public enum SourceReadinessEvaluator {
+public nonisolated enum SourceReadinessEvaluator {
 
     /// Evaluate the ten dimensions of a source version into a snapshot. Order-independent.
-    public static func evaluate(sourceVersionID: UUID, aggregateRevision: Int,
+    public nonisolated static func evaluate(sourceVersionID: UUID, aggregateRevision: Int,
                                 dimensions raw: [SourceReadinessDimensionRecord], updatedAt: Date) -> SourceReadinessSnapshot {
         let dims = raw.sorted { $0.dimension.ordinal < $1.dimension.ordinal }
         func d(_ dim: SourceReadinessDimension) -> SourceReadinessDimensionRecord? { dims.first { $0.dimension == dim } }

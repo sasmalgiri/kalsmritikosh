@@ -251,7 +251,7 @@ public actor SQLiteVectorStore: VectorStore {
 /// A fixed-size best-K collector: keeps only the top `limit` (chunkID, score)
 /// pairs seen, so a full scan of any-size corpus uses O(limit) memory. `limit`
 /// is tiny (≤ ~50), so the kept list stays sorted ascending by insertion.
-struct BoundedTopK {
+nonisolated struct BoundedTopK {
     private let limit: Int
     /// Ascending by score — the weakest kept hit is at index 0.
     private var items: [(Chunk.ID, Double)] = []

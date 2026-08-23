@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum EvidenceAssessmentRowDecoder {
+public nonisolated enum EvidenceAssessmentRowDecoder {
 
     /// Raw column values as read from a row (any may be nil / malformed).
     public struct Row: Sendable, Hashable {

@@ -150,7 +150,7 @@ public struct SourceReadinessRepository: Sendable {
 
     // MARK: - Validation (§9.3 + shape mirrors the v85 CHECKs)
 
-    private static func validateShape(_ u: SourceReadinessDimensionUpdate) throws {
+    private nonisolated static func validateShape(_ u: SourceReadinessDimensionUpdate) throws {
         if u.action == .initialize { throw SourceReadinessError.invalidAction(.initialize) }
         if u.applicability == .notApplicable {
             guard u.state == .ready, u.condition == nil, u.completedUnits == nil, u.totalUnits == nil else {
@@ -169,7 +169,7 @@ public struct SourceReadinessRepository: Sendable {
         }
     }
 
-    private static func naturalAction(for state: SourceReadinessDimensionState) -> SourceReadinessAction? {
+    private nonisolated static func naturalAction(for state: SourceReadinessDimensionState) -> SourceReadinessAction? {
         switch state {
         case .running: return .begin
         case .ready: return .satisfy
@@ -181,7 +181,7 @@ public struct SourceReadinessRepository: Sendable {
         }
     }
 
-    private static func validateTransition(from: SourceReadinessDimensionState, update u: SourceReadinessDimensionUpdate) throws {
+    private nonisolated static func validateTransition(from: SourceReadinessDimensionState, update u: SourceReadinessDimensionUpdate) throws {
         let to = u.state
         func bad() -> SourceReadinessError { .invalidTransition(dimension: u.dimension, from: from, to: to) }
 

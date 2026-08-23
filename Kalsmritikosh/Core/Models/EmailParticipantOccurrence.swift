@@ -32,7 +32,7 @@ public struct EmailParticipantSeed: Codable, Sendable {
 }
 
 /// Fully resolved occurrence row ready for `EmailParticipantRepository`.
-public struct EmailParticipantOccurrence: Sendable {
+public nonisolated struct EmailParticipantOccurrence: Sendable {
     public let id: UUID
     public let sourceObjectID: KnowledgeObject.ID
     public let entityID: Entity.ID

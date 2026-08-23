@@ -15,7 +15,7 @@ import Foundation
 
 /// A date with preserved precision and original text. Never widen precision for
 /// display (a year-only date is NOT 1 January) — the renderer honours `precision`.
-public struct TemporalValue: Sendable, Codable, Hashable {
+public nonisolated struct TemporalValue: Sendable, Codable, Hashable {
     public let start: Date?
     public let end: Date?
     public let precision: DatePrecision

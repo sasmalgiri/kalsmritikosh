@@ -18,7 +18,7 @@ public struct ResolvedEvidenceBlock: Sendable, Equatable {
     public let blockID: EvidenceBlock.ID
     public let knowledgeObjectID: KnowledgeObject.ID
     public let sourceVersionID: UUID
-    public init(blockID: EvidenceBlock.ID, knowledgeObjectID: KnowledgeObject.ID, sourceVersionID: UUID) {
+    public nonisolated init(blockID: EvidenceBlock.ID, knowledgeObjectID: KnowledgeObject.ID, sourceVersionID: UUID) {
         self.blockID = blockID; self.knowledgeObjectID = knowledgeObjectID; self.sourceVersionID = sourceVersionID
     }
 }

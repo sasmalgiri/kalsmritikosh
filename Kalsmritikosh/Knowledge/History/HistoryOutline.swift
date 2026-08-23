@@ -29,7 +29,7 @@ public struct HistoryChapterPlan: Sendable, Codable, Hashable, Identifiable {
 /// The completeness picture — shown SEPARATELY (never one vague "92%"). Phase 5
 /// computes the temporal/evidence coverage; source-parsing coverage etc. layer on
 /// in Phase 6's HistoryCoverageEngine.
-public struct HistoryCoverage: Sendable, Codable, Hashable {
+public nonisolated struct HistoryCoverage: Sendable, Codable, Hashable {
     public let totalItems: Int
     public let datedItems: Int
     public let undatedItems: Int

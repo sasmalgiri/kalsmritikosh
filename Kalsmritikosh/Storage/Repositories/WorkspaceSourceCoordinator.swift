@@ -23,7 +23,7 @@ public struct WorkspaceSourceCandidate: Sendable, Hashable, Identifiable {
     public let ingestedAt: Date?
     public var id: UUID { fileID }
 
-    public init(fileID: UUID, filename: String, parentPath: String, sourceType: SourceType,
+    public nonisolated init(fileID: UUID, filename: String, parentPath: String, sourceType: SourceType,
                 availability: FileAvailability, ingestedAt: Date?) {
         self.fileID = fileID; self.filename = filename; self.parentPath = parentPath
         self.sourceType = sourceType; self.availability = availability; self.ingestedAt = ingestedAt
