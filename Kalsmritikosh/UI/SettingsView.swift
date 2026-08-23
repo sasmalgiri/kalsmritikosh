@@ -1243,8 +1243,12 @@ public struct SettingsView: View {
                 .foregroundStyle(.orange)
 
             legalItem("Accuracy — verify every answer", LegalNotice.accuracyStatement, "exclamationmark.triangle")
+            legalItem("AI output — human review required", LegalNotice.aiOutputStatement, "brain")
             legalItem("Privacy — private by design", LegalNotice.privacyStatement, "lock.shield")
             legalItem("Terms — provided “as is”", LegalNotice.termsStatement, "doc.text")
+            legalItem("No professional relationship", LegalNotice.noRelationshipStatement, "person.crop.circle.badge.xmark")
+            legalItem("Warranty & liability", LegalNotice.liabilityStatement, "shield.lefthalf.filled")
+            legalItem("Your responsibilities — data, backup, lawful use", LegalNotice.responsibilityStatement, "externaldrive.badge.checkmark")
             legalItem("Acknowledgments", LegalNotice.thirdPartyStatement, "shippingbox")
 
             Text(LegalNotice.counselNote)

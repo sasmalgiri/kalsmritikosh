@@ -75,6 +75,56 @@ public enum LegalNotice {
     ship with the app.
     """
 
+    /// No professional relationship — the clause the strongest legal-tech
+    /// competitors repeat in every document (ToS, addenda, community rules).
+    public static let noRelationshipStatement = """
+    Kalsmritikosh’s developer is not a law firm, accounting firm, investigative agency, \
+    or licensed professional practice, and does not practise law or any other regulated \
+    profession. Using the app — including its persona studios, report templates, and \
+    references to professional standards (FRCP, GPS, PRISMA, 8D, and others) — creates \
+    no attorney–client, accountant–client, or any other professional relationship, and \
+    is not a substitute for advice from a qualified professional who knows your matter.
+    """
+
+    /// Warranty & liability — enumerated, with an explicit cap, the way
+    /// commercial legal-tech terms allocate risk.
+    public static let liabilityStatement = """
+    The app is provided “as is” and “as available”, without warranties of any kind, \
+    express or implied — including merchantability, fitness for a particular purpose, \
+    title, and non-infringement. To the maximum extent permitted by law, the developer \
+    is not liable for indirect, incidental, special, consequential, exemplary, or \
+    punitive damages, or for lost profits, lost data, or business interruption, under \
+    any legal theory, even if advised of the possibility. Total aggregate liability for \
+    all claims is capped at the amount you paid for the app in the twelve months before \
+    the claim arose (zero while the app is free). Some jurisdictions do not allow some \
+    of these exclusions, so parts may not apply to you. These provisions allocate risk \
+    and are a basis of the bargain.
+    """
+
+    /// AI output — the 2026-practice clause: probabilistic output, human
+    /// review REQUIRED before consequential use, disclosed at point of use.
+    public static let aiOutputStatement = """
+    AI-assisted output is probabilistic: it is not guaranteed to be accurate, complete, \
+    current, or fit for any purpose, and may contain errors, omissions, or content that \
+    does not reflect current facts or law. Human review of any output against its cited \
+    sources is required before any consequential use — filing, publication, employment \
+    action, referral, or financial decision. The app discloses its AI assistance at the \
+    point of use: on every answer, and on the first page of every exported report.
+    """
+
+    /// Your responsibilities — data custody & backup (everything is local),
+    /// lawful use, indemnity, export compliance.
+    public static let responsibilityStatement = """
+    Because everything stays on your device, you are solely responsible for the \
+    security and BACKUP of your documents, ledger, and reports — the developer holds no \
+    copy and cannot recover your data. You confirm you have the legal right to ingest \
+    and analyse the documents you add, and you agree to indemnify the developer against \
+    claims arising from your content or your unlawful use of the app. You agree to \
+    comply with applicable export-control and sanctions laws. On the Mac App Store, \
+    Apple’s standard Licensed Application EULA also applies where no custom EULA is \
+    presented.
+    """
+
     /// Required attribution for the bundled reasoning model (Meta Llama Community
     /// Licence). Surfaced in Settings → Legal & Privacy and About. See
     /// MODEL_ATTRIBUTIONS.md for the full obligation set.
