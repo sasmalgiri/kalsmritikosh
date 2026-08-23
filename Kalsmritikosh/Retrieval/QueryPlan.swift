@@ -81,7 +81,7 @@ public struct EvidencePolicy: Codable, Sendable, Hashable {
 
 /// The compiled, explicit plan for a question. Inspectable and Codable so it can
 /// be logged, shown in the quality strip, and asserted against in tests.
-public struct QueryPlan: Codable, Sendable, Hashable {
+public nonisolated struct QueryPlan: Codable, Sendable, Hashable {
     public let rawQuestion: String
     public let targetSubjects: [String]
     public let requestedFields: [RequestedField]

@@ -261,7 +261,7 @@ public nonisolated struct Deadline: Identifiable, Sendable, Equatable {
 
 // MARK: - Evidence links (IDs only — never copied content)
 
-public enum TaskEvidenceLinkScope: Sendable, Equatable, Hashable {
+public nonisolated enum TaskEvidenceLinkScope: Sendable, Equatable, Hashable {
     case task
     case deadlineCandidate(UUID)
     case deadline(UUID)
@@ -294,7 +294,7 @@ public enum TaskEvidenceLinkScope: Sendable, Equatable, Hashable {
 
 /// Same canonical target set as IssueLinkTarget (both validated by the shared
 /// WorkflowTargetValidator — identical fail-closed existence + workspace-boundary rules).
-public enum TaskEvidenceTarget: Sendable, Equatable, Hashable {
+public nonisolated enum TaskEvidenceTarget: Sendable, Equatable, Hashable {
     case claim(UUID)
     case event(UUID)
     case entity(UUID)

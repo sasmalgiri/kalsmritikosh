@@ -16,7 +16,7 @@
 
 import Foundation
 
-public struct Contradiction: Identifiable, Sendable, Hashable, Codable {
+public nonisolated struct Contradiction: Identifiable, Sendable, Hashable, Codable {
     public typealias ID = UUID
 
     /// How much the conflict matters. Derived from the size of the

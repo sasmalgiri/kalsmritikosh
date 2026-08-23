@@ -38,7 +38,7 @@ public enum WorkflowCalculationOperation: String, Codable, Sendable, CaseIterabl
 
 /// A literal input value snapshotted at definition time. The calculation always
 /// recomputes from these literals — never from a live canonical read.
-public enum WorkflowCalculationLiteral: Sendable, Equatable {
+public nonisolated enum WorkflowCalculationLiteral: Sendable, Equatable {
     case number(Double)
     case date(String)   // strict ISO-8601 (e.g. 2026-07-28T00:00:00Z)
 }

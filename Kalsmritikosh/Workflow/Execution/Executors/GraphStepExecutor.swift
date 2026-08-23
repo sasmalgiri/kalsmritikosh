@@ -20,7 +20,7 @@ import Foundation
 
 /// A node either references a canonical object by exact ID, or is an explicit
 /// proposal node that exists only inside this workflow.
-public enum WorkflowGraphNodeReference: Sendable, Equatable {
+public nonisolated enum WorkflowGraphNodeReference: Sendable, Equatable {
     case canonical(kind: WorkflowEvidenceObjectKind, canonicalObjectID: String)
     case proposal(label: String)
 }
@@ -78,7 +78,7 @@ public enum WorkflowGraphEdgeDirection: String, Codable, Sendable, CaseIterable,
 }
 
 /// Where an edge came from. Closed vocabulary — every edge must declare its origin.
-public enum WorkflowGraphEdgeProvenance: Sendable, Equatable {
+public nonisolated enum WorkflowGraphEdgeProvenance: Sendable, Equatable {
     case userDrawn(actorIdentifier: String?)
     case inferred(basis: String)
 }

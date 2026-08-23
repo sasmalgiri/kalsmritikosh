@@ -31,7 +31,7 @@ public nonisolated struct TemporalValue: Sendable, Codable, Hashable {
 }
 
 /// The object of a temporal claim: a literal string, another entity, or a quantity.
-public enum ClaimValue: Sendable, Codable, Hashable {
+public nonisolated enum ClaimValue: Sendable, Codable, Hashable {
     case literal(String)
     case entity(Entity.ID)
     case quantity(Double, unit: String?)

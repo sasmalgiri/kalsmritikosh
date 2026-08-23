@@ -12,7 +12,7 @@ import Foundation
 // MARK: - Table cell value
 
 /// Closed enum for typed values in a table cell.
-public enum WorkflowTableCellValue: Sendable, Equatable {
+public nonisolated enum WorkflowTableCellValue: Sendable, Equatable {
     case text(String)
     case number(Double)
     case boolean(Bool)

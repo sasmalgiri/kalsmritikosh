@@ -217,7 +217,7 @@ public struct KMeansClusterer: Sendable {
 
 /// Deterministic xorshift64* PRNG — the same idiom HNSWVectorIndex uses for
 /// layer sampling. Never zero-seeded (a zero state is a fixed point).
-public struct XorShift64Star: Sendable {
+public nonisolated struct XorShift64Star: Sendable {
     private(set) var state: UInt64
     public init(state: UInt64) {
         self.state = state == 0 ? 0x9E37_79B9_7F4A_7C15 : state
