@@ -838,22 +838,19 @@ public struct RootView: View {
     private var personaSection: some View {
         if let p = currentPersona {
             HStack {
-                Text("FOR YOU")
+                // Persona titles are phrased "For Lawyers" — strip the prefix
+                // and the plural so the label reads "PERSONA · LAWYER".
+                Text("PERSONA · \(Self.personaRole(p.title).uppercased())")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .tracking(0.5)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                // Persona titles are phrased "For Lawyers", "For Investigators", …
-                // — next to the FOR YOU label that reads as a stutter, so the
-                // focus control drops the prefix: "FOR YOU · Lawyers".
-                Button(p.title.hasPrefix("For ") ? String(p.title.dropFirst(4)) : p.title) {
-                    showPersonaPicker = true
-                }
+                Button("Change") { showPersonaPicker = true }
                     .font(.caption2)
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.brand)
-                    .help("Your focus — click to change it")
+                    .help("Click to change your persona")
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
@@ -884,6 +881,14 @@ public struct RootView: View {
                 }
             }
         }
+    }
+
+    /// "For Lawyers" → "Lawyer", "For Everyone" → "Everyone".
+    private static func personaRole(_ title: String) -> String {
+        var t = title
+        if t.hasPrefix("For ") { t = String(t.dropFirst(4)) }
+        if t.hasSuffix("s") { t = String(t.dropLast()) }
+        return t
     }
 
     /// The last 4 screens the user actually visited, newest first (home
