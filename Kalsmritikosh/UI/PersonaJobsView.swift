@@ -532,6 +532,13 @@ public struct PersonaJobsView: View {
                         }
                         Spacer()
                         if phase == .analyze {
+                            // The new/classic SWITCH, in the place it acts (also in
+                            // Settings ▸ Answering & modes ▸ "Prefer classic surfaces").
+                            Toggle(isOn: $preferClassicSurfaces) {
+                                Text("Classic").font(.caption2)
+                            }
+                            .toggleStyle(.switch).controlSize(.mini)
+                            .help("Switch between the classic fixed launchers and the newer catalog-driven ones. Also in Settings ▸ Answering & modes.")
                             if preferClassicSurfaces {
                                 // CLASSIC — the previous fixed Analyze launchers (Settings switch).
                                 Button { SurfaceOpener.open(.hypotheses) } label: {

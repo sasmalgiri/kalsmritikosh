@@ -485,6 +485,67 @@ public struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
+            // FLOATING-SIDEBAR FIX — below ~1040pt the split view FLOATS the
+            // sidebar as an overlay whose invisible scrim swallows clicks on the
+            // header buttons ("upper buttons not clickable when not full screen").
+            // Watch the detail width and HIDE the docked sidebar instead of
+            // letting it float; it reopens automatically when the window widens.
+            detailStack
+                .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width in
+                    if width < 760, columnVisibility != .detailOnly {
+                        columnVisibility = .detailOnly
+                    } else if width >= 900, columnVisibility == .detailOnly {
+                        columnVisibility = .all
+                    }
+                }
+        }
+        .navigationSplitViewStyle(.balanced)
+        .tint(Theme.brand)
+        .preferredColorScheme(.light)
+        .frame(minWidth: 1040, minHeight: 640)
+        .background(shortcutButtons)
+        .overlay(paletteOverlay)
+        .overlay(shortcutHelpOverlay)
+        .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
+            if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
+                navigate(to: dest)
+            }
+        }
+        .onChange(of: appState.pendingWorkCenterDefID) { _, newValue in
+            if newValue != nil { navigate(to: .workCenter) }
+        }
+        .task {
+            // ENGINE POWER — refresh the semantic-index backlog caption.
+            while !Task.isCancelled {
+                let p = await appState.ingestProgress()
+                semanticBacklog = (p.embedDone, p.embedTotal)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
+            }
+        }
+        .sheet(isPresented: $presentingOnboarding) {
+            OnboardingView()
+                .environment(appState)
+        }
+        .sheet(isPresented: $showPersonaPicker) {
+            PersonaPickerView(current: personaID) { picked in
+                personaID = picked
+                showPersonaPicker = false
+            }
+        }
+        .task {
+            if !onboardingShown && appState.bookmarks.roots.isEmpty {
+                presentingOnboarding = true
+                onboardingShown = true
+            }
+            // First-run focus pick: if no persona chosen yet, prompt once.
+            if personaID.isEmpty && !presentingOnboarding {
+                showPersonaPicker = true
+            }
+        }
+    }
+
+    private var detailStack: some View {
             NavigationStack {
                 VStack(spacing: 0) {
                     appHeader
@@ -522,59 +583,6 @@ public struct RootView: View {
                     }
                 }
             }
-        }
-        .navigationSplitViewStyle(.balanced)
-        .tint(Theme.brand)
-        .preferredColorScheme(.light)
-        // Keep the window wide enough that .balanced ALWAYS docks the sidebar
-        // beside the detail — below this, a content-dense detail (e.g. the Work
-        // Center run screen) makes the split view float the sidebar as a clipped
-        // overlay. 1040 = sidebar (ideal 244) + a comfortable detail.
-        .frame(minWidth: 1040, minHeight: 640)
-        .background(shortcutButtons)
-        .overlay(paletteOverlay)
-        .overlay(shortcutHelpOverlay)
-        .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
-        // FIRST-RUN-CURVE — empty states everywhere carry an "Add your files"
-        // (or similar) button; they post this notification and RootView jumps.
-        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
-            if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
-                navigate(to: dest)
-            }
-        }
-        // A persona job asked to run as a guided workflow — jump to the Work
-        // Center, which starts that run and clears the channel.
-        .onChange(of: appState.pendingWorkCenterDefID) { _, newValue in
-            if newValue != nil { navigate(to: .workCenter) }
-        }
-        .task {
-            // ENGINE POWER — refresh the semantic-index backlog caption.
-            while !Task.isCancelled {
-                let p = await appState.ingestProgress()
-                semanticBacklog = (p.embedDone, p.embedTotal)
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-            }
-        }
-        .sheet(isPresented: $presentingOnboarding) {
-            OnboardingView()
-                .environment(appState)
-        }
-        .sheet(isPresented: $showPersonaPicker) {
-            PersonaPickerView(current: personaID) { picked in
-                personaID = picked
-                showPersonaPicker = false
-            }
-        }
-        .task {
-            if !onboardingShown && appState.bookmarks.roots.isEmpty {
-                presentingOnboarding = true
-                onboardingShown = true
-            }
-            // First-run focus pick: if no persona chosen yet, prompt once.
-            if personaID.isEmpty && !presentingOnboarding {
-                showPersonaPicker = true
-            }
-        }
     }
 
     /// Engine picker binding. If background work is in flight, a change is held
