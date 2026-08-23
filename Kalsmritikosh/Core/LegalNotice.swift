@@ -125,8 +125,27 @@ public enum LegalNotice {
     presented.
     """
 
+    /// SOP positioning — added when "follows the professional's SOP" became
+    /// the lead claim. Names the three risks that claim creates and bounds them:
+    /// no affiliation, interpretation not certification, human review stands.
+    public static let sopStatement = """
+    Kalsmritikosh's workflows implement the developer's good-faith reading of published \
+    professional standards (such as PRISMA, GRADE, 8D, ACH, the Admiralty scale, FRCP \
+    provisions, and the Genealogical Proof Standard). Those names and standards belong to \
+    their respective bodies; no affiliation, endorsement, or certification by any \
+    governing body, court, or standards organization is implied. A conformance \
+    certificate means one thing only: the run satisfied the app's encoded rules for that \
+    workflow at the stated version. It is not a legal opinion, not a regulatory \
+    compliance guarantee, and not a substitute for review by a qualified professional \
+    responsible for the matter.
+    """
+
+    /// One line stamped on conformance certificates and the compliance board.
+    public static let conformanceScopeNote =
+        "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
+
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.2 (2026-08-23)"
+    public static let termsVersion = "1.3 (2026-08-23)"
 
     /// Subscription-proof payment terms: written to hold unchanged whether the
     /// app is free (today) or subscription-based (later).

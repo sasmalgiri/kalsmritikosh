@@ -76,6 +76,7 @@ public nonisolated struct ConformanceReport: Sendable, Equatable {
         if !prohibitedAsserted.isEmpty {
             out += "**Prohibited conclusions asserted:**\n"; for p in prohibitedAsserted { out += "- ⊘ \(p)\n" }; out += "\n"
         }
+        out += "_\(LegalNotice.conformanceScopeNote)_\n"
         return out
     }
 }

@@ -103,6 +103,7 @@ public nonisolated enum ComplianceBoard {
             out += "| \(r.title) | \(r.governingBody) | \(r.editionImplemented) | \(r.implementedIn) | \(verified) | \(effective.isDue(now: now) ? "⚠️ review due" : "✓ current") |\n"
         }
         out += "\nPeriodic checks are on-device reminders; re-verification is a human act against the governing body's current text, recorded with a date.\n"
+        out += "\n_\(LegalNotice.conformanceScopeNote)_\n"
         return out
     }
 }

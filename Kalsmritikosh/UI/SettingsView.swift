@@ -1247,6 +1247,7 @@ public struct SettingsView: View {
             legalItem("Privacy — private by design", LegalNotice.privacyStatement, "lock.shield")
             legalItem("Terms — provided “as is”", LegalNotice.termsStatement, "doc.text")
             legalItem("No professional relationship", LegalNotice.noRelationshipStatement, "person.crop.circle.badge.xmark")
+            legalItem("Standards & SOPs — interpretation, not certification", LegalNotice.sopStatement, "checkmark.seal")
             legalItem("Warranty & liability", LegalNotice.liabilityStatement, "shield.lefthalf.filled")
             legalItem("Your responsibilities — data, backup, lawful use", LegalNotice.responsibilityStatement, "externaldrive.badge.checkmark")
             legalItem("Payments & subscriptions", LegalNotice.subscriptionStatement, "creditcard")
