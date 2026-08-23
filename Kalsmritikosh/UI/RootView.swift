@@ -1067,25 +1067,12 @@ public struct RootView: View {
 
     // MARK: Header (grouped icon nav + always-on search)
 
-    /// Two-row app header shown above every screen:
-    ///  • Row 1 — every screen as an icon, grouped (Ask · Rebuild · Know ·
-    ///    Work · System) with a caption under each group. Active screen is
-    ///    highlighted; hovering any icon or group caption shows a one-line
-    ///    explanation.
-    ///  • Row 2 — an always-visible search box: type and press return to
-    ///    search the archive from anywhere, no navigation first.
+    /// App header shown above every screen: an always-visible search box —
+    /// type and press return to search the archive from anywhere, no
+    /// navigation first. Navigation itself lives in the sidebar only; the
+    /// per-screen icon strip was switched off (owner decision, 2026-08-23).
     private var appHeader: some View {
         VStack(spacing: 8) {
-            // The group icons lay out in a WRAPPING flow — NOT a horizontal ScrollView. On macOS a horizontal
-            // ScrollView intercepts the mouse-down for panning, so child Buttons never fire (the sidebar uses
-            // the same Button pattern but in a vertical scroll and works). A flow keeps every icon directly
-            // hittable and always visible (wraps to another line instead of hiding behind a scroll).
-            FlowLayout(spacing: 12, lineSpacing: 8) {
-                ForEach(Destination.Group.allCases) { group in
-                    headerGroup(group)
-                }
-            }
-            .padding(.horizontal, 16)
             headerSearchBar
                 .padding(.horizontal, 16)
         }
