@@ -42,7 +42,7 @@ public struct AuditChainEvent: Sendable, Equatable {
     /// `key=value;` pairs (never JSON — key order must be stable across runs).
     public let canonicalPayload: String
 
-    public init(source: Source, eventID: UUID, occurredAt: Date, canonicalPayload: String) {
+    public nonisolated init(source: Source, eventID: UUID, occurredAt: Date, canonicalPayload: String) {
         self.source = source
         self.eventID = eventID
         self.occurredAt = occurredAt

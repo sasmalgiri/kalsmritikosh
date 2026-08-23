@@ -13,7 +13,7 @@
 import Foundation
 import CryptoKit
 
-public struct DerivedObject: Sendable, Identifiable {
+public nonisolated struct DerivedObject: Sendable, Identifiable {
     public enum Kind: String, Sendable, Codable {
         case claim
         case event

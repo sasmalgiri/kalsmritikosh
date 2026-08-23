@@ -13,7 +13,7 @@
 
 import Foundation
 
-public struct UserIntent: Codable, Sendable, Hashable {
+public nonisolated struct UserIntent: Codable, Sendable, Hashable {
     public let kind: Kind
     public let scope: Scope
     public let timeframe: Timeframe?

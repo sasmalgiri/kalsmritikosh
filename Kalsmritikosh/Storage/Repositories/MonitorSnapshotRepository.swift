@@ -9,7 +9,7 @@
 
 import Foundation
 
-public struct MonitorSnapshot: Sendable {
+public nonisolated struct MonitorSnapshot: Sendable {
     public let id: UUID
     public let createdAt: Date
     public let signatures: [String]

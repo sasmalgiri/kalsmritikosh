@@ -20,7 +20,7 @@
 import Foundation
 import Accelerate
 
-public struct KMeansClusterer: Sendable {
+public nonisolated struct KMeansClusterer: Sendable {
 
     public struct Result: Sendable {
         /// k centroids, each `dim` floats.
