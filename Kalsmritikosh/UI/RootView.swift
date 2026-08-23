@@ -34,6 +34,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
     case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
     case rsStudio, gnStudio, ccStudio, inStudio
+    case sopBoard
     case fundFlow, emailThreads
     case review
     case handoff
@@ -80,6 +81,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "Proof Argument"
         case .ccStudio:     return "Publish Package"
         case .inStudio:     return "Emergency Binder"
+        case .sopBoard:     return "Compliance Board"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
@@ -141,6 +143,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "person.text.rectangle"
         case .ccStudio:     return "shippingbox"
         case .inStudio:     return "book.closed"
+        case .sopBoard:     return "checklist.checked"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
@@ -218,6 +221,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .gnStudio:     return "Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument"
         case .ccStudio:     return "Ship a piece professionally — claims checked to sources, rights cleared, disclosures confirmed, corrections path in place"
         case .inStudio:     return "Build the family emergency binder — key people, where every document and account lives, your instructions, printable"
+        case .sopBoard:     return "Every external SOP the app implements, at the edition verified, with periodic re-checks so compliance is maintained over time"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
@@ -261,7 +265,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
             case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
-            case .system:      return [.guide, .sutra, .settings]
+            case .system:      return [.guide, .sutra, .sopBoard, .settings]
             }
         }
 
@@ -447,7 +451,7 @@ public struct RootView: View {
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
              .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio:    return .reports
-        case .guide, .settings, .sutra:                               return .settings
+        case .guide, .settings, .sutra, .sopBoard:                    return .settings
         }
     }
 
@@ -1344,6 +1348,7 @@ public struct RootView: View {
         case .gnStudio:     GenealogistStudioView()
         case .ccStudio:     CreatorStudioView()
         case .inStudio:     BinderStudioView()
+        case .sopBoard:     ComplianceBoardView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()
