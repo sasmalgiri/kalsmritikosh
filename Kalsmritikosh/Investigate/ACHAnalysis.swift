@@ -86,6 +86,7 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
     public var question: String = ""
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     public var hypotheses: [ACHHypothesis] = []
     public var evidence: [ACHEvidence] = []
@@ -157,6 +158,7 @@ public nonisolated struct ACHAnalysis: Codable, Identifiable, Hashable, Sendable
         a.conclusion.leadingHypothesisID = h1.id
         a.conclusion.confidence = .moderate
         a.conclusion.summary = "The evidence is least inconsistent with a transcription error at intake; misrepresentation is heavily contradicted by the unprompted disclosure and absence of motive. Recommend a targeted re-interview before any coverage decision."
+        StudioAudit.record(&a.history, "Worked example created", at: now)
         return a
     }
 
@@ -237,6 +239,7 @@ public enum ACHReportRenderer {
         out += "**Confidence:** \(a.conclusion.confidence.label)\n\n"
         if !a.conclusion.summary.trimmed.isEmpty { out += "\(a.conclusion.summary)\n\n" }
         out += "---\n\n_ACH aids judgment; it does not compute a verdict. A low score means a hypothesis survives the evidence best, not that it is proven — if several remain viable, say so._\n"
+        out += StudioAudit.appendix(a.history)
         return out
     }
 }

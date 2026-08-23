@@ -109,6 +109,7 @@ public struct SIUStudioView: View {
     private func newReferral() {
         var r = SIUReferral(title: "New claim file", now: Date())
         r.investigator = NSFullUserName()
+        StudioAudit.record(&r.history, "Created")
         referrals.append(r); persist(); activeID = r.id; stage = .claim
     }
     private func loadSample() {

@@ -33,6 +33,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
     case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
+    case rsStudio, gnStudio, ccStudio, inStudio
     case fundFlow, emailThreads
     case review
     case handoff
@@ -75,6 +76,10 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .siuStudio:    return "SIU Report"
         case .faStudio:     return "Expert Report"
         case .jnStudio:     return "Fact-Check"
+        case .rsStudio:     return "Evidence Review"
+        case .gnStudio:     return "Proof Argument"
+        case .ccStudio:     return "Publish Package"
+        case .inStudio:     return "Emergency Binder"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
@@ -132,6 +137,10 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .siuStudio:    return "shield.lefthalf.filled"
         case .faStudio:     return "dollarsign.arrow.circlepath"
         case .jnStudio:     return "newspaper"
+        case .rsStudio:     return "doc.text.magnifyingglass"
+        case .gnStudio:     return "person.text.rectangle"
+        case .ccStudio:     return "shippingbox"
+        case .inStudio:     return "book.closed"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
@@ -205,6 +214,10 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .siuStudio:    return "Work a referred claim the SIU way — red flags against objective criteria, loss chronology, investigation, discrepancies, and the exact disposition report"
         case .faStudio:     return "Follow the money like a testifying expert — named tracing method, sourced schedule, findings distinct from opinion, and the FRCP 26(a)(2)(B) report"
         case .jnStudio:     return "Prepare a contested story the newsroom way — claim-by-claim verification, a right-of-reply log with deadlines, and the pre-publication memo"
+        case .rsStudio:     return "Run a review the published way — PRISMA screening counts, one extraction row per included study, and a GRADE-rated synthesis"
+        case .gnStudio:     return "Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument"
+        case .ccStudio:     return "Ship a piece professionally — claims checked to sources, rights cleared, disclosures confirmed, corrections path in place"
+        case .inStudio:     return "Build the family emergency binder — key people, where every document and account lives, your instructions, printable"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
@@ -245,7 +258,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .sutra, .settings]
@@ -427,7 +440,7 @@ public struct RootView: View {
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
-             .jnStudio:                                                return .reports
+             .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio:    return .reports
         case .guide, .settings, .sutra:                               return .settings
         }
     }
@@ -1315,6 +1328,10 @@ public struct RootView: View {
         case .siuStudio:    SIUStudioView()
         case .faStudio:     ForensicStudioView()
         case .jnStudio:     JournalistStudioView()
+        case .rsStudio:     ResearcherStudioView()
+        case .gnStudio:     GenealogistStudioView()
+        case .ccStudio:     CreatorStudioView()
+        case .inStudio:     BinderStudioView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()

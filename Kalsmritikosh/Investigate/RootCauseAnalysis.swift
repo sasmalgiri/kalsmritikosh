@@ -141,6 +141,7 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
     public var problemStatement: String = ""  // the effect / incident under investigation
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     public var brainstorm: [RCAIdea] = []
     public var fiveWhys: [RCAWhyStep] = []
@@ -251,6 +252,7 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
         r.conclusion.summary = "The inconsistency is best explained by a process gap at intake rather than misrepresentation on the current evidence. Recommend a verification step and a targeted re-interview before any coverage decision."
         r.approval.preparedBy = "SIU Investigator"
         r.approval.submittedTo = "SIU Manager"
+        StudioAudit.record(&r.history, "Worked example created", at: now)
         return r
     }
 }
@@ -357,6 +359,7 @@ public enum RCAReportRenderer {
         out += "\n\nApproval: **\(rca.approval.status.label)**"
         if rca.approval.status == .approved { out += " — signed **\(rca.approval.approver.orDash)**, \(date(rca.approval.decidedAt))" }
         out += "\n"
+        out += StudioAudit.appendix(rca.history)
         return out
     }
 }

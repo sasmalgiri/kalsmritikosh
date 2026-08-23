@@ -165,6 +165,7 @@ public struct ReasoningStudioView: View {
     private func newAnalysis() {
         var rca = RootCauseAnalysis(title: "New investigation", now: Date())
         rca.approval.preparedBy = NSFullUserName()
+        StudioAudit.record(&rca.history, "Created")
         analyses.append(rca); persist()
         activeID = rca.id; stage = .frame
     }

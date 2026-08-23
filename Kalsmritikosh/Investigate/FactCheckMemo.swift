@@ -58,6 +58,7 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     // Stage 1 — Story.
     public var premise: String = ""          // what the story alleges, in one paragraph
@@ -146,6 +147,7 @@ public struct FactCheckMemo: Codable, Identifiable, Hashable, Sendable {
         m.replies = [r1, r2]
         m.allegedLabellingConfirmed = true
         m.correctionsPathConfirmed = true
+        StudioAudit.record(&m.history, "Worked example created", at: now)
         return m
     }
 }
@@ -196,6 +198,7 @@ public enum FactCheckMemoRenderer {
         out += "- A corrections path exists post-publication: **\(m.correctionsPathConfirmed ? "Yes" : "No")**\n\n"
 
         out += "---\n\nPrepared by **\(m.reporter.orDashJ)** · Reviewed by **\(m.editor.orDashJ)**\n"
+        out += StudioAudit.appendix(m.history)
         return out
     }
 }

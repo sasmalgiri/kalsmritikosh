@@ -78,6 +78,7 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     // Stage 1 — Mandate (terms of reference).
     public var mandate: String = ""                     // who commissioned it, to determine what
@@ -185,6 +186,7 @@ public struct WorkplaceInvestigation: Codable, Identifiable, Hashable, Sendable 
         w.noticeGiven = true
         w.opportunityToRespond = true
         w.submittedTo = "HR Director"
+        StudioAudit.record(&w.history, "Worked example created", at: now)
         return w
     }
 }
@@ -279,6 +281,7 @@ public enum WIReportRenderer {
         out += "---\n\nPrepared by **\(w.investigator.orDashWI)**"
         if !w.submittedTo.trimmed.isEmpty { out += " · Submitted to **\(w.submittedTo)**" }
         out += "\n"
+        out += StudioAudit.appendix(w.history)
         return out
     }
 }

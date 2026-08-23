@@ -78,6 +78,7 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     // Stage 1 — Claim identification.
     public var claimNumber: String = ""
@@ -179,6 +180,7 @@ public struct SIUReferral: Codable, Identifiable, Hashable, Sendable {
         s.disposition = .returnToClaims
         s.dispositionRationale = "Suspicion not substantiated on the developed facts; recommend claims resolve the date via a targeted re-interview and medical-record reconciliation. The file shows the work performed."
         s.indicatorsNotProofAcknowledged = true
+        StudioAudit.record(&s.history, "Worked example created", at: now)
         return s
     }
 }
@@ -239,6 +241,7 @@ public enum SIUReportRenderer {
             out += "_This referral is made in good faith under the applicable insurance-fraud reporting statute._\n\n"
         }
         out += "---\n\nPrepared by **\(s.investigator.orDashSIU)**. The file documents what triggered the referral, what was done, what was found, and the action that followed.\n"
+        out += StudioAudit.appendix(s.history)
         return out
     }
 }

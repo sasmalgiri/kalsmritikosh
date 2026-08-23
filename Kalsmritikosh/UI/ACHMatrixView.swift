@@ -112,7 +112,8 @@ public struct ACHMatrixView: View {
     }
 
     private func newAnalysis() {
-        let a = ACHAnalysis(title: "New analysis", now: Date())
+        var a = ACHAnalysis(title: "New analysis", now: Date())
+        StudioAudit.record(&a.history, "Created")
         analyses.append(a); persist(); activeID = a.id
     }
     private func loadSample() {

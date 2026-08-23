@@ -106,6 +106,7 @@ public struct PrivilegeLogStudioView: View {
     private func newLog() {
         var l = PrivilegeLog(title: "New privilege log", now: Date())
         l.preparedBy = NSFullUserName()
+        StudioAudit.record(&l.history, "Created")
         logs.append(l); persist(); activeID = l.id; stage = .matter
     }
     private func loadSample() {

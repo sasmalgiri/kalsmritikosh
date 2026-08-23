@@ -49,6 +49,7 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     // Stage 1 — Engagement.
     public var scope: String = ""              // what the expert was asked to determine
@@ -143,6 +144,7 @@ public struct ForensicEngagement: Codable, Identifiable, Hashable, Sendable {
         f.certaintyDeclared = true
         f.limitations = ["Vendor LLC's second account (#9911) was not produced; amounts routed through it, if any, are not captured.",
                          "No opinion is offered on intent; that is for the trier of fact."]
+        StudioAudit.record(&f.history, "Worked example created", at: now)
         return f
     }
 }
@@ -198,6 +200,7 @@ public enum FAReportRenderer {
         }
 
         out += "---\n\nSigned: **\(f.expert.orDashFA)**\n"
+        out += StudioAudit.appendix(f.history)
         return out
     }
 }

@@ -64,6 +64,7 @@ public struct PrivilegeLog: Codable, Identifiable, Hashable, Sendable {
     public var title: String
     public var createdAt: Date
     public var updatedAt: Date
+    public var history: [StudioAuditEntry]?
 
     // Stage 1 — Matter.
     public var caption: String = ""          // "Doe v. Acme Corp., No. 1:26-cv-0421 (N.D. Ga.)"
@@ -143,6 +144,7 @@ public struct PrivilegeLog: Codable, Identifiable, Hashable, Sendable {
         p.entries = [e1, e2, e3]
         p.descriptionsDoNotRevealContent = true
         p.everyEntryHasBasis = true
+        StudioAudit.record(&p.history, "Worked example created", at: now)
         return p
     }
 }
@@ -176,6 +178,7 @@ public enum PrivilegeLogRenderer {
         out += "---\n\n"
         out += "Certified: the descriptions above do not reveal privileged content, and a claim of privilege or work-product protection is asserted for every entry.\n\n"
         out += "Prepared by **\(p.preparedBy.orDashPL)** on behalf of **\(p.producingParty.orDashPL)**.\n"
+        out += StudioAudit.appendix(p.history)
         return out
     }
 }

@@ -114,6 +114,7 @@ public struct WorkplaceStudioView: View {
     private func newCase() {
         var c = WorkplaceInvestigation(title: "New investigation", now: Date())
         c.investigator = NSFullUserName()
+        StudioAudit.record(&c.history, "Created")
         cases.append(c); persist(); activeID = c.id; stage = .mandate
     }
     private func loadSample() {

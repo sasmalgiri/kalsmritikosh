@@ -111,6 +111,7 @@ public struct ForensicStudioView: View {
     private func newEngagement() {
         var e = ForensicEngagement(title: "New engagement", now: Date())
         e.expert = NSFullUserName()
+        StudioAudit.record(&e.history, "Created")
         engagements.append(e); persist(); activeID = e.id; stage = .engagement
     }
     private func loadSample() {

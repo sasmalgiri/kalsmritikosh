@@ -109,6 +109,7 @@ public struct JournalistStudioView: View {
     private func newMemo() {
         var m = FactCheckMemo(title: "New fact-check", now: Date())
         m.reporter = NSFullUserName()
+        StudioAudit.record(&m.history, "Created")
         memos.append(m); persist(); activeID = m.id; stage = .story
     }
     private func loadSample() {
