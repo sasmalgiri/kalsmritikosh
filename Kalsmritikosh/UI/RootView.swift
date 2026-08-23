@@ -652,6 +652,19 @@ public struct RootView: View {
                     .padding(.bottom, 6)
                 paletteButton
                     .padding(.bottom, 6)
+                    // The add-folder importer (⌘K palette) lives on ITS OWN view:
+                    // two .fileImporter modifiers on one view collide on macOS —
+                    // only one presents, which silently killed "Add files".
+                    .fileImporter(isPresented: $showAddFolder,
+                                  allowedContentTypes: [.folder],
+                                  allowsMultipleSelection: false) { result in
+                        if case .success(let urls) = result, let url = urls.first {
+                            let scoped = url.startAccessingSecurityScopedResource()
+                            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                            try? appState.bookmarks.register(url: url)
+                            navigate(to: .sources)
+                        }
+                    }
                 // ADD FILES — always-visible ingestion entry point: pick supported
                 // files and the app reads them into your archive (folders are added
                 // from Sources). Complements the auto-watched folders.
@@ -671,16 +684,6 @@ public struct RootView: View {
                               allowsMultipleSelection: true) { result in
                     if case .success(let urls) = result {
                         Task { await appState.ingestFiles(urls) }
-                    }
-                }
-                .fileImporter(isPresented: $showAddFolder,
-                              allowedContentTypes: [.folder],
-                              allowsMultipleSelection: false) { result in
-                    if case .success(let urls) = result, let url = urls.first {
-                        let scoped = url.startAccessingSecurityScopedResource()
-                        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                        try? appState.bookmarks.register(url: url)
-                        navigate(to: .sources)
                     }
                 }
                 // Simple / Advanced interface toggle. Simple shows one primary screen per group;
