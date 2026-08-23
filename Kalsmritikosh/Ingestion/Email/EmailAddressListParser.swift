@@ -19,7 +19,7 @@
 
 import Foundation
 
-public enum EmailAddressListParser {
+public nonisolated enum EmailAddressListParser {
 
     public struct ParsedAddress: Sendable, Equatable {
         public let address: String

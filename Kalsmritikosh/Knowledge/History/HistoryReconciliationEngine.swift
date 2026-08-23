@@ -12,7 +12,7 @@
 
 import Foundation
 
-public struct HistoryReconciliationEngine: Sendable {
+public nonisolated struct HistoryReconciliationEngine: Sendable {
     private let detector = ContradictionDetector()
     private let gapEngine: HistoryGapEngine
     private let independence = SourceIndependenceGrouper()

@@ -51,7 +51,7 @@ public struct HistoryGap: Sendable, Codable, Hashable, Identifiable {
 /// Deterministic gap inference over a HistoryOutline. Conservative: only gaps that
 /// follow directly from the item shape (no speculation). Suggested evidence types
 /// help the Missing-Chapter action turn a gap into a focused search.
-public struct HistoryGapEngine: Sendable {
+public nonisolated struct HistoryGapEngine: Sendable {
     /// A silent period longer than this (seconds) between consecutive dated items
     /// is flagged. Default 2 years.
     public let silentPeriodThreshold: TimeInterval

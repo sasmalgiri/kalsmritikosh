@@ -24,8 +24,8 @@ public struct EmailTopic: Equatable, Sendable {
 }
 
 public enum EmailTopicExtractor {
-    static let minLength = 12
-    static let maxLength = 180
+    nonisolated static let minLength = 12
+    nonisolated static let maxLength = 180
 
     public nonisolated static func topic(subject: String?, cleanedContent: String) -> EmailTopic? {
         if let s = meaningfulSubject(subject) {

@@ -14,7 +14,7 @@
 import Foundation
 
 /// A single vetted transform step (maps to a DatasetProcessor op).
-public enum DatasetTransform: Codable, Sendable, Hashable {
+public nonisolated enum DatasetTransform: Codable, Sendable, Hashable {
     case filterContains(columnIndex: Int, needle: String)
     case sumColumn(columnIndex: Int, resultName: String)
     case countByGroup(keyColumn: Int)
@@ -28,7 +28,7 @@ public enum DatasetTransform: Codable, Sendable, Hashable {
     }
 }
 
-public struct TransformationGraph: Sendable, Hashable {
+public nonisolated struct TransformationGraph: Sendable, Hashable {
     public private(set) var steps: [DatasetTransform]
     /// How many steps are currently applied (cursor). Steps beyond it are redoable.
     public private(set) var cursor: Int

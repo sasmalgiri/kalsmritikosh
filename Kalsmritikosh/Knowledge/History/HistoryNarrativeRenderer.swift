@@ -27,7 +27,7 @@ public struct HistoryNarrative: Sendable, Codable, Hashable {
     public let gapsNote: String?
 }
 
-public struct HistoryNarrativeRenderer: Sendable {
+public nonisolated struct HistoryNarrativeRenderer: Sendable {
     private static let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c
     }()

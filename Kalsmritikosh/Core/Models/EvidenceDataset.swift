@@ -30,7 +30,7 @@ public struct DatasetColumn: Codable, Sendable, Hashable, Identifiable {
 }
 
 /// One cell. A derived value MUST carry >=1 supporting evidence block, or be `.missing`.
-public struct DatasetCell: Codable, Sendable, Hashable {
+public nonisolated struct DatasetCell: Codable, Sendable, Hashable {
     public let value: String?
     public let sourceBlockIDs: [UUID]
     public let status: EvidenceStatus

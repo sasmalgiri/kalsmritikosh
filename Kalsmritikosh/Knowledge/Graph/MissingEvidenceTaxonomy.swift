@@ -13,7 +13,7 @@
 
 import Foundation
 
-public enum MissingEvidenceKind: String, Codable, Sendable, CaseIterable {
+public nonisolated enum MissingEvidenceKind: String, Codable, Sendable, CaseIterable {
     case notInCorpus         // no source in the added corpus covers this
     case searchedNotFound    // sources searched, no matching evidence present
     case deferredProcessing  // recognized source not yet fully processed (e.g. media/OCR pending)

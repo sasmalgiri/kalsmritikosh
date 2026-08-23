@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct HistoryOutlineBuilder: Sendable {
+public nonisolated struct HistoryOutlineBuilder: Sendable {
     /// UTC gregorian calendar so year grouping is stable across locales/timezones.
     private static let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian); c.timeZone = TimeZone(identifier: "UTC")!; return c

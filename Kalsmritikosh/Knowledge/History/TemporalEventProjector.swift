@@ -15,7 +15,7 @@
 import Foundation
 import CryptoKit
 
-public struct TemporalEventProjector: Sendable {
+public nonisolated struct TemporalEventProjector: Sendable {
     public let extractorID: String
     public let extractorVersion: String
     /// Injected clock (tests pass a fixed date so projected `createdAt` is stable).

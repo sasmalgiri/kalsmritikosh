@@ -14,7 +14,7 @@
 
 import Foundation
 
-public enum LegalNotice {
+public nonisolated enum LegalNotice {
     /// Short line shown under every answer (space-constrained UI).
     public static let answerFooter =
         "AI-assisted answer — it can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice."

@@ -60,7 +60,7 @@ public enum PreferredSourceRole: String, Codable, Sendable, Hashable, CaseIterab
 }
 
 /// The corroboration rules the answer must respect.
-public struct EvidencePolicy: Codable, Sendable, Hashable {
+public nonisolated struct EvidencePolicy: Codable, Sendable, Hashable {
     /// At least two independent sources required before a material claim ships.
     public let requiresCorroboration: Bool
     /// Duplicate copies of the same source never count as independent corroboration.

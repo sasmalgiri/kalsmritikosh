@@ -19,7 +19,7 @@ public protocol SourceIndependenceKeyProvider: Sendable {
     func keys(for objectIDs: Set<KnowledgeObject.ID>) async throws -> [KnowledgeObject.ID: String]
 }
 
-public struct SourceIndependenceGrouper: Sendable {
+public nonisolated struct SourceIndependenceGrouper: Sendable {
     public init() {}
 
     /// Group object ids by their independence key. Objects with the SAME key are

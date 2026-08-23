@@ -14,7 +14,7 @@
 import Foundation
 
 public actor HistoryReconstructionEngine: HistoryReconstructing {
-    public static let version = "history-engine-1"
+    public nonisolated static let version = "history-engine-1"
 
     private let resolver: HistorySubjectResolver
     private let collector: HistoryMaterialCollector

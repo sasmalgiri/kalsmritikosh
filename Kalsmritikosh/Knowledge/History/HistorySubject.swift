@@ -15,7 +15,7 @@ import Foundation
 
 /// What a history is *about*. Every entity-bearing case carries a canonical
 /// `Entity.ID`; `topic`/`folder`/`corpus` are scope selectors without an entity.
-public enum HistorySubject: Sendable, Hashable, Codable {
+public nonisolated enum HistorySubject: Sendable, Hashable, Codable {
     case entity(Entity.ID)
     case project(Entity.ID)
     case organization(Entity.ID)

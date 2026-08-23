@@ -66,7 +66,7 @@ public enum ConflictStatus: String, Codable, Sendable, Hashable, CaseIterable {
 /// The five orthogonal dimensions carried together. Replaces the single
 /// `EvidenceStatus` field on domain models (adopted in Commit C). `legacyStatus`
 /// preserves the original raw value so nothing is lost across the split.
-public struct EvidenceAssessment: Codable, Sendable, Hashable {
+public nonisolated struct EvidenceAssessment: Codable, Sendable, Hashable {
     public let basis: EvidenceBasis
     public let review: ReviewDisposition
     public let origin: ProposalOrigin

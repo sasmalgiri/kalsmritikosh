@@ -164,7 +164,7 @@ public struct TemporalClaim: Sendable, Codable, Hashable, Identifiable {
 /// HIST-024 — the domain-NEUTRAL predicate registry. Domain packs may add more, but
 /// every predicate maps to this same temporal model. Kept as canonical strings so
 /// the store and projector agree.
-public enum HistoryPredicate {
+public nonisolated enum HistoryPredicate {
     public static let hasName = "has_name"
     public static let hasAlias = "has_alias"
     public static let bornOn = "born_on"

@@ -23,7 +23,7 @@ public enum SourceCoverageState: String, Codable, Sendable, Hashable {
     case failed         = "FAILED"          // attempt failed; retry info kept, not "processed"
 
     /// May a source in this state be counted as "processed / searchable"?
-    public var isSearchable: Bool { self == .full || self == .partial }
+    public nonisolated var isSearchable: Bool { self == .full || self == .partial }
     /// User-facing claim allowed for this state.
     public var userLabel: String {
         switch self {

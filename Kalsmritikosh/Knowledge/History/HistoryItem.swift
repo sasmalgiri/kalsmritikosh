@@ -40,7 +40,7 @@ public enum HistoryReviewStatus: String, Codable, Sendable {
 
 /// A pointer from a history item to the EXACT evidence backing it. `role` records
 /// whether this source supports, contradicts, or merely contextualises the item.
-public struct EvidenceReference: Sendable, Codable, Hashable {
+public nonisolated struct EvidenceReference: Sendable, Codable, Hashable {
     public enum Role: String, Codable, Sendable { case supports, contradicts, context }
     public let objectID: KnowledgeObject.ID
     public let blockID: EvidenceBlock.ID?
@@ -62,14 +62,14 @@ public struct EvidenceReference: Sendable, Codable, Hashable {
 }
 
 /// What a history item was projected FROM (lineage; §13 projection preserves refs).
-public struct DerivedReference: Sendable, Codable, Hashable {
+public nonisolated struct DerivedReference: Sendable, Codable, Hashable {
     public enum Kind: String, Codable, Sendable { case event, assertion, genericFact, temporalClaim, relationship, historyItem }
     public let kind: Kind
     public let id: UUID
     public nonisolated init(kind: Kind, id: UUID) { self.kind = kind; self.id = id }
 }
 
-public struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
+public nonisolated struct HistoryItem: Sendable, Codable, Identifiable, Hashable {
     public let id: UUID
     public let subject: HistorySubject
     public let kind: HistoryItemKind

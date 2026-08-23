@@ -28,7 +28,7 @@ public struct HistoryDiff: Sendable, Hashable {
     }
 }
 
-public struct HistoryDiffEngine: Sendable {
+public nonisolated struct HistoryDiffEngine: Sendable {
     public init() {}
 
     public func diff(old: HistoryOutline, new: HistoryOutline) -> HistoryDiff {

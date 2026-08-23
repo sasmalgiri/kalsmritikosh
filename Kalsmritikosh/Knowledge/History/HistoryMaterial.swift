@@ -11,7 +11,7 @@
 
 import Foundation
 
-public struct HistoryMaterial: Sendable {
+public nonisolated struct HistoryMaterial: Sendable {
     public let subject: ResolvedHistorySubject
     public let events: [Event]
     public let assertions: [Assertion]
