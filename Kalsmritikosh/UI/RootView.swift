@@ -496,6 +496,11 @@ public struct RootView: View {
                     // SHELL-001 — browser-style location Back/Forward, deliberately
                     // distinct from any workflow's Prev/Next stepping.
                     ToolbarItemGroup(placement: .navigation) {
+                        Button { navigate(to: .home) } label: {
+                            Image(systemName: "house")
+                        }
+                        .keyboardShortcut(.home, modifiers: .command)
+                        .help("Home — back to the start screen")
                         Button(action: navGoBack) {
                             Image(systemName: "chevron.backward")
                         }
@@ -1329,7 +1334,11 @@ private struct FlowLayout: Layout {
             widest = max(widest, x - spacing)
             lineHeight = max(lineHeight, size.height)
         }
-        return CGSize(width: min(widest, maxWidth), height: y + lineHeight)
+        // Return the FULL proposed width (not the widest line): placeSubviews wraps
+        // against bounds.width, so reporting a narrower width made placement wrap
+        // EARLIER than measurement — extra rows landed below the measured height,
+        // under the detail view, visible but not clickable at windowed sizes.
+        return CGSize(width: proposal.width ?? widest, height: y + lineHeight)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
