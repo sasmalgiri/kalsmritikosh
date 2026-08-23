@@ -346,6 +346,62 @@ public final class AppState {
         }
     }
 
+    /// True while any background task the user could want to halt is in flight:
+    /// the bulk (re)ingest pass (running / paused / stopping), the embedding
+    /// drain that rides it, or the idle maintenance scan. Drives the always-
+    /// visible "Stop all" control and the mode-switch confirmation — the button
+    /// only appears while there is actually something to stop.
+    public var hasStoppableBackgroundWork: Bool {
+        ingestRunState == .running
+            || ingestRunState == .paused
+            || ingestRunState == .stopping
+            || idleMaintenanceScan != nil
+    }
+
+    /// STOP ALL — one action that halts every stoppable background task at its
+    /// next safe checkpoint: the bulk ingest pass, its background embedding
+    /// drain, and the idle maintenance scan. Nothing in flight is force-killed
+    /// (a document's atomic commit always finishes, so the ledger is never left
+    /// half-written); already-finished work stays and a later run resumes the
+    /// remainder via content-hash dedup. Idempotent — safe to call when idle.
+    public func stopAllBackgroundWork() {
+        // Only drive the ingest stop when a bulk pass owns the run state, so its
+        // `defer { ingestRunState = .idle }` resets us. Calling it while idle
+        // would strand the UI at "Stopping…" with nothing to reset it.
+        if ingestRunState == .running || ingestRunState == .paused {
+            stopIngest()
+        }
+        idleMaintenanceScan?.cancel()
+        idleMaintenanceScan = nil
+        scanContinuePromptPending = false
+    }
+
+    // MARK: - Add files (user-initiated ingest)
+
+    /// Ingest user-picked files (from an "Add files" button) into the private
+    /// archive with the full pipeline, tracked on the live panel so the user sees
+    /// progress. Picker URLs are sandbox security-scoped, so access is started per
+    /// file for the read. Folders are handled by the Sources watcher, not here.
+    public func ingestFiles(_ urls: [URL]) async {
+        guard let ingest, !urls.isEmpty else { return }
+        let activity = beginProcess("Adding \(urls.count) file(s)…", total: urls.count)
+        defer { finishProcess(activity); ingestCurrentFile = nil }
+        var done = 0
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            ingestCurrentFile = url.lastPathComponent
+            do {
+                _ = try await ingest.ingest(fileAt: url, intent: .fullAvailable)
+                ingestLastFile = url.lastPathComponent
+            } catch {
+                KalsmritikoshLog.app.error("Add-files ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+            done += 1
+            updateProcess(activity, done: done)
+        }
+    }
+
     // MARK: - Device-suitable model install (consent-gated)
 
     /// User declined the suggested lighter model — hide the prompt for this session.
@@ -595,6 +651,11 @@ public final class AppState {
     /// this on appear, then clears it. Lets a persona example open Ask ready
     /// to run.
     public var pendingAskQuestion: String?
+    /// Set by a persona job's guided runner to hand off into the Work Center:
+    /// the generated workflow's defID (e.g. "job.inv-01"). RootView navigates to
+    /// the Work Center when this is set; WorkCenterView starts/opens that run and
+    /// clears it. Lets a lazy user turn any job into its step-by-step workflow.
+    public var pendingWorkCenterDefID: String?
 
     // MARK: - Self-check (auto, zero-touch)
     /// Result of the fast self-check (deterministic logic + all Convert
@@ -1073,11 +1134,16 @@ public final class AppState {
                 let hasFittingModel = detectedOllama.contains {
                     $0.estimatedRAMBytes > 0 && $0.estimatedRAMBytes <= ramBudget
                 }
+                // Model-pull suggestions are a developer convenience: the release
+                // app is fully private by default — it never proposes a download
+                // (all shipped AI, including BGE search models, is in the bundle).
+                #if DEBUG
                 if !hasFittingModel {
                     let sug = OllamaSetupAdvisor.recommendModel(totalRAMBytes: hardware.totalRAMBytes)
                     self.pendingModelSuggestion = sug
                     KalsmritikoshLog.app.info("No comfortably-fitting reasoning model on \(hardware.totalRAMBytes / 1_073_741_824, privacy: .public)GB device — suggesting \(sug.modelTag, privacy: .public)")
                 }
+                #endif
             }
             if detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(

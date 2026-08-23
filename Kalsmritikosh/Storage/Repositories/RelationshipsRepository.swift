@@ -191,6 +191,47 @@ public actor RelationshipsRepository {
         }
     }
 
+    /// Weighted money-flow edges with both endpoints' canonical labels, for
+    /// the fund-flow visualization. Defaults to `paid` edges (payer → payee).
+    /// Edge `weight` is the corroboration count (how many times the payment
+    /// relationship was observed); `evidenceCount` is the number of distinct
+    /// source documents backing it. Ordered by weight so the strongest flows
+    /// come first when the caller caps the set.
+    public func fundFlowEdges(
+        kinds: [Relationship.Kind] = [.paid],
+        limit: Int = 400
+    ) async throws -> [FundFlowEdge] {
+        guard !kinds.isEmpty else { return [] }
+        // Enum rawValues are a fixed, safe vocabulary — no injection surface.
+        let kindList = kinds.map { "'\($0.rawValue)'" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT r.from_entity_id, r.to_entity_id, r.weight, r.evidence_object_ids_json,
+               ef.value AS from_label, et.value AS to_label
+        FROM relationships r
+        JOIN entities ef ON ef.id = r.from_entity_id
+        JOIN entities et ON et.id = r.to_entity_id
+        WHERE r.kind IN (\(kindList))
+          AND ef.review_status IS NULL AND ef.merged_into IS NULL
+          AND et.review_status IS NULL AND et.merged_into IS NULL
+        ORDER BY r.weight DESC
+        LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { row in
+            guard
+                let from = row.uuid(0),
+                let to = row.uuid(1),
+                let fromLabel = row.string(4),
+                let toLabel = row.string(5)
+            else { return nil }
+            let weight = Int(row.int(2) ?? 1)
+            let evidence = parseEvidence(row.string(3) ?? "[]").count
+            return FundFlowEdge(
+                fromID: from, toID: to,
+                fromLabel: fromLabel, toLabel: toLabel,
+                weight: max(1, weight), evidenceCount: evidence)
+        }
+    }
+
     // MARK: - JSON evidence list helpers
 
     private func parseEvidence(_ json: String) -> [String] {
@@ -208,4 +249,15 @@ public actor RelationshipsRepository {
         }
         return s
     }
+}
+
+/// A payer → payee money-flow edge with resolved labels, for the fund-flow view.
+public struct FundFlowEdge: Sendable, Hashable, Identifiable {
+    public var id: String { "\(fromID.uuidString)->\(toID.uuidString)" }
+    public let fromID: Entity.ID
+    public let toID: Entity.ID
+    public let fromLabel: String
+    public let toLabel: String
+    public let weight: Int
+    public let evidenceCount: Int
 }

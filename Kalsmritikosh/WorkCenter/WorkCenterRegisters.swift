@@ -79,7 +79,9 @@ public nonisolated struct WCRegister: Identifiable, Equatable, Sendable {
 
 public nonisolated enum WCRegisterCatalog {
 
-    public static var all: [WCRegister] { [interviewLog, requestTracker, researchLog, contentCalendar] }
+    public static var all: [WCRegister] {
+        [interviewLog, requestTracker, researchLog, contentCalendar, surveillanceLog, allegationsFindings]
+    }
 
     public static func register(_ docType: String) -> WCRegister? {
         all.first { $0.docType == docType }
@@ -225,4 +227,73 @@ public nonisolated enum WCRegisterCatalog {
               placeholder: "Record the interview"),
         ],
         titleKey: "workingTitle", statusKey: "stage")
+
+    // Surveillance / Observation Log — PI, SIU. Field observations with times
+    // and location; for SIU, whether the observed activity matches the
+    // claimed limitations (the bodily-injury / workers-comp check). Editable
+    // as a watch progresses, with the change history kept.
+    public static let surveillanceLog = WCRegister(
+        docType: "SVL", name: "Surveillance & Observation Log",
+        persona: "Investigator / SIU",
+        purpose: "Log field observations — who was watched, when and where, what they did, and (for a claim) whether the activity matches the stated limitations. Kept factual and time-stamped; editable with history.",
+        fields: [
+            f("subject", "Subject observed", .text,
+              "Who or what was under observation.",
+              placeholder: "Full name", required: true),
+            f("date", "Date", .date,
+              "The day of the observation."),
+            f("startTime", "Start time", .text,
+              "When the watch began — record real times; observation is only as good as its timeline.",
+              placeholder: "09:15"),
+            f("endTime", "End time", .text,
+              "When the watch ended.", placeholder: "12:40"),
+            f("location", "Location", .text,
+              "Where the observation took place — a public place; note the vantage point.",
+              placeholder: "123 Main St / public sidewalk", required: true),
+            f("observed", "What was observed", .longText,
+              "Plainly what the subject did — facts, not conclusions. Times against each activity where you can.",
+              required: true),
+            f("matchesClaim", "Activity vs. stated limitation", .choice,
+              "For a claim: does the observed activity fit the claimed restriction? An observation is evidence, not a verdict.",
+              options: ["Consistent with claim", "Inconsistent with claim", "Inconclusive", "Not applicable"]),
+            f("media", "Media reference", .text,
+              "Photo/video filenames or exhibit numbers this entry rests on.",
+              placeholder: "IMG_0421–0437"),
+            f("investigator", "Observed by", .text,
+              "Who conducted the observation — goes on the record."),
+        ],
+        titleKey: "subject", statusKey: "matchesClaim")
+
+    // Allegations & Findings — Compliance / HR. One row per allegation with
+    // its standard of proof and the disposition on the balance of
+    // probabilities (substantiated / unsubstantiated / inconclusive), keeping
+    // the RATIONALE and any RECOMMENDATION distinct — the investigator finds
+    // facts; the decision-maker acts.
+    public static let allegationsFindings = WCRegister(
+        docType: "ALG", name: "Allegations & Findings",
+        persona: "Compliance / HR Investigator",
+        purpose: "Track each allegation to a defensible disposition — substantiated, unsubstantiated, or inconclusive on the balance of probabilities — with the reasoning, and any recommendation kept separate from the finding of fact. Editable with history.",
+        fields: [
+            f("allegation", "Allegation", .text,
+              "The specific allegation being determined — one row per allegation.",
+              placeholder: "Raised voice / breached comms policy on 15 Nov", required: true),
+            f("against", "Respondent", .text,
+              "The person the allegation concerns.", placeholder: "Full name"),
+            f("policy", "Policy at issue", .text,
+              "The policy or standard the allegation would breach.",
+              placeholder: "Code of Conduct §4"),
+            f("standard", "Standard of proof", .choice,
+              "The standard applied to this determination — workplace findings usually rest on the balance of probabilities.",
+              options: ["Balance of probabilities", "Clear and convincing", "Other"]),
+            f("disposition", "Disposition", .choice,
+              "The finding — “more likely than not” is substantiated; genuinely undecidable is inconclusive; disproven is unfounded.",
+              required: true,
+              options: ["Substantiated", "Unsubstantiated", "Inconclusive", "Unfounded"]),
+            f("rationale", "Rationale", .longText,
+              "Why the evidence supports this disposition — the reasoning a reviewer can follow.",
+              required: true),
+            f("recommendation", "Recommendation (kept separate)", .longText,
+              "Any recommended action — deliberately separate from the finding of fact; the investigator recommends, the decision-maker decides."),
+        ],
+        titleKey: "allegation", statusKey: "disposition")
 }

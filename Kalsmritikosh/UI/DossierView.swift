@@ -165,6 +165,10 @@ public struct DossierView: View {
             }
             .buttonStyle(.plain)
             .disabled(streaming || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .guidance(GuidanceTip("Build dossier",
+                                  what: "Assembles everything known about a person, project or organization from your evidence — each fact cited to its source.",
+                                  enabledWhen: "Type a subject, and wait for any current build to finish."),
+                      enabled: !(streaming || subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
     }

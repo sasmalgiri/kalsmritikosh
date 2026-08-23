@@ -49,6 +49,10 @@ struct JobRunnerView: View {
     /// Launches the REAL job via the existing PersonaJobService path.
     let onRun: () -> Void
     let onClose: () -> Void
+    /// Optional — hand this job off to the Work Center as a full-rigor guided
+    /// workflow (gated steps, typed fields, a numbered document per step). nil
+    /// hides the button (e.g. in previews).
+    var onStartWorkflow: (() -> Void)? = nil
 
     @State private var step: Int = 0
 
@@ -207,6 +211,14 @@ struct JobRunnerView: View {
                 onClose()
             }
             .help("Keeps your place — reopen the guide any time to resume this step.")
+            if let onStartWorkflow {
+                Button {
+                    onStartWorkflow()
+                } label: {
+                    Label("Open as guided workflow", systemImage: "list.bullet.clipboard")
+                }
+                .help("Run this job as a step-by-step Work Center workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
+            }
             Spacer()
             if step > 0 {
                 Button("Previous") {

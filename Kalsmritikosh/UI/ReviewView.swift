@@ -102,6 +102,10 @@ public struct ReviewView: View {
                         .controlSize(.small)
                         .disabled(queueIDs.count == reviewedCount)
                         .help("Work through items one at a time — decide with the number keys, and it advances for you")
+                        .guidance(GuidanceTip("Start review queue",
+                                              what: "Walks you through the items needing review one at a time — decide with the number keys and it advances for you automatically.",
+                                              enabledWhen: "Available while there are still items left to review."),
+                                  enabled: queueIDs.count != reviewedCount)
                         if reviewedCount > 0 {
                             Text("\(reviewedCount) of \(queueIDs.count) reviewed")
                                 .font(.caption).foregroundStyle(.secondary)

@@ -88,6 +88,10 @@ public struct SearchView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(batchRunning || BatchSearchParser.parse(batchInput).isEmpty)
+                    .guidance(GuidanceTip("Search all",
+                                          what: "Runs every term you listed (one per line) as its own search at once and shows how many documents match each — a fast way to sweep a whole checklist of terms.",
+                                          enabledWhen: "Enter at least one term, and wait for any running batch to finish."),
+                              enabled: !(batchRunning || BatchSearchParser.parse(batchInput).isEmpty))
                     if !batchResults.isEmpty {
                         Text("\(batchResults.filter { $0.count > 0 }.count) of \(batchResults.count) terms found")
                             .font(.caption).foregroundStyle(.secondary)

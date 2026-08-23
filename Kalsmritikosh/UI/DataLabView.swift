@@ -33,6 +33,7 @@ public struct DataLabView: View {
     @State private var record: WorkbenchDatasetRecord?
     @State private var selectedCell: (rowID: UUID, fieldID: UUID)?
     @State private var cellEditor = ""
+    @FocusState private var focusedCellKey: String?
     @State private var newFieldName = ""
     @State private var newFieldShape: FactSchemaRegistry.ValueShape = .text
 
@@ -54,7 +55,18 @@ public struct DataLabView: View {
     @State private var quality: WorkbenchDataQualityReport?
     @State private var showQuality = false
 
+    // Show every generic analysis, not just this persona's curated set.
+    @State private var showAllAnalyses = false
+
     @State private var errorMessage: String?
+
+    // Persona starter template chosen on the create panel (optional).
+    @State private var selectedStarter: DataLabStarterTemplate?
+
+    // One-click "bind this cell to a source document" (manual cells).
+    @State private var bindingActive = false
+    @State private var bindCandidates: [KnowledgeObjectSummaryRow] = []
+    @State private var bindQuery = ""
 
     // Interop — Excel/Word/PDF exports (each posts a numbered EXP document),
     // CSV import, and the chart panel.
@@ -90,6 +102,29 @@ public struct DataLabView: View {
         return name.isEmpty ? "Owner" : name
     }
 
+    // MARK: Persona scoping — DataLab shows the tools this workspace's
+    // profession actually uses; the rest stay reachable behind "Other…".
+
+    /// The persona (workspace template) for a dataset being edited.
+    private func personaTemplate(_ rec: WorkbenchDatasetRecord) -> WorkspaceTemplate {
+        workspaces.first { $0.id == rec.dataset.workspaceID }?.template ?? .general
+    }
+
+    /// The persona for the create panel (the selected/only workspace).
+    private var createPersona: WorkspaceTemplate {
+        if let id = selectedWorkspace, let ws = workspaces.first(where: { $0.id == id }) { return ws.template }
+        return workspaces.first?.template ?? .general
+    }
+
+    /// Header summary line, built as a plain string so the ViewBuilder doesn't
+    /// have to type-check a long `Text(...) + optional + optional` chain.
+    private func datasetSummary(_ rec: WorkbenchDatasetRecord) -> String {
+        var s = "\(rec.fields.count) fields · \(rec.rows.count) rows · revision \(rec.dataset.revision)"
+        if let sc = activeScenario { s += " · scenario: \(sc.scenario.title)" }
+        if let p = projectionLabel { s += " · view: \(p)" }
+        return s
+    }
+
     // MARK: - Catalog
 
     private var catalogScreen: some View {
@@ -121,19 +156,73 @@ public struct DataLabView: View {
                         Text("Advanced").tag(WorkbenchDatasetMode.advanced)
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 170)
+                    Menu {
+                        Button("Blank table") { selectedStarter = nil }
+                        let suggested = DataLabStarterTemplates.suggested(for: createPersona)
+                        let suggestedIDs = Set(suggested.map(\.id))
+                        let others = DataLabStarterTemplates.all.filter { !suggestedIDs.contains($0.id) }
+                        if createPersona != .general, !suggested.isEmpty {
+                            Divider()
+                            ForEach(suggested) { t in
+                                Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                            }
+                            if !others.isEmpty {
+                                Menu("Other professions…") {
+                                    ForEach(others) { t in
+                                        Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                                    }
+                                }
+                            }
+                        } else {
+                            Divider()
+                            ForEach(DataLabStarterTemplates.all) { t in
+                                Button("\(t.displayName) · \(t.profession)") { selectedStarter = t }
+                            }
+                        }
+                    } label: {
+                        Label(selectedStarter?.displayName ?? "Start from a template", systemImage: "square.grid.2x2")
+                            .font(.caption).lineLimit(1)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .help("Start from a ready-made table for your profession. This workspace's tools come first; other professions are under \u{201C}Other professions\u{2026}\u{201D}.")
                     Button("Create") { createDataset() }
                         .buttonStyle(.borderedProminent)
                         .disabled(newTitle.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .help("Creates an empty dataset in this workspace — add fields and rows, or let a persona job prepare one")
+                        .help("Creates a dataset in this workspace — blank, or pre-filled with the columns of the chosen template")
                     Button {
                         showImporter = true
                     } label: { Label("Import CSV", systemImage: "square.and.arrow.down") }
                         .help("Turn a spreadsheet into a dataset — export it from Excel/Numbers as CSV first; the header row becomes the fields")
+                    Menu {
+                        Button("Timeline — from dated events") { buildFromEvidence(.timeline) }
+                        Button("People & organizations — from entities") { buildFromEvidence(.peopleAndOrganizations) }
+                        Button("Payments — payer → payee") { buildFromEvidence(.payments) }
+                        Button("Communications — who contacted whom") { buildFromEvidence(.communications) }
+                        Divider()
+                        Button("Conflicts to resolve") { buildFromEvidence(.conflicts) }
+                        Button("Missing evidence / follow-ups") { buildFromEvidence(.missingEvidence) }
+                    } label: {
+                        Label("Build from evidence", systemImage: "sparkles.rectangle.stack")
+                            .font(.caption).lineLimit(1)
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .help("Build a table straight from what you've ingested — one row per event or entity, every value drill-through bound to its source (no re-keying).")
                 }
                 .fileImporter(isPresented: $showImporter,
                               allowedContentTypes: [.commaSeparatedText, .plainText],
                               allowsMultipleSelection: false) { result in
                     if case .success(let urls) = result, let url = urls.first { importCSV(url) }
+                }
+
+                if let starter = selectedStarter {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Template: \(starter.displayName) — \(starter.purpose)")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text(starter.note)
+                            .font(.caption2).foregroundStyle(.tertiary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 620, alignment: .leading)
                 }
 
                 if let message = errorMessage { errorBanner(message) }
@@ -241,9 +330,7 @@ public struct DataLabView: View {
                 .fixedSize()
                 .help("Save the current view (including an active scenario) for Excel, Word or print — every export posts a numbered Export document in the Work Center register")
             }
-            Text("\(rec.fields.count) fields · \(rec.rows.count) rows · revision \(rec.dataset.revision)"
-                 + (activeScenario.map { " · scenario: \($0.scenario.title)" } ?? "")
-                 + (projectionLabel.map { " · view: \($0)" } ?? ""))
+            Text(datasetSummary(rec))
                 .font(.caption).foregroundStyle(.secondary)
             if let number = lastExportNumber {
                 HStack(spacing: 6) {
@@ -266,8 +353,10 @@ public struct DataLabView: View {
 
     // MARK: Grid
 
-    private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
-        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+    /// The rows currently visible in the grid, with projection filtering and
+    /// any active sort/filter view applied — the same order the grid shows, so
+    /// inline-edit "move to next row" matches what the user sees.
+    private func orderedVisibleRows(_ rec: WorkbenchDatasetRecord) -> [WorkbenchRow] {
         var rows = rec.rows.sorted { $0.ordinal < $1.ordinal }
         if let projection = activeProjection() {
             rows = rows.filter { !projection.excludedRows.contains($0.id) }
@@ -276,6 +365,12 @@ public struct DataLabView: View {
             let index = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
             rows = rows.filter { index[$0.id] != nil }.sorted { (index[$0.id] ?? 0) < (index[$1.id] ?? 0) }
         }
+        return rows
+    }
+
+    private func grid(_ rec: WorkbenchDatasetRecord) -> some View {
+        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+        let rows = orderedVisibleRows(rec)
         var cellByKey: [String: WorkbenchCell] = [:]
         for cell in rec.cells { cellByKey["\(cell.rowID.uuidString)|\(cell.fieldID.uuidString)"] = cell }
 
@@ -301,42 +396,74 @@ public struct DataLabView: View {
                 }
             }
             if rows.isEmpty {
-                Text("No rows yet — add one from the panel on the right.")
+                Text("No rows yet — add rows or paste a table from the panel on the right.")
                     .font(.caption).foregroundStyle(.tertiary).padding(8)
+            } else if !fields.isEmpty {
+                Text("Tip: click a cell and type; press Return to drop to the next row.")
+                    .font(.caption2).foregroundStyle(.tertiary).padding(.leading, 6).padding(.top, 4)
             }
         }
     }
 
+    /// A cell you can type into directly: empty cells and hand-entered kinds.
+    /// Source-bound values and derived (formula) values stay read-only, and
+    /// inline editing is suppressed while a scenario is active (use Override).
+    private func isInlineEditable(_ cell: WorkbenchCell?, overridden: Bool) -> Bool {
+        if activeScenario != nil || overridden { return false }
+        guard let cell else { return true }   // empty → becomes user-entered
+        switch cell.kind {
+        case .userEntered, .userCorrected, .modelProposal, .reviewed: return true
+        case .sourceValue, .deterministicCalculation: return false
+        }
+    }
+
+    @ViewBuilder
     private func gridCell(row: WorkbenchRow, field: WorkbenchField,
                           cell: WorkbenchCell?, rec: WorkbenchDatasetRecord) -> some View {
+        let key = "\(row.id.uuidString)|\(field.id.uuidString)"
         let projection = activeProjection()
-        let overridden = projection?.cellOverrides["\(row.id.uuidString)|\(field.id.uuidString)"] != nil
+        let overridden = projection?.cellOverrides[key] != nil
         let display = projection?.projectedValue(rowID: row.id, fieldID: field.id) ?? cell?.value
         let selected = selectedCell?.rowID == row.id && selectedCell?.fieldID == field.id
-        return Button {
-            selectedCell = (row.id, field.id)
-            cellEditor = display ?? ""
-        } label: {
-            HStack(spacing: 4) {
-                if let cell {
-                    Circle()
-                        .fill(provenanceColor(cell, rec: rec, overridden: overridden))
-                        .frame(width: 6, height: 6)
+        let editable = isInlineEditable(cell, overridden: overridden)
+
+        if selected && editable {
+            TextField("", text: $cellEditor)
+                .textFieldStyle(.plain)
+                .font(.caption)
+                .focused($focusedCellKey, equals: key)
+                .onSubmit { commitInline(rec, selection: (row.id, field.id)) }
+                .padding(6)
+                .frame(width: 150)
+                .background(.tint.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.tint, lineWidth: 1))
+        } else {
+            Button {
+                selectedCell = (row.id, field.id)
+                cellEditor = display ?? ""
+                if editable { focusedCellKey = key }
+            } label: {
+                HStack(spacing: 4) {
+                    if let cell {
+                        Circle()
+                            .fill(provenanceColor(cell, rec: rec, overridden: overridden))
+                            .frame(width: 6, height: 6)
+                    }
+                    Text(display ?? "")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                Text(display ?? "")
-                    .font(.caption)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(6)
+                .frame(width: 150)
+                .background(selected ? AnyShapeStyle(.tint.opacity(0.15))
+                            : overridden ? AnyShapeStyle(.orange.opacity(0.10))
+                            : AnyShapeStyle(.quaternary.opacity(0.2)))
+                .contentShape(Rectangle())
             }
-            .padding(6)
-            .frame(width: 150)
-            .background(selected ? AnyShapeStyle(.tint.opacity(0.15))
-                        : overridden ? AnyShapeStyle(.orange.opacity(0.10))
-                        : AnyShapeStyle(.quaternary.opacity(0.2)))
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .help(cellHelp(cell, rec: rec, overridden: overridden))
         }
-        .buttonStyle(.plain)
-        .help(cellHelp(cell, rec: rec, overridden: overridden))
     }
 
     private func provenanceColor(_ cell: WorkbenchCell, rec: WorkbenchDatasetRecord, overridden: Bool) -> Color {
@@ -436,6 +563,53 @@ public struct DataLabView: View {
                             .help("Records a what-if value in the scenario — the base cell stays untouched")
                     }
                 }
+
+                // Existing bindings on this (now-source) cell, if any.
+                if let cell, !rec.bindings(forCell: cell.id).isEmpty {
+                    ForEach(rec.bindings(forCell: cell.id)) { binding in
+                        Label("\(binding.targetKind.rawValue) \(binding.targetID.prefix(8))…", systemImage: "link")
+                            .font(.caption2).foregroundStyle(.tint)
+                    }
+                }
+
+                Divider().padding(.vertical, 2)
+                Button {
+                    bindQuery = ""
+                    bindingActive.toggle()
+                    if bindingActive { Task { await loadBindCandidates() } }
+                } label: {
+                    Label(bindingActive ? "Cancel" : "Bind to a source document…", systemImage: "link")
+                        .font(.caption)
+                }
+                .controlSize(.small)
+                .help("Tie this hand-entered value to the document it came from, so it drills through like sourced data (turns the cell green + citable).")
+                if bindingActive {
+                    TextField("Filter documents", text: $bindQuery)
+                        .textFieldStyle(.roundedBorder).controlSize(.small)
+                    if bindCandidates.isEmpty {
+                        Text("No ingested documents yet.").font(.caption2).foregroundStyle(.secondary)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 3) {
+                                ForEach(filteredBindCandidates) { doc in
+                                    Button {
+                                        bindCell(rec, selection: selection, objectID: doc.id)
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(doc.sourceFile.lastPathComponent).font(.caption).lineLimit(1)
+                                            Text(doc.preview).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, 2)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 180)
+                    }
+                }
             }
         }
         .padding(10)
@@ -458,9 +632,23 @@ public struct DataLabView: View {
                     .disabled(newFieldName.trimmingCharacters(in: .whitespaces).isEmpty)
                     .help("Add a field (column)")
             }
-            Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
-                .controlSize(.small)
-                .disabled(rec.fields.isEmpty)
+            HStack(spacing: 6) {
+                Button { addRow(rec) } label: { Label("Add row", systemImage: "plus.rectangle") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                    .guidance(GuidanceTip("Add row",
+                                          what: "Adds one empty row you can type into. Values you enter are recorded as hand-entered; bind any cell to a source to make it cited.",
+                                          enabledWhen: "Add at least one column (field) first — a row needs columns to hold its values."),
+                              enabled: !rec.fields.isEmpty)
+                Button { addRows(5, rec) } label: { Text("+5") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                    .help("Add five empty rows at once")
+                Button { pasteTable(rec) } label: { Label("Paste table", systemImage: "doc.on.clipboard") }
+                    .controlSize(.small)
+                    .disabled(rec.fields.isEmpty)
+                    .help("Paste a block of cells copied from Excel or Numbers — it fills new rows across your columns, left to right. Values are recorded as hand-entered.")
+            }
 
             Divider().padding(.vertical, 2)
             sectionLabel("Templates")
@@ -471,13 +659,49 @@ public struct DataLabView: View {
             .help("Set up the net-worth method: adds the input columns (assets, liabilities, opening net worth, reported income, known expenditures) and the derived columns (net worth, increase, funds applied, income from unknown sources). Fill inputs from source documents.")
             Text("An unexplained increase is a lead, not proof.")
                 .font(.caption2).foregroundStyle(.secondary)
+
+            Menu {
+                let persona = personaTemplate(rec)
+                let suggested = DataLabStarterTemplates.suggested(for: persona)
+                let suggestedIDs = Set(suggested.map(\.id))
+                let others = DataLabStarterTemplates.all.filter { !suggestedIDs.contains($0.id) }
+                if persona != .general, !suggested.isEmpty {
+                    ForEach(suggested) { t in
+                        Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
+                    }
+                    if !others.isEmpty {
+                        Menu("Other professions…") {
+                            ForEach(others) { t in
+                                Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(DataLabStarterTemplates.all) { t in
+                        Button("\(t.displayName) · \(t.profession)") { Task { await applyStarter(t, to: rec) } }
+                    }
+                }
+            } label: {
+                Label("Apply a profession template", systemImage: "square.grid.2x2").font(.caption)
+            }
+            .menuStyle(.borderlessButton)
+            .help("Add the columns of a ready-made table to this dataset — this workspace's profession first. Existing columns are kept, so it's safe to apply.")
         }
+    }
+
+    /// The analyses shown for this dataset: the persona's curated set (unless
+    /// the user opted to see them all, or the workspace is General).
+    private func curatedPresets(_ rec: WorkbenchDatasetRecord) -> [WorkbenchAnalysisPreset] {
+        if showAllAnalyses { return WorkbenchModePresetCatalog.simplePresets }
+        let kinds = Set(DataLabStarterTemplates.analyses(for: personaTemplate(rec)))
+        let filtered = WorkbenchModePresetCatalog.simplePresets.filter { kinds.contains($0.kind) }
+        return filtered.isEmpty ? WorkbenchModePresetCatalog.simplePresets : filtered
     }
 
     private func analysesPanel(_ rec: WorkbenchDatasetRecord, caps: WorkbenchModeCapabilities) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel("Analyses — plain language, records provenance")
-            ForEach(WorkbenchModePresetCatalog.simplePresets) { preset in
+            ForEach(curatedPresets(rec)) { preset in
                 Button {
                     activePreset = activePreset?.id == preset.id ? nil : preset
                     presetParams = WorkbenchPresetParameters()
@@ -495,6 +719,14 @@ public struct DataLabView: View {
                 if activePreset?.id == preset.id {
                     presetForm(preset, rec: rec)
                 }
+            }
+            if personaTemplate(rec) != .general {
+                Button { showAllAnalyses.toggle() } label: {
+                    Label(showAllAnalyses ? "Show fewer — just this profession's" : "Show all analyses",
+                          systemImage: showAllAnalyses ? "line.3.horizontal.decrease.circle" : "ellipsis.circle")
+                        .font(.caption2)
+                }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
             }
             if let agg = aggregateResult {
                 VStack(alignment: .leading, spacing: 3) {
@@ -913,7 +1145,72 @@ public struct DataLabView: View {
                 newTitle = ""
                 record = rec
                 await loadSatellites(rec.dataset.id)
+                if let starter = selectedStarter {
+                    await applyStarter(starter, to: rec)
+                    selectedStarter = nil
+                }
             } catch { errorMessage = "Could not create the dataset: \(error)" }
+        }
+    }
+
+    /// KnowledgeObject ids belonging to the workspace's sources, so an evidence
+    /// build can be scoped to this matter. nil = no sources yet (build from all).
+    private func allowedObjectIDs(_ workspaceID: UUID) async -> Set<UUID>? {
+        guard let wsRepo = appState.workspaces, let objs = appState.objects else { return nil }
+        let fileIDs = (try? await wsRepo.sourceIDs(in: workspaceID)) ?? []
+        guard !fileIDs.isEmpty else { return nil }
+        let set = (try? await objs.objectIDs(inFileIDs: fileIDs)) ?? []
+        return set.isEmpty ? nil : set
+    }
+
+    /// Build a sourced dataset from the ingested ledger and open it.
+    private func buildFromEvidence(_ shape: EvidenceDatasetBuilder.Shape) {
+        guard let datasets = appState.workbenchDatasets,
+              let eventsRepo = appState.events,
+              let entitiesRepo = appState.entities,
+              let relationshipsRepo = appState.relationships else { return }
+        errorMessage = nil
+        Task {
+            do {
+                guard let wsID = await ensureWorkspace() else { return }
+                let builder = EvidenceDatasetBuilder(datasets: datasets, events: eventsRepo,
+                                                     entities: entitiesRepo, relationships: relationshipsRepo)
+                let result: EvidenceDatasetBuilder.BuildResult
+                switch shape {
+                case .timeline:
+                    let allowed = await allowedObjectIDs(wsID)
+                    result = try await builder.buildTimeline(
+                        workspaceID: wsID, title: "Timeline from evidence",
+                        allowedObjectIDs: allowed, actor: actorName, at: Date())
+                case .peopleAndOrganizations:
+                    result = try await builder.buildEntities(
+                        workspaceID: wsID, title: "People & organizations",
+                        kinds: [.person, .organization, .vendor, .client], actor: actorName, at: Date())
+                case .payments:
+                    result = try await builder.buildPayments(
+                        workspaceID: wsID, title: "Payments from evidence", actor: actorName, at: Date())
+                case .communications:
+                    result = try await builder.buildCommunications(
+                        workspaceID: wsID, title: "Communications from evidence", actor: actorName, at: Date())
+                case .conflicts:
+                    guard let repo = appState.contradictions else {
+                        errorMessage = "Contradictions aren't available yet."; return
+                    }
+                    result = try await builder.buildContradictions(
+                        contradictions: repo, workspaceID: wsID, title: "Conflicts to resolve", actor: actorName, at: Date())
+                case .missingEvidence:
+                    guard let repo = appState.gapNodes else {
+                        errorMessage = "Gaps aren't available yet."; return
+                    }
+                    result = try await builder.buildGaps(
+                        gaps: repo, workspaceID: wsID, title: "Missing evidence", actor: actorName, at: Date())
+                }
+                record = result.record
+                await loadSatellites(result.record.dataset.id)
+                if result.rowsAdded == 0 {
+                    errorMessage = "No matching evidence yet — ingest documents (and process them), then build again."
+                }
+            } catch { errorMessage = "Could not build from evidence: \(error)" }
         }
     }
 
@@ -1004,6 +1301,38 @@ public struct DataLabView: View {
         }
     }
 
+    /// Apply a persona starter template: add any missing input columns, then
+    /// apply derived formula columns in order. Threads the latest record through
+    /// each revision bump. Idempotent — existing columns are skipped, so
+    /// applying the same template twice never duplicates. Shared by the create
+    /// panel (any mode) and the Advanced structure panel.
+    private func applyStarter(_ template: DataLabStarterTemplate, to rec: WorkbenchDatasetRecord) async {
+        guard let datasets = appState.workbenchDatasets,
+              let transforms = appState.workbenchTransforms else { return }
+        do {
+            var current = rec
+            for col in template.inputColumns
+            where !current.fields.contains(where: { $0.name == col.name }) {
+                current = try await datasets.addField(
+                    datasetID: current.dataset.id, name: col.name, valueShape: col.shape,
+                    expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+            }
+            for spec in template.transformSpecs {
+                if case .calculatedColumn(let name, _, _) = spec,
+                   current.fields.contains(where: { $0.name == name }) { continue }
+                _ = try await transforms.applyTransform(
+                    datasetID: current.dataset.id, spec: spec,
+                    expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                if let refreshed = try await datasets.fetch(datasetID: current.dataset.id) {
+                    current = refreshed
+                }
+            }
+            record = current
+        } catch {
+            errorMessage = "Could not apply the \(template.displayName) template: \(error)"
+        }
+    }
+
     private func addRow(_ rec: WorkbenchDatasetRecord) {
         guard let repo = appState.workbenchDatasets else { return }
         errorMessage = nil
@@ -1012,6 +1341,52 @@ public struct DataLabView: View {
                 record = try await repo.addRow(datasetID: rec.dataset.id,
                                                expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
             } catch { errorMessage = "Could not add the row: \(error)" }
+        }
+    }
+
+    // MARK: One-click source binding for manual cells
+
+    private var filteredBindCandidates: [KnowledgeObjectSummaryRow] {
+        let q = bindQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return bindCandidates }
+        return bindCandidates.filter {
+            $0.sourceFile.lastPathComponent.lowercased().contains(q) || $0.preview.lowercased().contains(q)
+        }
+    }
+
+    private func loadBindCandidates() async {
+        if let repo = appState.objects {
+            bindCandidates = (try? await repo.recent(limit: 200)) ?? []
+        } else {
+            bindCandidates = []
+        }
+    }
+
+    /// Convert a hand-entered cell into a source cell bound to a document, so it
+    /// drills through like built data. setCell replaces the cell (new id), so we
+    /// bind the refreshed cell.
+    private func bindCell(_ rec: WorkbenchDatasetRecord, selection: (rowID: UUID, fieldID: UUID), objectID: UUID) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let value = cellEditor
+        Task {
+            do {
+                var updated = try await repo.setCell(
+                    datasetID: rec.dataset.id, rowID: selection.rowID, fieldID: selection.fieldID,
+                    kind: .sourceValue, value: value.isEmpty ? nil : value, status: .directlyObserved,
+                    expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
+                guard let cell = updated.cells.first(where: { $0.rowID == selection.rowID && $0.fieldID == selection.fieldID }) else {
+                    errorMessage = "Could not locate the cell to bind."; return
+                }
+                updated = try await repo.bindSource(
+                    cellID: cell.id, targetKind: .knowledgeObject, targetID: objectID.uuidString,
+                    sourceVersionID: nil, locator: nil,
+                    expectedRevision: updated.dataset.revision, actor: actorName, at: Date())
+                record = updated
+                bindingActive = false
+            } catch {
+                errorMessage = "Could not bind to the source: \(error)"
+            }
         }
     }
 
@@ -1026,6 +1401,100 @@ public struct DataLabView: View {
                                                 value: value.isEmpty ? nil : value, status: .humanConfirmed,
                                                 expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
             } catch { errorMessage = "Could not save the cell: \(error)" }
+        }
+    }
+
+    /// Inline-grid commit: save the typed value, then move selection + focus to
+    /// the same column of the next visible row (spreadsheet-style Return).
+    private func commitInline(_ rec: WorkbenchDatasetRecord, selection: (rowID: UUID, fieldID: UUID)) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let value = cellEditor
+        let visible = orderedVisibleRows(rec)
+        let nextRowID: UUID? = visible.firstIndex(where: { $0.id == selection.rowID })
+            .flatMap { idx in idx + 1 < visible.count ? visible[idx + 1].id : nil }
+        Task {
+            do {
+                let updated = try await repo.setCell(
+                    datasetID: rec.dataset.id, rowID: selection.rowID, fieldID: selection.fieldID,
+                    kind: .userEntered, value: value.isEmpty ? nil : value, status: .humanConfirmed,
+                    expectedRevision: rec.dataset.revision, actor: actorName, at: Date())
+                record = updated
+                if let nid = nextRowID {
+                    selectedCell = (nid, selection.fieldID)
+                    cellEditor = updated.cells.first { $0.rowID == nid && $0.fieldID == selection.fieldID }?.value ?? ""
+                    focusedCellKey = "\(nid.uuidString)|\(selection.fieldID.uuidString)"
+                } else {
+                    selectedCell = nil
+                    focusedCellKey = nil
+                }
+            } catch { errorMessage = "Could not save the cell: \(error)" }
+        }
+    }
+
+    /// Add several empty rows in one action (revision threaded through each).
+    private func addRows(_ n: Int, _ rec: WorkbenchDatasetRecord) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        Task {
+            do {
+                var current = rec
+                for _ in 0..<max(1, n) {
+                    current = try await repo.addRow(datasetID: current.dataset.id,
+                                                    expectedRevision: current.dataset.revision,
+                                                    actor: actorName, at: Date())
+                }
+                record = current
+            } catch { errorMessage = "Could not add rows: \(error)" }
+        }
+    }
+
+    /// Paste a block of cells copied from Excel/Numbers (tab- or comma-separated)
+    /// into new rows, mapped left-to-right onto the existing columns. Values are
+    /// recorded as hand-entered — source binding stays a separate, explicit step.
+    private func pasteTable(_ rec: WorkbenchDatasetRecord) {
+        guard let repo = appState.workbenchDatasets else { return }
+        errorMessage = nil
+        let fields = rec.fields.sorted { $0.ordinal < $1.ordinal }
+        guard !fields.isEmpty else { errorMessage = "Add columns before pasting."; return }
+        #if os(macOS)
+        let raw = NSPasteboard.general.string(forType: .string) ?? ""
+        #else
+        let raw = ""
+        #endif
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "Clipboard is empty — copy a block of cells from Excel/Numbers first."
+            return
+        }
+        let table = DataLabPasteParser.parse(raw)
+        guard !table.isEmpty else { return }
+        let maxCells = 2000
+        Task {
+            do {
+                var current = rec
+                var placed = 0
+                outer: for cols in table {
+                    current = try await repo.addRow(datasetID: current.dataset.id,
+                                                    expectedRevision: current.dataset.revision,
+                                                    actor: actorName, at: Date())
+                    guard let newRow = current.rows.max(by: { $0.ordinal < $1.ordinal }) else { continue }
+                    for (i, field) in fields.enumerated() {
+                        guard i < cols.count else { break }
+                        let v = cols[i]
+                        if v.isEmpty { continue }
+                        if placed >= maxCells { break outer }
+                        current = try await repo.setCell(
+                            datasetID: current.dataset.id, rowID: newRow.id, fieldID: field.id,
+                            kind: .userEntered, value: v, status: .humanConfirmed,
+                            expectedRevision: current.dataset.revision, actor: actorName, at: Date())
+                        placed += 1
+                    }
+                }
+                record = current
+                if placed >= maxCells {
+                    errorMessage = "Pasted the first \(maxCells) values — paste the rest in a second block."
+                }
+            } catch { errorMessage = "Could not paste the table: \(error)" }
         }
     }
 
@@ -1305,3 +1774,11 @@ public struct DataLabView: View {
                      text: WorkbenchReport.render(rec, projection: projection, quality: quality))
     }
 }
+
+#if DEBUG
+#Preview("DataLab — catalog") {
+    DataLabView()
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif

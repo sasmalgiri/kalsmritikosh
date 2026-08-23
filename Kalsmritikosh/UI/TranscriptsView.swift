@@ -147,6 +147,10 @@ public struct TranscriptsView: View {
                 else { Label(segments.isEmpty ? "Transcribe" : "Re-transcribe", systemImage: "waveform.badge.mic") }
             }
             .disabled(transcribing)
+            .guidance(GuidanceTip("Transcribe",
+                                  what: "Transcribes the audio/video on-device and adds it to your searchable, citable archive.",
+                                  enabledWhen: "Wait for the current transcription to finish."),
+                      enabled: !transcribing)
             if !segments.isEmpty {
                 Button { Task { await exportQuotes(file) } } label: {
                     Label("Export quotes", systemImage: "square.and.arrow.up")

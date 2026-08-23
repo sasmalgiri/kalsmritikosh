@@ -23,6 +23,8 @@ public struct SettingsView: View {
     @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var showIngestGuide = false
+    /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
+    @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -124,6 +126,7 @@ public struct SettingsView: View {
                 settingsGroup("Background maintenance", "moon.zzz") { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down") { optionalIngestSection }
                 settingsGroup("Your data", "trash") { dataSection }
+                settingsGroup("Help & feedback", "envelope") { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield") { legalSection }
 
                 // ── Advanced (collapsed by default) ───────────────────────
@@ -243,10 +246,15 @@ public struct SettingsView: View {
             // with a Fast (seconds) and Deep (full) button. Everything else is
             // tucked into the collapsed "More tools" group below so there is no
             // wall of buttons to choose between.
+            // Release-readiness + eval/smoke harnesses are developer tools —
+            // they speak in Gates, fixtures, and ship checks. DEBUG only.
+            #if DEBUG
             releaseReadinessBanner
+            #endif
 
             DisclosureGroup(isExpanded: $showMoreDiagnostics) {
               VStack(alignment: .leading, spacing: 8) {
+            #if DEBUG
             Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -342,6 +350,7 @@ public struct SettingsView: View {
             }
 
             Divider().padding(.vertical, 4)
+            #endif
 
             Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Kalsmritikosh extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -430,7 +439,8 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            #endif
+            // (DEBUG block continues: bond rebuild, Gate 3, and the smoke test
+            // are developer/maintenance harnesses, not consumer settings.)
 
             Divider().padding(.vertical, 4)
 
@@ -520,6 +530,7 @@ public struct SettingsView: View {
                 }
                 .padding(.leading, 8)
             }
+            #endif
               }
             } label: {
                 Label("More diagnostic tools (advanced)", systemImage: "wrench.and.screwdriver")
@@ -1119,6 +1130,18 @@ public struct SettingsView: View {
             Button("File-type ingest guide") { showIngestGuide = true }
                 .font(.caption)
                 .buttonStyle(.borderless)
+
+            Divider().padding(.vertical, 4)
+
+            Toggle(isOn: $preferClassicSurfaces) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Prefer classic surfaces").font(.callout.weight(.medium))
+                    Text("Use the previous fixed Analyze launchers instead of the newer catalog-driven studio launchers. Both surfaces stay available; this only changes which the persona hub offers by default.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
         }
         .sheet(isPresented: $showIngestGuide) { IngestGuideView() }
     }
@@ -1182,6 +1205,37 @@ public struct SettingsView: View {
         }
     }
 
+    /// Help & feedback — a privacy-safe "Report a problem": composes a draft in
+    /// the USER'S OWN mail app (mailto:). Kalsmritikosh itself sends nothing and
+    /// collects nothing; the user sees and can edit every character before
+    /// deciding to send. Keeps "Data Not Collected" truthful.
+    private var feedbackSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "envelope")
+                    .foregroundStyle(Theme.brand)
+                Text("Help & feedback").font(.title3.bold())
+            }
+            Text("Found a problem or have an idea? Tell us — it's the whole point of the free release. The button below opens a draft in your own Mail app: Kalsmritikosh itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                let v = FeedbackMail.currentVersions()
+                if let url = FeedbackMail.reportProblemURL(appVersion: v.app, osVersion: v.os) {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label("Report a problem / send feedback", systemImage: "paperplane")
+            }
+            .buttonStyle(.borderedProminent)
+            .guidance(GuidanceTip("Report a problem",
+                                  what: "Opens a pre-filled draft in your own Mail app addressed to support. The app makes no network call and attaches none of your documents — only the visible text you choose to send."))
+            Text("Or email \(FeedbackMail.supportAddress) directly. Never include privileged or confidential case material in a report.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+    }
+
     /// Legal & Privacy — accuracy disclaimer, privacy posture, terms, and
     /// third-party notices. Always visible (not hidden under Advanced) so the
     /// declarations are easy to find.
@@ -1197,15 +1251,22 @@ public struct SettingsView: View {
                 .foregroundStyle(.orange)
 
             legalItem("Accuracy — verify every answer", LegalNotice.accuracyStatement, "exclamationmark.triangle")
+            legalItem("AI output — human review required", LegalNotice.aiOutputStatement, "brain")
             legalItem("Privacy — private by design", LegalNotice.privacyStatement, "lock.shield")
             legalItem("Terms — provided “as is”", LegalNotice.termsStatement, "doc.text")
+            legalItem("No professional relationship", LegalNotice.noRelationshipStatement, "person.crop.circle.badge.xmark")
+            legalItem("Standards & SOPs — interpretation, not certification", LegalNotice.sopStatement, "checkmark.seal")
+            legalItem("Warranty & liability", LegalNotice.liabilityStatement, "shield.lefthalf.filled")
+            legalItem("Your responsibilities — data, backup, lawful use", LegalNotice.responsibilityStatement, "externaldrive.badge.checkmark")
+            legalItem("Payments & subscriptions", LegalNotice.subscriptionStatement, "creditcard")
+            legalItem("Changes to these notices", LegalNotice.changesStatement, "clock.arrow.2.circlepath")
             legalItem("Acknowledgments", LegalNotice.thirdPartyStatement, "shippingbox")
 
-            Text(LegalNotice.counselNote)
-                .font(.caption2.italic())
+            Text("Notices version \(LegalNotice.termsVersion)")
+                .font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 2)
+            // The counsel note is an owner/developer reminder, not a user
+            // notice — kept in LegalNotice for the repo, not shown in the app.
         }
     }
 

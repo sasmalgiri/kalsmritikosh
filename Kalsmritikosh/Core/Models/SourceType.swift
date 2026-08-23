@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import UniformTypeIdentifiers
 
 public enum SourceType: String, Codable, CaseIterable, Sendable {
     // Documents
@@ -192,4 +193,46 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case document, spreadsheet, presentation, email, image, audio, video,
              archive, chat, browserHistory, unknown
     }
+}
+
+// MARK: - Attachable formats (user-initiated attach → ingest → answer)
+
+public extension SourceType {
+    /// The file extensions a user may ATTACH for on-demand ingest — every format
+    /// the app extracts content from. Legacy-binary Office (.doc/.xls/.ppt) and
+    /// Outlook mail (.msg/.pst) are INCLUDED (owner decision 2026-08-20): their
+    /// loaders do extract real content, though the legacy-binary ones can be
+    /// partial. Still excluded are the true no-read stubs — .nsf, .rar, .7z and
+    /// Keynote (decoder pending) — and the path-pattern chat/browser DBs, which
+    /// aren't hand-picked documents.
+    nonisolated static let attachableExtensions: [String] = [
+        // Documents (incl. legacy .doc — partial OLE2 extraction)
+        "pdf", "docx", "doc", "txt", "md", "markdown", "rtf", "odt", "epub",
+        "html", "htm", "xhtml", "json", "jsonl", "ndjson", "xml", "plist", "log",
+        "sqlite", "sqlite3", "db",
+        // Spreadsheets (incl. legacy .xls — partial OLE2 extraction)
+        "xlsx", "xls", "csv", "ods",
+        // Presentations (incl. legacy .ppt — partial; Keynote omitted, stub)
+        "pptx", "ppt",
+        // Email (incl. Outlook .msg / .pst)
+        "mbox", "eml", "emlx", "msg", "pst",
+        // Images
+        "png", "jpg", "jpeg", "heic", "tiff", "tif", "webp",
+        // Audio
+        "mp3", "wav", "m4a", "aac", "aiff", "aif", "aifc", "caf", "flac", "3gp", "3gpp",
+        // Video
+        "mp4", "mov",
+        // Archives
+        "zip",
+    ]
+
+    /// The attachable set as `UTType`s for SwiftUI `.fileImporter` /
+    /// `NSOpenPanel.allowedContentTypes` (unknown extensions are dropped).
+    nonisolated static var attachableContentTypes: [UTType] {
+        attachableExtensions.compactMap { UTType(filenameExtension: $0) }
+    }
+
+    /// One-line, human-readable summary of the supported formats for tooltips.
+    nonisolated static let attachableSummary =
+        "PDF, Word (.doc/.docx), Excel (.xls/.xlsx), CSV, PowerPoint (.ppt/.pptx), RTF, ODT, EPUB, HTML, JSON, XML, text & logs, SQLite, email (.mbox/.eml/.msg/.pst), images, audio and video."
 }

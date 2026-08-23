@@ -51,11 +51,10 @@ public enum LegalNotice {
     public static let privacyStatement = """
     Private by design. Your documents, the extracted ledger, and your questions stay on \
     this device — they are not sent to any server, and there is no analytics or telemetry. \
-    All AI runs on-device using the bundled model (and Apple’s on-device model where \
-    available); there is no cloud processing and nothing to install. The only time the \
-    app uses the network is an optional, one-time download of a larger model if you choose \
-    it — your documents are never part of that. You can delete everything by removing the \
-    app’s data folder.
+    All AI runs on-device: written answers use Apple’s on-device model (part of macOS), \
+    and the semantic-search models ship inside the app package — so there is no cloud \
+    processing, nothing to install, and nothing to download. The app makes no network \
+    connections at all. You can delete everything by removing the app’s data folder.
     """
 
     public static let termsStatement = """
@@ -73,6 +72,100 @@ public enum LegalNotice {
     Licence). Semantic search uses on-device BGE embedding + reranker models (MIT). All \
     processing is on-device; respective model licences and third-party notices apply and \
     ship with the app.
+    """
+
+    /// No professional relationship — the clause the strongest legal-tech
+    /// competitors repeat in every document (ToS, addenda, community rules).
+    public static let noRelationshipStatement = """
+    Kalsmritikosh’s developer is not a law firm, accounting firm, investigative agency, \
+    or licensed professional practice, and does not practise law or any other regulated \
+    profession. Using the app — including its persona studios, report templates, and \
+    references to professional standards (FRCP, GPS, PRISMA, 8D, and others) — creates \
+    no attorney–client, accountant–client, or any other professional relationship, and \
+    is not a substitute for advice from a qualified professional who knows your matter.
+    """
+
+    /// Warranty & liability — enumerated, with an explicit cap, the way
+    /// commercial legal-tech terms allocate risk.
+    public static let liabilityStatement = """
+    The app is provided “as is” and “as available”, without warranties of any kind, \
+    express or implied — including merchantability, fitness for a particular purpose, \
+    title, and non-infringement. To the maximum extent permitted by law, the developer \
+    is not liable for indirect, incidental, special, consequential, exemplary, or \
+    punitive damages, or for lost profits, lost data, or business interruption, under \
+    any legal theory, even if advised of the possibility. Total aggregate liability for \
+    all claims is capped at the amount you paid for the app in the twelve months before \
+    the claim arose (zero while the app is free). Some jurisdictions do not allow some \
+    of these exclusions, so parts may not apply to you. These provisions allocate risk \
+    and are a basis of the bargain.
+    """
+
+    /// AI output — the 2026-practice clause: probabilistic output, human
+    /// review REQUIRED before consequential use, disclosed at point of use.
+    public static let aiOutputStatement = """
+    AI-assisted output is probabilistic: it is not guaranteed to be accurate, complete, \
+    current, or fit for any purpose, and may contain errors, omissions, or content that \
+    does not reflect current facts or law. Human review of any output against its cited \
+    sources is required before any consequential use — filing, publication, employment \
+    action, referral, or financial decision. The app discloses its AI assistance at the \
+    point of use: on every answer, and on the first page of every exported report.
+    """
+
+    /// Your responsibilities — data custody & backup (everything is local),
+    /// lawful use, indemnity, export compliance.
+    public static let responsibilityStatement = """
+    Because everything stays on your device, you are solely responsible for the \
+    security and BACKUP of your documents, ledger, and reports — the developer holds no \
+    copy and cannot recover your data. You confirm you have the legal right to ingest \
+    and analyse the documents you add, and you agree to indemnify the developer against \
+    claims arising from your content or your unlawful use of the app. You agree to \
+    comply with applicable export-control and sanctions laws. On the Mac App Store, \
+    Apple’s standard Licensed Application EULA also applies where no custom EULA is \
+    presented.
+    """
+
+    /// SOP positioning — added when "follows the professional's SOP" became
+    /// the lead claim. Names the three risks that claim creates and bounds them:
+    /// no affiliation, interpretation not certification, human review stands.
+    public static let sopStatement = """
+    Kalsmritikosh's workflows implement the developer's good-faith reading of published \
+    professional standards (such as PRISMA, GRADE, 8D, ACH, the Admiralty scale, FRCP \
+    provisions, and the Genealogical Proof Standard). Those names and standards belong to \
+    their respective bodies; no affiliation, endorsement, or certification by any \
+    governing body, court, or standards organization is implied. A conformance \
+    certificate means one thing only: the run satisfied the app's encoded rules for that \
+    workflow at the stated version. It is not a legal opinion, not a regulatory \
+    compliance guarantee, and not a substitute for review by a qualified professional \
+    responsible for the matter.
+    """
+
+    /// One line stamped on conformance certificates and the compliance board.
+    public static let conformanceScopeNote =
+        "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
+
+    /// Version of these notices — bump on any material change, keep the date.
+    public static let termsVersion = "1.4 (2026-08-23)"
+
+    /// Subscription-proof payment terms: written to hold unchanged whether the
+    /// app is free (today) or subscription-based (later).
+    public static let subscriptionStatement = """
+    The app is currently free. If paid tiers or subscriptions are introduced, all \
+    purchases, renewals, cancellations, and refunds are handled by Apple through your \
+    App Store account under Apple’s terms; the developer never sees or stores your \
+    payment details. Prices and tier boundaries may change prospectively with notice — \
+    never retroactively. Whatever the tier: your documents, ledger, and reports remain \
+    yours, stay on your device, remain exportable at no charge, and a lapsed or \
+    cancelled subscription never locks you out of data you created.
+    """
+
+    /// How these notices change — the versioned, prospective change process.
+    public static let changesStatement = """
+    These notices are versioned and dated (see the version shown below). Material \
+    changes take effect only prospectively, are announced in-app with the new version \
+    number, and never reduce the privacy commitments retroactively — a promise made \
+    about data you already ingested is kept for that data. Continued use after notice \
+    of a change constitutes acceptance; if you do not accept, stop using the app and \
+    your data remains exportable.
     """
 
     /// Required attribution for the bundled reasoning model (Meta Llama Community

@@ -16,6 +16,7 @@ import TipKit
 #if canImport(AppKit)
 import AppKit
 #endif
+import UniformTypeIdentifiers
 
 // MARK: - Navigation model
 
@@ -31,13 +32,19 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case workspaces
     case dataLab
     case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
+    case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
+    case rsStudio, gnStudio, ccStudio, inStudio
+    case sopBoard
+    case fundFlow, emailThreads
     case review
     case handoff
     case transcripts
     case insights, changes
     case knowledge, assertions, answers, audit, verifyReceipt, library, saved
+    case authenticity, citations, freshness, trends, query
     case sources, convert, completeness, live
-    case guide, settings
+    case redaction, caseload
+    case guide, settings, sutra
 
     public var id: String { rawValue }
 
@@ -60,7 +67,21 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "Explore"
         case .matrix:       return "Cross-Doc Matrix"
         case .connections:  return "Connections"
+        case .fundFlow:     return "Fund Flow"
+        case .emailThreads: return "Email Threads"
         case .story:        return "Case Story"
+        case .reasoning:    return "Reasoning Studio"
+        case .hypotheses:   return "Competing Hypotheses"
+        case .hrStudio:     return "HR Investigation"
+        case .privilegeStudio: return "Privilege Log"
+        case .siuStudio:    return "SIU Report"
+        case .faStudio:     return "Expert Report"
+        case .jnStudio:     return "Fact-Check"
+        case .rsStudio:     return "Evidence Review"
+        case .gnStudio:     return "Proof Argument"
+        case .ccStudio:     return "Publish Package"
+        case .inStudio:     return "Emergency Binder"
+        case .sopBoard:     return "Compliance Board"
         case .review:       return "Review"
         case .transcripts:  return "Transcripts"
         case .insights:     return "Insights"
@@ -72,11 +93,19 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .verifyReceipt: return "Verify Receipt"
         case .library:      return "Library"
         case .saved:        return "Saved"
+        case .authenticity: return "Authenticity"
+        case .citations:    return "Citations"
+        case .freshness:    return "Freshness"
+        case .trends:       return "Trends"
+        case .query:        return "Query"
+        case .caseload:     return "Caseload"
         case .sources:      return "Sources"
         case .convert:      return "Convert"
         case .completeness: return "Completeness"
         case .live:         return "Live"
+        case .redaction:    return "Redaction"
         case .guide:        return "Guide"
+        case .sutra:        return "Constitution"
         case .settings:     return "Settings"
         }
     }
@@ -100,7 +129,21 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "point.3.connected.trianglepath.dotted"
         case .matrix:       return "square.grid.3x3.topleft.filled"
         case .connections:  return "point.topleft.down.to.point.bottomright.curvepath"
+        case .fundFlow:     return "arrow.triangle.branch"
+        case .emailThreads: return "envelope.badge.person.crop"
         case .story:        return "book.pages"
+        case .reasoning:    return "brain.head.profile"
+        case .hypotheses:   return "tablecells"
+        case .hrStudio:     return "person.2.badge.gearshape"
+        case .privilegeStudio: return "lock.doc"
+        case .siuStudio:    return "shield.lefthalf.filled"
+        case .faStudio:     return "dollarsign.arrow.circlepath"
+        case .jnStudio:     return "newspaper"
+        case .rsStudio:     return "doc.text.magnifyingglass"
+        case .gnStudio:     return "person.text.rectangle"
+        case .ccStudio:     return "shippingbox"
+        case .inStudio:     return "book.closed"
+        case .sopBoard:     return "checklist.checked"
         case .review:       return "checkmark.bubble"
         case .transcripts:  return "waveform"
         case .insights:     return "lightbulb.max"
@@ -112,11 +155,19 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .verifyReceipt: return "checkmark.seal"
         case .library:      return "books.vertical.fill"
         case .saved:        return "bookmark"
+        case .authenticity: return "checkmark.shield"
+        case .citations:    return "quote.bubble"
+        case .freshness:    return "clock.badge.exclamationmark"
+        case .trends:       return "chart.xyaxis.line"
+        case .query:        return "line.3.horizontal.decrease.circle"
+        case .caseload:     return "square.stack.3d.up"
         case .sources:      return "folder"
         case .convert:      return "arrow.right.doc.on.clipboard"
         case .completeness: return "checklist"
         case .live:         return "waveform.path.ecg"
+        case .redaction:    return "eye.slash"
         case .guide:        return "book"
+        case .sutra:        return "building.columns"
         case .settings:     return "gearshape"
         }
     }
@@ -156,7 +207,21 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .explore:      return "Entity graph — see who and what connects"
         case .matrix:       return "Ask one question across every document — what each source says, cited"
         case .connections:  return "Find the shortest chain of relationships linking two people or organizations"
+        case .fundFlow:     return "See how money moved between parties — payer to payee — drawn from your evidence"
+        case .emailThreads: return "A big email dump, deduplicated and grouped into conversations"
         case .story:        return "The whole cited story of a subject — timeline, parties, clauses, roadblocks, gaps"
+        case .reasoning:    return "Run a root-cause investigation start to finish — brainstorm, 5 Whys, a fishbone diagram, a conclusion, and an approval-ready report"
+        case .hypotheses:   return "Weigh competing explanations against your evidence — an Analysis of Competing Hypotheses matrix that ranks by fewest inconsistencies"
+        case .hrStudio:     return "Run a workplace investigation the real-life way — mandate, allegations, evidence, credibility, classified findings — and produce the exact report an investigator signs"
+        case .privilegeStudio: return "Build an FRCP 26(b)(5) privilege log — describe each withheld document enough to test the claim without revealing it, QC, and serve the exact table"
+        case .siuStudio:    return "Work a referred claim the SIU way — red flags against objective criteria, loss chronology, investigation, discrepancies, and the exact disposition report"
+        case .faStudio:     return "Follow the money like a testifying expert — named tracing method, sourced schedule, findings distinct from opinion, and the FRCP 26(a)(2)(B) report"
+        case .jnStudio:     return "Prepare a contested story the newsroom way — claim-by-claim verification, a right-of-reply log with deadlines, and the pre-publication memo"
+        case .rsStudio:     return "Run a review the published way — PRISMA screening counts, one extraction row per included study, and a GRADE-rated synthesis"
+        case .gnStudio:     return "Answer a genealogical question to the Genealogical Proof Standard — research log with nil results, conflicts resolved, written proof argument"
+        case .ccStudio:     return "Ship a piece professionally — claims checked to sources, rights cleared, disclosures confirmed, corrections path in place"
+        case .inStudio:     return "Build the family emergency binder — key people, where every document and account lives, your instructions, printable"
+        case .sopBoard:     return "Every external SOP the app implements, at the edition verified, with periodic re-checks so compliance is maintained over time"
         case .review:       return "Resolve contradictions and follow up on missing evidence"
         case .transcripts:  return "Timecoded transcripts — search, play, quote audio & video"
         case .insights:     return "Auto-surfaced gaps, contradictions and patterns"
@@ -168,11 +233,19 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .verifyReceipt: return "Open an exported receipt and re-check its hash chain — genuine or tampered"
         case .library:      return "Every document you've ingested"
         case .saved:        return "Your bookmarked questions"
+        case .authenticity: return "Check a file's provenance — fingerprint, capture metadata, editing traces, PDF edit markers"
+        case .citations:    return "Build layered Evidence Explained citations — full note, short note, bibliography"
+        case .freshness:    return "Confirmed facts ranked by how long since they were checked — catch stale ones before they're reused"
+        case .trends:       return "Patterns across everything — activity over time, event types, entity makeup"
+        case .query:        return "Ask a precise question of your ledger — pick a subject, add filters, run. No SQL to write; see the SQL if you want"
+        case .caseload:     return "Every matter triaged by how much attention it needs"
         case .sources:      return "Folders being watched and ingested"
         case .convert:      return "Turn files between formats, back and forth"
         case .completeness: return "How fully your archive has been processed"
         case .live:         return "Live pipeline and background activity"
+        case .redaction:    return "Remove text from a PDF for real — flattened and verified, not just a black box"
         case .guide:        return "What every screen does, and how facts are graded"
+        case .sutra:        return "The constitution the app runs on — every phase, the tooling it earns, its obligations, human decisions, and prohibited conclusions"
         case .settings:     return "Modes, privacy, models and diagnostics"
         }
     }
@@ -189,10 +262,10 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .story, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
-            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved]
-            case .workspace:   return [.sources, .convert, .completeness, .live]
-            case .system:      return [.guide, .settings]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
+            case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
+            case .system:      return [.guide, .sutra, .sopBoard, .settings]
             }
         }
 
@@ -254,6 +327,16 @@ public struct RootView: View {
     /// — drives the caption under the Engine picker so Lightning's deferred
     /// indexing is never silent.
     @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
+    /// Engine-switch confirmation. When the user flips Full power ↔ Lightning
+    /// while background work is running, we hold the desired value here and
+    /// raise a Stop all / Keep running / Cancel dialog instead of flipping
+    /// silently — so the switch never strands in-flight work without a choice.
+    @State private var pendingEnginePower: Bool?
+    @State private var showEngineSwitchConfirm = false
+    /// Presents the native "Add files" importer (SwiftUI-managed, sizes correctly).
+    @State private var showAddFiles = false
+    /// Presents the add-folder importer (from the ⌘K palette).
+    @State private var showAddFolder = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
     /// "?" keyboard cheat-sheet visibility.
@@ -263,6 +346,11 @@ public struct RootView: View {
     /// Chosen persona (GuidePersona.id). Empty = not yet picked → first-run
     /// picker. Drives the "For you" sidebar section (persona's own screens).
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
+
+    /// The user's most recently visited screens (raw values, newest first).
+    /// Drives the "For you" sidebar rows: the last 4 features actually used —
+    /// blank until there is real history, never a canned list.
+    @AppStorage("kalsmritikosh.recentDestinations") private var recentDestinationsBlob: String = ""
     /// First-run / "change focus" persona picker sheet.
     @State private var showPersonaPicker = false
     /// Which sidebar groups are expanded (Advanced mode only). Default = ALL expanded so the
@@ -290,6 +378,7 @@ public struct RootView: View {
     /// history (SHELL-001), then animates to the new one.
     private func navigate(to dest: Destination) {
         if let current = selection, current != dest { previousSelection = current }
+        recordRecent(dest)
         withAnimation(Theme.springFast) { selection = dest }
         navHistory.navigate(to: AppNavigationEntry(
             destination: Self.navBucket(for: dest),
@@ -350,15 +439,19 @@ public struct RootView: View {
         case .home:                                                   return .home
         case .ask, .search, .answers, .saved:                         return .answers
         case .work, .workCenter, .registers:                          return .jobs
-        case .sources, .convert, .live, .completeness, .workspaces:   return .sources
+        case .sources, .convert, .live, .completeness, .workspaces,
+             .redaction, .caseload:                                   return .sources
         case .timeline, .history, .changes:                           return .timeline
         case .knowledge, .assertions, .insights, .library,
-             .transcripts:                                            return .entities
+             .transcripts, .authenticity, .citations,
+             .freshness, .trends, .emailThreads, .query:              return .entities
         case .dataLab:                                                return .dataLab
-        case .connections, .explore, .matrix:                         return .relationships
+        case .connections, .explore, .matrix, .fundFlow:              return .relationships
         case .findings, .notebook, .dossier, .story, .review,
-             .handoff, .verifyReceipt, .audit:                        return .reports
-        case .guide, .settings:                                       return .settings
+             .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
+             .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
+             .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio:    return .reports
+        case .guide, .settings, .sutra, .sopBoard:                    return .settings
         }
     }
 
@@ -432,53 +525,35 @@ public struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
-            NavigationStack {
-                VStack(spacing: 0) {
-                    appHeader
-                    Divider()
-                    detail
-                }
-                .navigationTitle(selection?.title ?? "Kalsmritikosh")
-                .toolbar {
-                    // SHELL-001 — browser-style location Back/Forward, deliberately
-                    // distinct from any workflow's Prev/Next stepping.
-                    ToolbarItemGroup(placement: .navigation) {
-                        Button(action: navGoBack) {
-                            Image(systemName: "chevron.backward")
-                        }
-                        .disabled(!navHistory.canGoBack)
-                        .keyboardShortcut("[", modifiers: .command)
-                        .help("Back — previous place you visited  (⌘[)")
-                        Button(action: navGoForward) {
-                            Image(systemName: "chevron.forward")
-                        }
-                        .disabled(!navHistory.canGoForward)
-                        .keyboardShortcut("]", modifiers: .command)
-                        .help("Forward  (⌘])")
-                    }
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { showPalette = true } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .help("Jump to any screen or command  (⌘K)")
+            // FLOATING-SIDEBAR FIX — below ~1040pt the split view FLOATS the
+            // sidebar as an overlay whose invisible scrim swallows clicks on the
+            // header buttons ("upper buttons not clickable when not full screen").
+            // Watch the detail width and HIDE the docked sidebar instead of
+            // letting it float; it reopens automatically when the window widens.
+            detailStack
+                .onGeometryChange(for: CGFloat.self) { proxy in proxy.size.width } action: { width in
+                    if width < 760, columnVisibility != .detailOnly {
+                        columnVisibility = .detailOnly
+                    } else if width >= 900, columnVisibility == .detailOnly {
+                        columnVisibility = .all
                     }
                 }
-            }
         }
         .navigationSplitViewStyle(.balanced)
         .tint(Theme.brand)
         .preferredColorScheme(.light)
-        .frame(minWidth: 880, minHeight: 620)
+        .frame(minWidth: 1040, minHeight: 640)
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .overlay(shortcutHelpOverlay)
         .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
-        // FIRST-RUN-CURVE — empty states everywhere carry an "Add your files"
-        // (or similar) button; they post this notification and RootView jumps.
         .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
             if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
                 navigate(to: dest)
             }
+        }
+        .onChange(of: appState.pendingWorkCenterDefID) { _, newValue in
+            if newValue != nil { navigate(to: .workCenter) }
         }
         .task {
             // ENGINE POWER — refresh the semantic-index backlog caption.
@@ -510,6 +585,64 @@ public struct RootView: View {
         }
     }
 
+    private var detailStack: some View {
+            NavigationStack {
+                VStack(spacing: 0) {
+                    appHeader
+                    Divider()
+                    detail
+                }
+                .navigationTitle(selection?.title ?? "Kalsmritikosh")
+                .toolbar {
+                    // SHELL-001 — browser-style location Back/Forward, deliberately
+                    // distinct from any workflow's Prev/Next stepping.
+                    ToolbarItemGroup(placement: .navigation) {
+                        Button { navigate(to: .home) } label: {
+                            Image(systemName: "house")
+                        }
+                        .keyboardShortcut(.home, modifiers: .command)
+                        .help("Home — back to the start screen")
+                        Button(action: navGoBack) {
+                            Image(systemName: "chevron.backward")
+                        }
+                        .disabled(!navHistory.canGoBack)
+                        .keyboardShortcut("[", modifiers: .command)
+                        .help("Back — previous place you visited  (⌘[)")
+                        Button(action: navGoForward) {
+                            Image(systemName: "chevron.forward")
+                        }
+                        .disabled(!navHistory.canGoForward)
+                        .keyboardShortcut("]", modifiers: .command)
+                        .help("Forward  (⌘])")
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { showPalette = true } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .help("Jump to any screen or command  (⌘K)")
+                    }
+                }
+            }
+    }
+
+    /// Engine picker binding. If background work is in flight, a change is held
+    /// as `pendingEnginePower` and the confirmation dialog decides what happens;
+    /// otherwise it flips immediately. The getter always returns the committed
+    /// `fullPower`, so the segmented control stays put until the user confirms.
+    private var enginePowerBinding: Binding<Bool> {
+        Binding(
+            get: { fullPower },
+            set: { newValue in
+                guard newValue != fullPower else { return }
+                if appState.hasStoppableBackgroundWork {
+                    pendingEnginePower = newValue
+                    showEngineSwitchConfirm = true
+                } else {
+                    fullPower = newValue
+                }
+            })
+    }
+
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
@@ -519,6 +652,40 @@ public struct RootView: View {
                     .padding(.bottom, 6)
                 paletteButton
                     .padding(.bottom, 6)
+                    // The add-folder importer (⌘K palette) lives on ITS OWN view:
+                    // two .fileImporter modifiers on one view collide on macOS —
+                    // only one presents, which silently killed "Add files".
+                    .fileImporter(isPresented: $showAddFolder,
+                                  allowedContentTypes: [.folder],
+                                  allowsMultipleSelection: false) { result in
+                        if case .success(let urls) = result, let url = urls.first {
+                            let scoped = url.startAccessingSecurityScopedResource()
+                            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                            try? appState.bookmarks.register(url: url)
+                            navigate(to: .sources)
+                        }
+                    }
+                // ADD FILES — always-visible ingestion entry point: pick supported
+                // files and the app reads them into your archive (folders are added
+                // from Sources). Complements the auto-watched folders.
+                Button {
+                    showAddFiles = true
+                } label: {
+                    Label("Add files", systemImage: "plus.rectangle.on.folder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+                .help("Ingest files into your private archive so you can ask and cite over them. Supported: \(SourceType.attachableSummary)")
+                .fileImporter(isPresented: $showAddFiles,
+                              allowedContentTypes: SourceType.attachableContentTypes,
+                              allowsMultipleSelection: true) { result in
+                    if case .success(let urls) = result {
+                        Task { await appState.ingestFiles(urls) }
+                    }
+                }
                 // Simple / Advanced interface toggle. Simple shows one primary screen per group;
                 // everything else stays reachable via the header search + ⌘K.
                 Picker("Interface", selection: $simpleMode) {
@@ -534,7 +701,7 @@ public struct RootView: View {
                 // Lightning answers from structure + full-text alone: fastest,
                 // lowest energy, still evidence-cited. Lossless flip: vectors
                 // resume backfilling the moment Full power returns.
-                Picker("Engine", selection: $fullPower) {
+                Picker("Engine", selection: enginePowerBinding) {
                     Label("Full power", systemImage: "brain").tag(true)
                     Label("Lightning", systemImage: "bolt.fill").tag(false)
                 }
@@ -543,6 +710,24 @@ public struct RootView: View {
                 .padding(.horizontal, 8)
                 .padding(.bottom, 6)
                 .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
+                .confirmationDialog(
+                    "Background work is running",
+                    isPresented: $showEngineSwitchConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Stop all and switch", role: .destructive) {
+                        appState.stopAllBackgroundWork()
+                        if let p = pendingEnginePower { fullPower = p }
+                        pendingEnginePower = nil
+                    }
+                    Button("Keep running and switch") {
+                        if let p = pendingEnginePower { fullPower = p }
+                        pendingEnginePower = nil
+                    }
+                    Button("Cancel", role: .cancel) { pendingEnginePower = nil }
+                } message: {
+                    Text("Ingesting, relationship extraction and semantic indexing are still in progress. Switching the engine loses nothing — the work pauses and resumes automatically. Choose Stop all to halt it now instead.")
+                }
                 // ENGINE POWER visibility — the one honest caveat of the flip:
                 // content ingested during Lightning has no semantic index yet.
                 // Surface the backlog so catch-up is never silent.
@@ -561,6 +746,26 @@ public struct RootView: View {
                           ? "New content becomes semantically searchable as the background index catches up. Exact and structured search already covers everything."
                           : "Lightning skips semantic indexing. Everything stays searchable by structure and full text; the semantic index resumes when you switch to Full power.")
                 }
+                // STOP ALL — always reachable while any background task is in flight
+                // (bulk ingest, relationship extraction, semantic indexing, the idle
+                // maintenance scan). Halts them at the next safe checkpoint; finished
+                // work is kept and a later run resumes the rest. Hidden when idle so
+                // the sidebar stays calm.
+                if appState.hasStoppableBackgroundWork {
+                    Button(role: .destructive) {
+                        appState.stopAllBackgroundWork()
+                    } label: {
+                        Label("Stop all background work", systemImage: "stop.circle.fill")
+                            .font(.caption2.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+                    .help("Halt ingesting, relationship extraction and semantic indexing now. Finished work is kept; a later run resumes the rest.")
+                }
                 onboardingTip
                 personaSection
                 if simpleMode {
@@ -577,6 +782,13 @@ public struct RootView: View {
                     ForEach(Destination.Group.allCases) { group in
                         SidebarRow(dest: group.simplePrimary, isSelected: selection == group.simplePrimary, namespace: sidebarNS) {
                             navigate(to: group.simplePrimary)
+                        }
+                    }
+                    // Even in Simple mode, keep the professional workflow surfaces one
+                    // click away — jobs run their guided workflows in the Work Center.
+                    ForEach([Destination.work, .workCenter], id: \.self) { dest in
+                        SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                            navigate(to: dest)
                         }
                     }
                 } else {
@@ -622,14 +834,16 @@ public struct RootView: View {
         GuideContent.personas.first { $0.id == personaID }
     }
 
-    /// "For you" — the chosen persona's own screens up top, so a user isn't
-    /// faced with every screen. If no persona is chosen yet, shows a single
-    /// "Choose your focus" button that opens the picker.
+    /// "For you" — the user's own last-used screens (up to 4, newest first),
+    /// blank until there is real history. The focus (persona) is shown once,
+    /// as the change control on the right — not duplicated in the label.
     @ViewBuilder
     private var personaSection: some View {
         if let p = currentPersona {
             HStack {
-                Text("FOR YOU · \(p.title.uppercased())")
+                // Persona titles are phrased "For Lawyers" — strip the prefix
+                // and the plural so the label reads "PERSONA · LAWYER".
+                Text("PERSONA · \(Self.personaRole(p.title).uppercased())")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .tracking(0.5)
@@ -639,19 +853,14 @@ public struct RootView: View {
                     .font(.caption2)
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.brand)
+                    .help("Click to change your persona")
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
             .padding(.bottom, 2)
-            ForEach(p.keyScreens, id: \.label) { screen in
-                SidebarRow(dest: screen.dest, isSelected: selection == screen.dest, namespace: sidebarNS) {
-                    navigate(to: screen.dest)
-                }
-            }
-            // Ask is the universal entry point — always offer it in For You.
-            if !p.keyScreens.contains(where: { $0.dest == .ask }) {
-                SidebarRow(dest: .ask, isSelected: selection == .ask, namespace: sidebarNS) {
-                    navigate(to: .ask)
+            ForEach(recentDestinations) { dest in
+                SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                    navigate(to: dest)
                 }
             }
         } else {
@@ -669,7 +878,39 @@ public struct RootView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 8)
             .padding(.top, 8)
+            ForEach(recentDestinations) { dest in
+                SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                    navigate(to: dest)
+                }
+            }
         }
+    }
+
+    /// "For Lawyers" → "Lawyer", "For Everyone" → "Everyone".
+    private static func personaRole(_ title: String) -> String {
+        var t = title
+        if t.hasPrefix("For ") { t = String(t.dropFirst(4)) }
+        if t.hasSuffix("s") { t = String(t.dropLast()) }
+        return t
+    }
+
+    /// The last 4 screens the user actually visited, newest first (home
+    /// excluded — it has its own permanent place). Empty until real use.
+    private var recentDestinations: [Destination] {
+        recentDestinationsBlob.split(separator: ",")
+            .compactMap { Destination(rawValue: String($0)) }
+            .filter { $0 != .home }
+            .prefix(4)
+            .map { $0 }
+    }
+
+    /// Record a visit: newest first, deduplicated, capped.
+    private func recordRecent(_ dest: Destination) {
+        guard dest != .home else { return }
+        var raws = recentDestinationsBlob.split(separator: ",").map(String.init)
+        raws.removeAll { $0 == dest.rawValue }
+        raws.insert(dest.rawValue, at: 0)
+        recentDestinationsBlob = raws.prefix(8).joined(separator: ",")
     }
 
     /// A collapsible sidebar group. Header click toggles it; collapsed by
@@ -868,25 +1109,12 @@ public struct RootView: View {
 
     // MARK: Header (grouped icon nav + always-on search)
 
-    /// Two-row app header shown above every screen:
-    ///  • Row 1 — every screen as an icon, grouped (Ask · Rebuild · Know ·
-    ///    Work · System) with a caption under each group. Active screen is
-    ///    highlighted; hovering any icon or group caption shows a one-line
-    ///    explanation.
-    ///  • Row 2 — an always-visible search box: type and press return to
-    ///    search the archive from anywhere, no navigation first.
+    /// App header shown above every screen: an always-visible search box —
+    /// type and press return to search the archive from anywhere, no
+    /// navigation first. Navigation itself lives in the sidebar only; the
+    /// per-screen icon strip was switched off (owner decision, 2026-08-23).
     private var appHeader: some View {
         VStack(spacing: 8) {
-            // The group icons lay out in a WRAPPING flow — NOT a horizontal ScrollView. On macOS a horizontal
-            // ScrollView intercepts the mouse-down for panning, so child Buttons never fire (the sidebar uses
-            // the same Button pattern but in a vertical scroll and works). A flow keeps every icon directly
-            // hittable and always visible (wraps to another line instead of hiding behind a scroll).
-            FlowLayout(spacing: 12, lineSpacing: 8) {
-                ForEach(Destination.Group.allCases) { group in
-                    headerGroup(group)
-                }
-            }
-            .padding(.horizontal, 16)
             headerSearchBar
                 .padding(.horizontal, 16)
         }
@@ -1086,18 +1314,7 @@ public struct RootView: View {
 
     /// Open a folder picker directly from the palette, register it, and jump
     /// to Sources — the whole "add source" flow in one keyboard-driven pass.
-    private func addFolderFromPalette() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Select Folder"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? appState.bookmarks.register(url: url)
-        navigate(to: .sources)
-        #endif
-    }
+    private func addFolderFromPalette() { showAddFolder = true }
 
     // MARK: Detail router
 
@@ -1130,7 +1347,21 @@ public struct RootView: View {
         case .explore:      ExplorerView()
         case .matrix:       CrossDocumentMatrixView()
         case .connections:  ConnectionFinderView()
+        case .fundFlow:     FundFlowView()
+        case .emailThreads: EmailThreadsView()
         case .story:        CaseStoryView()
+        case .reasoning:    ReasoningStudioView()
+        case .hypotheses:   ACHMatrixView()
+        case .hrStudio:     WorkplaceStudioView()
+        case .privilegeStudio: PrivilegeLogStudioView()
+        case .siuStudio:    SIUStudioView()
+        case .faStudio:     ForensicStudioView()
+        case .jnStudio:     JournalistStudioView()
+        case .rsStudio:     ResearcherStudioView()
+        case .gnStudio:     GenealogistStudioView()
+        case .ccStudio:     CreatorStudioView()
+        case .inStudio:     BinderStudioView()
+        case .sopBoard:     ComplianceBoardView()
         case .review:       ReviewView()
         case .transcripts:  TranscriptsView()
         case .insights:     InsightsView()
@@ -1142,11 +1373,19 @@ public struct RootView: View {
         case .verifyReceipt: ReceiptVerifierView()
         case .library:      LibraryView()
         case .saved:        SavedQueriesView()
+        case .authenticity: AuthenticityView()
+        case .citations:    CitationBuilderView()
+        case .freshness:    FreshnessView()
+        case .trends:       TrendsView()
+        case .query:        QueryView()
+        case .caseload:     CaseloadView()
         case .sources:      SourcesView()
         case .convert:      ConvertView()
         case .completeness: CompletenessView()
         case .live:         LiveDashboardView()
+        case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
+        case .sutra:        SutraView()
         case .settings:     SettingsView()
         }
     }
@@ -1172,7 +1411,11 @@ private struct FlowLayout: Layout {
             widest = max(widest, x - spacing)
             lineHeight = max(lineHeight, size.height)
         }
-        return CGSize(width: min(widest, maxWidth), height: y + lineHeight)
+        // Return the FULL proposed width (not the widest line): placeSubviews wraps
+        // against bounds.width, so reporting a narrower width made placement wrap
+        // EARLIER than measurement — extra rows landed below the measured height,
+        // under the detail view, visible but not clickable at windowed sizes.
+        return CGSize(width: proposal.width ?? widest, height: y + lineHeight)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {

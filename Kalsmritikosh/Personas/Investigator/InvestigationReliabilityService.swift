@@ -55,6 +55,20 @@ public actor InvestigationReliabilityService {
         return (assessment, review)
     }
 
+    /// Rate a source on the PUBLISHED Admiralty / NATO scale (INV-08 gap fix). The letter grade maps to the
+    /// shared canonical ReliabilityRating that is stored; the full code (e.g. "B2") is stamped into the
+    /// rationale so the exact, auditable grade is preserved. Additive over `assessAndConfirm` — no schema change.
+    @discardableResult
+    public func assessAndConfirm(caseID: UUID, sourceVersionID: UUID, admiralty: AdmiraltyCode,
+                                 independence: IndependenceStatus, rationale: String?, actor: String,
+                                 at date: Date) async throws -> (assessment: SourceReliabilityAssessment, review: InvestigationDeskReview) {
+        let note = (rationale?.trimmingCharacters(in: .whitespacesAndNewlines)).flatMap { $0.isEmpty ? nil : $0 }
+        let composed = note.map { "\(admiralty.rationaleLine) \($0)" } ?? admiralty.rationaleLine
+        return try await assessAndConfirm(caseID: caseID, sourceVersionID: sourceVersionID,
+                                          reliability: admiralty.coarseRating, independence: independence,
+                                          rationale: composed, actor: actor, at: date)
+    }
+
     private func requireOpenCaseScope(_ caseID: UUID) async throws -> RetrievalSourceScope {
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationDeskError.caseNotFound(caseID) }
         guard record.caseHeader.status != .closed else { throw InvestigationDeskError.caseClosed(caseID) }

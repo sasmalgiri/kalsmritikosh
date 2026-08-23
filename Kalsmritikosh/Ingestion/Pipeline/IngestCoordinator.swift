@@ -168,6 +168,12 @@ public actor IngestCoordinator {
     /// T18 — optional chain-of-custody ledger. nil = custody logging off.
     private let custody: CustodyRepository?
 
+    /// Pins the custody mode for direct-file intake regardless of the user's
+    /// managed-evidence Settings toggle. nil (production) = honor the toggle;
+    /// tests pin .referenced so tamper-safety guarantees are verified
+    /// deterministically on any machine.
+    private let custodyModeOverride: SourceCustodyMode?
+
     private let invalidationContinuation: AsyncStream<SubjectInvalidation>.Continuation
     public nonisolated let invalidations: AsyncStream<SubjectInvalidation>
 
@@ -211,8 +217,10 @@ public actor IngestCoordinator {
         readiness: SourceReadinessRepository? = nil,
         typedFields: TypedFieldRepository? = nil,
         containerInspection: ContainerInspectionRepository? = nil,
-        intakeCoordinator: UniversalSourceIntakeCoordinator
+        intakeCoordinator: UniversalSourceIntakeCoordinator,
+        custodyModeOverride: SourceCustodyMode? = nil
     ) {
+        self.custodyModeOverride = custodyModeOverride
         self.intakeCoordinator = intakeCoordinator
         self.containerCoordinator = ContainerProcessingCoordinator(repository: containerInspection)
         self.readiness = readiness
@@ -857,7 +865,8 @@ public actor IngestCoordinator {
         if let byteURL = memberByteURL {
             handle = try await intakeCoordinator.admit(byteURL: byteURL, originIdentity: url, custodyMode: .managed, parent: parentVersion, now: Date())
         } else {
-            let custodyMode: SourceCustodyMode = FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced
+            let custodyMode: SourceCustodyMode = custodyModeOverride
+                ?? (FeatureFlags.managedEvidenceModeValue() ? .managed : .referenced)
             handle = try await intakeCoordinator.admit(url: url, custodyMode: custodyMode, parent: parentVersion, now: Date())
         }
         // USF-001.2 — the loader and structural parser must read the immutable per-intake snapshot

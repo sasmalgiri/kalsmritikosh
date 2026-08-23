@@ -194,6 +194,9 @@ public struct PersonaJobsView: View {
     @State private var model: PersonaJobsModel?
     @State private var docJob: PersonaJob?          // JOB-DOC: job whose documentation sheet is open
     @State private var runnerJob: PersonaJob?       // JOB-RUN: job whose guided walkthrough is open
+    /// SURFACE STYLE switch (Settings): classic fixed Analyze launchers vs the
+    /// newer catalog-driven ones. Reactive via the shared FeatureFlags key.
+    @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
 
     public init() {}
 
@@ -216,7 +219,15 @@ public struct PersonaJobsView: View {
                                 job: job, doc: doc,
                                 canRun: !model.busy && model.activeCaseID != nil,
                                 onRun: { Task { await model.run(job, actor: "me", at: Date()) } },
-                                onClose: { runnerJob = nil })
+                                onClose: { runnerJob = nil },
+                                onStartWorkflow: {
+                                    // Hand off to the Work Center as a full guided
+                                    // workflow; RootView navigates there and it starts.
+                                    runnerJob = nil
+                                    if let def = WCCatalog.jobWorkflow(forJob: job) {
+                                        appState.pendingWorkCenterDefID = def.defID
+                                    }
+                                })
                         }
                     }
             } else if appState.personaJobs != nil {
@@ -369,6 +380,11 @@ public struct PersonaJobsView: View {
                     .tint(Theme.brand)
                     .disabled(model.busy || model.intakeJob == nil
                               || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .guidance(GuidanceTip("Start matter",
+                                          what: "Opens a new case for this persona and runs its intake job — the container every later job works against. It's created in the chosen workspace.",
+                                          enabledWhen: "Type a matter title first (a workspace is created automatically if you have none)."),
+                              enabled: !(model.busy || model.intakeJob == nil
+                                         || model.matterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
                 if model.workspaceList.isEmpty {
                     Text("No workspace yet — starting your first matter creates one named \u{201C}General\u{201D} automatically.")
@@ -470,6 +486,26 @@ public struct PersonaJobsView: View {
         }
     }
 
+    /// The analytic canvases to offer in the Analyze phase — derived from the
+    /// Sūtra tooling catalog (analyze-tier jobs that name a real surface).
+    private var analyticLaunchers: [(dest: Destination, help: String)] {
+        JobToolingCatalog.analyticKinds.compactMap { kind in
+            guard let p = JobToolingCatalog.profile(for: kind),
+                  let s = p.surface, let d = Destination(rawValue: s) else { return nil }
+            return (d, p.rationale)
+        }
+    }
+
+    /// The analytic canvas a job earns, per the Sūtra tooling catalog — only
+    /// analyze-tier jobs that name a real surface. nil = a Work Center form/service
+    /// is the right depth. Honours the classic-surfaces switch (hidden when on).
+    private func analyticCanvas(_ kind: PersonaJobKind) -> Destination? {
+        guard !preferClassicSurfaces,
+              let p = JobToolingCatalog.profile(for: kind), p.tier == .analyze,
+              let s = p.surface, let d = Destination(rawValue: s) else { return nil }
+        return d
+    }
+
     private func jobGrid(_ model: PersonaJobsModel) -> some View {
         let phased: [(JobPhase, [PersonaJob])] = JobPhase.allCases.compactMap { phase in
             let inPhase = model.runnableJobs.filter { JobPhase.phase(of: $0.kind) == phase }
@@ -495,6 +531,38 @@ public struct PersonaJobsView: View {
                                 .foregroundStyle(Theme.brand)
                         }
                         Spacer()
+                        if phase == .analyze {
+                            // The new/classic SWITCH, in the place it acts (also in
+                            // Settings ▸ Answering & modes ▸ "Prefer classic surfaces").
+                            Toggle(isOn: $preferClassicSurfaces) {
+                                Text("Classic").font(.caption2)
+                            }
+                            .toggleStyle(.switch).controlSize(.mini)
+                            .help("Switch between the classic fixed launchers and the newer catalog-driven ones. Also in Settings ▸ Answering & modes.")
+                            if preferClassicSurfaces {
+                                // CLASSIC — the previous fixed Analyze launchers (Settings switch).
+                                Button { SurfaceOpener.open(.hypotheses) } label: {
+                                    Label("Hypotheses (ACH)", systemImage: "tablecells").font(.caption)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help("Open the Analysis of Competing Hypotheses matrix — rate evidence against rival explanations and rank by fewest inconsistencies.")
+                                Button { SurfaceOpener.open(.reasoning) } label: {
+                                    Label("Reasoning Studio", systemImage: "brain.head.profile").font(.caption)
+                                }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help("Open the Reasoning Studio — brainstorm, 5 Whys and a fishbone diagram to a root-cause conclusion and an approval-ready report.")
+                            } else {
+                                // NEW — the analytic canvases DERIVED from the Sūtra tooling catalog
+                                // (JobToolingCatalog), not hard-coded — the constitution drives the UI.
+                                ForEach(analyticLaunchers, id: \.dest) { item in
+                                    Button { SurfaceOpener.open(item.dest) } label: {
+                                        Label(item.dest.title, systemImage: item.dest.icon).font(.caption)
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .help(item.help)
+                                }
+                            }
+                        }
                         Text("\(done)/\(phaseJobs.count)")
                             .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
@@ -538,28 +606,29 @@ public struct PersonaJobsView: View {
                         Text(job.detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
                         Spacer(minLength: 0)
                         HStack(spacing: 8) {
+                            // ONE action per job (owner decision 2026-08-20): open the
+                            // guided Work Center workflow — gated steps, typed fields,
+                            // and a numbered document per confirmed step. Replaces the
+                            // separate instant-Run and Guide buttons.
                             Button {
-                                Task { await model.run(job, actor: "me", at: Date()) }
-                            } label: { Label("Run", systemImage: "arrow.right.circle") }
-                            .buttonStyle(.bordered)
-                            .disabled(model.busy || model.activeCaseID == nil)
-                            // JOB-RUN — the guided step-by-step walkthrough of this
-                            // job's documented workflow (Previous/Next/Save/progress).
-                            if let doc = JobDocumentationCatalog.doc(
-                                personaLabel: model.personas.first { $0.id == model.selectedPersona }?.label ?? "",
-                                jobTitle: job.title) {
-                                Button { runnerJob = job } label: {
-                                    Label("Guide", systemImage: "signpost.right")
+                                if let def = WCCatalog.jobWorkflow(forJob: job) {
+                                    appState.pendingWorkCenterDefID = def.defID
                                 }
-                                .buttonStyle(.borderless)
-                                .help("Walk this job step by step — your place is saved.")
-                                if let saved = JobRunnerProgress.savedStep(jobID: doc.jobID) {
-                                    Text("step \(saved + 1)/\(JobRunnerView.steps(of: doc).count)")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                        .help("Guided walkthrough in progress — reopen Guide to resume.")
+                            } label: {
+                                Label("Run workflow", systemImage: "list.bullet.clipboard")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(Theme.brand)
+                            .controlSize(.small)
+                            .help("Open this job as a step-by-step guided workflow — gated steps, typed fields, and a numbered document for every step you confirm.")
+                            // Analyze-tier jobs earn a direct canvas launch — decided by the
+                            // Sūtra tooling catalog, not hard-coded (Step 2).
+                            if let canvas = analyticCanvas(job.kind) {
+                                Button { SurfaceOpener.open(canvas) } label: {
+                                    Label(canvas.title, systemImage: canvas.icon).font(.caption)
                                 }
+                                .buttonStyle(.bordered).controlSize(.small)
+                                .help("This is an analysis job — open its canvas directly (\(canvas.title)). Derived from the tooling map.")
                             }
                         }
                     }
@@ -646,3 +715,11 @@ private struct JobDocumentationDetail: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Professional Jobs") {
+    PersonaJobsView()
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif

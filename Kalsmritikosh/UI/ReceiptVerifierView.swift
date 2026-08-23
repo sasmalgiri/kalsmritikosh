@@ -19,6 +19,7 @@ public struct ReceiptVerifierView: View {
     @State private var isValid: Bool?
     @State private var filename: String?
     @State private var parseError = false
+    @State private var showOpen = false
 
     public init() {}
 
@@ -31,11 +32,17 @@ public struct ReceiptVerifierView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                openReceipt()
+                parseError = false
+                showOpen = true
             } label: {
                 Label("Open receipt…", systemImage: "doc.badge.plus")
             }
             .buttonStyle(.borderedProminent)
+            .fileImporter(isPresented: $showOpen,
+                          allowedContentTypes: [.json],
+                          allowsMultipleSelection: false) { result in
+                if case .success(let urls) = result, let url = urls.first { openReceipt(url) }
+            }
 
             if parseError {
                 Label("That file isn\u{2019}t a Kalsmritikosh receipt.", systemImage: "xmark.octagon")
@@ -92,14 +99,14 @@ public struct ReceiptVerifierView: View {
         }
     }
 
-    private func openReceipt() {
-        #if canImport(AppKit)
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
-        panel.allowsMultipleSelection = false
-        parseError = false
-        guard panel.runModal() == .OK, let url = panel.url,
-              let data = try? Data(contentsOf: url) else { return }
+    private func openReceipt(_ url: URL) {
+        // .fileImporter hands back a security-scoped URL — start access to read it.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            receipt = nil; isValid = nil; filename = nil; parseError = true
+            return
+        }
         guard let parsed = VerifiableReceipt.parse(data) else {
             receipt = nil; isValid = nil; filename = nil; parseError = true
             return
@@ -107,6 +114,5 @@ public struct ReceiptVerifierView: View {
         receipt = parsed
         isValid = VerifiableReceipt.verify(parsed)
         filename = url.lastPathComponent
-        #endif
     }
 }

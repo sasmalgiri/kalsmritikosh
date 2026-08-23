@@ -58,6 +58,10 @@ public struct CaseStoryView: View {
                 Button("Build the story") { run() }
                     .buttonStyle(.borderedProminent)
                     .disabled(subject.trimmingCharacters(in: .whitespaces).count < 2)
+                    .guidance(GuidanceTip("Build the story",
+                                          what: "Reconstructs the whole cited story of a subject — timeline, parties, key clauses, roadblocks and gaps — from your evidence.",
+                                          enabledWhen: "Name a subject (at least two characters) first."),
+                              enabled: subject.trimmingCharacters(in: .whitespaces).count >= 2)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(Color.primary.opacity(0.05), in: Capsule())

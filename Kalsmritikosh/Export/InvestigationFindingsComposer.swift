@@ -69,6 +69,29 @@ public struct InvestigationFindingsComposer: WorkProductSectionComposer {
     }
 }
 
+/// Executive-summary composer → one prose section placed FIRST, so a non-technical reader
+/// (counsel, a manager) grasps the whole report in under a minute. Pure prose (no material
+/// claims) → never trips the evidence gate; counts come ONLY from the selected context, and it
+/// reaches no conclusion beyond the evidence.
+public struct InvestigationExecutiveSummaryComposer: WorkProductSectionComposer {
+    public nonisolated init() {}
+
+    public var id: WorkProductComposerID { WorkProductComposerID("investigation.execsummary") }
+    public var sectionKind: BlueprintSection.Kind { .narrative }
+
+    public func compose(_ context: WorkProductContext) -> [WorkProductSection] {
+        let findings = context.selectedClaims.count
+        let conflicts = context.selectedConflicts.count
+        let gaps = context.selectedGaps.count
+        let line1 = findings == 0
+            ? "No findings are supported by the sources in the \"\(context.subjectLabel)\" workspace."
+            : "\(findings) finding(s) are supported by the sources in the \"\(context.subjectLabel)\" workspace."
+        let line2 = "\(conflicts) unresolved conflict(s) and \(gaps) evidence gap(s) remain to be weighed before relying on these findings."
+        let line3 = "Read the full report below; every finding cites a reopenable source and is labelled by how it is grounded. This summary reaches no conclusion beyond the evidence."
+        return [WorkProductSection(title: "Executive summary", preamble: [line1, line2, line3])]
+    }
+}
+
 /// Limitations composer → one disclosure section. Pure prose (no material claims), so it never
 /// trips the fail-closed evidence gate. States the honest bounds of the report.
 public struct InvestigationLimitationsComposer: WorkProductSectionComposer {

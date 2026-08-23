@@ -307,7 +307,7 @@ struct WorkCenterEngineTests {
     @Test("Register catalog integrity — unique 3-letter types, every field has help, keys resolve, choices have options")
     func registerCatalogIntegrity() {
         let regs = WCRegisterCatalog.all
-        #expect(regs.count == 4)
+        #expect(regs.count == 6)
         #expect(Set(regs.map(\.docType)).count == regs.count, "register doc-types must be unique")
         for reg in regs {
             #expect(reg.docType.count == 3, "\(reg.docType): SAP-style 3-letter type code")
@@ -731,6 +731,47 @@ struct WorkCenterRepositoryTests {
         let stageEdits = try await repo.editHistory(docID: rec.id).filter { $0.fieldKey == "stage" }
         #expect(stageEdits.count == 2, "two stage transitions recorded")
         #expect(stageEdits.map(\.newValue) == ["Scheduled", "Researching"], "newest edit first")
+    }
+
+    @Test("HR allegation disposition is editable and every change is sealed to history")
+    func allegationDispositionTracked() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let alg = WCRegisterCatalog.allegationsFindings
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        let rec = try await repo.createRecord(
+            type: alg.docType, title: "Raised voice 15 Nov",
+            values: ["allegation": "Raised voice 15 Nov", "disposition": "Inconclusive",
+                     "rationale": "Accounts conflict; no witnesses yet."],
+            actor: "HR", at: when)
+        #expect(rec.docType == "ALG")
+        #expect(rec.docNumber.hasPrefix("ALG-"))
+        // A witness turns up — disposition moves to substantiated, sealed.
+        let changed = try await repo.updateRecord(
+            docID: rec.id, title: "Raised voice 15 Nov",
+            values: ["allegation": "Raised voice 15 Nov", "disposition": "Substantiated",
+                     "rationale": "Two witnesses corroborate on the balance of probabilities.",
+                     "recommendation": "Written warning + comms training."],
+            editor: "HR", note: "Witness statements obtained.", at: when.addingTimeInterval(86_400))
+        #expect(changed == 3, "disposition + rationale changed, recommendation added")
+        let dispEdit = try #require(try await repo.editHistory(docID: rec.id).first { $0.fieldKey == "disposition" })
+        #expect(dispEdit.oldValue == "Inconclusive")
+        #expect(dispEdit.newValue == "Substantiated")
+    }
+
+    @Test("Surveillance log records a numbered, editable observation")
+    func surveillanceObservationRecorded() async throws {
+        let (repo, _, _) = try await makeRepo()
+        let svl = WCRegisterCatalog.surveillanceLog
+        let when = Date(timeIntervalSince1970: 1_755_000_000)
+        let rec = try await repo.createRecord(
+            type: svl.docType, title: "J. Roe",
+            values: ["subject": "J. Roe", "location": "public sidewalk",
+                     "observed": "Lifted boxes into a van, no visible difficulty.",
+                     "matchesClaim": "Inconsistent with claim"],
+            actor: "PI", at: when)
+        #expect(rec.docType == "SVL")
+        #expect(rec.docNumber.hasPrefix("SVL-"))
+        #expect(rec.fieldValues[1]?["matchesClaim"] == "Inconsistent with claim")
     }
 
     @Test("records(type:) lists a register's records newest-first and never leaks another register's rows")

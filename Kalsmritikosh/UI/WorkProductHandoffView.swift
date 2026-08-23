@@ -24,6 +24,8 @@ public final class WorkProductHandoffModel {
     private let handoff: WorkProductHandoffService
     private let findings: InvestigationFindingsService
     private let closure: InvestigationClosureService
+    /// INV-12 desk — used only to SURFACE undecided contradictions/gaps at report time (read-only here).
+    private let contradictionGap: InvestigationContradictionGapService?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -33,6 +35,17 @@ public final class WorkProductHandoffModel {
 
     /// Reviewer inputs.
     public var rationale: String = ""
+    /// The standard of proof these findings are declared to meet. Required before
+    /// approval — findings can't be approved without a declared evidentiary bar.
+    public var proofStandard: EvidentiaryStandard?
+
+    /// Undecided (open) in-scope contradictions/gaps at report time — surfaced so findings are never approved
+    /// while tensions remain quietly unresolved. Populated on load from the INV-12 desk.
+    public private(set) var openContradictionCount = 0
+    public private(set) var openGapCount = 0
+    /// The approver's explicit acknowledgment they've seen the open items — required to approve when any exist.
+    public var acknowledgedOpenItems = false
+    public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
 
@@ -40,8 +53,11 @@ public final class WorkProductHandoffModel {
     public private(set) var lastError: String?
     public private(set) var busy = false
 
-    public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService, closure: InvestigationClosureService) {
+    public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService,
+                closure: InvestigationClosureService,
+                contradictionGap: InvestigationContradictionGapService? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
+        self.contradictionGap = contradictionGap
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -51,6 +67,10 @@ public final class WorkProductHandoffModel {
         if self.caseID != caseID {
             built = nil
             rationale = ""
+            proofStandard = nil
+            openContradictionCount = 0
+            openGapCount = 0
+            acknowledgedOpenItems = false
             unresolvedText = ""
             exportRedactionTerms = ""
             exportFormat = .pdf
@@ -65,6 +85,13 @@ public final class WorkProductHandoffModel {
         guard let caseID else { return }
         do { snapshot = try await handoff.snapshot(caseID: caseID) }
         catch { lastError = "\(error)"; snapshot = nil }
+        // Surface undecided in-scope contradictions/gaps (review == nil = no case disposition yet).
+        if let desk = contradictionGap {
+            let cs = (try? await desk.contradictions(caseID: caseID)) ?? []
+            let gs = (try? await desk.gaps(caseID: caseID)) ?? []
+            openContradictionCount = cs.filter { $0.review == nil }.count
+            openGapCount = gs.filter { $0.review == nil }.count
+        }
     }
 
     /// Build the case's findings work product over the shared assembly engine (does not approve or close).
@@ -83,10 +110,21 @@ public final class WorkProductHandoffModel {
         guard let snap = snapshot, let f = built else { lastError = "Build findings first."; return }
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for approval."; return }
+        guard let std = proofStandard else {
+            lastError = "Choose the standard of proof these findings meet before approving."; return
+        }
+        if hasOpenItems && !acknowledgedOpenItems {
+            lastError = "\(openContradictionCount) open contradiction(s) and \(openGapCount) open gap(s) are still undecided in scope. Review them, then tick the acknowledgment before approving."
+            return
+        }
+        let awareness = hasOpenItems
+            ? " Open items at approval: \(openContradictionCount) contradiction(s), \(openGapCount) gap(s) — acknowledged by approver."
+            : " No open contradictions or gaps at approval."
         await perform {
-            _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, rationale: why, actor: actor, at: date)
+            _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
+                                                        rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
-            return "Findings approved."
+            return "Findings approved under \(std.label)."
         }
     }
 
@@ -271,6 +309,21 @@ public struct WorkProductHandoffView: View {
         @Bindable var model = model
         VStack(alignment: .leading, spacing: 8) {
             Text("Findings").font(.headline)
+            // Standard of proof — findings can't be approved without a declared bar.
+            HStack(spacing: 8) {
+                Text("Standard of proof").font(.caption).foregroundStyle(.secondary)
+                Picker("Standard of proof", selection: $model.proofStandard) {
+                    Text("Choose…").tag(Optional<EvidentiaryStandard>.none)
+                    ForEach(EvidentiaryStandard.allCases, id: \.self) { s in Text(s.label).tag(Optional(s)) }
+                }
+                .labelsHidden().frame(maxWidth: 300)
+                .guidance(GuidanceTip("Standard of proof",
+                                      what: "The evidentiary bar these findings are declared to meet (e.g. balance of probabilities, clear and convincing, beyond reasonable doubt). It is stamped into the approval record so the report states the threshold it was tested against.",
+                                      enabledWhen: nil))
+            }
+            if let s = model.proofStandard {
+                Text(s.detail).font(.caption2).foregroundStyle(.secondary)
+            }
             HStack(spacing: 10) {
                 Button { Task { await model.buildFindings(actor: "me", at: Date()) } } label: {
                     Label("Build findings", systemImage: "doc.badge.gearshape")
@@ -278,16 +331,53 @@ public struct WorkProductHandoffView: View {
                 Button { Task { await model.approve(actor: "me", at: Date()) } } label: {
                     Label("Approve", systemImage: "checkmark.seal.fill")
                 }.buttonStyle(.borderedProminent).disabled(model.busy || model.built == nil)
+                    .guidance(GuidanceTip("Approve findings",
+                                          what: "Records your human approval of the built findings under the chosen standard of proof. Approval authorizes the report — it does not verify the world or close the matter.",
+                                          enabledWhen: "Build findings, choose a standard of proof, and enter a rationale (below) first."),
+                              enabled: !(model.busy || model.built == nil))
                 Button { Task { await model.withdraw(actor: "me", at: Date()) } } label: {
                     Label("Withdraw", systemImage: "xmark.seal")
                 }.buttonStyle(.bordered).disabled(model.busy || model.built == nil || !snap.isApproved)
+            }
+            // Open items at report time — findings can't be approved while these are undecided
+            // unless the approver explicitly acknowledges them.
+            if model.hasOpenItems {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("\(model.openContradictionCount) open contradiction(s) and \(model.openGapCount) open gap(s) are still undecided in this case's scope.",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Resolve them on the Contradiction & Gap desk, or acknowledge that you're approving with them open.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                    Toggle("I've reviewed the open items and am approving with them recorded as open",
+                           isOn: $model.acknowledgedOpenItems)
+                        .font(.caption)
+                }
+                .padding(10)
+                .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
             }
             if !snap.approvalHistory.isEmpty {
                 ForEach(snap.approvalHistory) { a in
                     Text("• \(a.decision.rawValue) — \(a.rationale) (\(a.actor))").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            conformanceReadout(model, snap)
         }
+    }
+
+    /// Sūtra conformance (step 4) — proves the run satisfied its constitution:
+    /// standard of proof declared, open items surfaced, approval made.
+    private func conformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
+        let record = RunRecord(
+            completedPhaseKinds: [.findings],
+            standardOfProofDeclared: model.proofStandard != nil,
+            openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
+            humanDecisionsMade: snap.isApproved ? [.findings] : [])
+        let report = SutraConformance.verify(run: record, against: SutraCompiler.shared())
+        return Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
+            .font(.caption)
+            .foregroundStyle(report.isConformant ? Color.green : Color.orange)
+            .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
     }
 
     @ViewBuilder
@@ -384,7 +474,8 @@ public struct WorkProductHandoffView: View {
         guard let handoff = appState.workProductHandoff,
               let findings = appState.investigationFindings,
               let closure = appState.investigationClosure else { return }
-        let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure)
+        let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure,
+                                                 contradictionGap: appState.investigationContradictionGap)
         await m.load(caseID: id)
         model = m
     }

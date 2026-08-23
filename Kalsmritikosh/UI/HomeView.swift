@@ -173,7 +173,7 @@ public struct HomeView: View {
                     Text("Kalsmritikosh")
                         .font(Theme.display(26, .bold))
                         .foregroundStyle(Theme.brandGradient())
-                    Text("Reconstruct history from your documents — cited, evidence-gated answers.")
+                    Text("Your documents, worked by the professional's own SOP — cited, evidence-gated, to the real deliverable.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

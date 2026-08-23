@@ -23,6 +23,10 @@ public struct ReleaseCapabilityProfile: Sendable, Equatable {
     public let silentLLMBackgroundMaintenanceEnabled: Bool
     public let promptedLLMRerankerEnabled: Bool
     public let bundledReasoningProviderRequired: Bool
+    /// Fully private by default: the release app never proposes or performs a
+    /// model download — every shipped model (reasoning + BGE embedder/reranker)
+    /// travels inside the app bundle. Zero network connections.
+    public let optionalModelDownloadEnabled: Bool
 
     /// The locked v1 profile. All generative-ingest levers OFF; no cloud, no
     /// user-facing Ollama/BYO-model; bundled reasoning provider required.
@@ -37,7 +41,8 @@ public struct ReleaseCapabilityProfile: Sendable, Equatable {
         memoryDistillationOnIngestEnabled: false,
         silentLLMBackgroundMaintenanceEnabled: false,
         promptedLLMRerankerEnabled: false,
-        bundledReasoningProviderRequired: true
+        bundledReasoningProviderRequired: true,
+        optionalModelDownloadEnabled: false
     )
 
     /// Verify the live configuration matches the locked release profile.

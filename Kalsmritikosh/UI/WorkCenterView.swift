@@ -21,6 +21,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 #if os(macOS)
 import AppKit
 #endif
@@ -51,6 +52,10 @@ public struct WorkCenterView: View {
     // Attach-evidence + derivation-notice state.
     @State private var showFileImporter = false
     @State private var derivedKeys: Set<String> = []
+    /// Per-attachment ingest status (keyed by WCStepRef.id) so the user sees the
+    /// app actually READING each attached file, not just recording its path.
+    @State private var refIngesting: Set<String> = []
+    @State private var refFailed: Set<String> = []
 
     // Auto-save defaults ON; auto-complete defaults OFF (owner decision
     // 2026-08-18, matching how the owner runs the source system) — steps are
@@ -83,6 +88,9 @@ public struct WorkCenterView: View {
     @State private var docTo = Date()
     @State private var expandedDocID: UUID?
 
+    // Browse-all-jobs search over the 183 generated job workflows.
+    @State private var catalogSearch = ""
+
     public init(onNavigate: @escaping (Destination) -> Void) {
         self.onNavigate = onNavigate
     }
@@ -105,7 +113,7 @@ public struct WorkCenterView: View {
             Text("Reuse this run's field entries next time by starting from this variant.")
         }
         .fileImporter(isPresented: $showFileImporter,
-                      allowedContentTypes: [.item],
+                      allowedContentTypes: SourceType.attachableContentTypes,
                       allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { attachFiles(urls) }
         }
@@ -124,6 +132,13 @@ public struct WorkCenterView: View {
 
     private func restoreAndReload() async {
         await reloadLists()
+        // Handoff from a persona job — start that job's generated guided workflow
+        // (takes precedence over resuming a prior run).
+        if let defID = appState.pendingWorkCenterDefID, let def = WCCatalog.definition(defID) {
+            appState.pendingWorkCenterDefID = nil
+            start(def)
+            return
+        }
         // Resume the run that was open when the user jumped out to a tool.
         if activeRun == nil, let id = UUID(uuidString: persistedRunID),
            let repo = appState.workCenter, let run = try? await repo.run(id),
@@ -157,6 +172,8 @@ public struct WorkCenterView: View {
                     ForEach(WCCatalog.all) { def in recipeCard(def) }
                 }
 
+                recentSection
+                allJobsBrowser
                 documentsRegister
             }
             .padding(24)
@@ -242,6 +259,83 @@ public struct WorkCenterView: View {
     private func postedTypes(_ def: WCWorkflowDefinition) -> String {
         let types = def.operations.compactMap(\.postsDocType)
         return types.isEmpty ? "—" : types.map(WCDocType.displayName).joined(separator: ", ")
+    }
+
+    // MARK: - Recent jobs + browse-all-jobs (searchable)
+
+    /// The most recently completed runs — a quick way back to finished jobs
+    /// (in-progress ones are already under "Resume where you left off").
+    @ViewBuilder
+    private var recentSection: some View {
+        let recent = runs.filter { $0.status == .confirmed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+        if !recent.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                sectionLabel("Recently completed")
+                VStack(spacing: 8) { ForEach(recent.prefix(6)) { run in resumeRow(run) } }
+            }
+        }
+    }
+
+    /// Search across EVERY saved job workflow (all 10 personas, 183 jobs) and
+    /// start any as its own guided run — the curated recipes above are the
+    /// highlights; this is the full library.
+    @ViewBuilder
+    private var allJobsBrowser: some View {
+        let q = catalogSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let matches = q.isEmpty ? [] : WCCatalog.jobWorkflows.filter {
+            $0.name.lowercased().contains(q) || $0.persona.lowercased().contains(q)
+        }
+        VStack(alignment: .leading, spacing: 8) {
+            sectionLabel("All jobs")
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Search \(WCCatalog.jobWorkflows.count) jobs by name or persona…", text: $catalogSearch)
+                    .textFieldStyle(.plain)
+                if !catalogSearch.isEmpty {
+                    Button { catalogSearch = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                        .help("Clear search")
+                }
+            }
+            .padding(8)
+            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            if q.isEmpty {
+                Text("Type to search all \(WCCatalog.jobWorkflows.count) job workflows across every persona, then Start one — it gets its own numbered run.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if matches.isEmpty {
+                Text("No jobs match \u{201C}\(catalogSearch)\u{201D}.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text("\(matches.count) match\(matches.count == 1 ? "" : "es")")
+                    .font(.caption2).foregroundStyle(.tertiary)
+                LazyVStack(spacing: 6) {
+                    ForEach(matches.prefix(60)) { def in jobWorkflowRow(def) }
+                }
+                if matches.count > 60 {
+                    Text("Showing the first 60 — refine your search to narrow.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+        }
+    }
+
+    private func jobWorkflowRow(_ def: WCWorkflowDefinition) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "list.bullet.clipboard").foregroundStyle(.tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(def.name).font(.callout.weight(.medium))
+                Text("\(def.persona) · \(def.operations.count) steps")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("Start") { start(def) }
+                .buttonStyle(.bordered).controlSize(.small)
+                .help("Start this job as a guided run — gated steps and a numbered document per step.")
+        }
+        .padding(8)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Documents register (search + date filter + detail)
@@ -763,6 +857,10 @@ public struct WorkCenterView: View {
                             Button("Save") { save(run, seq: op.seq) }
                                 .disabled(!draftDirty)
                                 .help("Store your entries for this step")
+                                .guidance(GuidanceTip("Save",
+                                                      what: "Stores your entries for this step without finalizing it — you can keep editing.",
+                                                      enabledWhen: "You have unsaved edits to store."),
+                                          enabled: draftDirty)
                         }
                         Button {
                             confirm(run, op: op)
@@ -774,6 +872,12 @@ public struct WorkCenterView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(!locked.isEmpty)
                         .help("Finalize this step and record who did it and when")
+                        .guidance(GuidanceTip(op.postsDocType.map { "Confirm & post \(WCDocType.displayName($0))" } ?? "Confirm step",
+                                              what: op.postsDocType != nil
+                                                ? "Finalizes this step, records who did it and when, and posts its numbered document — quotable later from the Documents register."
+                                                : "Finalizes this step and records who did it and when. Nothing is uploaded.",
+                                              enabledWhen: locked.first ?? "Fill this step's required fields first."),
+                                  enabled: locked.isEmpty)
                     }
                 }
 
@@ -952,12 +1056,13 @@ public struct WorkCenterView: View {
                         showFileImporter = true
                     } label: { Label("Attach files", systemImage: "paperclip") }
                     .controlSize(.small)
-                    .help("Attach the files this step rests on — they ride with the record and are searchable")
+                    .help("Attach the files this step rests on — the app reads them into your archive so they're searchable and citable. Supported: \(SourceType.attachableSummary)")
                 }
             }
             if stepRefs().isEmpty {
-                Text("Nothing attached — optional, but attached files make the record self-explanatory later.")
+                Text("Attach a supported file and the app reads it — so this step can cite and answer over it. Supported: \(SourceType.attachableSummary)")
                     .font(.caption).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(stepRefs()) { ref in
                 HStack(spacing: 6) {
@@ -965,6 +1070,19 @@ public struct WorkCenterView: View {
                     Text(ref.title).font(.caption)
                     if !ref.detail.isEmpty {
                         Text(ref.detail).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
+                    }
+                    // The app is READING the file — surface it, don't leave it silent.
+                    if refIngesting.contains(ref.id) {
+                        ProgressView().controlSize(.mini)
+                        Text("reading…").font(.caption2).foregroundStyle(.secondary)
+                    } else if refFailed.contains(ref.id) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange).imageScale(.small)
+                        Text("couldn't read").font(.caption2).foregroundStyle(.orange)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green).imageScale(.small)
+                            .help("Read into your archive — searchable and citable.")
                     }
                     Spacer()
                     if !disabled {
@@ -987,6 +1105,25 @@ public struct WorkCenterView: View {
                       detail: $0.deletingLastPathComponent().path)
         }
         setRefs(stepRefs() + new, run: run, op: op)
+        // READ each attached file into the private archive (fast intent: custody +
+        // searchable text now, structure as a background upgrade) so this step's
+        // evidence is actually answerable — the same path Ask uses. The importer
+        // hands back security-scoped URLs, so access must be started to read them.
+        for (url, ref) in zip(urls, new) {
+            refIngesting.insert(ref.id)
+            Task {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    guard let ingest = appState.ingest else { throw CocoaError(.featureUnsupported) }
+                    _ = try await ingest.ingest(fileAt: url, intent: .initialFast)
+                    await MainActor.run { _ = refIngesting.remove(ref.id) }
+                } catch {
+                    KalsmritikoshLog.ui.error("Work Center attach ingest failed for \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    await MainActor.run { refIngesting.remove(ref.id); refFailed.insert(ref.id) }
+                }
+            }
+        }
     }
 
     private func setRefs(_ refs: [WCStepRef], run: WCDocument, op: WCOperation) {
@@ -1395,3 +1532,11 @@ public struct WorkCenterView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Work Center") {
+    WorkCenterView(onNavigate: { _ in })
+        .environment(AppState())
+        .frame(width: 1040, height: 720)
+}
+#endif

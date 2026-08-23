@@ -90,6 +90,10 @@ public struct AuditView: View {
                 else { Label("Verify integrity", systemImage: "checkmark.shield") }
             }
             .disabled(verifying)
+            .guidance(GuidanceTip("Verify integrity",
+                                  what: "Re-checks the ledger's integrity — content hashes and the custody chain — and reports any breaks.",
+                                  enabledWhen: "Available when a verification isn't already running."),
+                      enabled: !verifying)
         }
         .padding(12)
         .cardSurface(cornerRadius: 12, tint: integrityIntact ? Theme.brand : .red)
