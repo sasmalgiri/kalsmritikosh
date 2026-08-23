@@ -126,6 +126,7 @@ public struct SettingsView: View {
                 settingsGroup("Background maintenance", "moon.zzz") { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down") { optionalIngestSection }
                 settingsGroup("Your data", "trash") { dataSection }
+                settingsGroup("Help & feedback", "envelope") { feedbackSection }
                 settingsGroup("Legal & privacy", "checkmark.shield") { legalSection }
 
                 // ── Advanced (collapsed by default) ───────────────────────
@@ -1193,6 +1194,37 @@ public struct SettingsView: View {
             }
         } message: {
             Text("This permanently erases the ingested ledger (documents, timeline, entities, search index). Your original files on disk are NOT affected. This cannot be undone.")
+        }
+    }
+
+    /// Help & feedback — a privacy-safe "Report a problem": composes a draft in
+    /// the USER'S OWN mail app (mailto:). Kalsmritikosh itself sends nothing and
+    /// collects nothing; the user sees and can edit every character before
+    /// deciding to send. Keeps "Data Not Collected" truthful.
+    private var feedbackSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "envelope")
+                    .foregroundStyle(Theme.brand)
+                Text("Help & feedback").font(.title3.bold())
+            }
+            Text("Found a problem or have an idea? Tell us — it's the whole point of the free release. The button below opens a draft in your own Mail app: Kalsmritikosh itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button {
+                let v = FeedbackMail.currentVersions()
+                if let url = FeedbackMail.reportProblemURL(appVersion: v.app, osVersion: v.os) {
+                    NSWorkspace.shared.open(url)
+                }
+            } label: {
+                Label("Report a problem / send feedback", systemImage: "paperplane")
+            }
+            .buttonStyle(.borderedProminent)
+            .guidance(GuidanceTip("Report a problem",
+                                  what: "Opens a pre-filled draft in your own Mail app addressed to support. The app makes no network call and attaches none of your documents — only the visible text you choose to send."))
+            Text("Or email \(FeedbackMail.supportAddress) directly. Never include privileged or confidential case material in a report.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .textSelection(.enabled)
         }
     }
 
