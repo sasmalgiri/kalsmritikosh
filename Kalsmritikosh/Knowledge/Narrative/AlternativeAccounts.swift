@@ -47,14 +47,15 @@ public struct AlternativeAccountsBuilder: Sendable {
                 let isNew = !usedValues.contains { key in
                     // reuse comparator: two facts equivalent iff same subject+field+canonical
                     comparator.compare(fact, GenericFact(subjectLabel: fact.subjectLabel, field: fact.field,
-                        value: key, status: fact.status, confidence: 1, sourceBlockIDs: [])) == .equivalent
+                        value: key, assessment: fact.assessment, confidence: 1, sourceBlockIDs: [])) == .equivalent
                 }
                 if isNew {
                     usedValues.append(fact.value)
-                    versions.append(AccountVersion(value: fact.value, sourceBlockIDs: fact.sourceBlockIDs, status: fact.status))
+                    versions.append(AccountVersion(value: fact.value, sourceBlockIDs: fact.sourceBlockIDs,
+                                                   status: LegacyEvidenceStatusAdapter.encode(fact.assessment)))
                 } else if let idx = versions.firstIndex(where: {
                     comparator.compare(fact, GenericFact(subjectLabel: fact.subjectLabel, field: fact.field,
-                        value: $0.value, status: fact.status, confidence: 1, sourceBlockIDs: [])) == .equivalent
+                        value: $0.value, assessment: fact.assessment, confidence: 1, sourceBlockIDs: [])) == .equivalent
                 }) {
                     // Merge evidence into the existing version (corroboration, not a new account).
                     let merged = Array(Set(versions[idx].sourceBlockIDs + fact.sourceBlockIDs))

@@ -41,7 +41,8 @@ public struct HistoryChronologyComposer: Sendable {
             return ChronologyRow(
                 id: item.id, datePhrase: phrase,
                 sortKey: item.start?.start ?? distantFuture,
-                title: item.title, kind: item.kind, status: item.evidenceStatus,
+                title: item.title, kind: item.kind,
+                status: LegacyEvidenceStatusAdapter.encode(item.assessment),
                 evidenceObjectIDs: item.evidence.map(\.objectID))
         }
         .sorted { a, b in

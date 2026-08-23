@@ -40,7 +40,7 @@ public struct DomainFactExtractor: Sendable {
                 byKey[key] = GenericFact(id: existing.id, subjectID: existing.subjectID,
                                          subjectLabel: existing.subjectLabel, field: existing.field,
                                          value: existing.value, unit: existing.unit ?? f.unit,
-                                         status: existing.status, confidence: max(existing.confidence, f.confidence),
+                                         assessment: existing.assessment, confidence: max(existing.confidence, f.confidence),
                                          sourceBlockIDs: blocks)
             } else {
                 byKey[key] = f

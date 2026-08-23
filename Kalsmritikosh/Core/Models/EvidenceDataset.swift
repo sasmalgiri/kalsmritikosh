@@ -57,7 +57,8 @@ public struct DatasetCell: Codable, Sendable, Hashable {
 
     /// Build an evidence-backed cell from a GenericFact (kernel bridge).
     public nonisolated static func from(_ fact: GenericFact) -> DatasetCell {
-        DatasetCell(value: fact.value, sourceBlockIDs: fact.sourceBlockIDs, status: fact.status)
+        DatasetCell(value: fact.value, sourceBlockIDs: fact.sourceBlockIDs,
+                    status: LegacyEvidenceStatusAdapter.encode(fact.assessment))
     }
 }
 

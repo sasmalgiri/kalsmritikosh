@@ -64,7 +64,9 @@ public struct HistoryDiffEngine: Sendable {
 
     static func deltas(from o: HistoryItem, to n: HistoryItem) -> [String] {
         var d: [String] = []
-        if o.evidenceStatus != n.evidenceStatus { d.append("status \(o.evidenceStatus.rawValue)→\(n.evidenceStatus.rawValue)") }
+        let oStatus = LegacyEvidenceStatusAdapter.encode(o.assessment)
+        let nStatus = LegacyEvidenceStatusAdapter.encode(n.assessment)
+        if oStatus != nStatus { d.append("status \(oStatus.rawValue)→\(nStatus.rawValue)") }
         if o.start?.start != n.start?.start { d.append("start date changed") }
         if o.end?.end != n.end?.end { d.append("end date changed") }
         if o.confidence != n.confidence { d.append("confidence \(String(format: "%.2f", o.confidence))→\(String(format: "%.2f", n.confidence))") }

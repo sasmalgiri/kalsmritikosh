@@ -52,7 +52,7 @@ public struct TemporalEventProjector: Sendable {
                 byID[cid] = TemporalClaim(
                     id: cid, subjectID: subjectID, predicate: predicate, object: object,
                     validFrom: existing.validFrom, validTo: existing.validTo, observedAt: existing.observedAt,
-                    status: existing.status, confidence: max(existing.confidence, f.confidence),
+                    assessment: existing.assessment, confidence: max(existing.confidence, f.confidence),
                     sourceObjectIDs: existing.sourceObjectIDs,
                     sourceBlockIDs: Array(Set(existing.sourceBlockIDs).union(f.sourceBlockIDs)),
                     assertionIDs: existing.assertionIDs, genericFactIDs: existing.genericFactIDs + [f.id],
@@ -60,7 +60,7 @@ public struct TemporalEventProjector: Sendable {
             } else {
                 byID[cid] = TemporalClaim(
                     id: cid, subjectID: subjectID, predicate: predicate, object: object,
-                    status: f.status, confidence: f.confidence,
+                    assessment: f.assessment, confidence: f.confidence,
                     sourceBlockIDs: f.sourceBlockIDs, genericFactIDs: [f.id],
                     extractorID: extractorID, extractorVersion: extractorVersion, createdAt: now)
             }
@@ -104,7 +104,7 @@ public struct TemporalEventProjector: Sendable {
                 id: hid, subject: subject, kind: Self.itemKind(forPredicate: c.predicate, hasEnd: c.validTo != nil),
                 title: Self.title(for: c), description: nil,
                 start: c.validFrom, end: c.validTo,
-                evidenceStatus: c.status, confidence: c.confidence,
+                assessment: c.assessment, confidence: c.confidence,
                 evidence: evidence,
                 derivedFrom: [DerivedReference(kind: .temporalClaim, id: c.id)])
         }
