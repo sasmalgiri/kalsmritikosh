@@ -1134,11 +1134,16 @@ public final class AppState {
                 let hasFittingModel = detectedOllama.contains {
                     $0.estimatedRAMBytes > 0 && $0.estimatedRAMBytes <= ramBudget
                 }
+                // Model-pull suggestions are a developer convenience: the release
+                // app is fully private by default — it never proposes a download
+                // (all shipped AI, including BGE search models, is in the bundle).
+                #if DEBUG
                 if !hasFittingModel {
                     let sug = OllamaSetupAdvisor.recommendModel(totalRAMBytes: hardware.totalRAMBytes)
                     self.pendingModelSuggestion = sug
                     KalsmritikoshLog.app.info("No comfortably-fitting reasoning model on \(hardware.totalRAMBytes / 1_073_741_824, privacy: .public)GB device — suggesting \(sug.modelTag, privacy: .public)")
                 }
+                #endif
             }
             if detectedOllama.isEmpty {
                 await capabilities.register(OllamaProvider(

@@ -51,11 +51,10 @@ public enum LegalNotice {
     public static let privacyStatement = """
     Private by design. Your documents, the extracted ledger, and your questions stay on \
     this device — they are not sent to any server, and there is no analytics or telemetry. \
-    All AI runs on-device using the bundled model (and Apple’s on-device model where \
-    available); there is no cloud processing and nothing to install. The only time the \
-    app uses the network is an optional, one-time download of a larger model if you choose \
-    it — your documents are never part of that. You can delete everything by removing the \
-    app’s data folder.
+    All AI runs on-device: written answers use Apple’s on-device model (part of macOS), \
+    and the semantic-search models ship inside the app package — so there is no cloud \
+    processing, nothing to install, and nothing to download. The app makes no network \
+    connections at all. You can delete everything by removing the app’s data folder.
     """
 
     public static let termsStatement = """
@@ -145,7 +144,7 @@ public enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.3 (2026-08-23)"
+    public static let termsVersion = "1.4 (2026-08-23)"
 
     /// Subscription-proof payment terms: written to hold unchanged whether the
     /// app is free (today) or subscription-based (later).
