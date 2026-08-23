@@ -16,6 +16,7 @@ import AppKit
 public struct ComplianceBoardView: View {
     /// Owner review overrides: SOP id → yyyy-mm-dd of last manual verification.
     @AppStorage("kalsmritikosh.sopboard.reviews") private var reviewBlob = ""
+    @State private var showHandbook = false
 
     public init() {}
 
@@ -43,9 +44,16 @@ public struct ComplianceBoardView: View {
                     Label("\(due.count) SOP(s) due for periodic re-verification.", systemImage: "exclamationmark.triangle.fill")
                         .font(.callout.weight(.semibold)).foregroundStyle(.orange)
                 }
-                Button { copyBoard() } label: { Label("Copy board as hardcopy", systemImage: "doc.on.doc") }
-                    .guidance(GuidanceTip("Copy board",
-                                          what: "Copies the whole board as a markdown table — the compliance evidence you can hand to anyone."))
+                HStack(spacing: 10) {
+                    Button { showHandbook = true } label: { Label("Read the SOP Handbook", systemImage: "book") }
+                        .buttonStyle(.borderedProminent)
+                        .guidance(GuidanceTip("SOP Handbook",
+                                              what: "The presentable form of everything the app binds itself to: the system flow, the core SOPs, every constitution's obligations and prohibitions, and this board — generated live from the enforced rules, so it can never drift from the app."))
+                    Button { copyBoard() } label: { Label("Copy board as hardcopy", systemImage: "doc.on.doc") }
+                        .guidance(GuidanceTip("Copy board",
+                                              what: "Copies the whole board as a markdown table — the compliance evidence you can hand to anyone."))
+                }
+                .sheet(isPresented: $showHandbook) { handbookSheet }
                 VStack(spacing: 10) {
                     ForEach(ComplianceBoard.records) { r in row(r) }
                 }
@@ -85,6 +93,31 @@ public struct ComplianceBoardView: View {
         }
         .padding(14)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var handbookSheet: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("SOP Handbook").font(.headline)
+                Spacer()
+                Button { copyHandbook() } label: { Label("Copy", systemImage: "doc.on.doc") }.controlSize(.small)
+                Button("Done") { showHandbook = false }.keyboardShortcut(.defaultAction).controlSize(.small)
+            }
+            .padding(14)
+            Divider()
+            ScrollView {
+                Text(SOPHandbook.markdown(now: Date()))
+                    .font(.callout.monospaced()).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+            }
+        }
+        .frame(minWidth: 720, minHeight: 560)
+    }
+    private func copyHandbook() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(SOPHandbook.markdown(now: Date()), forType: .string)
+        #endif
     }
 
     private func copyBoard() {

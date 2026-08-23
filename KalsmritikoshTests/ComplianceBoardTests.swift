@@ -47,6 +47,18 @@ struct ComplianceBoardTests {
         #expect(!cleared.contains { $0.id == "sop.aiact" })
     }
 
+    @Test("The handbook presents the system flow, core SOPs, every constitution, and the board")
+    func handbook() {
+        let md = SOPHandbook.markdown(now: seedDay)
+        #expect(md.contains("The system flow"))
+        #expect(md.contains("6. **Maintain compliance**"))
+        for (title, _) in SOPHandbook.coreSOPs { #expect(md.contains(title)) }
+        for d in SutraCompiler.builtInDisciplines { #expect(md.contains(d.sutra.citation)) }
+        #expect(md.contains("Human decides:"))
+        #expect(md.contains("Never:"))
+        #expect(md.contains("# SOP Compliance Board"))
+    }
+
     @Test("The board renders as a hardcopy with every SOP row and a status")
     func hardcopy() {
         let md = ComplianceBoard.markdown(now: seedDay)
