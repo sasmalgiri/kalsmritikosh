@@ -125,6 +125,31 @@ public enum LegalNotice {
     presented.
     """
 
+    /// Version of these notices — bump on any material change, keep the date.
+    public static let termsVersion = "1.2 (2026-08-23)"
+
+    /// Subscription-proof payment terms: written to hold unchanged whether the
+    /// app is free (today) or subscription-based (later).
+    public static let subscriptionStatement = """
+    The app is currently free. If paid tiers or subscriptions are introduced, all \
+    purchases, renewals, cancellations, and refunds are handled by Apple through your \
+    App Store account under Apple’s terms; the developer never sees or stores your \
+    payment details. Prices and tier boundaries may change prospectively with notice — \
+    never retroactively. Whatever the tier: your documents, ledger, and reports remain \
+    yours, stay on your device, remain exportable at no charge, and a lapsed or \
+    cancelled subscription never locks you out of data you created.
+    """
+
+    /// How these notices change — the versioned, prospective change process.
+    public static let changesStatement = """
+    These notices are versioned and dated (see the version shown below). Material \
+    changes take effect only prospectively, are announced in-app with the new version \
+    number, and never reduce the privacy commitments retroactively — a promise made \
+    about data you already ingested is kept for that data. Continued use after notice \
+    of a change constitutes acceptance; if you do not accept, stop using the app and \
+    your data remains exportable.
+    """
+
     /// Required attribution for the bundled reasoning model (Meta Llama Community
     /// Licence). Surfaced in Settings → Legal & Privacy and About. See
     /// MODEL_ATTRIBUTIONS.md for the full obligation set.

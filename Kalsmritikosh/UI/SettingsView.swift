@@ -1249,8 +1249,13 @@ public struct SettingsView: View {
             legalItem("No professional relationship", LegalNotice.noRelationshipStatement, "person.crop.circle.badge.xmark")
             legalItem("Warranty & liability", LegalNotice.liabilityStatement, "shield.lefthalf.filled")
             legalItem("Your responsibilities — data, backup, lawful use", LegalNotice.responsibilityStatement, "externaldrive.badge.checkmark")
+            legalItem("Payments & subscriptions", LegalNotice.subscriptionStatement, "creditcard")
+            legalItem("Changes to these notices", LegalNotice.changesStatement, "clock.arrow.2.circlepath")
             legalItem("Acknowledgments", LegalNotice.thirdPartyStatement, "shippingbox")
 
+            Text("Notices version \(LegalNotice.termsVersion)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
             Text(LegalNotice.counselNote)
                 .font(.caption2.italic())
                 .foregroundStyle(.tertiary)

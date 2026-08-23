@@ -27,6 +27,18 @@ public nonisolated struct SutraPhase: Sendable, Identifiable, Equatable, Codable
     public let prohibitedConclusions: [String]  // what it must never assert
 }
 
+/// One recorded change to a constitution: SOPs evolve, and the record of what
+/// changed, when, and why must travel with the sutra — an unversioned,
+/// unamendable constitution can't be complied with over time.
+public nonisolated struct SutraAmendment: Sendable, Equatable, Codable {
+    public let version: Int
+    public let date: String        // yyyy-mm-dd
+    public let summary: String     // what changed and why
+    public init(version: Int, date: String, summary: String) {
+        self.version = version; self.date = date; self.summary = summary
+    }
+}
+
 public nonisolated struct Sutra: Sendable, Equatable, Codable {
     public let id: String
     public let version: Int
@@ -36,9 +48,28 @@ public nonisolated struct Sutra: Sendable, Equatable, Codable {
     public let phases: [SutraPhase]
     public let standardsOfProof: [EvidentiaryStandard]
     public let reportSections: [String]
+    /// Amendment history, oldest first. Optional so sutras recorded before
+    /// governance existed still decode; nil reads as "v\(version), unamended".
+    public var amendments: [SutraAmendment]? = nil
 
     /// Phases in tier order (the shape of the practice).
     public func phases(inTier tier: PhaseTier) -> [SutraPhase] { phases.filter { $0.tier == tier } }
+
+    /// "Title v3 · sutra.id" — how certificates and reports cite this constitution.
+    public var citation: String { "\(title) v\(version) · \(id)" }
+
+    /// A new version of this sutra with the change recorded — the ONLY
+    /// sanctioned way to alter a constitution: version bumps, history appends.
+    public func amended(on date: String, summary: String,
+                        phases newPhases: [SutraPhase]? = nil,
+                        reportSections newSections: [String]? = nil) -> Sutra {
+        var next = Sutra(id: id, version: version + 1, title: title,
+                         provenance: provenance, reliabilityScale: reliabilityScale,
+                         phases: newPhases ?? phases, standardsOfProof: standardsOfProof,
+                         reportSections: newSections ?? reportSections)
+        next.amendments = (amendments ?? []) + [SutraAmendment(version: version + 1, date: date, summary: summary)]
+        return next
+    }
 }
 
 /// The doctrine per job-kind — the obligations, reserved human decisions, and

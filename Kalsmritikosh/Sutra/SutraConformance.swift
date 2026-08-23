@@ -44,6 +44,9 @@ public nonisolated struct ConformanceReport: Sendable, Equatable {
     public var unmetObligations: [String]
     public var humanDecisionsPending: [String]
     public var prohibitedAsserted: [String]
+    /// Which constitution (and version) this run was verified against —
+    /// a certificate that doesn't name its constitution proves nothing.
+    public var constitution: String = ""
 
     /// Conformant only when nothing is unmet, pending, or prohibited.
     public var isConformant: Bool {
@@ -58,7 +61,9 @@ public nonisolated struct ConformanceReport: Sendable, Equatable {
 
     /// A certificate block for the sealed report.
     public var certificate: String {
-        var out = "## Sūtra conformance\n\n**\(summaryLine)**\n\n"
+        var out = "## Sūtra conformance\n\n"
+        if !constitution.isEmpty { out += "**Constitution:** \(constitution)\n\n" }
+        out += "**\(summaryLine)**\n\n"
         if !metObligations.isEmpty {
             out += "**Met:**\n"; for m in metObligations { out += "- ✓ \(m)\n" }; out += "\n"
         }
@@ -100,6 +105,7 @@ public nonisolated enum SutraConformance {
         }
 
         return ConformanceReport(metObligations: met, unmetObligations: unmet,
-                                 humanDecisionsPending: pending, prohibitedAsserted: run.assertedProhibited)
+                                 humanDecisionsPending: pending, prohibitedAsserted: run.assertedProhibited,
+                                 constitution: sutra.citation)
     }
 }
