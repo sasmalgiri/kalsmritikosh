@@ -844,7 +844,12 @@ public struct RootView: View {
                     .tracking(0.5)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                Button(p.title) { showPersonaPicker = true }
+                // Persona titles are phrased "For Lawyers", "For Investigators", …
+                // — next to the FOR YOU label that reads as a stutter, so the
+                // focus control drops the prefix: "FOR YOU · Lawyers".
+                Button(p.title.hasPrefix("For ") ? String(p.title.dropFirst(4)) : p.title) {
+                    showPersonaPicker = true
+                }
                     .font(.caption2)
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.brand)
