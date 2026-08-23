@@ -246,10 +246,15 @@ public struct SettingsView: View {
             // with a Fast (seconds) and Deep (full) button. Everything else is
             // tucked into the collapsed "More tools" group below so there is no
             // wall of buttons to choose between.
+            // Release-readiness + eval/smoke harnesses are developer tools —
+            // they speak in Gates, fixtures, and ship checks. DEBUG only.
+            #if DEBUG
             releaseReadinessBanner
+            #endif
 
             DisclosureGroup(isExpanded: $showMoreDiagnostics) {
               VStack(alignment: .leading, spacing: 8) {
+            #if DEBUG
             Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -345,6 +350,7 @@ public struct SettingsView: View {
             }
 
             Divider().padding(.vertical, 4)
+            #endif
 
             Text("Generate Knowledge Inventory — per-file readout of EVERYTHING Kalsmritikosh extracted from your archive: source path, content preview, entities, events, bonds. Pair against your originals to spot ingest gaps. Writes `knowledge-inventory.md` to ~/Documents/EvalBaselines/.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -433,7 +439,8 @@ public struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            #endif
+            // (DEBUG block continues: bond rebuild, Gate 3, and the smoke test
+            // are developer/maintenance harnesses, not consumer settings.)
 
             Divider().padding(.vertical, 4)
 
@@ -523,6 +530,7 @@ public struct SettingsView: View {
                 }
                 .padding(.leading, 8)
             }
+            #endif
               }
             } label: {
                 Label("More diagnostic tools (advanced)", systemImage: "wrench.and.screwdriver")
@@ -1257,11 +1265,8 @@ public struct SettingsView: View {
             Text("Notices version \(LegalNotice.termsVersion)")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
-            Text(LegalNotice.counselNote)
-                .font(.caption2.italic())
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 2)
+            // The counsel note is an owner/developer reminder, not a user
+            // notice — kept in LegalNotice for the repo, not shown in the app.
         }
     }
 
