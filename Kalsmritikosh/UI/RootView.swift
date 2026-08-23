@@ -342,6 +342,11 @@ public struct RootView: View {
     /// Chosen persona (GuidePersona.id). Empty = not yet picked → first-run
     /// picker. Drives the "For you" sidebar section (persona's own screens).
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
+
+    /// The user's most recently visited screens (raw values, newest first).
+    /// Drives the "For you" sidebar rows: the last 4 features actually used —
+    /// blank until there is real history, never a canned list.
+    @AppStorage("kalsmritikosh.recentDestinations") private var recentDestinationsBlob: String = ""
     /// First-run / "change focus" persona picker sheet.
     @State private var showPersonaPicker = false
     /// Which sidebar groups are expanded (Advanced mode only). Default = ALL expanded so the
@@ -369,6 +374,7 @@ public struct RootView: View {
     /// history (SHELL-001), then animates to the new one.
     private func navigate(to dest: Destination) {
         if let current = selection, current != dest { previousSelection = current }
+        recordRecent(dest)
         withAnimation(Theme.springFast) { selection = dest }
         navHistory.navigate(to: AppNavigationEntry(
             destination: Self.navBucket(for: dest),
@@ -821,36 +827,31 @@ public struct RootView: View {
         GuideContent.personas.first { $0.id == personaID }
     }
 
-    /// "For you" — the chosen persona's own screens up top, so a user isn't
-    /// faced with every screen. If no persona is chosen yet, shows a single
-    /// "Choose your focus" button that opens the picker.
+    /// "For you" — the user's own last-used screens (up to 4, newest first),
+    /// blank until there is real history. The focus (persona) is shown once,
+    /// as the change control on the right — not duplicated in the label.
     @ViewBuilder
     private var personaSection: some View {
         if let p = currentPersona {
             HStack {
-                Text("FOR YOU · \(p.title.uppercased())")
+                Text("FOR YOU")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.tertiary)
                     .tracking(0.5)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                Button("Change") { showPersonaPicker = true }
+                Button(p.title) { showPersonaPicker = true }
                     .font(.caption2)
                     .buttonStyle(.plain)
                     .foregroundStyle(Theme.brand)
+                    .help("Your focus — click to change it")
             }
             .padding(.horizontal, 12)
             .padding(.top, 12)
             .padding(.bottom, 2)
-            ForEach(p.keyScreens, id: \.label) { screen in
-                SidebarRow(dest: screen.dest, isSelected: selection == screen.dest, namespace: sidebarNS) {
-                    navigate(to: screen.dest)
-                }
-            }
-            // Ask is the universal entry point — always offer it in For You.
-            if !p.keyScreens.contains(where: { $0.dest == .ask }) {
-                SidebarRow(dest: .ask, isSelected: selection == .ask, namespace: sidebarNS) {
-                    navigate(to: .ask)
+            ForEach(recentDestinations) { dest in
+                SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                    navigate(to: dest)
                 }
             }
         } else {
@@ -868,7 +869,31 @@ public struct RootView: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 8)
             .padding(.top, 8)
+            ForEach(recentDestinations) { dest in
+                SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
+                    navigate(to: dest)
+                }
+            }
         }
+    }
+
+    /// The last 4 screens the user actually visited, newest first (home
+    /// excluded — it has its own permanent place). Empty until real use.
+    private var recentDestinations: [Destination] {
+        recentDestinationsBlob.split(separator: ",")
+            .compactMap { Destination(rawValue: String($0)) }
+            .filter { $0 != .home }
+            .prefix(4)
+            .map { $0 }
+    }
+
+    /// Record a visit: newest first, deduplicated, capped.
+    private func recordRecent(_ dest: Destination) {
+        guard dest != .home else { return }
+        var raws = recentDestinationsBlob.split(separator: ",").map(String.init)
+        raws.removeAll { $0 == dest.rawValue }
+        raws.insert(dest.rawValue, at: 0)
+        recentDestinationsBlob = raws.prefix(8).joined(separator: ",")
     }
 
     /// A collapsible sidebar group. Header click toggles it; collapsed by
