@@ -19,7 +19,7 @@ import Foundation
 /// HERE means the builder derives locator presence and independence itself — no consumer
 /// passes a separately-computed `hasExactLocator`, so all three decision points that share
 /// this builder cannot disagree on the context.
-public struct AssertabilityEvidence: Sendable, Hashable, Codable {
+public nonisolated struct AssertabilityEvidence: Sendable, Hashable, Codable {
     public let objectID: KnowledgeObject.ID
     public let blockID: EvidenceBlock.ID?
     public let independenceKey: String?
@@ -29,7 +29,7 @@ public struct AssertabilityEvidence: Sendable, Hashable, Codable {
     }
 }
 
-public struct AssertabilityContextBuilder: Sendable {
+public nonisolated struct AssertabilityContextBuilder: Sendable {
     private let grouper = SourceIndependenceGrouper()
     public init() {}
 

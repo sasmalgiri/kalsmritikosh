@@ -258,7 +258,7 @@ public struct RootCauseAnalysis: Codable, Identifiable, Hashable, Sendable {
 }
 
 extension String {
-    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
+    nonisolated var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
 }
 
 // MARK: - Report renderer (pure — copy / export / print all use this)

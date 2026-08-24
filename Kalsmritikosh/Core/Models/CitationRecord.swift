@@ -17,7 +17,7 @@ import Foundation
 /// A granular, format-agnostic pointer into a source. Exactly the locator
 /// kinds the spec enumerates (§8.1). `rendered` builds the human string when
 /// an explicit `locatorText` override isn't supplied.
-public struct CitationLocator: Sendable, Hashable, Codable {
+public nonisolated struct CitationLocator: Sendable, Hashable, Codable {
     public var page: Int?
     public var sheet: String?
     public var cell: String?
@@ -59,7 +59,7 @@ public struct CitationLocator: Sendable, Hashable, Codable {
 
 /// Optional bibliographic surface for research-style renderers (BibTeX / RIS
 /// / CSL-JSON). Absent for ordinary document citations.
-public struct BibliographicMetadata: Sendable, Hashable, Codable {
+public nonisolated struct BibliographicMetadata: Sendable, Hashable, Codable {
     public var entryType: String   // article / book / report / misc …
     public var title: String?
     public var authors: [String]

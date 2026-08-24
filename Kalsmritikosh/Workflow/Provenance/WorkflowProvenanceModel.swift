@@ -74,7 +74,7 @@ public enum WorkflowProvenanceReferenceKind: String, Codable, CaseIterable, Send
 
     /// The matching evidence-gate kind for canonical references; nil for
     /// workflow-output kinds.
-    public var evidenceGateKind: WorkflowEvidenceObjectKind? {
+    public nonisolated var evidenceGateKind: WorkflowEvidenceObjectKind? {
         WorkflowEvidenceObjectKind(rawValue: rawValue)
     }
 }

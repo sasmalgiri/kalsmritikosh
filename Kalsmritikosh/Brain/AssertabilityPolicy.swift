@@ -20,7 +20,7 @@ import Foundation
 /// Everything the policy needs beyond the assessment: the evidence shape. `independent
 /// EvidenceGroupCount` is the number of INDEPENDENT source groups (duplicates and forwarded
 /// copies collapse to one) — it must never be substituted by a raw citation count.
-public struct AssertabilityContext: Sendable, Hashable, Codable {
+public nonisolated struct AssertabilityContext: Sendable, Hashable, Codable {
     public let assessment: EvidenceAssessment
     public let exactEvidenceCount: Int
     public let independentEvidenceGroupCount: Int
