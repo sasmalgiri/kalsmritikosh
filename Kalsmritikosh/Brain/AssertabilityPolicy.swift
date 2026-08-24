@@ -43,7 +43,7 @@ public struct AssertabilityContext: Sendable, Hashable, Codable {
 }
 
 /// How a claim may be surfaced. Ordered from strongest assertion to refusal.
-public enum AssertabilityDecision: String, Sendable, Hashable, Codable {
+public nonisolated enum AssertabilityDecision: String, Sendable, Hashable, Codable {
     case assertAsFact
     case assertWithAttribution
     case assertAsCorroborated

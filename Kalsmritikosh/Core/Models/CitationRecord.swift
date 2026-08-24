@@ -87,7 +87,7 @@ public struct BibliographicMetadata: Sendable, Hashable, Codable {
     }
 }
 
-public struct CitationRecord: Sendable, Identifiable, Hashable, Codable {
+public nonisolated struct CitationRecord: Sendable, Identifiable, Hashable, Codable {
     public typealias ID = UUID
 
     public let id: ID

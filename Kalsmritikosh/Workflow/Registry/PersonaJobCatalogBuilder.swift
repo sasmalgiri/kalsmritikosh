@@ -47,7 +47,7 @@ private let allProtectedTypeNames: Set<String> =
 ///
 /// Registration methods validate only ID/version/duplicate constraints.
 /// Cross-registry dependency validation happens entirely in `build()`.
-public struct PersonaJobCatalogBuilder {
+public nonisolated struct PersonaJobCatalogBuilder {
 
     private var applicationBuilder:  VersionedDefinitionRegistryBuilder<PersonaApplicationDefinition>  = .init()
     private var toolBuilder:         VersionedDefinitionRegistryBuilder<PersonaToolDefinition>         = .init()

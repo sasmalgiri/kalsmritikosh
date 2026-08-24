@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum LLMQueryClass: String, Sendable, Codable, CaseIterable {
+public nonisolated enum LLMQueryClass: String, Sendable, Codable, CaseIterable {
     /// Exact structured answer normal code can render — 0 calls.
     case deterministic
     /// One evidence-backed explanatory answer — 1 call.

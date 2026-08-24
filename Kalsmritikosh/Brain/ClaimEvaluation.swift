@@ -48,7 +48,7 @@ public enum ClaimPresentation: String, Codable, Sendable, Hashable {
     }
 }
 
-public struct ClaimEvaluation: Codable, Sendable, Hashable, Identifiable {
+public nonisolated struct ClaimEvaluation: Codable, Sendable, Hashable, Identifiable {
     /// The ORIGINAL ledger claim id (e.g. GenericFact.id) — never regenerated.
     public let id: UUID
     public let claimKind: ClaimKind
