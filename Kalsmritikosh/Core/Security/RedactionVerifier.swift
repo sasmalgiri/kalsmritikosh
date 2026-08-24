@@ -21,7 +21,7 @@
 
 import Foundation
 
-public struct RedactionVerifier: Sendable {
+public nonisolated struct RedactionVerifier: Sendable {
     public nonisolated init() {}
 
     public enum LeakChannel: String, Sendable, Hashable {

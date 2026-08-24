@@ -14,7 +14,7 @@
 import Foundation
 
 /// Ordered sensitivity lattice. Higher rawValue = more protected.
-public enum SensitivityLevel: Int, Codable, Sendable, Hashable, Comparable, CaseIterable {
+public nonisolated enum SensitivityLevel: Int, Codable, Sendable, Hashable, Comparable, CaseIterable {
     case publicLevel   = 0
     case internalLevel = 1
     case confidential  = 2

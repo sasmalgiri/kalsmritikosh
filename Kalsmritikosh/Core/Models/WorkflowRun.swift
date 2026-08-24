@@ -441,7 +441,7 @@ public struct WorkflowCheckpoint: Codable, Identifiable, Hashable, Sendable {
 
 /// Canonical snapshot of the full mutable run state at checkpoint time.
 /// Excludes prior checkpoints, registry objects, DB handles, and UI state.
-public struct WorkflowCheckpointPayload: Codable, Hashable, Sendable {
+public nonisolated struct WorkflowCheckpointPayload: Codable, Hashable, Sendable {
     public let run: WorkflowRun
     public let stepRuns: [WorkflowStepRun]
     public let decisions: [WorkflowDecision]

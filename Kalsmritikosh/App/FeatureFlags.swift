@@ -436,6 +436,6 @@ public final class FeatureFlags {
     private static let kBrowserHistory   = "kalsmritikosh.feature.browserHistory.enabled"
     private static let kChatExport       = "kalsmritikosh.feature.chatExport.enabled"
     private static let kContextPrefixBackfill = "kalsmritikosh.feature.contextPrefixBackfill.enabled"
-    private static let kOCRDuringIngest  = "kalsmritikosh.feature.ocrDuringIngest.enabled"
-    private static let kManagedEvidence  = "kalsmritikosh.feature.managedEvidenceMode.enabled"
+    private nonisolated static let kOCRDuringIngest  = "kalsmritikosh.feature.ocrDuringIngest.enabled"
+    private nonisolated static let kManagedEvidence  = "kalsmritikosh.feature.managedEvidenceMode.enabled"
 }

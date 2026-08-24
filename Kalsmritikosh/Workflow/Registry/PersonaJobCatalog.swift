@@ -15,7 +15,7 @@ import Foundation
 
 /// Immutable registry of compiled, validated workflow definitions.
 /// Definitions are stored pre-compiled; no recompilation occurs on lookup.
-public struct WorkflowDefinitionRegistry: Sendable {
+public nonisolated struct WorkflowDefinitionRegistry: Sendable {
 
     private let _sorted: [ValidatedWorkflowDefinition]
     private let _byKey: [RegistryKey<WorkflowDefinitionID>: ValidatedWorkflowDefinition]

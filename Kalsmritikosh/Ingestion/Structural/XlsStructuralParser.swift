@@ -369,7 +369,7 @@ public nonisolated struct XlsStructuralParser: StructuralParser {
 /// Reads across the SST record + its CONTINUE segments as one logical stream,
 /// re-reading the per-segment grbit byte when an XLUnicodeRichExtendedString's
 /// character data crosses a segment boundary ([MS-XLS] §2.5.293).
-private struct SegmentedReader {
+private nonisolated struct SegmentedReader {
     private let bytes: [UInt8]
     /// Absolute byte offset where each segment (after the first) begins, so a
     /// string that spans into a new segment knows to read a fresh grbit byte.

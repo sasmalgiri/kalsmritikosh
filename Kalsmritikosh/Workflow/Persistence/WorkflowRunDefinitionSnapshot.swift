@@ -475,7 +475,7 @@ public struct TerminologyDefinitionSnapshot: Codable, Hashable, Sendable {
 /// Frozen canonical snapshot of the entire resolved application package at run-creation time.
 /// Stored as JSON with SHA-256 hash. Enables exact reconstruction of any workflow run's
 /// original definition regardless of subsequent registry changes.
-public struct WorkflowRunContractSnapshot: Codable, Hashable, Sendable {
+public nonisolated struct WorkflowRunContractSnapshot: Codable, Hashable, Sendable {
 
     /// Schema version for this snapshot format. 1 = PJE-003.
     public let snapshotSchemaVersion: Int

@@ -283,7 +283,7 @@ public struct SourceUpgradeJobRepository: Sendable {
         try db.query("SELECT \(columns) FROM enrichment_jobs WHERE id = ? LIMIT 1;", [.uuid(id)]).first.flatMap(decode)
     }
 
-    private static func decode(_ r: SQLRow) -> SourceUpgradeJob? {
+    private nonisolated static func decode(_ r: SQLRow) -> SourceUpgradeJob? {
         guard let id = r.uuid(0), let scope = SourceUpgradeScope(rawValue: r.string(1) ?? ""),
               let kind = SourceUpgradeKind(rawValue: r.string(4) ?? ""),
               let priority = SourceUpgradePriority(rawValue: Int(r.int(7) ?? 40)),

@@ -18,7 +18,7 @@ public struct StudioAuditEntry: Codable, Identifiable, Hashable, Sendable {
     public init(date: Date, action: String) { self.date = date; self.action = action }
 }
 
-public enum StudioAudit {
+public nonisolated enum StudioAudit {
     /// Append an entry to an optional history (all studio models carry
     /// `history: [StudioAuditEntry]?` — optional so records saved before the
     /// audit trail existed still decode).

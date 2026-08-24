@@ -20,7 +20,7 @@ public enum SourceUpgradePlanner {
     }
 
     /// OCR-dependent formats (fidelity varies with image quality) — text needs OCR before it exists.
-    private static func isOCRDependent(_ t: SourceType) -> Bool {
+    private nonisolated static func isOCRDependent(_ t: SourceType) -> Bool {
         switch t { case .pdf, .png, .jpg, .heic, .tiff, .webp: return true; default: return false }
     }
 

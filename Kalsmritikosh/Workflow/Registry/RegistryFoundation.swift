@@ -106,7 +106,7 @@ extension ValidatedWorkflowDefinition: VersionedRegistryDefinition {
 /// An immutable, value-semantic registry snapshot.
 /// `all` and `allKeys` are always sorted by (id.rawValue, version).
 /// All reads are O(1) via internal dictionary; `versions(for:)` is O(n).
-public struct VersionedDefinitionRegistry<Definition: VersionedRegistryDefinition>: Sendable {
+public nonisolated struct VersionedDefinitionRegistry<Definition: VersionedRegistryDefinition>: Sendable {
 
     private let _sorted: [Definition]
     private let _byKey: [RegistryKey<Definition.DefinitionID>: Definition]
@@ -146,7 +146,7 @@ public struct VersionedDefinitionRegistry<Definition: VersionedRegistryDefinitio
 
 /// Accumulates definitions and produces an immutable frozen snapshot.
 /// `freeze()` is value-safe: subsequent builder mutations do not affect a frozen registry.
-public struct VersionedDefinitionRegistryBuilder<Definition: VersionedRegistryDefinition> {
+public nonisolated struct VersionedDefinitionRegistryBuilder<Definition: VersionedRegistryDefinition> {
 
     private var _byKey: [RegistryKey<Definition.DefinitionID>: Definition] = [:]
 
