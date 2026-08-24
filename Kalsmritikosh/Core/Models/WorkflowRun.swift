@@ -38,7 +38,7 @@ public enum WorkflowStepRunStatus: String, Codable, CaseIterable, Sendable {
 
 // MARK: - WorkflowRun
 
-public struct WorkflowRun: Codable, Identifiable, Hashable, Sendable {
+public nonisolated struct WorkflowRun: Codable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let workspaceID: Workspace.ID
 
@@ -261,7 +261,7 @@ public enum WorkflowArtifactKind: String, Codable, CaseIterable, Sendable {
 
 // MARK: - WorkflowArtifact
 
-public struct WorkflowArtifact: Codable, Identifiable, Hashable, Sendable {
+public nonisolated struct WorkflowArtifact: Codable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let workflowRunID: UUID
     public let stepRunID: UUID?
@@ -489,7 +489,7 @@ public enum WorkflowRunEventType: String, Codable, CaseIterable, Sendable {
 
 // MARK: - WorkflowRunEvent
 
-public struct WorkflowRunEvent: Codable, Identifiable, Hashable, Sendable {
+public nonisolated struct WorkflowRunEvent: Codable, Identifiable, Hashable, Sendable {
     public let id: UUID
     public let workflowRunID: UUID
 

@@ -364,7 +364,7 @@ public struct ToolDefinitionSnapshot: Codable, Hashable, Sendable {
 
 // MARK: - Application definition snapshot
 
-public struct ApplicationDefinitionSnapshot: Codable, Hashable, Sendable {
+public nonisolated struct ApplicationDefinitionSnapshot: Codable, Hashable, Sendable {
     public let id: String
     public let version: Int
     public let label: String
@@ -452,7 +452,7 @@ public struct TerminologyLabelEntry: Codable, Hashable, Sendable {
     }
 }
 
-public struct TerminologyDefinitionSnapshot: Codable, Hashable, Sendable {
+public nonisolated struct TerminologyDefinitionSnapshot: Codable, Hashable, Sendable {
     public let id: String
     public let version: Int
     public let applicationID: String
