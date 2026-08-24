@@ -71,7 +71,9 @@ public actor WorkCenterRepository {
     /// the SAME number (caught by the concurrent-burst test; the schema's
     /// UNIQUE then rejected the insert). Zero suspension points here means
     /// zero interleaving window.
-    private nonisolated static func issueNumber(_ db: isolated Database,
+    // The isolated Database parameter defines this function's isolation;
+    // combining it with 'nonisolated' is an error in Swift 6 mode.
+    private static func issueNumber(_ db: isolated Database,
                                                 type: String, at date: Date) throws -> String {
         let year = Calendar(identifier: .gregorian).component(.year, from: date)
         try db.exec("""

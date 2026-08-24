@@ -33,7 +33,7 @@ public enum DocumentRole: String, Codable, Sendable, Hashable, CaseIterable {
     case generic           // no strong signal
 
     /// The coarse retrieval-authority bucket the fitness scorer consumes.
-    public var preferredSourceRole: PreferredSourceRole {
+    public nonisolated var preferredSourceRole: PreferredSourceRole {
         switch self {
         case .resume:                         return .biographical
         case .paymentReceipt, .invoice, .bankStatement: return .transactional

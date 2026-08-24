@@ -17,7 +17,7 @@
 
 import Foundation
 
-public struct ContentDecoder: Sendable {
+public nonisolated struct ContentDecoder: Sendable {
     public nonisolated init() {}
 
     /// A single decoded blob: which encoding produced it and the readable text.

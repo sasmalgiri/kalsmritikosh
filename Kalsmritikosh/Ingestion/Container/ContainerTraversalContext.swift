@@ -29,7 +29,7 @@ public final class ContainerRootBudget: @unchecked Sendable {
     private var bytesConsumed: Int64 = 0
     private var nestedContainers = 0
 
-    public init(policy: ContainerSafetyPolicy) { self.policy = policy }
+    public nonisolated init(policy: ContainerSafetyPolicy) { self.policy = policy }
 
     /// Reserve one member + its uncompressed bytes against the whole-root budget. Only reserves when
     /// the reservation FITS — an over-budget request consumes nothing and reports which ceiling hit.

@@ -86,10 +86,12 @@ public nonisolated enum WorkbenchValue: Sendable, Equatable {
         return nil
     }
 
-    private nonisolated static let iso8601WithTime: ISO8601DateFormatter = {
+    // ISO8601DateFormatter is documented thread-safe but not marked Sendable;
+    // these are configured once and never mutated after creation.
+    private nonisolated(unsafe) static let iso8601WithTime: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime]; return f
     }()
-    private nonisolated static let iso8601DateOnly: ISO8601DateFormatter = {
+    private nonisolated(unsafe) static let iso8601DateOnly: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter(); f.formatOptions = [.withFullDate]; return f
     }()
     private nonisolated static func fixed(_ format: String) -> DateFormatter {

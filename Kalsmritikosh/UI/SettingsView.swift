@@ -1926,7 +1926,7 @@ public struct SettingsView: View {
 
     /// How well a model fits THIS device, from hardware RAM vs the model's
     /// minimum. Built-in Apple / cloud models (minRAM == 0) always fit.
-    private enum DeviceFit {
+    private nonisolated enum DeviceFit {
         case fits, tight, tooBig
         var label: String {
             switch self {

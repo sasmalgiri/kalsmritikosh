@@ -17,7 +17,7 @@ public enum IndexStrategySelector {
 
     /// Fraction of the in-memory cap below which a disk index switches back
     /// to in-memory HNSW. The 20% band prevents flapping at the boundary.
-    public static let hysteresisFactor = 0.8
+    public nonisolated static let hysteresisFactor = 0.8
 
     /// Pure decision: given the current persisted strategy, the corpus size
     /// and the machine's RAM, which strategy should serve?

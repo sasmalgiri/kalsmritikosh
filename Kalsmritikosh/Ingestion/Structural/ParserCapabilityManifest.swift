@@ -35,7 +35,7 @@ public struct ParserCapabilityEntry: Codable, Sendable, Hashable {
     public let parserVersion: String?
 }
 
-public struct ParserCapabilityManifest: Sendable {
+public nonisolated struct ParserCapabilityManifest: Sendable {
 
     /// Build the manifest from a registry. Types the registry parses are FULL (or
     /// PARTIAL when OCR-dependent); media types are DEFERRED; everything else the app

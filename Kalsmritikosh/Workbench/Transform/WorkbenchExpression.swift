@@ -179,7 +179,7 @@ nonisolated enum WorkbenchTokenizer {
 
 // MARK: - Recursive-descent parser
 
-private struct RecursiveDescent {
+private nonisolated struct RecursiveDescent {
     let tokens: [WorkbenchToken]
     var pos = 0
 
