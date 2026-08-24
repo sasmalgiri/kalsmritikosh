@@ -90,7 +90,7 @@ public nonisolated enum AssertabilityDecision: String, Sendable, Hashable, Codab
     public var isMaterialAssertion: Bool { isAssertiveDecision }
 }
 
-public enum AssertabilityPolicy {
+public nonisolated enum AssertabilityPolicy {
 
     /// Evaluate in a safety-first priority order. Earlier rules dominate later ones.
     public nonisolated static func evaluate(_ c: AssertabilityContext) -> AssertabilityDecision {

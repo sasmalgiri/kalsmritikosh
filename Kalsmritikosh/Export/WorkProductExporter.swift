@@ -21,7 +21,7 @@ public enum ExportFormat: String, Sendable, CaseIterable, Codable {
     case markdown, html, csv, json, rtf
 
     public var fileExtension: String { self == .markdown ? "md" : rawValue }
-    public var displayName: String {
+    public nonisolated var displayName: String {
         switch self {
         case .markdown: return "Markdown"
         case .html:     return "HTML"
@@ -242,7 +242,7 @@ public enum WorkProductExporter {
         row.count >= n ? Array(row.prefix(n)) : row + Array(repeating: "", count: n - row.count)
     }
 
-    private static func csvField(_ s: String) -> String {
+    private nonisolated static func csvField(_ s: String) -> String {
         if s.contains(",") || s.contains("\"") || s.contains("\n") {
             return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }

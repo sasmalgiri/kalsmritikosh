@@ -53,7 +53,7 @@ public struct EventClaimStatement: Sendable, Equatable {
     }
 }
 
-public enum EventClaimStatementRenderer {
+public nonisolated enum EventClaimStatementRenderer {
     /// Deterministic max statement length (characters). A longer statement is trimmed on a word
     /// boundary and suffixed with a single ellipsis.
     static let maxStatementLength = 300

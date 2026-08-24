@@ -25,7 +25,7 @@ public enum ExportDeliverableFormat: String, Sendable, CaseIterable, Codable {
 
     public var fileExtension: String { self == .markdown ? "md" : rawValue }
     public var isBinary: Bool { self == .pdf || self == .docx || self == .xlsx }
-    public var displayName: String {
+    public nonisolated var displayName: String {
         switch self {
         case .markdown: return "Markdown"
         case .html:     return "HTML"

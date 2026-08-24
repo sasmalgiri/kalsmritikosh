@@ -85,7 +85,7 @@ public protocol WorkProductSectionComposer: Sendable {
 
 /// Deterministic registry of section composers. Registration rejects duplicate ids so two
 /// composers can never silently claim the same identity.
-public struct WorkProductComposerRegistry: Sendable {
+public nonisolated struct WorkProductComposerRegistry: Sendable {
     public enum RegistrationError: Error, Equatable, CustomStringConvertible {
         case duplicate(WorkProductComposerID)
         public var description: String {

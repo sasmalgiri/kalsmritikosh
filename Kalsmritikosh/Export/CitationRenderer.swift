@@ -25,7 +25,7 @@ public enum CitationStyle: String, Sendable, CaseIterable, Codable {
     case cslJSON
     case plainBibliography
 
-    public var displayName: String {
+    public nonisolated var displayName: String {
         switch self {
         case .general:           return "General"
         case .footnote:          return "Footnote"
