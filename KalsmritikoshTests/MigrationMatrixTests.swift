@@ -82,6 +82,8 @@ struct MigrationMatrixTests {
                 "v108 protocol_registry table missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "protocol_review_records"),
                 "v108 protocol_review_records table missing")
+        #expect(try await MigrationFixtureBuilder.tableExists(db, "governance_events"),
+                "v111 governance_events table missing")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -96,7 +98,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 110)          // v109 run binding + facts · v110 deviation status + evidence manifest
+        #expect(SchemaMigrations.latestVersion == 111)          // v110 deviation status + evidence manifest · v111 governance events ledger
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

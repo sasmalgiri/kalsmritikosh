@@ -243,3 +243,66 @@ struct ProtocolRegistryTests {
         }
     }
 }
+
+// MARK: - Fifth audit — trust-boundary re-verification
+
+@Suite("Protocol registry — trust boundaries re-verify (fifth audit)")
+struct ProtocolRegistryTrustBoundaryTests {
+
+    private let sutra = SutraCompiler.shared()
+    private let now = Date(timeIntervalSince1970: 1_756_000_000)
+    private let key = P256.Signing.PrivateKey()
+
+    private func makeRig() async throws -> (ProtocolRegistryRepository, Database) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("protoreg-tb-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        return (ProtocolRegistryRepository(database: db), db)
+    }
+
+    private func verifiedPack() throws -> SignedProtocolPack {
+        let data = try ProtocolPacks.export(sutra: sutra, publisher: "Test Org",
+                                            assurance: "organization-approved", key: key, at: now)
+        return try ProtocolPacks.verify(data).pack
+    }
+
+    @Test("importPack re-verifies inside the repository — a forged signature is refused even from a 'verified' caller")
+    func importReVerifies() async throws {
+        let (repo, _) = try await makeRig()
+        let good = try verifiedPack()
+        // Same envelope + snapshot, forged signature — the caller CLAIMS it
+        // was verified; the repository must not take their word for it.
+        let forged = SignedProtocolPack(envelope: good.envelope,
+                                        sutraSnapshotJSON: good.sutraSnapshotJSON,
+                                        signatureHex: String(good.signatureHex.reversed()),
+                                        publicKeyHex: good.publicKeyHex)
+        await #expect(throws: (any Error).self) {
+            _ = try await repo.importPack(forged, at: now)
+        }
+        // The genuine pack still imports.
+        _ = try await repo.importPack(good, at: now)
+    }
+
+    @Test("activeSutra re-verifies the stored row — a tampered registry row fails closed to the built-in")
+    func tamperedRowFailsClosed() async throws {
+        let (repo, db) = try await makeRig()
+        let pack = try verifiedPack()
+        let registered = try await repo.importPack(pack, at: now)
+        try await repo.activate(id: registered.id, at: now)
+        // Intact row resolves.
+        #expect(try await repo.activeSutra(id: sutra.id) != nil)
+        // Tamper with the stored pack JSON the way a direct DB edit would —
+        // the snapshot changes but the envelope hash/signature do not.
+        let rows = try await db.query("SELECT pack_json FROM protocol_registry WHERE id = ?;",
+                                      [.text(registered.id)])
+        let json = try #require(rows.first?.string(0))
+        let tampered = json.replacingOccurrences(of: "phases", with: "phasez")
+        #expect(tampered != json)
+        try await db.exec("UPDATE protocol_registry SET pack_json = ? WHERE id = ?;",
+                          [.text(tampered), .text(registered.id)])
+        // Fail CLOSED: the built-in governs instead of the tampered row.
+        #expect(try await repo.activeSutra(id: sutra.id) == nil)
+    }
+}

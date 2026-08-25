@@ -15,6 +15,7 @@
 
 import SwiftUI
 import AppKit
+import OSLog
 
 /// Approval+assessment atomicity by recorded compensation: when the assessment
 /// cannot be persisted, the approval is withdrawn and this error surfaces.
@@ -46,6 +47,11 @@ public final class WorkProductHandoffModel {
     /// The protocol registry (v108) — new runs freeze the ACTIVE imported
     /// constitution when one exists; the built-in doctrine is the fallback.
     private let protocols: ProtocolRegistryRepository?
+    /// The governance ledger (v111) — approval/withdrawal/assessment/export
+    /// acts recorded append-only and sealed by the audit chain. Recording is
+    /// best-effort (logged on failure): the primary records are the findings
+    /// genealogy and the assessment rows; this ledger is their chained trace.
+    private let governance: GovernanceEventsRepository?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -208,6 +214,11 @@ public final class WorkProductHandoffModel {
         catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
         catch { return (false, "\(error)") }   // caller compensates: approval is withdrawn
+        // Governance ledger — the recording act itself joins the chain on the
+        // next seal pass (a seal cannot cover its own recording event).
+        await recordGovernance(.assessmentRecorded, actor: "system",
+                               detail: "revision=\(nextRevision);status=\(assessment.status.rawValue)",
+                               at: date)
         return (true, warning)
     }
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
@@ -223,12 +234,32 @@ public final class WorkProductHandoffModel {
                 contradictionGap: InvestigationContradictionGapService? = nil,
                 assessments: ConformanceAssessmentRepository? = nil,
                 auditChain: AuditChainService? = nil,
-                protocols: ProtocolRegistryRepository? = nil) {
+                protocols: ProtocolRegistryRepository? = nil,
+                governance: GovernanceEventsRepository? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
         self.assessments = assessments
         self.auditChain = auditChain
         self.protocols = protocols
+        self.governance = governance
+    }
+
+    /// A verification bundle left the app — record the export act (v111).
+    public func noteBundleExported(revision: Int, at date: Date) async {
+        await recordGovernance(.bundleExported, actor: "me",
+                               detail: "revision=\(revision)", at: date)
+    }
+
+    /// Append a governance act to the v111 ledger (best-effort, logged).
+    /// Called BEFORE the assessment seals so the sealed audit-chain head
+    /// covers the act it certifies.
+    private func recordGovernance(_ kind: GovernanceEventKind, actor: String,
+                                  detail: String, at date: Date) async {
+        guard let governance, let caseID else { return }
+        do { _ = try await governance.record(kind: kind, caseID: caseID, actor: actor, detail: detail, at: date) }
+        catch {
+            KalsmritikoshLog.ui.error("governance event \(kind.rawValue, privacy: .public) not recorded: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -343,6 +374,11 @@ public final class WorkProductHandoffModel {
             _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
                                                         rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
+            // Governance ledger (v111) — recorded BEFORE the assessment seals,
+            // so the sealed audit-chain head covers this approval act.
+            await self.recordGovernance(.findingsApproved, actor: actor,
+                                        detail: "standard=\(std.label);receipt=\(f.receipt.seal.prefix(16))",
+                                        at: date)
             // Strict conformance: record + seal the per-rule assessment of this
             // approved run against the frozen constitution.
             if !FeatureFlags.classicConformanceValue() {
@@ -356,6 +392,8 @@ public final class WorkProductHandoffModel {
                     let reason = "Automatic withdrawal — conformance assessment could not be recorded: \(result.warning ?? "unknown error")"
                     _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f,
                                                                  rationale: reason, actor: actor, at: date)
+                    await self.recordGovernance(.approvalWithdrawn, actor: actor,
+                                                detail: "compensation=assessmentNotRecorded", at: date)
                     await self.refresh()
                     throw ConformanceGateError.assessmentNotRecorded(reason)
                 }
@@ -375,6 +413,8 @@ public final class WorkProductHandoffModel {
         guard !why.isEmpty else { lastError = "Give a rationale for withdrawal."; return }
         await perform {
             _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f, rationale: why, actor: actor, at: date)
+            await self.recordGovernance(.approvalWithdrawn, actor: actor,
+                                        detail: "receipt=\(f.receipt.seal.prefix(16))", at: date)
             await self.refresh()
             return "Approval withdrawn."
         }
@@ -759,8 +799,15 @@ public struct WorkProductHandoffView: View {
                 HStack(spacing: 10) {
                     Button {
                         var text = assessment.certificate
-                        if let sealed = stored?.seal ?? (try? ConformanceSeal.seal(assessment: assessment)) {
+                        // A stored seal is RE-VERIFIED before it is handed out —
+                        // a tampered row must not leave the app looking signed.
+                        // An unverifiable stored seal is replaced by a fresh one;
+                        // if sealing is impossible the copy says so explicitly.
+                        let storedSeal = stored?.seal.flatMap { ConformanceSeal.verify($0) ? $0 : nil }
+                        if let sealed = storedSeal ?? (try? ConformanceSeal.seal(assessment: assessment)) {
                             text += "\n" + ConformanceSeal.markdown(for: sealed)
+                        } else {
+                            text += "\n\n> UNSEALED — no verifiable signature could be produced for this certificate."
                         }
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
@@ -807,7 +854,10 @@ public struct WorkProductHandoffView: View {
         panel.canCreateDirectories = true
         panel.prompt = "Export Bundle"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try ConformanceBundle.write(stored: stored, to: url) }
+        do {
+            try ConformanceBundle.write(stored: stored, to: url)
+            Task { await model?.noteBundleExported(revision: stored.runRevision, at: Date()) }
+        }
         catch { model?.noteExportFailure("Verification bundle export failed: \(error)") }
     }
 
@@ -888,7 +938,8 @@ public struct WorkProductHandoffView: View {
                                                  contradictionGap: appState.investigationContradictionGap,
                                                  assessments: appState.conformanceAssessments,
                                                  auditChain: appState.auditChain,
-                                                 protocols: appState.protocolRegistry)
+                                                 protocols: appState.protocolRegistry,
+                                                 governance: appState.governanceEvents)
         await m.load(caseID: id)
         model = m
     }

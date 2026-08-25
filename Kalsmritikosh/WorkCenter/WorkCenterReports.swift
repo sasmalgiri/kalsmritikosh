@@ -117,6 +117,7 @@ public nonisolated enum WCAutoComplete {
         guard !confirmed.contains(op.seq), lockedReasons.isEmpty else { return false }
         guard op.fields.contains(where: \.required) else { return false }
         guard WCFieldValidation.missingRequired(op.fields, values: values).isEmpty else { return false }
+        guard WCFieldValidation.unsatisfiedAssertions(op.fields, values: values).isEmpty else { return false }
         if op.launchesSurface != nil { return openedTool }
         return touched
     }

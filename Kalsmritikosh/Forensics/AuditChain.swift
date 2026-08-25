@@ -34,7 +34,7 @@ import CryptoKit
 /// One already-recorded audit event, reduced to the stable fields the chain
 /// seals. Each source ledger produces these in deterministic order.
 public struct AuditChainEvent: Sendable, Equatable {
-    public enum Source: String, Sendable { case custody, review }
+    public enum Source: String, Sendable { case custody, review, governance }
     public let source: Source
     public let eventID: UUID
     public let occurredAt: Date

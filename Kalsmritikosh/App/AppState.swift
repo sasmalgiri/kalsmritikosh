@@ -636,6 +636,9 @@ public final class AppState {
     /// Conformance roadmap 1.1 (v108) — signed offline protocol packs and the
     /// governed review records behind the assurance board.
     public private(set) var protocolRegistry: ProtocolRegistryRepository?
+    /// Fifth audit (v111) — append-only governance ledger (approval, withdrawal,
+    /// assessment recording, bundle export) sealed by the audit chain.
+    public private(set) var governanceEvents: GovernanceEventsRepository?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -2211,6 +2214,9 @@ public final class AppState {
             self.conformanceAssessments = ConformanceAssessmentRepository(database: db)
             // Conformance roadmap 1.1 — offline protocol packs + governed reviews (v108).
             self.protocolRegistry = ProtocolRegistryRepository(database: db)
+            // Fifth audit — governance ledger (v111), sealed into the audit chain below.
+            let governanceRepo = GovernanceEventsRepository(database: db)
+            self.governanceEvents = governanceRepo
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the
@@ -2258,16 +2264,19 @@ public final class AppState {
             self.contradictions = contradictionsRepo
             self.factReviews = factReviewsRepo
             self.custody = custodyRepo
-            // AUD-CHAIN — seal the two append-only ledgers into a verifiable
+            // AUD-CHAIN — seal the three append-only ledgers into a verifiable
             // hash chain. Secret in the Keychain (falls back to a per-run
             // secret if unavailable — still detects corruption). The provider
-            // reads BOTH ledgers' ordered canonical events at seal/verify time.
+            // reads ALL ledgers' ordered canonical events at seal/verify time:
+            // custody + fact reviews + governance acts (fifth audit — the chain
+            // covers approval/assessment/export history, not just evidence).
             if let auditSecret = AuditChainSecret.loadOrGenerate() {
                 let auditChainService = AuditChainService(
                     database: db, secret: auditSecret,
-                    eventProvider: { [weak custodyRepo, weak factReviewsRepo] in
+                    eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo] in
                         var out = (try? await custodyRepo?.auditChainEvents()) ?? []
                         out += (try? await factReviewsRepo?.auditChainEvents()) ?? []
+                        out += (try? await governanceRepo?.auditChainEvents()) ?? []
                         return out
                     })
                 self.auditChain = auditChainService

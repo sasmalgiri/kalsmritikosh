@@ -796,3 +796,93 @@ struct WorkCenterRepositoryTests {
         #expect(Set(all.map(\.docNumber)).count == all.count)
     }
 }
+
+// MARK: - Fifth audit — semantic assertions in authored workflows
+
+@Suite("WORK-CENTER — semantic assertions (fifth audit)")
+struct WorkCenterAssertionTests {
+
+    @Test("unsatisfiedAssertions — a recorded negative blocks, the affirmative passes")
+    func assertionValidation() {
+        let f = WCField(key: "log", label: "Privilege log complete?", kind: .choice,
+                        help: "", required: true, options: ["Complete", "Incomplete"],
+                        mustEqual: "Complete")
+        #expect(!WCFieldValidation.unsatisfiedAssertions([f], values: ["log": "Incomplete"]).isEmpty)
+        #expect(!WCFieldValidation.unsatisfiedAssertions([f], values: [:]).isEmpty)
+        #expect(WCFieldValidation.unsatisfiedAssertions([f], values: ["log": "Complete"]).isEmpty)
+    }
+
+    @Test("Authored catalog — every REQUIRED bool attestation carries mustEqual Yes")
+    func authoredBoolAssertions() {
+        let requiredBools = WCCatalog.jobWorkflows.flatMap(\.operations).flatMap(\.fields)
+            .filter { $0.kind == .bool && $0.required }
+        #expect(!requiredBools.isEmpty)
+        for f in requiredBools {
+            #expect(f.mustEqual == "Yes", "\(f.label) accepts a recorded No")
+        }
+    }
+
+    @Test("Authored catalog — the seven binary completion checks demand their affirmative")
+    func completionChecksMarked() {
+        let byLabel = Dictionary(grouping: WCCatalog.jobWorkflows
+            .flatMap(\.operations).flatMap(\.fields), by: \.label)
+        let expected: [String: String] = [
+            "Privilege log complete?": "Complete",
+            "Redaction validated?": "Validated",
+            "Redaction validated": "Validated",
+            "Scope confirmed?": "Confirmed",
+            "Protocol confirmed?": "Confirmed",
+            "Approve to proceed?": "Approved",
+            "Right of reply": "All offered a reply",
+        ]
+        for (label, want) in expected {
+            guard let fields = byLabel[label], !fields.isEmpty else { continue }  // not all jobs launch in every catalog build
+            for f in fields where f.kind == .choice {
+                #expect(f.mustEqual == want, "\(label) is not gated on “\(want)”")
+            }
+        }
+        // The audit's exact example must exist and be gated somewhere.
+        #expect(byLabel["Privilege log complete?"]?.contains { $0.mustEqual == "Complete" } == true)
+    }
+
+    @Test("Repository — a negative completion answer cannot confirm (fail-closed); the affirmative can")
+    func repositoryAssertionEnforcement() async throws {
+        let url = MigrationFixtureBuilder.newTemporaryURL()
+        let db = try await MigrationFixtureBuilder.database(atVersion: 0, at: url)
+        try await SchemaMigrations.migrate(db)
+        let repo = WorkCenterRepository(database: db)
+
+        let def = try #require(WCCatalog.jobWorkflows.first { d in
+            d.operations.contains { op in op.fields.contains { $0.label == "Privilege log complete?" } }
+        })
+        let run = try await repo.createRun(defID: def.defID, title: "T", actor: "T", at: Date())
+        for op in def.operations.sorted(by: { $0.seq < $1.seq }) {
+            var values: [String: String] = [:]
+            for field in op.fields where field.required || field.mustEqual != nil {
+                if let want = field.mustEqual { values[field.key] = want }
+                else {
+                    switch field.kind {
+                    case .choice: values[field.key] = field.options.first ?? "X"
+                    case .bool:   values[field.key] = "Yes"
+                    case .number: values[field.key] = "1"
+                    case .text, .longText: values[field.key] = "test value"
+                    case .date: values[field.key] = "2026-08-26"
+                    case .dateRange: values[field.key] = "2026-07-26 → 2026-08-26"
+                    }
+                }
+            }
+            if let target = op.fields.first(where: { $0.label == "Privilege log complete?" }) {
+                var negative = values
+                negative[target.key] = "Incomplete"
+                try await repo.saveFields(runID: run.id, seq: op.seq, values: negative, at: Date())
+                await #expect(throws: WorkCenterError.self) {
+                    _ = try await repo.confirmStep(runID: run.id, seq: op.seq, actor: "T", at: Date())
+                }
+            }
+            try await repo.saveFields(runID: run.id, seq: op.seq, values: values, at: Date())
+            _ = try await repo.confirmStep(runID: run.id, seq: op.seq, actor: "T", at: Date())
+        }
+        let finished = try #require(try await repo.run(run.id))
+        #expect(finished.status == .confirmed)
+    }
+}

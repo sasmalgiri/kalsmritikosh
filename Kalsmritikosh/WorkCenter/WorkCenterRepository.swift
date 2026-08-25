@@ -19,6 +19,7 @@ public enum WorkCenterError: Error, Equatable {
     case unknownStep(Int)
     case stepAlreadyConfirmed(Int)
     case missingRequiredFields([String])
+    case assertionUnsatisfied([String])
     case gatesLocked([String])
     case invalidStatusAdvance(from: String, to: String)
 }
@@ -140,6 +141,8 @@ public actor WorkCenterRepository {
         let values = run.fieldValues[seq] ?? [:]
         let missing = WCFieldValidation.missingRequired(op.fields, values: values)
         guard missing.isEmpty else { throw WorkCenterError.missingRequiredFields(missing) }
+        let unsatisfied = WCFieldValidation.unsatisfiedAssertions(op.fields, values: values)
+        guard unsatisfied.isEmpty else { throw WorkCenterError.assertionUnsatisfied(unsatisfied) }
         let locked = WCGatePolicy.lockedReasons(op, state: .init(
             confirmed: run.confirmedSeqs, fieldValues: run.fieldValues))
         guard locked.isEmpty else { throw WorkCenterError.gatesLocked(locked) }
@@ -149,6 +152,7 @@ public actor WorkCenterRepository {
         // interleave with another confirm/save. Authoritative state (fields,
         // confirmed set) is RE-READ inside the barrier; the friendly checks
         // above are advisory, the closure is the enforcement.
+        let opFields = op.fields
         let opTitle = op.title
         let postsType = op.postsDocType
         let totalOps = def.operations.count
@@ -164,6 +168,13 @@ public actor WorkCenterRepository {
             }
             var confirmed = Set(confirmedRaw.split(separator: ",").compactMap { Int($0) })
             guard !confirmed.contains(seq) else { throw WorkCenterError.stepAlreadyConfirmed(seq) }
+
+            // Semantic assertions re-checked against the RE-READ authoritative
+            // values — a concurrent save can't slip a negative answer past the
+            // advisory pre-check above.
+            let authoritative = Self.decodeFields(json)[seq] ?? [:]
+            let broken = WCFieldValidation.unsatisfiedAssertions(opFields, values: authoritative)
+            guard broken.isEmpty else { throw WorkCenterError.assertionUnsatisfied(broken) }
 
             // Stamp the attestation (who/when) into the step's value map — the
             // reserved keys ride inside fields_json so both the run and the

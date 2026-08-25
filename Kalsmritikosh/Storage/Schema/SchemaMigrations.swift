@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 110
+    public static let latestVersion = 111
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -606,7 +606,8 @@ public enum SchemaMigrations {
         (107, v107),
         (108, v108),
         (109, v109),
-        (110, v110)
+        (110, v110),
+        (111, v111)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6101,5 +6102,45 @@ public enum SchemaMigrations {
     DROP TABLE conformance_assessments;
     ALTER TABLE conformance_assessments_v110 RENAME TO conformance_assessments;
     CREATE INDEX idx_conformance_assessments_case ON conformance_assessments(case_id, created_at);
+    """
+
+    // MARK: - v111 — governance events ledger (fifth audit: audit-chain scope)
+    //
+    // Append-only record of the governance acts the audit chain must cover
+    // beyond custody/fact-review: findings approval, approval withdrawal,
+    // assessment recording, verification-bundle export. Rows are never
+    // updated or deleted; the AUD-CHAIN seals them as a third source.
+    private static let v111: String = """
+    CREATE TABLE governance_events (
+        id          TEXT PRIMARY KEY,
+        kind        TEXT NOT NULL,
+        case_id     TEXT NOT NULL,
+        actor       TEXT NOT NULL,
+        detail      TEXT NOT NULL DEFAULT '',
+        occurred_at REAL NOT NULL,
+        CHECK(kind IN ('findings.approved','approval.withdrawn','assessment.recorded','bundle.exported'))
+    );
+    CREATE INDEX idx_governance_events_case ON governance_events(case_id, occurred_at);
+    -- Admit the governance ledger as a third audit-chain source. SQLite cannot
+    -- alter a CHECK: recreate and copy rows VERBATIM — every sealed hash is
+    -- untouched, so the existing HMAC chain remains intact end-to-end.
+    CREATE TABLE audit_chain_v111 (
+        seq          INTEGER PRIMARY KEY,
+        source       TEXT NOT NULL,
+        event_id     TEXT NOT NULL,
+        occurred_at  REAL NOT NULL,
+        payload_hash TEXT NOT NULL,
+        prev_hash    TEXT NOT NULL,
+        entry_hash   TEXT NOT NULL,
+        sealed_at    REAL NOT NULL,
+        CHECK(source IN ('custody','review','governance')),
+        CHECK(seq >= 1),
+        CHECK(length(entry_hash) > 0),
+        CHECK(length(prev_hash) > 0)
+    );
+    INSERT INTO audit_chain_v111 SELECT * FROM audit_chain;
+    DROP TABLE audit_chain;
+    ALTER TABLE audit_chain_v111 RENAME TO audit_chain;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
     """
 }

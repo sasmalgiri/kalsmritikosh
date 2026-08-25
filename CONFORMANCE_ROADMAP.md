@@ -222,3 +222,53 @@ Remaining (by nature, not omission): release-time pinned developer key
 PinnedDeveloperKey.keyID), deterministic prohibited-conclusion detection
 (content-analysis engine; attestation-based today), external assurance
 (never unilateral).
+## Fifth-audit response (2026-08-26) — verified stale vs. real, real items implemented
+
+The fifth external audit examined `0b1828b` — six commits behind, BEFORE
+`1a579ac` (fourth-audit implementation) and `20fbe63` (atomicity). Its P0
+claims about the approval gate, CLI envelope parity, facts binding, required
+phases, rule enrichment, deviation governance, and the curated privilege-log
+gate were verified against HEAD and are STALE (already fixed). Its claim
+that no Core ML model is committed is FALSE (BGESmallEmbedder + BGEReranker
+.mlpackage under Resources/). The five REAL findings, now implemented:
+
+1. ✅ Semantic gates for JSON-authored job workflows. `WCField.mustEqual`
+   (a value the field must HOLD, not merely answer) enforced fail-closed in
+   `confirmStep` — advisory pre-check AND re-check against re-read
+   authoritative values inside the write barrier — plus the auto-complete
+   guard and the Confirm button (live-draft aware, reason shown). Applied
+   automatically to every required bool attestation in the authored catalog
+   ("Integrity verified", "Hold issued", …) and hand-marked on the seven
+   binary completion checks ("Privilege log complete?" → "Complete",
+   "Redaction validated" → "Validated", "Scope/Protocol confirmed?" →
+   "Confirmed", "Approve to proceed?" → "Approved", "Right of reply" →
+   "All offered a reply"). Recording a negative now BLOCKS the workflow.
+2. ✅ Registry re-verifies at trust boundaries. `importPack` re-verifies
+   signature+hash+schema inside the repository (never trusts the caller's
+   "already verified"); `activeSutra` re-verifies the stored pack bytes and
+   fails CLOSED to the built-in constitution on any mismatch (logged).
+3. ✅ Copy sealed certificate re-verifies the stored seal first; an
+   unverifiable stored seal is never handed out — replaced by a fresh seal
+   or an explicit "UNSEALED" marker.
+4. ✅ Audit-chain governance coverage (schema v111). Append-only
+   `governance_events` ledger (findings.approved / approval.withdrawn /
+   assessment.recorded / bundle.exported) sealed as a THIRD chain source
+   beside custody and fact reviews. The approval act is recorded BEFORE the
+   assessment seals, so the signed audit-chain head covers it.
+5. ✅ Required-phase breadth — DECISION RECORDED: the built-in doctrine
+   deliberately mandates [caseIntake, findings] as its spine. Custody,
+   decision and closure phases are evidence-driven (their rules bind when
+   reached; custody evidence kinds are required by the findings rules), and
+   inflating requiredPhaseKinds to all 16 would mark every real matter
+   non-conformant for phases that are legitimately conditional (e.g.
+   closure on a still-open matter). Breadth is per-Sūtra policy, not a
+   global constant: imported/custom protocols declare their OWN
+   requiredPhaseKinds, the Studio requires ALL included phases, and pack
+   verification refuses an empty effective-required set. Owners who want a
+   stricter built-in spine publish an amended protocol pack.
+
+Still by nature, not omission: full conformance ASSESSMENT (vs. deliverable
+seals) for the ten studios' outputs is future scope — studios seal what
+leaves the app; only the investigator findings handoff carries a governed
+approval act today. Website "Download" targets and pricing copy resolve at
+release (owner acts, RELEASE_EVIDENCE_INDEX.md).

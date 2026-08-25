@@ -34,6 +34,11 @@ public nonisolated struct WCField: Identifiable, Equatable, Sendable {
     public var placeholder: String = ""
     public var required: Bool = false
     public var options: [String] = []
+    /// Semantic assertion: the step cannot confirm until this field holds
+    /// EXACTLY this value ("Complete", "Yes", …). Distinct from `required`,
+    /// which only demands a non-empty answer — a recorded negative
+    /// ("Incomplete", "No") must still block the SOP from advancing.
+    public var mustEqual: String? = nil
 }
 
 // MARK: - Operations & gates
@@ -101,6 +106,19 @@ public nonisolated enum WCFieldValidation {
         fields.filter(\.required)
             .filter { (values[$0.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .map(\.label)
+    }
+
+    /// Semantic assertions — fields whose recorded value must EQUAL a specific
+    /// affirmative before the step may confirm. `required` alone accepts any
+    /// non-empty answer, so "Incomplete" would pass; these do not. Returns
+    /// human-readable reasons (empty = all satisfied).
+    public static func unsatisfiedAssertions(_ fields: [WCField], values: [String: String]) -> [String] {
+        fields.compactMap { f in
+            guard let want = f.mustEqual else { return nil }
+            let got = (values[f.key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return got == want ? nil
+                : "“\(f.label)” must be “\(want)” before this step can confirm\(got.isEmpty ? "" : " — recorded: “\(got)”")."
+        }
     }
 }
 
@@ -771,6 +789,8 @@ public nonisolated enum WCAuthoredWorkflows {
     private struct JField: Codable {
         let key: String; let label: String; let kind: String; let help: String
         var required: Bool? = nil; var placeholder: String? = nil; var options: [String]? = nil
+        /// Value this field must hold for the step to confirm (semantic gate).
+        var mustEqual: String? = nil
     }
     private struct JStep: Codable {
         let key: String; let title: String; let hint: String
@@ -788,7 +808,12 @@ public nonisolated enum WCAuthoredWorkflows {
                 let seq = i + 1
                 let gates: [WCGate] = seq <= 1 ? [] : [WCGate(rule: .operationConfirmed(seq: seq - 1), reason: "Complete the previous step first.")]
                 let fields = (s.fields ?? []).map { jf in
-                    WCField(key: jf.key, label: jf.label, kind: WCField.Kind(rawValue: jf.kind) ?? .text, help: jf.help, placeholder: jf.placeholder ?? "", required: jf.required ?? false, options: jf.options ?? [])
+                    let kind = WCField.Kind(rawValue: jf.kind) ?? .text
+                    // Semantic default: a required checkbox in an authored SOP
+                    // is an attestation — recording "No" must block the step,
+                    // not satisfy it. Explicit mustEqual in the JSON overrides.
+                    let assertion = jf.mustEqual ?? ((kind == .bool && (jf.required ?? false)) ? "Yes" : nil)
+                    return WCField(key: jf.key, label: jf.label, kind: kind, help: jf.help, placeholder: jf.placeholder ?? "", required: jf.required ?? false, options: jf.options ?? [], mustEqual: assertion)
                 }
                 ops.append(WCOperation(seq: seq, key: s.key, title: s.title, hint: s.hint, postsDocType: s.posts, launchesSurface: s.opens, fields: fields, gates: gates))
             }
@@ -1443,6 +1468,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "decision",
             "kind" : "choice",
             "label" : "Scope confirmed?",
+            "mustEqual" : "Confirmed",
             "options" : [
               "Confirmed",
               "Needs revision"
@@ -1700,7 +1726,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "Hash/verify each item.",
@@ -3363,7 +3390,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "How each entered custody unaltered.",
@@ -3989,7 +4017,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "Hash/verify the originals.",
@@ -5085,7 +5114,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on once custodians/IT are notified in writing.",
             "key" : "holdIssued",
             "kind" : "bool",
-            "label" : "Hold issued"
+            "label" : "Hold issued",
+            "required" : true
           },
           {
             "help" : "When the hold was issued.",
@@ -5138,7 +5168,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Complainant/witnesses reminded that retaliation is prohibited.",
             "key" : "antiRetaliation",
             "kind" : "bool",
-            "label" : "Anti-retaliation reminder"
+            "label" : "Anti-retaliation reminder",
+            "required" : true
           }
         ],
         "hint" : "Who may know, and how personal data is handled.",
@@ -5168,6 +5199,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "decision",
             "kind" : "choice",
             "label" : "Approve to proceed?",
+            "mustEqual" : "Approved",
             "options" : [
               "Approved",
               "Needs revision"
@@ -5403,7 +5435,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "How each entered custody unaltered.",
@@ -6543,7 +6576,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "The app hashes each so tampering is detectable.",
@@ -7526,6 +7560,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "validated",
             "kind" : "choice",
             "label" : "Redaction validated",
+            "mustEqual" : "Validated",
             "options" : [
               "Validated",
               "Not yet"
@@ -8043,7 +8078,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on once custodians/IT are notified.",
             "key" : "holdIssued",
             "kind" : "bool",
-            "label" : "Hold issued"
+            "label" : "Hold issued",
+            "required" : true
           }
         ],
         "hint" : "Stop relevant evidence being lost before collection.",
@@ -8094,6 +8130,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "decision",
             "kind" : "choice",
             "label" : "Approve to proceed?",
+            "mustEqual" : "Approved",
             "options" : [
               "Approved",
               "Needs revision"
@@ -8650,7 +8687,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           },
           {
             "help" : "Algorithm and where the value is recorded.",
@@ -10249,6 +10287,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "reply",
             "kind" : "choice",
             "label" : "Right of reply",
+            "mustEqual" : "All offered a reply",
             "options" : [
               "All offered a reply",
               "Outstanding"
@@ -10704,7 +10743,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "Hash/verify each.",
@@ -11489,7 +11529,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "Hash/verify each exhibit.",
@@ -11830,7 +11871,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on once custodians are notified in writing.",
             "key" : "holdIssued",
             "kind" : "bool",
-            "label" : "Hold issued"
+            "label" : "Hold issued",
+            "required" : true
           }
         ],
         "hint" : "Suspend routine deletion of relevant ESI — before collection.",
@@ -12318,6 +12360,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "privComplete",
             "kind" : "choice",
             "label" : "Privilege log complete?",
+            "mustEqual" : "Complete",
             "options" : [
               "Complete",
               "Incomplete"
@@ -12442,6 +12485,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "validated",
             "kind" : "choice",
             "label" : "Redaction validated?",
+            "mustEqual" : "Validated",
             "options" : [
               "Validated",
               "Not yet"
@@ -14079,6 +14123,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "decision",
             "kind" : "choice",
             "label" : "Protocol confirmed?",
+            "mustEqual" : "Confirmed",
             "options" : [
               "Confirmed",
               "Needs revision"
@@ -14718,7 +14763,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on once notified.",
             "key" : "holdIssued",
             "kind" : "bool",
-            "label" : "Hold issued"
+            "label" : "Hold issued",
+            "required" : true
           }
         ],
         "hint" : "Preserve claim file, recorded statements, and related records — assume litigation will follow.",
@@ -14977,7 +15023,8 @@ public nonisolated enum WCAuthoredWorkflows {
             "help" : "Turn on after Verify integrity on Audit.",
             "key" : "integrity",
             "kind" : "bool",
-            "label" : "Integrity verified"
+            "label" : "Integrity verified",
+            "required" : true
           }
         ],
         "hint" : "NIST SP 800-86: for any device/live system, capture volatile data first (memory, live connections) before power-down; then record how each entered custody unaltered.",

@@ -862,6 +862,11 @@ public struct WorkCenterView: View {
                                                       enabledWhen: "You have unsaved edits to store."),
                                           enabled: draftDirty)
                         }
+                        // Semantic assertions ("Privilege log complete" must be
+                        // "Complete", not merely answered) — checked against the
+                        // live draft so the button reflects what confirm() will do.
+                        let unsatisfied = WCFieldValidation.unsatisfiedAssertions(
+                            op.fields, values: vals.merging(draft) { _, new in new })
                         Button {
                             confirm(run, op: op)
                         } label: {
@@ -870,14 +875,14 @@ public struct WorkCenterView: View {
                                   systemImage: "checkmark.seal")
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(!locked.isEmpty)
+                        .disabled(!locked.isEmpty || !unsatisfied.isEmpty)
                         .help("Finalize this step and record who did it and when")
                         .guidance(GuidanceTip(op.postsDocType.map { "Confirm & post \(WCDocType.displayName($0))" } ?? "Confirm step",
                                               what: op.postsDocType != nil
                                                 ? "Finalizes this step, records who did it and when, and posts its numbered document — quotable later from the Documents register."
                                                 : "Finalizes this step and records who did it and when. Nothing is uploaded.",
-                                              enabledWhen: locked.first ?? "Fill this step's required fields first."),
-                                  enabled: locked.isEmpty)
+                                              enabledWhen: locked.first ?? unsatisfied.first ?? "Fill this step's required fields first."),
+                                  enabled: locked.isEmpty && unsatisfied.isEmpty)
                     }
                 }
 
@@ -1521,6 +1526,8 @@ public struct WorkCenterView: View {
         switch error {
         case .missingRequiredFields(let labels):
             return "Fill the required field\(labels.count == 1 ? "" : "s") first: \(labels.joined(separator: ", "))."
+        case .assertionUnsatisfied(let reasons):
+            return reasons.joined(separator: " ")
         case .gatesLocked(let reasons):
             return reasons.joined(separator: " ")
         case .stepAlreadyConfirmed:

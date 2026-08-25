@@ -14,6 +14,7 @@
 
 import Foundation
 import CryptoKit
+import OSLog
 
 public nonisolated enum ProtocolStatus: String, Sendable, Codable {
     case imported, active, superseded, revoked
@@ -153,10 +154,13 @@ public actor ProtocolRegistryRepository {
 
     // MARK: - Packs
 
-    /// Register a signature-VERIFIED pack (callers go through ProtocolPacks.verify
-    /// first — the repository never accepts raw bytes). Idempotent per identity.
+    /// Register a pack. Callers verify before offering, but the repository
+    /// RE-VERIFIES the pack itself (signature + hash + schema compile) — a
+    /// trust boundary never relies on an "already verified" parameter.
+    /// Idempotent per identity.
     @discardableResult
     public func importPack(_ pack: SignedProtocolPack, at now: Date) async throws -> RegisteredProtocol {
+        _ = try ProtocolPacks.verify(try ConformanceCanonical.data(of: pack))
         let id = "\(pack.envelope.sutraID)@v\(pack.envelope.sutraVersion)"
         let offeredKeyID = ProtocolPacks.signerKeyID(of: pack)
         // TOFU pinning (audit item 4): the first key seen for a publisher is
@@ -218,6 +222,9 @@ public actor ProtocolRegistryRepository {
 
     /// The ACTIVE constitution for a sutra id, decoded from its registered
     /// snapshot — what new runs freeze. nil = fall back to the built-in.
+    /// The stored bytes are RE-VERIFIED (signature + hash + schema) before
+    /// use: a registry row altered outside the app fails closed to the
+    /// built-in constitution instead of being trusted.
     public func activeSutra(id sutraID: String) async throws -> Sutra? {
         let rows = try await database.query("""
         SELECT pack_json FROM protocol_registry
@@ -225,9 +232,12 @@ public actor ProtocolRegistryRepository {
         ORDER BY version DESC LIMIT 1;
         """, [.text(sutraID)])
         guard let json = rows.first?.string(0) else { return nil }
-        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
-        guard let pack = try? decoder.decode(SignedProtocolPack.self, from: Data(json.utf8)) else { return nil }
-        return try? decoder.decode(Sutra.self, from: Data(pack.sutraSnapshotJSON.utf8))
+        do {
+            return try ProtocolPacks.verify(Data(json.utf8)).sutra
+        } catch {
+            KalsmritikoshLog.storage.error("activeSutra(\(sutraID, privacy: .public)): stored pack failed re-verification — falling back to built-in: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     public func list() async throws -> [RegisteredProtocol] {
