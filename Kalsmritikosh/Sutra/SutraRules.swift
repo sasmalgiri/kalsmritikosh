@@ -164,6 +164,11 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
     /// VISIBLE on the certificate (`approvedDeviation`), never hidden — the run
     /// can still be conformant, but the departure travels with it.
     public var approvedDeviations: [String: String]
+    /// Evidence kinds actually BOUND to the run (e.g. "custody.record",
+    /// "custody.hash"). A rule whose `requiredEvidence` names a kind absent
+    /// here stays `notEvaluated` — an attestation cannot substitute for
+    /// evidence the run doesn't hold.
+    public var presentEvidenceKinds: Set<String>
 
     public init(completedPhaseKinds: Set<PersonaJobKind>,
                 standardOfProofDeclared: Bool = false,
@@ -171,7 +176,8 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
                 humanDecisionsMade: Set<PersonaJobKind> = [],
                 assertedProhibited: [String] = [],
                 attestedRuleIDs: Set<String> = [],
-                approvedDeviations: [String: String] = [:]) {
+                approvedDeviations: [String: String] = [:],
+                presentEvidenceKinds: Set<String> = []) {
         self.completedPhaseKinds = completedPhaseKinds
         self.standardOfProofDeclared = standardOfProofDeclared
         self.openItemsAcknowledged = openItemsAcknowledged
@@ -179,6 +185,7 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
         self.assertedProhibited = assertedProhibited
         self.attestedRuleIDs = attestedRuleIDs
         self.approvedDeviations = approvedDeviations
+        self.presentEvidenceKinds = presentEvidenceKinds
     }
 }
 
@@ -349,6 +356,14 @@ extension SutraConformance {
             return RuleEvaluation(rule: rule, outcome: .approvedDeviation,
                                   evaluatorID: "human.deviation.v1",
                                   detail: "authorized deviation: \(justification)")
+        }
+        // 3. Declared evidence binding: required kinds must actually be bound to
+        //    the run — an attestation cannot substitute for absent evidence.
+        let missingEvidence = rule.requiredEvidence.filter { !facts.presentEvidenceKinds.contains($0) }
+        if !missingEvidence.isEmpty {
+            return RuleEvaluation(rule: rule, outcome: .notEvaluated,
+                                  evaluatorID: "gate.evidenceBinding.v1",
+                                  detail: "required evidence not bound: \(missingEvidence.joined(separator: ", "))")
         }
         switch rule.kind {
         case .humanDecision:

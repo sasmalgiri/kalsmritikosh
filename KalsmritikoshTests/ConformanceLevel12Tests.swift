@@ -155,6 +155,47 @@ struct ConformanceLevel1Tests {
         #expect(SutraConformance.assess(facts: all, against: s, at: now).status == .conformant)
     }
 
+    /// Declared evidence binding: a required kind absent from the run keeps the
+    /// rule notEvaluated — attestation cannot substitute for missing evidence.
+    @Test("requiredEvidence gates evaluation; attestation cannot substitute")
+    func evidenceBinding() {
+        let rule = SutraRule(id: "x.obligation.9", phaseKind: .findings, kind: .obligation,
+                             severity: .mandatory, text: "hash all evidence",
+                             requiredEvidence: ["custody.hash"])
+        let without = ConformanceFacts(completedPhaseKinds: [.findings],
+                                       attestedRuleIDs: [rule.id])
+        let blocked = SutraConformance.evaluate(rule: rule, facts: without)
+        #expect(blocked.outcome == .notEvaluated)
+        #expect(blocked.evaluatorID == "gate.evidenceBinding.v1")
+        #expect(blocked.detail.contains("custody.hash"))
+        let with = ConformanceFacts(completedPhaseKinds: [.findings],
+                                    attestedRuleIDs: [rule.id],
+                                    presentEvidenceKinds: ["custody.hash"])
+        #expect(SutraConformance.evaluate(rule: rule, facts: with).outcome == .passed)
+    }
+
+    /// Multi-phase facts: custody + closure phases evaluate alongside findings.
+    @Test("Multi-phase runs evaluate custody and closure rules")
+    func multiPhase() {
+        let reached: Set<PersonaJobKind> = [.findings, .evidenceCustody, .closure]
+        let attested = Set(SutraRuleCompiler.rules(for: sutra)
+            .filter { $0.phaseKind.map(reached.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: reached,
+                                     standardOfProofDeclared: true,
+                                     openItemsAcknowledged: true,
+                                     humanDecisionsMade: [.findings, .closure],
+                                     attestedRuleIDs: attested,
+                                     presentEvidenceKinds: ["custody.record", "custody.hash"])
+        let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
+        #expect(a.status == .conformant)
+        #expect(a.evaluations.contains { $0.rule.phaseKind == .evidenceCustody && $0.outcome == .passed })
+        #expect(a.evaluations.contains { $0.rule.phaseKind == .closure && $0.outcome == .passed })
+        // Closure's reserved decision missing → the run fails, not pends.
+        var noDecision = facts
+        noDecision.humanDecisionsMade = [.findings]
+        #expect(SutraConformance.assess(facts: noDecision, against: sutra, at: now).status == .notConformant)
+    }
+
     /// A justified deviation is visible (`approvedDeviation`) and does not block conformance.
     @Test("Approved deviations stay visible and count as resolved")
     func deviations() {
@@ -240,7 +281,9 @@ struct ConformanceLevel2Tests {
             auditChainHead: sealed.envelope.auditChainHead,
             auditEventCount: sealed.envelope.auditEventCount,
             receiptSeal: sealed.envelope.receiptSeal,
-            databaseSchemaVersion: sealed.envelope.databaseSchemaVersion)
+            databaseSchemaVersion: sealed.envelope.databaseSchemaVersion,
+            evidenceManifestSHA256: sealed.envelope.evidenceManifestSHA256,
+            signerAssurance: sealed.envelope.signerAssurance)
         let forged = SealedConformance(envelope: forgedEnvelope,
                                        signatureHex: sealed.signatureHex,
                                        publicKeyHex: sealed.publicKeyHex)
@@ -312,17 +355,23 @@ struct ConformanceLevel2Tests {
     @Test("Envelope v2 carries and signs the run linkage")
     func linkageSigned() throws {
         let caseID = UUID()
+        let manifest = [EvidenceManifestEntry(sourceVersionID: "v1", contentHash: "aa"),
+                        EvidenceManifestEntry(sourceVersionID: "v2", contentHash: nil)]
+        let manifestSHA = try ConformanceCanonical.sha256(of: manifest)
         let sealed = try ConformanceSeal.seal(
             assessment: conformantAssessment(), build: "t", key: key,
             linkage: ConformanceSealLinkage(caseID: caseID, runRevision: 2, assessedRunRevision: 2,
                                             auditChainHead: "abc123", auditEventCount: 9,
-                                            receiptSeal: "feed99", databaseSchemaVersion: 107))
+                                            receiptSeal: "feed99", databaseSchemaVersion: 107,
+                                            evidenceManifestSHA256: manifestSHA))
         #expect(sealed.envelope.formatVersion == 2)
         #expect(sealed.envelope.caseID == caseID.uuidString)
         #expect(sealed.envelope.auditChainHead == "abc123")
+        #expect(sealed.envelope.evidenceManifestSHA256 == manifestSHA)
+        #expect(sealed.envelope.signerAssurance == "external-software")   // injected key
         #expect(ConformanceSeal.verify(sealed))
         let md = ConformanceSeal.markdown(for: sealed)
-        #expect(md.contains("abc123") && md.contains("feed99"))
+        #expect(md.contains("abc123") && md.contains("feed99") && md.contains(manifestSHA))
     }
 }
 

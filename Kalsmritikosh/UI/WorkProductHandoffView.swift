@@ -28,6 +28,9 @@ public final class WorkProductHandoffModel {
     private let contradictionGap: InvestigationContradictionGapService?
     /// Level-1 persistence (v107). nil = preview-only (tests without a DB).
     private let assessments: ConformanceAssessmentRepository?
+    /// The v104 HMAC audit chain — sealed and bound into the conformance seal
+    /// at approval so the certificate attests over a specific ledger state.
+    private let auditChain: AuditChainService?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -59,10 +62,27 @@ public final class WorkProductHandoffModel {
     /// run reopens against this — its own stored snapshot, not today's Sutra.
     public private(set) var storedAssessment: StoredConformanceAssessment?
 
+    /// Authorized deviations recorded by the reviewer this session: rule ID →
+    /// justification. Visible on the certificate, never hidden.
+    public var approvedDeviations: [String: String] = [:]
+
     /// The recorded facts the assessor consults — derived in the model from
-    /// service-backed state, not assembled by the view.
+    /// service-backed state, not assembled by the view. Multi-phase: findings
+    /// always; chain-of-custody when the case holds custody entries; closure
+    /// when a close/reopen decision was recorded.
     public func conformanceFacts() -> ConformanceFacts {
-        let reached: Set<PersonaJobKind> = [.findings]
+        var reached: Set<PersonaJobKind> = [.findings]
+        if !(snapshot?.custody.isEmpty ?? true) { reached.insert(.evidenceCustody) }
+        if snapshot?.latestClosure != nil { reached.insert(.closure) }
+        var decisions: Set<PersonaJobKind> = []
+        if snapshot?.isApproved ?? false { decisions.insert(.findings) }
+        if snapshot?.latestClosure != nil { decisions.insert(.closure) }
+        // Evidence kinds actually bound to this run (custody manifest).
+        var evidence: Set<String> = []
+        if let custody = snapshot?.custody, !custody.isEmpty {
+            evidence.insert("custody.record")
+            if custody.allSatisfy({ $0.contentHash != nil }) { evidence.insert("custody.hash") }
+        }
         let sutra = frozenSutra ?? SutraCompiler.shared()
         let attestable = rulesAttested
             ? Set(SutraRuleCompiler.rules(for: sutra)
@@ -73,8 +93,10 @@ public final class WorkProductHandoffModel {
             completedPhaseKinds: reached,
             standardOfProofDeclared: proofStandard != nil,
             openItemsAcknowledged: !hasOpenItems || acknowledgedOpenItems,
-            humanDecisionsMade: (snapshot?.isApproved ?? false) ? [.findings] : [],
-            attestedRuleIDs: attestable)
+            humanDecisionsMade: decisions,
+            attestedRuleIDs: attestable,
+            approvedDeviations: approvedDeviations,
+            presentEvidenceKinds: evidence)
     }
 
     /// Live (unrecorded) assessment against the frozen constitution.
@@ -84,19 +106,39 @@ public final class WorkProductHandoffModel {
     }
 
     /// Record + seal this run's assessment (called on approval). The seal links
-    /// the case, revision, findings-receipt seal and schema version; recording
-    /// appends a new revision — prior assessments are never rewritten.
+    /// the case, revision, findings-receipt seal, schema version, the evidence
+    /// manifest, and the freshly sealed audit-chain head; recording appends a
+    /// new revision — prior assessments are never rewritten.
     private func recordAssessment(caseID: UUID, at date: Date) async {
         guard let repo = assessments else { return }
         let assessment = currentAssessment(at: date)
         let nextRevision = ((try? await repo.latest(caseID: caseID))?.runRevision ?? 0) + 1
-        let sealed = try? ConformanceSeal.seal(
-            assessment: assessment,
-            linkage: ConformanceSealLinkage(caseID: caseID,
-                                            runRevision: nextRevision,
-                                            assessedRunRevision: nextRevision,
-                                            receiptSeal: built?.receipt.seal,
-                                            databaseSchemaVersion: SchemaMigrations.latestVersion))
+        var linkage = ConformanceSealLinkage(caseID: caseID,
+                                             runRevision: nextRevision,
+                                             assessedRunRevision: nextRevision,
+                                             receiptSeal: built?.receipt.seal,
+                                             databaseSchemaVersion: SchemaMigrations.latestVersion)
+        // Bind the tamper-evident ledger: seal outstanding audit events first,
+        // then record the head this certificate attests over. A remaining
+        // unsealed count refuses the seal rather than attesting over a ledger
+        // that can still silently change.
+        if let chain = auditChain {
+            _ = try? await chain.seal(now: date)
+            if let v = try? await chain.verify() { linkage.unsealedAuditEvents = v.unsealedCount }
+            if let h = try? await chain.head() {
+                linkage.auditChainHead = h.hash
+                linkage.auditEventCount = h.sealedSeq
+            }
+        }
+        // The evidence manifest the run was assessed over (custody entries).
+        if let custody = snapshot?.custody, !custody.isEmpty {
+            let manifest = custody
+                .map { EvidenceManifestEntry(sourceVersionID: $0.sourceVersionID.uuidString,
+                                             contentHash: $0.contentHash) }
+                .sorted { $0.sourceVersionID < $1.sourceVersionID }
+            linkage.evidenceManifestSHA256 = try? ConformanceCanonical.sha256(of: manifest)
+        }
+        let sealed = try? ConformanceSeal.seal(assessment: assessment, linkage: linkage)
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
         catch { lastError = "Conformance assessment could not be recorded: \(error)" }
     }
@@ -111,10 +153,12 @@ public final class WorkProductHandoffModel {
     public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService,
                 closure: InvestigationClosureService,
                 contradictionGap: InvestigationContradictionGapService? = nil,
-                assessments: ConformanceAssessmentRepository? = nil) {
+                assessments: ConformanceAssessmentRepository? = nil,
+                auditChain: AuditChainService? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
         self.assessments = assessments
+        self.auditChain = auditChain
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -136,6 +180,7 @@ public final class WorkProductHandoffModel {
             rulesAttested = false
             frozenSutra = nil
             storedAssessment = nil
+            approvedDeviations = [:]
         }
         self.caseID = caseID
         await refresh()
@@ -300,6 +345,9 @@ public struct WorkProductHandoffView: View {
     @Environment(AppState.self) private var appState
     /// CONFORMANCE STYLE switch — classic summary label vs strict per-rule assessment.
     @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
+    /// Deviation recording (strict mode): the rule being deviated + its justification.
+    @State private var deviationRule: SutraRule?
+    @State private var deviationJustification = ""
     @State private var model: WorkProductHandoffModel?
     @State private var selectedWorkspace: Workspace.ID?
     @State private var workspaceList: [Workspace] = []
@@ -494,6 +542,36 @@ public struct WorkProductHandoffView: View {
                     .guidance(GuidanceTip("Rule attestation",
                                           what: "Rules the app cannot check deterministically require your recorded attestation. Attesting evaluates them as met under your name; leaving them unattested keeps conformance honestly indeterminate. Your attestation is recorded and sealed with the assessment when you approve.",
                                           enabledWhen: nil))
+                DisclosureGroup("Unevaluated rules (\(assessment.unevaluated.count))") {
+                    ForEach(assessment.unevaluated) { e in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("\(e.rule.id) — \(e.rule.text)").font(.caption2).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            Button("Record deviation…") {
+                                deviationRule = e.rule
+                                deviationJustification = ""
+                            }
+                            .font(.caption2).buttonStyle(.borderless)
+                        }
+                    }
+                }
+                .font(.caption)
+                .alert("Record authorized deviation", isPresented: Binding(
+                    get: { deviationRule != nil },
+                    set: { if !$0 { deviationRule = nil } })) {
+                    TextField("Justification — who authorized it, and why", text: $deviationJustification)
+                    Button("Record deviation") {
+                        let why = deviationJustification.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let rule = deviationRule, !why.isEmpty {
+                            model.approvedDeviations[rule.id] = why
+                        }
+                        deviationRule = nil
+                    }
+                    Button("Cancel", role: .cancel) { deviationRule = nil }
+                } message: {
+                    Text("A deviation resolves the rule as an authorized departure. It stays visible on the certificate with your justification — it is never hidden.")
+                }
             }
             if assessment.status != .indeterminate {
                 Button {
@@ -606,7 +684,8 @@ public struct WorkProductHandoffView: View {
               let closure = appState.investigationClosure else { return }
         let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure,
                                                  contradictionGap: appState.investigationContradictionGap,
-                                                 assessments: appState.conformanceAssessments)
+                                                 assessments: appState.conformanceAssessments,
+                                                 auditChain: appState.auditChain)
         await m.load(caseID: id)
         model = m
     }

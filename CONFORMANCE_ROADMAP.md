@@ -33,15 +33,26 @@ Done (all suite-verified):
 - ✅ Owner switch: Settings › "Classic conformance readout" restores the previous
   behavior verbatim; strict mode is the default; the flip is lossless.
 
-Still open (honest tail):
-- requiredEvidence is declared on rules but not yet BOUND to evidence records
-  (attestation substitutes); evidenceManifestSHA256 not yet in the envelope.
-- The live handoff does not yet feed auditChainHead/unsealedCount from the v104
-  AuditChain into the linkage (fields + refusal exist and are tested; production
-  wiring passes receiptSeal, revision and schema version).
-- Deviations have producers + tests but no recording UI yet.
-- Wiring beyond the findings handoff (studios, other phases); Secure Enclave
-  option; signer assurance levels.
+Completed in the tail pass (2026-08-25, all suite-verified):
+- ✅ Evidence binding: `requiredEvidence` gates evaluation (`gate.evidenceBinding.v1`;
+  attestation cannot substitute for absent evidence); the custody manifest is
+  hashed into the envelope (`evidenceManifestSHA256`) and signed.
+- ✅ Audit-chain feed: at approval the v104 chain is sealed, verified, and its
+  head + count bind into the signed envelope; a remaining unsealed count
+  refuses the seal.
+- ✅ Deviation recording UI: per-rule "Record deviation…" with mandatory
+  justification; travels visibly on the certificate.
+- ✅ Multi-phase facts: chain-of-custody and closure phases evaluate alongside
+  findings (reach, decisions, and evidence kinds derived from the snapshot).
+- ✅ Secure Enclave signing when the hardware offers it (Keychain software key
+  fallback); `signerAssurance` recorded and signed in the envelope.
+
+Deliberately out of scope here (by design, not omission):
+- Persona studios are standalone deliverable documents whose completeness gates
+  live in `StudioDeliverable.isComplete`; run-level conformance applies to case
+  runs. Extending sealed assessments to studio deliverables is part of the
+  1.0.x-C bundle format work, where each deliverable exports as a verifiable
+  bundle rather than growing its own parallel assessor.
 
 ## Non-negotiable acceptance tests
 

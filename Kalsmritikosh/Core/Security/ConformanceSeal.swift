@@ -45,6 +45,22 @@ public nonisolated struct ConformanceSealEnvelope: Sendable, Codable, Equatable 
     /// The findings run's VerifiableReceipt seal, when one exists.
     public let receiptSeal: String?
     public let databaseSchemaVersion: Int?
+    /// SHA-256 over the canonical evidence manifest (source version IDs +
+    /// content hashes) the run was assessed over.
+    public let evidenceManifestSHA256: String?
+    /// Where the signing key lives: "secure-enclave", "keychain-software", or
+    /// "external-software" (injected key, e.g. tests).
+    public let signerAssurance: String?
+}
+
+/// One evidence-manifest line: a source version and the content hash that
+/// custody recorded for it. Hashed canonically into the envelope.
+public nonisolated struct EvidenceManifestEntry: Sendable, Codable, Equatable {
+    public let sourceVersionID: String
+    public let contentHash: String?
+    public init(sourceVersionID: String, contentHash: String?) {
+        self.sourceVersionID = sourceVersionID; self.contentHash = contentHash
+    }
 }
 
 /// What the seal binds to beyond the assessment itself. All optional — pass
@@ -61,16 +77,18 @@ public nonisolated struct ConformanceSealLinkage: Sendable, Equatable {
     public var unsealedAuditEvents: Int?
     public var receiptSeal: String?
     public var databaseSchemaVersion: Int?
+    public var evidenceManifestSHA256: String?
 
     public init(caseID: UUID? = nil, runRevision: Int? = nil, assessedRunRevision: Int? = nil,
                 auditChainHead: String? = nil, auditEventCount: Int? = nil,
                 unsealedAuditEvents: Int? = nil, receiptSeal: String? = nil,
-                databaseSchemaVersion: Int? = nil) {
+                databaseSchemaVersion: Int? = nil, evidenceManifestSHA256: String? = nil) {
         self.caseID = caseID; self.runRevision = runRevision
         self.assessedRunRevision = assessedRunRevision
         self.auditChainHead = auditChainHead; self.auditEventCount = auditEventCount
         self.unsealedAuditEvents = unsealedAuditEvents; self.receiptSeal = receiptSeal
         self.databaseSchemaVersion = databaseSchemaVersion
+        self.evidenceManifestSHA256 = evidenceManifestSHA256
     }
 }
 
@@ -95,18 +113,65 @@ public nonisolated enum ConformanceSealError: Error, Equatable {
 public nonisolated enum ConformanceSigningKey {
     private static let service = "ecosanskritiinnovation.Kalsmritikosh.conformanceSeal"
     private static let account = "p256-signing-key-v1"
+    private static let enclaveAccount = "p256-se-signing-key-v1"
 
-    /// Load the existing key, or generate + store a fresh one. Returns nil only
-    /// when the Keychain is entirely unavailable (tests inject an ephemeral key).
+    /// Where the private key lives. Secure Enclave when the hardware offers it
+    /// (the key never leaves the chip); Keychain software key otherwise.
+    public enum Backend {
+        case software(P256.Signing.PrivateKey)
+        case enclave(SecureEnclave.P256.Signing.PrivateKey)
+
+        public var assurance: String {
+            switch self {
+            case .software: return "keychain-software"
+            case .enclave:  return "secure-enclave"
+            }
+        }
+        public var publicKey: P256.Signing.PublicKey {
+            switch self {
+            case .software(let k): return k.publicKey
+            case .enclave(let k):  return k.publicKey
+            }
+        }
+        public func signature(for data: Data) throws -> P256.Signing.ECDSASignature {
+            switch self {
+            case .software(let k): return try k.signature(for: data)
+            case .enclave(let k):  return try k.signature(for: data)
+            }
+        }
+    }
+
+    /// Load the existing key, or generate + store a fresh one — Secure Enclave
+    /// preferred, Keychain software key as the fallback. Returns nil only when
+    /// neither store is available (tests inject an ephemeral key instead).
+    public static func loadOrGenerateBackend() -> Backend? {
+        if SecureEnclave.isAvailable {
+            if let data = load(account: enclaveAccount),
+               let key = try? SecureEnclave.P256.Signing.PrivateKey(dataRepresentation: data) {
+                return .enclave(key)
+            }
+            if let key = try? SecureEnclave.P256.Signing.PrivateKey(),
+               store(key.dataRepresentation, account: enclaveAccount) {
+                return .enclave(key)
+            }
+        }
+        if let data = load(account: account), let key = try? P256.Signing.PrivateKey(rawRepresentation: data) {
+            return .software(key)
+        }
+        let key = P256.Signing.PrivateKey()
+        return store(key.rawRepresentation, account: account) ? .software(key) : nil
+    }
+
+    /// Compatibility: the software key path (used before Secure Enclave support).
     public static func loadOrGenerate() -> P256.Signing.PrivateKey? {
-        if let data = load(), let key = try? P256.Signing.PrivateKey(rawRepresentation: data) {
+        if let data = load(account: account), let key = try? P256.Signing.PrivateKey(rawRepresentation: data) {
             return key
         }
         let key = P256.Signing.PrivateKey()
-        return store(key.rawRepresentation) ? key : nil
+        return store(key.rawRepresentation, account: account) ? key : nil
     }
 
-    private static func load() -> Data? {
+    private static func load(account: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -120,7 +185,7 @@ public nonisolated enum ConformanceSigningKey {
         return data
     }
 
-    private static func store(_ raw: Data) -> Bool {
+    private static func store(_ raw: Data, account: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -134,7 +199,11 @@ public nonisolated enum ConformanceSigningKey {
 
     /// "<first 16 hex of SHA-256(public key)>" — printed on certificates.
     public static func keyID(for key: P256.Signing.PrivateKey) -> String {
-        let digest = SHA256.hash(data: key.publicKey.x963Representation)
+        keyID(forPublicKey: key.publicKey)
+    }
+
+    public static func keyID(forPublicKey publicKey: P256.Signing.PublicKey) -> String {
+        let digest = SHA256.hash(data: publicKey.x963Representation)
         return digest.map { String(format: "%02x", $0) }.joined().prefix(16).lowercased()
     }
 }
@@ -163,9 +232,14 @@ public nonisolated enum ConformanceSeal {
            runRev != assessedRev {
             throw ConformanceSealError.runRevisionMismatch
         }
-        guard let signingKey = key ?? ConformanceSigningKey.loadOrGenerate() else {
-            throw ConformanceSealError.keyUnavailable
-        }
+        // An injected key is an external signer (tests); otherwise Secure Enclave
+        // when the hardware offers it, Keychain software key as fallback.
+        let backend: ConformanceSigningKey.Backend
+        if let key { backend = .software(key) }
+        else if let stored = ConformanceSigningKey.loadOrGenerateBackend() { backend = stored }
+        else { throw ConformanceSealError.keyUnavailable }
+        let assurance = key != nil ? "external-software" : backend.assurance
+
         let envelope = ConformanceSealEnvelope(
             formatVersion: 2,
             sutraCitation: assessment.sutraCitation,
@@ -175,22 +249,24 @@ public nonisolated enum ConformanceSeal {
             ruleCount: assessment.evaluations.count,
             assessedAt: assessment.assessedAt,
             applicationBuild: build,
-            signerKeyID: ConformanceSigningKey.keyID(for: signingKey),
+            signerKeyID: ConformanceSigningKey.keyID(forPublicKey: backend.publicKey),
             signatureAlgorithm: "ECDSA-P256-SHA256",
             caseID: linkage.caseID?.uuidString,
             runRevision: linkage.runRevision,
             auditChainHead: linkage.auditChainHead,
             auditEventCount: linkage.auditEventCount,
             receiptSeal: linkage.receiptSeal,
-            databaseSchemaVersion: linkage.databaseSchemaVersion)
+            databaseSchemaVersion: linkage.databaseSchemaVersion,
+            evidenceManifestSHA256: linkage.evidenceManifestSHA256,
+            signerAssurance: assurance)
         guard let canonical = try? ConformanceCanonical.data(of: envelope) else {
             throw ConformanceSealError.encodingFailed
         }
-        let signature = try signingKey.signature(for: canonical)
+        let signature = try backend.signature(for: canonical)
         return SealedConformance(
             envelope: envelope,
             signatureHex: signature.derRepresentation.map { String(format: "%02x", $0) }.joined(),
-            publicKeyHex: signingKey.publicKey.x963Representation.map { String(format: "%02x", $0) }.joined())
+            publicKeyHex: backend.publicKey.x963Representation.map { String(format: "%02x", $0) }.joined())
     }
 
     /// Recompute the canonical envelope and check the signature against the
@@ -219,7 +295,9 @@ public nonisolated enum ConformanceSeal {
         if let rev = e.runRevision { out += "| Run revision | \(rev) |\n" }
         if let head = e.auditChainHead { out += "| Audit chain head | `\(head)` (\(e.auditEventCount ?? 0) sealed event(s)) |\n" }
         if let receipt = e.receiptSeal { out += "| Findings receipt seal | `\(receipt)` |\n" }
+        if let manifest = e.evidenceManifestSHA256 { out += "| Evidence manifest SHA-256 | `\(manifest)` |\n" }
         if let schema = e.databaseSchemaVersion { out += "| DB schema | v\(schema) |\n" }
+        if let assurance = e.signerAssurance { out += "| Key assurance | \(assurance) |\n" }
         out += "| Signer key ID | `\(e.signerKeyID)` |\n"
         out += "| Algorithm | \(e.signatureAlgorithm) |\n"
         out += "| Signature (DER, hex) | `\(sealed.signatureHex)` |\n"

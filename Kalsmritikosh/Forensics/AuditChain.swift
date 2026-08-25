@@ -172,6 +172,15 @@ public actor AuditChainService {
         return Int(rows.first?.int(0) ?? 0)
     }
 
+    /// The chain's current head — the last sealed entry hash and its sequence.
+    /// This is what a conformance seal binds to (roadmap 1.0.x-B): the signed
+    /// certificate then attests over a specific, tamper-evident ledger state.
+    /// Returns (0, genesis) before anything is sealed.
+    public func head() async throws -> (sealedSeq: Int, hash: String) {
+        let t = try await tail()
+        return (t.seq, t.hash)
+    }
+
     // MARK: - Reads
 
     private func tail() async throws -> (seq: Int, hash: String) {
