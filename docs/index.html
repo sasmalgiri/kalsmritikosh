@@ -220,12 +220,12 @@
     <div class="card prob">
       <div class="who">Problem 1 · it makes things up</div>
       <h3>“Grounded” assistants still hallucinate</h3>
-      <p>Users report document AIs inventing contract clauses that aren't there, attributing claims to a vague “Source 3” with no page you can cite, and never flagging when two sources disagree. Convincing — and sometimes confidently wrong.</p>
+      <p>Users have reported document AIs inventing contract clauses that aren't there, giving citations too coarse to check quickly, and letting disagreements between sources slip past unflagged. Convincing — and sometimes confidently wrong.</p>
     </div>
     <div class="card prob">
       <div class="who">Problem 2 · it takes your data</div>
       <h3>Your private files go to the cloud</h3>
-      <p>On popular chatbots, uploaded files can be used to train the model by default, are retained for weeks, can be caught by legal holds, and have leaked in past breaches. Confidential work doesn't belong on someone else's servers.</p>
+      <p>On several popular chatbots' personal plans, uploaded files can be used for model training depending on your plan and settings, are retained on servers, can be caught by legal holds, and have leaked in past breaches. Confidential work doesn't belong on someone else's servers.</p>
     </div>
   </div>
 
@@ -461,16 +461,16 @@
     </tr></thead>
     <tbody>
       <tr><td class="k">Runs fully on your device</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
-      <tr><td class="k">Your files used for training</td><td class="col-us yes">Never</td><td class="no">By default on personal plans</td><td class="k">Varies</td></tr>
-      <tr><td class="k">Citation precision</td><td class="col-us yes">File · page · line</td><td class="no">Often none</td><td class="k">Vague (“Source 3”)</td></tr>
-      <tr><td class="k">Refuses when evidence is missing</td><td class="col-us yes">Yes</td><td class="no">Rarely</td><td class="no">Rarely</td></tr>
-      <tr><td class="k">Surfaces contradictions</td><td class="col-us yes">Yes, both sides</td><td class="no">No</td><td class="no">No</td></tr>
-      <tr><td class="k">Timeline reconstruction</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
-      <tr><td class="k">Export with citations</td><td class="col-us yes">Yes</td><td class="k">Copy-paste</td><td class="no">Limited</td></tr>
+      <tr><td class="k">Your files used for training</td><td class="col-us yes">Never</td><td class="k">Varies by provider, plan &amp; settings</td><td class="k">Varies by provider &amp; settings</td></tr>
+      <tr><td class="k">Citation precision</td><td class="col-us yes">File + exact locator — page, line, timestamp or record</td><td class="k">Available in some modes; precision varies</td><td class="k">Inline citations; precision varies</td></tr>
+      <tr><td class="k">Refuses when evidence is missing</td><td class="col-us yes">Yes — enforced evidence gate</td><td class="k">Depends on product &amp; mode</td><td class="k">Source-grounded modes may decline</td></tr>
+      <tr><td class="k">Surfaces contradictions</td><td class="col-us yes">Yes — a persistent record, both sides shown</td><td class="k">Can analyse when prompted; not kept as a ledger</td><td class="k">Can analyse when prompted; not kept as a ledger</td></tr>
+      <tr><td class="k">Timeline reconstruction</td><td class="col-us yes">Yes — persistent &amp; evidence-linked</td><td class="k">Can generate on request; not maintained</td><td class="k">Can generate on request; not maintained</td></tr>
+      <tr><td class="k">Export with citations</td><td class="col-us yes">Yes — citations &amp; audit trail intact</td><td class="k">File export in many products; provenance varies</td><td class="k">Export available; provenance varies</td></tr>
       <tr><td class="k">Works offline</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
     </tbody>
   </table>
-  <p class="muted" style="font-size:13px;margin-top:12px">Comparison reflects publicly reported behaviour of popular cloud AI tools at time of writing; competitors' features change over time.</p>
+  <p class="muted" style="font-size:13px;margin-top:12px">Comparison reflects the vendors' published documentation as of August 2026; features and defaults vary by product, plan and settings, and change over time. Kalsmritikosh's difference is architectural: evidence, contradictions and timelines are persistent, local, auditable records — not one-off answers.</p>
 </div></section>
 
 <!-- FAQ -->
