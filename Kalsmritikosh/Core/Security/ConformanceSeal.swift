@@ -51,6 +51,13 @@ public nonisolated struct ConformanceSealEnvelope: Sendable, Codable, Equatable 
     /// Where the signing key lives: "secure-enclave", "keychain-software", or
     /// "external-software" (injected key, e.g. tests).
     public let signerAssurance: String?
+    /// The REAL immutable run this seal binds to (audit item 2) — the findings
+    /// run's ID and a hash over its identifying state at assessment time.
+    public let runID: String?
+    public let runStateSHA256: String?
+    /// Deviations are visible on the wire: a conformant-with-deviations seal
+    /// says so, distinctly from a clean conformant.
+    public let approvedDeviationCount: Int?
 }
 
 /// One evidence-manifest line: a source version and the content hash that
@@ -258,7 +265,11 @@ public nonisolated enum ConformanceSeal {
             receiptSeal: linkage.receiptSeal,
             databaseSchemaVersion: linkage.databaseSchemaVersion,
             evidenceManifestSHA256: linkage.evidenceManifestSHA256,
-            signerAssurance: assurance)
+            signerAssurance: assurance,
+            runID: assessment.runID?.uuidString,
+            runStateSHA256: assessment.runStateSHA256,
+            approvedDeviationCount: assessment.approvedDeviationCount > 0
+                ? assessment.approvedDeviationCount : nil)
         guard let canonical = try? ConformanceCanonical.data(of: envelope) else {
             throw ConformanceSealError.encodingFailed
         }
@@ -296,6 +307,9 @@ public nonisolated enum ConformanceSeal {
         if let head = e.auditChainHead { out += "| Audit chain head | `\(head)` (\(e.auditEventCount ?? 0) sealed event(s)) |\n" }
         if let receipt = e.receiptSeal { out += "| Findings receipt seal | `\(receipt)` |\n" }
         if let manifest = e.evidenceManifestSHA256 { out += "| Evidence manifest SHA-256 | `\(manifest)` |\n" }
+        if let runID = e.runID { out += "| Findings run | `\(runID)` |\n" }
+        if let runState = e.runStateSHA256 { out += "| Run state SHA-256 | `\(runState)` |\n" }
+        if let deviations = e.approvedDeviationCount { out += "| Approved deviations | \(deviations) — each with its justification in the per-rule certificate |\n" }
         if let schema = e.databaseSchemaVersion { out += "| DB schema | v\(schema) |\n" }
         if let assurance = e.signerAssurance { out += "| Key assurance | \(assurance) |\n" }
         out += "| Signer key ID | `\(e.signerKeyID)` |\n"

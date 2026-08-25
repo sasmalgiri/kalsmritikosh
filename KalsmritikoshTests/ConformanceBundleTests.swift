@@ -50,12 +50,51 @@ struct ConformanceBundleTests {
         #expect(v.authenticity == .passed)
         #expect(v.conformanceReplay == .passed)
         #expect(v.allPassed)
-        #expect(v.details.isEmpty)
-        // The bundle carries every spec file.
+        // The only detail allowed on a clean unpinned verify is the honest
+        // key-consistency caveat.
+        #expect(v.details.allSatisfy { $0.contains("key-consistent only") })
+        // The bundle carries every spec file, including the replayable facts.
         for f in ["attestation.json", "protocol.json", "rule-evaluations.json",
-                  "public-key.hex", "manifest.json", "README.txt"] {
+                  "evaluation-facts.json", "public-key.hex", "manifest.json", "README.txt"] {
             #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(f).path), Comment(rawValue: f))
         }
+        // Identity binding: the correct trusted key ID passes; a wrong one fails.
+        let embeddedKeyID = ConformanceSigningKey.keyID(for: key)
+        #expect(ConformanceBundle.verify(at: dir, trustedSignerKeyID: embeddedKeyID).authenticity == .passed)
+        #expect(ConformanceBundle.verify(at: dir, trustedSignerKeyID: "deadbeefdeadbeef").authenticity == .failed)
+    }
+
+    /// Audit item 5 acceptance: a wrongly COMPUTED evaluation — legitimately
+    /// signed, hashes consistent — is caught only by rerunning the evaluators
+    /// over the recorded facts. This is the difference between outcome
+    /// consistency and true replay.
+    @Test("Facts replay catches signed-but-wrong evaluations")
+    func factsReplayCatchesWrongEvaluations() throws {
+        let dir = try tempDir()
+        // Build an assessment whose recorded evaluations DISAGREE with its
+        // facts: flip one passed outcome to approvedDeviation before sealing.
+        var assessment = try sealedStored().assessment
+        var evaluations = assessment.evaluations
+        let victim = evaluations.firstIndex { $0.outcome == .passed }!
+        evaluations[victim] = RuleEvaluation(rule: evaluations[victim].rule, outcome: .approvedDeviation,
+                                             evaluatorID: "forged-app", detail: "never actually evaluated")
+        assessment = {
+            var a = ConformanceAssessment(sutraCitation: assessment.sutraCitation,
+                                          sutraSnapshotJSON: assessment.sutraSnapshotJSON,
+                                          sutraSHA256: assessment.sutraSHA256,
+                                          evaluations: evaluations,
+                                          assessedAt: assessment.assessedAt)
+            a.facts = assessment.facts   // facts unchanged — the lie is in the outcomes
+            return a
+        }()
+        let sealed = try ConformanceSeal.seal(assessment: assessment, build: "t", key: key)
+        try ConformanceBundle.write(stored: StoredConformanceAssessment(
+            caseID: UUID(), runRevision: 1, assessment: assessment, seal: sealed, createdAt: now), to: dir)
+        let v = ConformanceBundle.verify(at: dir)
+        #expect(v.integrity == .passed)
+        #expect(v.authenticity == .passed, "the forger signed correctly — hashes are consistent")
+        #expect(v.conformanceReplay == .failed, "rerunning the evaluators must expose the lie")
+        #expect(v.details.contains { $0.contains("does not reproduce") })
     }
 
     @Test("An unsealed assessment refuses to export")
@@ -115,7 +154,9 @@ struct ConformanceBundleTests {
             signatureAlgorithm: e.signatureAlgorithm, caseID: e.caseID, runRevision: e.runRevision,
             auditChainHead: e.auditChainHead, auditEventCount: e.auditEventCount,
             receiptSeal: e.receiptSeal, databaseSchemaVersion: e.databaseSchemaVersion,
-            evidenceManifestSHA256: e.evidenceManifestSHA256, signerAssurance: e.signerAssurance)
+            evidenceManifestSHA256: e.evidenceManifestSHA256, signerAssurance: e.signerAssurance,
+            runID: e.runID, runStateSHA256: e.runStateSHA256,
+            approvedDeviationCount: e.approvedDeviationCount)
         attestation = SealedConformance(envelope: forgedEnvelope,
                                         signatureHex: attestation.signatureHex,
                                         publicKeyHex: attestation.publicKeyHex)

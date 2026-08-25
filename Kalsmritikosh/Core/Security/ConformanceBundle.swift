@@ -50,6 +50,7 @@ public nonisolated enum ConformanceBundle {
     static let attestationFile = "attestation.json"
     static let protocolFile = "protocol.json"
     static let evaluationsFile = "rule-evaluations.json"
+    static let factsFile = "evaluation-facts.json"
     static let publicKeyFile = "public-key.hex"
     static let manifestFile = "manifest.json"
     static let readmeFile = "README.txt"
@@ -74,12 +75,16 @@ public nonisolated enum ConformanceBundle {
         let attestationData = try ConformanceCanonical.data(of: seal)
         let publicKeyData = Data(seal.publicKeyHex.utf8)
 
-        let payload: [(String, Data)] = [
+        var payload: [(String, Data)] = [
             (protocolFile, protocolData),
             (evaluationsFile, evaluationsData),
             (attestationFile, attestationData),
             (publicKeyFile, publicKeyData),
         ]
+        // The exact facts consulted — lets the verifier RERUN the evaluators.
+        if let facts = stored.assessment.facts {
+            payload.append((factsFile, try ConformanceCanonical.data(of: facts)))
+        }
         for (name, data) in payload {
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
         }
@@ -106,7 +111,10 @@ public nonisolated enum ConformanceBundle {
     // MARK: - Verify (the same checks the standalone CLI performs, plus the
     // in-app-only protocol recompile check)
 
-    public static func verify(at directory: URL) -> BundleVerdict {
+    /// `trustedSignerKeyID`: the recipient's known signer fingerprint. Without
+    /// it, AUTHENTICITY proves key-consistency only — a forger can always embed
+    /// a fresh self-consistent key.
+    public static func verify(at directory: URL, trustedSignerKeyID: String? = nil) -> BundleVerdict {
         var verdict = BundleVerdict()
         let fm = FileManager.default
         func read(_ name: String) -> Data? {
@@ -157,6 +165,19 @@ public nonisolated enum ConformanceBundle {
             authenticityOK = false
             verdict.details.append("authenticity: rule-evaluations.json does not match the signed evaluations hash")
         }
+        // Identity binding: compare the EMBEDDED key's fingerprint to the
+        // recipient's known one. Recomputed from the key bytes, never trusted
+        // from the envelope's own claim.
+        if let trusted = trustedSignerKeyID?.lowercased() {
+            let embedded = SHA256.hash(data: Data(hexIn: sealed.publicKeyHex) ?? Data())
+                .map { String(format: "%02x", $0) }.joined().prefix(16).lowercased()
+            if embedded != trusted {
+                authenticityOK = false
+                verdict.details.append("authenticity: signer key ID \(embedded) does not match the trusted key ID \(trusted)")
+            }
+        } else {
+            verdict.details.append("authenticity note: key-consistent only — no trusted signer key ID supplied")
+        }
         verdict.authenticity = authenticityOK ? .passed : .failed
         guard authenticityOK else { return verdict }
 
@@ -198,6 +219,25 @@ public nonisolated enum ConformanceBundle {
             replayOK = false
             verdict.details.append("replay: the protocol compiles to zero rules — vacuous conformance is refused")
         }
+        // TRUE replay: when the bundle carries the consulted facts, RERUN every
+        // evaluator over them and require the reproduced evaluations to match
+        // the recorded ones exactly — outcomes that were never produced by the
+        // rules-over-facts computation are caught here even when correctly signed.
+        if let factsData = read(factsFile) {
+            if let facts = try? decoder().decode(ConformanceFacts.self, from: factsData) {
+                let reproduced = SutraConformance.assess(facts: facts, against: sutra,
+                                                         at: sealed.envelope.assessedAt).evaluations
+                if reproduced != evaluations {
+                    replayOK = false
+                    verdict.details.append("replay: rerunning the evaluators over the recorded facts does not reproduce the recorded evaluations")
+                }
+            } else {
+                replayOK = false
+                verdict.details.append("replay: evaluation-facts.json failed to decode")
+            }
+        } else {
+            verdict.details.append("replay note: no facts in bundle — outcome-consistency only, evaluators not rerun")
+        }
         verdict.conformanceReplay = replayOK ? .passed : .failed
         return verdict
     }
@@ -212,5 +252,19 @@ public nonisolated enum ConformanceBundle {
 
     private static func sha256(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+extension Data {
+    fileprivate nonisolated init?(hexIn hex: String) {
+        guard hex.count.isMultiple(of: 2) else { return nil }
+        var out = Data(capacity: hex.count / 2)
+        var i = hex.startIndex
+        while i < hex.endIndex {
+            let next = hex.index(i, offsetBy: 2)
+            guard let b = UInt8(hex[i..<next], radix: 16) else { return nil }
+            out.append(b); i = next
+        }
+        self = out
     }
 }

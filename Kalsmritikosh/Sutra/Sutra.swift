@@ -55,6 +55,10 @@ public nonisolated struct Sutra: Sendable, Equatable, Codable {
     /// deliverable carries its evidence"). Optional so previously recorded sutras
     /// still decode; each line compiles to a mandatory GLOBAL typed rule.
     public var globalRequirements: [String]? = nil
+    /// Phases a conformant run MUST reach. nil (legacy) reads as "the findings
+    /// phase, when the sutra has one" — an unreached required phase FAILS its
+    /// rules instead of marking them notApplicable.
+    public var requiredPhaseKinds: [PersonaJobKind]? = nil
 
     /// Phases in tier order (the shape of the practice).
     public func phases(inTier tier: PhaseTier) -> [SutraPhase] { phases.filter { $0.tier == tier } }
@@ -73,6 +77,7 @@ public nonisolated struct Sutra: Sendable, Equatable, Codable {
                          reportSections: newSections ?? reportSections)
         next.amendments = (amendments ?? []) + [SutraAmendment(version: version + 1, date: date, summary: summary)]
         next.globalRequirements = globalRequirements
+        next.requiredPhaseKinds = requiredPhaseKinds
         return next
     }
 }

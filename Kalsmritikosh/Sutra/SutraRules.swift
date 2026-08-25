@@ -148,9 +148,22 @@ public nonisolated enum SutraRuleCompiler {
 
 // MARK: - Facts (what the run actually recorded)
 
+/// One actor-bound attestation of one rule (audit 2026-08-25 item 1): WHO
+/// attested, in what role, WHY, and when — replacing the blanket toggle.
+public nonisolated struct RuleAttestation: Sendable, Codable, Equatable {
+    public let actor: String
+    public let role: String?
+    public let rationale: String
+    public let at: Date
+    public init(actor: String, role: String? = nil, rationale: String, at: Date) {
+        self.actor = actor; self.role = role; self.rationale = rationale; self.at = at
+    }
+}
+
 /// The recorded facts an assessment may consult. Extends the legacy RunRecord
-/// shape with explicit attestations so no rule can pass by default.
-public nonisolated struct ConformanceFacts: Sendable, Equatable {
+/// shape with explicit attestations so no rule can pass by default. Codable so
+/// verification bundles can carry the facts and REPLAY the evaluators.
+public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
     public var completedPhaseKinds: Set<PersonaJobKind>
     public var standardOfProofDeclared: Bool
     public var openItemsAcknowledged: Bool
@@ -169,6 +182,15 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
     /// here stays `notEvaluated` — an attestation cannot substitute for
     /// evidence the run doesn't hold.
     public var presentEvidenceKinds: Set<String>
+    /// Actor-bound per-rule attestations (rule ID → who/why/when). The UI
+    /// records THESE; the bare `attestedRuleIDs` set remains for programmatic
+    /// callers and is reported as "unattributed" on the certificate.
+    public var attestations: [String: RuleAttestation]
+    /// Phases that MUST be reached for the run to conform. A rule of an
+    /// unreached required phase FAILS instead of going notApplicable (audit
+    /// item: "an unreached required phase must fail, not become N/A").
+    /// `assess` injects the Sutra's declared set; default = the findings phase.
+    public var requiredPhaseKinds: Set<PersonaJobKind>
 
     public init(completedPhaseKinds: Set<PersonaJobKind>,
                 standardOfProofDeclared: Bool = false,
@@ -177,7 +199,9 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
                 assertedProhibited: [String] = [],
                 attestedRuleIDs: Set<String> = [],
                 approvedDeviations: [String: String] = [:],
-                presentEvidenceKinds: Set<String> = []) {
+                presentEvidenceKinds: Set<String> = [],
+                attestations: [String: RuleAttestation] = [:],
+                requiredPhaseKinds: Set<PersonaJobKind> = []) {
         self.completedPhaseKinds = completedPhaseKinds
         self.standardOfProofDeclared = standardOfProofDeclared
         self.openItemsAcknowledged = openItemsAcknowledged
@@ -186,6 +210,8 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
         self.attestedRuleIDs = attestedRuleIDs
         self.approvedDeviations = approvedDeviations
         self.presentEvidenceKinds = presentEvidenceKinds
+        self.attestations = attestations
+        self.requiredPhaseKinds = requiredPhaseKinds
     }
 }
 
@@ -210,6 +236,14 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
     public let sutraSHA256: String
     public let evaluations: [RuleEvaluation]
     public let assessedAt: Date
+    /// The REAL run this assessment binds to (audit item 2). Optional so
+    /// pre-binding rows still decode.
+    public var runID: UUID? = nil
+    /// Hash over the run's immutable identifying state at assessment time.
+    public var runStateSHA256: String? = nil
+    /// The exact facts consulted — carried so a verifier can RERUN the
+    /// evaluators, not merely re-add the outcomes.
+    public var facts: ConformanceFacts? = nil
 
     /// Fail-closed rollup: failed beats everything; any mandatory
     /// notEvaluated/evaluatorError makes the whole assessment indeterminate.
@@ -225,6 +259,17 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
     /// Rules still awaiting an explicit evaluation (drives the attestation UI).
     public var unevaluated: [RuleEvaluation] {
         evaluations.filter { $0.outcome == .notEvaluated || $0.outcome == .evaluatorError }
+    }
+
+    /// Deviations are never hidden: a conformant run with authorized deviations
+    /// says so on its face (distinct from a clean conformant).
+    public var approvedDeviationCount: Int {
+        evaluations.filter { $0.outcome == .approvedDeviation }.count
+    }
+    public var displaySummaryLine: String {
+        status == .conformant && approvedDeviationCount > 0
+            ? "Conformant with \(approvedDeviationCount) approved deviation(s) — every departure is on the certificate."
+            : status.summaryLine
     }
 
     /// SHA-256 over the canonical encoding of all rule evaluations — what the seal signs.
@@ -295,20 +340,37 @@ public nonisolated enum ConformanceCanonical {
 extension SutraConformance {
 
     /// Level-1 assessment: exactly one outcome per typed rule, fail-closed.
-    /// Pure and deterministic — pass `now` explicitly.
+    /// Pure and deterministic — pass `now` explicitly. `runID`/`runStateSHA256`
+    /// bind the assessment to the REAL immutable run; the consulted facts are
+    /// embedded so a verifier can rerun the evaluators.
     public static func assess(facts: ConformanceFacts, against sutra: Sutra,
-                              at now: Date) -> ConformanceAssessment {
+                              at now: Date,
+                              runID: UUID? = nil,
+                              runStateSHA256: String? = nil) -> ConformanceAssessment {
+        // Required phases: the sutra's declared set; legacy sutras default to
+        // the findings phase when they have one. An unreached required phase
+        // FAILS its rules — a run that never got there cannot be conformant.
+        var effectiveFacts = facts
+        if effectiveFacts.requiredPhaseKinds.isEmpty {
+            let declared = sutra.requiredPhaseKinds
+                ?? (sutra.phases.contains { $0.kind == .findings } ? [.findings] : [])
+            effectiveFacts.requiredPhaseKinds = Set(declared)
+        }
         let rules = SutraRuleCompiler.rules(for: sutra)
-        let evaluations = rules.map { evaluate(rule: $0, facts: facts) }
+        let evaluations = rules.map { evaluate(rule: $0, facts: effectiveFacts) }
         let snapshotJSON = (try? ConformanceCanonical.data(of: sutra))
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
         let snapshotSHA = snapshotJSON.isEmpty ? ""
             : SHA256.hash(data: Data(snapshotJSON.utf8)).map { String(format: "%02x", $0) }.joined()
-        return ConformanceAssessment(sutraCitation: sutra.citation,
-                                     sutraSnapshotJSON: snapshotJSON,
-                                     sutraSHA256: snapshotSHA,
-                                     evaluations: evaluations,
-                                     assessedAt: now)
+        var assessment = ConformanceAssessment(sutraCitation: sutra.citation,
+                                               sutraSnapshotJSON: snapshotJSON,
+                                               sutraSHA256: snapshotSHA,
+                                               evaluations: evaluations,
+                                               assessedAt: now)
+        assessment.runID = runID
+        assessment.runStateSHA256 = runStateSHA256
+        assessment.facts = effectiveFacts
+        return assessment
     }
 
     /// The doctrine's two findings-phase gates the app records deterministically.
@@ -347,6 +409,13 @@ extension SutraConformance {
                                   detail: "unparseable applicability expression '\(rule.applicability ?? "")' — fail closed")
         }
         guard isApplicable else {
+            // A rule of an unreached REQUIRED phase fails — the run was obliged
+            // to get there (audit item 3: required phases never soften to N/A).
+            if let phase = rule.phaseKind, facts.requiredPhaseKinds.contains(phase) {
+                return RuleEvaluation(rule: rule, outcome: .failed,
+                                      evaluatorID: "gate.requiredPhase.v1",
+                                      detail: "required phase '\(phase.rawValue)' was not reached")
+            }
             return RuleEvaluation(rule: rule, outcome: .notApplicable,
                                   evaluatorID: "gate.applicability.v1",
                                   detail: rule.phaseKind == nil ? "condition not met" : "phase not reached in this run")
@@ -384,9 +453,13 @@ extension SutraConformance {
                                       detail: "prohibited conclusion asserted in this run")
             }
             // No default pass: the reviewer must attest the prohibition was respected.
+            if let att = facts.attestations[rule.id] {
+                return RuleEvaluation(rule: rule, outcome: .passed, evaluatorID: "human.attest.v2",
+                                      detail: Self.attributed("prohibition respected", att))
+            }
             return facts.attestedRuleIDs.contains(rule.id)
                 ? RuleEvaluation(rule: rule, outcome: .passed, evaluatorID: "human.attest.v1",
-                                 detail: "reviewer attested the prohibition was respected")
+                                 detail: "attested (unattributed) that the prohibition was respected")
                 : RuleEvaluation(rule: rule, outcome: .notEvaluated, evaluatorID: "human.attest.v1",
                                  detail: "awaiting reviewer attestation")
         case .obligation:
@@ -406,11 +479,21 @@ extension SutraConformance {
                                      detail: "open items not acknowledged")
             }
             // Everything else requires a recorded attestation — fail-closed.
+            if let att = facts.attestations[rule.id] {
+                return RuleEvaluation(rule: rule, outcome: .passed, evaluatorID: "human.attest.v2",
+                                      detail: Self.attributed("obligation met", att))
+            }
             return facts.attestedRuleIDs.contains(rule.id)
                 ? RuleEvaluation(rule: rule, outcome: .passed, evaluatorID: "human.attest.v1",
-                                 detail: "reviewer attested the obligation was met")
+                                 detail: "attested (unattributed) that the obligation was met")
                 : RuleEvaluation(rule: rule, outcome: .notEvaluated, evaluatorID: "human.attest.v1",
                                  detail: "awaiting reviewer attestation")
         }
+    }
+
+    private static func attributed(_ what: String, _ att: RuleAttestation) -> String {
+        let role = att.role.map { " (\($0))" } ?? ""
+        let when = ISO8601DateFormatter().string(from: att.at)
+        return "\(what) — attested by \(att.actor)\(role) at \(when): \(att.rationale)"
     }
 }

@@ -53,11 +53,11 @@ public final class WorkProductHandoffModel {
     public private(set) var openGapCount = 0
     /// The approver's explicit acknowledgment they've seen the open items — required to approve when any exist.
     public var acknowledgedOpenItems = false
-    /// Level-1 conformance: the reviewer's explicit attestation that the reached
-    /// phases' obligations were met and no prohibited conclusion was asserted.
-    /// Without it those rules stay `notEvaluated` and conformance is indeterminate
-    /// — nothing passes by default.
-    public var rulesAttested = false
+    /// Level-1 conformance: PER-RULE, actor-bound attestations (audit item 1 —
+    /// no blanket toggle). A rule the app cannot check deterministically stays
+    /// `notEvaluated` until the reviewer attests it individually with a
+    /// rationale; conformance is indeterminate until every rule is resolved.
+    public var ruleAttestations: [String: RuleAttestation] = [:]
     /// The constitution FROZEN when this matter's findings were first built in
     /// this session — the assessment never chases the live compiler value mid-run.
     public private(set) var frozenSutra: Sutra?
@@ -89,26 +89,38 @@ public final class WorkProductHandoffModel {
             evidence.insert("custody.record")
             if custody.allSatisfy({ $0.contentHash != nil }) { evidence.insert("custody.hash") }
         }
-        let sutra = frozenSutra ?? SutraCompiler.shared()
-        let attestable = rulesAttested
-            ? Set(SutraRuleCompiler.rules(for: sutra)
-                .filter { $0.phaseKind.map(reached.contains) ?? true }
-                .map(\.id))
-            : Set<String>()
         return ConformanceFacts(
             completedPhaseKinds: reached,
             standardOfProofDeclared: proofStandard != nil,
             openItemsAcknowledged: !hasOpenItems || acknowledgedOpenItems,
             humanDecisionsMade: decisions,
-            attestedRuleIDs: attestable,
             approvedDeviations: approvedDeviations,
-            presentEvidenceKinds: evidence)
+            presentEvidenceKinds: evidence,
+            attestations: ruleAttestations)
+    }
+
+    /// The REAL run this assessment binds to (audit item 2): the built findings
+    /// run's ID + a hash over its immutable identifying state.
+    private struct RunStateBinding: Codable {
+        let runID: UUID
+        let receiptSeal: String
+        let caseRevision: Int
+    }
+    public func runBinding() -> (runID: UUID?, runStateSHA256: String?) {
+        guard let run = built?.run else { return (nil, nil) }
+        let binding = RunStateBinding(runID: run.id,
+                                      receiptSeal: built?.receipt.seal ?? "",
+                                      caseRevision: snapshot?.revision ?? 0)
+        return (run.id, try? ConformanceCanonical.sha256(of: binding))
     }
 
     /// Live (unrecorded) assessment against the frozen constitution.
     public func currentAssessment(at now: Date = Date()) -> ConformanceAssessment {
-        SutraConformance.assess(facts: conformanceFacts(),
-                                against: frozenSutra ?? SutraCompiler.shared(), at: now)
+        let binding = runBinding()
+        return SutraConformance.assess(facts: conformanceFacts(),
+                                       against: frozenSutra ?? SutraCompiler.shared(), at: now,
+                                       runID: binding.runID,
+                                       runStateSHA256: binding.runStateSHA256)
     }
 
     /// Record + seal this run's assessment (called on approval). The seal links
@@ -190,7 +202,7 @@ public final class WorkProductHandoffModel {
             exportFormat = .pdf
             lastOutcome = nil
             lastError = nil
-            rulesAttested = false
+            ruleAttestations = [:]
             frozenSutra = nil
             storedAssessment = nil
             approvedDeviations = [:]
@@ -367,6 +379,11 @@ public struct WorkProductHandoffView: View {
     /// Deviation recording (strict mode): the rule being deviated + its justification.
     @State private var deviationRule: SutraRule?
     @State private var deviationJustification = ""
+    /// Per-rule attestation capture (strict mode): actor, role, rationale.
+    @State private var attestRule: SutraRule?
+    @State private var attestActor = ""
+    @State private var attestRole = ""
+    @State private var attestRationale = ""
     @State private var model: WorkProductHandoffModel?
     @State private var selectedWorkspace: Workspace.ID?
     @State private var workspaceList: [Workspace] = []
@@ -554,7 +571,7 @@ public struct WorkProductHandoffView: View {
         case .indeterminate: ("seal", .orange)
         }
         return VStack(alignment: .leading, spacing: 6) {
-            Label(assessment.status.summaryLine, systemImage: icon)
+            Label(assessment.displaySummaryLine, systemImage: icon)
                 .font(.caption).foregroundStyle(color)
                 .help("Sūtra conformance — every rule of the frozen constitution is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently.")
             if let stored {
@@ -562,18 +579,20 @@ public struct WorkProductHandoffView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
             if stored == nil && !assessment.unevaluated.isEmpty {
-                Toggle("I attest each obligation of the reached phases was met and no prohibited conclusion is asserted (\(assessment.unevaluated.count) rule(s))",
-                       isOn: $model.rulesAttested)
-                    .font(.caption)
-                    .guidance(GuidanceTip("Rule attestation",
-                                          what: "Rules the app cannot check deterministically require your recorded attestation. Attesting evaluates them as met under your name; leaving them unattested keeps conformance honestly indeterminate. Your attestation is recorded and sealed with the assessment when you approve.",
-                                          enabledWhen: nil))
+                Text("\(assessment.unevaluated.count) rule(s) await your individual attestation — each is recorded under your name with a rationale and sealed with the assessment. There is no attest-all shortcut.")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 DisclosureGroup("Unevaluated rules (\(assessment.unevaluated.count))") {
                     ForEach(assessment.unevaluated) { e in
                         HStack(alignment: .firstTextBaseline) {
                             Text("\(e.rule.id) — \(e.rule.text)").font(.caption2).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 8)
+                            Button("Attest…") {
+                                attestRule = e.rule
+                                attestRationale = ""
+                            }
+                            .font(.caption2).buttonStyle(.borderless)
                             Button("Record deviation…") {
                                 deviationRule = e.rule
                                 deviationJustification = ""
@@ -583,6 +602,27 @@ public struct WorkProductHandoffView: View {
                     }
                 }
                 .font(.caption)
+                .alert("Attest rule", isPresented: Binding(
+                    get: { attestRule != nil },
+                    set: { if !$0 { attestRule = nil } })) {
+                    TextField("Your name (required)", text: $attestActor)
+                    TextField("Role (optional)", text: $attestRole)
+                    TextField("Rationale — how you verified this rule was met", text: $attestRationale)
+                    Button("Attest") {
+                        let actor = attestActor.trimmingCharacters(in: .whitespaces)
+                        let why = attestRationale.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let rule = attestRule, !actor.isEmpty, !why.isEmpty {
+                            model.ruleAttestations[rule.id] = RuleAttestation(
+                                actor: actor,
+                                role: attestRole.isEmpty ? nil : attestRole,
+                                rationale: why, at: Date())
+                        }
+                        attestRule = nil
+                    }
+                    Button("Cancel", role: .cancel) { attestRule = nil }
+                } message: {
+                    Text("Your name, role, rationale and timestamp are recorded on this rule's evaluation and sealed with the assessment when you approve.")
+                }
                 .alert("Record authorized deviation", isPresented: Binding(
                     get: { deviationRule != nil },
                     set: { if !$0 { deviationRule = nil } })) {

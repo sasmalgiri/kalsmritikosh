@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 108
+    public static let latestVersion = 109
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -604,7 +604,8 @@ public enum SchemaMigrations {
         (105, v105),
         (106, v106),
         (107, v107),
-        (108, v108)
+        (108, v108),
+        (109, v109)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6045,5 +6046,18 @@ public enum SchemaMigrations {
         CHECK(decision IN ('current','updateRequired','notApplicable'))
     );
     CREATE INDEX idx_protocol_review_subject ON protocol_review_records(subject_id, reviewed_at);
+    """
+
+    // MARK: - v109 — assessments bind to the real run and carry their facts
+    //
+    // Audit 2026-08-25 items 1/2/5: run_id + run_state_sha256 bind each
+    // assessment to the immutable findings run it judged; facts_json carries
+    // the exact ConformanceFacts consulted (incl. actor-bound per-rule
+    // attestations) so verification bundles can RERUN the evaluators instead
+    // of merely re-adding recorded outcomes.
+    private static let v109: String = """
+    ALTER TABLE conformance_assessments ADD COLUMN run_id TEXT;
+    ALTER TABLE conformance_assessments ADD COLUMN run_state_sha256 TEXT;
+    ALTER TABLE conformance_assessments ADD COLUMN facts_json TEXT;
     """
 }

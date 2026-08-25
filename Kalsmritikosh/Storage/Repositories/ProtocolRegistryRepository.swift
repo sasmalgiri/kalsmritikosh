@@ -138,6 +138,10 @@ public nonisolated struct ProtocolReviewRecord: Sendable, Identifiable {
 public nonisolated enum ProtocolRegistryError: Error, Equatable {
     case notFound(String)
     case revoked(String)      // a revoked pack can never activate again
+    /// Trust-on-first-use: this publisher already signed with a different key —
+    /// a new key for a known publisher is refused until the old packs are
+    /// revoked (key rotation is an explicit act, never silent).
+    case publisherKeyMismatch(publisher: String, knownKeyID: String, offeredKeyID: String)
 }
 
 public actor ProtocolRegistryRepository {
@@ -154,6 +158,18 @@ public actor ProtocolRegistryRepository {
     @discardableResult
     public func importPack(_ pack: SignedProtocolPack, at now: Date) async throws -> RegisteredProtocol {
         let id = "\(pack.envelope.sutraID)@v\(pack.envelope.sutraVersion)"
+        let offeredKeyID = ProtocolPacks.signerKeyID(of: pack)
+        // TOFU pinning (audit item 4): the first key seen for a publisher is
+        // pinned; a different key for the same publisher refuses until the
+        // prior packs are explicitly revoked.
+        let known = try await database.query("""
+        SELECT signer_key_id FROM protocol_registry
+        WHERE publisher = ? AND signer_key_id != ? AND status != 'revoked' LIMIT 1;
+        """, [.text(pack.envelope.publisher), .text(offeredKeyID)])
+        if let mismatch = known.first?.string(0) {
+            throw ProtocolRegistryError.publisherKeyMismatch(
+                publisher: pack.envelope.publisher, knownKeyID: mismatch, offeredKeyID: offeredKeyID)
+        }
         let packJSON = String(data: try ConformanceCanonical.data(of: pack), encoding: .utf8) ?? "{}"
         try await database.exec("""
         INSERT INTO protocol_registry
@@ -169,7 +185,7 @@ public actor ProtocolRegistryRepository {
             .text(packJSON),
             .text(pack.envelope.publisher),
             .text(pack.envelope.assurance),
-            .text(ProtocolPacks.signerKeyID(of: pack)),
+            .text(offeredKeyID),
             .date(now)
         ])
         guard let row = try await find(id: id) else { throw ProtocolRegistryError.notFound(id) }

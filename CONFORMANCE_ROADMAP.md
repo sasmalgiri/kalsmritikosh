@@ -125,20 +125,35 @@ Fixed in the audit-response pass:
   unsealed row.
 - ✅ Website claim scoped to what is true (approved findings runs, fail-closed).
 
-Known structural remainder (the honest gap between prototype and moat —
-in priority order, per the audit):
-1. Per-rule attestation/evidence references replacing the single "attest all"
-   toggle (actor, role, timestamp, rationale per rule).
-2. Assessments bound atomically to the real findings/workflow run ID +
-   run-state hash, recorded in the same transaction as approval.
-3. Required-phase policy: an unreached REQUIRED phase fails, not N/A.
-4. Trusted-key management: pinned developer key, org allowlist/TOFU, rotation.
-5. Bundles export facts + evidence manifests so the external verifier reruns
-   evaluators (true replay, not outcome-consistency).
-6. Custom protocol selection wired into run creation (today only the built-in
+Structural items — status after the v109 pass (all suite-verified):
+1. ✅ Per-rule, actor-bound attestations (who/role/rationale/timestamp on each
+   evaluation, `human.attest.v2`); the blanket "attest all" toggle is GONE from
+   the UI. Bare programmatic `attestedRuleIDs` still exists for tests and is
+   reported as "unattributed" on the certificate.
+2. ✅ Run binding: assessments carry the real findings run ID + a run-state
+   hash (run ID, receipt seal, case revision), persisted (v109 columns) and
+   signed into the envelope. ⏳ Same-transaction atomicity with approval is
+   still pending (recording happens immediately after, failures surface loudly).
+3. ✅ Required phases: `Sutra.requiredPhaseKinds` (legacy default: findings);
+   an unreached required phase FAILS its rules (`gate.requiredPhase.v1`) —
+   attesting everything cannot rescue it (tested).
+4. ✅ TOFU key pinning: a known publisher presenting a new key is refused until
+   prior packs are explicitly revoked (rotation is an act, never silent);
+   in-app bundle verify + kalverify accept a trusted signer key ID and label
+   unpinned verification "key-consistent only". ⏳ A pinned developer key
+   shipped in the app bundle is still pending.
+5. ✅ True replay: bundles carry `evaluation-facts.json`; the in-app verifier
+   RERUNS every evaluator over the recorded facts and requires exact
+   reproduction — a legitimately signed but wrongly computed evaluation is
+   caught (tested). ⏳ The standalone CLI still does outcome-consistency only
+   (portable evaluators are the remaining piece).
+6. ⏳ Custom protocol selection at run creation (today only the built-in
    doctrine id resolves for real runs).
-7. `conformantWithApprovedDeviation` as a distinct rollup status.
+7. ✅ Deviations distinct on the wire: `approvedDeviationCount` signed in the
+   envelope; the readout says "Conformant with N approved deviation(s)".
 
-Until 1–5 land, the accurate claim is: tamper-evident, signed, per-rule
-ASSESSED conformance with independent outcome verification — not yet fully
-independently REPLAYED conformance.
+Accurate current claim: tamper-evident, signed, per-rule assessed conformance
+with actor-bound attestations, run binding, required-phase enforcement, TOFU
+key pinning, and in-app evaluator replay. The standalone-CLI evaluator rerun,
+approval-transaction atomicity, a shipped pinned developer key, and custom-
+protocol run selection remain before "fully independently replayed" is claimed.

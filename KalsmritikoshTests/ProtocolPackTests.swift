@@ -187,6 +187,32 @@ struct ProtocolRegistryTests {
         #expect(try await repo.activeSutra(id: sutra.id) == nil)
     }
 
+    /// TOFU pinning (audit item 4): a known publisher presenting a NEW key is
+    /// refused until the prior packs are explicitly revoked.
+    @Test("A new key for a known publisher refuses; rotation requires revocation")
+    func tofuPinning() async throws {
+        let repo = try await makeRig()
+        _ = try await repo.importPack(try verifiedPack(of: sutra), at: now)
+
+        // Same publisher, DIFFERENT key → refused.
+        let rogueKey = P256.Signing.PrivateKey()
+        let amended = sutra.amended(on: "2026-08-26", summary: "v2")
+        let rogueData = try ProtocolPacks.export(sutra: amended, publisher: "Test Org",
+                                                 assurance: "organization-approved", key: rogueKey, at: now)
+        let roguePack = try ProtocolPacks.verify(rogueData).pack
+        await #expect(throws: ProtocolRegistryError.publisherKeyMismatch(
+            publisher: "Test Org",
+            knownKeyID: ConformanceSigningKey.keyID(for: key),
+            offeredKeyID: ConformanceSigningKey.keyID(for: rogueKey))) {
+            _ = try await repo.importPack(roguePack, at: now)
+        }
+
+        // Explicit rotation: revoke the pinned pack, then the new key imports.
+        try await repo.revoke(id: "\(sutra.id)@v\(sutra.version)", reason: "key rotation", at: now)
+        let rotated = try await repo.importPack(roguePack, at: now)
+        #expect(rotated.signerKeyID == ConformanceSigningKey.keyID(for: rogueKey))
+    }
+
     @Test("Governed review records round-trip with a verifiable signature")
     func governedReviews() async throws {
         let repo = try await makeRig()

@@ -196,6 +196,59 @@ struct ConformanceLevel1Tests {
         #expect(SutraConformance.assess(facts: noDecision, against: sutra, at: now).status == .notConformant)
     }
 
+    /// Audit item 3: a run that never reached a REQUIRED phase fails — its
+    /// rules never soften to notApplicable.
+    @Test("An unreached required phase fails the run")
+    func requiredPhaseFails() {
+        // The built-in doctrine defaults to requiring the findings phase.
+        let facts = ConformanceFacts(completedPhaseKinds: [.caseIntake],
+                                     humanDecisionsMade: [.caseIntake],
+                                     attestedRuleIDs: Set(SutraRuleCompiler.rules(for: sutra).map(\.id)))
+        let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
+        #expect(a.status == .notConformant, "attesting everything cannot rescue an unreached required phase")
+        #expect(a.evaluations.contains {
+            $0.outcome == .failed && $0.evaluatorID == "gate.requiredPhase.v1"
+        })
+    }
+
+    /// Audit item 1: attestations are actor-bound — who, role, when, why —
+    /// and the attribution travels on the evaluation detail.
+    @Test("Per-rule attestations carry actor, role, timestamp and rationale")
+    func attributedAttestation() {
+        let rule = SutraRuleCompiler.rules(for: sutra).first { $0.phaseKind == .findings && $0.kind == .prohibition }!
+        let att = RuleAttestation(actor: "A. Reviewer", role: "counsel",
+                                  rationale: "checked the report against the declared standard",
+                                  at: now)
+        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+                                     attestations: [rule.id: att])
+        let e = SutraConformance.evaluate(rule: rule, facts: facts)
+        #expect(e.outcome == .passed)
+        #expect(e.evaluatorID == "human.attest.v2")
+        #expect(e.detail.contains("A. Reviewer") && e.detail.contains("counsel")
+                && e.detail.contains("checked the report"))
+    }
+
+    /// Run binding (audit item 2): the assessment and the signed envelope carry
+    /// the real run ID and run-state hash.
+    @Test("Assessments bind to the real run and the seal carries it")
+    func runBinding() throws {
+        let attested = Set(SutraRuleCompiler.rules(for: sutra)
+            .filter { $0.phaseKind == .findings || $0.phaseKind == nil }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+                                     standardOfProofDeclared: true, openItemsAcknowledged: true,
+                                     humanDecisionsMade: [.findings], attestedRuleIDs: attested)
+        let runID = UUID()
+        let a = SutraConformance.assess(facts: facts, against: sutra, at: now,
+                                        runID: runID, runStateSHA256: "cafe01")
+        #expect(a.runID == runID)
+        #expect(a.facts != nil, "the consulted facts are embedded for replay")
+        let sealed = try ConformanceSeal.seal(assessment: a, build: "t",
+                                              key: CryptoKit.P256.Signing.PrivateKey())
+        #expect(sealed.envelope.runID == runID.uuidString)
+        #expect(sealed.envelope.runStateSHA256 == "cafe01")
+        #expect(ConformanceSeal.verify(sealed))
+    }
+
     /// A justified deviation is visible (`approvedDeviation`) and does not block conformance.
     @Test("Approved deviations stay visible and count as resolved")
     func deviations() {
@@ -283,7 +336,10 @@ struct ConformanceLevel2Tests {
             receiptSeal: sealed.envelope.receiptSeal,
             databaseSchemaVersion: sealed.envelope.databaseSchemaVersion,
             evidenceManifestSHA256: sealed.envelope.evidenceManifestSHA256,
-            signerAssurance: sealed.envelope.signerAssurance)
+            signerAssurance: sealed.envelope.signerAssurance,
+            runID: sealed.envelope.runID,
+            runStateSHA256: sealed.envelope.runStateSHA256,
+            approvedDeviationCount: sealed.envelope.approvedDeviationCount)
         let forged = SealedConformance(envelope: forgedEnvelope,
                                        signatureHex: sealed.signatureHex,
                                        publicKeyHex: sealed.publicKeyHex)
