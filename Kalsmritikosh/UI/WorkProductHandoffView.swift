@@ -66,6 +66,9 @@ public final class WorkProductHandoffModel {
     /// justification. Visible on the certificate, never hidden.
     public var approvedDeviations: [String: String] = [:]
 
+    /// Surface an export failure raised by the view layer (save panels live there).
+    public func noteExportFailure(_ message: String) { lastError = message }
+
     /// The recorded facts the assessor consults — derived in the model from
     /// service-backed state, not assembled by the view. Multi-phase: findings
     /// always; chain-of-custody when the case holds custody entries; closure
@@ -574,16 +577,25 @@ public struct WorkProductHandoffView: View {
                 }
             }
             if assessment.status != .indeterminate {
-                Button {
-                    var text = assessment.certificate
-                    if let sealed = stored?.seal ?? (try? ConformanceSeal.seal(assessment: assessment)) {
-                        text += "\n" + ConformanceSeal.markdown(for: sealed)
+                HStack(spacing: 10) {
+                    Button {
+                        var text = assessment.certificate
+                        if let sealed = stored?.seal ?? (try? ConformanceSeal.seal(assessment: assessment)) {
+                            text += "\n" + ConformanceSeal.markdown(for: sealed)
+                        }
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    } label: { Label("Copy sealed conformance certificate", systemImage: "signature") }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .help("Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app.")
+                    if let stored, stored.seal != nil {
+                        Button {
+                            exportBundle(stored, title: snap.title)
+                        } label: { Label("Export verification bundle…", systemImage: "shippingbox") }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .help("A folder anyone can verify without Kalsmritikosh — integrity, authenticity and conformance replay (spec: BUNDLE_FORMAT.md; CLI: kalverify).")
                     }
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(text, forType: .string)
-                } label: { Label("Copy sealed conformance certificate", systemImage: "signature") }
-                .buttonStyle(.bordered).controlSize(.small)
-                .help("Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app.")
+                }
             }
         }
     }
@@ -607,6 +619,17 @@ public struct WorkProductHandoffView: View {
                 .buttonStyle(.borderedProminent).disabled(model.busy)
             }
         }
+    }
+
+    /// Export a sealed assessment as a verification-bundle folder (1.0.x-C).
+    private func exportBundle(_ stored: StoredConformanceAssessment, title: String) {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(title) — conformance bundle"
+        panel.canCreateDirectories = true
+        panel.prompt = "Export Bundle"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try ConformanceBundle.write(stored: stored, to: url) }
+        catch { model?.noteExportFailure("Verification bundle export failed: \(error)") }
     }
 
     /// Present a save panel and, on confirmation, write the export to the chosen location.

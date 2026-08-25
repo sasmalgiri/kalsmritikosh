@@ -8,7 +8,7 @@ Assurance levels and the maximum permitted claim:
 |---|---|---|
 | 1 | One outcome per typed rule, fail-closed, Sutra frozen by SHA-256 | **Core shipped** (`Sutra/SutraRules.swift`); remainder below |
 | 2 | ECDSA P-256 signed seal; recomputed-hash forgery fails signature | **Core shipped** (`Core/Security/ConformanceSeal.swift`); remainder below |
-| 3 | Standalone open verifier: integrity / authenticity / conformance replay | Planned 1.0.x-C |
+| 3 | Standalone open verifier: integrity / authenticity / conformance replay | **Shipped** — `ConformanceBundle` export, `verifier/kalverify.swift` CLI, spec in `docs/verification/BUNDLE_FORMAT.md`; cross-verified both ways (CLI accepts app bundles; CLI rejects tampering; app-side tamper matrix incl. recomputed-hash forgery) |
 | 4 | External-standard compliance | Never claimed unilaterally — assurance-labelled only |
 
 ## Levels 1–2 remainder — status after v107 (2026-08-25)
@@ -76,7 +76,12 @@ Deliberately out of scope here (by design, not omission):
 
 ## Sequence
 
-- **1.0.x-C — open verifier**: portable JSON rule format (no Swift/JS/AI execution), published canonicalization spec + test vectors + tampered fixtures, small OSS CLI, separate integrity/authenticity/replay verdicts.
+- **1.0.x-C — open verifier**: ✅ SHIPPED (2026-08-25). Bundle format v1
+  (canonical bytes on disk, three separated verdicts), in-app export from the
+  strict readout, standalone CLI (Foundation + CryptoKit only, no app
+  dependency), published spec. Acceptance tests 5/6/7 verified: editing any
+  file breaks integrity; a recomputed-hash forgery passes integrity but fails
+  the signature; the verifier recomputes the same status the app sealed.
 - **1.1 — offline protocol packs + governance**: signed import, authority manifests, governed review records (reviewer, source hash, diff, affected rules, signature), supersession/revocation.
 - **2.0 — custom protocol studio**: AI drafts only; typed rule builder; lifecycle Draft → Structure → Compile → Test → Expert review → Org approval → Sign → Activate → Supersede; assurance labels.
 - **Later — external assurance**: expert crosswalks, published mappings, partnerships; certification only where a body grants it.
