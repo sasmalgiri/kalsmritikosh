@@ -3,9 +3,13 @@
 //  Kalsmritikosh
 //
 //  The other half of verifiable receipts: open a receipt .json exported by
-//  Kalsmritikosh (on any machine) and re-check its hash chain. Shows GENUINE
-//  when every claim, passage, and the order are intact, or TAMPERED the moment
-//  anything was altered. Fully offline; the guarantee needs no server.
+//  Kalsmritikosh (on any machine) and re-check its hash chain. Fully offline.
+//
+//  Honest scope (conformance roadmap 1.0.x-B): the chain is UNKEYED SHA-256, so
+//  a pass proves internal consistency — the entries match the seal — NOT origin
+//  or authorship: anyone who edits a receipt can recompute a valid chain. The
+//  wording below claims exactly that and no more. Signed conformance seals
+//  (ConformanceSeal, ECDSA P-256) carry the authenticity claim instead.
 //
 
 import SwiftUI
@@ -27,7 +31,7 @@ public struct ReceiptVerifierView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Verify a receipt")
                 .font(.title3.bold())
-            Text("Open a receipt \u{2019}.json\u{2019} exported by Kalsmritikosh — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether it\u{2019}s intact or was altered. No internet needed.")
+            Text("Open a receipt \u{2019}.json\u{2019} exported by Kalsmritikosh — from this Mac or anyone else\u{2019}s. We recompute its hash chain and tell you whether the entries are internally consistent with the seal. This detects accidental corruption and casual edits; it does not prove who produced the receipt. No internet needed.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -65,7 +69,8 @@ public struct ReceiptVerifierView: View {
                 .font(.system(size: 30))
                 .foregroundStyle(isValid ? .green : .red)
             VStack(alignment: .leading, spacing: 2) {
-                Text(isValid ? "GENUINE — intact and unaltered" : "TAMPERED — the chain does not verify")
+                Text(isValid ? "Integrity check passed — hash chain is internally consistent"
+                             : "Integrity check FAILED — the chain does not match the seal")
                     .font(.headline)
                     .foregroundStyle(isValid ? .green : .red)
                 Text(receipt.title).font(.caption).foregroundStyle(.secondary)

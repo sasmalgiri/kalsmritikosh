@@ -45,6 +45,11 @@ public final class WorkProductHandoffModel {
     public private(set) var openGapCount = 0
     /// The approver's explicit acknowledgment they've seen the open items — required to approve when any exist.
     public var acknowledgedOpenItems = false
+    /// Level-1 conformance: the reviewer's explicit attestation that the reached
+    /// phases' obligations were met and no prohibited conclusion was asserted.
+    /// Without it those rules stay `notEvaluated` and conformance is indeterminate
+    /// — nothing passes by default.
+    public var rulesAttested = false
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
@@ -365,19 +370,62 @@ public struct WorkProductHandoffView: View {
         }
     }
 
-    /// Sūtra conformance (step 4) — proves the run satisfied its constitution:
-    /// standard of proof declared, open items surfaced, approval made.
+    /// Level-1 conformance (typed rules, fail-closed): one outcome per rule of
+    /// the reached phases. Rules without a deterministic gate stay `notEvaluated`
+    /// (indeterminate — never green) until the reviewer explicitly attests them.
     private func conformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
-        let record = RunRecord(
-            completedPhaseKinds: [.findings],
+        @Bindable var model = model
+        let sutra = SutraCompiler.shared()
+        let facts = conformanceFacts(model, snap, sutra: sutra)
+        let assessment = SutraConformance.assess(facts: facts, against: sutra, at: Date())
+        let (icon, color): (String, Color) = switch assessment.status {
+        case .conformant:    ("checkmark.seal.fill", .green)
+        case .notConformant: ("xmark.seal.fill", .red)
+        case .indeterminate: ("seal", .orange)
+        }
+        return VStack(alignment: .leading, spacing: 6) {
+            Label(assessment.status.summaryLine, systemImage: icon)
+                .font(.caption).foregroundStyle(color)
+                .help("Sūtra conformance — every rule of the reached phases is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently.")
+            if !assessment.unevaluated.isEmpty {
+                Toggle("I attest each obligation of the reached phases was met and no prohibited conclusion is asserted (\(assessment.unevaluated.count) rule(s))",
+                       isOn: $model.rulesAttested)
+                    .font(.caption)
+                    .guidance(GuidanceTip("Rule attestation",
+                                          what: "Rules the app cannot check deterministically require your recorded attestation. Attesting evaluates them as met under your name; leaving them unattested keeps conformance honestly indeterminate.",
+                                          enabledWhen: nil))
+            }
+            if assessment.status != .indeterminate {
+                Button {
+                    var text = assessment.certificate
+                    if let sealed = try? ConformanceSeal.seal(assessment: assessment) {
+                        text += "\n" + ConformanceSeal.markdown(for: sealed)
+                    }
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                } label: { Label("Copy sealed conformance certificate", systemImage: "signature") }
+                .buttonStyle(.bordered).controlSize(.small)
+                .help("Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app.")
+            }
+        }
+    }
+
+    /// The recorded facts the assessor may consult — attestation covers exactly
+    /// the attestable (non-gated) rules of the reached phases, nothing more.
+    private func conformanceFacts(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot,
+                                  sutra: Sutra) -> ConformanceFacts {
+        let reached: Set<PersonaJobKind> = [.findings]
+        let attestable = model.rulesAttested
+            ? Set(SutraRuleCompiler.rules(for: sutra)
+                .filter { reached.contains($0.phaseKind) }
+                .map(\.id))
+            : []
+        return ConformanceFacts(
+            completedPhaseKinds: reached,
             standardOfProofDeclared: model.proofStandard != nil,
             openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
-            humanDecisionsMade: snap.isApproved ? [.findings] : [])
-        let report = SutraConformance.verify(run: record, against: SutraCompiler.shared())
-        return Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
-            .font(.caption)
-            .foregroundStyle(report.isConformant ? Color.green : Color.orange)
-            .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
+            humanDecisionsMade: snap.isApproved ? [.findings] : [],
+            attestedRuleIDs: attestable)
     }
 
     @ViewBuilder
