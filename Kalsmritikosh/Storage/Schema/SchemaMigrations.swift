@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 107
+    public static let latestVersion = 108
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -603,7 +603,8 @@ public enum SchemaMigrations {
         (104, v104),
         (105, v105),
         (106, v106),
-        (107, v107)
+        (107, v107),
+        (108, v108)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5992,5 +5993,57 @@ public enum SchemaMigrations {
         CHECK(length(trim(sutra_sha256)) = 64)
     );
     CREATE INDEX idx_conformance_assessments_case ON conformance_assessments(case_id, created_at);
+    """
+
+    // MARK: - v108 — signed offline protocol packs + governed review records
+    //
+    // Roadmap 1.1. protocol_registry: every imported, signature-verified pack
+    // with its full signed JSON; exactly one row per (sutra, version); status
+    // moves imported → active → superseded/revoked — activation supersedes the
+    // previous active version of the same sutra, revocation is recorded with a
+    // reason, and NOTHING here ever mutates a frozen run (assessments carry
+    // their own snapshot). protocol_review_records: governed "reviewed as of"
+    // records for the assurance board — reviewer, source hash, diff, affected
+    // rules, decision, optional P-256-signed record. Both append-only by
+    // convention.
+    private static let v108: String = """
+    CREATE TABLE protocol_registry (
+        id                TEXT PRIMARY KEY NOT NULL,   -- "<sutra_id>@v<version>"
+        sutra_id          TEXT NOT NULL,
+        version           INTEGER NOT NULL,
+        sutra_sha256      TEXT NOT NULL,
+        pack_json         TEXT NOT NULL,               -- full SignedProtocolPack, canonical
+        publisher         TEXT NOT NULL,
+        assurance         TEXT NOT NULL,
+        signer_key_id     TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'imported',
+        imported_at       REAL NOT NULL,
+        activated_at      REAL,
+        revoked_at        REAL,
+        revocation_reason TEXT,
+        CHECK(status IN ('imported','active','superseded','revoked')),
+        CHECK(version >= 1),
+        CHECK(length(trim(sutra_sha256)) = 64)
+    );
+    CREATE UNIQUE INDEX idx_protocol_registry_identity ON protocol_registry(sutra_id, version);
+    CREATE INDEX idx_protocol_registry_status ON protocol_registry(sutra_id, status);
+
+    CREATE TABLE protocol_review_records (
+        id               TEXT PRIMARY KEY NOT NULL,
+        subject_id       TEXT NOT NULL,     -- ComplianceBoard SOP id or protocol_registry id
+        reviewer         TEXT NOT NULL,
+        role             TEXT,
+        source_note      TEXT,              -- the official source or imported snapshot consulted
+        source_sha256    TEXT,
+        diff_summary     TEXT,
+        affected_rules   TEXT,              -- comma-joined rule IDs
+        decision         TEXT NOT NULL,     -- current | updateRequired | notApplicable
+        notes            TEXT,
+        record_seal_json TEXT,              -- optional P-256 signed canonical record
+        reviewed_at      REAL NOT NULL,
+        CHECK(length(trim(reviewer)) > 0),
+        CHECK(decision IN ('current','updateRequired','notApplicable'))
+    );
+    CREATE INDEX idx_protocol_review_subject ON protocol_review_records(subject_id, reviewed_at);
     """
 }

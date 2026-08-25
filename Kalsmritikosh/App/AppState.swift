@@ -633,6 +633,9 @@ public final class AppState {
     /// Conformance roadmap 1.0.x-A (v107) — recorded per-rule assessments with
     /// their frozen Sutra snapshots and signed seals, one append-only row per run.
     public private(set) var conformanceAssessments: ConformanceAssessmentRepository?
+    /// Conformance roadmap 1.1 (v108) — signed offline protocol packs and the
+    /// governed review records behind the assurance board.
+    public private(set) var protocolRegistry: ProtocolRegistryRepository?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -2206,6 +2209,8 @@ public final class AppState {
             }
             // Conformance roadmap 1.0.x-A — run-bound assessment persistence (v107).
             self.conformanceAssessments = ConformanceAssessmentRepository(database: db)
+            // Conformance roadmap 1.1 — offline protocol packs + governed reviews (v108).
+            self.protocolRegistry = ProtocolRegistryRepository(database: db)
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the

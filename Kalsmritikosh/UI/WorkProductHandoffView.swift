@@ -31,6 +31,9 @@ public final class WorkProductHandoffModel {
     /// The v104 HMAC audit chain — sealed and bound into the conformance seal
     /// at approval so the certificate attests over a specific ledger state.
     private let auditChain: AuditChainService?
+    /// The protocol registry (v108) — new runs freeze the ACTIVE imported
+    /// constitution when one exists; the built-in doctrine is the fallback.
+    private let protocols: ProtocolRegistryRepository?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -157,11 +160,13 @@ public final class WorkProductHandoffModel {
                 closure: InvestigationClosureService,
                 contradictionGap: InvestigationContradictionGapService? = nil,
                 assessments: ConformanceAssessmentRepository? = nil,
-                auditChain: AuditChainService? = nil) {
+                auditChain: AuditChainService? = nil,
+                protocols: ProtocolRegistryRepository? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
         self.assessments = assessments
         self.auditChain = auditChain
+        self.protocols = protocols
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -211,8 +216,14 @@ public final class WorkProductHandoffModel {
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let access = exportAccess(workspaceID: snap.workspaceID)
         // Run-start freeze: the constitution this run will be assessed against is
-        // fixed the moment findings are first built — never the live compiler value.
-        if frozenSutra == nil { frozenSutra = SutraCompiler.shared() }
+        // fixed the moment findings are first built — never a live value. The
+        // ACTIVE imported protocol (signed offline pack, v108) wins when one
+        // exists; the built-in doctrine is the fallback.
+        if frozenSutra == nil {
+            var resolved: Sutra? = nil
+            if let protocols { resolved = try? await protocols.activeSutra(id: SutraCompiler.shared().id) }
+            frozenSutra = resolved ?? SutraCompiler.shared()
+        }
         await perform {
             let f = try await self.findings.buildFindings(caseID: snap.caseID, access: access, actor: actor, at: date)
             self.built = f
@@ -708,7 +719,8 @@ public struct WorkProductHandoffView: View {
         let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure,
                                                  contradictionGap: appState.investigationContradictionGap,
                                                  assessments: appState.conformanceAssessments,
-                                                 auditChain: appState.auditChain)
+                                                 auditChain: appState.auditChain,
+                                                 protocols: appState.protocolRegistry)
         await m.load(caseID: id)
         model = m
     }

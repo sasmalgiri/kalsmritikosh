@@ -82,7 +82,17 @@ Deliberately out of scope here (by design, not omission):
   dependency), published spec. Acceptance tests 5/6/7 verified: editing any
   file breaks integrity; a recomputed-hash forgery passes integrity but fails
   the signature; the verifier recomputes the same status the app sealed.
-- **1.1 — offline protocol packs + governance**: signed import, authority manifests, governed review records (reviewer, source hash, diff, affected rules, signature), supersession/revocation.
+- **1.1 — offline protocol packs + governance**: ✅ SHIPPED (2026-08-25).
+  Signed `.kalprotocol` packs (P-256; a pack activates ONLY when signature +
+  hash + schema-compile all pass — acceptance test 8); registry with
+  imported → active → superseded / revoked lifecycle (v108); new runs freeze
+  the ACTIVE imported constitution, built-in doctrine as fallback; activation
+  never mutates frozen runs (acceptance test 9); full offline update loop
+  export → verify → import → activate tested (acceptance test 11); the
+  Compliance Board gained pack import/activate/revoke and GOVERNED review
+  records (reviewer, role, source, decision, notes — signed with the
+  installation key, "reviewed as of date" not "current"). Zero network
+  retained throughout (test 12). Distribution: Files/AirDrop/USB/MDM.
 - **2.0 — custom protocol studio**: AI drafts only; typed rule builder; lifecycle Draft → Structure → Compile → Test → Expert review → Org approval → Sign → Activate → Supersede; assurance labels.
 - **Later — external assurance**: expert crosswalks, published mappings, partnerships; certification only where a body grants it.
 
