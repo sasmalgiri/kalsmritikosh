@@ -16,6 +16,18 @@
 import SwiftUI
 import AppKit
 
+/// Approval+assessment atomicity by recorded compensation: when the assessment
+/// cannot be persisted, the approval is withdrawn and this error surfaces.
+public nonisolated enum ConformanceGateError: Error, CustomStringConvertible {
+    case assessmentNotRecorded(String)
+    public var description: String {
+        switch self {
+        case .assessmentNotRecorded(let reason):
+            return "Approval withdrawn: \(reason)"
+        }
+    }
+}
+
 // MARK: - Model (testable, @Observable)
 
 @MainActor
@@ -169,8 +181,8 @@ public final class WorkProductHandoffModel {
     /// new revision — prior assessments are never rewritten. Returns a WARNING
     /// string on any failure so the approval outcome carries it (audit item 2:
     /// the success path must never erase a recording/sealing failure).
-    private func recordAssessment(caseID: UUID, at date: Date) async -> String? {
-        guard let repo = assessments else { return nil }
+    private func recordAssessment(caseID: UUID, at date: Date) async -> (recorded: Bool, warning: String?) {
+        guard let repo = assessments else { return (true, nil) }
         let assessment = currentAssessment(at: date)
         let nextRevision = ((try? await repo.latest(caseID: caseID))?.runRevision ?? 0) + 1
         var linkage = ConformanceSealLinkage(caseID: caseID,
@@ -195,8 +207,8 @@ public final class WorkProductHandoffModel {
         do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
         catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
-        catch { warning = "conformance assessment could NOT be recorded: \(error)" }
-        return warning
+        catch { return (false, "\(error)") }   // caller compensates: approval is withdrawn
+        return (true, warning)
     }
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
@@ -332,10 +344,23 @@ public final class WorkProductHandoffModel {
                                                         rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
             // Strict conformance: record + seal the per-rule assessment of this
-            // approved run against the frozen constitution. A recording/sealing
-            // failure is NEVER erased by the success path — it rides the outcome.
+            // approved run against the frozen constitution.
             if !FeatureFlags.classicConformanceValue() {
-                if let warning = await self.recordAssessment(caseID: snap.caseID, at: date) {
+                let result = await self.recordAssessment(caseID: snap.caseID, at: date)
+                if !result.recorded {
+                    // COMPENSATION (approval+assessment atomicity): an approval
+                    // must never stand without its recorded assessment. The
+                    // approval is WITHDRAWN as a recorded decision — both the
+                    // approval and its reversal stay in the genealogy — and the
+                    // failure surfaces as the error, never as success.
+                    let reason = "Automatic withdrawal — conformance assessment could not be recorded: \(result.warning ?? "unknown error")"
+                    _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f,
+                                                                 rationale: reason, actor: actor, at: date)
+                    await self.refresh()
+                    throw ConformanceGateError.assessmentNotRecorded(reason)
+                }
+                // A sealing failure with the row recorded rides the outcome.
+                if let warning = result.warning {
                     return "Findings approved under \(std.label) — ⚠️ \(warning)"
                 }
             }

@@ -207,6 +207,18 @@ export the release signing key's fingerprint and pin it at build time).
 CI now runs the standalone CLI against the production-shaped fixture plus the
 edited-file, facts-downgrade and wrong-key attacks on every push.
 
-Remaining (unchanged, by nature): same-transaction approval atomicity
-(service redesign), release-time pinned developer key (owner act),
-deterministic prohibited-conclusion detection, external assurance.
+Approval+assessment atomicity: ✅ CLOSED via RECORDED COMPENSATION
+(2026-08-26). When the strict-mode assessment cannot be persisted after
+approveFindings, the approval is automatically WITHDRAWN as a recorded
+decision — both the approval and its reversal stay in the genealogy, the
+failure surfaces as the error, and an approval can never stand without its
+recorded assessment (tested: compensationWithdrawsApproval). A literal
+single-SQL-transaction composition remains an optional refinement — the
+codebase documents multi-await BEGIN/COMMIT as unsafe, and compensation
+delivers the same invariant with full auditability.
+
+Remaining (by nature, not omission): release-time pinned developer key
+(owner act — Compliance Board › Copy my signer fingerprint →
+PinnedDeveloperKey.keyID), deterministic prohibited-conclusion detection
+(content-analysis engine; attestation-based today), external assurance
+(never unilateral).
