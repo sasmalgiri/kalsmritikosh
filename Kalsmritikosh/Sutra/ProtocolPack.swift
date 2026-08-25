@@ -124,8 +124,14 @@ public nonisolated enum ProtocolPacks {
         guard sutra.id == pack.envelope.sutraID, sutra.version == pack.envelope.sutraVersion else {
             throw ProtocolPackError.schemaDoesNotCompile("envelope identity does not match the snapshot")
         }
+        let rules = SutraRuleCompiler.rules(for: sutra)
+        // An empty protocol would roll up as vacuously conformant — refuse it
+        // (audit 2026-08-25 item 6).
+        guard !rules.isEmpty else {
+            throw ProtocolPackError.schemaDoesNotCompile("protocol compiles to zero rules — nothing to conform to")
+        }
         let emptyFacts = ConformanceFacts(completedPhaseKinds: [])
-        for rule in SutraRuleCompiler.rules(for: sutra) {
+        for rule in rules {
             if SutraConformance.evaluate(rule: rule, facts: emptyFacts).outcome == .evaluatorError {
                 throw ProtocolPackError.schemaDoesNotCompile("rule \(rule.id) fails to evaluate")
             }

@@ -106,3 +106,39 @@ Deliberately out of scope here (by design, not omission):
 - **Later — external assurance**: expert crosswalks, published mappings, partnerships; certification only where a body grants it.
 
 The moat is not the hashes (copyable) — it is expert-reviewed mappings, the portable rule corpus, accumulated edge cases, evidence-level provenance, org-specific packs, and professional acceptance of the attestations.
+
+## Third-audit verdict (2026-08-25) — honest current state
+
+Fixed in the audit-response pass:
+- ✅ CI red: MigrationMatrixTests pinned latestVersion 106 → 108 (+ v107/v108
+  table markers); guard step gained `set -o pipefail` (the false-green hole).
+- ✅ Classic readout relabelled: "legacy checklist — not a per-rule conformance
+  determination" (kept per owner decision, no longer masquerades).
+- ✅ Empty protocols refuse everywhere (pack verify + studio build): zero rules
+  can no longer roll up as vacuously conformant; built-in identifiers reserved
+  in the studio.
+- ✅ Replay compares FULL rule definitions (id + kind + severity + text), not
+  IDs — a severity swap under a kept ID is caught.
+- ✅ kalverify takes an optional trusted signer key ID; without one, AUTHENTICITY
+  is explicitly labelled "key-consistent only". Wrong key ID fails.
+- ✅ Sealing failures surface to the reviewer instead of silently recording an
+  unsealed row.
+- ✅ Website claim scoped to what is true (approved findings runs, fail-closed).
+
+Known structural remainder (the honest gap between prototype and moat —
+in priority order, per the audit):
+1. Per-rule attestation/evidence references replacing the single "attest all"
+   toggle (actor, role, timestamp, rationale per rule).
+2. Assessments bound atomically to the real findings/workflow run ID +
+   run-state hash, recorded in the same transaction as approval.
+3. Required-phase policy: an unreached REQUIRED phase fails, not N/A.
+4. Trusted-key management: pinned developer key, org allowlist/TOFU, rotation.
+5. Bundles export facts + evidence manifests so the external verifier reruns
+   evaluators (true replay, not outcome-consistency).
+6. Custom protocol selection wired into run creation (today only the built-in
+   doctrine id resolves for real runs).
+7. `conformantWithApprovedDeviation` as a distinct rollup status.
+
+Until 1–5 land, the accurate claim is: tamper-evident, signed, per-rule
+ASSESSED conformance with independent outcome verification — not yet fully
+independently REPLAYED conformance.

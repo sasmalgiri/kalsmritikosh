@@ -182,16 +182,21 @@ public nonisolated enum ConformanceBundle {
             replayOK = false
             verdict.details.append("replay: \(evaluations.count) evaluation(s) ≠ sealed ruleCount \(sealed.envelope.ruleCount)")
         }
-        // Exactly one evaluation per rule the protocol compiles to — no silently
-        // dropped or invented rules.
-        let compiledIDs = Set(SutraRuleCompiler.rules(for: sutra).map(\.id))
-        let evaluatedIDs = evaluations.map(\.id)
-        if Set(evaluatedIDs).count != evaluatedIDs.count {
+        // Exactly one evaluation per rule the protocol compiles to — compared as
+        // FULL rule definitions, not just IDs, so a rule whose severity or text
+        // was swapped while keeping its ID is caught (audit 2026-08-25 item 5).
+        let compiledRules = Set(SutraRuleCompiler.rules(for: sutra))
+        let evaluatedRules = evaluations.map(\.rule)
+        if Set(evaluatedRules.map(\.id)).count != evaluatedRules.count {
             replayOK = false; verdict.details.append("replay: duplicate rule evaluations")
         }
-        if compiledIDs != Set(evaluatedIDs) {
+        if compiledRules != Set(evaluatedRules) {
             replayOK = false
-            verdict.details.append("replay: evaluations do not correspond one-to-one with the protocol's compiled rules")
+            verdict.details.append("replay: evaluations do not match the protocol's compiled rules (id, kind, severity and text must all correspond)")
+        }
+        if compiledRules.isEmpty {
+            replayOK = false
+            verdict.details.append("replay: the protocol compiles to zero rules — vacuous conformance is refused")
         }
         verdict.conformanceReplay = replayOK ? .passed : .failed
         return verdict

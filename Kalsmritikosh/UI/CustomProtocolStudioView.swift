@@ -95,12 +95,18 @@ public final class CustomProtocolStudioModel {
     }
 
     /// Deterministic build of the edited constitution. nil until title,
-    /// identifier and at least one included phase exist.
+    /// identifier and at least one included phase with at least one rule exist.
+    /// Built-in identifiers are RESERVED — a custom protocol can never shadow
+    /// the developer doctrine's id from the studio (audit 2026-08-25 item 6).
     public func buildSutra() -> Sutra? {
         let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !id.isEmpty else { return nil }
         let base = SutraCompiler.shared()
+        guard id != base.id, id != SutraCompiler.clinicalDifferential().id else {
+            status = "The identifier '\(id)' is reserved for a built-in doctrine — choose your own (e.g. sutra.acme.hr)."
+            return nil
+        }
         let phases: [SutraPhase] = phaseEdits.filter(\.include).map { e in
             SutraPhase(kind: e.kind, title: e.phaseTitle, tier: e.tier, method: e.method,
                        surface: e.surface,
@@ -117,6 +123,11 @@ public final class CustomProtocolStudioModel {
                           reportSections: base.reportSections)
         let globals = lines(globalRequirementsText)
         sutra.globalRequirements = globals.isEmpty ? nil : globals
+        // A protocol with zero rules would be vacuously conformant — refuse.
+        guard !SutraRuleCompiler.rules(for: sutra).isEmpty else {
+            status = "The protocol compiles to zero rules — add at least one obligation, decision, prohibition or global requirement."
+            return nil
+        }
         return sutra
     }
 

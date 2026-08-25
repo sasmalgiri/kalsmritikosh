@@ -100,11 +100,16 @@ func decoder() -> JSONDecoder {
 
 // MARK: - Main
 
-guard CommandLine.arguments.count == 2 else {
-    print("usage: swift kalverify.swift <bundle-folder>")
+guard CommandLine.arguments.count == 2 || CommandLine.arguments.count == 3 else {
+    print("usage: swift kalverify.swift <bundle-folder> [trusted-signer-key-id]")
+    print("Without a trusted key ID, AUTHENTICITY proves key-consistency only —")
+    print("the signature matches the key EMBEDDED in the bundle. Supply the")
+    print("signer's known key ID (16 hex chars) to bind the seal to an identity.")
     exit(1)
 }
 let dir = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+let trustedKeyID: String? = CommandLine.arguments.count == 3
+    ? CommandLine.arguments[2].lowercased() : nil
 func read(_ name: String) -> Data? { try? Data(contentsOf: dir.appendingPathComponent(name)) }
 
 var failed = false
@@ -149,7 +154,19 @@ if authOK {
        let sigData = hexData(attestation.signatureHex),
        let signature = try? P256.Signing.ECDSASignature(derRepresentation: sigData),
        publicKey.isValidSignature(signature, for: canonicalEnvelope) {
-        // signature verifies
+        // Signature verifies against the EMBEDDED key. Identity binding requires
+        // a trusted key ID supplied by the recipient (a forger can always embed
+        // a fresh self-consistent key).
+        if let trustedKeyID {
+            let keyID = String(SHA256.hash(data: keyData)
+                .map { String(format: "%02x", $0) }.joined().prefix(16))
+            if keyID != trustedKeyID {
+                authOK = false
+                authDetail = "signer key ID \(keyID) does NOT match the trusted key ID \(trustedKeyID)"
+            }
+        } else {
+            authDetail = "key-consistent only — supply the signer's known key ID to bind identity"
+        }
     } else {
         authOK = false; authDetail = "signature does not verify against the embedded public key"
     }

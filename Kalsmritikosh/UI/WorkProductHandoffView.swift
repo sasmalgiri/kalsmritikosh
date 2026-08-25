@@ -144,7 +144,12 @@ public final class WorkProductHandoffModel {
                 .sorted { $0.sourceVersionID < $1.sourceVersionID }
             linkage.evidenceManifestSHA256 = try? ConformanceCanonical.sha256(of: manifest)
         }
-        let sealed = try? ConformanceSeal.seal(assessment: assessment, linkage: linkage)
+        // Never swallow a sealing failure (audit 2026-08-25 item 3): the row is
+        // still recorded (an honest unsealed assessment beats no record), but
+        // the reviewer is told exactly why the seal is missing.
+        var sealed: SealedConformance? = nil
+        do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
+        catch { lastError = "Assessment recorded UNSEALED — sealing refused: \(error)" }
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
         catch { lastError = "Conformance assessment could not be recorded: \(error)" }
     }
@@ -515,7 +520,9 @@ public struct WorkProductHandoffView: View {
         }
     }
 
-    /// The previous app's conformance summary, exactly as it shipped.
+    /// The previous app's conformance summary, exactly as it shipped — but
+    /// labelled for what it is: a legacy checklist over the recorded gates,
+    /// NOT a per-rule conformance determination (audit 2026-08-25 item 7).
     private func classicConformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
         let record = RunRecord(
             completedPhaseKinds: [.findings],
@@ -523,10 +530,15 @@ public struct WorkProductHandoffView: View {
             openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
             humanDecisionsMade: snap.isApproved ? [.findings] : [])
         let report = SutraConformance.verify(run: record, against: SutraCompiler.shared())
-        return Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
-            .font(.caption)
-            .foregroundStyle(report.isConformant ? Color.green : Color.orange)
-            .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
+        return VStack(alignment: .leading, spacing: 3) {
+            Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
+                .font(.caption)
+                .foregroundStyle(report.isConformant ? Color.green : Color.orange)
+                .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
+            Text("Legacy checklist over the recorded gates — not a per-rule conformance determination. Turn off “Classic conformance readout” in Settings for the assessed, sealed certificate.")
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// Level-1 strict assessment: one outcome per rule of the frozen constitution.
