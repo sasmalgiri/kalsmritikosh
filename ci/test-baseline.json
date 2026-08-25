@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3453,
-  "baselineCommit": "HEAD-perf3",
-  "note": "Whole-suite floor from hosted build-and-test on PR #82 (PERF-3: IVF ANN recall+latency at scale — spherical k-means fixes the cosine/Euclidean mismatch that collapsed 93% of vectors into one cell; scan-budget probe bounds rows not cells; benchmark corpus made unit-normalized/representative, 0.90 recall floor unchanged): total=3453 passed=3451 failed=0 skipped=2; floor RAISED 3452 -> 3453. Measured 384-D: recall@10 1.000 at 100k/500k, 500k query p50 85ms vs 1845ms brute (21.6x). Schema unchanged v104; migration floor 393; parser floor 126."
+  "minimumExecutedTests": 3744,
+  "baselineCommit": "20fbe63",
+  "note": "Whole-suite floor from local RunAllTests on the conformance program (v107-v110: per-rule fail-closed assessments, signed seals, verifiable bundles + kalverify attack matrix, protocol packs/registry/TOFU, custom protocol studio, approval gate + compensation): total=3744 passed=3742 failed=0 skipped=2; floor RAISED 3453 -> 3744. Schema v110; migration floor and parser floor unchanged."
 }

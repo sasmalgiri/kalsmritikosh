@@ -121,6 +121,22 @@ latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB
    everything must behave identically.
 - [ ] PASS — note any observed connection here (any at all = FAIL, file it): `[…]`
 
+## 6b. Conformance release acts (v107-v110, one-time)
+
+- [ ] **Pin the developer signing key**: on the RELEASE Mac, open Compliance Board →
+  "Copy my signer fingerprint" (16 hex chars). Paste it into
+  `PinnedDeveloperKey.keyID` (`Core/Security/ConformanceSeal.swift`) BEFORE the
+  release archive. From then on, packs/bundles signed on that Mac bind identity
+  on every install with no local trust decision.
+- [ ] Publish the same fingerprint on the website (verification page) so
+  recipients can run `swift kalverify.swift <bundle> <fingerprint>`.
+- [ ] Smoke on the release build: approve one real matter in strict mode
+  (attest each rule), export the verification bundle, verify it with
+  `swift verifier/kalverify.swift <folder> <your fingerprint>` — expect
+  INTEGRITY/AUTHENTICITY/REPLAY all PASSED with identity bound.
+- [ ] Optional: flip Settings → "Classic conformance readout" on and off once —
+  both readouts render; switching loses nothing.
+
 ## 7. Record and sign
 
 - [ ] Copy results into `release/RELEASE_EVIDENCE_v1.md` (owner fields + sign-off block).
