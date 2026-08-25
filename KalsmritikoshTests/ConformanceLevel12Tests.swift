@@ -36,10 +36,10 @@ struct ConformanceLevel1Tests {
     /// to empty. Now: gates satisfied but nothing attested → indeterminate, never green.
     @Test("Fail-closed: unattested rules block conformance")
     func failClosed() {
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let facts = ConformanceFacts(completedPhaseKinds: [.caseIntake, .findings],
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings])
+                                     humanDecisionsMade: [.caseIntake, .findings])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .indeterminate)
         #expect(!a.unevaluated.isEmpty)
@@ -49,12 +49,13 @@ struct ConformanceLevel1Tests {
     /// One outcome per rule; attesting the reached phase's rules makes it conformant.
     @Test("Full attestation over satisfied gates is conformant")
     func conformant() {
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let reachedIDs = Set(SutraRuleCompiler.rules(for: sutra)
-            .filter { $0.phaseKind == .findings }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: reachedIDs)
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .conformant)
@@ -68,10 +69,10 @@ struct ConformanceLevel1Tests {
     func prohibited() {
         let prohibition = SutraRuleCompiler.rules(for: sutra)
             .first { $0.phaseKind == .findings && $0.kind == .prohibition }!
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let facts = ConformanceFacts(completedPhaseKinds: [.caseIntake, .findings],
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: [.caseIntake, .findings],
                                      assertedProhibited: [prohibition.text])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .notConformant)
@@ -80,10 +81,10 @@ struct ConformanceLevel1Tests {
 
     @Test("A missing reserved human decision fails, not pends silently")
     func humanDecision() {
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let facts = ConformanceFacts(completedPhaseKinds: [.caseIntake, .findings],
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [])
+                                     humanDecisionsMade: [.caseIntake])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .notConformant)
         #expect(a.evaluations.contains { $0.rule.kind == .humanDecision && $0.outcome == .failed })
@@ -137,20 +138,21 @@ struct ConformanceLevel1Tests {
         #expect(global?.phaseKind == nil)
         #expect(global?.severity == .mandatory)
         // Unattested global rule blocks conformance even with every gate satisfied.
-        let attestedPhaseRules = Set(rules.filter { $0.phaseKind == .findings }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
+        let attestedPhaseRules = Set(rules.filter { $0.phaseKind.map(spine.contains) ?? false }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: attestedPhaseRules)
         let a = SutraConformance.assess(facts: facts, against: s, at: now)
         #expect(a.status == .indeterminate)
         #expect(a.evaluations.contains { $0.rule.id == "global.requirement.0" && $0.outcome == .notEvaluated })
         // Attesting it too makes the run conformant.
-        let all = ConformanceFacts(completedPhaseKinds: [.findings],
+        let all = ConformanceFacts(completedPhaseKinds: spine,
                                    standardOfProofDeclared: true,
                                    openItemsAcknowledged: true,
-                                   humanDecisionsMade: [.findings],
+                                   humanDecisionsMade: spine,
                                    attestedRuleIDs: attestedPhaseRules.union(["global.requirement.0"]))
         #expect(SutraConformance.assess(facts: all, against: s, at: now).status == .conformant)
     }
@@ -177,13 +179,13 @@ struct ConformanceLevel1Tests {
     /// Multi-phase facts: custody + closure phases evaluate alongside findings.
     @Test("Multi-phase runs evaluate custody and closure rules")
     func multiPhase() {
-        let reached: Set<PersonaJobKind> = [.findings, .evidenceCustody, .closure]
+        let reached: Set<PersonaJobKind> = [.caseIntake, .findings, .evidenceCustody, .closure]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
             .filter { $0.phaseKind.map(reached.contains) ?? true }.map(\.id))
         let facts = ConformanceFacts(completedPhaseKinds: reached,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings, .closure],
+                                     humanDecisionsMade: [.caseIntake, .findings, .closure],
                                      attestedRuleIDs: attested,
                                      presentEvidenceKinds: ["custody.record", "custody.hash"])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
@@ -192,7 +194,7 @@ struct ConformanceLevel1Tests {
         #expect(a.evaluations.contains { $0.rule.phaseKind == .closure && $0.outcome == .passed })
         // Closure's reserved decision missing → the run fails, not pends.
         var noDecision = facts
-        noDecision.humanDecisionsMade = [.findings]
+        noDecision.humanDecisionsMade = [.caseIntake, .findings]
         #expect(SutraConformance.assess(facts: noDecision, against: sutra, at: now).status == .notConformant)
     }
 
@@ -232,11 +234,12 @@ struct ConformanceLevel1Tests {
     /// the real run ID and run-state hash.
     @Test("Assessments bind to the real run and the seal carries it")
     func runBinding() throws {
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
-            .filter { $0.phaseKind == .findings || $0.phaseKind == nil }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true, openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings], attestedRuleIDs: attested)
+                                     humanDecisionsMade: spine, attestedRuleIDs: attested)
         let runID = UUID()
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now,
                                         runID: runID, runStateSHA256: "cafe01")
@@ -250,23 +253,35 @@ struct ConformanceLevel1Tests {
     }
 
     /// A justified deviation is visible (`approvedDeviation`) and does not block conformance.
-    @Test("Approved deviations stay visible and count as resolved")
+    @Test("Deviations: distinct status, typed authorization, prohibitions non-waivable")
     func deviations() {
-        let rules = SutraRuleCompiler.rules(for: sutra).filter { $0.phaseKind == .findings }
-        let deviated = rules.first { $0.kind == .prohibition }!
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
+        let rules = SutraRuleCompiler.rules(for: sutra)
+            .filter { $0.phaseKind.map(spine.contains) ?? true }
+        // Deviate a WAIVABLE obligation: status is DISTINCT, never plain conformant.
+        let deviated = rules.first { $0.kind == .obligation && $0.phaseKind == .caseIntake }!
         let attested = Set(rules.map(\.id)).subtracting([deviated.id])
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let auth = DeviationAuthorization(authorizedBy: "General Counsel", role: "counsel",
+                                          justification: "authorized the exception in writing", at: now)
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: attested,
-                                     approvedDeviations: [deviated.id: "counsel authorized the exception in writing"])
+                                     approvedDeviations: [deviated.id: auth])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
-        #expect(a.status == .conformant)
+        #expect(a.status == .conformantWithDeviations, "a deviated run is never plain conformant")
         let d = a.evaluations.first { $0.rule.id == deviated.id }
         #expect(d?.outcome == .approvedDeviation)
-        #expect(a.certificate.contains("counsel authorized the exception in writing"),
-                "the deviation's justification must travel on the certificate")
+        #expect(a.certificate.contains("General Counsel") && a.certificate.contains("authorized the exception"))
+        // A deviation on a PROHIBITION (non-waivable) FAILS the run.
+        let prohibition = rules.first { $0.kind == .prohibition }!
+        var illegal = facts
+        illegal.approvedDeviations = [prohibition.id: auth]
+        illegal.attestedRuleIDs = Set(rules.map(\.id)).subtracting([prohibition.id])
+        let b = SutraConformance.assess(facts: illegal, against: sutra, at: now)
+        #expect(b.status == .notConformant, "no free text can authorize a prohibited conclusion")
+        #expect(b.evaluations.contains { $0.rule.id == prohibition.id && $0.evaluatorID == "gate.nonWaivable.v1" })
     }
 
     /// The per-rule certificate names the constitution, its hash, and every outcome.
@@ -292,12 +307,13 @@ struct ConformanceLevel2Tests {
     private let key = P256.Signing.PrivateKey()   // ephemeral — no Keychain in tests
 
     private func conformantAssessment() -> ConformanceAssessment {
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
-            .filter { $0.phaseKind == .findings }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: attested)
         return SutraConformance.assess(facts: facts, against: sutra, at: now)
     }
@@ -339,7 +355,8 @@ struct ConformanceLevel2Tests {
             signerAssurance: sealed.envelope.signerAssurance,
             runID: sealed.envelope.runID,
             runStateSHA256: sealed.envelope.runStateSHA256,
-            approvedDeviationCount: sealed.envelope.approvedDeviationCount)
+            approvedDeviationCount: sealed.envelope.approvedDeviationCount,
+            factsSHA256: sealed.envelope.factsSHA256)
         let forged = SealedConformance(envelope: forgedEnvelope,
                                        signatureHex: sealed.signatureHex,
                                        publicKeyHex: sealed.publicKeyHex)
@@ -355,10 +372,10 @@ struct ConformanceLevel2Tests {
 
     @Test("Indeterminate assessments refuse to seal")
     func indeterminateRefuses() {
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let facts = ConformanceFacts(completedPhaseKinds: [.caseIntake, .findings],
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings])   // nothing attested
+                                     humanDecisionsMade: [.caseIntake, .findings])   // nothing attested
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .indeterminate)
         #expect(throws: ConformanceSealError.indeterminateAssessment) {
@@ -368,12 +385,13 @@ struct ConformanceLevel2Tests {
 
     @Test("A truthful negative attestation seals fine")
     func notConformantSeals() throws {
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: false,    // gate fails
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: Set(SutraRuleCompiler.rules(for: sutra)
-                                         .filter { $0.phaseKind == .findings }.map(\.id)))
+                                         .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id)))
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
         #expect(a.status == .notConformant)
         let sealed = try ConformanceSeal.seal(assessment: a, build: "1.0 (test)", key: key)
@@ -448,12 +466,13 @@ struct ConformancePersistenceTests {
     }
 
     private func conformantAssessment(against s: Sutra) -> ConformanceAssessment {
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: s)
-            .filter { $0.phaseKind == .findings || $0.phaseKind == nil }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: attested)
         return SutraConformance.assess(facts: facts, against: s, at: now)
     }

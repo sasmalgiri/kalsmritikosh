@@ -130,6 +130,19 @@ public nonisolated enum ProtocolPacks {
         guard !rules.isEmpty else {
             throw ProtocolPackError.schemaDoesNotCompile("protocol compiles to zero rules — nothing to conform to")
         }
+        // Anti-vacuous phase policy: the EFFECTIVE required set (declared, or
+        // the findings fallback) must be non-empty and every declared required
+        // phase must exist in the protocol. Otherwise a run that reaches no
+        // phase rolls up conformant with every rule notApplicable.
+        let phaseKinds = Set(sutra.phases.map(\.kind))
+        let effectiveRequired = sutra.requiredPhaseKinds
+            ?? (phaseKinds.contains(.findings) ? [.findings] : [])
+        guard !effectiveRequired.isEmpty else {
+            throw ProtocolPackError.schemaDoesNotCompile("protocol declares no required phases and has no findings phase — a run could conform without reaching anything")
+        }
+        guard Set(effectiveRequired).isSubset(of: phaseKinds) else {
+            throw ProtocolPackError.schemaDoesNotCompile("requiredPhaseKinds names phases the protocol does not contain")
+        }
         let emptyFacts = ConformanceFacts(completedPhaseKinds: [])
         for rule in rules {
             if SutraConformance.evaluate(rule: rule, facts: emptyFacts).outcome == .evaluatorError {

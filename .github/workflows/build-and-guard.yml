@@ -116,6 +116,37 @@ jobs:
           set -o pipefail
           bash ci/verify-xcresult-tests.sh build/TestResults.xcresult ci/test-baseline.json 2>&1 | tee verify.log
 
+      - name: Standalone verifier vs production-shaped bundle + attack matrix
+        run: |
+          set -euo pipefail
+          # The test suite leaves a PRODUCTION-SHAPED bundle (run-bound, facts,
+          # evidence manifest) at a stable temp path. The standalone CLI must
+          # accept it, and must REFUSE every attack below.
+          FIXTURE=$(find "$HOME/Library/Containers" /tmp "${TMPDIR:-/tmp}" -maxdepth 6 -type d -name "kalverify-fixture" 2>/dev/null | head -1)
+          test -n "$FIXTURE" || { echo "::error::kalverify fixture not found"; exit 1; }
+          echo "fixture: $FIXTURE"
+          swift verifier/kalverify.swift "$FIXTURE"
+          # Attack 1 — edited file: INTEGRITY must fail.
+          rm -rf /tmp/kv-edit && cp -R "$FIXTURE" /tmp/kv-edit && printf ' ' >> /tmp/kv-edit/protocol.json
+          if swift verifier/kalverify.swift /tmp/kv-edit; then echo "::error::edited bundle verified"; exit 1; fi
+          # Attack 2 — facts-deletion downgrade with regenerated manifest: REPLAY must fail.
+          rm -rf /tmp/kv-downgrade && cp -R "$FIXTURE" /tmp/kv-downgrade
+          rm /tmp/kv-downgrade/evaluation-facts.json
+          python3 - <<'PY'
+          import json, hashlib, os
+          d = "/tmp/kv-downgrade"
+          files = {}
+          for f in sorted(os.listdir(d)):
+              if f in ("manifest.json", "README.txt"): continue
+              files[f] = hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest()
+          open(os.path.join(d, "manifest.json"), "w").write(
+              json.dumps({"formatVersion": 1, "files": files}, sort_keys=True, separators=(",", ":")))
+          PY
+          if swift verifier/kalverify.swift /tmp/kv-downgrade; then echo "::error::facts-deletion downgrade verified"; exit 1; fi
+          # Attack 3 — wrong trusted signer key: AUTHENTICITY must fail.
+          if swift verifier/kalverify.swift "$FIXTURE" deadbeefdeadbeef; then echo "::error::wrong trusted key verified"; exit 1; fi
+          echo "kalverify attack matrix: all attacks refused, clean bundle verified."
+
       - name: Upload logs + result bundle on failure
         if: failure()
         uses: actions/upload-artifact@v4

@@ -21,14 +21,22 @@ struct ConformanceBundleTests {
     private let key = P256.Signing.PrivateKey()
 
     private func sealedStored() throws -> StoredConformanceAssessment {
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
-            .filter { $0.phaseKind == .findings || $0.phaseKind == nil }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: attested)
-        let assessment = SutraConformance.assess(facts: facts, against: sutra, at: now)
+        // Production-shaped: bound to a run, with an evidence manifest.
+        var assessment = SutraConformance.assess(facts: facts, against: sutra, at: now,
+                                                 runID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEFFFF0001"),
+                                                 runStateSHA256: "feedfacefeedface")
+        assessment.evidenceManifest = [
+            EvidenceManifestEntry(sourceVersionID: "v-0001", contentHash: "aa11"),
+            EvidenceManifestEntry(sourceVersionID: "v-0002", contentHash: nil),
+        ]
         let sealed = try ConformanceSeal.seal(assessment: assessment, build: "1.0 (test)", key: key)
         return StoredConformanceAssessment(caseID: UUID(), runRevision: 1,
                                            assessment: assessment, seal: sealed, createdAt: now)
@@ -55,7 +63,8 @@ struct ConformanceBundleTests {
         #expect(v.details.allSatisfy { $0.contains("key-consistent only") })
         // The bundle carries every spec file, including the replayable facts.
         for f in ["attestation.json", "protocol.json", "rule-evaluations.json",
-                  "evaluation-facts.json", "public-key.hex", "manifest.json", "README.txt"] {
+                  "evaluation-facts.json", "evidence-manifest.json",
+                  "public-key.hex", "manifest.json", "README.txt"] {
             #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent(f).path), Comment(rawValue: f))
         }
         // Identity binding: the correct trusted key ID passes; a wrong one fails.
@@ -156,7 +165,8 @@ struct ConformanceBundleTests {
             receiptSeal: e.receiptSeal, databaseSchemaVersion: e.databaseSchemaVersion,
             evidenceManifestSHA256: e.evidenceManifestSHA256, signerAssurance: e.signerAssurance,
             runID: e.runID, runStateSHA256: e.runStateSHA256,
-            approvedDeviationCount: e.approvedDeviationCount)
+            approvedDeviationCount: e.approvedDeviationCount,
+            factsSHA256: e.factsSHA256)
         attestation = SealedConformance(envelope: forgedEnvelope,
                                         signatureHex: attestation.signatureHex,
                                         publicKeyHex: attestation.publicKeyHex)
@@ -187,11 +197,12 @@ struct ConformanceBundleTests {
         #expect(ConformanceBundle.verify(at: dir).conformanceReplay == .passed)
 
         // A truthful notConformant seal also replays cleanly.
-        let rules = SutraRuleCompiler.rules(for: sutra).filter { $0.phaseKind == .findings }
-        let facts = ConformanceFacts(completedPhaseKinds: [.findings],
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
+        let rules = SutraRuleCompiler.rules(for: sutra).filter { $0.phaseKind.map(spine.contains) ?? true }
+        let facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: false,   // gate fails
                                      openItemsAcknowledged: true,
-                                     humanDecisionsMade: [.findings],
+                                     humanDecisionsMade: spine,
                                      attestedRuleIDs: Set(rules.map(\.id)))
         let bad = SutraConformance.assess(facts: facts, against: sutra, at: now)
         let sealedBad = try ConformanceSeal.seal(assessment: bad, build: "t", key: key)

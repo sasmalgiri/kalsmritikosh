@@ -15,9 +15,12 @@ file, page, and line. If your documents don't support it, the app says so
 instead of guessing. Conflicting evidence is shown with both sources — never
 averaged away.
 
-REAL SOPs, ENFORCED — NOT TEMPLATES
-Every workflow is a real profession's procedure, encoded as gates the app
-cannot skip:
+REAL SOPs, ENCODED — NOT TEMPLATES
+Every workflow is a real profession's procedure, encoded as completeness
+gates: a deliverable refuses to finish without its required elements, and
+findings approval is blocked until every rule of the frozen SOP is
+individually resolved — attested, evidenced, or recorded as an authorized
+deviation:
 • Investigators — root-cause analysis (8D dual root cause) and Analysis of
   Competing Hypotheses (Heuer), with fishbone diagrams and evidence matrices
 • Lawyers — an FRCP 26(b)(5)-style privilege log: describe without revealing,
@@ -32,11 +35,14 @@ cannot skip:
   each with its own studio ending in the real hardcopy, with a printed
   audit trail
 
-PROVABLE COMPLIANCE
-Every sealed run produces a conformance certificate naming the exact SOP
-version it satisfied. An in-app Compliance Board tracks each standard's
-current edition with periodic re-checks — and you can read every SOP the app
-binds itself to, on demand.
+ENCODED WORKFLOW CONFORMANCE
+Approved findings runs record a per-rule assessment against the exact SOP
+version, frozen by hash — unevaluated rules block approval instead of
+passing, and the signed certificate travels with the run, verifiable
+outside the app. An in-app Compliance Board tracks each standard's current
+edition with governed reviews — and you can read every SOP the app binds
+itself to, on demand. Conformance means the encoded procedure was followed;
+it is not legal or regulatory certification.
 
 PRIVATE BY ARCHITECTURE — NOT BY PROMISE
 Your documents, questions, and every answer stay on this Mac. The app makes

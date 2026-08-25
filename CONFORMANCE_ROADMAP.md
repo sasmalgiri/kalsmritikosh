@@ -174,3 +174,39 @@ Remaining before the claim is unqualified: approval-transaction atomicity
 and multi-await BEGIN/COMMIT is explicitly unsafe in this codebase) and a
 pinned developer key shipped in the release binary (an owner/release act:
 export the release signing key's fingerprint and pin it at build time).
+
+
+## Fourth-audit response (2026-08-26) — all ten findings implemented
+
+1. ✅ Approval GATED by conformance: in strict mode the projected assessment
+   (as if approved) must be conformant / conformant-with-deviations —
+   indeterminate or failed BLOCKS the approval itself.
+2. ✅ Recording/sealing failures ride the approval outcome ("approved — ⚠️ …");
+   the success path can no longer erase them.
+3. ✅ CLI envelope parity restored (runID, runStateSHA256,
+   approvedDeviationCount, factsSHA256); the test fixture is PRODUCTION-SHAPED
+   (run-bound + evidence manifest) and the CLI verified it live.
+4. ✅ Facts are mandatory in bundles and factsSHA256 is SIGNED — the
+   facts-deletion downgrade was run live and REFUSED by both verifiers.
+5. ✅ Required phases: the built-in doctrine declares [caseIntake, findings];
+   rules of an unreached required phase FAIL (attest-all cannot rescue).
+6. ✅ Custom vacuous bypass closed: studio protocols require ALL included
+   phases; pack verification refuses an empty effective-required set and
+   required phases the protocol lacks.
+7. ✅ Rule grounding: requiredEvidence (custody), humanRole (approver / case
+   owner / analyst) and authorityReferences (SWGDE/NIST, Admiralty, Heuer)
+   populated for the known doctrine lines. assertedProhibited remains
+   attestation-based — deterministic content detection stays future work.
+8. ✅ `conformantWithDeviations` distinct status (v110 CHECK), TYPED deviation
+   authorization (who/role/why/when), prohibitions NON-waivable.
+9. ✅ Bundles carry evidence-manifest.json (hash signed) alongside facts,
+   protocol, evaluations, attestation, key.
+10. ✅ Studios: every deliverable that leaves the app (copy/export/print)
+   carries a SIGNED deliverable seal — content hash, honest stage completion,
+   installation key — via the one shared shell (all ten studios).
+CI now runs the standalone CLI against the production-shaped fixture plus the
+edited-file, facts-downgrade and wrong-key attacks on every push.
+
+Remaining (unchanged, by nature): same-transaction approval atomicity
+(service redesign), release-time pinned developer key (owner act),
+deterministic prohibited-conclusion detection, external assurance.

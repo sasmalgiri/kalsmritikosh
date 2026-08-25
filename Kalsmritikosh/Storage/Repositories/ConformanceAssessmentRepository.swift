@@ -45,6 +45,9 @@ public actor ConformanceAssessmentRepository {
         let factsJSON = try assessment.facts.map {
             String(data: try ConformanceCanonical.data(of: $0), encoding: .utf8) ?? ""
         }
+        let manifestJSON = try assessment.evidenceManifest.map {
+            String(data: try ConformanceCanonical.data(of: $0), encoding: .utf8) ?? ""
+        }
         let revision = try await latestRevision(caseID: caseID) + 1
         let record = StoredConformanceAssessment(caseID: caseID, runRevision: revision,
                                                  assessment: assessment, seal: seal, createdAt: now)
@@ -52,8 +55,8 @@ public actor ConformanceAssessmentRepository {
         INSERT INTO conformance_assessments
             (id, case_id, run_revision, sutra_citation, sutra_sha256, sutra_snapshot_json,
              evaluations_json, status, seal_json, assessed_at, created_at,
-             run_id, run_state_sha256, facts_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             run_id, run_state_sha256, facts_json, evidence_manifest_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(record.id),
             .uuid(caseID),
@@ -68,7 +71,8 @@ public actor ConformanceAssessmentRepository {
             .date(now),
             assessment.runID.map { SQLValue.uuid($0) } ?? .null,
             .optionalText(assessment.runStateSHA256),
-            .optionalText(factsJSON)
+            .optionalText(factsJSON),
+            .optionalText(manifestJSON)
         ])
         return record
     }
@@ -79,7 +83,7 @@ public actor ConformanceAssessmentRepository {
         let rows = try await database.query("""
         SELECT id, run_revision, sutra_citation, sutra_sha256, sutra_snapshot_json,
                evaluations_json, seal_json, assessed_at, created_at,
-               run_id, run_state_sha256, facts_json
+               run_id, run_state_sha256, facts_json, evidence_manifest_json
         FROM conformance_assessments WHERE case_id = ?
         ORDER BY created_at DESC, run_revision DESC LIMIT 1;
         """, [.uuid(caseID)])
@@ -92,7 +96,7 @@ public actor ConformanceAssessmentRepository {
         let rows = try await database.query("""
         SELECT id, run_revision, sutra_citation, sutra_sha256, sutra_snapshot_json,
                evaluations_json, seal_json, assessed_at, created_at,
-               run_id, run_state_sha256, facts_json
+               run_id, run_state_sha256, facts_json, evidence_manifest_json
         FROM conformance_assessments WHERE case_id = ?
         ORDER BY created_at ASC, run_revision ASC;
         """, [.uuid(caseID)])
@@ -124,6 +128,9 @@ public actor ConformanceAssessmentRepository {
         assessment.runStateSHA256 = r.string(10)
         assessment.facts = r.string(11).flatMap {
             try? decoder.decode(ConformanceFacts.self, from: Data($0.utf8))
+        }
+        assessment.evidenceManifest = r.string(12).flatMap {
+            try? decoder.decode([EvidenceManifestEntry].self, from: Data($0.utf8))
         }
         return StoredConformanceAssessment(
             id: r.uuid(0) ?? UUID(),

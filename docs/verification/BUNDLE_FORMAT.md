@@ -70,7 +70,21 @@ see the assurance-level table in `CONFORMANCE_ROADMAP.md`.
 `formatVersion, sutraCitation, sutraSHA256, ruleEvaluationsSHA256,
 overallStatus, ruleCount, assessedAt, applicationBuild, signerKeyID,
 signatureAlgorithm, caseID?, runRevision?, auditChainHead?, auditEventCount?,
-receiptSeal?, databaseSchemaVersion?, evidenceManifestSHA256?, signerAssurance?`
+receiptSeal?, databaseSchemaVersion?, evidenceManifestSHA256?, signerAssurance?,
+runID?, runStateSHA256?, approvedDeviationCount?, factsSHA256?`
+
+`overallStatus` vocabulary: `conformant` · `conformantWithDeviations` (every
+mandatory rule resolved, at least one via a typed authorized deviation —
+NEVER blended into plain conformant) · `notConformant` · `indeterminate`.
+Prohibitions are non-waivable: a deviation on one evaluates `failed`.
+
+**Downgrade-proof facts:** `factsSHA256` is SIGNED. When present, verifiers
+MUST require `evaluation-facts.json`, check its hash, and rerun the
+evaluators; deleting the facts (even with a regenerated manifest) fails
+REPLAY. `evidenceManifestSHA256`, when present, likewise requires a matching
+`evidence-manifest.json`. Required phases travel inside the facts
+(`requiredPhaseKinds`): a rule of an unreached required phase evaluates
+`failed`, never `notApplicable`.
 
 Optional fields are omitted when absent (never `null`), which the sorted-keys
 canonical form preserves deterministically.

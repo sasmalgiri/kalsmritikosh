@@ -256,21 +256,33 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
     }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return config.render(b.wrappedValue, Date())
+        return sealedReport(b.wrappedValue)
     }
+
+    /// Every report that LEAVES the app carries the signed deliverable seal:
+    /// content hash, honest stage completion, installation-key signature —
+    /// the one shell seals all ten studios.
+    private func sealedReport(_ m: M) -> String {
+        let complete = stages.filter { m.isComplete($0) }.count
+        return StudioDeliverableSeal.sealedReport(
+            studio: config.name, title: m.title,
+            report: config.render(m, Date()),
+            stagesComplete: complete, stagesTotal: stages.count, at: Date())
+    }
+
     private var exportFilename: String {
         "\(config.filenamePrefix)-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
     }
     private func copyReport(_ m: M) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(config.render(m, Date()), forType: .string)
+        NSPasteboard.general.setString(sealedReport(m), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printReport(_ m: M) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = config.render(m, Date())
+        tv.string = sealedReport(m)
         tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         let op = NSPrintOperation(view: tv); op.jobTitle = "\(config.name) — \(m.title)"; op.run()
     }

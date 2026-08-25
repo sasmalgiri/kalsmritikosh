@@ -123,6 +123,11 @@ public final class CustomProtocolStudioModel {
                           reportSections: base.reportSections)
         let globals = lines(globalRequirementsText)
         sutra.globalRequirements = globals.isEmpty ? nil : globals
+        // Custom protocols default to ALL included phases required (audit:
+        // "default workflow protocols to all declared phases required") — an
+        // organization that includes a phase means it; the studio has no
+        // optional-phase editor yet, so nothing is silently skippable.
+        sutra.requiredPhaseKinds = phases.map(\.kind)
         // A protocol with zero rules would be vacuously conformant — refuse.
         guard !SutraRuleCompiler.rules(for: sutra).isEmpty else {
             status = "The protocol compiles to zero rules — add at least one obligation, decision, prohibition or global requirement."

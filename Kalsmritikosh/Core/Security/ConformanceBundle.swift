@@ -27,6 +27,7 @@ import CryptoKit
 
 public nonisolated enum ConformanceBundleError: Error, Equatable {
     case notSealed            // only sealed assessments export — nothing to verify otherwise
+    case missingFacts         // facts are MANDATORY: replay must be possible (audit item 4)
     case encodingFailed
 }
 
@@ -51,6 +52,7 @@ public nonisolated enum ConformanceBundle {
     static let protocolFile = "protocol.json"
     static let evaluationsFile = "rule-evaluations.json"
     static let factsFile = "evaluation-facts.json"
+    static let evidenceManifestFile = "evidence-manifest.json"
     static let publicKeyFile = "public-key.hex"
     static let manifestFile = "manifest.json"
     static let readmeFile = "README.txt"
@@ -75,15 +77,19 @@ public nonisolated enum ConformanceBundle {
         let attestationData = try ConformanceCanonical.data(of: seal)
         let publicKeyData = Data(seal.publicKeyHex.utf8)
 
+        // Facts are MANDATORY: a bundle that cannot be replayed is refused at
+        // export (audit item 4 — no downgrade to outcome-consistency).
+        guard let facts = stored.assessment.facts else { throw ConformanceBundleError.missingFacts }
         var payload: [(String, Data)] = [
             (protocolFile, protocolData),
             (evaluationsFile, evaluationsData),
             (attestationFile, attestationData),
             (publicKeyFile, publicKeyData),
+            (factsFile, try ConformanceCanonical.data(of: facts)),
         ]
-        // The exact facts consulted — lets the verifier RERUN the evaluators.
-        if let facts = stored.assessment.facts {
-            payload.append((factsFile, try ConformanceCanonical.data(of: facts)))
+        // The evidence manifest the signed envelope hashes (when the run has one).
+        if let manifest = stored.assessment.evidenceManifest {
+            payload.append((evidenceManifestFile, try ConformanceCanonical.data(of: manifest)))
         }
         for (name, data) in payload {
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
@@ -196,6 +202,7 @@ public nonisolated enum ConformanceBundle {
         let recomputed: ConformanceStatus =
             mandatory.contains { $0.outcome == .failed } ? .notConformant
             : mandatory.contains { $0.outcome == .notEvaluated || $0.outcome == .evaluatorError } ? .indeterminate
+            : mandatory.contains { $0.outcome == .approvedDeviation } ? .conformantWithDeviations
             : .conformant
         if recomputed.rawValue != sealed.envelope.overallStatus {
             replayOK = false
@@ -221,12 +228,17 @@ public nonisolated enum ConformanceBundle {
             replayOK = false
             verdict.details.append("replay: the protocol compiles to zero rules — vacuous conformance is refused")
         }
-        // TRUE replay: when the bundle carries the consulted facts, RERUN every
-        // evaluator over them and require the reproduced evaluations to match
-        // the recorded ones exactly — outcomes that were never produced by the
-        // rules-over-facts computation are caught here even when correctly signed.
+        // TRUE replay: RERUN every evaluator over the recorded facts and require
+        // the reproduced evaluations to match exactly — outcomes never produced
+        // by the rules-over-facts computation are caught even when correctly
+        // signed. DOWNGRADE-PROOF (audit item 4): when the SIGNED envelope
+        // commits to a facts hash, the facts file is REQUIRED and must match —
+        // deleting it (and regenerating the manifest) fails replay outright.
         if let factsData = read(factsFile) {
-            if let facts = try? decoder().decode(ConformanceFacts.self, from: factsData) {
+            if let signedFactsSHA = sealed.envelope.factsSHA256, sha256(factsData) != signedFactsSHA {
+                replayOK = false
+                verdict.details.append("replay: evaluation-facts.json does not match the SIGNED facts hash")
+            } else if let facts = try? decoder().decode(ConformanceFacts.self, from: factsData) {
                 let reproduced = SutraConformance.assess(facts: facts, against: sutra,
                                                          at: sealed.envelope.assessedAt).evaluations
                 if reproduced != evaluations {
@@ -237,8 +249,24 @@ public nonisolated enum ConformanceBundle {
                 replayOK = false
                 verdict.details.append("replay: evaluation-facts.json failed to decode")
             }
+        } else if sealed.envelope.factsSHA256 != nil {
+            replayOK = false
+            verdict.details.append("replay: the signed envelope commits to facts but evaluation-facts.json is missing — downgrade refused")
         } else {
-            verdict.details.append("replay note: no facts in bundle — outcome-consistency only, evaluators not rerun")
+            verdict.details.append("replay note: legacy bundle without signed facts — outcome-consistency only")
+        }
+        // The evidence manifest, when the signed envelope names one, must be
+        // present and match its hash.
+        if let signedManifestSHA = sealed.envelope.evidenceManifestSHA256 {
+            if let manifestData = read(evidenceManifestFile) {
+                if sha256(manifestData) != signedManifestSHA {
+                    replayOK = false
+                    verdict.details.append("replay: evidence-manifest.json does not match the SIGNED manifest hash")
+                }
+            } else {
+                replayOK = false
+                verdict.details.append("replay: the signed envelope commits to an evidence manifest but evidence-manifest.json is missing")
+            }
         }
         verdict.conformanceReplay = replayOK ? .passed : .failed
         return verdict

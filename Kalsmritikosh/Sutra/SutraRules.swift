@@ -51,6 +51,10 @@ public nonisolated struct SutraRule: Sendable, Codable, Equatable, Hashable, Ide
     public let humanRole: String?
     /// Citations to the external authority this rule encodes (e.g. "FRCP 26(b)(5)").
     public let authorityReferences: [String]
+    /// Whether an authorized deviation may resolve this rule. Prohibitions are
+    /// NON-waivable: no free-text justification can authorize asserting a
+    /// prohibited conclusion — a deviation attempt on a non-waivable rule fails.
+    public let waivable: Bool
 
     public init(id: String, phaseKind: PersonaJobKind?, kind: RuleKind,
                 severity: RuleSeverity, text: String,
@@ -58,7 +62,8 @@ public nonisolated struct SutraRule: Sendable, Codable, Equatable, Hashable, Ide
                 evaluatorVersion: String = "v1",
                 requiredEvidence: [String] = [],
                 humanRole: String? = nil,
-                authorityReferences: [String] = []) {
+                authorityReferences: [String] = [],
+                waivable: Bool = true) {
         self.id = id; self.phaseKind = phaseKind; self.kind = kind
         self.severity = severity; self.text = text
         self.applicability = applicability
@@ -66,11 +71,12 @@ public nonisolated struct SutraRule: Sendable, Codable, Equatable, Hashable, Ide
         self.requiredEvidence = requiredEvidence
         self.humanRole = humanRole
         self.authorityReferences = authorityReferences
+        self.waivable = waivable
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, phaseKind, kind, severity, text, applicability,
-             evaluatorVersion, requiredEvidence, humanRole, authorityReferences
+             evaluatorVersion, requiredEvidence, humanRole, authorityReferences, waivable
     }
 
     /// Back-compatible decode: rows written before the schema depth landed
@@ -87,6 +93,7 @@ public nonisolated struct SutraRule: Sendable, Codable, Equatable, Hashable, Ide
         self.requiredEvidence = try c.decodeIfPresent([String].self, forKey: .requiredEvidence) ?? []
         self.humanRole = try c.decodeIfPresent(String.self, forKey: .humanRole)
         self.authorityReferences = try c.decodeIfPresent([String].self, forKey: .authorityReferences) ?? []
+        self.waivable = try c.decodeIfPresent(Bool.self, forKey: .waivable) ?? true
     }
 }
 
@@ -127,22 +134,59 @@ public nonisolated enum SutraRuleCompiler {
         }
         for phase in sutra.phases {
             for (i, text) in phase.obligations.enumerated() {
+                let meta = enrichment(kind: phase.kind, text: text)
                 out.append(SutraRule(id: "\(phase.kind.rawValue).obligation.\(i)",
                                      phaseKind: phase.kind, kind: .obligation,
-                                     severity: .mandatory, text: text))
+                                     severity: .mandatory, text: text,
+                                     requiredEvidence: meta.requiredEvidence,
+                                     authorityReferences: meta.authorityReferences))
             }
             for (i, text) in phase.humanDecisions.enumerated() {
+                let meta = enrichment(kind: phase.kind, text: text)
                 out.append(SutraRule(id: "\(phase.kind.rawValue).humanDecision.\(i)",
                                      phaseKind: phase.kind, kind: .humanDecision,
-                                     severity: .mandatory, text: text))
+                                     severity: .mandatory, text: text,
+                                     humanRole: meta.humanRole,
+                                     authorityReferences: meta.authorityReferences))
             }
             for (i, text) in phase.prohibitedConclusions.enumerated() {
+                // Prohibitions are NON-waivable: no deviation can authorize one.
                 out.append(SutraRule(id: "\(phase.kind.rawValue).prohibition.\(i)",
                                      phaseKind: phase.kind, kind: .prohibition,
-                                     severity: .mandatory, text: text))
+                                     severity: .mandatory, text: text,
+                                     waivable: false))
             }
         }
         return out
+    }
+
+    /// Deterministic rule metadata for the KNOWN doctrine lines: which
+    /// evidence kinds a rule inspects, who owns its reserved decision, and the
+    /// external authority it encodes. Text-keyed so amendments that keep a
+    /// line keep its grounding.
+    static func enrichment(kind: PersonaJobKind, text: String)
+        -> (requiredEvidence: [String], humanRole: String?, authorityReferences: [String]) {
+        switch (kind, text) {
+        case (.evidenceCustody, "Record custody contemporaneously"):
+            return (["custody.record"], nil, ["SWGDE Best Practices", "NIST SP 800-86"])
+        case (.evidenceCustody, "Hash evidence as early as possible (SWGDE/NIST)"):
+            return (["custody.hash"], nil, ["SWGDE Best Practices", "NIST SP 800-86"])
+        case (.findings, "Declare a standard of proof"):
+            return ([], nil, ["Evidentiary standards (balance of probabilities … beyond reasonable doubt)"])
+        case (.findings, "Approve the findings"):
+            return ([], "approver", [])
+        case (.caseIntake, "Authorize the scope"):
+            return ([], "case owner", [])
+        case (.closure, "Decide to close or reopen"):
+            return ([], "case owner", [])
+        case (.sourceReliability, "Rate each source on the Admiralty scale (A–F × 1–6)"):
+            return ([], nil, ["Admiralty/NATO source rating"])
+        case (.analysis, _):
+            return ([], text.hasPrefix("Record the leading hypothesis") ? "analyst" : nil,
+                    ["Analysis of Competing Hypotheses (Heuer)"])
+        default:
+            return ([], nil, [])
+        }
     }
 }
 
@@ -160,6 +204,35 @@ public nonisolated struct RuleAttestation: Sendable, Codable, Equatable {
     }
 }
 
+/// A TYPED deviation authorization (audit item 8): who authorized departing
+/// from a rule, in what role, why, and when. Decodes legacy plain-string
+/// justifications as "unattributed" so v109 facts still verify.
+public nonisolated struct DeviationAuthorization: Sendable, Codable, Equatable {
+    public let authorizedBy: String
+    public let role: String?
+    public let justification: String
+    public let at: Date?
+
+    public init(authorizedBy: String, role: String? = nil, justification: String, at: Date?) {
+        self.authorizedBy = authorizedBy; self.role = role
+        self.justification = justification; self.at = at
+    }
+
+    private enum CodingKeys: String, CodingKey { case authorizedBy, role, justification, at }
+
+    public init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(), let s = try? single.decode(String.self) {
+            self.authorizedBy = "unattributed"; self.role = nil; self.justification = s; self.at = nil
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.authorizedBy = try c.decode(String.self, forKey: .authorizedBy)
+        self.role = try c.decodeIfPresent(String.self, forKey: .role)
+        self.justification = try c.decode(String.self, forKey: .justification)
+        self.at = try c.decodeIfPresent(Date.self, forKey: .at)
+    }
+}
+
 /// The recorded facts an assessment may consult. Extends the legacy RunRecord
 /// shape with explicit attestations so no rule can pass by default. Codable so
 /// verification bundles can carry the facts and REPLAY the evaluators.
@@ -173,10 +246,11 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
     /// recorded evaluation for rules with no deterministic gate. An unattested
     /// mandatory rule stays `notEvaluated` and blocks conformance.
     public var attestedRuleIDs: Set<String>
-    /// Authorized deviations: rule ID → recorded justification. A deviation is
-    /// VISIBLE on the certificate (`approvedDeviation`), never hidden — the run
-    /// can still be conformant, but the departure travels with it.
-    public var approvedDeviations: [String: String]
+    /// Authorized deviations: rule ID → TYPED authorization (who, role, why,
+    /// when). A deviation is VISIBLE on the certificate (`approvedDeviation`)
+    /// and downgrades the rollup to `conformantWithDeviations` — never plain
+    /// conformant. Non-waivable rules refuse deviations outright.
+    public var approvedDeviations: [String: DeviationAuthorization]
     /// Evidence kinds actually BOUND to the run (e.g. "custody.record",
     /// "custody.hash"). A rule whose `requiredEvidence` names a kind absent
     /// here stays `notEvaluated` — an attestation cannot substitute for
@@ -198,7 +272,7 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
                 humanDecisionsMade: Set<PersonaJobKind> = [],
                 assertedProhibited: [String] = [],
                 attestedRuleIDs: Set<String> = [],
-                approvedDeviations: [String: String] = [:],
+                approvedDeviations: [String: DeviationAuthorization] = [:],
                 presentEvidenceKinds: Set<String> = [],
                 attestations: [String: RuleAttestation] = [:],
                 requiredPhaseKinds: Set<PersonaJobKind> = []) {
@@ -219,10 +293,15 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
 
 public nonisolated enum ConformanceStatus: String, Sendable, Codable {
     case conformant, notConformant, indeterminate
+    /// Every mandatory rule resolved, but at least one via an authorized
+    /// deviation — distinct on the wire and the certificate, never blended
+    /// into plain conformant (audit item 8).
+    case conformantWithDeviations
 
     public var summaryLine: String {
         switch self {
         case .conformant:    return "Conformant — every mandatory rule evaluated and satisfied."
+        case .conformantWithDeviations: return "Conformant WITH authorized deviations — every departure is on the certificate."
         case .notConformant: return "Not conformant — at least one mandatory rule failed."
         case .indeterminate: return "Indeterminate — mandatory rule(s) not yet evaluated; conformance cannot be claimed."
         }
@@ -244,14 +323,21 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
     /// The exact facts consulted — carried so a verifier can RERUN the
     /// evaluators, not merely re-add the outcomes.
     public var facts: ConformanceFacts? = nil
+    /// The evidence manifest the run was assessed over (source versions +
+    /// content hashes) — exported in bundles; its hash is signed in the seal.
+    public var evidenceManifest: [EvidenceManifestEntry]? = nil
 
     /// Fail-closed rollup: failed beats everything; any mandatory
-    /// notEvaluated/evaluatorError makes the whole assessment indeterminate.
+    /// notEvaluated/evaluatorError makes the whole assessment indeterminate;
+    /// any authorized deviation is DISTINCT from plain conformance.
     public var status: ConformanceStatus {
         let mandatory = evaluations.filter { $0.rule.severity == .mandatory }
         if mandatory.contains(where: { $0.outcome == .failed }) { return .notConformant }
         if mandatory.contains(where: { $0.outcome == .notEvaluated || $0.outcome == .evaluatorError }) {
             return .indeterminate
+        }
+        if mandatory.contains(where: { $0.outcome == .approvedDeviation }) {
+            return .conformantWithDeviations
         }
         return .conformant
     }
@@ -267,8 +353,8 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
         evaluations.filter { $0.outcome == .approvedDeviation }.count
     }
     public var displaySummaryLine: String {
-        status == .conformant && approvedDeviationCount > 0
-            ? "Conformant with \(approvedDeviationCount) approved deviation(s) — every departure is on the certificate."
+        status == .conformantWithDeviations
+            ? "Conformant with \(approvedDeviationCount) authorized deviation(s) — every departure is on the certificate."
             : status.summaryLine
     }
 
@@ -420,11 +506,19 @@ extension SutraConformance {
                                   evaluatorID: "gate.applicability.v1",
                                   detail: rule.phaseKind == nil ? "condition not met" : "phase not reached in this run")
         }
-        // 2. An authorized, justified deviation — visible, never hidden.
-        if let justification = facts.approvedDeviations[rule.id] {
+        // 2. An authorized, justified deviation — visible, never hidden. A
+        //    deviation attempt on a NON-waivable rule (every prohibition) fails:
+        //    no free text can authorize asserting a prohibited conclusion.
+        if let auth = facts.approvedDeviations[rule.id] {
+            guard rule.waivable else {
+                return RuleEvaluation(rule: rule, outcome: .failed,
+                                      evaluatorID: "gate.nonWaivable.v1",
+                                      detail: "deviation refused — this rule is non-waivable (attempted by \(auth.authorizedBy): \(auth.justification))")
+            }
+            let role = auth.role.map { " (\($0))" } ?? ""
             return RuleEvaluation(rule: rule, outcome: .approvedDeviation,
-                                  evaluatorID: "human.deviation.v1",
-                                  detail: "authorized deviation: \(justification)")
+                                  evaluatorID: "human.deviation.v2",
+                                  detail: "authorized deviation by \(auth.authorizedBy)\(role): \(auth.justification)")
         }
         // 3. Declared evidence binding: required kinds must actually be bound to
         //    the run — an attestation cannot substitute for absent evidence.

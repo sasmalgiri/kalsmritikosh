@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 109
+    public static let latestVersion = 110
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -605,7 +605,8 @@ public enum SchemaMigrations {
         (106, v106),
         (107, v107),
         (108, v108),
-        (109, v109)
+        (109, v109),
+        (110, v110)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6059,5 +6060,46 @@ public enum SchemaMigrations {
     ALTER TABLE conformance_assessments ADD COLUMN run_id TEXT;
     ALTER TABLE conformance_assessments ADD COLUMN run_state_sha256 TEXT;
     ALTER TABLE conformance_assessments ADD COLUMN facts_json TEXT;
+    """
+
+    // MARK: - v110 — deviations become a DISTINCT sealed status
+    //
+    // Audit item 8: 'conformantWithDeviations' joins the status vocabulary so a
+    // deviated run is never blended into plain conformant. SQLite cannot alter
+    // a CHECK, so the table is recreated with the 4-state constraint and rows
+    // copied verbatim (append-only history preserved). Adds evidence_manifest_json
+    // so bundles export the manifest the signed envelope hashes.
+    private static let v110: String = """
+    CREATE TABLE conformance_assessments_v110 (
+        id                     TEXT PRIMARY KEY NOT NULL,
+        case_id                TEXT NOT NULL,
+        run_revision           INTEGER NOT NULL DEFAULT 1,
+        sutra_citation         TEXT NOT NULL,
+        sutra_sha256           TEXT NOT NULL,
+        sutra_snapshot_json    TEXT NOT NULL,
+        evaluations_json       TEXT NOT NULL,
+        status                 TEXT NOT NULL,
+        seal_json              TEXT,
+        assessed_at            REAL NOT NULL,
+        created_at             REAL NOT NULL,
+        run_id                 TEXT,
+        run_state_sha256       TEXT,
+        facts_json             TEXT,
+        evidence_manifest_json TEXT,
+        CHECK(status IN ('conformant','conformantWithDeviations','notConformant','indeterminate')),
+        CHECK(run_revision >= 1),
+        CHECK(length(trim(sutra_sha256)) = 64)
+    );
+    INSERT INTO conformance_assessments_v110
+        (id, case_id, run_revision, sutra_citation, sutra_sha256, sutra_snapshot_json,
+         evaluations_json, status, seal_json, assessed_at, created_at,
+         run_id, run_state_sha256, facts_json)
+    SELECT id, case_id, run_revision, sutra_citation, sutra_sha256, sutra_snapshot_json,
+           evaluations_json, status, seal_json, assessed_at, created_at,
+           run_id, run_state_sha256, facts_json
+    FROM conformance_assessments;
+    DROP TABLE conformance_assessments;
+    ALTER TABLE conformance_assessments_v110 RENAME TO conformance_assessments;
+    CREATE INDEX idx_conformance_assessments_case ON conformance_assessments(case_id, created_at);
     """
 }

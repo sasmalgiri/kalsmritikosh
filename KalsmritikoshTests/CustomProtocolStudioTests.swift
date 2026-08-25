@@ -80,12 +80,16 @@ struct CustomProtocolStudioTests {
         #expect(try await repo.activeSutra(id: SutraCompiler.shared().id) == nil,
                 "the built-in doctrine's id must remain ungoverned")
 
-        // And the custom constitution assesses like any other — fail-closed.
+        // And the custom constitution assesses like any other — fail-closed,
+        // and STRICTER: the studio requires every included phase, so a run that
+        // only reached findings FAILS (unreached required phases), it does not
+        // soften to indeterminate.
         let facts = ConformanceFacts(completedPhaseKinds: [.findings],
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
                                      humanDecisionsMade: [.findings])
         let a = SutraConformance.assess(facts: facts, against: sutra, at: now)
-        #expect(a.status == .indeterminate, "unattested custom rules block conformance too")
+        #expect(a.status == .notConformant, "unreached required phases fail — no vacuous conformance")
+        #expect(a.evaluations.contains { $0.evaluatorID == "gate.requiredPhase.v1" && $0.outcome == .failed })
     }
 }

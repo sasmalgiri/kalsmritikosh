@@ -27,7 +27,7 @@ public nonisolated enum SutraCompiler {
                 humanDecisions: d.humanDecisions,
                 prohibitedConclusions: d.prohibited)
         }
-        return Sutra(
+        var sutra = Sutra(
             id: "sutra.investigation",
             version: 1,
             title: "Investigation doctrine",
@@ -37,6 +37,13 @@ public nonisolated enum SutraCompiler {
             standardsOfProof: EvidentiaryStandard.allCases,
             reportSections: ["Problem / mandate", "Evidence & custody", "Analysis",
                              "Findings (with standard of proof)", "Open items", "Sign-off & seal"])
+        // The DECLARED spine a conformant run must walk (audit item 5): intake
+        // authorizes the scope, findings declare + approve under a standard of
+        // proof. The other phases are case-dependent tools — a matter without a
+        // money trail owes no fund-flow — so they stay optional-but-evaluated
+        // whenever reached. Rules of an unreached REQUIRED phase FAIL.
+        sutra.requiredPhaseKinds = [.caseIntake, .findings]
+        return sutra
     }
 
     /// STEP 5 — a SECOND discipline, authored as a Sūtra alone (no new UI, no new

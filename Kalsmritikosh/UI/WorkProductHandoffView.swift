@@ -91,7 +91,7 @@ public final class WorkProductHandoffModel {
 
     /// Authorized deviations recorded by the reviewer this session: rule ID →
     /// justification. Visible on the certificate, never hidden.
-    public var approvedDeviations: [String: String] = [:]
+    public var approvedDeviations: [String: DeviationAuthorization] = [:]
 
     /// Surface an export failure raised by the view layer (save panels live there).
     public func noteExportFailure(_ message: String) { lastError = message }
@@ -100,12 +100,15 @@ public final class WorkProductHandoffModel {
     /// service-backed state, not assembled by the view. Multi-phase: findings
     /// always; chain-of-custody when the case holds custody entries; closure
     /// when a close/reopen decision was recorded.
-    public func conformanceFacts() -> ConformanceFacts {
-        var reached: Set<PersonaJobKind> = [.findings]
+    public func conformanceFacts(assumingApproval: Bool = false) -> ConformanceFacts {
+        // Intake is reached the moment a matter exists; its reserved decision
+        // ("Authorize the scope") is recorded when the scope was confirmed.
+        var reached: Set<PersonaJobKind> = [.caseIntake, .findings]
         if !(snapshot?.custody.isEmpty ?? true) { reached.insert(.evidenceCustody) }
         if snapshot?.latestClosure != nil { reached.insert(.closure) }
         var decisions: Set<PersonaJobKind> = []
-        if snapshot?.isApproved ?? false { decisions.insert(.findings) }
+        if let status = snapshot?.status, status != .open { decisions.insert(.caseIntake) }
+        if assumingApproval || (snapshot?.isApproved ?? false) { decisions.insert(.findings) }
         if snapshot?.latestClosure != nil { decisions.insert(.closure) }
         // Evidence kinds actually bound to this run (custody manifest).
         var evidence: Set<String> = []
@@ -121,6 +124,15 @@ public final class WorkProductHandoffModel {
             approvedDeviations: approvedDeviations,
             presentEvidenceKinds: evidence,
             attestations: ruleAttestations)
+    }
+
+    /// The custody manifest embedded into assessments (its hash is signed).
+    private func currentEvidenceManifest() -> [EvidenceManifestEntry]? {
+        guard let custody = snapshot?.custody, !custody.isEmpty else { return nil }
+        return custody
+            .map { EvidenceManifestEntry(sourceVersionID: $0.sourceVersionID.uuidString,
+                                         contentHash: $0.contentHash) }
+            .sorted { $0.sourceVersionID < $1.sourceVersionID }
     }
 
     /// The REAL run this assessment binds to (audit item 2): the built findings
@@ -139,20 +151,26 @@ public final class WorkProductHandoffModel {
     }
 
     /// Live (unrecorded) assessment against the frozen constitution.
-    public func currentAssessment(at now: Date = Date()) -> ConformanceAssessment {
+    public func currentAssessment(at now: Date = Date(),
+                                  assumingApproval: Bool = false) -> ConformanceAssessment {
         let binding = runBinding()
-        return SutraConformance.assess(facts: conformanceFacts(),
-                                       against: frozenSutra ?? SutraCompiler.shared(), at: now,
-                                       runID: binding.runID,
-                                       runStateSHA256: binding.runStateSHA256)
+        var assessment = SutraConformance.assess(
+            facts: conformanceFacts(assumingApproval: assumingApproval),
+            against: frozenSutra ?? SutraCompiler.shared(), at: now,
+            runID: binding.runID,
+            runStateSHA256: binding.runStateSHA256)
+        assessment.evidenceManifest = currentEvidenceManifest()
+        return assessment
     }
 
     /// Record + seal this run's assessment (called on approval). The seal links
     /// the case, revision, findings-receipt seal, schema version, the evidence
     /// manifest, and the freshly sealed audit-chain head; recording appends a
-    /// new revision — prior assessments are never rewritten.
-    private func recordAssessment(caseID: UUID, at date: Date) async {
-        guard let repo = assessments else { return }
+    /// new revision — prior assessments are never rewritten. Returns a WARNING
+    /// string on any failure so the approval outcome carries it (audit item 2:
+    /// the success path must never erase a recording/sealing failure).
+    private func recordAssessment(caseID: UUID, at date: Date) async -> String? {
+        guard let repo = assessments else { return nil }
         let assessment = currentAssessment(at: date)
         let nextRevision = ((try? await repo.latest(caseID: caseID))?.runRevision ?? 0) + 1
         var linkage = ConformanceSealLinkage(caseID: caseID,
@@ -172,22 +190,13 @@ public final class WorkProductHandoffModel {
                 linkage.auditEventCount = h.sealedSeq
             }
         }
-        // The evidence manifest the run was assessed over (custody entries).
-        if let custody = snapshot?.custody, !custody.isEmpty {
-            let manifest = custody
-                .map { EvidenceManifestEntry(sourceVersionID: $0.sourceVersionID.uuidString,
-                                             contentHash: $0.contentHash) }
-                .sorted { $0.sourceVersionID < $1.sourceVersionID }
-            linkage.evidenceManifestSHA256 = try? ConformanceCanonical.sha256(of: manifest)
-        }
-        // Never swallow a sealing failure (audit 2026-08-25 item 3): the row is
-        // still recorded (an honest unsealed assessment beats no record), but
-        // the reviewer is told exactly why the seal is missing.
+        var warning: String? = nil
         var sealed: SealedConformance? = nil
         do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
-        catch { lastError = "Assessment recorded UNSEALED — sealing refused: \(error)" }
+        catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
-        catch { lastError = "Conformance assessment could not be recorded: \(error)" }
+        catch { warning = "conformance assessment could NOT be recorded: \(error)" }
+        return warning
     }
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
@@ -298,15 +307,37 @@ public final class WorkProductHandoffModel {
         let awareness = hasOpenItems
             ? " Open items at approval: \(openContradictionCount) contradiction(s), \(openGapCount) gap(s) — acknowledged by approver."
             : " No open contradictions or gaps at approval."
+        // CONFORMANCE GATE (audit item 1): in strict mode with persistence wired,
+        // approval is REFUSED unless the run — assessed as if this approval were
+        // recorded — is conformant (deviations allowed, each on the certificate).
+        // Indeterminate (unattested rules) or failed (unreached required phase,
+        // asserted prohibition, non-waivable deviation) blocks the approval
+        // itself; conformance is a precondition, not an afterthought.
+        if assessments != nil && !FeatureFlags.classicConformanceValue() {
+            let projected = currentAssessment(at: date, assumingApproval: true)
+            switch projected.status {
+            case .conformant, .conformantWithDeviations:
+                break
+            case .indeterminate:
+                lastError = "Approval blocked — \(projected.unevaluated.count) rule(s) await attestation or an authorized deviation. Resolve each in the conformance panel, then approve."
+                return
+            case .notConformant:
+                let failed = projected.evaluations.filter { $0.outcome == .failed }
+                lastError = "Approval blocked — the run is not conformant: \(failed.map(\.rule.text).prefix(2).joined(separator: "; "))\(failed.count > 2 ? " (+\(failed.count - 2) more)" : "")."
+                return
+            }
+        }
         await perform {
             _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
                                                         rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
-            // Strict conformance (v107): record + seal the per-rule assessment of
-            // this approved run against the frozen constitution. Classic mode
-            // records nothing — exactly the previous behavior.
+            // Strict conformance: record + seal the per-rule assessment of this
+            // approved run against the frozen constitution. A recording/sealing
+            // failure is NEVER erased by the success path — it rides the outcome.
             if !FeatureFlags.classicConformanceValue() {
-                await self.recordAssessment(caseID: snap.caseID, at: date)
+                if let warning = await self.recordAssessment(caseID: snap.caseID, at: date) {
+                    return "Findings approved under \(std.label) — ⚠️ \(warning)"
+                }
             }
             return "Findings approved under \(std.label)."
         }
@@ -411,8 +442,10 @@ public struct WorkProductHandoffView: View {
     @Environment(AppState.self) private var appState
     /// CONFORMANCE STYLE switch — classic summary label vs strict per-rule assessment.
     @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
-    /// Deviation recording (strict mode): the rule being deviated + its justification.
+    /// Deviation recording (strict mode): the rule being deviated + its typed authorization.
     @State private var deviationRule: SutraRule?
+    @State private var deviationAuthorizer = ""
+    @State private var deviationRole = ""
     @State private var deviationJustification = ""
     /// Per-rule attestation capture (strict mode): actor, role, rationale.
     @State private var attestRule: SutraRule?
@@ -601,9 +634,10 @@ public struct WorkProductHandoffView: View {
         let stored = model.storedAssessment
         let assessment = stored?.assessment ?? model.currentAssessment()
         let (icon, color): (String, Color) = switch assessment.status {
-        case .conformant:    ("checkmark.seal.fill", .green)
-        case .notConformant: ("xmark.seal.fill", .red)
-        case .indeterminate: ("seal", .orange)
+        case .conformant:               ("checkmark.seal.fill", .green)
+        case .conformantWithDeviations: ("checkmark.seal", .teal)
+        case .notConformant:            ("xmark.seal.fill", .red)
+        case .indeterminate:            ("seal", .orange)
         }
         return VStack(alignment: .leading, spacing: 6) {
             // Which constitution governs this matter's NEW runs — locked once frozen.
@@ -677,17 +711,23 @@ public struct WorkProductHandoffView: View {
                 .alert("Record authorized deviation", isPresented: Binding(
                     get: { deviationRule != nil },
                     set: { if !$0 { deviationRule = nil } })) {
-                    TextField("Justification — who authorized it, and why", text: $deviationJustification)
+                    TextField("Authorized by (required)", text: $deviationAuthorizer)
+                    TextField("Role (optional)", text: $deviationRole)
+                    TextField("Justification — why this departure is authorized", text: $deviationJustification)
                     Button("Record deviation") {
+                        let who = deviationAuthorizer.trimmingCharacters(in: .whitespaces)
                         let why = deviationJustification.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if let rule = deviationRule, !why.isEmpty {
-                            model.approvedDeviations[rule.id] = why
+                        if let rule = deviationRule, !who.isEmpty, !why.isEmpty {
+                            model.approvedDeviations[rule.id] = DeviationAuthorization(
+                                authorizedBy: who,
+                                role: deviationRole.isEmpty ? nil : deviationRole,
+                                justification: why, at: Date())
                         }
                         deviationRule = nil
                     }
                     Button("Cancel", role: .cancel) { deviationRule = nil }
                 } message: {
-                    Text("A deviation resolves the rule as an authorized departure. It stays visible on the certificate with your justification — it is never hidden.")
+                    Text("A deviation resolves the rule as an authorized departure and downgrades the sealed status to 'conformant with deviations'. Prohibitions are non-waivable — a deviation on one fails the run. Every departure stays on the certificate with who authorized it and why.")
                 }
             }
             if assessment.status != .indeterminate {

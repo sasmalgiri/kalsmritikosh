@@ -43,6 +43,10 @@ struct Envelope: Codable {
     let databaseSchemaVersion: Int?
     let evidenceManifestSHA256: String?
     let signerAssurance: String?
+    let runID: String?
+    let runStateSHA256: String?
+    let approvedDeviationCount: Int?
+    let factsSHA256: String?
 }
 
 struct Attestation: Codable {
@@ -87,13 +91,25 @@ struct ProtocolSnapshot: Codable {
 /// by the app at assessment time, so the CLI never re-derives defaults.
 struct Facts: Codable {
     struct Attestation: Codable { let actor: String }
+    /// Typed deviation authorization; legacy facts stored a plain string.
+    struct Deviation: Codable {
+        let authorizedBy: String
+        init(from decoder: Decoder) throws {
+            if let single = try? decoder.singleValueContainer(), let _ = try? single.decode(String.self) {
+                self.authorizedBy = "unattributed"; return
+            }
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.authorizedBy = try c.decode(String.self, forKey: .authorizedBy)
+        }
+        enum CodingKeys: String, CodingKey { case authorizedBy }
+    }
     let completedPhaseKinds: [String]
     let standardOfProofDeclared: Bool
     let openItemsAcknowledged: Bool
     let humanDecisionsMade: [String]
     let assertedProhibited: [String]
     let attestedRuleIDs: [String]
-    let approvedDeviations: [String: String]
+    let approvedDeviations: [String: Deviation]
     let presentEvidenceKinds: [String]
     let attestations: [String: Attestation]
     let requiredPhaseKinds: [String]
@@ -216,6 +232,7 @@ let mandatory = evaluations.filter { $0.rule.severity == "mandatory" }
 let recomputed: String =
     mandatory.contains { $0.outcome == "failed" } ? "notConformant"
     : mandatory.contains { $0.outcome == "notEvaluated" || $0.outcome == "evaluatorError" } ? "indeterminate"
+    : mandatory.contains { $0.outcome == "approvedDeviation" } ? "conformantWithDeviations"
     : "conformant"
 var replayOK = true
 var replayDetail = ""
@@ -235,8 +252,24 @@ if replayOK, Set(evaluations.map(\.rule.id)).count != evaluations.count {
 // Detail strings are informational and not compared.
 func rerunEvaluators() -> String? {
     guard let factsData = read("evaluation-facts.json") else {
-        print("REPLAY note: no facts in bundle — outcome-consistency only")
+        // Downgrade-proof (spec v1): when the SIGNED envelope commits to a
+        // facts hash, the facts file is REQUIRED — deleting it fails replay.
+        if attestation.envelope.factsSHA256 != nil {
+            return "signed envelope commits to facts but evaluation-facts.json is missing — downgrade refused"
+        }
+        print("REPLAY note: legacy bundle without signed facts — outcome-consistency only")
         return nil
+    }
+    if let signedSHA = attestation.envelope.factsSHA256, sha256(factsData) != signedSHA {
+        return "evaluation-facts.json does not match the SIGNED facts hash"
+    }
+    if let signedManifestSHA = attestation.envelope.evidenceManifestSHA256 {
+        guard let manifestData = read("evidence-manifest.json") else {
+            return "signed envelope commits to an evidence manifest but evidence-manifest.json is missing"
+        }
+        if sha256(manifestData) != signedManifestSHA {
+            return "evidence-manifest.json does not match the SIGNED manifest hash"
+        }
     }
     guard let facts = try? decoder().decode(Facts.self, from: factsData),
           let proto = try? decoder().decode(ProtocolSnapshot.self, from: protocolData) else {
@@ -276,7 +309,10 @@ func rerunEvaluators() -> String? {
             if let phase = rule.phase, required.contains(phase) { return "failed" }
             return "notApplicable"
         }
-        if facts.approvedDeviations[rule.id] != nil { return "approvedDeviation" }
+        if facts.approvedDeviations[rule.id] != nil {
+            // Prohibitions are NON-waivable (spec v1): a deviation on one fails.
+            return rule.kind == "prohibition" ? "failed" : "approvedDeviation"
+        }
         switch rule.kind {
         case "humanDecision":
             guard let phase = rule.phase else { return "evaluatorError" }

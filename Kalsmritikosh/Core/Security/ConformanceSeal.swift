@@ -58,6 +58,10 @@ public nonisolated struct ConformanceSealEnvelope: Sendable, Codable, Equatable 
     /// Deviations are visible on the wire: a conformant-with-deviations seal
     /// says so, distinctly from a clean conformant.
     public let approvedDeviationCount: Int?
+    /// SHA-256 over the canonical consulted facts. SIGNED, so deleting
+    /// evaluation-facts.json from a bundle cannot silently downgrade the
+    /// verifier to outcome-consistency (audit item 4).
+    public let factsSHA256: String?
 }
 
 /// One evidence-manifest line: a source version and the content hash that
@@ -278,6 +282,11 @@ public nonisolated enum ConformanceSeal {
            runRev != assessedRev {
             throw ConformanceSealError.runRevisionMismatch
         }
+        // The facts and evidence-manifest hashes come from the assessment itself
+        // so the SIGNED envelope commits to them (downgrade-proof).
+        let factsSHA = try assessment.facts.map { try ConformanceCanonical.sha256(of: $0) }
+        let manifestSHA = try assessment.evidenceManifest.map { try ConformanceCanonical.sha256(of: $0) }
+            ?? linkage.evidenceManifestSHA256
         // An injected key is an external signer (tests); otherwise Secure Enclave
         // when the hardware offers it, Keychain software key as fallback.
         let backend: ConformanceSigningKey.Backend
@@ -303,12 +312,13 @@ public nonisolated enum ConformanceSeal {
             auditEventCount: linkage.auditEventCount,
             receiptSeal: linkage.receiptSeal,
             databaseSchemaVersion: linkage.databaseSchemaVersion,
-            evidenceManifestSHA256: linkage.evidenceManifestSHA256,
+            evidenceManifestSHA256: manifestSHA,
             signerAssurance: assurance,
             runID: assessment.runID?.uuidString,
             runStateSHA256: assessment.runStateSHA256,
             approvedDeviationCount: assessment.approvedDeviationCount > 0
-                ? assessment.approvedDeviationCount : nil)
+                ? assessment.approvedDeviationCount : nil,
+            factsSHA256: factsSHA)
         guard let canonical = try? ConformanceCanonical.data(of: envelope) else {
             throw ConformanceSealError.encodingFailed
         }
@@ -365,6 +375,75 @@ public nonisolated enum ConformanceSeal {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
         let b = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
         return "\(v) (\(b))"
+    }
+}
+
+// MARK: - Studio deliverable seal (audit item 10 — every studio, one shell)
+//
+// Persona-studio deliverables are completeness-gated documents, not case runs;
+// their conformance surface is the deliverable itself. Whenever a report
+// leaves the app (copy / export / print) the SHELL appends this signed seal:
+// content hash, stage completion honestly stated, installation key signature.
+// The same three-verdict logic applies — hash the text above the seal line,
+// re-encode the envelope canonically, check the P-256 signature.
+
+public nonisolated struct StudioDeliverableEnvelope: Sendable, Codable, Equatable {
+    public let formatVersion: Int          // 1
+    public let studio: String
+    public let deliverableTitle: String
+    /// SHA-256 over the rendered report text ABOVE the seal block (UTF-8).
+    public let contentSHA256: String
+    public let stagesComplete: Int
+    public let stagesTotal: Int
+    public let allStagesComplete: Bool
+    public let sealedAt: Date
+    public let signerKeyID: String
+    public let signatureAlgorithm: String
+}
+
+public nonisolated enum StudioDeliverableSeal {
+    /// The line separating report content from the seal — verifiers hash
+    /// everything strictly above it.
+    public static let separator = "\n---\n## Deliverable seal (ECDSA P-256)\n"
+
+    /// Append a signed seal to a rendered report. When no signing key is
+    /// available the report gains an honest UNSEALED note instead — the
+    /// deliverable never silently pretends.
+    public static func sealedReport(studio: String, title: String, report: String,
+                                    stagesComplete: Int, stagesTotal: Int,
+                                    at now: Date,
+                                    key: P256.Signing.PrivateKey? = nil) -> String {
+        let contentSHA = SHA256.hash(data: Data(report.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+        let backend: ConformanceSigningKey.Backend
+        if let key { backend = .software(key) }
+        else if let stored = ConformanceSigningKey.loadOrGenerateBackend() { backend = stored }
+        else {
+            return report + separator + "_UNSEALED — no signing key available on this Mac._\n"
+        }
+        let envelope = StudioDeliverableEnvelope(
+            formatVersion: 1, studio: studio, deliverableTitle: title,
+            contentSHA256: contentSHA,
+            stagesComplete: stagesComplete, stagesTotal: stagesTotal,
+            allStagesComplete: stagesComplete == stagesTotal,
+            sealedAt: now,
+            signerKeyID: ConformanceSigningKey.keyID(forPublicKey: backend.publicKey),
+            signatureAlgorithm: "ECDSA-P256-SHA256")
+        guard let canonical = try? ConformanceCanonical.data(of: envelope),
+              let signature = try? backend.signature(for: canonical) else {
+            return report + separator + "_UNSEALED — signing failed._\n"
+        }
+        var out = report + separator
+        out += "| Field | Value |\n|---|---|\n"
+        out += "| Studio | \(studio) |\n"
+        out += "| Content SHA-256 | `\(contentSHA)` |\n"
+        out += "| Stages complete | \(stagesComplete)/\(stagesTotal)\(stagesComplete == stagesTotal ? "" : " — INCOMPLETE, stated honestly") |\n"
+        out += "| Signer key ID | `\(envelope.signerKeyID)` |\n"
+        out += "| Envelope (canonical JSON) | `\(String(data: canonical, encoding: .utf8) ?? "")` |\n"
+        out += "| Signature (DER, hex) | `\(signature.derRepresentation.map { String(format: "%02x", $0) }.joined())` |\n"
+        out += "| Public key (X9.63, hex) | `\(backend.publicKey.x963Representation.map { String(format: "%02x", $0) }.joined())` |\n\n"
+        out += "_Verify: SHA-256 the report text above the seal line; check it equals contentSHA256 in the envelope; verify the ECDSA P-256 signature over the canonical envelope with the public key._\n"
+        return out
     }
 }
 
