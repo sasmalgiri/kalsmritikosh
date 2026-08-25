@@ -61,6 +61,30 @@ public final class WorkProductHandoffModel {
     /// The constitution FROZEN when this matter's findings were first built in
     /// this session — the assessment never chases the live compiler value mid-run.
     public private(set) var frozenSutra: Sutra?
+    /// Which registered protocol GOVERNS this matter's new runs (audit item 6 —
+    /// custom protocols wired into run creation). nil = the built-in doctrine.
+    /// Persisted per case; locked once the run's constitution is frozen.
+    public private(set) var selectedProtocolID: String?
+    /// The ACTIVE registered protocols selectable for new runs.
+    public private(set) var activeProtocols: [RegisteredProtocol] = []
+
+    private nonisolated static func protocolChoiceKey(_ caseID: UUID) -> String {
+        "kalsmritikosh.case.protocol.\(caseID.uuidString)"
+    }
+
+    /// Choose the governing protocol for this matter's NEXT run. Refused once
+    /// the current run's constitution is frozen — a protocol never changes
+    /// mid-run; a new choice governs the next build.
+    public func selectProtocol(sutraID: String?) {
+        guard frozenSutra == nil else {
+            lastError = "This run's constitution is already frozen — the choice applies from the next build."
+            return
+        }
+        selectedProtocolID = sutraID
+        guard let caseID else { return }
+        if let sutraID { UserDefaults.standard.set(sutraID, forKey: Self.protocolChoiceKey(caseID)) }
+        else { UserDefaults.standard.removeObject(forKey: Self.protocolChoiceKey(caseID)) }
+    }
     /// The most recently RECORDED assessment for this matter (v107 row). An old
     /// run reopens against this — its own stored snapshot, not today's Sutra.
     public private(set) var storedAssessment: StoredConformanceAssessment?
@@ -208,6 +232,7 @@ public final class WorkProductHandoffModel {
             approvedDeviations = [:]
         }
         self.caseID = caseID
+        selectedProtocolID = UserDefaults.standard.string(forKey: Self.protocolChoiceKey(caseID))
         await refresh()
     }
 
@@ -226,6 +251,10 @@ public final class WorkProductHandoffModel {
         if let repo = assessments {
             storedAssessment = try? await repo.latest(caseID: caseID)
         }
+        // The active registered protocols selectable for new runs.
+        if let protocols {
+            activeProtocols = ((try? await protocols.list()) ?? []).filter { $0.status == .active }
+        }
     }
 
     /// Build the case's findings work product over the shared assembly engine (does not approve or close).
@@ -234,11 +263,17 @@ public final class WorkProductHandoffModel {
         let access = exportAccess(workspaceID: snap.workspaceID)
         // Run-start freeze: the constitution this run will be assessed against is
         // fixed the moment findings are first built — never a live value. The
-        // ACTIVE imported protocol (signed offline pack, v108) wins when one
-        // exists; the built-in doctrine is the fallback.
+        // matter's SELECTED protocol wins (custom or built-in id); otherwise the
+        // ACTIVE imported version of the built-in doctrine; built-in as fallback.
         if frozenSutra == nil {
             var resolved: Sutra? = nil
-            if let protocols { resolved = try? await protocols.activeSutra(id: SutraCompiler.shared().id) }
+            if let protocols {
+                let governingID = selectedProtocolID ?? SutraCompiler.shared().id
+                resolved = try? await protocols.activeSutra(id: governingID)
+                if resolved == nil && selectedProtocolID != nil {
+                    lastError = "The selected protocol '\(governingID)' has no active version — the built-in doctrine governs this run."
+                }
+            }
             frozenSutra = resolved ?? SutraCompiler.shared()
         }
         await perform {
@@ -571,6 +606,22 @@ public struct WorkProductHandoffView: View {
         case .indeterminate: ("seal", .orange)
         }
         return VStack(alignment: .leading, spacing: 6) {
+            // Which constitution governs this matter's NEW runs — locked once frozen.
+            if model.frozenSutra == nil && !model.activeProtocols.isEmpty {
+                Picker("Governing protocol", selection: Binding(
+                    get: { model.selectedProtocolID ?? "" },
+                    set: { model.selectProtocol(sutraID: $0.isEmpty ? nil : $0) })) {
+                    Text("Built-in doctrine").tag("")
+                    ForEach(model.activeProtocols) { p in
+                        Text("\(p.sutraID) v\(p.version) · \(p.publisher)").tag(p.sutraID)
+                    }
+                }
+                .font(.caption).frame(maxWidth: 420)
+                .help("The constitution the next findings build will freeze and be assessed against. A protocol never changes mid-run.")
+            } else if let frozen = model.frozenSutra {
+                Text("Constitution frozen for this run: \(frozen.citation)")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
             Label(assessment.displaySummaryLine, systemImage: icon)
                 .font(.caption).foregroundStyle(color)
                 .help("Sūtra conformance — every rule of the frozen constitution is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently.")

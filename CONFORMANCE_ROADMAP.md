@@ -152,8 +152,25 @@ Structural items — status after the v109 pass (all suite-verified):
 7. ✅ Deviations distinct on the wire: `approvedDeviationCount` signed in the
    envelope; the readout says "Conformant with N approved deviation(s)".
 
+Final pass (same day):
+- ✅ Standalone CLI evaluator rerun: kalverify recompiles the rules from
+  protocol.json and reruns the deterministic evaluators over
+  evaluation-facts.json, comparing (rule id → outcome). Proven live against
+  the full attack matrix: file edit → INTEGRITY fails; recomputed hashes →
+  AUTHENTICITY fails; malicious signer (wrong outcomes re-signed with a fresh
+  key) → REPLAY fails via independent rerun.
+- ✅ Trusted-signer allowlist: TrustedSigners (local, revocable) + Compliance
+  Board "Trust signer"/"Untrust signer"; bundle verification binds identity to
+  the list automatically and labels unlisted signers "key-consistent only".
+- ✅ Custom-protocol run selection: per-matter "Governing protocol" picker in
+  the handoff (persisted per case, locked once the run's constitution is
+  frozen; a selected protocol with no active version falls back loudly).
+
 Accurate current claim: tamper-evident, signed, per-rule assessed conformance
 with actor-bound attestations, run binding, required-phase enforcement, TOFU
-key pinning, and in-app evaluator replay. The standalone-CLI evaluator rerun,
-approval-transaction atomicity, a shipped pinned developer key, and custom-
-protocol run selection remain before "fully independently replayed" is claimed.
+key pinning, and INDEPENDENT evaluator replay (in-app and standalone CLI).
+Remaining before the claim is unqualified: approval-transaction atomicity
+(needs a service-level transaction API — Database.transaction is synchronous
+and multi-await BEGIN/COMMIT is explicitly unsafe in this codebase) and a
+pinned developer key shipped in the release binary (an owner/release act:
+export the release signing key's fingerprint and pin it at build time).

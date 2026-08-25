@@ -215,6 +215,30 @@ public nonisolated enum ConformanceSigningKey {
     }
 }
 
+// MARK: - Trusted signers (audit item 4 — the owner's allowlist)
+
+/// The Mac-local allowlist of signer key fingerprints the OWNER has explicitly
+/// trusted (Compliance Board › Trust signer). Verification consults it when no
+/// explicit trusted key is supplied: a listed signer binds identity, an
+/// unlisted one stays "key-consistent only". UserDefaults-backed — trust is a
+/// local, revocable decision, never shipped as someone else's assumption.
+public nonisolated enum TrustedSigners {
+    private static let key = "kalsmritikosh.trustedSigners.keyIDs"
+
+    public static func all() -> Set<String> {
+        Set((UserDefaults.standard.stringArray(forKey: key) ?? []).map { $0.lowercased() })
+    }
+    public static func isTrusted(_ keyID: String) -> Bool {
+        all().contains(keyID.lowercased())
+    }
+    public static func trust(_ keyID: String) {
+        UserDefaults.standard.set(Array(all().union([keyID.lowercased()])).sorted(), forKey: key)
+    }
+    public static func revoke(_ keyID: String) {
+        UserDefaults.standard.set(Array(all().subtracting([keyID.lowercased()])).sorted(), forKey: key)
+    }
+}
+
 // MARK: - Seal + verify
 
 public nonisolated enum ConformanceSeal {

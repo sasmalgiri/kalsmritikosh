@@ -168,15 +168,17 @@ public nonisolated enum ConformanceBundle {
         // Identity binding: compare the EMBEDDED key's fingerprint to the
         // recipient's known one. Recomputed from the key bytes, never trusted
         // from the envelope's own claim.
+        let embedded = String(SHA256.hash(data: Data(hexIn: sealed.publicKeyHex) ?? Data())
+            .map { String(format: "%02x", $0) }.joined().prefix(16)).lowercased()
         if let trusted = trustedSignerKeyID?.lowercased() {
-            let embedded = SHA256.hash(data: Data(hexIn: sealed.publicKeyHex) ?? Data())
-                .map { String(format: "%02x", $0) }.joined().prefix(16).lowercased()
             if embedded != trusted {
                 authenticityOK = false
                 verdict.details.append("authenticity: signer key ID \(embedded) does not match the trusted key ID \(trusted)")
             }
+        } else if TrustedSigners.isTrusted(embedded) {
+            verdict.details.append("authenticity note: signer \(embedded) is in this Mac's trusted-signer list")
         } else {
-            verdict.details.append("authenticity note: key-consistent only — no trusted signer key ID supplied")
+            verdict.details.append("authenticity note: key-consistent only — signer \(embedded) is not in the trusted list and no trusted key ID was supplied")
         }
         verdict.authenticity = authenticityOK ? .passed : .failed
         guard authenticityOK else { return verdict }

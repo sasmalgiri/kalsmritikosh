@@ -141,7 +141,7 @@ public struct ComplianceBoardView: View {
                     .foregroundStyle(p.status == .active ? Color.green :
                                      p.status == .revoked ? Color.red : Color.secondary)
             }
-            Text("Publisher \(p.publisher) · signer \(p.signerKeyID) · sha256 \(p.sutraSHA256.prefix(12))…")
+            Text("Publisher \(p.publisher) · signer \(p.signerKeyID)\(TrustedSigners.isTrusted(p.signerKeyID) ? " ✓ trusted" : "") · sha256 \(p.sutraSHA256.prefix(12))…")
                 .font(.caption2).foregroundStyle(.tertiary)
             if let reason = p.revocationReason {
                 Text("Revoked: \(reason)").font(.caption2).foregroundStyle(.red)
@@ -152,6 +152,14 @@ public struct ComplianceBoardView: View {
                 }
                 if p.status != .revoked {
                     Button("Revoke…") { Task { await revoke(p) } }.controlSize(.small)
+                }
+                if TrustedSigners.isTrusted(p.signerKeyID) {
+                    Button("Untrust signer") { TrustedSigners.revoke(p.signerKeyID); Task { await reload() } }
+                        .controlSize(.small)
+                } else {
+                    Button("Trust signer") { TrustedSigners.trust(p.signerKeyID); Task { await reload() } }
+                        .controlSize(.small)
+                        .help("Adds this key fingerprint to this Mac's trusted-signer list: bundle verification then binds identity to it instead of reporting 'key-consistent only'. Trust is local and revocable.")
                 }
             }
         }

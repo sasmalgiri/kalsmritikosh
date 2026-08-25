@@ -43,9 +43,16 @@ canonically (from the mirrored struct in the spec) to check the signature.
    evaluations: any mandatory `failed` → `notConformant`; else any mandatory
    `notEvaluated`/`evaluatorError` → `indeterminate`; else `conformant`. Must
    equal `envelope.overallStatus`; the evaluation count must equal
-   `envelope.ruleCount`; rule IDs must be unique. The in-app verifier
-   additionally recompiles the rules from `protocol.json` and requires a
-   one-to-one correspondence.
+   `envelope.ruleCount`; rule IDs must be unique. When `evaluation-facts.json`
+   is present (always, for app-produced bundles), the verifier RERUNS the
+   deterministic evaluators: recompile the rules from `protocol.json`
+   (global requirements → `global.requirement.<i>`; per phase, obligations /
+   humanDecisions / prohibitedConclusions → `<kind>.<type>.<i>`), evaluate each
+   over the facts (applicability → required-phase failure → deviation →
+   kind-specific gates → attestation), and require every (rule id → outcome)
+   to reproduce exactly. This catches a wrongly computed evaluation even when
+   it was legitimately signed. The in-app verifier additionally compares full
+   rule definitions (id + kind + severity + text).
 
 Each verdict gates the next; report all three separately — never a single
 blended "genuine" claim.

@@ -59,10 +59,44 @@ struct Manifest: Codable {
 struct Evaluation: Codable {
     struct Rule: Codable {
         let id: String
+        let phaseKind: String?
+        let kind: String
         let severity: String
+        let text: String
+        let applicability: String?
+        let requiredEvidence: [String]?
     }
     let rule: Rule
     let outcome: String
+    let evaluatorID: String
+}
+
+/// Mirror of the protocol snapshot (spec v1) — enough to recompile the rules.
+struct ProtocolSnapshot: Codable {
+    struct Phase: Codable {
+        let kind: String
+        let obligations: [String]
+        let humanDecisions: [String]
+        let prohibitedConclusions: [String]
+    }
+    let phases: [Phase]
+    let globalRequirements: [String]?
+}
+
+/// Mirror of evaluation-facts.json (spec v1). requiredPhaseKinds is embedded
+/// by the app at assessment time, so the CLI never re-derives defaults.
+struct Facts: Codable {
+    struct Attestation: Codable { let actor: String }
+    let completedPhaseKinds: [String]
+    let standardOfProofDeclared: Bool
+    let openItemsAcknowledged: Bool
+    let humanDecisionsMade: [String]
+    let assertedProhibited: [String]
+    let attestedRuleIDs: [String]
+    let approvedDeviations: [String: String]
+    let presentEvidenceKinds: [String]
+    let attestations: [String: Attestation]
+    let requiredPhaseKinds: [String]
 }
 
 // MARK: - Helpers
@@ -193,6 +227,86 @@ if replayOK, evaluations.count != attestation.envelope.ruleCount {
 }
 if replayOK, Set(evaluations.map(\.rule.id)).count != evaluations.count {
     replayOK = false; replayDetail = "duplicate rule evaluations"
+}
+
+// TRUE replay (spec v1): when the bundle carries the facts, RERUN the
+// deterministic evaluators — recompile the rules from the protocol, evaluate
+// each over the facts, and require (rule id, outcome) to reproduce exactly.
+// Detail strings are informational and not compared.
+func rerunEvaluators() -> String? {
+    guard let factsData = read("evaluation-facts.json") else {
+        print("REPLAY note: no facts in bundle — outcome-consistency only")
+        return nil
+    }
+    guard let facts = try? decoder().decode(Facts.self, from: factsData),
+          let proto = try? decoder().decode(ProtocolSnapshot.self, from: protocolData) else {
+        return "facts or protocol failed to decode for evaluator rerun"
+    }
+    // Recompile the rules exactly as the app's SutraRuleCompiler does.
+    struct R { let id: String; let phase: String?; let kind: String; let text: String; let applicability: String? }
+    var rules: [R] = []
+    for (i, text) in (proto.globalRequirements ?? []).enumerated() {
+        rules.append(R(id: "global.requirement.\(i)", phase: nil, kind: "obligation", text: text, applicability: "always"))
+    }
+    for phase in proto.phases {
+        for (i, t) in phase.obligations.enumerated() {
+            rules.append(R(id: "\(phase.kind).obligation.\(i)", phase: phase.kind, kind: "obligation", text: t, applicability: nil))
+        }
+        for (i, t) in phase.humanDecisions.enumerated() {
+            rules.append(R(id: "\(phase.kind).humanDecision.\(i)", phase: phase.kind, kind: "humanDecision", text: t, applicability: nil))
+        }
+        for (i, t) in phase.prohibitedConclusions.enumerated() {
+            rules.append(R(id: "\(phase.kind).prohibition.\(i)", phase: phase.kind, kind: "prohibition", text: t, applicability: nil))
+        }
+    }
+    let reached = Set(facts.completedPhaseKinds)
+    let required = Set(facts.requiredPhaseKinds)
+    // Deterministic evaluator — mirrors SutraConformance.evaluate (spec v1).
+    func evaluate(_ rule: R) -> String {
+        let applicable: Bool?
+        switch rule.applicability {
+        case nil:      applicable = rule.phase.map(reached.contains) ?? true
+        case "always": applicable = true
+        case let e? where e.hasPrefix("phase_reached(") && e.hasSuffix(")"):
+            applicable = reached.contains(String(e.dropFirst("phase_reached(".count).dropLast()))
+        default:       applicable = nil
+        }
+        guard let applicable else { return "evaluatorError" }
+        guard applicable else {
+            if let phase = rule.phase, required.contains(phase) { return "failed" }
+            return "notApplicable"
+        }
+        if facts.approvedDeviations[rule.id] != nil { return "approvedDeviation" }
+        switch rule.kind {
+        case "humanDecision":
+            guard let phase = rule.phase else { return "evaluatorError" }
+            return facts.humanDecisionsMade.contains(phase) ? "passed" : "failed"
+        case "prohibition":
+            if facts.assertedProhibited.contains(rule.text) { return "failed" }
+            if facts.attestations[rule.id] != nil || facts.attestedRuleIDs.contains(rule.id) { return "passed" }
+            return "notEvaluated"
+        default: // obligation
+            if rule.phase == "findings" && rule.text == "Declare a standard of proof" {
+                return facts.standardOfProofDeclared ? "passed" : "failed"
+            }
+            if rule.phase == "findings" && rule.text == "Surface every open contradiction and gap" {
+                return facts.openItemsAcknowledged ? "passed" : "failed"
+            }
+            if facts.attestations[rule.id] != nil || facts.attestedRuleIDs.contains(rule.id) { return "passed" }
+            return "notEvaluated"
+        }
+    }
+    let reproduced = Dictionary(uniqueKeysWithValues: rules.map { ($0.id, evaluate($0)) })
+    let recorded = Dictionary(uniqueKeysWithValues: evaluations.map { ($0.rule.id, $0.outcome) })
+    if reproduced != recorded {
+        let diffs = Set(reproduced.keys).union(recorded.keys)
+            .filter { reproduced[$0] != recorded[$0] }.sorted().prefix(3)
+        return "rerunning the evaluators does not reproduce the recorded outcomes (e.g. \(diffs.joined(separator: ", ")))"
+    }
+    return nil
+}
+if replayOK, let rerunFailure = rerunEvaluators() {
+    replayOK = false; replayDetail = rerunFailure
 }
 report("REPLAY", replayOK, replayDetail)
 
