@@ -343,6 +343,10 @@ public struct RootView: View {
     @State private var showShortcutHelp: Bool = false
     /// Text in the always-visible header search box.
     @State private var headerSearch: String = ""
+    /// Focus handle for the header search field — must be RESIGNED when the
+    /// ⌘K palette opens, or the field keeps first responder and swallows the
+    /// palette's keystrokes (1.0.1 bug: palette worked only once per launch).
+    @FocusState private var headerSearchFocused: Bool
     /// Chosen persona (GuidePersona.id). Empty = not yet picked → first-run
     /// picker. Drives the "For you" sidebar section (persona's own screens).
     @AppStorage("kalsmritikosh.persona") private var personaID: String = ""
@@ -546,6 +550,12 @@ public struct RootView: View {
         .background(shortcutButtons)
         .overlay(paletteOverlay)
         .overlay(shortcutHelpOverlay)
+        .onChange(of: showPalette) { _, open in
+            // The header search field must give up first responder BEFORE the
+            // palette claims it, or every keystroke keeps landing in the
+            // header (palette-focus bug: worked only once per fresh launch).
+            if open { headerSearchFocused = false }
+        }
         .task { await resumeNavHistory() }   // SHELL-001 — resume last session's location + history
         .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
             if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
@@ -1169,6 +1179,7 @@ public struct RootView: View {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
             TextField("Search your archive — type and press return…", text: $headerSearch)
                 .textFieldStyle(.plain)
+                .focused($headerSearchFocused)
                 .onSubmit(runHeaderSearch)
             if !headerSearch.isEmpty {
                 Button { headerSearch = "" } label: {
@@ -1598,7 +1609,22 @@ private struct CommandPaletteView: View {
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.3), radius: 30, y: 12)
-        .onAppear { fieldFocused = true; highlighted = 0 }
+        .onAppear {
+            highlighted = 0
+            // A single same-tick focus claim loses the responder race when
+            // another field (header search) is first responder at open time.
+            // Claim now, then re-assert after the overlay is installed and
+            // once more after AppKit settles the previous responder's resign.
+            fieldFocused = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(60))
+                guard isPresented else { return }
+                fieldFocused = true
+                try? await Task.sleep(for: .milliseconds(180))
+                guard isPresented else { return }
+                fieldFocused = true
+            }
+        }
         .onChange(of: query) { _, _ in highlighted = 0 }
         .onKeyPress(.downArrow) { move(1); return .handled }
         .onKeyPress(.upArrow) { move(-1); return .handled }
