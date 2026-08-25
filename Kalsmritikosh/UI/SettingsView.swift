@@ -27,6 +27,8 @@ public struct SettingsView: View {
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
     /// CONFORMANCE STYLE switch — classic checklist readout vs strict per-rule assessment.
     @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
+    /// CUSTOM PROTOCOL STUDIO (roadmap 2.0) — shipped OFF by owner decision.
+    @AppStorage(FeatureFlags.customProtocolStudioKey) private var customProtocolStudio = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -1149,6 +1151,16 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Classic conformance readout").font(.callout.weight(.medium))
                     Text("Show the previous conformance summary (recorded gates + one label) instead of the strict per-rule assessment with reviewer attestation and signed certificate. Both stay available; switching never deletes recorded assessments.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+
+            Toggle(isOn: $customProtocolStudio) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Custom protocol studio").font(.callout.weight(.medium))
+                    Text("Author your organization's own constitution on the Compliance Board: AI drafts from your SOP text, you structure and test every rule, then sign it as an offline pack. Off by default — the built-in doctrines govern until you opt in.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

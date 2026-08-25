@@ -31,6 +31,9 @@ public struct ComplianceBoardView: View {
     @State private var registry: [RegisteredProtocol] = []
     @State private var showPackImporter = false
     @State private var packStatus: String?
+    // Custom Protocol Studio (roadmap 2.0 — shipped OFF; Settings toggle).
+    @AppStorage(FeatureFlags.customProtocolStudioKey) private var studioEnabled = false
+    @State private var showStudio = false
 
     public init() {}
 
@@ -109,6 +112,14 @@ public struct ComplianceBoardView: View {
                 Button { exportCurrentConstitution() } label: { Label("Export current constitution as signed pack…", systemImage: "square.and.arrow.up") }
                     .guidance(GuidanceTip("Export signed pack",
                                           what: "Signs the active investigation constitution with this installation's key and saves it as a .kalprotocol file another Mac can import offline. The signer key ID and assurance label travel with it."))
+                if studioEnabled {
+                    Button { showStudio = true } label: { Label("Author custom protocol…", systemImage: "hammer") }
+                        .guidance(GuidanceTip("Custom Protocol Studio",
+                                              what: "Author your organization's own constitution: AI drafts from your SOP text, you structure and test every rule, then sign it as an offline pack under a self-authored or organization-approved assurance label."))
+                }
+            }
+            .sheet(isPresented: $showStudio, onDismiss: { Task { await reload() } }) {
+                CustomProtocolStudioView()
             }
             if let packStatus {
                 Text(packStatus).font(.caption).foregroundStyle(.secondary)

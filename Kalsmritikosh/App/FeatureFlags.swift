@@ -315,6 +315,20 @@ public final class FeatureFlags {
     /// The UserDefaults key, exposed so views can bind it via @AppStorage.
     public nonisolated static var classicConformanceKey: String { kClassicConformance }
 
+    /// CUSTOM PROTOCOL STUDIO (roadmap 2.0, owner request 2026-08-25: build it,
+    /// ship it OFF). When ON, the Compliance Board offers authoring: draft an
+    /// organization's own constitution from SOP text (AI drafts only — humans
+    /// structure, compile, test, sign), exported/registered as a signed offline
+    /// pack with a self-authored/organization assurance label. Default OFF.
+    public var customProtocolStudio: Bool {
+        get { Self.customProtocolStudioValue() }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kCustomProtocolStudio) }
+    }
+    public nonisolated static func customProtocolStudioValue() -> Bool {
+        UserDefaults.standard.bool(forKey: kCustomProtocolStudio)   // default false
+    }
+    public nonisolated static var customProtocolStudioKey: String { kCustomProtocolStudio }
+
     /// Mixtral-style MoE emulation: a top-k gate selects specialist
     /// "super-experts" that deliberate IN PARALLEL over the evidence, and
     /// their perspectives feed the answer draft. Default on; auto-inert
@@ -441,6 +455,7 @@ public final class FeatureFlags {
     private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
     private nonisolated static let kPreferClassicSurfaces  = "kalsmritikosh.feature.preferClassicSurfaces"
     private nonisolated static let kClassicConformance     = "kalsmritikosh.feature.classicConformance.enabled"
+    private nonisolated static let kCustomProtocolStudio   = "kalsmritikosh.feature.customProtocolStudio.enabled"
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "kalsmritikosh.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "kalsmritikosh.feature.expertRelevanceGating"

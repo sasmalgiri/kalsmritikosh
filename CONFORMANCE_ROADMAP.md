@@ -93,7 +93,16 @@ Deliberately out of scope here (by design, not omission):
   records (reviewer, role, source, decision, notes — signed with the
   installation key, "reviewed as of date" not "current"). Zero network
   retained throughout (test 12). Distribution: Files/AirDrop/USB/MDM.
-- **2.0 — custom protocol studio**: AI drafts only; typed rule builder; lifecycle Draft → Structure → Compile → Test → Expert review → Org approval → Sign → Activate → Supersede; assurance labels.
+- **2.0 — custom protocol studio**: ✅ BUILT, SHIPPED OFF (owner decision
+  2026-08-25; Settings › Custom protocol studio). Lifecycle Draft (AI drafts
+  only, via SutraDraftParser) → Structure (per-phase obligations / reserved
+  decisions / prohibitions + global requirements, on the standard phase
+  skeleton) → Compile (the SAME export→verify gate that guards activation) →
+  Test (fact simulator with live fail-closed status) → Sign (publisher +
+  self-authored / organization-approved assurance) → Register/Activate through
+  the ordinary v108 registry. Custom constitutions assess fail-closed like any
+  built-in. Remaining inside 2.0: visual per-rule builder with applicability /
+  evidence-requirement editors, multi-role approval, pack sharing UX.
 - **Later — external assurance**: expert crosswalks, published mappings, partnerships; certification only where a body grants it.
 
 The moat is not the hashes (copyable) — it is expert-reviewed mappings, the portable rule corpus, accumulated edge cases, evidence-level provenance, org-specific packs, and professional acceptance of the attestations.
