@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kalsmritikosh — verify a conformance bundle</title>
+<meta name="description" content="Verify a Kalsmritikosh conformance bundle independently: integrity, authenticity, and full evaluator replay — with an open-source standalone verifier. No Kalsmritikosh required." />
+<style>
+  :root{ --bg:#0b0d12; --panel:#12151d; --ink:#eef1f7; --muted:#9aa4b8;
+    --line:rgba(255,255,255,.09); --brand2:#22c1a6;
+    --grad:linear-gradient(120deg,#6d7cff,#22c1a6); }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
+  .wrap{max-width:820px;margin:0 auto;padding:56px 22px 80px}
+  h1{font-size:34px;letter-spacing:-.02em;margin:0 0 8px}
+  h2{font-size:22px;margin:36px 0 8px}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  p{color:var(--muted)}
+  code,pre{font-family:"SF Mono",Menlo,monospace;font-size:13.5px}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;overflow-x:auto;color:var(--ink)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;font-size:14.5px}
+  .fp{font-family:"SF Mono",Menlo,monospace;font-size:15px;color:var(--brand2);
+    border:1px dashed rgba(34,193,166,.5);border-radius:8px;padding:8px 12px;display:inline-block}
+  a{color:#8da0ff;text-decoration:none} a:hover{text-decoration:underline}
+  .muted{font-size:13px;color:#6b7488}
+</style>
+</head>
+<body><div class="wrap">
+  <p><a href="../index.html">← Kalsmritikosh</a></p>
+  <h1>Verify a <span class="grad">conformance bundle</span></h1>
+  <p>When someone hands you a Kalsmritikosh conformance bundle — a plain folder exported
+  from an approved findings run — you can verify it yourself, on any Mac, without
+  installing Kalsmritikosh and without trusting the person who sent it.</p>
+
+  <h2>1 · Get the verifier</h2>
+  <p>The standalone verifier is a single open-source Swift file (Foundation + CryptoKit only):</p>
+  <pre>curl -LO https://raw.githubusercontent.com/sasmalgiri/kalsmritikosh/main/verifier/kalverify.swift</pre>
+
+  <h2>2 · Verify</h2>
+  <pre>swift kalverify.swift /path/to/bundle-folder</pre>
+  <p>Three separated verdicts print — never a single blended "genuine":</p>
+  <div class="card"><h3>INTEGRITY</h3><p>Every file matches the manifest's SHA-256. Detects edits, truncation, missing files.</p></div>
+  <div class="card"><h3>AUTHENTICITY</h3><p>The ECDSA P-256 signature over the canonical envelope verifies, and the signed hashes match the actual protocol, evaluations, facts and evidence-manifest bytes. Editing content and recomputing hashes still fails here.</p></div>
+  <div class="card"><h3>REPLAY</h3><p>The verifier recompiles the rules from the frozen protocol and <em>reruns every evaluator</em> over the recorded facts — a wrongly computed outcome fails even when it was correctly signed. Deleting the facts to force a weaker check also fails: the facts hash is signed.</p></div>
+
+  <h2>3 · Bind the signer's identity</h2>
+  <p>Without a known fingerprint, AUTHENTICITY proves key-consistency only — anyone can
+  sign with a fresh key. To bind identity, pass the signer's published fingerprint:</p>
+  <pre>swift kalverify.swift /path/to/bundle-folder &lt;signer-fingerprint&gt;</pre>
+  <p>The official Kalsmritikosh developer signing fingerprint:</p>
+  <p class="fp">[to be published with the 1.0 release]</p>
+  <p class="muted">Individuals and organizations publish their own fingerprints
+  (Kalsmritikosh → Compliance Board → “Copy my signer fingerprint”).</p>
+
+  <h2>What a passing bundle proves — and what it doesn't</h2>
+  <p><b>Proves:</b> this exact per-rule assessment, against this exact frozen SOP version,
+  produced these outcomes, was signed by the holder of that key, and nothing changed since.
+  <b>Does not prove:</b> which human ran it, that the underlying evidence is truthful, or
+  compliance with any law or regulation — conformance to the encoded procedure is a
+  property of the software record, not a legal certification.</p>
+
+  <h2>Format specification</h2>
+  <p>The full contract — file layout, canonicalization rules, envelope fields, verdict
+  algorithms, portable evaluator semantics — is published as
+  <a href="https://github.com/sasmalgiri/kalsmritikosh/blob/main/docs/verification/BUNDLE_FORMAT.md">BUNDLE_FORMAT.md</a>,
+  so independent implementations can verify identically.</p>
+
+  <p class="muted" style="margin-top:40px">Kalsmritikosh runs 100% on-device and makes no
+  network connections; bundles contain rule outcomes and hashes, never your source documents.</p>
+</div></body>
+</html>
