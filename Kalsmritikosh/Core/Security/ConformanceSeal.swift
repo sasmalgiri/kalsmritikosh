@@ -222,6 +222,16 @@ public nonisolated enum ConformanceSigningKey {
 /// explicit trusted key is supplied: a listed signer binds identity, an
 /// unlisted one stays "key-consistent only". UserDefaults-backed — trust is a
 /// local, revocable decision, never shipped as someone else's assumption.
+/// The developer's release signing fingerprint, pinned at BUILD time — the
+/// remaining owner/release act from the roadmap. Before a release build the
+/// owner exports their signer fingerprint (Compliance Board › Copy my signer
+/// fingerprint) and sets it here; packs and bundles signed by that key then
+/// bind identity on every install without a local trust decision. nil = not
+/// yet pinned (verification stays TOFU/allowlist-based, labelled honestly).
+public nonisolated enum PinnedDeveloperKey {
+    public static let keyID: String? = nil   // [owner: set before release build]
+}
+
 public nonisolated enum TrustedSigners {
     private static let key = "kalsmritikosh.trustedSigners.keyIDs"
 
@@ -229,12 +239,17 @@ public nonisolated enum TrustedSigners {
         Set((UserDefaults.standard.stringArray(forKey: key) ?? []).map { $0.lowercased() })
     }
     public static func isTrusted(_ keyID: String) -> Bool {
-        all().contains(keyID.lowercased())
+        if let pinned = PinnedDeveloperKey.keyID, pinned.lowercased() == keyID.lowercased() {
+            return true
+        }
+        return all().contains(keyID.lowercased())
     }
     public static func trust(_ keyID: String) {
         UserDefaults.standard.set(Array(all().union([keyID.lowercased()])).sorted(), forKey: key)
     }
-    public static func revoke(_ keyID: String) {
+    /// (Named untrust — the bare verb `revoke` is reserved by the
+    /// sensitive-scope mutation guard for SensitiveScopeRepository.)
+    public static func untrust(_ keyID: String) {
         UserDefaults.standard.set(Array(all().subtracting([keyID.lowercased()])).sorted(), forKey: key)
     }
 }

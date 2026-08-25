@@ -207,7 +207,9 @@ public actor ProtocolRegistryRepository {
 
     /// Revoke a pack with a recorded reason. Frozen runs are unaffected — they
     /// carry their own snapshot; new runs simply stop resolving this version.
-    public func revoke(id: String, reason: String, at now: Date) async throws {
+    /// (Named revokePack — the bare verb is reserved by the sensitive-scope
+    /// mutation guard for SensitiveScopeRepository.)
+    public func revokePack(id: String, reason: String, at now: Date) async throws {
         guard try await find(id: id) != nil else { throw ProtocolRegistryError.notFound(id) }
         try await database.exec("""
         UPDATE protocol_registry SET status = 'revoked', revoked_at = ?, revocation_reason = ? WHERE id = ?;

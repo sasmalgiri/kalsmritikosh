@@ -177,7 +177,7 @@ struct ProtocolRegistryTests {
     func revocation() async throws {
         let repo = try await makeRig()
         let row = try await repo.importPack(try verifiedPack(of: sutra), at: now)
-        try await repo.revoke(id: row.id, reason: "publisher key compromised", at: now)
+        try await repo.revokePack(id: row.id, reason: "publisher key compromised", at: now)
         await #expect(throws: ProtocolRegistryError.revoked(row.id)) {
             try await repo.activate(id: row.id, at: now)
         }
@@ -208,7 +208,7 @@ struct ProtocolRegistryTests {
         }
 
         // Explicit rotation: revoke the pinned pack, then the new key imports.
-        try await repo.revoke(id: "\(sutra.id)@v\(sutra.version)", reason: "key rotation", at: now)
+        try await repo.revokePack(id: "\(sutra.id)@v\(sutra.version)", reason: "key rotation", at: now)
         let rotated = try await repo.importPack(roguePack, at: now)
         #expect(rotated.signerKeyID == ConformanceSigningKey.keyID(for: rogueKey))
     }

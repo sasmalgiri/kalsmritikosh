@@ -112,6 +112,9 @@ public struct ComplianceBoardView: View {
                 Button { exportCurrentConstitution() } label: { Label("Export current constitution as signed pack…", systemImage: "square.and.arrow.up") }
                     .guidance(GuidanceTip("Export signed pack",
                                           what: "Signs the active investigation constitution with this installation's key and saves it as a .kalprotocol file another Mac can import offline. The signer key ID and assurance label travel with it."))
+                Button { copySignerFingerprint() } label: { Label("Copy my signer fingerprint", systemImage: "key") }
+                    .guidance(GuidanceTip("Signer fingerprint",
+                                          what: "This Mac's signing-key fingerprint (16 hex characters). Publish it, hand it to recipients so kalverify can bind identity to your bundles, or pin it as the developer key before a release build."))
                 if studioEnabled {
                     Button { showStudio = true } label: { Label("Author custom protocol…", systemImage: "hammer") }
                         .guidance(GuidanceTip("Custom Protocol Studio",
@@ -154,7 +157,7 @@ public struct ComplianceBoardView: View {
                     Button("Revoke…") { Task { await revoke(p) } }.controlSize(.small)
                 }
                 if TrustedSigners.isTrusted(p.signerKeyID) {
-                    Button("Untrust signer") { TrustedSigners.revoke(p.signerKeyID); Task { await reload() } }
+                    Button("Untrust signer") { TrustedSigners.untrust(p.signerKeyID); Task { await reload() } }
                         .controlSize(.small)
                 } else {
                     Button("Trust signer") { TrustedSigners.trust(p.signerKeyID); Task { await reload() } }
@@ -182,6 +185,17 @@ public struct ComplianceBoardView: View {
         await reload()
     }
 
+    private func copySignerFingerprint() {
+        guard let backend = ConformanceSigningKey.loadOrGenerateBackend() else {
+            packStatus = "No signing key available (Keychain unreachable)."
+            return
+        }
+        let fingerprint = ConformanceSigningKey.keyID(forPublicKey: backend.publicKey)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(fingerprint, forType: .string)
+        packStatus = "Signer fingerprint copied: \(fingerprint) (\(backend.assurance))"
+    }
+
     private func exportCurrentConstitution() {
         let panel = NSSavePanel()
         let sutra = SutraCompiler.shared()
@@ -207,7 +221,7 @@ public struct ComplianceBoardView: View {
 
     private func revoke(_ p: RegisteredProtocol) async {
         guard let repo = appState.protocolRegistry else { return }
-        do { try await repo.revoke(id: p.id, reason: "Revoked by owner from the board", at: Date()) }
+        do { try await repo.revokePack(id: p.id, reason: "Revoked by owner from the board", at: Date()) }
         catch { packStatus = "Revocation failed: \(error)" }
         await reload()
     }
