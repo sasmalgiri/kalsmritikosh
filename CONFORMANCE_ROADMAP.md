@@ -6,10 +6,28 @@ Assurance levels and the maximum permitted claim:
 
 | Level | Meaning | Status |
 |---|---|---|
-| 1 | One persisted outcome per typed rule, fail-closed, Sutra frozen by SHA-256 | **Shipped 1.0.x-A** (`Sutra/SutraRules.swift`) |
-| 2 | ECDSA P-256 signed seal; recomputed-hash forgery fails signature | **Shipped 1.0.x-B** (`Core/Security/ConformanceSeal.swift`) |
+| 1 | One outcome per typed rule, fail-closed, Sutra frozen by SHA-256 | **Core shipped** (`Sutra/SutraRules.swift`); remainder below |
+| 2 | ECDSA P-256 signed seal; recomputed-hash forgery fails signature | **Core shipped** (`Core/Security/ConformanceSeal.swift`); remainder below |
 | 3 | Standalone open verifier: integrity / authenticity / conformance replay | Planned 1.0.x-C |
 | 4 | External-standard compliance | Never claimed unilaterally — assurance-labelled only |
+
+## Honest remainder within Levels 1–2 (not yet done)
+
+- Per-rule evaluations persisted as DB rows bound to the run; Sutra frozen at RUN START,
+  not at display time — the handoff readout still assesses live against `SutraCompiler.shared()`.
+- Facts derivation moved into services — the UI still assembles `ConformanceFacts`
+  (nothing passes silently anymore, but the structural fix is pending).
+- Rule schema: applicability expressions, requiredEvidence bindings, evaluatorVersion,
+  humanRole, authorityReferences. `globalRequirements` does not exist on `Sutra` yet.
+- `approvedDeviation` / `evaluatorError` are handled in the rollup but nothing produces
+  them yet (no deviation workflow, no throwing evaluators).
+- Envelope linkage: no workflowRunID/revision, no runSnapshotSHA256, no
+  evidenceManifestSHA256, and the v104 HMAC audit chain head + VerifiableReceipt seal
+  are NOT yet connected into the envelope.
+- Seal refusals beyond indeterminate: unsealed audit events, revision mismatch,
+  failed source-hash verification.
+- Wiring beyond the findings handoff (studios, other phases); Secure Enclave option;
+  signer assurance levels.
 
 ## Non-negotiable acceptance tests
 
