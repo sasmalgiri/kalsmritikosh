@@ -12,7 +12,7 @@ searchable evidence ledger and reconstructed timeline, and answers questions wit
 citations you can open. Everything runs on your Mac; nothing is uploaded.
 
 ## Requirements
-- macOS 15.6 or later
+- macOS 15.6 or later (AI-written answers require macOS 26 or later)
 - Apple Intelligence enabled — the app uses Apple's on-device model to write answers.
   You can still ingest, browse, search, and view evidence without it; only the
   AI-written answers require it.

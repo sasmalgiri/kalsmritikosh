@@ -3435,8 +3435,9 @@ public final class AppState {
 
     /// User-initiated FULL ERASE of all ingested + derived data — the global
     /// "Delete all my data" the app was missing. Removes every watched folder
-    /// and empties every ledger table; the on-disk vector-index cache is dropped
-    /// too. Your ORIGINAL files on disk are NOT touched. This is a deliberate
+    /// and empties every ledger table; the on-disk vector-index cache and the
+    /// managed-evidence vault copies are dropped too. Your ORIGINAL files on
+    /// disk (outside the app container) are NOT touched. This is a deliberate
     /// user action — the preserve-everything directive guards against SILENT
     /// loss, not an explicit erase. Returns the number of tables cleared.
     @discardableResult
@@ -3464,6 +3465,13 @@ public final class AppState {
         // 3. Drop the vector-index cache so it rebuilds empty.
         let cache = db.url.deletingLastPathComponent().appendingPathComponent("hnsw-index.bin")
         try? FileManager.default.removeItem(at: cache)
+        // 4. Remove the managed-evidence vault (EV-005) — the content-addressed byte
+        //    copies made while managed mode was on. Without this, "Delete all my data"
+        //    left original bytes behind in the container. Same root as boot wiring
+        //    (<db dir>/EvidenceVault); blobs are chmod 444, but unlinking depends on
+        //    the parent directory, so removing the tree succeeds. Recreated on demand.
+        let vaultRoot = db.url.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true)
+        try? FileManager.default.removeItem(at: vaultRoot)
         newFilesSinceLaunch = 0
         KalsmritikoshLog.app.info("Deleted all ingested data (\(tables.count, privacy: .public) tables cleared) — user-initiated full erase")
         return tables.count
