@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 106
+    public static let latestVersion = 107
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -602,7 +602,8 @@ public enum SchemaMigrations {
         (103, v103),
         (104, v104),
         (105, v105),
-        (106, v106)
+        (106, v106),
+        (107, v107)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -5963,5 +5964,33 @@ public enum SchemaMigrations {
         CHECK(length(trim(actor)) > 0)
     );
     CREATE UNIQUE INDEX idx_investigation_case_events_seq ON investigation_case_events(case_id, sequence);
+    """
+
+    // MARK: - v107 — conformance assessments (roadmap 1.0.x-A, Level 1 persistence)
+    //
+    // One row per recorded conformance assessment of a run: the EXACT Sutra
+    // snapshot (canonical JSON + SHA-256) frozen at recording, every rule
+    // evaluation, the fail-closed status, and the optional signed seal. Old
+    // runs reopen against this stored snapshot — never against the live
+    // compiler value. Append-only by convention: recording again inserts a
+    // new row (new revision); nothing here is updated or cascaded away.
+    private static let v107: String = """
+    CREATE TABLE conformance_assessments (
+        id                   TEXT PRIMARY KEY NOT NULL,
+        case_id              TEXT NOT NULL,
+        run_revision         INTEGER NOT NULL DEFAULT 1,
+        sutra_citation       TEXT NOT NULL,
+        sutra_sha256         TEXT NOT NULL,
+        sutra_snapshot_json  TEXT NOT NULL,
+        evaluations_json     TEXT NOT NULL,
+        status               TEXT NOT NULL,
+        seal_json            TEXT,
+        assessed_at          REAL NOT NULL,
+        created_at           REAL NOT NULL,
+        CHECK(status IN ('conformant','notConformant','indeterminate')),
+        CHECK(run_revision >= 1),
+        CHECK(length(trim(sutra_sha256)) = 64)
+    );
+    CREATE INDEX idx_conformance_assessments_case ON conformance_assessments(case_id, created_at);
     """
 }

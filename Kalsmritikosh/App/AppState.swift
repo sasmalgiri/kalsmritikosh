@@ -630,6 +630,9 @@ public final class AppState {
     /// closure, and custody state from the shared authorities above so the Handoff & Review UI can review a
     /// matter and record the human-only approve / close / reopen decisions. Reads only; forks no engine.
     public private(set) var workProductHandoff: WorkProductHandoffService?
+    /// Conformance roadmap 1.0.x-A (v107) — recorded per-rule assessments with
+    /// their frozen Sutra snapshots and signed seals, one append-only row per run.
+    public private(set) var conformanceAssessments: ConformanceAssessmentRepository?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -2201,6 +2204,8 @@ public final class AppState {
                     cases: investigationCasesRepo, findings: handoffFindings,
                     closure: handoffClosure, custody: handoffCustody)
             }
+            // Conformance roadmap 1.0.x-A — run-bound assessment persistence (v107).
+            self.conformanceAssessments = ConformanceAssessmentRepository(database: db)
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the

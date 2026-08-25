@@ -33,15 +33,60 @@ public nonisolated enum RuleSeverity: String, Sendable, Codable {
 public nonisolated struct SutraRule: Sendable, Codable, Equatable, Hashable, Identifiable {
     /// Stable across releases for an unchanged doctrine line: "<phase>.<kind>.<index>".
     public let id: String
-    public let phaseKind: PersonaJobKind
+    /// nil = a GLOBAL rule (from Sutra.globalRequirements) — applies to the whole run.
+    public let phaseKind: PersonaJobKind?
     public let kind: RuleKind
     public let severity: RuleSeverity
     public let text: String
+    /// Restricted, declared applicability expression. nil = the default condition
+    /// (phase reached for phase rules, always for global rules). Supported:
+    /// "always" · "phase_reached(<kind>)". Anything else is an evaluatorError —
+    /// an expression nobody can parse must never silently pass or skip.
+    public let applicability: String?
+    public let evaluatorVersion: String
+    /// Declared evidence kinds this rule expects (bound in later slices; recorded
+    /// on the certificate so the expectation is visible even before binding).
+    public let requiredEvidence: [String]
+    /// The role whose recorded decision/attestation satisfies a human rule.
+    public let humanRole: String?
+    /// Citations to the external authority this rule encodes (e.g. "FRCP 26(b)(5)").
+    public let authorityReferences: [String]
 
-    public init(id: String, phaseKind: PersonaJobKind, kind: RuleKind,
-                severity: RuleSeverity, text: String) {
+    public init(id: String, phaseKind: PersonaJobKind?, kind: RuleKind,
+                severity: RuleSeverity, text: String,
+                applicability: String? = nil,
+                evaluatorVersion: String = "v1",
+                requiredEvidence: [String] = [],
+                humanRole: String? = nil,
+                authorityReferences: [String] = []) {
         self.id = id; self.phaseKind = phaseKind; self.kind = kind
         self.severity = severity; self.text = text
+        self.applicability = applicability
+        self.evaluatorVersion = evaluatorVersion
+        self.requiredEvidence = requiredEvidence
+        self.humanRole = humanRole
+        self.authorityReferences = authorityReferences
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, phaseKind, kind, severity, text, applicability,
+             evaluatorVersion, requiredEvidence, humanRole, authorityReferences
+    }
+
+    /// Back-compatible decode: rows written before the schema depth landed
+    /// carry only the first five fields.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.phaseKind = try c.decodeIfPresent(PersonaJobKind.self, forKey: .phaseKind)
+        self.kind = try c.decode(RuleKind.self, forKey: .kind)
+        self.severity = try c.decode(RuleSeverity.self, forKey: .severity)
+        self.text = try c.decode(String.self, forKey: .text)
+        self.applicability = try c.decodeIfPresent(String.self, forKey: .applicability)
+        self.evaluatorVersion = try c.decodeIfPresent(String.self, forKey: .evaluatorVersion) ?? "v1"
+        self.requiredEvidence = try c.decodeIfPresent([String].self, forKey: .requiredEvidence) ?? []
+        self.humanRole = try c.decodeIfPresent(String.self, forKey: .humanRole)
+        self.authorityReferences = try c.decodeIfPresent([String].self, forKey: .authorityReferences) ?? []
     }
 }
 
@@ -74,6 +119,12 @@ public nonisolated enum SutraRuleCompiler {
     /// amendment (version bump), so an ID never silently changes meaning.
     public static func rules(for sutra: Sutra) -> [SutraRule] {
         var out: [SutraRule] = []
+        // Global requirements apply to the run as a whole, regardless of phase.
+        for (i, text) in (sutra.globalRequirements ?? []).enumerated() {
+            out.append(SutraRule(id: "global.requirement.\(i)", phaseKind: nil,
+                                 kind: .obligation, severity: .mandatory, text: text,
+                                 applicability: "always"))
+        }
         for phase in sutra.phases {
             for (i, text) in phase.obligations.enumerated() {
                 out.append(SutraRule(id: "\(phase.kind.rawValue).obligation.\(i)",
@@ -109,19 +160,25 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable {
     /// recorded evaluation for rules with no deterministic gate. An unattested
     /// mandatory rule stays `notEvaluated` and blocks conformance.
     public var attestedRuleIDs: Set<String>
+    /// Authorized deviations: rule ID → recorded justification. A deviation is
+    /// VISIBLE on the certificate (`approvedDeviation`), never hidden — the run
+    /// can still be conformant, but the departure travels with it.
+    public var approvedDeviations: [String: String]
 
     public init(completedPhaseKinds: Set<PersonaJobKind>,
                 standardOfProofDeclared: Bool = false,
                 openItemsAcknowledged: Bool = false,
                 humanDecisionsMade: Set<PersonaJobKind> = [],
                 assertedProhibited: [String] = [],
-                attestedRuleIDs: Set<String> = []) {
+                attestedRuleIDs: Set<String> = [],
+                approvedDeviations: [String: String] = [:]) {
         self.completedPhaseKinds = completedPhaseKinds
         self.standardOfProofDeclared = standardOfProofDeclared
         self.openItemsAcknowledged = openItemsAcknowledged
         self.humanDecisionsMade = humanDecisionsMade
         self.assertedProhibited = assertedProhibited
         self.attestedRuleIDs = attestedRuleIDs
+        self.approvedDeviations = approvedDeviations
     }
 }
 
@@ -251,17 +308,57 @@ extension SutraConformance {
     private static let gateStandardOfProof = "Declare a standard of proof"
     private static let gateOpenItems = "Surface every open contradiction and gap"
 
-    private static func evaluate(rule: SutraRule, facts: ConformanceFacts) -> RuleEvaluation {
-        // Deterministic N/A: the run never reached this phase.
-        guard facts.completedPhaseKinds.contains(rule.phaseKind) else {
+    /// The restricted applicability language: nil (default), "always", or
+    /// "phase_reached(<kind>)". Returns nil when the expression cannot be
+    /// parsed — the caller records an evaluatorError (fail-closed: an
+    /// expression nobody can parse must never silently pass or skip).
+    private static func applicable(rule: SutraRule, facts: ConformanceFacts) -> Bool? {
+        switch rule.applicability {
+        case nil:
+            // Default condition: phase rules apply when their phase was reached;
+            // global rules (no phase) always apply.
+            guard let phase = rule.phaseKind else { return true }
+            return facts.completedPhaseKinds.contains(phase)
+        case "always":
+            return true
+        case let expr? where expr.hasPrefix("phase_reached(") && expr.hasSuffix(")"):
+            let raw = String(expr.dropFirst("phase_reached(".count).dropLast())
+            guard let kind = PersonaJobKind(rawValue: raw) else { return nil }
+            return facts.completedPhaseKinds.contains(kind)
+        default:
+            return nil
+        }
+    }
+
+    /// Internal (not private) so the fail-closed evaluator paths — including
+    /// expressions no built-in Sutra produces yet — are directly testable.
+    static func evaluate(rule: SutraRule, facts: ConformanceFacts) -> RuleEvaluation {
+        // 1. Declared applicability — deterministic, or fail-closed on parse failure.
+        guard let isApplicable = applicable(rule: rule, facts: facts) else {
+            return RuleEvaluation(rule: rule, outcome: .evaluatorError,
+                                  evaluatorID: "gate.applicability.v1",
+                                  detail: "unparseable applicability expression '\(rule.applicability ?? "")' — fail closed")
+        }
+        guard isApplicable else {
             return RuleEvaluation(rule: rule, outcome: .notApplicable,
-                                  evaluatorID: "gate.phaseReach.v1",
-                                  detail: "phase not reached in this run")
+                                  evaluatorID: "gate.applicability.v1",
+                                  detail: rule.phaseKind == nil ? "condition not met" : "phase not reached in this run")
+        }
+        // 2. An authorized, justified deviation — visible, never hidden.
+        if let justification = facts.approvedDeviations[rule.id] {
+            return RuleEvaluation(rule: rule, outcome: .approvedDeviation,
+                                  evaluatorID: "human.deviation.v1",
+                                  detail: "authorized deviation: \(justification)")
         }
         switch rule.kind {
         case .humanDecision:
             // The app records reserved decisions; absence in a reached phase is a failure, not a gap.
-            return facts.humanDecisionsMade.contains(rule.phaseKind)
+            guard let phase = rule.phaseKind else {
+                return RuleEvaluation(rule: rule, outcome: .evaluatorError,
+                                      evaluatorID: "gate.humanDecision.v1",
+                                      detail: "human-decision rule without a phase — fail closed")
+            }
+            return facts.humanDecisionsMade.contains(phase)
                 ? RuleEvaluation(rule: rule, outcome: .passed, evaluatorID: "gate.humanDecision.v1",
                                  detail: "reserved decision recorded")
                 : RuleEvaluation(rule: rule, outcome: .failed, evaluatorID: "gate.humanDecision.v1",

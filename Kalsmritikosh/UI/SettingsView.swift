@@ -25,6 +25,8 @@ public struct SettingsView: View {
     @State private var showIngestGuide = false
     /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
     @AppStorage(FeatureFlags.preferClassicSurfacesKey) private var preferClassicSurfaces = false
+    /// CONFORMANCE STYLE switch — classic checklist readout vs strict per-rule assessment.
+    @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
     @State private var showT3InResults: Bool = UserDefaults.standard.object(forKey: "kalsmritikosh.history.showT3InResults") as? Bool ?? false
     @State private var baselineRunning = false
     @State private var baselineStatus: String?
@@ -1137,6 +1139,16 @@ public struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Prefer classic surfaces").font(.callout.weight(.medium))
                     Text("Use the previous fixed Analyze launchers instead of the newer catalog-driven studio launchers. Both surfaces stay available; this only changes which the persona hub offers by default.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .toggleStyle(.switch)
+
+            Toggle(isOn: $classicConformance) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Classic conformance readout").font(.callout.weight(.medium))
+                    Text("Show the previous conformance summary (recorded gates + one label) instead of the strict per-rule assessment with reviewer attestation and signed certificate. Both stay available; switching never deletes recorded assessments.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

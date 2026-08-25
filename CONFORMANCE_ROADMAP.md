@@ -11,23 +11,37 @@ Assurance levels and the maximum permitted claim:
 | 3 | Standalone open verifier: integrity / authenticity / conformance replay | Planned 1.0.x-C |
 | 4 | External-standard compliance | Never claimed unilaterally — assurance-labelled only |
 
-## Honest remainder within Levels 1–2 (not yet done)
+## Levels 1–2 remainder — status after v107 (2026-08-25)
 
-- Per-rule evaluations persisted as DB rows bound to the run; Sutra frozen at RUN START,
-  not at display time — the handoff readout still assesses live against `SutraCompiler.shared()`.
-- Facts derivation moved into services — the UI still assembles `ConformanceFacts`
-  (nothing passes silently anymore, but the structural fix is pending).
-- Rule schema: applicability expressions, requiredEvidence bindings, evaluatorVersion,
-  humanRole, authorityReferences. `globalRequirements` does not exist on `Sutra` yet.
-- `approvedDeviation` / `evaluatorError` are handled in the rollup but nothing produces
-  them yet (no deviation workflow, no throwing evaluators).
-- Envelope linkage: no workflowRunID/revision, no runSnapshotSHA256, no
-  evidenceManifestSHA256, and the v104 HMAC audit chain head + VerifiableReceipt seal
-  are NOT yet connected into the envelope.
-- Seal refusals beyond indeterminate: unsealed audit events, revision mismatch,
-  failed source-hash verification.
-- Wiring beyond the findings handoff (studios, other phases); Secure Enclave option;
-  signer assurance levels.
+Done (all suite-verified):
+- ✅ Per-rule evaluations persisted as append-only DB rows bound to the case
+  (`conformance_assessments`, migration v107; `ConformanceAssessmentRepository`).
+- ✅ Sutra frozen at RUN START (findings build), recorded with the assessment;
+  old runs reopen against their stored snapshot, never the live compiler
+  (tested: `reopenAgainstOriginal`).
+- ✅ Facts derivation moved into the model (`WorkProductHandoffModel.conformanceFacts()`);
+  the view no longer assembles facts.
+- ✅ Rule schema depth: applicability (restricted language: `always` /
+  `phase_reached(<kind>)`; unknown → evaluatorError, fail-closed), evaluatorVersion,
+  requiredEvidence (declared), humanRole, authorityReferences.
+- ✅ `globalRequirements` on `Sutra` → mandatory always-applicable global rules.
+- ✅ Producers: `approvedDeviation` (facts.approvedDeviations, justification on the
+  certificate) and `evaluatorError` (unparseable applicability, phase-less human rule).
+- ✅ Envelope v2 linkage fields (caseID, runRevision, auditChainHead, auditEventCount,
+  receiptSeal, databaseSchemaVersion) — signed, forgery-tested.
+- ✅ Seal refusals: indeterminate, unsealed audit events, run-revision mismatch.
+- ✅ Owner switch: Settings › "Classic conformance readout" restores the previous
+  behavior verbatim; strict mode is the default; the flip is lossless.
+
+Still open (honest tail):
+- requiredEvidence is declared on rules but not yet BOUND to evidence records
+  (attestation substitutes); evidenceManifestSHA256 not yet in the envelope.
+- The live handoff does not yet feed auditChainHead/unsealedCount from the v104
+  AuditChain into the linkage (fields + refusal exist and are tested; production
+  wiring passes receiptSeal, revision and schema version).
+- Deviations have producers + tests but no recording UI yet.
+- Wiring beyond the findings handoff (studios, other phases); Secure Enclave
+  option; signer assurance levels.
 
 ## Non-negotiable acceptance tests
 

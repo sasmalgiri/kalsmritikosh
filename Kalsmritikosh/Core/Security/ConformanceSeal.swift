@@ -24,7 +24,7 @@ import CryptoKit
 // MARK: - Envelope (what gets signed)
 
 public nonisolated struct ConformanceSealEnvelope: Sendable, Codable, Equatable {
-    public let formatVersion: Int              // 1
+    public let formatVersion: Int              // 2
     public let sutraCitation: String
     public let sutraSHA256: String
     public let ruleEvaluationsSHA256: String
@@ -34,6 +34,44 @@ public nonisolated struct ConformanceSealEnvelope: Sendable, Codable, Equatable 
     public let applicationBuild: String
     public let signerKeyID: String             // SHA-256 of the public key, first 16 hex
     public let signatureAlgorithm: String      // "ECDSA-P256-SHA256"
+    // v2 — linkage to the run and the app's other integrity primitives (all
+    // optional so v1 envelopes still decode and verify).
+    public let caseID: String?
+    public let runRevision: Int?
+    /// Head hash of the v104 HMAC audit chain at sealing time — ties this seal
+    /// to the local tamper-evident custody/fact-review ledger.
+    public let auditChainHead: String?
+    public let auditEventCount: Int?
+    /// The findings run's VerifiableReceipt seal, when one exists.
+    public let receiptSeal: String?
+    public let databaseSchemaVersion: Int?
+}
+
+/// What the seal binds to beyond the assessment itself. All optional — pass
+/// what the caller has; refusal conditions apply only to supplied values.
+public nonisolated struct ConformanceSealLinkage: Sendable, Equatable {
+    public var caseID: UUID?
+    public var runRevision: Int?
+    /// The run revision the assessment was computed for. When both revisions
+    /// are supplied and differ, sealing refuses (stale assessment).
+    public var assessedRunRevision: Int?
+    public var auditChainHead: String?
+    public var auditEventCount: Int?
+    /// Unsealed events still outstanding in the audit chain. > 0 refuses.
+    public var unsealedAuditEvents: Int?
+    public var receiptSeal: String?
+    public var databaseSchemaVersion: Int?
+
+    public init(caseID: UUID? = nil, runRevision: Int? = nil, assessedRunRevision: Int? = nil,
+                auditChainHead: String? = nil, auditEventCount: Int? = nil,
+                unsealedAuditEvents: Int? = nil, receiptSeal: String? = nil,
+                databaseSchemaVersion: Int? = nil) {
+        self.caseID = caseID; self.runRevision = runRevision
+        self.assessedRunRevision = assessedRunRevision
+        self.auditChainHead = auditChainHead; self.auditEventCount = auditEventCount
+        self.unsealedAuditEvents = unsealedAuditEvents; self.receiptSeal = receiptSeal
+        self.databaseSchemaVersion = databaseSchemaVersion
+    }
 }
 
 public nonisolated struct SealedConformance: Sendable, Codable, Equatable {
@@ -48,6 +86,8 @@ public nonisolated enum ConformanceSealError: Error, Equatable {
     case indeterminateAssessment   // unevaluated mandatory rules — refuse to seal
     case keyUnavailable
     case encodingFailed
+    case unsealedAuditEvents(Int)  // the local audit chain has outstanding unsealed events
+    case runRevisionMismatch       // the assessment was computed for a different run revision
 }
 
 // MARK: - Per-installation signing key (Keychain; same idiom as AuditChainSecret)
@@ -108,15 +148,26 @@ public nonisolated enum ConformanceSeal {
     /// negative attestation is still an attestation.
     public static func seal(assessment: ConformanceAssessment,
                             build: String = appBuild(),
-                            key: P256.Signing.PrivateKey? = nil) throws -> SealedConformance {
+                            key: P256.Signing.PrivateKey? = nil,
+                            linkage: ConformanceSealLinkage = ConformanceSealLinkage()) throws -> SealedConformance {
         guard assessment.status != .indeterminate else {
             throw ConformanceSealError.indeterminateAssessment
+        }
+        // Refuse when the local audit chain has events not yet sealed — the seal
+        // would attest over a ledger that can still silently change.
+        if let unsealed = linkage.unsealedAuditEvents, unsealed > 0 {
+            throw ConformanceSealError.unsealedAuditEvents(unsealed)
+        }
+        // Refuse a stale assessment: computed for a different run revision.
+        if let runRev = linkage.runRevision, let assessedRev = linkage.assessedRunRevision,
+           runRev != assessedRev {
+            throw ConformanceSealError.runRevisionMismatch
         }
         guard let signingKey = key ?? ConformanceSigningKey.loadOrGenerate() else {
             throw ConformanceSealError.keyUnavailable
         }
         let envelope = ConformanceSealEnvelope(
-            formatVersion: 1,
+            formatVersion: 2,
             sutraCitation: assessment.sutraCitation,
             sutraSHA256: assessment.sutraSHA256,
             ruleEvaluationsSHA256: assessment.ruleEvaluationsSHA256,
@@ -125,7 +176,13 @@ public nonisolated enum ConformanceSeal {
             assessedAt: assessment.assessedAt,
             applicationBuild: build,
             signerKeyID: ConformanceSigningKey.keyID(for: signingKey),
-            signatureAlgorithm: "ECDSA-P256-SHA256")
+            signatureAlgorithm: "ECDSA-P256-SHA256",
+            caseID: linkage.caseID?.uuidString,
+            runRevision: linkage.runRevision,
+            auditChainHead: linkage.auditChainHead,
+            auditEventCount: linkage.auditEventCount,
+            receiptSeal: linkage.receiptSeal,
+            databaseSchemaVersion: linkage.databaseSchemaVersion)
         guard let canonical = try? ConformanceCanonical.data(of: envelope) else {
             throw ConformanceSealError.encodingFailed
         }
@@ -158,6 +215,11 @@ public nonisolated enum ConformanceSeal {
         out += "| Rule evaluations SHA-256 | `\(e.ruleEvaluationsSHA256)` |\n"
         out += "| Status | \(e.overallStatus) (\(e.ruleCount) rules) |\n"
         out += "| App build | \(e.applicationBuild) |\n"
+        if let c = e.caseID { out += "| Case | `\(c)` |\n" }
+        if let rev = e.runRevision { out += "| Run revision | \(rev) |\n" }
+        if let head = e.auditChainHead { out += "| Audit chain head | `\(head)` (\(e.auditEventCount ?? 0) sealed event(s)) |\n" }
+        if let receipt = e.receiptSeal { out += "| Findings receipt seal | `\(receipt)` |\n" }
+        if let schema = e.databaseSchemaVersion { out += "| DB schema | v\(schema) |\n" }
         out += "| Signer key ID | `\(e.signerKeyID)` |\n"
         out += "| Algorithm | \(e.signatureAlgorithm) |\n"
         out += "| Signature (DER, hex) | `\(sealed.signatureHex)` |\n"

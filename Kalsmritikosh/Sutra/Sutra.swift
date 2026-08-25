@@ -51,6 +51,10 @@ public nonisolated struct Sutra: Sendable, Equatable, Codable {
     /// Amendment history, oldest first. Optional so sutras recorded before
     /// governance existed still decode; nil reads as "v\(version), unamended".
     public var amendments: [SutraAmendment]? = nil
+    /// Run-wide requirements that no single phase owns (e.g. "Every claim in the
+    /// deliverable carries its evidence"). Optional so previously recorded sutras
+    /// still decode; each line compiles to a mandatory GLOBAL typed rule.
+    public var globalRequirements: [String]? = nil
 
     /// Phases in tier order (the shape of the practice).
     public func phases(inTier tier: PhaseTier) -> [SutraPhase] { phases.filter { $0.tier == tier } }
@@ -68,6 +72,7 @@ public nonisolated struct Sutra: Sendable, Equatable, Codable {
                          phases: newPhases ?? phases, standardsOfProof: standardsOfProof,
                          reportSections: newSections ?? reportSections)
         next.amendments = (amendments ?? []) + [SutraAmendment(version: version + 1, date: date, summary: summary)]
+        next.globalRequirements = globalRequirements
         return next
     }
 }

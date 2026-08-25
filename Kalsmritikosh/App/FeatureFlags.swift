@@ -298,6 +298,23 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kLLMSelfCritique)
     }
 
+    /// CONFORMANCE STYLE (owner request 2026-08-25). When ON, the findings
+    /// handoff presents the PREVIOUS classic conformance readout exactly as it
+    /// shipped (recorded gates + one summary label, no attestation, no seal).
+    /// Default OFF = the strict Level-1 assessment: typed fail-closed rules,
+    /// reviewer attestation, frozen Sutra snapshot, signed seal, persisted per
+    /// run. The flip is instant and lossless — both readouts stay available
+    /// and neither deletes the other's records.
+    public var classicConformance: Bool {
+        get { Self.classicConformanceValue() }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kClassicConformance) }
+    }
+    public nonisolated static func classicConformanceValue() -> Bool {
+        UserDefaults.standard.bool(forKey: kClassicConformance)   // default false = strict
+    }
+    /// The UserDefaults key, exposed so views can bind it via @AppStorage.
+    public nonisolated static var classicConformanceKey: String { kClassicConformance }
+
     /// Mixtral-style MoE emulation: a top-k gate selects specialist
     /// "super-experts" that deliberate IN PARALLEL over the evidence, and
     /// their perspectives feed the answer draft. Default on; auto-inert
@@ -423,6 +440,7 @@ public final class FeatureFlags {
 
     private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
     private nonisolated static let kPreferClassicSurfaces  = "kalsmritikosh.feature.preferClassicSurfaces"
+    private nonisolated static let kClassicConformance     = "kalsmritikosh.feature.classicConformance.enabled"
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "kalsmritikosh.feature.systemModeChosen"
     private nonisolated static let kExpertGating           = "kalsmritikosh.feature.expertRelevanceGating"

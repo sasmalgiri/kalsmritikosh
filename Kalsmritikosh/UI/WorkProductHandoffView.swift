@@ -26,6 +26,8 @@ public final class WorkProductHandoffModel {
     private let closure: InvestigationClosureService
     /// INV-12 desk — used only to SURFACE undecided contradictions/gaps at report time (read-only here).
     private let contradictionGap: InvestigationContradictionGapService?
+    /// Level-1 persistence (v107). nil = preview-only (tests without a DB).
+    private let assessments: ConformanceAssessmentRepository?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -50,6 +52,54 @@ public final class WorkProductHandoffModel {
     /// Without it those rules stay `notEvaluated` and conformance is indeterminate
     /// — nothing passes by default.
     public var rulesAttested = false
+    /// The constitution FROZEN when this matter's findings were first built in
+    /// this session — the assessment never chases the live compiler value mid-run.
+    public private(set) var frozenSutra: Sutra?
+    /// The most recently RECORDED assessment for this matter (v107 row). An old
+    /// run reopens against this — its own stored snapshot, not today's Sutra.
+    public private(set) var storedAssessment: StoredConformanceAssessment?
+
+    /// The recorded facts the assessor consults — derived in the model from
+    /// service-backed state, not assembled by the view.
+    public func conformanceFacts() -> ConformanceFacts {
+        let reached: Set<PersonaJobKind> = [.findings]
+        let sutra = frozenSutra ?? SutraCompiler.shared()
+        let attestable = rulesAttested
+            ? Set(SutraRuleCompiler.rules(for: sutra)
+                .filter { $0.phaseKind.map(reached.contains) ?? true }
+                .map(\.id))
+            : Set<String>()
+        return ConformanceFacts(
+            completedPhaseKinds: reached,
+            standardOfProofDeclared: proofStandard != nil,
+            openItemsAcknowledged: !hasOpenItems || acknowledgedOpenItems,
+            humanDecisionsMade: (snapshot?.isApproved ?? false) ? [.findings] : [],
+            attestedRuleIDs: attestable)
+    }
+
+    /// Live (unrecorded) assessment against the frozen constitution.
+    public func currentAssessment(at now: Date = Date()) -> ConformanceAssessment {
+        SutraConformance.assess(facts: conformanceFacts(),
+                                against: frozenSutra ?? SutraCompiler.shared(), at: now)
+    }
+
+    /// Record + seal this run's assessment (called on approval). The seal links
+    /// the case, revision, findings-receipt seal and schema version; recording
+    /// appends a new revision — prior assessments are never rewritten.
+    private func recordAssessment(caseID: UUID, at date: Date) async {
+        guard let repo = assessments else { return }
+        let assessment = currentAssessment(at: date)
+        let nextRevision = ((try? await repo.latest(caseID: caseID))?.runRevision ?? 0) + 1
+        let sealed = try? ConformanceSeal.seal(
+            assessment: assessment,
+            linkage: ConformanceSealLinkage(caseID: caseID,
+                                            runRevision: nextRevision,
+                                            assessedRunRevision: nextRevision,
+                                            receiptSeal: built?.receipt.seal,
+                                            databaseSchemaVersion: SchemaMigrations.latestVersion))
+        do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
+        catch { lastError = "Conformance assessment could not be recorded: \(error)" }
+    }
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
@@ -60,9 +110,11 @@ public final class WorkProductHandoffModel {
 
     public init(handoff: WorkProductHandoffService, findings: InvestigationFindingsService,
                 closure: InvestigationClosureService,
-                contradictionGap: InvestigationContradictionGapService? = nil) {
+                contradictionGap: InvestigationContradictionGapService? = nil,
+                assessments: ConformanceAssessmentRepository? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
+        self.assessments = assessments
     }
 
     /// Load (or reload) the handoff snapshot for a matter. Switching matters starts a CLEAN slate: reviewer
@@ -81,6 +133,9 @@ public final class WorkProductHandoffModel {
             exportFormat = .pdf
             lastOutcome = nil
             lastError = nil
+            rulesAttested = false
+            frozenSutra = nil
+            storedAssessment = nil
         }
         self.caseID = caseID
         await refresh()
@@ -97,12 +152,19 @@ public final class WorkProductHandoffModel {
             openContradictionCount = cs.filter { $0.review == nil }.count
             openGapCount = gs.filter { $0.review == nil }.count
         }
+        // Reopen path: the matter's recorded assessment, frozen snapshot and all.
+        if let repo = assessments {
+            storedAssessment = try? await repo.latest(caseID: caseID)
+        }
     }
 
     /// Build the case's findings work product over the shared assembly engine (does not approve or close).
     public func buildFindings(actor: String, at date: Date) async {
         guard let snap = snapshot else { lastError = "Load a matter first."; return }
         let access = exportAccess(workspaceID: snap.workspaceID)
+        // Run-start freeze: the constitution this run will be assessed against is
+        // fixed the moment findings are first built — never the live compiler value.
+        if frozenSutra == nil { frozenSutra = SutraCompiler.shared() }
         await perform {
             let f = try await self.findings.buildFindings(caseID: snap.caseID, access: access, actor: actor, at: date)
             self.built = f
@@ -129,6 +191,12 @@ public final class WorkProductHandoffModel {
             _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
                                                         rationale: why + awareness, actor: actor, at: date)
             await self.refresh()
+            // Strict conformance (v107): record + seal the per-rule assessment of
+            // this approved run against the frozen constitution. Classic mode
+            // records nothing — exactly the previous behavior.
+            if !FeatureFlags.classicConformanceValue() {
+                await self.recordAssessment(caseID: snap.caseID, at: date)
+            }
             return "Findings approved under \(std.label)."
         }
     }
@@ -230,6 +298,8 @@ public final class WorkProductHandoffModel {
 
 public struct WorkProductHandoffView: View {
     @Environment(AppState.self) private var appState
+    /// CONFORMANCE STYLE switch — classic summary label vs strict per-rule assessment.
+    @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
     @State private var model: WorkProductHandoffModel?
     @State private var selectedWorkspace: Workspace.ID?
     @State private var workspaceList: [Workspace] = []
@@ -370,14 +440,40 @@ public struct WorkProductHandoffView: View {
         }
     }
 
-    /// Level-1 conformance (typed rules, fail-closed): one outcome per rule of
-    /// the reached phases. Rules without a deterministic gate stay `notEvaluated`
-    /// (indeterminate — never green) until the reviewer explicitly attests them.
+    /// Conformance readout — two styles behind the Settings switch. Classic is
+    /// the previous recorded-gates summary, verbatim; strict is the Level-1
+    /// per-rule assessment (fail-closed, attestation, frozen snapshot, seal).
+    /// The flip is instant and lossless: neither style deletes the other's records.
+    @ViewBuilder
     private func conformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
+        if classicConformance {
+            classicConformanceReadout(model, snap)
+        } else {
+            strictConformanceReadout(model, snap)
+        }
+    }
+
+    /// The previous app's conformance summary, exactly as it shipped.
+    private func classicConformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
+        let record = RunRecord(
+            completedPhaseKinds: [.findings],
+            standardOfProofDeclared: model.proofStandard != nil,
+            openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
+            humanDecisionsMade: snap.isApproved ? [.findings] : [])
+        let report = SutraConformance.verify(run: record, against: SutraCompiler.shared())
+        return Label(report.summaryLine, systemImage: report.isConformant ? "checkmark.seal.fill" : "seal")
+            .font(.caption)
+            .foregroundStyle(report.isConformant ? Color.green : Color.orange)
+            .help("Sūtra conformance — whether this run met its constitution (standard of proof declared, open items surfaced, approval recorded).")
+    }
+
+    /// Level-1 strict assessment: one outcome per rule of the frozen constitution.
+    /// A RECORDED assessment (this matter was approved) shows the stored row —
+    /// its own snapshot, its own seal — never today's live Sutra.
+    private func strictConformanceReadout(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
         @Bindable var model = model
-        let sutra = SutraCompiler.shared()
-        let facts = conformanceFacts(model, snap, sutra: sutra)
-        let assessment = SutraConformance.assess(facts: facts, against: sutra, at: Date())
+        let stored = model.storedAssessment
+        let assessment = stored?.assessment ?? model.currentAssessment()
         let (icon, color): (String, Color) = switch assessment.status {
         case .conformant:    ("checkmark.seal.fill", .green)
         case .notConformant: ("xmark.seal.fill", .red)
@@ -386,19 +482,23 @@ public struct WorkProductHandoffView: View {
         return VStack(alignment: .leading, spacing: 6) {
             Label(assessment.status.summaryLine, systemImage: icon)
                 .font(.caption).foregroundStyle(color)
-                .help("Sūtra conformance — every rule of the reached phases is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently.")
-            if !assessment.unevaluated.isEmpty {
+                .help("Sūtra conformance — every rule of the frozen constitution is evaluated individually; unevaluated mandatory rules block conformance instead of passing silently.")
+            if let stored {
+                Text("Recorded assessment · revision \(stored.runRevision) · \(stored.assessment.sutraCitation) · constitution sha256 \(stored.assessment.sutraSHA256.prefix(12))…")
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+            if stored == nil && !assessment.unevaluated.isEmpty {
                 Toggle("I attest each obligation of the reached phases was met and no prohibited conclusion is asserted (\(assessment.unevaluated.count) rule(s))",
                        isOn: $model.rulesAttested)
                     .font(.caption)
                     .guidance(GuidanceTip("Rule attestation",
-                                          what: "Rules the app cannot check deterministically require your recorded attestation. Attesting evaluates them as met under your name; leaving them unattested keeps conformance honestly indeterminate.",
+                                          what: "Rules the app cannot check deterministically require your recorded attestation. Attesting evaluates them as met under your name; leaving them unattested keeps conformance honestly indeterminate. Your attestation is recorded and sealed with the assessment when you approve.",
                                           enabledWhen: nil))
             }
             if assessment.status != .indeterminate {
                 Button {
                     var text = assessment.certificate
-                    if let sealed = try? ConformanceSeal.seal(assessment: assessment) {
+                    if let sealed = stored?.seal ?? (try? ConformanceSeal.seal(assessment: assessment)) {
                         text += "\n" + ConformanceSeal.markdown(for: sealed)
                     }
                     NSPasteboard.general.clearContents()
@@ -408,24 +508,6 @@ public struct WorkProductHandoffView: View {
                 .help("Per-rule certificate with the constitution's SHA-256 and an ECDSA P-256 signature — verifiable outside this app.")
             }
         }
-    }
-
-    /// The recorded facts the assessor may consult — attestation covers exactly
-    /// the attestable (non-gated) rules of the reached phases, nothing more.
-    private func conformanceFacts(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot,
-                                  sutra: Sutra) -> ConformanceFacts {
-        let reached: Set<PersonaJobKind> = [.findings]
-        let attestable = model.rulesAttested
-            ? Set(SutraRuleCompiler.rules(for: sutra)
-                .filter { reached.contains($0.phaseKind) }
-                .map(\.id))
-            : []
-        return ConformanceFacts(
-            completedPhaseKinds: reached,
-            standardOfProofDeclared: model.proofStandard != nil,
-            openItemsAcknowledged: !model.hasOpenItems || model.acknowledgedOpenItems,
-            humanDecisionsMade: snap.isApproved ? [.findings] : [],
-            attestedRuleIDs: attestable)
     }
 
     @ViewBuilder
@@ -523,7 +605,8 @@ public struct WorkProductHandoffView: View {
               let findings = appState.investigationFindings,
               let closure = appState.investigationClosure else { return }
         let m = model ?? WorkProductHandoffModel(handoff: handoff, findings: findings, closure: closure,
-                                                 contradictionGap: appState.investigationContradictionGap)
+                                                 contradictionGap: appState.investigationContradictionGap,
+                                                 assessments: appState.conformanceAssessments)
         await m.load(caseID: id)
         model = m
     }
