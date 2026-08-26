@@ -418,3 +418,24 @@ could never be marked reached. Now:
   methods, causalAnalysis, linkage, capaRegister, effectivenessReview.
   B-2 remainders: `ask` + `dataLab` observation, and feeding phase
   observations into the audit chain as a fourth source.
+
+## Phase E (2026-08-26) — the claims registry; the wording class is closed
+
+`CLAIMS.md` maps every load-bearing public sentence to the mechanism that
+proves it (a named test, a CI step, a source pattern, or a recorded owner
+act). `scripts/check-claims.sh` runs in CI on every push and fails when:
+- a registered claim's copy no longer appears on the site (drift), or
+- a claim's proof no longer exists (proof rot), or
+- refused vocabulary ("provable compliance", "legally compliant",
+  "court-admissible", …) appears anywhere in docs/.
+New marketing copy therefore requires a registry row with a living proof
+BEFORE it can ship. An auditor can dispute a mapping; they can no longer
+discover an unbacked sentence.
+
+Phase B-2 disposition: `ask`/`dataLab` observation needs the same
+case-linkage pattern as v113 (their artifacts are workspace-scoped today) —
+queued, honestly stated in the refusal message and on the certificate.
+Feeding phase observations into the audit chain is intentionally NOT done:
+observations are DERIVED state, not events; deriving them at assessment
+time and signing them in the facts is the correct binding (the chain seals
+the underlying ledgers those derivations read).

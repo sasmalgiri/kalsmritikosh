@@ -30,6 +30,11 @@ jobs:
         run: |
           set -o pipefail
           bash ci/guards/run-all.sh 2>&1 | tee guards.log
+      - name: Claims registry gate (Phase E)
+        # Every registered public claim must still appear on the site and its
+        # proof (test / CI step / source pattern) must still exist; refused
+        # vocabulary ("provable compliance", …) must never ship.
+        run: bash scripts/check-claims.sh
       - name: Upload guard logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
