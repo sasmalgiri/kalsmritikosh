@@ -337,3 +337,28 @@ Correct-by-nature (documented, not deferred):
   infrastructure this product intentionally does not have.
 - Bundles prove the recorded run state, facts, rules and outcomes — not the
   truth of the underlying evidence. Stated on the verification page.
+
+## Phase A (2026-08-26) — ONE evaluator, zero drift; the parity finding class is closed
+
+The seventh audit's parity finding (CLI missing severity comparison) was the
+third instance of one structural cause: the standalone verifier was a
+hand-maintained mirror. Phase A removes the cause, not the instance:
+
+- `verifier/kalverify.swift` is now GENERATED (`scripts/generate-kalverify.sh`)
+  by concatenating the app's own conformance source verbatim — PersonaJobKind,
+  JobTooling, Sutra, SutraConformance, SutraRules (compiler + every evaluator +
+  the one `ConformanceStatus.rollup`), ConformanceEnvelope — plus a thin
+  file-IO/printing tail (`verifier/kalverify.main.swift`). What an outsider
+  reruns IS what the app ran; there is no second implementation to drift.
+- CI regenerates on every push and FAILS if the committed verifier is stale.
+- Full typed rule equality comes free (SutraRule Equatable covers severity,
+  waivability, applicability, evidence requirements, human role, authority,
+  evaluator version); the rollup is recomputed by the app's own function.
+- Seventh-audit severity-demotion attack: refused twice over — the SIGNED
+  ruleEvaluationsSHA256 catches the edit at AUTHENTICITY (the claimed attack
+  was in fact never possible), and the shared-core full-rule comparison is
+  the second lock. Attack 4 in the CI matrix proves it live.
+- Wire types split to `ConformanceEnvelope.swift` (pure) so the envelope the
+  CLI decodes is the envelope the app signs, byte-for-byte canonical.
+- `recordAssessment` now refuses to seal over a BROKEN audit chain
+  (`isIntact` checked, not just the unsealed count) — seventh audit #4.

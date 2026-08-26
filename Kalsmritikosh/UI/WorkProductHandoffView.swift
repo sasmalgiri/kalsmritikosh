@@ -210,6 +210,12 @@ public final class WorkProductHandoffModel {
             do {
                 _ = try await chain.seal(now: date)
                 let v = try await chain.verify()
+                // A BROKEN chain (tampered link or deleted sealed event) is as
+                // disqualifying as an unavailable one — never attest over it.
+                guard v.isIntact else {
+                    throw ConformanceGateError.assessmentNotRecorded(
+                        "audit chain verification reports a broken link (seq \(v.firstBrokenSeq ?? v.missingEventSeq ?? -1))")
+                }
                 linkage.unsealedAuditEvents = v.unsealedCount
                 let h = try await chain.head()
                 linkage.auditChainHead = h.hash

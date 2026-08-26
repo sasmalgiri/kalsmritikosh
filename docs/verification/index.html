@@ -37,7 +37,11 @@
   installing Kalsmritikosh and without trusting the person who sent it.</p>
 
   <h2>1 · Get the verifier</h2>
-  <p>The standalone verifier is a single open-source Swift file (Foundation + CryptoKit only):</p>
+  <p>The standalone verifier is a single open-source Swift file (Foundation + CryptoKit only).
+  It is <b>generated from the app's own conformance source</b> — the rule compiler, every
+  evaluator, the fail-closed rollup and the seal envelope are the application's files
+  concatenated verbatim (see <code>scripts/generate-kalverify.sh</code>), and CI fails if the
+  published verifier ever drifts from the app. What you rerun is what the app ran.</p>
   <pre>curl -LO https://raw.githubusercontent.com/sasmalgiri/kalsmritikosh/main/verifier/kalverify.swift</pre>
 
   <h2>2 · Verify</h2>
@@ -45,7 +49,7 @@
   <p>Three separated verdicts print — never a single blended "genuine":</p>
   <div class="card"><h3>INTEGRITY</h3><p>Every file matches the manifest's SHA-256. Detects edits, truncation, missing files.</p></div>
   <div class="card"><h3>AUTHENTICITY</h3><p>The ECDSA P-256 signature over the canonical envelope verifies, and the signed hashes match the actual protocol, evaluations, facts and evidence-manifest bytes. Editing content and recomputing hashes still fails here.</p></div>
-  <div class="card"><h3>REPLAY</h3><p>The verifier recompiles the rules from the frozen protocol and <em>reruns every evaluator</em> over the recorded facts — a wrongly computed outcome fails even when it was correctly signed. Deleting the facts to force a weaker check also fails: the facts hash is signed.</p></div>
+  <div class="card"><h3>REPLAY</h3><p>The verifier recompiles the rules from the frozen protocol and <em>reruns every evaluator</em> over the recorded facts — with the app's own compiler and evaluator code, so a wrongly computed outcome fails even when it was correctly signed. Every rule field (severity, waivability, evidence requirements, applicability) is compared, and the run binding is recomputed from the signed facts. Deleting the facts to force a weaker check also fails: the facts hash is signed.</p></div>
 
   <h2>3 · Bind the signer's identity</h2>
   <p>Without a known fingerprint, AUTHENTICITY proves key-consistency only — anyone can

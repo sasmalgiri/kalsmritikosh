@@ -122,6 +122,11 @@ jobs:
           # The test suite leaves a PRODUCTION-SHAPED bundle (run-bound, facts,
           # evidence manifest) at a stable temp path. The standalone CLI must
           # accept it, and must REFUSE every attack below.
+          # PHASE A — the verifier is GENERATED from the app's own conformance
+          # core; a stale committed copy means app/CLI parity is broken.
+          ./scripts/generate-kalverify.sh
+          git diff --exit-code verifier/kalverify.swift \
+            || { echo "::error::verifier/kalverify.swift is STALE — run scripts/generate-kalverify.sh and commit"; exit 1; }
           FIXTURE=$(find "$HOME/Library/Containers" /tmp "${TMPDIR:-/tmp}" -maxdepth 6 -type d -name "kalverify-fixture" 2>/dev/null | head -1)
           test -n "$FIXTURE" || { echo "::error::kalverify fixture not found"; exit 1; }
           echo "fixture: $FIXTURE"
@@ -145,6 +150,25 @@ jobs:
           if swift verifier/kalverify.swift /tmp/kv-downgrade; then echo "::error::facts-deletion downgrade verified"; exit 1; fi
           # Attack 3 — wrong trusted signer key: AUTHENTICITY must fail.
           if swift verifier/kalverify.swift "$FIXTURE" deadbeefdeadbeef; then echo "::error::wrong trusted key verified"; exit 1; fi
+          # Attack 4 — severity demotion (seventh audit): flip a mandatory rule
+          # to advisory + recompute the unsigned manifest. Must be refused (the
+          # SIGNED evaluations hash catches it; the shared-core full-rule
+          # comparison is the second lock).
+          rm -rf /tmp/kv-sev && cp -R "$FIXTURE" /tmp/kv-sev
+          python3 - <<'PY'
+          import json, hashlib, os
+          d = "/tmp/kv-sev"
+          evs = json.load(open(os.path.join(d, "rule-evaluations.json")))
+          evs[0]["rule"]["severity"] = "advisory"
+          open(os.path.join(d, "rule-evaluations.json"), "w").write(
+              json.dumps(evs, sort_keys=True, separators=(",", ":")))
+          m = json.load(open(os.path.join(d, "manifest.json")))
+          for name in m["files"]:
+              m["files"][name] = hashlib.sha256(open(os.path.join(d, name), "rb").read()).hexdigest()
+          open(os.path.join(d, "manifest.json"), "w").write(
+              json.dumps(m, sort_keys=True, separators=(",", ":")))
+          PY
+          if swift verifier/kalverify.swift /tmp/kv-sev; then echo "::error::severity-demoted bundle verified"; exit 1; fi
           echo "kalverify attack matrix: all attacks refused, clean bundle verified."
 
       - name: Upload logs + result bundle on failure

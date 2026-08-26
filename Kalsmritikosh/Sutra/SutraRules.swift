@@ -324,6 +324,21 @@ public nonisolated enum ConformanceStatus: String, Sendable, Codable {
         case .indeterminate: return "Indeterminate — mandatory rule(s) not yet evaluated; conformance cannot be claimed."
         }
     }
+
+    /// THE fail-closed rollup — one computation, used by the assessment AND
+    /// every verifier (the CLI is generated from this exact file, so a status
+    /// recomputed outside the app is the same code, not a mirror).
+    public static func rollup(of evaluations: [RuleEvaluation]) -> ConformanceStatus {
+        let mandatory = evaluations.filter { $0.rule.severity == .mandatory }
+        if mandatory.contains(where: { $0.outcome == .failed }) { return .notConformant }
+        if mandatory.contains(where: { $0.outcome == .notEvaluated || $0.outcome == .evaluatorError }) {
+            return .indeterminate
+        }
+        if mandatory.contains(where: { $0.outcome == .approvedDeviation }) {
+            return .conformantWithDeviations
+        }
+        return .conformant
+    }
 }
 
 public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
@@ -348,17 +363,7 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
     /// Fail-closed rollup: failed beats everything; any mandatory
     /// notEvaluated/evaluatorError makes the whole assessment indeterminate;
     /// any authorized deviation is DISTINCT from plain conformance.
-    public var status: ConformanceStatus {
-        let mandatory = evaluations.filter { $0.rule.severity == .mandatory }
-        if mandatory.contains(where: { $0.outcome == .failed }) { return .notConformant }
-        if mandatory.contains(where: { $0.outcome == .notEvaluated || $0.outcome == .evaluatorError }) {
-            return .indeterminate
-        }
-        if mandatory.contains(where: { $0.outcome == .approvedDeviation }) {
-            return .conformantWithDeviations
-        }
-        return .conformant
-    }
+    public var status: ConformanceStatus { ConformanceStatus.rollup(of: evaluations) }
 
     /// Rules still awaiting an explicit evaluation (drives the attestation UI).
     public var unevaluated: [RuleEvaluation] {
