@@ -155,6 +155,38 @@ struct ConformanceBundleTests {
         #expect(v2.details.contains { $0.contains("public-key.hex") })
     }
 
+    /// TENTH AUDIT — the bundle directory must contain EXACTLY the
+    /// manifest's files: deletion-with-delisting and unlisted additions
+    /// both fail integrity.
+    @Test("Deleting README (even delisted) and adding an unlisted file both fail integrity")
+    func exactDirectoryContentsEnforced() throws {
+        // Delete README AND delist it from a regenerated manifest: the
+        // mandatory-set rule refuses.
+        let dir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir)
+        try FileManager.default.removeItem(at: dir.appendingPathComponent("README.txt"))
+        var files: [String: String] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        where name != "manifest.json" {
+            let data = try Data(contentsOf: dir.appendingPathComponent(name))
+            files[name] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
+        try JSONSerialization.data(withJSONObject: ["formatVersion": 1, "files": files],
+                                   options: [.sortedKeys])
+            .write(to: dir.appendingPathComponent("manifest.json"))
+        let deleted = ConformanceBundle.verify(at: dir)
+        #expect(deleted.integrity == .failed)
+        #expect(deleted.details.contains { $0.contains("README.txt") })
+
+        // Smuggle an unlisted file into an otherwise clean bundle: refused.
+        let dir2 = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir2)
+        try Data("stowaway".utf8).write(to: dir2.appendingPathComponent("extra.json"))
+        let smuggled = ConformanceBundle.verify(at: dir2)
+        #expect(smuggled.integrity == .failed)
+        #expect(smuggled.details.contains { $0.contains("unlisted file") })
+    }
+
     /// Acceptance test 5: editing any file breaks verification (integrity layer).
     @Test("Editing any bundle file fails integrity")
     func tamperedFileFailsIntegrity() throws {
@@ -219,8 +251,8 @@ struct ConformanceBundleTests {
         // interesting forgery is a complete, internally consistent one).
         func sha(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
         var files: [String: String] = [:]
-        for name in ["attestation.json", "protocol.json", "rule-evaluations.json",
-                     "evaluation-facts.json", "public-key.hex"] {
+        for name in try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        where name != "manifest.json" {
             files[name] = sha(try Data(contentsOf: dir.appendingPathComponent(name)))
         }
         try ConformanceCanonical.data(of: ConformanceBundle.Manifest(formatVersion: 1, files: files))

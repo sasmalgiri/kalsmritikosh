@@ -127,6 +127,12 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// evidence. Defaults to `.unknown` for legacy callers that don't
     /// run the answerability gate yet.
     public let answerState: AnswerState
+    /// TENTH AUDIT — the durable COMMIT PROOF. Set (by MasterBrain) only
+    /// after `lockVerifiedFinal` succeeded in the answer ledger, carrying
+    /// that ledger's answer ID. nil means NOT durably committed — including
+    /// degraded no-ledger runs whose `.verifiedFinal` is display-terminal
+    /// only. Conformance observation requires this ID, never the state name.
+    public let ledgerAnswerID: UUID?
 
     public nonisolated init(
         body: String,
@@ -141,7 +147,8 @@ public struct VerifiedAnswer: Codable, Sendable {
         walkSteps: [WalkStep] = [],
         source: AnswerSource = .unknown,
         reasoningTrace: ReasoningTrace? = nil,
-        answerState: AnswerState = .unknown
+        answerState: AnswerState = .unknown,
+        ledgerAnswerID: UUID? = nil
     ) {
         self.body = body
         self.answerText = answerText
@@ -156,10 +163,22 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.source = source
         self.reasoningTrace = reasoningTrace
         self.answerState = answerState
+        self.ledgerAnswerID = ledgerAnswerID
+    }
+
+    /// The same answer, stamped with its durable ledger commit (MasterBrain
+    /// calls this immediately after `lockVerifiedFinal` succeeds).
+    public nonisolated func withLedgerCommit(_ answerID: UUID) -> VerifiedAnswer {
+        VerifiedAnswer(body: body, answerText: answerText, intentKind: intentKind,
+                       citations: citations, confidence: confidence,
+                       contradictions: contradictions, refused: refused,
+                       refusalReason: refusalReason, report: report, walkSteps: walkSteps,
+                       source: source, reasoningTrace: reasoningTrace,
+                       answerState: answerState, ledgerAnswerID: answerID)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState, ledgerAnswerID
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -177,6 +196,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.source = try c.decodeIfPresent(AnswerSource.self, forKey: .source) ?? .unknown
         self.reasoningTrace = try c.decodeIfPresent(ReasoningTrace.self, forKey: .reasoningTrace)
         self.answerState = try c.decodeIfPresent(AnswerState.self, forKey: .answerState) ?? .unknown
+        self.ledgerAnswerID = try c.decodeIfPresent(UUID.self, forKey: .ledgerAnswerID)
     }
 
     public struct Citation: Codable, Sendable, Hashable {

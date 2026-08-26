@@ -16,8 +16,8 @@ reference verifier (Foundation + CryptoKit only) lives at
 | `evidence-manifest.json` | The run's evidence manifest (source-version IDs + custody content hashes) when the signed envelope carries `evidenceManifestSHA256`. Metadata only — never document content. |
 | `audit-events.json` | The PUBLIC audit trail (Phase D), truncated to the SIGNED head. MANDATORY when the envelope signs a non-genesis `publicAuditChainHead`. |
 | `public-key.hex` | The signer's public key again, as a standalone file for convenience. MANDATORY. |
-| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file, INCLUDING `README.txt` (ninth audit). Verifiers REFUSE an unknown `formatVersion` and REFUSE a manifest that does not cover the mandatory file set (eighth audit — an emptied manifest cannot pass integrity vacuously). |
-| `README.txt` | Human instructions. Manifest-covered; display-only (its hash is not in the signed envelope). |
+| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file, INCLUDING `README.txt` (ninth audit — README is in the MANDATORY set). Verifiers REFUSE an unknown `formatVersion`, REFUSE a manifest that does not cover the mandatory file set (eighth audit), and REFUSE a directory whose contents differ from `manifest.files` + `manifest.json` — deleted-and-delisted files and unlisted additions both fail (tenth audit). Dotfiles (`.DS_Store` etc.) are OS browsing artifacts and are excluded from the exact-contents rule. |
+| `README.txt` | Human instructions. MANDATORY and manifest-covered; display-only (its hash is not in the signed envelope). |
 
 No source documents are included — only rule outcomes, metadata and hashes.
 The evidence manifest, when exported, reveals source-version IDs and content
@@ -80,8 +80,8 @@ blended "genuine" claim.
 ## What a passing bundle proves — and what it does not
 
 Proves: this exact assessment (these rules, these outcomes, this constitution,
-this status) was signed by the holder of the embedded key, and nothing in the
-bundle changed since. Does **not** prove: which human ran it, that the
+this status) was signed by the holder of the embedded key, and the SIGNED
+evidence-bearing contents have not changed since. Does **not** prove: which human ran it, that the
 underlying evidence is truthful, or compliance with any external standard —
 see the assurance-level table in `CONFORMANCE_ROADMAP.md`.
 

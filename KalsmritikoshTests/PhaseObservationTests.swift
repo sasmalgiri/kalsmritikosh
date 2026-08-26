@@ -106,13 +106,27 @@ struct PhaseObservationTests {
         #expect(model.frozenSutra?.id == review.id, "the review protocol governs the run")
     }
 
-    @Test("The v115 artifact ledger surfaces ask and dataLab observations; a dataLab row must point at a REAL dataset")
+    @Test("The v115 artifact ledger surfaces ask and dataLab observations; both must point at REAL artifacts")
     func artifactLedgerObserved() async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-artifacts")
         let repo = CasePhaseArtifactRepository(database: h.db)
         let caseID = UUID()
-        _ = try await repo.record(caseID: caseID, phase: .ask,
-                                  artifactID: CasePhaseArtifactRepository.askArtifactID(caseID: caseID, question: "q"),
+        // TENTH AUDIT — an ask observation pointing at a nonexistent answer
+        // (or one never locked verifiedFinal) is REFUSED.
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, phase: .ask, artifactID: UUID(),
+                                  detail: "question=abcd1234", at: t0)
+        }
+        // A REAL durably committed answer records normally: drive the actual
+        // AEE-M2 ledger to verifiedFinal and use ITS answer ID.
+        let ledger = AnswerLedgerRepository(database: h.db)
+        let answerID = try await ledger.beginAnswer(question: "obs q", mission: nil, at: t0)
+        _ = try await ledger.appendWorkingResult(
+            answerID: answerID, body: "grounded body",
+            citations: [], answerState: .unknown, confidence: 0.8, at: t0)
+        try await ledger.markReviewReady(answerID: answerID, at: t0)
+        try await ledger.lockVerifiedFinal(answerID: answerID, at: t0)
+        _ = try await repo.record(caseID: caseID, phase: .ask, artifactID: answerID,
                                   detail: "question=abcd1234", at: t0)
         // NINTH AUDIT — a dataLab observation pointing at a nonexistent
         // dataset is REFUSED (referential truth, not a bare UUID column).

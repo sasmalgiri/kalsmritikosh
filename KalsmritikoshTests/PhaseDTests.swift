@@ -163,11 +163,13 @@ struct PhaseDTests {
         try ConformanceBundle.write(stored: stored, to: dirB, auditTrail: trail)
         let clean = ConformanceBundle.verify(at: dirB)
         #expect(clean.allPassed, "\(clean.details)")
-        // Strip the trail + recompute the (unsigned) manifest: replay refuses.
+        // Strip the trail + recompute the (unsigned) manifest over EVERYTHING
+        // else (a competent forger keeps the mandatory set + exact-contents
+        // rule intact): replay still refuses on the missing trail.
         try FileManager.default.removeItem(at: dirB.appendingPathComponent("audit-events.json"))
         var files: [String: String] = [:]
         for name in try FileManager.default.contentsOfDirectory(atPath: dirB.path)
-        where name != "manifest.json" && name != "README.txt" {
+        where name != "manifest.json" {
             let data = try Data(contentsOf: dirB.appendingPathComponent(name))
             files[name] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         }

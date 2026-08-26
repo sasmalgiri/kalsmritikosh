@@ -1,11 +1,19 @@
 # CLAIMS.md — every public claim, mapped to the mechanism that proves it
 
-PHASE E (seventh audit). Rule: **a sentence may not ship on the website
-unless it appears here with a living proof.** CI (`scripts/check-claims.sh`)
-verifies on every push that (a) each registered claim still appears on the
-live site source, and (b) each named proof still exists — a claim whose copy
-drifted or whose test was deleted fails the build. Adding new marketing copy
-means adding a row here first.
+PHASE E (seventh audit), rebuilt on explicit IDs (tenth audit). Rule: **an
+enforcement, verifiability or privacy sentence may not ship on the website
+unless its element carries a `data-claim="<id>"` attribute and that id has
+exactly one row here with a living proof.** CI (`scripts/check-claims.sh`)
+verifies on every push, in BOTH directions:
+
+- registry → site: every row's id appears in a `data-claim` attribute, its
+  verbatim fragment still exists in the site source, and its proof is alive;
+- site → registry: every `data-claim` id found in the HTML has exactly one
+  row here.
+
+A keyword heuristic additionally scans for enforcement-flavored copy that
+carries neither a `data-claim` attribute nor a `claims-exempt` marker — as a
+SECONDARY WARNING (the id gate is the authority, per the tenth audit).
 
 Proof kinds:
 - `test:<symbol>` — a named test in KalsmritikoshTests proves the behavior.
@@ -14,50 +22,51 @@ Proof kinds:
 - `owner:<file>` — true only after a recorded owner act; the claim page must
   carry the conditional wording until that act is done.
 
-| Claim (verbatim fragment on the site) | Proof |
-|---|---|
-| `refuse to confirm without their required elements` | test:repositoryAssertionEnforcement |
-| `approval is blocked until every rule of the frozen SOP` | test:failClosed |
-| `unevaluated rules block conformance` | test:failClosed |
-| `frozen by hash` | test:snapshotHash |
-| `strict conformance mode` | test:flagDefaultsOff |
-| `reruns every evaluator` | ci:generate-kalverify |
-| `What you rerun is what the app ran` | ci:git diff --exit-code verifier/kalverify.swift |
-| `Every file matches the manifest` | test:tamperedFileFailsIntegrity |
-| `recomputing hashes still fails` | test:recomputedForgeryFailsSignature |
-| `run binding is recomputed` | test:runBindingRecomputes |
-| `the facts hash is signed` | test:factsReplayCatchesWrongEvaluations |
-| `no network connections` | ci:sensitive-export |
-| `100% on-device` | ci:sensitive-export |
-| `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
-| `sealed receipt` | ci:report-receipt-integrity |
-| `machine-observed phases` | test:certificateSplit |
-| `every line traceable to a source` | test:ungroundedFlagged |
-| `end in the actual hardcopy` | test:hardcopy |
-| `deliverable seal` | test:studioSealVerifies |
-| `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
-| `replays a keyless` | test:publicChainSealsAndReplays |
-| `trail metadata cannot be edited` | test:publicChainSealsAndReplays |
-| `Real standards, enforced` | test:failClosed |
-| `conclusions the app refuses to assert` | test:repositoryAssertionEnforcement |
-| `refuses to guess` | test:missingEvidenceIncomplete |
-| `enforced evidence gate` | test:missingEvidenceIncomplete |
-| `refuses when the record` | test:missingEvidenceIncomplete |
-| `disabling that enforcement` | grep:disables enforcement:Kalsmritikosh/UI/SettingsView.swift |
-| `right of reply enforced` | test:stages |
+| Claim ID | Verbatim fragment on the site | Proof |
+|---|---|---|
+| `workflow.element-gates` | `refuse to confirm without their required elements` | test:repositoryAssertionEnforcement |
+| `conformance.approval-gate` | `approval is blocked until every rule of the frozen SOP` | test:failClosed |
+| `conformance.fail-closed` | `unevaluated rules block conformance` | test:failClosed |
+| `conformance.frozen-hash` | `frozen by hash` | test:snapshotHash |
+| `conformance.strict-mode` | `strict conformance mode` | test:flagDefaultsOff |
+| `conformance.classic-disclosure` | `disabling that enforcement` | grep:disables enforcement:Kalsmritikosh/UI/SettingsView.swift |
+| `conformance.standards-enforced` | `Real standards, enforced` | test:failClosed |
+| `conformance.refused-conclusions` | `conclusions the app refuses to assert` | test:repositoryAssertionEnforcement |
+| `conformance.observed-phases` | `machine-observed phases` | test:certificateSplit |
+| `verify.true-replay` | `reruns every evaluator` | ci:generate-kalverify |
+| `verify.generated-cli` | `What you rerun is what the app ran` | ci:git diff --exit-code verifier/kalverify.swift |
+| `verify.integrity` | `Every file matches the manifest` | test:tamperedFileFailsIntegrity |
+| `verify.authenticity` | `recomputing hashes still fails` | test:recomputedForgeryFailsSignature |
+| `verify.run-binding` | `run binding is recomputed` | test:runBindingRecomputes |
+| `verify.signed-facts` | `the facts hash is signed` | test:factsReplayCatchesWrongEvaluations |
+| `trail.public-replay` | `replays a keyless` | test:publicChainSealsAndReplays |
+| `trail.metadata-bound` | `trail metadata cannot be edited` | test:publicChainSealsAndReplays |
+| `studios.hardcopy` | `end in the actual hardcopy` | test:hardcopy |
+| `studios.deliverable-seal` | `deliverable seal` | test:studioSealVerifies |
+| `studios.unsealed-disclosure` | `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
+| `receipts.sealed` | `sealed receipt` | ci:report-receipt-integrity |
+| `answers.traceable` | `every line traceable to a source` | test:ungroundedFlagged |
+| `answers.refuses-to-guess` | `refuses to guess` | test:missingEvidenceIncomplete |
+| `answers.evidence-gate` | `enforced evidence gate` | test:missingEvidenceIncomplete |
+| `answers.refuses-unsupported` | `refuses when the record` | test:missingEvidenceIncomplete |
+| `journalism.reply-gate` | `right of reply enforced` | test:stages |
+| `privacy.no-egress` | `no network connections` | ci:sensitive-export |
+| `privacy.on-device` | `100% on-device` | ci:sensitive-export |
+| `privacy.never-leaves` | `never leave your Mac` | ci:sensitive-export |
+| `privacy.no-servers` | `No servers. No accounts. No analytics` | ci:sensitive-export |
+| `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
+| `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 
-Coverage boundary (eighth + ninth audits, stated honestly): the registry
+Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the
 sentences whose falsehood would mislead a verifier or a buyer about what the
-software enforces. BOTH directions are now checked mechanically:
-registry → site (every row's copy must still exist, its proof must be alive),
-and site → registry (any line matching the enforcement-keyword heuristic in
-`scripts/check-claims.sh` must carry a registered fragment or an explicit
-`claims-exempt` marker for disclaimers). The keyword heuristic is exactly
-that — a heuristic: purely narrative copy that asserts nothing enforceable
-is out of scope by design, and a claim phrased without any trigger keyword
-would evade the gate; the rule for humans remains that any sentence
-asserting an enforcement or guarantee MUST get a row before it ships.
+software enforces. The `data-claim` id gate is the mechanical authority in
+both directions; the keyword scan is a secondary warning that flags likely
+enforcement copy shipped untagged. Purely narrative copy that asserts
+nothing enforceable is out of scope by design; the rule for humans remains
+that any sentence asserting an enforcement or guarantee MUST get a tagged
+element and a row before it ships.
 
 Claims that must NEVER appear (refused vocabulary — CI fails if found):
 - "provable compliance" / "provably compliant"

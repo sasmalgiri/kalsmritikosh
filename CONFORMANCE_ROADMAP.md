@@ -575,3 +575,39 @@ actual sources before fixing.)
    entirely in the signed envelope's own hashes.
 5. **Guard flake.** `printf | grep -q` under `pipefail` could SIGPIPE;
    replaced with pure shell case-matching (no pipe).
+
+## Tenth-audit response (2026-08-26) — the three residual gaps closed
+
+(This audit used REAL repository paths and its scoring was accurate: two
+closed, three partial. All three residuals are now implemented.)
+
+1. **Ask truth binding (was partial).** `VerifiedAnswer` gains
+   `ledgerAnswerID` — the COMMIT PROOF, set by MasterBrain only after
+   `lockVerifiedFinal` succeeded, carrying the ledger's answer ID. A
+   degraded no-ledger `.verifiedFinal` carries nil (display-terminal, NOT
+   durably committed — stated on the enum). The case-scoped Ask records
+   phase evidence only when the proof is present, and the artifact ID IS
+   that ledger answer ID; `CasePhaseArtifactRepository` refuses an ask
+   artifact with no matching `verifiedFinal` event in
+   `answer_revision_events` — the audit's random-ID reproduction now
+   throws. The degraded emission itself is a DECLARED design decision
+   (AEE-M2: tests/boot still get display-terminal answers); durability is
+   now distinguishable on the wire, which is what conformance requires.
+2. **Claims gate authority (was partial).** Exactly as prescribed:
+   enforcement/verifiability/privacy sentences carry `data-claim="<id>"`
+   attributes; CLAIMS.md is a three-column registry (id · verbatim
+   fragment · proof); `check-claims.sh` enforces the id gate in BOTH
+   directions (registry id must be tagged on the site; site id must have
+   exactly one row; fragments and proofs still checked) and the keyword
+   heuristic is demoted to a SECONDARY WARNING. The audit's bypass
+   sentence now surfaces; an unregistered site id FAILS (both verified).
+   Newly registered: never-leaves / no-servers / erase-everything /
+   private-by-design (with real proofs). The models sentence now states
+   the release-acceptance verification act inline.
+3. **Manifest completeness (was partial).** README.txt joined the
+   MANDATORY set; both verifiers require the bundle directory to contain
+   EXACTLY manifest.files + manifest.json (deleted-and-delisted files and
+   unlisted additions both fail; dotfiles excluded as OS artifacts, stated
+   in the spec); the site and spec now say "the signed evidence-bearing
+   contents have not changed" instead of "nothing changed since". Tests:
+   exactDirectoryContentsEnforced (deletion + smuggling).

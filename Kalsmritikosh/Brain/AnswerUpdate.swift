@@ -35,7 +35,12 @@ public enum AnswerUpdate: Sendable {
     case analysisProgress(detail: String, chapter: NarrativeChapter?)
     /// The current content satisfies the mission's evidence obligations.
     case reviewReady(VerifiedAnswer)
-    /// The locked answer, AFTER verification AND a durable answer-ledger commit.
+    /// The locked answer. When a durable answer-ledger commit succeeded, the
+    /// carried answer's `ledgerAnswerID` is that commit's ledger ID (the
+    /// COMMIT PROOF — tenth audit); in degraded no-ledger runs (tests,
+    /// boot) it is nil, meaning display-terminal only, NOT durably
+    /// committed. Consumers that require durability (conformance phase
+    /// observation) must gate on the ID, never on this case name alone.
     case verifiedFinal(VerifiedAnswer)
     /// An explicit replacement of previously-visible content; the prior revision is preserved.
     case corrected(VerifiedAnswer, reason: String)

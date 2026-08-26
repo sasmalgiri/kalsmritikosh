@@ -28,17 +28,6 @@ public actor CasePhaseArtifactRepository {
             .map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
-    /// DURABLE identity for an ask artifact (eighth audit): derived from
-    /// SHA-256(caseID || question), so the same shipped answer maps to the
-    /// same artifact ID across re-asks instead of a fresh random UUID —
-    /// without ever persisting the question itself.
-    public nonisolated static func askArtifactID(caseID: UUID, question: String) -> UUID {
-        let bytes = Array(SHA256.hash(data: Data((caseID.uuidString + "|" + question).utf8)).prefix(16))
-        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
-                           bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
-                           bytes[12], bytes[13], bytes[14], bytes[15]))
-    }
-
     public enum CasePhaseArtifactError: Error, Equatable {
         /// The named artifact does not exist in its authority — an
         /// observation row must never point at nothing (ninth audit).
@@ -48,17 +37,24 @@ public actor CasePhaseArtifactRepository {
     @discardableResult
     public func record(caseID: UUID, phase: PersonaJobKind, artifactID: UUID,
                        detail: String, at date: Date) async throws -> UUID {
-        // NINTH AUDIT — referential truth per phase kind. A dataLab
-        // observation must point at a REAL dataset row; recording an
-        // arbitrary UUID is refused. Ask artifacts carry a digest-derived
-        // identity (answers live in the append-only answer ledger, keyed by
-        // revision, not by this ID) — their truth link is the caller's
-        // verifiedFinal gate: the service records only after the durable
-        // ledger commit, by the AEE-M2 contract.
-        if phase == .dataLab {
+        // NINTH/TENTH AUDIT — referential truth per phase kind: an
+        // observation row must never point at nothing. A dataLab artifact
+        // must be a REAL dataset row; an ask artifact must be a REAL answer
+        // in the append-only answer ledger with a recorded verifiedFinal
+        // lifecycle event (the durable commit). Arbitrary UUIDs are refused.
+        switch phase {
+        case .dataLab:
             let exists = try await database.query(
                 "SELECT 1 FROM workbench_datasets WHERE id = ? LIMIT 1;", [.uuid(artifactID)])
             guard !exists.isEmpty else { throw CasePhaseArtifactError.artifactMissing(artifactID) }
+        case .ask:
+            let exists = try await database.query("""
+            SELECT 1 FROM answer_revision_events
+            WHERE answer_id = ? AND state = 'verifiedFinal' LIMIT 1;
+            """, [.uuid(artifactID)])
+            guard !exists.isEmpty else { throw CasePhaseArtifactError.artifactMissing(artifactID) }
+        default:
+            break
         }
         let id = UUID()
         try await database.exec("""

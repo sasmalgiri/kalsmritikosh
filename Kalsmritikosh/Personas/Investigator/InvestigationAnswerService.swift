@@ -110,37 +110,36 @@ public actor InvestigationAnswerService {
         let context = try await scopeContext(caseID: caseID)
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope)
         let brain = makeBrain(scoped)
-        // NINTH AUDIT — consume the lifecycle STREAM, not the collapsed
-        // answer: `.verifiedFinal` is emitted ONLY after the durable
-        // answer-ledger commit (AEE-M2), while a persistence failure yields
-        // a non-refused `.incomplete`. Only a durably committed final may
-        // count as machine-observed phase evidence.
+        // NINTH/TENTH AUDIT — consume the lifecycle STREAM and require the
+        // COMMIT PROOF: `.verifiedFinal` carries the ledger answer ID only
+        // when `lockVerifiedFinal` actually succeeded (a degraded no-ledger
+        // final carries nil; a persistence failure yields a non-refused
+        // `.incomplete`). Only an answer with its durable ledger identity
+        // may count as machine-observed phase evidence — and that identity
+        // IS the recorded artifact ID, validated by the repository against
+        // a real verifiedFinal ledger event.
         var verified: VerifiedAnswer?
-        var durablyFinal = false
+        var committedAnswerID: UUID?
         for await update in await brain.answerStream(question: question, access: access) {
             switch update {
-            case .verifiedFinal(let a): verified = a; durablyFinal = true
+            case .verifiedFinal(let a): verified = a; committedAnswerID = a.ledgerAnswerID
             case .corrected(let a, _):  verified = a
-            case .incomplete(let a):    verified = a; durablyFinal = false
+            case .incomplete(let a):    verified = a; committedAnswerID = nil
             default: continue
             }
         }
         let answer = verified ?? VerifiedAnswer(
             body: "Kalsmritikosh produced no terminal answer.", citations: [], confidence: .zero,
             refused: true, refusalReason: "answerStream closed without a terminal event.")
-        // PHASE B-2 — observable ask phase (question digest only). Recorded
-        // ONLY for a durably committed verifiedFinal — a refusal or an
-        // honest incomplete produced no locked work product, so neither
-        // counts as phase evidence. Hashing and artifact-identity derivation
-        // live in the artifact repository — this service computes no digests
-        // of its own (the one-system fingerprint guard). A failed write
-        // loses only the OBSERVATION (the phase stays machine-unobserved —
+        // PHASE B-2 — observable ask phase (question digest only in the
+        // detail; the question text never persists). A failed write loses
+        // only the OBSERVATION (the phase stays machine-unobserved —
         // fail-closed for conformance), but it is logged, never swallowed.
-        if let artifacts, durablyFinal {
+        if let artifacts, let committedAnswerID {
             do {
                 try await artifacts.record(
                     caseID: caseID, phase: .ask,
-                    artifactID: CasePhaseArtifactRepository.askArtifactID(caseID: caseID, question: question),
+                    artifactID: committedAnswerID,
                     detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",
                     at: Date())
             } catch {

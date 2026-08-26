@@ -1250,6 +1250,10 @@ public actor MasterBrain {
     ) async -> [AnswerUpdate] {
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
+            // Degraded (no ledger wired — tests/boot): the terminal state is
+            // still emitted for display, but WITHOUT a ledgerAnswerID — the
+            // nil commit proof marks it as not durably committed (tenth
+            // audit), so durability-requiring consumers ignore it.
             return groundable ? [.verifiedFinal(verified)] : [.incomplete(verified)]
         }
         do {
@@ -1271,7 +1275,12 @@ public actor MasterBrain {
                 confidence: verified.confidence.value, source: verified.source.rawValue)
             try await answerLedger.markReviewReady(answerID: id)
             try await answerLedger.lockVerifiedFinal(answerID: id)   // durable commit BEFORE verifiedFinal
-            return [.groundedWorkingResult(verified), .reviewReady(verified), .verifiedFinal(verified)]
+            // TENTH AUDIT — the emitted final carries its COMMIT PROOF (the
+            // ledger answer ID). A degraded no-ledger final above carries
+            // nil, so consumers that require durability (conformance phase
+            // observation) can tell the two apart on the wire.
+            return [.groundedWorkingResult(verified), .reviewReady(verified),
+                    .verifiedFinal(verified.withLedgerCommit(id))]
         } catch {
             KalsmritikoshLog.brain.error("AEE-M2 durable answer commit failed: \(String(describing: error))")
             return [.incomplete(verified)]   // never emit verifiedFinal when the audit record failed

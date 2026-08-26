@@ -174,10 +174,23 @@ public nonisolated enum ConformanceBundle {
             integrityOK = false
             verdict.details.append("integrity: unknown format version \(manifest.formatVersion) — refused")
         }
-        for required in [attestationFile, protocolFile, evaluationsFile, factsFile, publicKeyFile]
+        for required in [attestationFile, protocolFile, evaluationsFile, factsFile, publicKeyFile, readmeFile]
         where manifest.files[required] == nil {
             integrityOK = false
             verdict.details.append("integrity: manifest does not cover mandatory file \(required)")
+        }
+        // TENTH AUDIT — the directory must contain EXACTLY the manifest's
+        // files plus manifest.json itself: a deleted-and-delisted file or a
+        // smuggled unlisted file both fail integrity, so "the bundle
+        // contents match the manifest" means the WHOLE folder, not a subset.
+        // Dotfiles (.DS_Store etc.) are OS browsing artifacts and are
+        // excluded — stated in BUNDLE_FORMAT.md.
+        if let actual = try? fm.contentsOfDirectory(atPath: directory.path) {
+            let expected = Set(manifest.files.keys).union([manifestFile])
+            for extra in Set(actual.filter { !$0.hasPrefix(".") }).subtracting(expected).sorted() {
+                integrityOK = false
+                verdict.details.append("integrity: unlisted file in bundle: \(extra)")
+            }
         }
         for (name, expected) in manifest.files {
             guard let data = read(name) else {
