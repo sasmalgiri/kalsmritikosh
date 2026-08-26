@@ -106,14 +106,29 @@ struct PhaseObservationTests {
         #expect(model.frozenSutra?.id == review.id, "the review protocol governs the run")
     }
 
-    @Test("The v115 artifact ledger surfaces ask and dataLab observations")
+    @Test("The v115 artifact ledger surfaces ask and dataLab observations; a dataLab row must point at a REAL dataset")
     func artifactLedgerObserved() async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-artifacts")
         let repo = CasePhaseArtifactRepository(database: h.db)
         let caseID = UUID()
-        _ = try await repo.record(caseID: caseID, phase: .ask, artifactID: UUID(),
+        _ = try await repo.record(caseID: caseID, phase: .ask,
+                                  artifactID: CasePhaseArtifactRepository.askArtifactID(caseID: caseID, question: "q"),
                                   detail: "question=abcd1234", at: t0)
-        _ = try await repo.record(caseID: caseID, phase: .dataLab, artifactID: UUID(),
+        // NINTH AUDIT — a dataLab observation pointing at a nonexistent
+        // dataset is REFUSED (referential truth, not a bare UUID column).
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, phase: .dataLab, artifactID: UUID(),
+                                  detail: "preset=source-inventory", at: t0)
+        }
+        // A REAL dataset row records normally.
+        let wsID = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "Obs WS", template: .investigation))
+        let datasetID = UUID()
+        try await h.db.exec("""
+        INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at)
+        VALUES (?, ?, 'Obs DS', 'advanced', 1, ?, ?);
+        """, [.uuid(datasetID), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970)])
+        _ = try await repo.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
                                   detail: "preset=source-inventory", at: t0)
         let service = PhaseObservationService(artifacts: repo)
         let obs = await service.observations(caseID: caseID)

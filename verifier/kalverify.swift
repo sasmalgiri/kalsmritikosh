@@ -1739,7 +1739,13 @@ guard let attestationData = read("attestation.json"),
 }
 var authOK = true
 var authDetail = ""
-if attestation.envelope.sutraSHA256 != sha256Hex(protocolData) {
+// NINTH AUDIT — the standalone public-key.hex must BE the key the envelope
+// embeds; a swapped standalone key is refused, not ignored.
+if let standaloneKey = read("public-key.hex"),
+   String(decoding: standaloneKey, as: UTF8.self) != attestation.publicKeyHex {
+    authOK = false; authDetail = "public-key.hex ≠ the key embedded in the signed attestation"
+}
+if authOK, attestation.envelope.sutraSHA256 != sha256Hex(protocolData) {
     authOK = false; authDetail = "protocol.json ≠ signed constitution hash"
 }
 if authOK, attestation.envelope.ruleEvaluationsSHA256 != sha256Hex(evaluationsData) {

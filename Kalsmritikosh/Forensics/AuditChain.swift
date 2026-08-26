@@ -68,9 +68,12 @@ public actor AuditChainService {
         public let seq: Int
         public let source: String
         public let eventID: UUID
+        public let occurredAt: Date
         public let payloadHash: String
         public let prevHash: String
         public let entryHash: String
+        public let publicPrev: String?
+        public let publicHash: String?
     }
 
     static let genesis = "GENESIS-audit-chain-v1"
@@ -172,19 +175,22 @@ public actor AuditChainService {
     /// signed head. Rows sealed pre-v114 are not exportable (no public link).
     public func publicTrail() async throws -> [AuditTrailEntry] {
         let rows = try await database.query("""
-        SELECT seq, source, event_id, occurred_at, public_prev, public_hash
+        SELECT seq, source, event_id, public_prev, public_hash
         FROM audit_chain WHERE public_hash IS NOT NULL ORDER BY seq ASC;
         """, [])
-        var payloadByKey: [String: String] = [:]
+        // Payload AND occurrence time come from the AUTHORITATIVE source
+        // events, never from audit_chain's stored copies (ninth audit) —
+        // the exported trail is exactly what replays to the sealed links.
+        var eventByKey: [String: (payload: String, occurredAt: Date)] = [:]
         for e in try await eventProvider() {
-            payloadByKey[e.source.rawValue + ":" + e.eventID.uuidString] = e.canonicalPayload
+            eventByKey[e.source.rawValue + ":" + e.eventID.uuidString] = (e.canonicalPayload, e.occurredAt)
         }
         return rows.compactMap { r in
             guard let seq = r.int(0), let source = r.string(1), let id = r.uuid(2),
-                  let at = r.date(3), let prev = r.string(4), let hash = r.string(5),
-                  let payload = payloadByKey[source + ":" + id.uuidString] else { return nil }
-            return AuditTrailEntry(seq: Int(seq), source: source, eventID: id, occurredAt: at,
-                                   canonicalPayload: payload, publicPrev: prev, publicHash: hash)
+                  let prev = r.string(3), let hash = r.string(4),
+                  let event = eventByKey[source + ":" + id.uuidString] else { return nil }
+            return AuditTrailEntry(seq: Int(seq), source: source, eventID: id, occurredAt: event.occurredAt,
+                                   canonicalPayload: event.payload, publicPrev: prev, publicHash: hash)
         }
     }
 
@@ -196,30 +202,57 @@ public actor AuditChainService {
     /// events not yet sealed.
     public func verify() async throws -> AuditChainVerification {
         let rows = try await allSeals()
-        // Current source events, keyed for re-derivation.
-        var payloadByKey: [String: String] = [:]
+        // Current source events, keyed for re-derivation. The provider is
+        // the AUTHORITY for payload and occurrence time — stored copies in
+        // audit_chain are convenience, never trusted.
+        var eventByKey: [String: (payload: String, occurredAt: Date)] = [:]
         for e in try await eventProvider() {
-            payloadByKey[e.source.rawValue + ":" + e.eventID.uuidString] = e.canonicalPayload
+            eventByKey[e.source.rawValue + ":" + e.eventID.uuidString] = (e.canonicalPayload, e.occurredAt)
         }
 
         var prev = Self.genesis
+        var publicPrev = Self.publicGenesis
         for row in rows {
             let key = row.source + ":" + row.eventID.uuidString
-            guard let payload = payloadByKey[key] else {
+            guard let event = eventByKey[key] else {
                 return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
                                               missingEventSeq: row.seq, unsealedCount: 0)
             }
-            let expectedPayloadHash = hmac(payload)
+            let expectedPayloadHash = hmac(event.payload)
             let expectedEntryHash = hmac(row.payloadHash + prev)
             if row.payloadHash != expectedPayloadHash || row.prevHash != prev || row.entryHash != expectedEntryHash {
                 return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
                                               missingEventSeq: nil, unsealedCount: 0)
             }
+            // NINTH AUDIT — the stored occurred_at and PUBLIC links are
+            // keyless, so a database writer could rewrite them and recompute
+            // the public SHA-256 chain without the HMAC key. Verification
+            // therefore RE-DERIVES both from the authoritative source event:
+            // the stored timestamp must match the provider's, and the stored
+            // public links must equal the rule-v2 fold over provider data.
+            // Any mismatch is a break — reported BEFORE anything signs the
+            // public head.
+            if abs(row.occurredAt.timeIntervalSince1970 - event.occurredAt.timeIntervalSince1970) > 0.0005 {
+                return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
+                                              missingEventSeq: nil, unsealedCount: 0)
+            }
+            if let storedPublicHash = row.publicHash {
+                let expectedPublicHash = PublicAuditChain.link(
+                    entry: PublicAuditChain.canonicalEntry(seq: row.seq, source: row.source,
+                                                           eventID: row.eventID, occurredAt: event.occurredAt,
+                                                           payload: event.payload),
+                    prev: publicPrev)
+                if storedPublicHash != expectedPublicHash || row.publicPrev != publicPrev {
+                    return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: row.seq,
+                                                  missingEventSeq: nil, unsealedCount: 0)
+                }
+                publicPrev = expectedPublicHash
+            }
             prev = row.entryHash
         }
 
         let sealedKeys = Set(rows.map { $0.source + ":" + $0.eventID.uuidString })
-        let unsealed = payloadByKey.keys.filter { !sealedKeys.contains($0) }.count
+        let unsealed = eventByKey.keys.filter { !sealedKeys.contains($0) }.count
         return AuditChainVerification(sealedCount: rows.count, firstBrokenSeq: nil,
                                       missingEventSeq: nil, unsealedCount: unsealed)
     }
@@ -260,14 +293,16 @@ public actor AuditChainService {
 
     private func allSeals() async throws -> [Row] {
         let rows = try await database.query("""
-        SELECT seq, source, event_id, payload_hash, prev_hash, entry_hash
+        SELECT seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, public_prev, public_hash
         FROM audit_chain ORDER BY seq;
         """, [])
         return rows.compactMap { r in
             guard let seq = r.int(0), let source = r.string(1), let id = r.uuid(2),
-                  let ph = r.string(3), let prev = r.string(4), let eh = r.string(5) else { return nil }
-            return Row(seq: Int(seq), source: source, eventID: id,
-                       payloadHash: ph, prevHash: prev, entryHash: eh)
+                  let at = r.date(3),
+                  let ph = r.string(4), let prev = r.string(5), let eh = r.string(6) else { return nil }
+            return Row(seq: Int(seq), source: source, eventID: id, occurredAt: at,
+                       payloadHash: ph, prevHash: prev, entryHash: eh,
+                       publicPrev: r.string(7), publicHash: r.string(8))
         }
     }
 }

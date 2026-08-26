@@ -16,12 +16,24 @@ reference verifier (Foundation + CryptoKit only) lives at
 | `evidence-manifest.json` | The run's evidence manifest (source-version IDs + custody content hashes) when the signed envelope carries `evidenceManifestSHA256`. Metadata only — never document content. |
 | `audit-events.json` | The PUBLIC audit trail (Phase D), truncated to the SIGNED head. MANDATORY when the envelope signs a non-genesis `publicAuditChainHead`. |
 | `public-key.hex` | The signer's public key again, as a standalone file for convenience. MANDATORY. |
-| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file. Verifiers REFUSE an unknown `formatVersion` and REFUSE a manifest that does not cover the mandatory file set (eighth audit — an emptied manifest cannot pass integrity vacuously). |
-| `README.txt` | Human instructions. |
+| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file, INCLUDING `README.txt` (ninth audit). Verifiers REFUSE an unknown `formatVersion` and REFUSE a manifest that does not cover the mandatory file set (eighth audit — an emptied manifest cannot pass integrity vacuously). |
+| `README.txt` | Human instructions. Manifest-covered; display-only (its hash is not in the signed envelope). |
 
 No source documents are included — only rule outcomes, metadata and hashes.
 The evidence manifest, when exported, reveals source-version IDs and content
 hashes (custody metadata), never content.
+
+**What each layer protects (stated honestly).** The manifest is UNSIGNED by
+construction — it covers `attestation.json`, so it cannot be signed by the
+attestation without circularity. INTEGRITY therefore detects accidental
+corruption and naive edits, nothing more. Forgery resistance lives entirely
+in AUTHENTICITY: the signed envelope hashes the protocol, evaluations,
+facts, evidence manifest and public-trail head, so no evidence-bearing file
+can be swapped without breaking the signature. The standalone
+`public-key.hex` MUST byte-equal the key embedded in the signed attestation
+(ninth audit) — verifiers refuse a swapped standalone key. An attacker who
+rewrites a display-only file AND regenerates the unsigned manifest changes
+nothing the certificate attests to.
 
 ## Canonicalization (the signing contract)
 

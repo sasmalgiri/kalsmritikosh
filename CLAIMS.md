@@ -38,14 +38,26 @@ Proof kinds:
 | `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
 | `replays a keyless` | test:publicChainSealsAndReplays |
 | `trail metadata cannot be edited` | test:publicChainSealsAndReplays |
+| `Real standards, enforced` | test:failClosed |
+| `conclusions the app refuses to assert` | test:repositoryAssertionEnforcement |
+| `refuses to guess` | test:missingEvidenceIncomplete |
+| `enforced evidence gate` | test:missingEvidenceIncomplete |
+| `refuses when the record` | test:missingEvidenceIncomplete |
+| `disabling that enforcement` | grep:disables enforcement:Kalsmritikosh/UI/SettingsView.swift |
+| `right of reply enforced` | test:stages |
 
-Coverage boundary (eighth audit, stated honestly): the registry registers the
-site's VERIFIABILITY and PRIVACY claims — the sentences whose falsehood would
-mislead a verifier or a buyer about what the software enforces. Narrative and
-descriptive copy (feature tours, screenshots, positioning prose) is not
-exhaustively registered; the reverse direction (site → registry) is reviewed
-manually when copy changes, and any sentence that asserts an enforcement or
-guarantee MUST get a row before it ships.
+Coverage boundary (eighth + ninth audits, stated honestly): the registry
+registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the
+sentences whose falsehood would mislead a verifier or a buyer about what the
+software enforces. BOTH directions are now checked mechanically:
+registry → site (every row's copy must still exist, its proof must be alive),
+and site → registry (any line matching the enforcement-keyword heuristic in
+`scripts/check-claims.sh` must carry a registered fragment or an explicit
+`claims-exempt` marker for disclaimers). The keyword heuristic is exactly
+that — a heuristic: purely narrative copy that asserts nothing enforceable
+is out of scope by design, and a claim phrased without any trigger keyword
+would evade the gate; the rule for humans remains that any sentence
+asserting an enforcement or guarantee MUST get a row before it ships.
 
 Claims that must NEVER appear (refused vocabulary — CI fails if found):
 - "provable compliance" / "provably compliant"

@@ -119,13 +119,8 @@ public nonisolated enum ConformanceBundle {
         if !trailToShip.isEmpty {
             payload.append((auditEventsFile, try ConformanceCanonical.data(of: trailToShip)))
         }
-        for (name, data) in payload {
-            try data.write(to: directory.appendingPathComponent(name), options: .atomic)
-        }
-        let manifest = Manifest(formatVersion: Self.formatVersion,
-                                files: Dictionary(uniqueKeysWithValues: payload.map { ($0.0, sha256($0.1)) }))
-        try ConformanceCanonical.data(of: manifest)
-            .write(to: directory.appendingPathComponent(manifestFile), options: .atomic)
+        // README is part of the manifest too (ninth audit — "every file
+        // matches the manifest" must include the human instructions).
         let readme = """
         Kalsmritikosh conformance verification bundle (format v\(Self.formatVersion))
 
@@ -139,7 +134,14 @@ public nonisolated enum ConformanceBundle {
         conformance replay (fail-closed rollup of the rule evaluations).
         This bundle contains no source documents — only rule outcomes and hashes.
         """
-        try Data(readme.utf8).write(to: directory.appendingPathComponent(readmeFile), options: .atomic)
+        payload.append((readmeFile, Data(readme.utf8)))
+        for (name, data) in payload {
+            try data.write(to: directory.appendingPathComponent(name), options: .atomic)
+        }
+        let manifest = Manifest(formatVersion: Self.formatVersion,
+                                files: Dictionary(uniqueKeysWithValues: payload.map { ($0.0, sha256($0.1)) }))
+        try ConformanceCanonical.data(of: manifest)
+            .write(to: directory.appendingPathComponent(manifestFile), options: .atomic)
     }
 
     // MARK: - Verify (the same checks the standalone CLI performs, plus the
@@ -201,6 +203,13 @@ public nonisolated enum ConformanceBundle {
         if !ConformanceSeal.verify(sealed) {
             authenticityOK = false
             verdict.details.append("authenticity: signature does not verify against the embedded public key")
+        }
+        // NINTH AUDIT — the standalone public-key.hex must BE the key the
+        // envelope embeds; a swapped standalone key is refused, not ignored.
+        if let standaloneKey = read(publicKeyFile),
+           String(decoding: standaloneKey, as: UTF8.self) != sealed.publicKeyHex {
+            authenticityOK = false
+            verdict.details.append("authenticity: public-key.hex does not match the key embedded in the signed attestation")
         }
         if sealed.envelope.sutraSHA256 != sha256(protocolData) {
             authenticityOK = false

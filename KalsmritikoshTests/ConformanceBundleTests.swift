@@ -122,6 +122,39 @@ struct ConformanceBundleTests {
         }
     }
 
+    /// NINTH AUDIT — README is manifest-covered, and the standalone key
+    /// must be the embedded key.
+    @Test("README tampering fails integrity; a swapped public-key.hex fails authenticity")
+    func readmeCoveredAndKeyCrossChecked() throws {
+        let dir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir)
+        let readme = dir.appendingPathComponent("README.txt")
+        try Data("edited instructions".utf8).write(to: readme)
+        let v = ConformanceBundle.verify(at: dir)
+        #expect(v.integrity == .failed, "README must be covered by the manifest")
+
+        let dir2 = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir2)
+        // Swap the standalone key for a fresh one and regenerate the
+        // (unsigned) manifest so integrity stays consistent.
+        let otherKey = Data(P256.Signing.PrivateKey().publicKey.x963Representation
+            .map { String(format: "%02x", $0) }.joined().utf8)
+        try otherKey.write(to: dir2.appendingPathComponent("public-key.hex"))
+        var files: [String: String] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: dir2.path)
+        where name != "manifest.json" {
+            let data = try Data(contentsOf: dir2.appendingPathComponent(name))
+            files[name] = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        }
+        try JSONSerialization.data(withJSONObject: ["formatVersion": 1, "files": files],
+                                   options: [.sortedKeys])
+            .write(to: dir2.appendingPathComponent("manifest.json"))
+        let v2 = ConformanceBundle.verify(at: dir2)
+        #expect(v2.integrity == .passed)
+        #expect(v2.authenticity == .failed, "the standalone key must be the embedded key")
+        #expect(v2.details.contains { $0.contains("public-key.hex") })
+    }
+
     /// Acceptance test 5: editing any file breaks verification (integrity layer).
     @Test("Editing any bundle file fails integrity")
     func tamperedFileFailsIntegrity() throws {

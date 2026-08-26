@@ -48,5 +48,24 @@ for phrase in "provable compliance" "provably compliant" "legally compliant" "gu
   fi
 done
 
+# 3 — REVERSE direction (ninth audit): any site line that ASSERTS enforcement
+# must carry a registered claim fragment, or an explicit `claims-exempt`
+# marker (for disclaimers). This is a keyword heuristic, stated as such in
+# CLAIMS.md — it catches new enforcement copy shipped without a proof row.
+CLAIMS_FRAGMENTS=$(grep '^| `' CLAIMS.md | sed -e 's/^| `//' -e 's/`.*$//')
+while IFS=: read -r file line text; do
+  case "$text" in *claims-exempt*) continue ;; esac
+  covered=0
+  while IFS= read -r frag; do
+    [ -z "$frag" ] && continue
+    case "$text" in *"$frag"*) covered=1; break ;; esac
+  done <<< "$CLAIMS_FRAGMENTS"
+  if [ "$covered" -eq 0 ]; then
+    echo "::error::UNREGISTERED enforcement claim at $file:$line — add a CLAIMS.md row (with a living proof) or mark the line claims-exempt"
+    echo "  $text"
+    fail=1
+  fi
+done < <(grep -rinE "enforce|refuses|refuse to|guarantee|tamper-proof|cannot be edited|cryptographically" docs --include="*.html")
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "check-claims: every registered claim is on the site with a living proof; refused vocabulary absent."

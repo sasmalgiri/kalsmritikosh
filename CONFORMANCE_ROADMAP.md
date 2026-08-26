@@ -533,3 +533,45 @@ outcome is recorded honestly in `RELEASE_EVIDENCE_INDEX.md`.
 Declared boundaries unchanged (classic mode by owner directive, self-asserted
 roles, no source bytes in bundles, private HMAC key + public v2 chain,
 gitignored BGE models built at archive time, no legal-compliance claims).
+
+## Ninth-audit response (2026-08-26) — all five findings closed
+
+(The audit's cited file paths were fabricated — `KalSmritiKosh/Features/…`
+does not exist — but every described behavior was verified REAL in the
+actual sources before fixing.)
+
+1. **Ask counted non-refused incompletes.** True: AEE-M2's `answer()`
+   collapses `.verifiedFinal` and `.incomplete` into one VerifiedAnswer, and
+   a ledger-commit failure yields a NON-refused incomplete. The case-scoped
+   Ask now consumes the lifecycle STREAM and records phase evidence only on
+   `.verifiedFinal` — which by the AEE-M2 contract is emitted only AFTER the
+   durable answer-ledger lock. A dataLab observation now REFUSES an
+   artifact ID with no matching `workbench_datasets` row
+   (`CasePhaseArtifactError.artifactMissing`); ask artifacts keep their
+   digest-derived identity (answers are keyed by ledger revision, not by
+   this ID) with the verifiedFinal gate as the truth link — stated in code.
+2. **Keyless rewrite of public columns / occurred_at.** True: the HMAC
+   covered neither. `verify()` now RE-DERIVES the stored timestamp and the
+   full public chain (rule v2) from the authoritative source events, and
+   `publicTrail()` exports provider data, never audit_chain's stored copies.
+   A direct `UPDATE audit_chain SET occurred_at…` or a keyless public-hash
+   rewrite is reported as a break BEFORE strict approval signs the head —
+   proven by test (publicColumnsRewriteDetected).
+3. **Registry not bidirectional.** `check-claims.sh` now checks
+   site → registry too: any docs line matching the enforcement-keyword
+   heuristic must carry a registered fragment or an explicit
+   `claims-exempt` marker (disclaimers). The audit's reproduction (add an
+   enforcement sentence → gate passes) now FAILS the gate — verified. Seven
+   new rows registered ("Real standards, enforced", "refuses to guess",
+   "enforced evidence gate", "refuses when the record", "disabling that
+   enforcement", "right of reply enforced", "conclusions the app refuses to
+   assert"); the models-ship sentence carries conditional wording on the
+   site. The heuristic's limits are STATED in CLAIMS.md.
+4. **Manifest gaps.** README.txt is now manifest-covered; both verifiers
+   refuse a standalone `public-key.hex` that differs from the key embedded
+   in the signed attestation; BUNDLE_FORMAT.md states plainly which layer
+   protects what — the manifest is unsigned BY CONSTRUCTION (it covers the
+   attestation; signing it would be circular), so forgery resistance lives
+   entirely in the signed envelope's own hashes.
+5. **Guard flake.** `printf | grep -q` under `pipefail` could SIGPIPE;
+   replaced with pure shell case-matching (no pipe).

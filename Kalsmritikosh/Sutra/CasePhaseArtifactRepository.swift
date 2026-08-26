@@ -39,9 +39,27 @@ public actor CasePhaseArtifactRepository {
                            bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 
+    public enum CasePhaseArtifactError: Error, Equatable {
+        /// The named artifact does not exist in its authority — an
+        /// observation row must never point at nothing (ninth audit).
+        case artifactMissing(UUID)
+    }
+
     @discardableResult
     public func record(caseID: UUID, phase: PersonaJobKind, artifactID: UUID,
                        detail: String, at date: Date) async throws -> UUID {
+        // NINTH AUDIT — referential truth per phase kind. A dataLab
+        // observation must point at a REAL dataset row; recording an
+        // arbitrary UUID is refused. Ask artifacts carry a digest-derived
+        // identity (answers live in the append-only answer ledger, keyed by
+        // revision, not by this ID) — their truth link is the caller's
+        // verifiedFinal gate: the service records only after the durable
+        // ledger commit, by the AEE-M2 contract.
+        if phase == .dataLab {
+            let exists = try await database.query(
+                "SELECT 1 FROM workbench_datasets WHERE id = ? LIMIT 1;", [.uuid(artifactID)])
+            guard !exists.isEmpty else { throw CasePhaseArtifactError.artifactMissing(artifactID) }
+        }
         let id = UUID()
         try await database.exec("""
         INSERT INTO case_phase_artifacts (id, case_id, phase_kind, artifact_id, detail, created_at)

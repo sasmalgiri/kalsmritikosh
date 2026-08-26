@@ -71,6 +71,38 @@ struct PhaseDTests {
         #expect(PublicAuditChain.replay(timeForged, expectedHead: head) != nil)
     }
 
+    @Test("Keyless rewrites of occurred_at or the public columns are caught by verify()")
+    func publicColumnsRewriteDetected() async throws {
+        // NINTH AUDIT — occurred_at and the public links are not covered by
+        // the HMAC, so a database writer could rewrite them and recompute
+        // the keyless public chain. verify() must RE-DERIVE both from the
+        // authoritative source events and report the break BEFORE any
+        // approval signs the public head.
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("phased-rw-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let repo = GovernanceEventsRepository(database: db)
+        let caseID = UUID()
+        _ = try await repo.record(kind: .findingsApproved, caseID: caseID, actor: "me",
+                                  detail: "standard=Probable cause", at: t0)
+        _ = try await repo.record(kind: .bundleExported, caseID: caseID, actor: "me",
+                                  detail: "revision=1", at: t0.addingTimeInterval(10))
+        let chain = AuditChainService(database: db, secret: Data("test-secret".utf8),
+                                      eventProvider: { (try? await repo.auditChainEvents()) ?? [] })
+        _ = try await chain.seal(now: t0)
+        #expect(try await chain.verify().isIntact)
+        // (a) rewrite the stored timestamp only — HMAC columns untouched.
+        try await db.exec("UPDATE audit_chain SET occurred_at = occurred_at + 3600 WHERE seq = 1;", [])
+        #expect(try await chain.verify().firstBrokenSeq == 1)
+        try await db.exec("UPDATE audit_chain SET occurred_at = occurred_at - 3600 WHERE seq = 1;", [])
+        #expect(try await chain.verify().isIntact)
+        // (b) forge the keyless public columns directly.
+        try await db.exec("UPDATE audit_chain SET public_hash = 'ff00' WHERE seq = 2;", [])
+        #expect(try await chain.verify().firstBrokenSeq == 2)
+    }
+
     // MARK: Bundle v2 (trail-carrying)
 
     /// A synthetic trail entry folded with the shared RULE-V2 computation

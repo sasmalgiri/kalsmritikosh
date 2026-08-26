@@ -54,10 +54,15 @@ if [ -z "$RELEASE_BLOCK" ]; then
 else
   require_setting() {
     local setting="$1"
-    if ! printf '%s' "$RELEASE_BLOCK" | grep -q "$setting"; then
-      echo "::error::Release-configuration guard: app target Release must contain '$setting'"
-      FAIL=1
-    fi
+    # NINTH AUDIT — no `printf | grep -q` here: under `pipefail`, grep -q
+    # exiting early sends printf a SIGPIPE and the guard flakes with
+    # "write error: Broken pipe". Pure shell matching has no pipe at all.
+    case "$RELEASE_BLOCK" in
+      *"$setting"*) : ;;
+      *)
+        echo "::error::Release-configuration guard: app target Release must contain '$setting'"
+        FAIL=1 ;;
+    esac
   }
   require_setting "ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO;"
   require_setting "ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;"
