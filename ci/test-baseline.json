@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3708,
-  "baselineCommit": "462886d",
-  "note": "Whole-suite floor from the HOSTED build-and-test run on 462886d (fifth audit, v111): hosted total=3708 passed=3706 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3753 (45 environment-conditional tests more than the runner). Floor RAISED 3700 -> 3708, locking in the fifth-audit suites (semantic workflow assertions, registry trust-boundary re-verify, governance events + chain coverage). Schema v111."
+  "minimumExecutedTests": 3713,
+  "baselineCommit": "1fad4ef",
+  "note": "Whole-suite floor from the HOSTED build-and-test run on 1fad4ef (sixth audit): hosted total=3713 passed=3711 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3758 (45 environment-conditional tests more than the runner). Floor RAISED 3708 -> 3713, locking in the sixth-audit suites (confirmed-step immutability, run-binding recompute, discipline spines). Schema v111."
 }
