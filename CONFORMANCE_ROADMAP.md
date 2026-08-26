@@ -362,3 +362,28 @@ hand-maintained mirror. Phase A removes the cause, not the instance:
   CLI decodes is the envelope the app signs, byte-for-byte canonical.
 - `recordAssessment` now refuses to seal over a BROKEN audit chain
   (`isIntact` checked, not just the unsealed count) — seventh audit #4.
+
+## Phase C (2026-08-26) — durable approval state machine; the atomicity class is closed
+
+The approval act is now ONE transaction (`ApprovalTransactionRepository`,
+schema v112): the findings-approval decision row, the SEALED assessment row
+(`approval_state = 'approved'`), and the governance event commit in a single
+savepoint with no suspension points inside the barrier. Consequences:
+
+- An approval STRUCTURALLY cannot exist without its recorded assessment —
+  compensation is gone because no partial state can ever be observed
+  (tested: a failing composite leaves NOTHING, not even a withdrawn pair).
+- Sealing happens BEFORE the transaction; strict mode REFUSES the approval
+  when the seal or the audit chain refuses ("no seal → no approval"). The
+  sixth-audit warning path ("recorded UNSEALED") no longer exists on the
+  approval path.
+- The audit chain must verify INTACT before sealing; a broken or unavailable
+  chain refuses the approval with the reason.
+- Withdrawal is likewise atomic with its governance event.
+- The revision the seal signs is re-derived inside the barrier and refused
+  on mismatch (revisionRace) — the signed revision is the stored revision.
+- The website claim "every approved strict-mode run carries a signed
+  certificate" is now true BY CONSTRUCTION, not by best effort.
+- The pending → assessed → sealed → approved states never persist
+  individually; the CHECK'd approval_state column records the collapsed
+  transition ('recorded' for assessments stored without an approval act).

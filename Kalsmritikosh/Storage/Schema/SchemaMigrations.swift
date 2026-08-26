@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 111
+    public static let latestVersion = 112
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -607,7 +607,8 @@ public enum SchemaMigrations {
         (108, v108),
         (109, v109),
         (110, v110),
-        (111, v111)
+        (111, v111),
+        (112, v112)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6142,5 +6143,19 @@ public enum SchemaMigrations {
     DROP TABLE audit_chain;
     ALTER TABLE audit_chain_v111 RENAME TO audit_chain;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_chain_event ON audit_chain(source, event_id);
+    """
+
+    // MARK: - v112 — durable approval state (Phase C, seventh audit)
+    //
+    // 'approved' is written ONLY by the atomic approval composite (approval
+    // row + sealed assessment + governance event in ONE savepoint — see
+    // ApprovalTransactionRepository). 'recorded' covers assessments stored
+    // without an approval act (projections, tests, legacy rows). The
+    // intermediate states of the pending → assessed → sealed → approved
+    // machine never persist because the transition is a single transaction.
+    private static let v112: String = """
+    ALTER TABLE conformance_assessments
+        ADD COLUMN approval_state TEXT NOT NULL DEFAULT 'recorded'
+        CHECK(approval_state IN ('recorded','approved'));
     """
 }

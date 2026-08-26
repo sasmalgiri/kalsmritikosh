@@ -639,6 +639,9 @@ public final class AppState {
     /// Fifth audit (v111) — append-only governance ledger (approval, withdrawal,
     /// assessment recording, bundle export) sealed by the audit chain.
     public private(set) var governanceEvents: GovernanceEventsRepository?
+    /// PHASE C (v112) — the atomic approval composer: approval decision +
+    /// sealed assessment + governance event in ONE savepoint.
+    public private(set) var approvalTransactions: ApprovalTransactionRepository?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -2217,6 +2220,8 @@ public final class AppState {
             // Fifth audit — governance ledger (v111), sealed into the audit chain below.
             let governanceRepo = GovernanceEventsRepository(database: db)
             self.governanceEvents = governanceRepo
+            // Phase C — atomic approval composer (v112).
+            self.approvalTransactions = ApprovalTransactionRepository(database: db)
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the

@@ -16,15 +16,26 @@
 import SwiftUI
 import AppKit
 import OSLog
+import CryptoKit
 
 /// Approval+assessment atomicity by recorded compensation: when the assessment
 /// cannot be persisted, the approval is withdrawn and this error surfaces.
 public nonisolated enum ConformanceGateError: Error, CustomStringConvertible {
     case assessmentNotRecorded(String)
+    /// PHASE C — strict mode refuses the approval outright when no seal can
+    /// be produced. No seal means no approval; nothing was written.
+    case sealingRefused(String)
+    /// PHASE C — the audit chain could not be sealed/verified, or verified as
+    /// BROKEN. Strict mode never approves over an unknown or tampered ledger.
+    case auditChainUnavailable(String)
     public var description: String {
         switch self {
         case .assessmentNotRecorded(let reason):
             return "Approval withdrawn: \(reason)"
+        case .sealingRefused(let reason):
+            return "Approval refused — the conformance certificate could not be sealed (nothing was recorded): \(reason)"
+        case .auditChainUnavailable(let reason):
+            return "Approval refused — the tamper-evident audit chain is unavailable or broken (nothing was recorded): \(reason)"
         }
     }
 }
@@ -48,10 +59,17 @@ public final class WorkProductHandoffModel {
     /// constitution when one exists; the built-in doctrine is the fallback.
     private let protocols: ProtocolRegistryRepository?
     /// The governance ledger (v111) — approval/withdrawal/assessment/export
-    /// acts recorded append-only and sealed by the audit chain. Recording is
-    /// best-effort (logged on failure): the primary records are the findings
-    /// genealogy and the assessment rows; this ledger is their chained trace.
+    /// acts recorded append-only and sealed by the audit chain. On the
+    /// APPROVAL path (Phase C) the event is written inside the same atomic
+    /// transaction; elsewhere recording is best-effort (logged on failure).
     private let governance: GovernanceEventsRepository?
+    /// PHASE C — the atomic approval composer: approval decision + sealed
+    /// assessment + governance event committed in ONE savepoint. An approval
+    /// structurally cannot exist without its recorded assessment.
+    private let approvalTxn: ApprovalTransactionRepository?
+    /// Test hook: an injected software signing key so the atomic approval is
+    /// deterministic on Keychain-less runners. nil = the installation key.
+    public var sealingKeyOverride: P256.Signing.PrivateKey?
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -185,63 +203,9 @@ public final class WorkProductHandoffModel {
         return assessment
     }
 
-    /// Record + seal this run's assessment (called on approval). The seal links
-    /// the case, revision, findings-receipt seal, schema version, the evidence
-    /// manifest, and the freshly sealed audit-chain head; recording appends a
-    /// new revision — prior assessments are never rewritten. Returns a WARNING
-    /// string on any failure so the approval outcome carries it (audit item 2:
-    /// the success path must never erase a recording/sealing failure).
-    private func recordAssessment(caseID: UUID, at date: Date) async -> (recorded: Bool, warning: String?) {
-        guard let repo = assessments else { return (true, nil) }
-        let assessment = currentAssessment(at: date)
-        let nextRevision = ((try? await repo.latest(caseID: caseID))?.runRevision ?? 0) + 1
-        var linkage = ConformanceSealLinkage(caseID: caseID,
-                                             runRevision: nextRevision,
-                                             assessedRunRevision: nextRevision,
-                                             receiptSeal: built?.receipt.seal,
-                                             databaseSchemaVersion: SchemaMigrations.latestVersion)
-        // Bind the tamper-evident ledger: seal outstanding audit events first,
-        // then record the head this certificate attests over. FAIL-CLOSED
-        // (sixth audit): a chain seal/verify/head ERROR refuses the
-        // conformance seal outright — never silently attest over an unknown
-        // ledger state. A remaining unsealed count refuses likewise.
-        var chainFailure: String? = nil
-        if let chain = auditChain {
-            do {
-                _ = try await chain.seal(now: date)
-                let v = try await chain.verify()
-                // A BROKEN chain (tampered link or deleted sealed event) is as
-                // disqualifying as an unavailable one — never attest over it.
-                guard v.isIntact else {
-                    throw ConformanceGateError.assessmentNotRecorded(
-                        "audit chain verification reports a broken link (seq \(v.firstBrokenSeq ?? v.missingEventSeq ?? -1))")
-                }
-                linkage.unsealedAuditEvents = v.unsealedCount
-                let h = try await chain.head()
-                linkage.auditChainHead = h.hash
-                linkage.auditEventCount = h.sealedSeq
-            } catch {
-                chainFailure = String(describing: error)
-                KalsmritikoshLog.ui.error("audit-chain state unavailable at assessment time — recording UNSEALED: \(String(describing: error), privacy: .public)")
-            }
-        }
-        var warning: String? = nil
-        var sealed: SealedConformance? = nil
-        if let chainFailure {
-            warning = "assessment recorded UNSEALED — audit-chain state unavailable (fail-closed): \(chainFailure)"
-        } else {
-            do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
-            catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
-        }
-        do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
-        catch { return (false, "\(error)") }   // caller compensates: approval is withdrawn
-        // Governance ledger — the recording act itself joins the chain on the
-        // next seal pass (a seal cannot cover its own recording event).
-        await recordGovernance(.assessmentRecorded, actor: "system",
-                               detail: "revision=\(nextRevision);status=\(assessment.status.rawValue)",
-                               at: date)
-        return (true, warning)
-    }
+    // recordAssessment (compensation era) is GONE — Phase C commits the
+    // approval decision, the sealed assessment, and the governance event in
+    // ONE savepoint via ApprovalTransactionRepository.approveAtomically.
     public var hasOpenItems: Bool { openContradictionCount + openGapCount > 0 }
     /// One accepted unresolved-limitation per line, recorded honestly at closure.
     public var unresolvedText: String = ""
@@ -256,13 +220,15 @@ public final class WorkProductHandoffModel {
                 assessments: ConformanceAssessmentRepository? = nil,
                 auditChain: AuditChainService? = nil,
                 protocols: ProtocolRegistryRepository? = nil,
-                governance: GovernanceEventsRepository? = nil) {
+                governance: GovernanceEventsRepository? = nil,
+                approvalTxn: ApprovalTransactionRepository? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
         self.assessments = assessments
         self.auditChain = auditChain
         self.protocols = protocols
         self.governance = governance
+        self.approvalTxn = approvalTxn
     }
 
     /// A verification bundle left the app — record the export act (v111).
@@ -392,48 +358,66 @@ public final class WorkProductHandoffModel {
             }
         }
         await perform {
+            // PHASE C — STRICT MODE (the default): the approval decision, the
+            // SEALED assessment, and the governance event are committed in ONE
+            // savepoint. Sealing happens BEFORE the transaction; if the seal or
+            // the audit chain refuses, the approval is refused and NOTHING is
+            // written. The pending → assessed → sealed → approved machine
+            // collapses into a single transition — compensation no longer
+            // exists because no partial state can ever be observed.
+            if !FeatureFlags.classicConformanceValue(), let txn = self.approvalTxn, self.assessments != nil {
+                let projected = self.currentAssessment(at: date, assumingApproval: true)
+                let nextRevision = try await txn.nextRevision(caseID: snap.caseID)
+                var linkage = ConformanceSealLinkage(caseID: snap.caseID,
+                                                     runRevision: nextRevision,
+                                                     assessedRunRevision: nextRevision,
+                                                     receiptSeal: f.receipt.seal,
+                                                     databaseSchemaVersion: SchemaMigrations.latestVersion)
+                if let chain = self.auditChain {
+                    do {
+                        _ = try await chain.seal(now: date)
+                        let v = try await chain.verify()
+                        guard v.isIntact else {
+                            throw ConformanceGateError.auditChainUnavailable(
+                                "broken link at seq \(v.firstBrokenSeq ?? v.missingEventSeq ?? -1)")
+                        }
+                        linkage.unsealedAuditEvents = v.unsealedCount
+                        let h = try await chain.head()
+                        linkage.auditChainHead = h.hash
+                        linkage.auditEventCount = h.sealedSeq
+                    } catch let gateError as ConformanceGateError {
+                        throw gateError
+                    } catch {
+                        throw ConformanceGateError.auditChainUnavailable(String(describing: error))
+                    }
+                }
+                let sealed: SealedConformance
+                do { sealed = try ConformanceSeal.seal(assessment: projected, key: self.sealingKeyOverride, linkage: linkage) }
+                catch { throw ConformanceGateError.sealingRefused(String(describing: error)) }
+                // Compose the rationale exactly as the legacy recorder did.
+                let composedRationale = "\(std.rationaleLine) \(why + awareness)"
+                let stored = try await txn.approveAtomically(
+                    write: AtomicApprovalWrite(caseID: snap.caseID,
+                                               workProductRunID: f.run.id,
+                                               receiptSeal: f.receipt.seal,
+                                               scopeFingerprint: f.scopeFingerprint.value,
+                                               rationale: composedRationale,
+                                               actor: actor),
+                    assessment: projected, seal: sealed, sealedForRevision: nextRevision,
+                    governanceDetail: "standard=\(std.label);receipt=\(f.receipt.seal.prefix(16))",
+                    at: date)
+                self.storedAssessment = stored
+                await self.refresh()
+                return "Findings approved under \(std.label) — sealed certificate recorded (revision \(stored.runRevision))."
+            }
+            // CLASSIC mode (owner switch), or preview construction without the
+            // conformance repositories: the legacy approval path, unchanged.
             _ = try await self.findings.approveFindings(caseID: snap.caseID, findings: f, proofStandard: std,
                                                         rationale: why + awareness, actor: actor, at: date)
-            await self.refresh()
-            // Governance ledger (v111) — recorded BEFORE the assessment seals,
-            // so the sealed audit-chain head covers this approval act.
             await self.recordGovernance(.findingsApproved, actor: actor,
                                         detail: "standard=\(std.label);receipt=\(f.receipt.seal.prefix(16))",
                                         at: date)
-            // Strict conformance: record + seal the per-rule assessment of this
-            // approved run against the frozen constitution.
-            if !FeatureFlags.classicConformanceValue() {
-                let result = await self.recordAssessment(caseID: snap.caseID, at: date)
-                if !result.recorded {
-                    // COMPENSATION (approval+assessment atomicity): an approval
-                    // must never stand without its recorded assessment. The
-                    // approval is WITHDRAWN as a recorded decision — both the
-                    // approval and its reversal stay in the genealogy — and the
-                    // failure surfaces as the error, never as success.
-                    let reason = "Automatic withdrawal — conformance assessment could not be recorded: \(result.warning ?? "unknown error")"
-                    do {
-                        _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f,
-                                                                     rationale: reason, actor: actor, at: date)
-                    } catch {
-                        // Double failure (sixth audit): the compensation itself
-                        // failed, so the approval STANDS without its assessment.
-                        // Surface it as loudly as the system can — never as a
-                        // quieter version of the original failure.
-                        KalsmritikoshLog.ui.fault("CRITICAL: compensation withdrawal ALSO failed — approval stands without a recorded assessment: \(String(describing: error), privacy: .public)")
-                        await self.refresh()
-                        throw ConformanceGateError.assessmentNotRecorded(
-                            reason + " — AND the automatic withdrawal ALSO failed (\(error)). The approval currently stands without its assessment: withdraw it manually from this panel.")
-                    }
-                    await self.recordGovernance(.approvalWithdrawn, actor: actor,
-                                                detail: "compensation=assessmentNotRecorded", at: date)
-                    await self.refresh()
-                    throw ConformanceGateError.assessmentNotRecorded(reason)
-                }
-                // A sealing failure with the row recorded rides the outcome.
-                if let warning = result.warning {
-                    return "Findings approved under \(std.label) — ⚠️ \(warning)"
-                }
-            }
+            await self.refresh()
             return "Findings approved under \(std.label)."
         }
     }
@@ -444,9 +428,23 @@ public final class WorkProductHandoffModel {
         let why = trimmed(rationale)
         guard !why.isEmpty else { lastError = "Give a rationale for withdrawal."; return }
         await perform {
-            _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f, rationale: why, actor: actor, at: date)
-            await self.recordGovernance(.approvalWithdrawn, actor: actor,
-                                        detail: "receipt=\(f.receipt.seal.prefix(16))", at: date)
+            // PHASE C — the withdrawal decision and its governance event are
+            // one atom when the composer is wired; otherwise the legacy path.
+            if let txn = self.approvalTxn {
+                try await txn.withdrawAtomically(
+                    write: AtomicApprovalWrite(caseID: snap.caseID,
+                                               workProductRunID: f.run.id,
+                                               receiptSeal: f.receipt.seal,
+                                               scopeFingerprint: f.scopeFingerprint.value,
+                                               rationale: why,
+                                               actor: actor),
+                    governanceDetail: "receipt=\(f.receipt.seal.prefix(16))",
+                    at: date)
+            } else {
+                _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f, rationale: why, actor: actor, at: date)
+                await self.recordGovernance(.approvalWithdrawn, actor: actor,
+                                            detail: "receipt=\(f.receipt.seal.prefix(16))", at: date)
+            }
             await self.refresh()
             return "Approval withdrawn."
         }
@@ -971,7 +969,8 @@ public struct WorkProductHandoffView: View {
                                                  assessments: appState.conformanceAssessments,
                                                  auditChain: appState.auditChain,
                                                  protocols: appState.protocolRegistry,
-                                                 governance: appState.governanceEvents)
+                                                 governance: appState.governanceEvents,
+                                                 approvalTxn: appState.approvalTransactions)
         await m.load(caseID: id)
         model = m
     }

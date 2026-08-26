@@ -13,6 +13,7 @@
 
 import Testing
 import Foundation
+import CryptoKit
 @testable import Kalsmritikosh
 
 @MainActor
@@ -48,13 +49,12 @@ struct WorkProductHandoffModelTests {
         return (model, created.id, h)
     }
 
-    /// Approval+assessment ATOMICITY BY COMPENSATION: when the strict-mode
-    /// conformance recording fails after approveFindings, the approval is
-    /// automatically WITHDRAWN as a recorded decision — an approval never
-    /// stands without its recorded assessment, and the failure surfaces as an
-    /// error, never as success.
-    @Test("Assessment-recording failure withdraws the approval (compensation)")
-    func compensationWithdrawsApproval() async throws {
+    /// PHASE C — approval, sealed assessment and governance event commit in
+    /// ONE savepoint: when the composite cannot write, the approval is
+    /// REFUSED and NOTHING exists afterward — not even a withdrawn pair.
+    /// (Compensation is gone; no partial state can be observed.)
+    @Test("Atomic approval: a failing composite refuses — nothing is written")
+    func atomicApprovalRefusesOnFailure() async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: "handoff-comp")
         let a = try await h.seedFact(value: "COMP finding \(UUID().uuidString)", hashChar: "d")
         let wsID = UUID()
@@ -80,8 +80,10 @@ struct WorkProductHandoffModelTests {
         try FileManager.default.createDirectory(at: brokenDir, withIntermediateDirectories: true)
         let brokenDB = try Database(url: brokenDir.appendingPathComponent("empty.sqlite"))
         let brokenRepo = ConformanceAssessmentRepository(database: brokenDB)
+        let brokenTxn = ApprovalTransactionRepository(database: brokenDB)
         let model = WorkProductHandoffModel(handoff: handoff, findings: h.findings, closure: h.closure,
-                                            assessments: brokenRepo)
+                                            assessments: brokenRepo, approvalTxn: brokenTxn)
+        model.sealingKeyOverride = P256.Signing.PrivateKey()
         await model.load(caseID: created.id)
         await model.buildFindings(actor: "me", at: t0)
         #expect(model.built != nil)
@@ -97,11 +99,12 @@ struct WorkProductHandoffModelTests {
         model.proofStandard = .preponderance
         if model.hasOpenItems { model.acknowledgedOpenItems = true }
         await model.approve(actor: "me", at: t0)
-        // The recording failed → the approval was withdrawn, loudly.
-        #expect(model.lastError?.contains("Approval withdrawn") == true, "\(model.lastError ?? "nil")")
+        // The composite failed → the approval was REFUSED; nothing exists.
+        #expect(model.lastError != nil, "the failure must surface, never read as success")
         #expect(model.snapshot?.isApproved == false, "an approval must never stand without its assessment")
-        #expect(model.snapshot?.approvalHistory.last?.decision == .withdrawn)
-        #expect(model.snapshot?.approvalHistory.count == 2, "both the approval and its reversal stay recorded")
+        #expect(model.snapshot?.approvalHistory.isEmpty == true,
+                "atomicity means NO partial state — not even an approval+withdrawal pair")
+        #expect(model.storedAssessment == nil)
     }
 
     @Test("Loading a matter reads its real handoff snapshot from the shared authorities")
@@ -264,5 +267,65 @@ struct WorkProductHandoffModelTests {
         #expect(model.unresolvedText.isEmpty)
         #expect(model.exportRedactionTerms.isEmpty)
         #expect(model.exportFormat == .pdf)
+    }
+
+    /// PHASE C — the positive atomic path: approval decision + SEALED
+    /// assessment + governance event land together; the assessment row
+    /// carries approval_state = 'approved'.
+    @Test("Atomic approval commits approval, sealed assessment and governance event together")
+    func atomicApprovalCommitsAllThree() async throws {
+        let h = try await PersonaAcceptanceHarness.make(seed: "handoff-atomic")
+        let a = try await h.seedFact(value: "ATOMIC finding \(UUID().uuidString)", hashChar: "e")
+        let wsID = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "Atomic Matter", template: .investigation))
+        try await h.workspaces.addSource(a.fileID, to: wsID)
+        try await WorkspaceMembershipDeriver(database: h.db, workspaces: h.workspaces).deriveMembership(for: wsID)
+        _ = try await h.producer.backfill(at: t0)
+        var created = try await h.cases.createCase(workspaceID: wsID, title: "Atomic Matter", actor: "me", at: t0)
+        created = try await h.cases.includeSource(caseID: created.id, expectedRevision: created.revision,
+                                                  sourceRef: a.svID.uuidString, sourceKind: .sourceVersion,
+                                                  actor: "me", at: t0)
+        _ = try await h.cases.confirmScope(caseID: created.id, expectedRevision: created.revision, actor: "me", at: t0)
+        let store = EvidenceStore(database: h.db)
+        let custody = InvestigationCustodyService(
+            cases: h.cases, resolver: CaseRetrievalScopeResolver(evidence: store),
+            evidence: store, custody: CustodyRepository(database: h.db), database: h.db)
+        let handoff = WorkProductHandoffService(cases: h.cases, findings: h.findings, closure: h.closure, custody: custody)
+        let model = WorkProductHandoffModel(handoff: handoff, findings: h.findings, closure: h.closure,
+                                            assessments: ConformanceAssessmentRepository(database: h.db),
+                                            governance: GovernanceEventsRepository(database: h.db),
+                                            approvalTxn: ApprovalTransactionRepository(database: h.db))
+        model.sealingKeyOverride = P256.Signing.PrivateKey()
+        await model.load(caseID: created.id)
+        await model.buildFindings(actor: "me", at: t0)
+        #expect(model.built != nil)
+        let frozen = try #require(model.frozenSutra)
+        let reached = model.conformanceFacts().completedPhaseKinds
+        for rule in SutraRuleCompiler.rules(for: frozen)
+        where rule.phaseKind.map(reached.contains) ?? true {
+            model.ruleAttestations[rule.id] = RuleAttestation(
+                actor: "me", role: "reviewer", rationale: "verified for the atomic test", at: t0)
+        }
+        model.rationale = "reviewed and ready"
+        model.proofStandard = .preponderance
+        if model.hasOpenItems { model.acknowledgedOpenItems = true }
+        await model.approve(actor: "me", at: t0)
+        #expect(model.lastError == nil, "\(model.lastError ?? "nil")")
+        // 1 — the approval decision exists.
+        #expect(model.snapshot?.isApproved == true)
+        #expect(model.snapshot?.approvalHistory.count == 1)
+        // 2 — the SEALED assessment exists, at revision 1, marked 'approved'.
+        let stored = try #require(model.storedAssessment)
+        #expect(stored.seal != nil, "strict mode never approves unsealed")
+        #expect(stored.runRevision == 1)
+        let state = try await h.db.query(
+            "SELECT approval_state FROM conformance_assessments WHERE id = ?;",
+            [.uuid(stored.id)]).first?.string(0)
+        #expect(state == "approved")
+        // 3 — the governance event landed in the SAME atom.
+        let events = try await h.db.query(
+            "SELECT kind FROM governance_events WHERE case_id = ? AND kind = 'findings.approved';",
+            [.uuid(created.id)])
+        #expect(events.count == 1)
     }
 }

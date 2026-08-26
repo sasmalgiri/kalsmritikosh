@@ -98,7 +98,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 111)          // v110 deviation status + evidence manifest · v111 governance events ledger
+        #expect(SchemaMigrations.latestVersion == 112)          // v111 governance events ledger · v112 approval_state (atomic approval)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate
