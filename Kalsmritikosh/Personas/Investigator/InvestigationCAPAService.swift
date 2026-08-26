@@ -50,7 +50,11 @@ public actor InvestigationCAPAService {
         guard Self.capaMethodIDs.contains(methodDefinitionID) else {
             throw InvestigationCAPAError.notCAPAMethod(methodDefinitionID)
         }
+        // INV-16 vs INV-17 — the effectiveness review is its OWN observable phase.
+        let phase: PersonaJobKind = methodDefinitionID == "com.kalsmritikosh.method.effectiveness-review"
+            ? .effectivenessReview : .capaRegister
         return try await methods.startMethod(caseID: caseID, methodDefinitionID: methodDefinitionID,
-                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now)
+                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now,
+                                             phaseKind: phase)
     }
 }

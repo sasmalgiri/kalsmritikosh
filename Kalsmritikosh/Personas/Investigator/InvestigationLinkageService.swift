@@ -55,6 +55,7 @@ public actor InvestigationLinkageService {
             throw InvestigationLinkageError.notLinkageMethod(methodDefinitionID)
         }
         return try await methods.startMethod(caseID: caseID, methodDefinitionID: methodDefinitionID,
-                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now)
+                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now,
+                                             phaseKind: .linkage)
     }
 }

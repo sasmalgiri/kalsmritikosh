@@ -271,6 +271,11 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
     /// the run binding instead of trusting it. nil on legacy facts.
     public var runReceiptSeal: String? = nil
     public var runCaseRevision: Int? = nil
+    /// PHASE B (seventh audit): the subset of completedPhaseKinds that was
+    /// MACHINE-OBSERVED from the case's own ledgers (vs. asserted by a test
+    /// or an external caller). Signed with the facts; the certificate prints
+    /// the observed/attested split per phase. nil on legacy facts.
+    public var observedPhaseKinds: Set<PersonaJobKind>? = nil
 
     public init(completedPhaseKinds: Set<PersonaJobKind>,
                 standardOfProofDeclared: Bool = false,
@@ -392,7 +397,21 @@ public nonisolated struct ConformanceAssessment: Sendable, Codable, Equatable {
         var out = "## Sūtra conformance (per-rule)\n\n"
         out += "**Constitution:** \(sutraCitation)\n"
         out += "**Constitution SHA-256:** `\(sutraSHA256)`\n"
-        out += "**Status:** \(status.summaryLine)\n\n"
+        out += "**Status:** \(status.summaryLine)\n"
+        // PHASE B — the observed/attested split, on the certificate's face:
+        // which reached phases were MACHINE-OBSERVED from the case's own
+        // ledgers, and which rest on assertion alone.
+        if let facts {
+            let reached = facts.completedPhaseKinds
+            let observed = facts.observedPhaseKinds ?? []
+            if !reached.isEmpty {
+                let obs = reached.intersection(observed).map(\.rawValue).sorted().joined(separator: ", ")
+                let att = reached.subtracting(observed).map(\.rawValue).sorted().joined(separator: ", ")
+                out += "**Phases machine-observed:** \(obs.isEmpty ? "none" : obs)\n"
+                out += "**Phases asserted (not machine-observed):** \(att.isEmpty ? "none" : att)\n"
+            }
+        }
+        out += "\n"
         let mark: (RuleOutcome) -> String = {
             switch $0 {
             case .passed: return "✓"; case .failed: return "✗"

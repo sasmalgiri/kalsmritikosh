@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 112
+    public static let latestVersion = 113
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -608,7 +608,8 @@ public enum SchemaMigrations {
         (109, v109),
         (110, v110),
         (111, v111),
-        (112, v112)
+        (112, v112),
+        (113, v113)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6157,5 +6158,24 @@ public enum SchemaMigrations {
     ALTER TABLE conformance_assessments
         ADD COLUMN approval_state TEXT NOT NULL DEFAULT 'recorded'
         CHECK(approval_state IN ('recorded','approved'));
+    """
+
+    // MARK: - v113 — case ↔ method-run linkage (Phase B, seventh audit)
+    //
+    // Method runs were workspace-scoped only, so the conformance assessor
+    // could never OBSERVE the method-family phases (methods, causalAnalysis,
+    // linkage, capaRegister) for a case. startMethod now records the link at
+    // run creation; phase completion is DERIVED by joining onto method_runs —
+    // the runs table remains the single source of truth for run state.
+    private static let v113: String = """
+    CREATE TABLE case_method_runs (
+        case_id       TEXT NOT NULL,
+        method_run_id TEXT NOT NULL,
+        phase_kind    TEXT NOT NULL,
+        created_at    REAL NOT NULL,
+        PRIMARY KEY (case_id, method_run_id),
+        FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX idx_case_method_runs_case ON case_method_runs(case_id, phase_kind);
     """
 }

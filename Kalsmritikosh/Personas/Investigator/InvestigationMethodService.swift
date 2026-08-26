@@ -126,8 +126,10 @@ public actor InvestigationMethodService {
 
     /// Start a shared MethodRun inside an active case. Every supplied reference must pass BOTH the case
     /// authorization and the shared gate BEFORE the run is created; any failure throws and creates nothing.
+    /// `phaseKind` records WHICH case phase this run advances (PHASE B, v113) —
+    /// the conformance assessor derives phase completion from the linkage.
     public func startMethod(caseID: UUID, methodDefinitionID: String, evidenceSpecs: [InvestigationMethodEvidenceSpec],
-                            createdBy: String, now: Date) async throws -> InvestigationMethodRun {
+                            createdBy: String, now: Date, phaseKind: PersonaJobKind = .methods) async throws -> InvestigationMethodRun {
         guard let record = try await cases.fetch(caseID: caseID) else { throw InvestigationMethodError.caseNotFound(caseID) }
         guard let definition = registry.latest(id: ProfessionalMethodDefinitionID(rawValue: methodDefinitionID)) else {
             throw InvestigationMethodError.unknownMethod(methodDefinitionID)
@@ -156,6 +158,9 @@ public actor InvestigationMethodService {
                                           addedBy: createdBy, addedAt: now)
             run = try await methodRuns.addEvidenceLink(link, expectedRevision: run.revision, gate: gate, now: now)
         }
+        // PHASE B (v113): persist the case linkage so the phase this run
+        // advances is OBSERVABLE by the conformance assessor.
+        try await methodRuns.linkCase(caseID, methodRunID: run.id, phaseKind: phaseKind, at: now)
         return InvestigationMethodRun(caseID: caseID, scope: scope, run: run)
     }
 }

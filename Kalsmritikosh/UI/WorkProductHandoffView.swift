@@ -70,6 +70,12 @@ public final class WorkProductHandoffModel {
     /// Test hook: an injected software signing key so the atomic approval is
     /// deterministic on Keychain-less runners. nil = the installation key.
     public var sealingKeyOverride: P256.Signing.PrivateKey?
+    /// PHASE B — machine observation of SOP phases from the case's own
+    /// ledgers; refreshed with the snapshot. nil = the four snapshot-derived
+    /// phases only (previews / tests without repositories).
+    private let phaseObservation: PhaseObservationService?
+    /// The observed phases for the loaded matter (phase → artifact counts).
+    public private(set) var observedPhases: [PersonaJobKind: PhaseObservationRecord] = [:]
 
     /// The matter currently under review.
     public private(set) var caseID: UUID?
@@ -146,13 +152,25 @@ public final class WorkProductHandoffModel {
         if let status = snapshot?.status, status != .open { decisions.insert(.caseIntake) }
         if assumingApproval || (snapshot?.isApproved ?? false) { decisions.insert(.findings) }
         if snapshot?.latestClosure != nil { decisions.insert(.closure) }
+        // PHASE B — every phase the observation service derived from the
+        // case's OWN ledgers joins the reached set, and its reserved decision
+        // is recorded when the ledger holds the decided artifacts (each
+        // contradiction/gap must be individually reconciled; elsewhere one
+        // decided artifact carries the phase's call).
+        for (phase, obs) in observedPhases {
+            reached.insert(phase)
+            let decided = phase == .contradictionGap
+                ? (obs.artifactCount > 0 && obs.decidedCount == obs.artifactCount)
+                : obs.decidedCount > 0
+            if decided { decisions.insert(phase) }
+        }
         // Evidence kinds actually bound to this run (custody manifest).
         var evidence: Set<String> = []
         if let custody = snapshot?.custody, !custody.isEmpty {
             evidence.insert("custody.record")
             if custody.allSatisfy({ $0.contentHash != nil }) { evidence.insert("custody.hash") }
         }
-        return ConformanceFacts(
+        var facts = ConformanceFacts(
             completedPhaseKinds: reached,
             standardOfProofDeclared: proofStandard != nil,
             openItemsAcknowledged: !hasOpenItems || acknowledgedOpenItems,
@@ -160,6 +178,11 @@ public final class WorkProductHandoffModel {
             approvedDeviations: approvedDeviations,
             presentEvidenceKinds: evidence,
             attestations: ruleAttestations)
+        // Everything above was DERIVED from the case's ledgers — record the
+        // observed set so the certificate can print the observed/attested
+        // split (hand-built facts in tests carry nil and read as attested).
+        facts.observedPhaseKinds = reached
+        return facts
     }
 
     /// The custody manifest embedded into assessments (its hash is signed).
@@ -221,7 +244,8 @@ public final class WorkProductHandoffModel {
                 auditChain: AuditChainService? = nil,
                 protocols: ProtocolRegistryRepository? = nil,
                 governance: GovernanceEventsRepository? = nil,
-                approvalTxn: ApprovalTransactionRepository? = nil) {
+                approvalTxn: ApprovalTransactionRepository? = nil,
+                phaseObservation: PhaseObservationService? = nil) {
         self.handoff = handoff; self.findings = findings; self.closure = closure
         self.contradictionGap = contradictionGap
         self.assessments = assessments
@@ -229,6 +253,7 @@ public final class WorkProductHandoffModel {
         self.protocols = protocols
         self.governance = governance
         self.approvalTxn = approvalTxn
+        self.phaseObservation = phaseObservation
     }
 
     /// A verification bundle left the app — record the export act (v111).
@@ -286,6 +311,10 @@ public final class WorkProductHandoffModel {
             openContradictionCount = cs.filter { $0.review == nil }.count
             openGapCount = gs.filter { $0.review == nil }.count
         }
+        // PHASE B — machine observations from the case's own ledgers.
+        if let phaseObservation {
+            observedPhases = await phaseObservation.observations(caseID: caseID)
+        }
         // Reopen path: the matter's recorded assessment, frozen snapshot and all.
         if let repo = assessments {
             storedAssessment = try? await repo.latest(caseID: caseID)
@@ -313,7 +342,19 @@ public final class WorkProductHandoffModel {
                     lastError = "The selected protocol '\(governingID)' has no active version — the built-in doctrine governs this run."
                 }
             }
-            frozenSutra = resolved ?? SutraCompiler.shared()
+            let candidate = resolved ?? SutraCompiler.shared()
+            // PHASE B — refuse at run start (never silently never-conform): a
+            // governing protocol requiring a phase this build cannot
+            // machine-observe would make every run notConformant with no way
+            // out. Say so NOW, with the phases named.
+            if let required = candidate.requiredPhaseKinds {
+                let unobservable = Set(required).subtracting(PhaseObservationService.observableKinds)
+                if !unobservable.isEmpty {
+                    lastError = "The governing protocol '\(candidate.citation)' requires phase(s) this app cannot machine-observe yet: \(unobservable.map(\.rawValue).sorted().joined(separator: ", ")). A run under it could never conform — choose a different protocol or amend it."
+                    return
+                }
+            }
+            frozenSutra = candidate
         }
         await perform {
             let f = try await self.findings.buildFindings(caseID: snap.caseID, access: access, actor: actor, at: date)
@@ -970,7 +1011,8 @@ public struct WorkProductHandoffView: View {
                                                  auditChain: appState.auditChain,
                                                  protocols: appState.protocolRegistry,
                                                  governance: appState.governanceEvents,
-                                                 approvalTxn: appState.approvalTransactions)
+                                                 approvalTxn: appState.approvalTransactions,
+                                                 phaseObservation: appState.phaseObservation)
         await m.load(caseID: id)
         model = m
     }

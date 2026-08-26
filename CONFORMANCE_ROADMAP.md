@@ -387,3 +387,34 @@ savepoint with no suspension points inside the barrier. Consequences:
 - The pending → assessed → sealed → approved states never persist
   individually; the CHECK'd approval_state column records the collapsed
   transition ('recorded' for assessments stored without an approval act).
+
+## Phase B-1 (2026-08-26) — machine phase observability; the "phases can never complete" class closed for 14 of 16 kinds
+
+The production assessor previously recognized four phases; the other twelve
+could never be marked reached. Now:
+
+- v113 `case_method_runs`: startMethod persists WHICH case phase a method
+  run advances (causal/linkage/CAPA/effectiveness wrappers pass their
+  kinds). Phase completion is DERIVED by joining onto method_runs — the
+  runs table stays the single source of truth.
+- `PhaseObservationService` derives phase completion from the case's OWN
+  ledgers: hypotheses (analysis — a non-proposed hypothesis carries the
+  human call), the reliability desk (confirmed assessments), the
+  contradiction/gap desk (each item individually reconciled), the subject
+  dossier, the identity decision log, and the v113 linkage. A probe error
+  reads as NOT observed — fail-closed.
+- `conformanceFacts()` unions observed phases into completedPhaseKinds and
+  derives their reserved decisions from the decided artifacts; the SIGNED
+  facts carry `observedPhaseKinds`, and the certificate prints the
+  observed/attested split on its face.
+- REFUSE AT RUN START: a governing protocol requiring a phase this build
+  cannot machine-observe (today: `ask`, `dataLab`) is refused when the run
+  would freeze, with the phases named — never a silent never-conforming
+  run. (The systematic-review discipline is therefore not selectable as a
+  governing findings protocol until dataLab observation lands — stated
+  here, on the certificate, and in the refusal message.)
+- Observable today (14/16): intake, findings, custody, closure, analysis,
+  sourceReliability, contradictionGap, subjectDossier, identityResolution,
+  methods, causalAnalysis, linkage, capaRegister, effectivenessReview.
+  B-2 remainders: `ask` + `dataLab` observation, and feeding phase
+  observations into the audit chain as a fourth source.

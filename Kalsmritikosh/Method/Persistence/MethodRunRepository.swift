@@ -578,3 +578,41 @@ public actor MethodRunRepository {
             actorKind: actorKind, actorIdentifier: r.string(9), reason: r.string(10), occurredAt: occurredAt)
     }
 }
+
+// MARK: - Case ↔ method-run linkage (PHASE B, v113)
+
+/// The persisted case linkage the seventh audit found missing: method runs
+/// were workspace-scoped only, so no case-scoped phase (methods, causal
+/// analysis, linkage, CAPA) could ever be OBSERVED by the conformance
+/// assessor. `startMethod` records the link at creation; the observation
+/// service derives phase completion from it — the runs table stays the one
+/// source of truth for run state.
+extension MethodRunRepository {
+
+    public func linkCase(_ caseID: UUID, methodRunID: UUID,
+                         phaseKind: PersonaJobKind, at date: Date) async throws {
+        try await database.exec("""
+        INSERT OR IGNORE INTO case_method_runs (case_id, method_run_id, phase_kind, created_at)
+        VALUES (?, ?, ?, ?);
+        """, [.uuid(caseID), .uuid(methodRunID), .text(phaseKind.rawValue),
+              .real(date.timeIntervalSince1970)])
+    }
+
+    /// Per-phase method activity for a case: (phase, total runs, completed runs).
+    public func casePhaseActivity(caseID: UUID) async throws -> [(phase: PersonaJobKind, total: Int, completed: Int)] {
+        let rows = try await database.query("""
+        SELECT l.phase_kind,
+               COUNT(*),
+               SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END)
+        FROM case_method_runs l
+        JOIN method_runs r ON r.id = l.method_run_id
+        WHERE l.case_id = ?
+        GROUP BY l.phase_kind;
+        """, [.uuid(caseID)])
+        return rows.compactMap { r in
+            guard let raw = r.string(0), let phase = PersonaJobKind(rawValue: raw),
+                  let total = r.int(1) else { return nil }
+            return (phase, Int(total), Int(r.int(2) ?? 0))
+        }
+    }
+}

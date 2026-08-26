@@ -642,6 +642,9 @@ public final class AppState {
     /// PHASE C (v112) — the atomic approval composer: approval decision +
     /// sealed assessment + governance event in ONE savepoint.
     public private(set) var approvalTransactions: ApprovalTransactionRepository?
+    /// PHASE B (v113) — machine observation of SOP phase completion from the
+    /// case's own ledgers.
+    public private(set) var phaseObservation: PhaseObservationService?
     /// #142 — the ONE production PersonaJobCatalog (built once at boot) and the ONE live consumer that
     /// discovers a persona, enumerates its real jobs, and routes a selected job into the real implementation.
     public private(set) var personaJobCatalog: PersonaJobCatalog?
@@ -2222,6 +2225,15 @@ public final class AppState {
             self.governanceEvents = governanceRepo
             // Phase C — atomic approval composer (v112).
             self.approvalTransactions = ApprovalTransactionRepository(database: db)
+            // Phase B — machine observation of SOP phases from the case's own
+            // ledgers (v113 case↔method-run linkage + the desk services).
+            self.phaseObservation = PhaseObservationService(
+                analysis: self.investigationAnalysis,
+                reliability: self.investigationReliability,
+                contradictionGap: self.investigationContradictionGap,
+                dossier: self.investigationSubjectDossier,
+                identity: self.investigationIdentityResolution,
+                methodRuns: sharedMethodRuns)
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the

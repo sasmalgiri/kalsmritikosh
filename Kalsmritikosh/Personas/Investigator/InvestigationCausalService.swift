@@ -61,6 +61,7 @@ public actor InvestigationCausalService {
             throw InvestigationCausalError.notCausalMethod(methodDefinitionID)
         }
         return try await methods.startMethod(caseID: caseID, methodDefinitionID: methodDefinitionID,
-                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now)
+                                             evidenceSpecs: evidenceSpecs, createdBy: createdBy, now: now,
+                                             phaseKind: .causalAnalysis)
     }
 }
