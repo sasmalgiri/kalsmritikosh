@@ -172,7 +172,8 @@ struct ConformanceBundleTests {
             evidenceManifestSHA256: e.evidenceManifestSHA256, signerAssurance: e.signerAssurance,
             runID: e.runID, runStateSHA256: e.runStateSHA256,
             approvedDeviationCount: e.approvedDeviationCount,
-            factsSHA256: e.factsSHA256)
+            factsSHA256: e.factsSHA256,
+            publicAuditChainHead: e.publicAuditChainHead)
         attestation = SealedConformance(envelope: forgedEnvelope,
                                         signatureHex: attestation.signatureHex,
                                         publicKeyHex: attestation.publicKeyHex)

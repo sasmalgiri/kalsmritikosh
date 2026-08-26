@@ -262,6 +262,13 @@ public final class WorkProductHandoffModel {
                                detail: "revision=\(revision)", at: date)
     }
 
+    /// Phase D — the exportable PUBLIC audit trail (metadata payloads only)
+    /// for bundle export; nil when no chain is wired.
+    public func currentAuditTrail() async -> [AuditTrailEntry]? {
+        guard let chain = auditChain else { return nil }
+        return try? await chain.publicTrail()
+    }
+
     /// Append a governance act to the v111 ledger (best-effort, logged).
     /// Called BEFORE the assessment seals so the sealed audit-chain head
     /// covers the act it certifies.
@@ -426,6 +433,9 @@ public final class WorkProductHandoffModel {
                         let h = try await chain.head()
                         linkage.auditChainHead = h.hash
                         linkage.auditEventCount = h.sealedSeq
+                        // Phase D — the PUBLIC chain head is signed too, so
+                        // outsiders can replay the exported trail to it.
+                        linkage.publicAuditChainHead = try await chain.publicHead()
                     } catch let gateError as ConformanceGateError {
                         throw gateError
                     } catch {
@@ -925,11 +935,18 @@ public struct WorkProductHandoffView: View {
         panel.canCreateDirectories = true
         panel.prompt = "Export Bundle"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try ConformanceBundle.write(stored: stored, to: url)
-            Task { await model?.noteBundleExported(revision: stored.runRevision, at: Date()) }
+        let m = model
+        Task {
+            do {
+                // Phase D — export the public audit trail alongside; write()
+                // refuses a v2 bundle without it.
+                let trail = await m?.currentAuditTrail()
+                try ConformanceBundle.write(stored: stored, to: url, auditTrail: trail)
+                await m?.noteBundleExported(revision: stored.runRevision, at: Date())
+            } catch {
+                m?.noteExportFailure("Verification bundle export failed: \(error)")
+            }
         }
-        catch { model?.noteExportFailure("Verification bundle export failed: \(error)") }
     }
 
     /// Present a save panel and, on confirmation, write the export to the chosen location.

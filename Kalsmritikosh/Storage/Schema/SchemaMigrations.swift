@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 113
+    public static let latestVersion = 114
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -609,7 +609,8 @@ public enum SchemaMigrations {
         (110, v110),
         (111, v111),
         (112, v112),
-        (113, v113)
+        (113, v113),
+        (114, v114)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6177,5 +6178,21 @@ public enum SchemaMigrations {
         FOREIGN KEY(method_run_id) REFERENCES method_runs(id) ON DELETE CASCADE
     );
     CREATE INDEX idx_case_method_runs_case ON case_method_runs(case_id, phase_kind);
+    """
+
+    // MARK: - v114 — PUBLIC hash chain columns (Phase D, seventh audit)
+    //
+    // The HMAC chain detects local tampering but its key is private, so an
+    // OUTSIDE verifier could never replay it. Each new seal now also links a
+    // plain SHA-256 chain over the same canonical payloads:
+    //   public_hash = SHA256(canonicalPayload || public_prev)
+    // The head is SIGNED into the conformance envelope and bundles export the
+    // event payloads (metadata only — never document content), so anyone can
+    // recompute the chain to the signed head. Legacy rows keep NULL (their
+    // payloads were sealed before the public chain existed); the public chain
+    // starts at the first post-v114 seal — stated, not hidden.
+    private static let v114: String = """
+    ALTER TABLE audit_chain ADD COLUMN public_prev TEXT;
+    ALTER TABLE audit_chain ADD COLUMN public_hash TEXT;
     """
 }

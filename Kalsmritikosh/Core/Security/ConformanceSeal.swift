@@ -226,7 +226,8 @@ public nonisolated enum ConformanceSeal {
             runStateSHA256: assessment.runStateSHA256,
             approvedDeviationCount: assessment.approvedDeviationCount > 0
                 ? assessment.approvedDeviationCount : nil,
-            factsSHA256: factsSHA)
+            factsSHA256: factsSHA,
+            publicAuditChainHead: linkage.publicAuditChainHead)
         guard let canonical = try? ConformanceCanonical.data(of: envelope) else {
             throw ConformanceSealError.encodingFailed
         }
@@ -295,24 +296,14 @@ public nonisolated enum ConformanceSeal {
 // The same three-verdict logic applies — hash the text above the seal line,
 // re-encode the envelope canonically, check the P-256 signature.
 
-public nonisolated struct StudioDeliverableEnvelope: Sendable, Codable, Equatable {
-    public let formatVersion: Int          // 1
-    public let studio: String
-    public let deliverableTitle: String
-    /// SHA-256 over the rendered report text ABOVE the seal block (UTF-8).
-    public let contentSHA256: String
-    public let stagesComplete: Int
-    public let stagesTotal: Int
-    public let allStagesComplete: Bool
-    public let sealedAt: Date
-    public let signerKeyID: String
-    public let signatureAlgorithm: String
-}
+// StudioDeliverableEnvelope moved to ConformanceEnvelope.swift (Phase D) —
+// the standalone verifier's --studio mode is generated from that file.
 
 public nonisolated enum StudioDeliverableSeal {
     /// The line separating report content from the seal — verifiers hash
     /// everything strictly above it.
-    public static let separator = "\n---\n## Deliverable seal (ECDSA P-256)\n"
+    /// ONE separator definition — the shared verifier owns it (Phase D).
+    public static let separator = StudioDeliverableVerifier.separator
 
     /// Append a signed seal to a rendered report. When no signing key is
     /// available the report gains an honest UNSEALED note instead — the

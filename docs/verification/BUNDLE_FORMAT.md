@@ -88,3 +88,20 @@ REPLAY. `evidenceManifestSHA256`, when present, likewise requires a matching
 
 Optional fields are omitted when absent (never `null`), which the sorted-keys
 canonical form preserves deterministically.
+
+## Phase D additions (2026-08-26)
+
+- `audit-events.json` — the PUBLIC audit trail: an array of
+  `{seq, source, eventID, occurredAt, canonicalPayload, publicPrev, publicHash}`
+  (canonical JSON). Verifiers fold `SHA256(canonicalPayload || "|" || prev)`
+  from genesis `GENESIS-public-audit-chain-v1` and require the final hash to
+  equal the envelope's SIGNED `publicAuditChainHead`. When the envelope
+  carries that field, this file is MANDATORY — its absence fails REPLAY
+  (downgrade refused). Payloads are event METADATA only; document content
+  never ships.
+- Envelope field `publicAuditChainHead` (optional; nil on pre-v114 seals —
+  the public chain starts at the first post-v114 seal, stated here).
+- Studio deliverables: `swift kalverify.swift --studio <sealed.md>` verifies
+  a sealed studio report — content hash above the seal separator + ECDSA
+  P-256 over the canonical `StudioDeliverableEnvelope` — with the app's own
+  `StudioDeliverableVerifier` (shared source, not a mirror).

@@ -28,6 +28,7 @@ import CryptoKit
 public nonisolated enum ConformanceBundleError: Error, Equatable {
     case notSealed            // only sealed assessments export — nothing to verify otherwise
     case missingFacts         // facts are MANDATORY: replay must be possible (audit item 4)
+    case missingAuditTrail    // the envelope signs a public chain head — the trail must ship (Phase D)
     case encodingFailed
 }
 
@@ -53,6 +54,7 @@ public nonisolated enum ConformanceBundle {
     static let evaluationsFile = "rule-evaluations.json"
     static let factsFile = "evaluation-facts.json"
     static let evidenceManifestFile = "evidence-manifest.json"
+    static let auditEventsFile = "audit-events.json"
     static let publicKeyFile = "public-key.hex"
     static let manifestFile = "manifest.json"
     static let readmeFile = "README.txt"
@@ -67,8 +69,15 @@ public nonisolated enum ConformanceBundle {
 
     /// Export a sealed assessment as a verification bundle folder. Refuses an
     /// unsealed record — there is nothing for an outsider to verify.
-    public static func write(stored: StoredConformanceAssessment, to directory: URL) throws {
+    /// `auditTrail` (Phase D): the public-chain event payloads; MANDATORY
+    /// when the signed envelope commits to a public chain head — a v2 bundle
+    /// without its trail could not be independently replayed.
+    public static func write(stored: StoredConformanceAssessment, to directory: URL,
+                             auditTrail: [AuditTrailEntry]? = nil) throws {
         guard let seal = stored.seal else { throw ConformanceBundleError.notSealed }
+        if seal.envelope.publicAuditChainHead != nil && (auditTrail?.isEmpty ?? true) {
+            throw ConformanceBundleError.missingAuditTrail
+        }
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
 
@@ -90,6 +99,11 @@ public nonisolated enum ConformanceBundle {
         // The evidence manifest the signed envelope hashes (when the run has one).
         if let manifest = stored.assessment.evidenceManifest {
             payload.append((evidenceManifestFile, try ConformanceCanonical.data(of: manifest)))
+        }
+        // Phase D — the public audit trail (metadata payloads only): outside
+        // verifiers fold SHA256(payload || prev) to the SIGNED public head.
+        if let auditTrail, !auditTrail.isEmpty {
+            payload.append((auditEventsFile, try ConformanceCanonical.data(of: auditTrail)))
         }
         for (name, data) in payload {
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
@@ -285,8 +299,30 @@ public nonisolated enum ConformanceBundle {
                 verdict.details.append("replay: the signed envelope commits to an evidence manifest but evidence-manifest.json is missing")
             }
         }
+        // PHASE D — the PUBLIC audit chain: when the signed envelope commits
+        // to a public head, the exported trail is REQUIRED and must fold
+        // (SHA256(payload || prev)) exactly to that head. The private HMAC
+        // chain stays local; this one anyone can replay.
+        if let signedHead = sealed.envelope.publicAuditChainHead {
+            if let trailData = read(auditEventsFile),
+               let trail = try? decoder().decode([AuditTrailEntry].self, from: trailData) {
+                if let failure = Self.replayPublicChain(trail, expectedHead: signedHead) {
+                    replayOK = false
+                    verdict.details.append("replay: \(failure)")
+                }
+            } else {
+                replayOK = false
+                verdict.details.append("replay: the signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused")
+            }
+        }
         verdict.conformanceReplay = replayOK ? .passed : .failed
         return verdict
+    }
+
+    /// Fold the public chain over the exported payloads — the ONE shared
+    /// computation (PublicAuditChain), same bytes as the sealing service.
+    static func replayPublicChain(_ trail: [AuditTrailEntry], expectedHead: String) -> String? {
+        PublicAuditChain.replay(trail, expectedHead: expectedHead)
     }
 
     // MARK: - Helpers

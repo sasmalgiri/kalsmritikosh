@@ -439,3 +439,23 @@ Feeding phase observations into the audit chain is intentionally NOT done:
 observations are DERIVED state, not events; deriving them at assessment
 time and signing them in the facts is the correct binding (the chain seals
 the underlying ledgers those derivations read).
+
+## Phase D (2026-08-26) — the publicly recomputable trail; the "outsiders can't replay" class shrunk to the privacy boundary
+
+- DUAL-HASH CHAIN (v114): every new seal writes a keyless public link
+  (`SHA256(payload || prev)`) alongside the private HMAC link. ONE shared
+  computation (`PublicAuditChain` in the generated-verifier core) is used by
+  the sealing service, the in-app bundle verifier and kalverify.
+- The PUBLIC head is SIGNED into the conformance envelope
+  (`publicAuditChainHead`); strict-mode approvals bind it automatically.
+- Bundles export `audit-events.json` (event METADATA payloads — document
+  content never ships). When the envelope commits to a public head the trail
+  is MANDATORY: export refuses without it, and verifiers refuse a stripped
+  trail even with a recomputed manifest.
+- `kalverify --studio <sealed.md>` verifies studio deliverable seals with
+  the app's own `StudioDeliverableVerifier` (shared source; the separator
+  and envelope live in the same generated core).
+- Pre-v114 rows carry no public link — the public chain starts at the first
+  post-v114 seal, stated in the spec and on the wire. The remaining
+  non-exportables are permanent privacy boundaries: source/work-product
+  bytes and the receipt's content-derived payload stay on the device.

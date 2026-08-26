@@ -76,7 +76,7 @@ struct AuditChainTests {
 
     @Test("Seal is append-only and idempotent; verify() confirms an intact chain")
     func sealIdempotentAndIntact() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ledger = Ledger()
         await ledger.set([event(1), event(2), event(3)])
         let svc = service(db, ledger)
@@ -92,7 +92,7 @@ struct AuditChainTests {
 
     @Test("A newly recorded event seals onto the existing chain and stays intact")
     func incrementalSeal() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ledger = Ledger()
         var events = [event(1), event(2)]
         await ledger.set(events)
@@ -112,7 +112,7 @@ struct AuditChainTests {
 
     @Test("Editing a sealed event's payload breaks the chain at that seq")
     func editedEventDetected() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ledger = Ledger()
         let e = [event(1), event(2), event(3)]
         await ledger.set(e)
@@ -131,7 +131,7 @@ struct AuditChainTests {
 
     @Test("Deleting a sealed event is caught as a missing-event break")
     func deletedEventDetected() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ledger = Ledger()
         let e = [event(1), event(2), event(3)]
         await ledger.set(e)
@@ -146,7 +146,7 @@ struct AuditChainTests {
 
     @Test("A wrong secret cannot validate the chain")
     func wrongSecretFails() async throws {
-        let db = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         let ledger = Ledger()
         await ledger.set([event(1), event(2)])
         _ = try await service(db, ledger).seal(now: t0)
@@ -157,8 +157,8 @@ struct AuditChainTests {
 
     @Test("Canonical ordering is by (occurredAt, source, id) — same-timestamp events seal deterministically")
     func deterministicOrdering() async throws {
-        let db1 = try await MigrationFixtureBuilder.database(atVersion: 104)
-        let db2 = try await MigrationFixtureBuilder.database(atVersion: 104)
+        let db1 = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
+        let db2 = try await MigrationFixtureBuilder.database(atVersion: SchemaMigrations.latestVersion)
         // Two events at the SAME instant, different sources.
         let a = AuditChainEvent(source: .custody, eventID: UUID(), occurredAt: t0, canonicalPayload: "a")
         let b = AuditChainEvent(source: .review, eventID: UUID(), occurredAt: t0, canonicalPayload: "b")

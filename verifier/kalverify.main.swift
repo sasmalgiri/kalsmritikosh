@@ -49,8 +49,25 @@ struct VerifierManifest: Codable {
 
 // MARK: - Main
 
+// --studio <file.md>: verify a SEALED studio deliverable (Phase D) with the
+// app's own StudioDeliverableVerifier — content hash + P-256 signature.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--studio" {
+    guard let markdown = try? String(contentsOf: URL(fileURLWithPath: CommandLine.arguments[2]), encoding: .utf8) else {
+        print("STUDIO: FAILED — file unreadable"); exit(1)
+    }
+    let v = StudioDeliverableVerifier.verify(markdown: markdown)
+    print("CONTENT: \(v.contentIntact ? "PASSED — matches the sealed content hash" : "FAILED")")
+    print("SIGNATURE: \(v.signatureValid ? "PASSED — ECDSA P-256 over the canonical envelope" : "FAILED")")
+    if let e = v.envelope {
+        print("Deliverable: \(e.studio) · \(e.deliverableTitle) · stages \(e.stagesComplete)/\(e.stagesTotal)\(e.allStagesComplete ? "" : " — INCOMPLETE, stated honestly") · signer \(e.signerKeyID)")
+    }
+    print(v.verified ? "\nRESULT: VERIFIED" : "\nRESULT: FAILED")
+    exit(v.verified ? 0 : 1)
+}
+
 guard CommandLine.arguments.count == 2 || CommandLine.arguments.count == 3 else {
     print("usage: swift kalverify.swift <bundle-folder> [trusted-signer-key-id]")
+    print("       swift kalverify.swift --studio <sealed-deliverable.md>")
     print("Without a trusted key ID, AUTHENTICITY proves key-consistency only —")
     print("the signature matches the key EMBEDDED in the bundle. Supply the")
     print("signer's known key ID (16 hex chars) to bind the seal to an identity.")
@@ -198,6 +215,19 @@ func rerunEvaluators() -> String? {
         } else {
             print("REPLAY note: run binding not independently recomputable (facts predate the binding-components format)")
         }
+    }
+    // PUBLIC AUDIT CHAIN (Phase D): when the signed envelope commits to a
+    // public head, the exported trail is REQUIRED and must fold — with the
+    // app's own PublicAuditChain computation — exactly to that head.
+    if let signedHead = attestation.envelope.publicAuditChainHead {
+        guard let trailData = read("audit-events.json"),
+              let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData) else {
+            return "signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused"
+        }
+        if let failure = PublicAuditChain.replay(trail, expectedHead: signedHead) {
+            return failure
+        }
+        print("REPLAY note: public audit chain REPLAYED over \(trail.count) exported event(s) — matches the SIGNED head")
     }
     // RERUN with the app's own assess(): every evaluator, every gate, the
     // same code — outcome, evaluator ID and detail must all reproduce.

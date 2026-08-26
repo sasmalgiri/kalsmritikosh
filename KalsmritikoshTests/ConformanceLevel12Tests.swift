@@ -356,7 +356,8 @@ struct ConformanceLevel2Tests {
             runID: sealed.envelope.runID,
             runStateSHA256: sealed.envelope.runStateSHA256,
             approvedDeviationCount: sealed.envelope.approvedDeviationCount,
-            factsSHA256: sealed.envelope.factsSHA256)
+            factsSHA256: sealed.envelope.factsSHA256,
+            publicAuditChainHead: sealed.envelope.publicAuditChainHead)
         let forged = SealedConformance(envelope: forgedEnvelope,
                                        signatureHex: sealed.signatureHex,
                                        publicKeyHex: sealed.publicKeyHex)
