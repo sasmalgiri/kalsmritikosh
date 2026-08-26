@@ -721,9 +721,19 @@ public struct ReasoningStudioView: View {
 
     // MARK: - Report output
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ rca: RootCauseAnalysis) -> String {
+        let stages = RootCauseAnalysis.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "Root-Cause Analysis", title: rca.title,
+            report: RCAReportRenderer.markdown(rca, generatedAt: Date()),
+            stagesComplete: stages.filter { rca.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return RCAReportRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         let t = activeBinding?.wrappedValue.title ?? "investigation"
@@ -732,14 +742,13 @@ public struct ReasoningStudioView: View {
     private func copyReport(_ rca: RootCauseAnalysis) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(RCAReportRenderer.markdown(rca, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(rca), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printReport(_ rca: RootCauseAnalysis) {
-        let text = RCAReportRenderer.markdown(rca, generatedAt: Date())
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = text
+        tv.string = sealed(rca)
         tv.font = NSFont.systemFont(ofSize: 11)
         let op = NSPrintOperation(view: tv)
         op.jobTitle = "Root-Cause Analysis — \(rca.title)"

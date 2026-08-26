@@ -272,3 +272,68 @@ seals) for the ten studios' outputs is future scope — studios seal what
 leaves the app; only the investigator findings handoff carries a governed
 approval act today. Website "Download" targets and pricing copy resolve at
 release (owner acts, RELEASE_EVIDENCE_INDEX.md).
+
+## Sixth-audit response (2026-08-26) — first audit of current HEAD; all real findings implemented
+
+This audit examined `3762506` (current at audit time) and its findings were
+verified individually. Two corrections to OUR OWN earlier statements first:
+
+- RETRACTION: the fourth-audit section said studio seals covered "all ten
+  studios". That was wrong — only the four shell-based studios were sealed;
+  Forensic, Journalist, Privilege-Log, SIU, Workplace and Reasoning had
+  unsealed copy/print/export paths. As of this response all ten ARE sealed
+  (the six standalone views now route every deliverable through
+  StudioDeliverableSeal), and the claim is true going forward.
+- CORRECTION: the fifth-audit response called "no Core ML model committed"
+  false. The models exist on the DEVELOPER's disk but are deliberately
+  .gitignored (built via scripts/build-bge-*.sh) — the public repo does NOT
+  contain them, and the shipped app carries them only when the owner runs
+  those scripts before archiving. Now an explicit owner-checklist step.
+
+Implemented from this audit:
+
+1. ✅ Confirmed workflow steps are IMMUTABLE: saveFields refuses a confirmed
+   seq (re-read inside the write barrier) and can never plant or overwrite
+   the who/when attestation stamps; the confirm barrier re-validates
+   required fields, semantic assertions AND gates against re-read state.
+2. ✅ The standalone verifier now reruns EVERY evaluator faithfully: the
+   evidence-binding gate (gate.evidenceBinding.v1) is mirrored, the
+   deterministic evidence enrichment is mirrored from the compiler, and a
+   FULL rule-definition comparison (id/kind/text/phase/requiredEvidence,
+   count) refuses doctored rule definitions even with reproducible outcomes.
+3. ✅ All ten studios seal deliverables (see retraction above).
+4. ✅ The classic switch is labelled as what it is — "Classic conformance
+   mode (disables enforcement)" — and the website says "strict conformance
+   mode (the default)" wherever approval-blocking is claimed. Classic
+   remains a deliberate owner decision (restore the previous app IN FULL);
+   it produces no certificates, so no false artifacts can come from it.
+5. ✅ Systematic completion-check sweep over every required choice field in
+   the authored catalog: "Log complete?" → Complete and the content
+   creators' "Rights" → All cleared joined the gated set. The remaining
+   required choices (Decision / Verdict / Acquisition method / Risk /
+   Urgency / Conflicts…) are GENUINE human decisions with multiple
+   legitimate outcomes — gating those would falsify the record.
+6. ✅ Audit-chain errors now FAIL CLOSED at assessment time: a seal/verify/
+   head failure refuses the conformance seal (recorded UNSEALED with an
+   explicit warning) instead of silently attesting over an unknown ledger
+   state. A compensation double-failure (withdrawal also failing) surfaces
+   as a CRITICAL error naming the manual step — never as a quieter version
+   of the original failure.
+7. ✅ The run binding is now RECOMPUTABLE outside the app: the signed facts
+   carry the binding components (receipt seal + case revision); with the
+   envelope's runID, verifiers (app bundle verify AND kalverify) recompute
+   runStateSHA256 and refuse a mismatch. The binding stopped being an
+   assertion. (Source/work-product bytes stay out of bundles by privacy
+   design — that boundary is permanent.)
+8. ✅ Every built-in discipline declares its mandatory spine: clinical
+   [intake, findings]; safety RCA [intake, causalAnalysis, findings];
+   systematic review [intake, dataLab, findings]. The persona-lens
+   reconstruction no longer drops requiredPhaseKinds or globalRequirements.
+
+Correct-by-nature (documented, not deferred):
+- Human authority remains self-asserted — a single-user, on-device app has
+  no identity provider; attestations record who/role/why/when and the
+  certificate says exactly that. Authenticated roles require an identity
+  infrastructure this product intentionally does not have.
+- Bundles prove the recorded run state, facts, rules and outcomes — not the
+  truth of the underlying evidence. Stated on the verification page.

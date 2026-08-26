@@ -112,14 +112,26 @@ public actor WorkCenterRepository {
     /// Save (or update) the captured field values for one step of a run.
     /// Read-modify-write of fields_json runs inside ONE isolated closure so
     /// a concurrent save can never clobber another step's just-saved values.
+    /// A CONFIRMED step is immutable (sixth audit): its recorded values and
+    /// who/when attestation stamp can never be rewritten — the confirmed set
+    /// is re-read inside the barrier so a racing confirm cannot be bypassed.
     public func saveFields(runID: UUID, seq: Int, values: [String: String], at date: Date) async throws {
         _ = try await requireRun(runID)   // friendly not-found error first
         try await database.withSavepoint("wcsave_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)") { db in
             let rows = try db.query(
-                "SELECT fields_json FROM work_center_documents WHERE id = ? LIMIT 1;", [.uuid(runID)])
-            guard let json = rows.first?.string(0) else { throw WorkCenterError.runNotFound(runID) }
+                "SELECT fields_json, confirmed_seqs FROM work_center_documents WHERE id = ? LIMIT 1;", [.uuid(runID)])
+            guard let row = rows.first, let json = row.string(0) else {
+                throw WorkCenterError.runNotFound(runID)
+            }
+            let confirmed = Set((row.string(1) ?? "").split(separator: ",").compactMap { Int($0) })
+            guard !confirmed.contains(seq) else { throw WorkCenterError.stepAlreadyConfirmed(seq) }
             var all = Self.decodeFields(json)
-            all[seq] = values
+            // The attestation stamps are repository-owned — a caller-supplied
+            // map can never plant or overwrite who/when a step was confirmed.
+            // (Other reserved keys — __note, __refs — are legitimate UI input.)
+            all[seq] = values.filter {
+                $0.key != WCReservedKey.confirmedAt && $0.key != WCReservedKey.confirmedBy
+            }
             try db.exec(
                 "UPDATE work_center_documents SET fields_json = ?, updated_at = ? WHERE id = ?;",
                 [.text(Self.encodeFields(all)), .real(date.timeIntervalSince1970), .uuid(runID)])
@@ -156,6 +168,7 @@ public actor WorkCenterRepository {
         let opTitle = op.title
         let postsType = op.postsDocType
         let totalOps = def.operations.count
+        let barrierOp = op
         let stepDocID: UUID? = try await database.withSavepoint(
             "wcstep_\(runID.uuidString.replacingOccurrences(of: "-", with: ""))_\(seq)") { db in
             let rows = try db.query("""
@@ -169,18 +182,24 @@ public actor WorkCenterRepository {
             var confirmed = Set(confirmedRaw.split(separator: ",").compactMap { Int($0) })
             guard !confirmed.contains(seq) else { throw WorkCenterError.stepAlreadyConfirmed(seq) }
 
-            // Semantic assertions re-checked against the RE-READ authoritative
-            // values — a concurrent save can't slip a negative answer past the
-            // advisory pre-check above.
-            let authoritative = Self.decodeFields(json)[seq] ?? [:]
+            // FULL re-validation against the RE-READ authoritative state
+            // (sixth audit): required fields, semantic assertions AND gates —
+            // a concurrent save can't slip anything past the advisory
+            // pre-checks above. The barrier is the enforcement.
+            var allFields = Self.decodeFields(json)
+            let authoritative = allFields[seq] ?? [:]
+            let missingAuth = WCFieldValidation.missingRequired(opFields, values: authoritative)
+            guard missingAuth.isEmpty else { throw WorkCenterError.missingRequiredFields(missingAuth) }
             let broken = WCFieldValidation.unsatisfiedAssertions(opFields, values: authoritative)
             guard broken.isEmpty else { throw WorkCenterError.assertionUnsatisfied(broken) }
+            let lockedAuth = WCGatePolicy.lockedReasons(barrierOp, state: .init(
+                confirmed: confirmed, fieldValues: allFields))
+            guard lockedAuth.isEmpty else { throw WorkCenterError.gatesLocked(lockedAuth) }
 
             // Stamp the attestation (who/when) into the step's value map — the
             // reserved keys ride inside fields_json so both the run and the
             // posted document carry the record with no extra table.
-            var allFields = Self.decodeFields(json)
-            var stamped = allFields[seq] ?? [:]
+            var stamped = authoritative
             stamped[WCReservedKey.confirmedAt] = String(date.timeIntervalSince1970)
             stamped[WCReservedKey.confirmedBy] = actor
             allFields[seq] = stamped

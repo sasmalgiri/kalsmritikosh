@@ -154,17 +154,13 @@ public final class WorkProductHandoffModel {
     }
 
     /// The REAL run this assessment binds to (audit item 2): the built findings
-    /// run's ID + a hash over its immutable identifying state.
-    private struct RunStateBinding: Codable {
-        let runID: UUID
-        let receiptSeal: String
-        let caseRevision: Int
-    }
+    /// run's ID + a hash over its immutable identifying state. Uses the PUBLIC
+    /// ConformanceRunBinding so outside verifiers recompute identical bytes.
     public func runBinding() -> (runID: UUID?, runStateSHA256: String?) {
         guard let run = built?.run else { return (nil, nil) }
-        let binding = RunStateBinding(runID: run.id,
-                                      receiptSeal: built?.receipt.seal ?? "",
-                                      caseRevision: snapshot?.revision ?? 0)
+        let binding = ConformanceRunBinding(runID: run.id,
+                                            receiptSeal: built?.receipt.seal ?? "",
+                                            caseRevision: snapshot?.revision ?? 0)
         return (run.id, try? ConformanceCanonical.sha256(of: binding))
     }
 
@@ -172,8 +168,16 @@ public final class WorkProductHandoffModel {
     public func currentAssessment(at now: Date = Date(),
                                   assumingApproval: Bool = false) -> ConformanceAssessment {
         let binding = runBinding()
+        var facts = conformanceFacts(assumingApproval: assumingApproval)
+        // Carry the binding COMPONENTS inside the signed facts (sixth audit):
+        // with the envelope's runID they recompute runStateSHA256, so the run
+        // binding is verifiable outside the app, not merely asserted.
+        if built?.run != nil {
+            facts.runReceiptSeal = built?.receipt.seal ?? ""
+            facts.runCaseRevision = snapshot?.revision ?? 0
+        }
         var assessment = SutraConformance.assess(
-            facts: conformanceFacts(assumingApproval: assumingApproval),
+            facts: facts,
             against: frozenSutra ?? SutraCompiler.shared(), at: now,
             runID: binding.runID,
             runStateSHA256: binding.runStateSHA256)
@@ -197,21 +201,32 @@ public final class WorkProductHandoffModel {
                                              receiptSeal: built?.receipt.seal,
                                              databaseSchemaVersion: SchemaMigrations.latestVersion)
         // Bind the tamper-evident ledger: seal outstanding audit events first,
-        // then record the head this certificate attests over. A remaining
-        // unsealed count refuses the seal rather than attesting over a ledger
-        // that can still silently change.
+        // then record the head this certificate attests over. FAIL-CLOSED
+        // (sixth audit): a chain seal/verify/head ERROR refuses the
+        // conformance seal outright — never silently attest over an unknown
+        // ledger state. A remaining unsealed count refuses likewise.
+        var chainFailure: String? = nil
         if let chain = auditChain {
-            _ = try? await chain.seal(now: date)
-            if let v = try? await chain.verify() { linkage.unsealedAuditEvents = v.unsealedCount }
-            if let h = try? await chain.head() {
+            do {
+                _ = try await chain.seal(now: date)
+                let v = try await chain.verify()
+                linkage.unsealedAuditEvents = v.unsealedCount
+                let h = try await chain.head()
                 linkage.auditChainHead = h.hash
                 linkage.auditEventCount = h.sealedSeq
+            } catch {
+                chainFailure = String(describing: error)
+                KalsmritikoshLog.ui.error("audit-chain state unavailable at assessment time — recording UNSEALED: \(String(describing: error), privacy: .public)")
             }
         }
         var warning: String? = nil
         var sealed: SealedConformance? = nil
-        do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
-        catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
+        if let chainFailure {
+            warning = "assessment recorded UNSEALED — audit-chain state unavailable (fail-closed): \(chainFailure)"
+        } else {
+            do { sealed = try ConformanceSeal.seal(assessment: assessment, linkage: linkage) }
+            catch { warning = "assessment recorded UNSEALED — sealing refused: \(error)" }
+        }
         do { storedAssessment = try await repo.record(caseID: caseID, assessment: assessment, seal: sealed, at: date) }
         catch { return (false, "\(error)") }   // caller compensates: approval is withdrawn
         // Governance ledger — the recording act itself joins the chain on the
@@ -390,8 +405,19 @@ public final class WorkProductHandoffModel {
                     // approval and its reversal stay in the genealogy — and the
                     // failure surfaces as the error, never as success.
                     let reason = "Automatic withdrawal — conformance assessment could not be recorded: \(result.warning ?? "unknown error")"
-                    _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f,
-                                                                 rationale: reason, actor: actor, at: date)
+                    do {
+                        _ = try await self.findings.withdrawApproval(caseID: snap.caseID, findings: f,
+                                                                     rationale: reason, actor: actor, at: date)
+                    } catch {
+                        // Double failure (sixth audit): the compensation itself
+                        // failed, so the approval STANDS without its assessment.
+                        // Surface it as loudly as the system can — never as a
+                        // quieter version of the original failure.
+                        KalsmritikoshLog.ui.fault("CRITICAL: compensation withdrawal ALSO failed — approval stands without a recorded assessment: \(String(describing: error), privacy: .public)")
+                        await self.refresh()
+                        throw ConformanceGateError.assessmentNotRecorded(
+                            reason + " — AND the automatic withdrawal ALSO failed (\(error)). The approval currently stands without its assessment: withdraw it manually from this panel.")
+                    }
                     await self.recordGovernance(.approvalWithdrawn, actor: actor,
                                                 detail: "compensation=assessmentNotRecorded", at: date)
                     await self.refresh()

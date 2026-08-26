@@ -265,6 +265,12 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
     /// item: "an unreached required phase must fail, not become N/A").
     /// `assess` injects the Sutra's declared set; default = the findings phase.
     public var requiredPhaseKinds: Set<PersonaJobKind>
+    /// Run-binding components (sixth audit): the receipt seal and case
+    /// revision that, with the envelope's runID, hash to runStateSHA256 —
+    /// carried INSIDE the signed facts so an outside verifier can RECOMPUTE
+    /// the run binding instead of trusting it. nil on legacy facts.
+    public var runReceiptSeal: String? = nil
+    public var runCaseRevision: Int? = nil
 
     public init(completedPhaseKinds: Set<PersonaJobKind>,
                 standardOfProofDeclared: Bool = false,
@@ -286,6 +292,18 @@ public nonisolated struct ConformanceFacts: Sendable, Equatable, Codable {
         self.presentEvidenceKinds = presentEvidenceKinds
         self.attestations = attestations
         self.requiredPhaseKinds = requiredPhaseKinds
+    }
+}
+
+/// The canonical run-binding tuple: `runStateSHA256` is the canonical-JSON
+/// SHA-256 of exactly this value. Public so the bundle verifier (and the
+/// mirrored CLI) recompute the SAME bytes the app hashed at assessment time.
+public nonisolated struct ConformanceRunBinding: Codable, Sendable, Equatable {
+    public let runID: UUID
+    public let receiptSeal: String
+    public let caseRevision: Int
+    public init(runID: UUID, receiptSeal: String, caseRevision: Int) {
+        self.runID = runID; self.receiptSeal = receiptSeal; self.caseRevision = caseRevision
     }
 }
 

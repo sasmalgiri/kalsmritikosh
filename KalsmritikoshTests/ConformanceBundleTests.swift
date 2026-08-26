@@ -20,19 +20,25 @@ struct ConformanceBundleTests {
     private let now = Date(timeIntervalSince1970: 1_756_000_000)
     private let key = P256.Signing.PrivateKey()
 
-    private func sealedStored() throws -> StoredConformanceAssessment {
+    private func sealedStored(runStateOverride: String? = nil) throws -> StoredConformanceAssessment {
         let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
             .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
-        let facts = ConformanceFacts(completedPhaseKinds: spine,
+        var facts = ConformanceFacts(completedPhaseKinds: spine,
                                      standardOfProofDeclared: true,
                                      openItemsAcknowledged: true,
                                      humanDecisionsMade: spine,
                                      attestedRuleIDs: attested)
-        // Production-shaped: bound to a run, with an evidence manifest.
+        // Production-shaped: bound to a run via a GENUINELY recomputable
+        // binding — the components ride in the signed facts (sixth audit).
+        let runID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEFFFF0001")!
+        facts.runReceiptSeal = "receipt-seal-0001"
+        facts.runCaseRevision = 3
+        let binding = try ConformanceCanonical.sha256(of: ConformanceRunBinding(
+            runID: runID, receiptSeal: "receipt-seal-0001", caseRevision: 3))
         var assessment = SutraConformance.assess(facts: facts, against: sutra, at: now,
-                                                 runID: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEFFFF0001"),
-                                                 runStateSHA256: "feedfacefeedface")
+                                                 runID: runID,
+                                                 runStateSHA256: runStateOverride ?? binding)
         assessment.evidenceManifest = [
             EvidenceManifestEntry(sourceVersionID: "v-0001", contentHash: "aa11"),
             EvidenceManifestEntry(sourceVersionID: "v-0002", contentHash: nil),
@@ -223,5 +229,23 @@ struct ConformanceBundleTests {
         try? FileManager.default.removeItem(at: dir)
         try ConformanceBundle.write(stored: try sealedStored(), to: dir)
         #expect(ConformanceBundle.verify(at: dir).allPassed)
+    }
+
+    @Test("Run binding recomputes from the signed facts; a wrong signed binding fails replay")
+    func runBindingRecomputes() throws {
+        // Positive: the fixture's binding is genuine — recompute matches.
+        let cleanDir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: cleanDir)
+        let clean = ConformanceBundle.verify(at: cleanDir)
+        #expect(clean.conformanceReplay == .passed)
+        #expect(!clean.details.contains { $0.contains("not independently recomputable") })
+        // Negative: same facts components, but the SIGNED runStateSHA256 does
+        // not hash from them — the recompute refuses.
+        let forgedDir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(runStateOverride: String(repeating: "ab", count: 32)),
+                                    to: forgedDir)
+        let forged = ConformanceBundle.verify(at: forgedDir)
+        #expect(forged.conformanceReplay == .failed)
+        #expect(forged.details.contains { $0.contains("run binding") })
     }
 }

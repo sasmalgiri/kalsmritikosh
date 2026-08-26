@@ -356,9 +356,19 @@ public struct ForensicStudioView: View {
         f.wrappedValue.limitations.append(t); newLimitation = ""
     }
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ e: ForensicEngagement) -> String {
+        let stages = ForensicEngagement.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "Forensic Accountant", title: e.title,
+            report: FAReportRenderer.markdown(e, generatedAt: Date()),
+            stagesComplete: stages.filter { e.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return FAReportRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         "expert-report-\((activeBinding?.wrappedValue.title ?? "engagement").replacingOccurrences(of: " ", with: "-").lowercased())"
@@ -366,13 +376,13 @@ public struct ForensicStudioView: View {
     private func copyReport(_ e: ForensicEngagement) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(FAReportRenderer.markdown(e, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(e), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printReport(_ e: ForensicEngagement) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = FAReportRenderer.markdown(e, generatedAt: Date())
+        tv.string = sealed(e)
         tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         let op = NSPrintOperation(view: tv); op.jobTitle = "Expert Report — \(e.title)"; op.run()
     }

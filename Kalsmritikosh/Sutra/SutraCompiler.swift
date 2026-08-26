@@ -86,7 +86,7 @@ public nonisolated enum SutraCompiler {
                   ["Record follow-up and safety-net advice"], ["Decide the disposition"],
                   ["Discharge with unresolved red-flag findings"])
         ]
-        return Sutra(
+        var sutra = Sutra(
             id: "sutra.clinical.differential", version: 1,
             title: "Clinical differential diagnosis",
             provenance: "Clinical reasoning framed as competing hypotheses — reuses the same ACH engine, the same conformance gates, and no new UI. Illustrative only; not medical advice.",
@@ -95,6 +95,9 @@ public nonisolated enum SutraCompiler {
             standardsOfProof: [],   // clinical certainty is GRADE, not a legal standard
             reportSections: ["Presenting complaint", "Findings", "Differential (ACH)",
                              "Assessment & certainty", "Plan & safety-net", "Sign-off"])
+        // Mandatory spine: no assessment without intake and a signed-off plan.
+        sutra.requiredPhaseKinds = [.caseIntake, .findings]
+        return sutra
     }
 
     /// STEP 5 (more) — safety-incident root-cause analysis, authored as a Sūtra.
@@ -126,12 +129,15 @@ public nonisolated enum SutraCompiler {
                      ["Record residual risk honestly"], ["Decide to close or reopen"],
                      ["Imply the risk is eliminated when it's only reduced"])
         ]
-        return Sutra(id: "sutra.safety.incident", version: 1, title: "Safety-incident RCA",
-                     provenance: "Incident investigation — a just-culture root-cause analysis; reuses the Reasoning Studio (5 Whys / fishbone) and the same conformance gates.",
-                     reliabilityScale: "Contributing-factor weighting (none / contributory / root)",
-                     phases: phases, standardsOfProof: [],
-                     reportSections: ["Incident summary", "Sequence of events", "Root causes",
-                                      "Corrective & preventive actions", "Residual risk", "Sign-off"])
+        var sutra = Sutra(id: "sutra.safety.incident", version: 1, title: "Safety-incident RCA",
+                          provenance: "Incident investigation — a just-culture root-cause analysis; reuses the Reasoning Studio (5 Whys / fishbone) and the same conformance gates.",
+                          reliabilityScale: "Contributing-factor weighting (none / contributory / root)",
+                          phases: phases, standardsOfProof: [],
+                          reportSections: ["Incident summary", "Sequence of events", "Root causes",
+                                           "Corrective & preventive actions", "Residual risk", "Sign-off"])
+        // Mandatory spine: an RCA without the causal analysis isn't an RCA.
+        sutra.requiredPhaseKinds = [.caseIntake, .causalAnalysis, .findings]
+        return sutra
     }
 
     /// Systematic evidence review, authored as a Sūtra. Extraction rides the cited
@@ -157,12 +163,16 @@ public nonisolated enum SutraCompiler {
                      ["Record open questions and update triggers"], ["Decide to publish or reopen"],
                      ["Present the review as final when evidence is still emerging"])
         ]
-        return Sutra(id: "sutra.systematic.review", version: 1, title: "Systematic review",
-                     provenance: "Evidence synthesis — PRISMA screening + GRADE certainty; reuses the cited-table engine and the same conformance gates.",
-                     reliabilityScale: "GRADE — certainty of evidence (High / Moderate / Low / Very low)",
-                     phases: phases, standardsOfProof: [],
-                     reportSections: ["Question & protocol", "Screening (PRISMA)", "Extraction",
-                                      "Synthesis (GRADE)", "Limitations", "Sign-off"])
+        var sutra = Sutra(id: "sutra.systematic.review", version: 1, title: "Systematic review",
+                          provenance: "Evidence synthesis — PRISMA screening + GRADE certainty; reuses the cited-table engine and the same conformance gates.",
+                          reliabilityScale: "GRADE — certainty of evidence (High / Moderate / Low / Very low)",
+                          phases: phases, standardsOfProof: [],
+                          reportSections: ["Question & protocol", "Screening (PRISMA)", "Extraction",
+                                           "Synthesis (GRADE)", "Limitations", "Sign-off"])
+        // Mandatory spine: registered protocol, PRISMA screening/extraction,
+        // and a signed-off synthesis — the review's non-negotiables.
+        sutra.requiredPhaseKinds = [.caseIntake, .dataLab, .findings]
+        return sutra
     }
 
     private static func authored(_ kind: PersonaJobKind, _ title: String,
@@ -185,13 +195,19 @@ public nonisolated enum SutraCompiler {
     /// overrides and persona-specific prohibited conclusions can be layered here.)
     public static func sutra(forPersonaLabel label: String) -> Sutra {
         let base = shared()
-        return Sutra(id: base.id + "." + label.lowercased().replacingOccurrences(of: " ", with: "-"),
-                     version: base.version,
-                     title: "\(label) — \(base.title)",
-                     provenance: base.provenance,
-                     reliabilityScale: base.reliabilityScale,
-                     phases: base.phases,
-                     standardsOfProof: base.standardsOfProof,
-                     reportSections: base.reportSections)
+        var out = Sutra(id: base.id + "." + label.lowercased().replacingOccurrences(of: " ", with: "-"),
+                        version: base.version,
+                        title: "\(label) — \(base.title)",
+                        provenance: base.provenance,
+                        reliabilityScale: base.reliabilityScale,
+                        phases: base.phases,
+                        standardsOfProof: base.standardsOfProof,
+                        reportSections: base.reportSections)
+        // A persona lens NEVER weakens the doctrine: the shared constitution's
+        // global requirements and mandatory phases carry through (sixth audit —
+        // the reconstruction used to drop both).
+        out.globalRequirements = base.globalRequirements
+        out.requiredPhaseKinds = base.requiredPhaseKinds
+        return out
     }
 }

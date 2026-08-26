@@ -834,6 +834,8 @@ struct WorkCenterAssertionTests {
             "Protocol confirmed?": "Confirmed",
             "Approve to proceed?": "Approved",
             "Right of reply": "All offered a reply",
+            "Log complete?": "Complete",
+            "Rights": "All cleared",
         ]
         for (label, want) in expected {
             guard let fields = byLabel[label], !fields.isEmpty else { continue }  // not all jobs launch in every catalog build
@@ -884,5 +886,53 @@ struct WorkCenterAssertionTests {
         }
         let finished = try #require(try await repo.run(run.id))
         #expect(finished.status == .confirmed)
+    }
+}
+
+// MARK: - Sixth audit — confirmed steps are immutable
+
+@Suite("WORK-CENTER — confirmed steps immutable (sixth audit)")
+struct WorkCenterImmutabilityTests {
+
+    private func makeRepo() async throws -> WorkCenterRepository {
+        let url = MigrationFixtureBuilder.newTemporaryURL()
+        let db = try await MigrationFixtureBuilder.database(atVersion: 0, at: url)
+        try await SchemaMigrations.migrate(db)
+        return WorkCenterRepository(database: db)
+    }
+
+    @Test("saveFields refuses a confirmed step — recorded values never rewrite")
+    func confirmedStepRefusesSave() async throws {
+        let repo = try await makeRepo()
+        let def = WCCatalog.lifeRecords
+        let run = try await repo.createRun(defID: def.defID, title: "Immutable", actor: "T", at: Date())
+        try await repo.saveFields(runID: run.id, seq: 1, values: ["scope": "Original"], at: Date())
+        _ = try await repo.confirmStep(runID: run.id, seq: 1, actor: "T", at: Date())
+        await #expect(throws: WorkCenterError.self) {
+            try await repo.saveFields(runID: run.id, seq: 1, values: ["scope": "REWRITTEN"], at: Date())
+        }
+        let after = try #require(try await repo.run(run.id))
+        #expect(after.fieldValues[1]?["scope"] == "Original")
+    }
+
+    @Test("Attestation stamps are repository-owned — a caller-supplied map cannot forge who/when")
+    func attestationStampsCannotBeForged() async throws {
+        let repo = try await makeRepo()
+        let def = WCCatalog.lifeRecords
+        let run = try await repo.createRun(defID: def.defID, title: "Forge", actor: "T", at: Date())
+        try await repo.saveFields(runID: run.id, seq: 1, values: [
+            "scope": "Papers",
+            WCReservedKey.confirmedAt: "1",
+            WCReservedKey.confirmedBy: "Forger",
+            WCReservedKey.note: "legit note stays",
+        ], at: Date())
+        let saved = try #require(try await repo.run(run.id))
+        #expect(saved.fieldValues[1]?[WCReservedKey.confirmedAt] == nil)
+        #expect(saved.fieldValues[1]?[WCReservedKey.confirmedBy] == nil)
+        #expect(saved.fieldValues[1]?[WCReservedKey.note] == "legit note stays")
+        // The REAL confirmation stamps the repository's own attestation.
+        _ = try await repo.confirmStep(runID: run.id, seq: 1, actor: "RealActor", at: Date())
+        let confirmed = try #require(try await repo.run(run.id))
+        #expect(confirmed.fieldValues[1]?[WCReservedKey.confirmedBy] == "RealActor")
     }
 }

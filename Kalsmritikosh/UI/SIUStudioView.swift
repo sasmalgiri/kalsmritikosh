@@ -344,9 +344,19 @@ public struct SIUStudioView: View {
         HStack { Spacer(); Button { stage = s } label: { Label("Next: \(s.title)", systemImage: "arrow.right") }.buttonStyle(.borderedProminent) }
     }
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ r: SIUReferral) -> String {
+        let stages = SIUReferral.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "SIU Investigation", title: r.title,
+            report: SIUReportRenderer.markdown(r, generatedAt: Date()),
+            stagesComplete: stages.filter { r.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return SIUReportRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         "siu-report-\((activeBinding?.wrappedValue.claimNumber ?? "claim").replacingOccurrences(of: " ", with: "-").lowercased())"
@@ -354,13 +364,13 @@ public struct SIUStudioView: View {
     private func copyReport(_ r: SIUReferral) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(SIUReportRenderer.markdown(r, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(r), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printReport(_ r: SIUReferral) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = SIUReportRenderer.markdown(r, generatedAt: Date())
+        tv.string = sealed(r)
         tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         let op = NSPrintOperation(view: tv); op.jobTitle = "SIU Report — \(r.title)"; op.run()
     }

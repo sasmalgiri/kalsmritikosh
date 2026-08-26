@@ -1149,8 +1149,8 @@ public struct SettingsView: View {
 
             Toggle(isOn: $classicConformance) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Classic conformance readout").font(.callout.weight(.medium))
-                    Text("Show the previous conformance summary (recorded gates + one label) instead of the strict per-rule assessment with reviewer attestation and signed certificate. Both stay available; switching never deletes recorded assessments.")
+                    Text("Classic conformance mode (disables enforcement)").font(.callout.weight(.medium))
+                    Text("Restores the previous behavior IN FULL: the legacy checklist readout, AND findings approval is no longer blocked by the per-rule conformance gate, AND assessments are not recorded or sealed. Deliverables produced in classic mode carry no conformance certificate. Switching back to strict never deletes recorded assessments.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

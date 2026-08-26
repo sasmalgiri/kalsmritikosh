@@ -303,9 +303,19 @@ public struct JournalistStudioView: View {
         HStack { Spacer(); Button { stage = s } label: { Label("Next: \(s.title)", systemImage: "arrow.right") }.buttonStyle(.borderedProminent) }
     }
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ m: FactCheckMemo) -> String {
+        let stages = FactCheckMemo.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "Journalist Fact-Check", title: m.title,
+            report: FactCheckMemoRenderer.markdown(m, generatedAt: Date()),
+            stagesComplete: stages.filter { m.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return FactCheckMemoRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         "fact-check-\((activeBinding?.wrappedValue.title ?? "memo").replacingOccurrences(of: " ", with: "-").lowercased())"
@@ -313,13 +323,13 @@ public struct JournalistStudioView: View {
     private func copyMemo(_ m: FactCheckMemo) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(FactCheckMemoRenderer.markdown(m, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(m), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printMemo(_ m: FactCheckMemo) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = FactCheckMemoRenderer.markdown(m, generatedAt: Date())
+        tv.string = sealed(m)
         tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         let op = NSPrintOperation(view: tv); op.jobTitle = "Fact-Check Memo — \(m.title)"; op.run()
     }

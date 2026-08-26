@@ -287,9 +287,19 @@ public struct PrivilegeLogStudioView: View {
         HStack { Spacer(); Button { stage = s } label: { Label("Next: \(s.title)", systemImage: "arrow.right") }.buttonStyle(.borderedProminent) }
     }
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ l: PrivilegeLog) -> String {
+        let stages = PrivilegeLog.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "Privilege Log", title: l.title,
+            report: PrivilegeLogRenderer.markdown(l, generatedAt: Date()),
+            stagesComplete: stages.filter { l.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return PrivilegeLogRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         "privilege-log-\((activeBinding?.wrappedValue.title ?? "log").replacingOccurrences(of: " ", with: "-").lowercased())"
@@ -297,13 +307,13 @@ public struct PrivilegeLogStudioView: View {
     private func copyLog(_ l: PrivilegeLog) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(PrivilegeLogRenderer.markdown(l, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(l), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printLog(_ l: PrivilegeLog) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = PrivilegeLogRenderer.markdown(l, generatedAt: Date())
+        tv.string = sealed(l)
         tv.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
         let op = NSPrintOperation(view: tv); op.jobTitle = "Privilege Log — \(l.title)"; op.run()
     }

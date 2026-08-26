@@ -113,6 +113,27 @@ struct Facts: Codable {
     let presentEvidenceKinds: [String]
     let attestations: [String: Attestation]
     let requiredPhaseKinds: [String]
+    /// Run-binding components (sixth audit): with the envelope's runID they
+    /// recompute runStateSHA256 — the binding is verified, never asserted.
+    let runReceiptSeal: String?
+    let runCaseRevision: Int?
+}
+
+/// Mirror of the app's ConformanceRunBinding — runStateSHA256 is the
+/// canonical-JSON SHA-256 of exactly this value.
+struct RunBinding: Encodable {
+    let runID: String
+    let receiptSeal: String
+    let caseRevision: Int
+    enum CodingKeys: String, CodingKey { case runID, receiptSeal, caseRevision }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        // The app encodes a Foundation UUID, which serializes as its
+        // uppercase uuidString — mirror that exactly.
+        try c.encode(runID.uppercased(), forKey: .runID)
+        try c.encode(receiptSeal, forKey: .receiptSeal)
+        try c.encode(caseRevision, forKey: .caseRevision)
+    }
 }
 
 // MARK: - Helpers
@@ -275,22 +296,67 @@ func rerunEvaluators() -> String? {
           let proto = try? decoder().decode(ProtocolSnapshot.self, from: protocolData) else {
         return "facts or protocol failed to decode for evaluator rerun"
     }
-    // Recompile the rules exactly as the app's SutraRuleCompiler does.
-    struct R { let id: String; let phase: String?; let kind: String; let text: String; let applicability: String? }
+    // RUN BINDING RECOMPUTED (sixth audit): the signed facts carry the
+    // binding components; with the envelope's runID they must hash to the
+    // SIGNED runStateSHA256.
+    if let signedBinding = attestation.envelope.runStateSHA256 {
+        if let runID = attestation.envelope.runID,
+           let seal = facts.runReceiptSeal, let revision = facts.runCaseRevision {
+            let binding = RunBinding(runID: runID, receiptSeal: seal, caseRevision: revision)
+            guard let bytes = try? canonical(binding) else { return "run binding failed to encode" }
+            if sha256(bytes) != signedBinding {
+                return "recomputed run binding does not match the SIGNED runStateSHA256"
+            }
+            print("REPLAY note: run binding RECOMPUTED from signed facts — matches the sealed runStateSHA256")
+        } else {
+            print("REPLAY note: run binding not independently recomputable (facts predate the binding-components format)")
+        }
+    }
+    // Recompile the rules exactly as the app's SutraRuleCompiler does —
+    // INCLUDING the deterministic evidence enrichment for the known doctrine
+    // lines (mirror of SutraRuleCompiler.enrichment; spec v1). Evidence
+    // requirements come from this table, never from the attacker-writable
+    // evaluations file.
+    func enrichedEvidence(phase: String, text: String) -> [String] {
+        switch (phase, text) {
+        case ("evidenceCustody", "Record custody contemporaneously"):        return ["custody.record"]
+        case ("evidenceCustody", "Hash evidence as early as possible (SWGDE/NIST)"): return ["custody.hash"]
+        default: return []
+        }
+    }
+    struct R { let id: String; let phase: String?; let kind: String; let text: String; let applicability: String?; let requiredEvidence: [String] }
     var rules: [R] = []
     for (i, text) in (proto.globalRequirements ?? []).enumerated() {
-        rules.append(R(id: "global.requirement.\(i)", phase: nil, kind: "obligation", text: text, applicability: "always"))
+        rules.append(R(id: "global.requirement.\(i)", phase: nil, kind: "obligation", text: text, applicability: "always", requiredEvidence: []))
     }
     for phase in proto.phases {
         for (i, t) in phase.obligations.enumerated() {
-            rules.append(R(id: "\(phase.kind).obligation.\(i)", phase: phase.kind, kind: "obligation", text: t, applicability: nil))
+            rules.append(R(id: "\(phase.kind).obligation.\(i)", phase: phase.kind, kind: "obligation", text: t, applicability: nil, requiredEvidence: enrichedEvidence(phase: phase.kind, text: t)))
         }
         for (i, t) in phase.humanDecisions.enumerated() {
-            rules.append(R(id: "\(phase.kind).humanDecision.\(i)", phase: phase.kind, kind: "humanDecision", text: t, applicability: nil))
+            rules.append(R(id: "\(phase.kind).humanDecision.\(i)", phase: phase.kind, kind: "humanDecision", text: t, applicability: nil, requiredEvidence: enrichedEvidence(phase: phase.kind, text: t)))
         }
         for (i, t) in phase.prohibitedConclusions.enumerated() {
-            rules.append(R(id: "\(phase.kind).prohibition.\(i)", phase: phase.kind, kind: "prohibition", text: t, applicability: nil))
+            rules.append(R(id: "\(phase.kind).prohibition.\(i)", phase: phase.kind, kind: "prohibition", text: t, applicability: nil, requiredEvidence: []))
         }
+    }
+    // FULL rule-definition comparison (sixth audit): every recorded evaluation
+    // must carry EXACTLY the rule the signed protocol compiles to — id, kind,
+    // text and evidence requirements. A doctored rule definition refuses even
+    // when its outcome would reproduce.
+    let compiledByID = Dictionary(uniqueKeysWithValues: rules.map { ($0.id, $0) })
+    for e in evaluations {
+        guard let c = compiledByID[e.rule.id] else {
+            return "recorded evaluation for rule '\(e.rule.id)' which the signed protocol does not compile"
+        }
+        if e.rule.kind != c.kind || e.rule.text != c.text
+            || (e.rule.requiredEvidence ?? []) != c.requiredEvidence
+            || (e.rule.phaseKind ?? "") != (c.phase ?? "") {
+            return "recorded rule definition for '\(e.rule.id)' does not match the signed protocol's compiled rule"
+        }
+    }
+    if evaluations.count != rules.count {
+        return "recorded evaluations cover \(evaluations.count) rules but the signed protocol compiles \(rules.count)"
     }
     let reached = Set(facts.completedPhaseKinds)
     let required = Set(facts.requiredPhaseKinds)
@@ -312,6 +378,12 @@ func rerunEvaluators() -> String? {
         if facts.approvedDeviations[rule.id] != nil {
             // Prohibitions are NON-waivable (spec v1): a deviation on one fails.
             return rule.kind == "prohibition" ? "failed" : "approvedDeviation"
+        }
+        // Evidence binding (mirror of gate.evidenceBinding.v1): required
+        // evidence kinds must be BOUND to the run — an attestation cannot
+        // substitute for absent evidence.
+        if rule.requiredEvidence.contains(where: { !facts.presentEvidenceKinds.contains($0) }) {
+            return "notEvaluated"
         }
         switch rule.kind {
         case "humanDecision":

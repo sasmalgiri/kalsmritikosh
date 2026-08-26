@@ -527,3 +527,29 @@ struct ConformancePersistenceTests {
         #expect(frozen.citation == original.citation)
     }
 }
+
+// MARK: - Sixth audit — discipline spines
+
+@Suite("Discipline spines (sixth audit)")
+struct DisciplineSpineTests {
+
+    @Test("Every built-in discipline declares a mandatory phase spine that exists in its protocol")
+    func disciplinesDeclareSpines() {
+        for d in SutraCompiler.builtInDisciplines {
+            let required = d.sutra.requiredPhaseKinds ?? []
+            #expect(!required.isEmpty, Comment(rawValue: "\(d.id) declares no required phases"))
+            #expect(required.contains(.findings), Comment(rawValue: "\(d.id) does not require its findings phase"))
+            let phaseKinds = Set(d.sutra.phases.map(\.kind))
+            #expect(Set(required).isSubset(of: phaseKinds),
+                    Comment(rawValue: "\(d.id) requires phases its protocol does not contain"))
+        }
+    }
+
+    @Test("The persona lens carries the shared doctrine's spine and global requirements")
+    func personaLensCarriesDoctrine() {
+        let base = SutraCompiler.shared()
+        let lens = SutraCompiler.sutra(forPersonaLabel: "Journalist")
+        #expect(lens.requiredPhaseKinds == base.requiredPhaseKinds)
+        #expect(lens.globalRequirements == base.globalRequirements)
+    }
+}

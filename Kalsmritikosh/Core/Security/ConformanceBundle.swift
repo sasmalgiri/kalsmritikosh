@@ -245,6 +245,23 @@ public nonisolated enum ConformanceBundle {
                     replayOK = false
                     verdict.details.append("replay: rerunning the evaluators over the recorded facts does not reproduce the recorded evaluations")
                 }
+                // RUN BINDING RECOMPUTED (sixth audit): the signed facts carry
+                // the binding components; with the envelope's runID they must
+                // hash to the SIGNED runStateSHA256 — the run binding is
+                // verified, not merely asserted.
+                if let signedBinding = sealed.envelope.runStateSHA256 {
+                    if let runIDString = sealed.envelope.runID, let runID = UUID(uuidString: runIDString),
+                       let seal = facts.runReceiptSeal, let revision = facts.runCaseRevision {
+                        let recomputedBinding = try? ConformanceCanonical.sha256(
+                            of: ConformanceRunBinding(runID: runID, receiptSeal: seal, caseRevision: revision))
+                        if recomputedBinding != signedBinding {
+                            replayOK = false
+                            verdict.details.append("replay: recomputed run binding does not match the SIGNED runStateSHA256")
+                        }
+                    } else {
+                        verdict.details.append("replay note: run binding not independently recomputable (facts predate the binding-components format)")
+                    }
+                }
             } else {
                 replayOK = false
                 verdict.details.append("replay: evaluation-facts.json failed to decode")

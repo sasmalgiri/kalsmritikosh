@@ -121,7 +121,16 @@ latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB
    everything must behave identically.
 - [ ] PASS — note any observed connection here (any at all = FAIL, file it): `[…]`
 
-## 6b. Conformance release acts (v107-v110, one-time)
+## 6b. Conformance release acts (v107-v111, one-time)
+
+- [ ] **Build the bundled AI models BEFORE archiving** (sixth audit): the BGE
+  embedder + reranker are .gitignored — the archive only contains them if this
+  Mac built them. Run `scripts/build-bge-embedder.sh` and
+  `scripts/build-bge-reranker.sh`, then confirm both `.mlpackage` folders exist
+  under `Kalsmritikosh/Resources/`. After archiving, open the .app bundle and
+  verify `BGESmallEmbedder.mlmodelc` and `BGEReranker.mlmodelc` are inside
+  Contents/Resources — the website's "models ship inside the app" claim is
+  true ONLY when this step is done.
 
 - [ ] **Pin the developer signing key**: on the RELEASE Mac, open Compliance Board →
   "Copy my signer fingerprint" (16 hex chars). Paste it into

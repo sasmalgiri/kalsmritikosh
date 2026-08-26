@@ -385,9 +385,19 @@ public struct WorkplaceStudioView: View {
         w.wrappedValue.recommendations.append(WIRecommendation(text: t)); newRecommendation = ""
     }
 
+    /// Every deliverable that LEAVES the studio (copy/print/export) carries a
+    /// signed seal — content hash, honest stage completion, signer key.
+    private func sealed(_ w: WorkplaceInvestigation) -> String {
+        let stages = WorkplaceInvestigation.Stage.allCases
+        return StudioDeliverableSeal.sealedReport(
+            studio: "Workplace Investigation", title: w.title,
+            report: WIReportRenderer.markdown(w, generatedAt: Date()),
+            stagesComplete: stages.filter { w.isComplete($0) }.count,
+            stagesTotal: stages.count, at: Date())
+    }
     private var activeReport: String {
         guard let b = activeBinding else { return "" }
-        return WIReportRenderer.markdown(b.wrappedValue, generatedAt: Date())
+        return sealed(b.wrappedValue)
     }
     private var exportFilename: String {
         "hr-investigation-\((activeBinding?.wrappedValue.title ?? "report").replacingOccurrences(of: " ", with: "-").lowercased())"
@@ -395,13 +405,13 @@ public struct WorkplaceStudioView: View {
     private func copyReport(_ w: WorkplaceInvestigation) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(WIReportRenderer.markdown(w, generatedAt: Date()), forType: .string)
+        NSPasteboard.general.setString(sealed(w), forType: .string)
         #endif
     }
     #if os(macOS)
     private func printReport(_ w: WorkplaceInvestigation) {
         let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 468, height: 648))
-        tv.string = WIReportRenderer.markdown(w, generatedAt: Date())
+        tv.string = sealed(w)
         tv.font = NSFont.systemFont(ofSize: 11)
         let op = NSPrintOperation(view: tv); op.jobTitle = "Workplace Investigation — \(w.title)"; op.run()
     }

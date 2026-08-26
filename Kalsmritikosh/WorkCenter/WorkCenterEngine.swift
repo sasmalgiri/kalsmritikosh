@@ -1537,6 +1537,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "rights",
             "kind" : "choice",
             "label" : "Rights",
+            "mustEqual" : "All cleared",
             "options" : [
               "All cleared",
               "Outstanding items"
@@ -12285,6 +12286,7 @@ public nonisolated enum WCAuthoredWorkflows {
             "key" : "logComplete",
             "kind" : "choice",
             "label" : "Log complete?",
+            "mustEqual" : "Complete",
             "options" : [
               "Complete",
               "Incomplete"
