@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3726,
-  "baselineCommit": "49911b4",
-  "note": "Whole-suite floor from the HOSTED build-and-test run on 49911b4 (ninth-audit response): hosted total=3726 passed=3724 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3771 (45 environment-conditional tests more than the runner). Floor RAISED 3724 -> 3726, locking in the authoritative-chain-verify and manifest-completeness suites. Schema v116."
+  "minimumExecutedTests": 3727,
+  "baselineCommit": "6a371ee",
+  "note": "Whole-suite floor from the HOSTED build-and-test run on 6a371ee (tenth-audit response): hosted total=3727 passed=3725 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3772 (45 environment-conditional tests more than the runner). Floor RAISED 3726 -> 3727, locking in the ledger-bound-ask and exact-contents-manifest suites. Schema v116."
 }
