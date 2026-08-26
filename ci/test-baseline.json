@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3700,
-  "baselineCommit": "a897702",
-  "note": "Whole-suite floor from the HOSTED build-and-test run on a897702 (the conformance program, v107-v110): hosted total=3700 passed=3698 failed=0 skipped=2. The hosted count is the authority for this gate \u2014 local RunAllTests executes 3744 (44 environment-conditional tests more than the runner). Floor RAISED 3453 -> 3700, locking in the conformance-era suites (fail-closed assessments, seals, bundles + kalverify attack matrix, protocol packs/registry/TOFU, studio, approval gate + compensation). Schema v110."
+  "minimumExecutedTests": 3708,
+  "baselineCommit": "462886d",
+  "note": "Whole-suite floor from the HOSTED build-and-test run on 462886d (fifth audit, v111): hosted total=3708 passed=3706 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3753 (45 environment-conditional tests more than the runner). Floor RAISED 3700 -> 3708, locking in the fifth-audit suites (semantic workflow assertions, registry trust-boundary re-verify, governance events + chain coverage). Schema v111."
 }
