@@ -36,33 +36,30 @@ public actor PhaseObservationService {
     private let dossier: InvestigationSubjectDossierService?
     private let identity: InvestigationIdentityResolutionService?
     private let methodRuns: MethodRunRepository?
+    private let artifacts: CasePhaseArtifactRepository?
 
     public init(analysis: InvestigationAnalysisService? = nil,
                 reliability: InvestigationReliabilityService? = nil,
                 contradictionGap: InvestigationContradictionGapService? = nil,
                 dossier: InvestigationSubjectDossierService? = nil,
                 identity: InvestigationIdentityResolutionService? = nil,
-                methodRuns: MethodRunRepository? = nil) {
+                methodRuns: MethodRunRepository? = nil,
+                artifacts: CasePhaseArtifactRepository? = nil) {
         self.analysis = analysis
         self.reliability = reliability
         self.contradictionGap = contradictionGap
         self.dossier = dossier
         self.identity = identity
         self.methodRuns = methodRuns
+        self.artifacts = artifacts
     }
 
-    /// The phase kinds THIS build can machine-observe. A governing protocol
-    /// whose required phases fall outside this set is refused at run start —
-    /// it could never conform, and silence would be dishonest.
-    /// `ask` and `dataLab` remain attestation-only today (their case-scoped
-    /// activity is not yet persisted per case) — stated, not hidden.
-    public static let observableKinds: Set<PersonaJobKind> = [
-        .caseIntake, .findings, .evidenceCustody, .closure,           // snapshot-derived (the original four)
-        .analysis, .sourceReliability, .contradictionGap,             // desk ledgers
-        .subjectDossier, .identityResolution,                         // dossier + decision log
-        .methods, .causalAnalysis, .linkage, .capaRegister,           // v113 case↔method-run linkage
-        .effectivenessReview,
-    ]
+    /// The phase kinds THIS build can machine-observe. Since Phase B-2 the
+    /// set covers EVERY built-in phase kind — ask and dataLab record their
+    /// case artifacts in the v115 ledger. The refuse-at-run-start guard
+    /// stays for any future kinds a protocol might declare before their
+    /// observation lands.
+    public static let observableKinds: Set<PersonaJobKind> = Set(PersonaJobKind.allCases)
 
     /// Machine observations for one case, beyond the four snapshot-derived
     /// phases (which the handoff model derives itself).
@@ -95,6 +92,13 @@ public actor PhaseObservationService {
         if let methodRuns, let activity = try? await methodRuns.casePhaseActivity(caseID: caseID) {
             for row in activity {
                 note(row.phase, artifacts: row.total, decided: row.completed)
+            }
+        }
+        // v115 generic artifacts (ask answers, dataLab datasets): producing
+        // the artifact IS the human act on these phases.
+        if let artifacts, let counts = try? await artifacts.phaseCounts(caseID: caseID) {
+            for row in counts {
+                note(row.phase, artifacts: row.count, decided: row.count)
             }
         }
         return out

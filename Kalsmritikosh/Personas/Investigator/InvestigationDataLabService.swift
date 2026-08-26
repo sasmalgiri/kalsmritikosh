@@ -50,9 +50,15 @@ public actor InvestigationDataLabService {
     private let datasets: WorkbenchDatasetRepository
     private let scopes: SensitiveScopeRepository
 
+    /// PHASE B-2 (v115) — records that the dataLab phase produced a dataset
+    /// for the case, so the conformance assessor can OBSERVE the phase.
+    private let artifacts: CasePhaseArtifactRepository?
+
     public init(cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver,
-                datasets: WorkbenchDatasetRepository, scopes: SensitiveScopeRepository) {
+                datasets: WorkbenchDatasetRepository, scopes: SensitiveScopeRepository,
+                artifacts: CasePhaseArtifactRepository? = nil) {
         self.cases = cases; self.resolver = resolver; self.datasets = datasets; self.scopes = scopes
+        self.artifacts = artifacts
     }
 
     public nonisolated func presets() -> [InvestigationDataLabPreset] { InvestigationDataLabPresetCatalog.all }
@@ -90,6 +96,11 @@ public actor InvestigationDataLabService {
             workspaceID: record.caseHeader.workspaceID,
             title: "\(record.caseHeader.title) — \(preset.displayName)", mode: .advanced, actor: actor, at: date)
         let datasetID = rec.dataset.id
+        // PHASE B-2 — observable dataLab phase (best-effort record).
+        if let artifacts {
+            try? await artifacts.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
+                                        detail: "preset=\(preset.id)", at: date)
+        }
 
         // Fields, in preset order.
         var fieldID: [String: UUID] = [:]

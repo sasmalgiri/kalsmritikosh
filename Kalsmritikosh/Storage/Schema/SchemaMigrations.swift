@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 114
+    public static let latestVersion = 115
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -610,7 +610,8 @@ public enum SchemaMigrations {
         (111, v111),
         (112, v112),
         (113, v113),
-        (114, v114)
+        (114, v114),
+        (115, v115)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6194,5 +6195,24 @@ public enum SchemaMigrations {
     private static let v114: String = """
     ALTER TABLE audit_chain ADD COLUMN public_prev TEXT;
     ALTER TABLE audit_chain ADD COLUMN public_hash TEXT;
+    """
+
+    // MARK: - v115 — generic case-phase artifacts (Phase B-2)
+    //
+    // The last two attestation-only phases become machine-observable: the
+    // case-scoped Ask records one row per verified answer (a question HASH
+    // only — never the question text), and DataLab records one row per
+    // prepared dataset. The observation service derives phase completion
+    // from these rows; artifacts themselves stay in their own authorities.
+    private static let v115: String = """
+    CREATE TABLE case_phase_artifacts (
+        id          TEXT PRIMARY KEY,
+        case_id     TEXT NOT NULL,
+        phase_kind  TEXT NOT NULL,
+        artifact_id TEXT NOT NULL,
+        detail      TEXT NOT NULL DEFAULT '',
+        created_at  REAL NOT NULL
+    );
+    CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
     """
 }

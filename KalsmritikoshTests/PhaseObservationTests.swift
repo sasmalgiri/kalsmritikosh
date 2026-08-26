@@ -63,23 +63,26 @@ struct PhaseObservationTests {
         #expect(assessment.certificate.contains("causalAnalysis"))
     }
 
-    @Test("A governing protocol requiring an unobservable phase is refused at run start")
-    func unobservableRequiredPhaseRefused() async throws {
-        // The systematic-review discipline requires dataLab — a phase this
-        // build cannot machine-observe yet. Selecting it must refuse the run
-        // START with the phase named, never produce a never-conforming run.
+    @Test("Every built-in phase kind is machine-observable; the review protocol is selectable")
+    func allPhasesObservable() async throws {
+        // Phase B-2 closed the last two gaps (ask via answer artifacts,
+        // dataLab via dataset artifacts) — the observable set is TOTAL, so
+        // no built-in protocol can be refused for unobservable phases.
+        #expect(PhaseObservationService.observableKinds == Set(PersonaJobKind.allCases))
+
+        // The systematic-review discipline (requires dataLab) now freezes as
+        // a governing protocol instead of being refused.
         let review = SutraCompiler.systematicReview()
         #expect(review.requiredPhaseKinds?.contains(.dataLab) == true)
-        #expect(!PhaseObservationService.observableKinds.contains(.dataLab))
 
-        let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-refuse")
-        let a = try await h.seedFact(value: "REFUSE finding \(UUID().uuidString)", hashChar: "f")
+        let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-select")
+        let a = try await h.seedFact(value: "SELECT finding \(UUID().uuidString)", hashChar: "a")
         let wsID = UUID()
-        try await h.workspaces.upsert(Workspace(id: wsID, title: "Refuse Matter", template: .investigation))
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "Select Matter", template: .investigation))
         try await h.workspaces.addSource(a.fileID, to: wsID)
         try await WorkspaceMembershipDeriver(database: h.db, workspaces: h.workspaces).deriveMembership(for: wsID)
         _ = try await h.producer.backfill(at: t0)
-        var created = try await h.cases.createCase(workspaceID: wsID, title: "Refuse Matter", actor: "me", at: t0)
+        var created = try await h.cases.createCase(workspaceID: wsID, title: "Select Matter", actor: "me", at: t0)
         created = try await h.cases.includeSource(caseID: created.id, expectedRevision: created.revision,
                                                   sourceRef: a.svID.uuidString, sourceKind: .sourceVersion,
                                                   actor: "me", at: t0)
@@ -88,7 +91,6 @@ struct PhaseObservationTests {
             cases: h.cases, resolver: CaseRetrievalScopeResolver(evidence: store),
             evidence: store, custody: CustodyRepository(database: h.db), database: h.db)
         let handoff = WorkProductHandoffService(cases: h.cases, findings: h.findings, closure: h.closure, custody: custody)
-        // Register + activate the review protocol, then govern the matter with it.
         let registry = ProtocolRegistryRepository(database: h.db)
         let pack = try ProtocolPacks.verify(try ProtocolPacks.export(
             sutra: review, publisher: "Test Org", assurance: "organization-approved",
@@ -100,9 +102,23 @@ struct PhaseObservationTests {
         await model.load(caseID: created.id)
         model.selectProtocol(sutraID: review.id)
         await model.buildFindings(actor: "me", at: t0)
-        #expect(model.built == nil, "the run must be refused, not built under a never-conforming protocol")
-        #expect(model.frozenSutra == nil)
-        #expect(model.lastError?.contains("cannot machine-observe") == true, "\(model.lastError ?? "nil")")
-        #expect(model.lastError?.contains("dataLab") == true)
+        #expect(model.built != nil, "\(model.lastError ?? "nil")")
+        #expect(model.frozenSutra?.id == review.id, "the review protocol governs the run")
+    }
+
+    @Test("The v115 artifact ledger surfaces ask and dataLab observations")
+    func artifactLedgerObserved() async throws {
+        let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-artifacts")
+        let repo = CasePhaseArtifactRepository(database: h.db)
+        let caseID = UUID()
+        _ = try await repo.record(caseID: caseID, phase: .ask, artifactID: UUID(),
+                                  detail: "question=abcd1234", at: t0)
+        _ = try await repo.record(caseID: caseID, phase: .dataLab, artifactID: UUID(),
+                                  detail: "preset=source-inventory", at: t0)
+        let service = PhaseObservationService(artifacts: repo)
+        let obs = await service.observations(caseID: caseID)
+        #expect(obs[.ask]?.artifactCount == 1)
+        #expect(obs[.dataLab]?.artifactCount == 1)
+        #expect(await service.observations(caseID: UUID()).isEmpty)
     }
 }

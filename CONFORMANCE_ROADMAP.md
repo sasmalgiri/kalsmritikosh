@@ -459,3 +459,18 @@ the underlying ledgers those derivations read).
   post-v114 seal, stated in the spec and on the wire. The remaining
   non-exportables are permanent privacy boundaries: source/work-product
   bytes and the receipt's content-derived payload stay on the device.
+
+## Phase B-2 (2026-08-26) — TOTAL phase observability: 16 of 16
+
+- v115 `case_phase_artifacts`: the last two attestation-only phases record
+  their case artifacts — the case-scoped Ask records one row per verified
+  answer (a question DIGEST only, never the question text; hashing lives in
+  the repository, honoring the one-fingerprint-system guard), and DataLab
+  records one row per prepared dataset.
+- `PhaseObservationService.observableKinds` now covers EVERY built-in phase
+  kind. The refuse-at-run-start guard stays for future kinds; the
+  systematic-review discipline (requires dataLab) is now SELECTABLE as a
+  governing protocol and freezes normally — proven by test.
+- With B-2, the "phases can never complete" class is fully closed: every
+  phase of every built-in protocol is machine-observable, and the signed
+  observed/attested split on the certificate shows exactly which ones were.

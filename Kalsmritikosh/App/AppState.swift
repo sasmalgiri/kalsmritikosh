@@ -2094,6 +2094,9 @@ public final class AppState {
             // over the SHARED retriever + SHARED MasterBrain (no persona engine). The brain is built per
             // request via this factory so the case-scoped retriever governs every retrieval pass while the
             // same shared collaborators are reused; building the actor only stores references.
+            // Phase B-2 — the generic case-phase artifact ledger (v115): ask
+            // answers and dataLab datasets become machine-observable.
+            let casePhaseArtifactsRepo = CasePhaseArtifactRepository(database: db)
             self.investigationAnswers = InvestigationAnswerService(
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
@@ -2108,7 +2111,8 @@ public final class AppState {
                         derivedObjects: derivedObjectsRepo, answerLedger: answerLedgerRepo, evidenceStore: evidenceStoreRepo,
                         objects: objects, priorityGate: priorityGate, typedFields: TypedFieldRepository(database: db),
                         sensitiveScope: sensitiveScopesRepo)
-                })
+                },
+                artifacts: casePhaseArtifactsRepo)
             // INV-02 / INV-03 — Subject dossier + Identity resolution, live from boot. Both are persona
             // LENSES over the SHARED canonical entity engine (EntitiesRepository merge/unmerge) bounded to
             // the active case's authorized scope via the ONE CaseRetrievalScopeResolver + CaseScopedEntityResolver.
@@ -2182,7 +2186,7 @@ public final class AppState {
                 cases: investigationCasesRepo,
                 resolver: CaseRetrievalScopeResolver(evidence: evidenceStoreRepo),
                 datasets: WorkbenchDatasetRepository(database: db),
-                scopes: SensitiveScopeRepository(database: db))
+                scopes: SensitiveScopeRepository(database: db), artifacts: casePhaseArtifactsRepo)
             self.investigationDataLab = investigationDataLabService
             // #143 — boot the SHARED ProfessionalMethod engine ONCE (registry + run store + canonical evidence
             // gate) and wire the case-scoped method services so the Investigator method / causal / linkage /
@@ -2233,7 +2237,8 @@ public final class AppState {
                 contradictionGap: self.investigationContradictionGap,
                 dossier: self.investigationSubjectDossier,
                 identity: self.investigationIdentityResolution,
-                methodRuns: sharedMethodRuns)
+                methodRuns: sharedMethodRuns,
+                artifacts: casePhaseArtifactsRepo)
             // #142 — the ONE production PersonaJobCatalog + the ONE live consumer. The catalog makes the
             // Investigator persona DISCOVERABLE; PersonaJobService ENUMERATES its real jobs and ROUTES a
             // selected job into the real implementation (the case-scoped services wired above). This is the

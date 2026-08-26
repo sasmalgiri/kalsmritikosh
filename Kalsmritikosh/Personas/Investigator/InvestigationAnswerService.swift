@@ -61,17 +61,23 @@ public actor InvestigationAnswerService {
     private let baseRetriever: any Retriever
     private let evidence: EvidenceStore
     private let makeBrain: @Sendable (any Retriever) -> MasterBrain
+    /// PHASE B-2 (v115) — records that the ask phase produced a verified
+    /// answer for the case, so the conformance assessor can OBSERVE the
+    /// phase. Only a question HASH is stored, never the question text.
+    private let artifacts: CasePhaseArtifactRepository?
 
     public init(cases: InvestigationCaseRepository,
                 resolver: CaseRetrievalScopeResolver,
                 baseRetriever: any Retriever,
                 evidence: EvidenceStore,
-                makeBrain: @escaping @Sendable (any Retriever) -> MasterBrain) {
+                makeBrain: @escaping @Sendable (any Retriever) -> MasterBrain,
+                artifacts: CasePhaseArtifactRepository? = nil) {
         self.cases = cases
         self.resolver = resolver
         self.baseRetriever = baseRetriever
         self.evidence = evidence
         self.makeBrain = makeBrain
+        self.artifacts = artifacts
     }
 
     /// Resolve the active case into its scope context (reused by Methods/DataLab so no downstream surface
@@ -104,6 +110,14 @@ public actor InvestigationAnswerService {
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope)
         let brain = makeBrain(scoped)
         let verified = await brain.answer(question: question, access: access)
+        // PHASE B-2 — observable ask phase (question digest only; best-effort).
+        // Hashing lives in the artifact repository — this service computes no
+        // digests of its own (the one-system fingerprint guard).
+        if let artifacts {
+            try? await artifacts.record(caseID: caseID, phase: .ask, artifactID: UUID(),
+                                        detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",
+                                        at: Date())
+        }
         return InvestigationAnswer(context: context, verified: verified)
     }
 }

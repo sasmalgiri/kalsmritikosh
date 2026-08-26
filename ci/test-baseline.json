@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3717,
-  "baselineCommit": "4cc3cfd",
-  "note": "Whole-suite floor from the HOSTED build-and-test run on 4cc3cfd (Phase A/C/B-1): hosted total=3717 passed=3715 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3762 (45 environment-conditional tests more than the runner). Floor RAISED 3713 -> 3717, locking in the shared-core, atomic-approval and phase-observability suites. Schema v113."
+  "minimumExecutedTests": 3720,
+  "baselineCommit": "b1f450e",
+  "note": "Whole-suite floor from the HOSTED build-and-test run on b1f450e (Phase D): hosted total=3720 passed=3718 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes 3766 (46 environment-conditional tests more than the runner). Floor RAISED 3717 -> 3720, locking in the public-trail suites. Schema v115."
 }
