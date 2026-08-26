@@ -137,8 +137,13 @@ public actor InvestigationAnswerService {
         // fail-closed for conformance), but it is logged, never swallowed.
         if let artifacts, let committedAnswerID {
             do {
+                // ELEVENTH AUDIT — the observation is bound to the exact case
+                // state the answer was produced under (revision + INV-01-C4
+                // scope fingerprint from THIS request's resolved context).
                 try await artifacts.record(
-                    caseID: caseID, phase: .ask,
+                    caseID: caseID, caseRevision: context.caseRevision,
+                    scopeFingerprint: context.fingerprint,
+                    phase: .ask,
                     artifactID: committedAnswerID,
                     detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",
                     at: Date())

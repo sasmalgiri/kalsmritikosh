@@ -185,6 +185,35 @@ struct ConformanceBundleTests {
         let smuggled = ConformanceBundle.verify(at: dir2)
         #expect(smuggled.integrity == .failed)
         #expect(smuggled.details.contains { $0.contains("unlisted file") })
+
+        // ELEVENTH AUDIT — a HIDDEN smuggled file is refused too: only the
+        // specific macOS artifacts (.DS_Store, ._*) are ignored.
+        let dir3 = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir3)
+        try Data("hidden stowaway".utf8).write(to: dir3.appendingPathComponent(".extra.json"))
+        let hidden = ConformanceBundle.verify(at: dir3)
+        #expect(hidden.integrity == .failed)
+        #expect(hidden.details.contains { $0.contains(".extra.json") })
+        // …while a genuine .DS_Store does not break a legitimate bundle.
+        let dir4 = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir4)
+        try Data([0x00, 0x01]).write(to: dir4.appendingPathComponent(".DS_Store"))
+        #expect(ConformanceBundle.verify(at: dir4).allPassed)
+    }
+
+    /// ELEVENTH AUDIT — an unlistable bundle directory FAILS integrity
+    /// (fail-closed): exact-contents checking must never be silently skipped.
+    @Test("An unenumerable bundle directory fails integrity")
+    func unenumerableDirectoryRefused() throws {
+        let dir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir)
+        // wx--x--x: files remain openable by exact name, but the directory
+        // cannot be LISTED — the exact-contents check is impossible.
+        try FileManager.default.setAttributes([.posixPermissions: 0o311], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        let v = ConformanceBundle.verify(at: dir)
+        #expect(v.integrity == .failed)
+        #expect(v.details.contains { $0.contains("could not be enumerated") })
     }
 
     /// Acceptance test 5: editing any file breaks verification (integrity layer).

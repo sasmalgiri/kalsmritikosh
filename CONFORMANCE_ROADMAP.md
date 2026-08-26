@@ -611,3 +611,35 @@ closed, three partial. All three residuals are now implemented.)
    in the spec); the site and spec now say "the signed evidence-bearing
    contents have not changed" instead of "nothing changed since". Tests:
    exactDirectoryContentsEnforced (deletion + smuggling).
+
+## Eleventh-audit response (2026-08-27) — case binding, structural claims gate, fail-closed enumeration
+
+1. **Phase evidence bound to the case (was the "moat" gap).** Schema v117
+   recreates `case_phase_artifacts`: FK to `investigation_cases`, immutable
+   `case_revision` + INV-01-C4 `scope_fingerprint` columns, and
+   UNIQUE(phase_kind, artifact_id) — one artifact is phase evidence for
+   exactly ONE case. `record()` refuses a nonexistent case, a stale case
+   revision, and an artifact already bound to another case (same-case
+   re-record is idempotent). Both producers pass their REAL resolved
+   context: Ask stamps the request's `InvestigationScopeContext`
+   (revision + fingerprint), DataLab computes the fingerprint from the
+   preparation's own scope. Pre-v117 rows carried no binding and are
+   DROPPED (fail-closed: those phases return to machine-unobserved).
+   Negative tests: nonexistent case, stale revision, case-A answer
+   refused for case B, nonexistent answer/dataset.
+2. **Structural claims gate.** The id/fragment checks are now an HTML
+   parse: every registry fragment must occur INSIDE the text of an element
+   carrying its id, checked PER FILE so a page cannot borrow another
+   page's copy — the audit's swap-ID reproduction now fails with two
+   errors (verified), and the clean tree passes. The untagged privacy
+   sentences are tagged: privacy.html's short version, all persona-page
+   pills, the Nothing-collected card (new `privacy.nothing-collected`
+   row, owner-conditional), the privacy FAQ entries, the verification
+   footer, and the website mirrors.
+3. **Fail-closed enumeration + honest dotfile rule.** An unenumerable
+   bundle directory now FAILS integrity in both verifiers (never silently
+   skipped — test with a wx--x--x directory; CI attack 6). The dotfile
+   exclusion is narrowed to exactly `.DS_Store` and AppleDouble `._*`; a
+   smuggled `.extra.json` fails (test + CI attack 5), a genuine
+   `.DS_Store` does not break a legitimate bundle (test). Stated in
+   BUNDLE_FORMAT.md.

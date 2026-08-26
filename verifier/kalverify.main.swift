@@ -102,13 +102,20 @@ for required in ["attestation.json", "protocol.json", "rule-evaluations.json",
 where integrityOK && manifest.files[required] == nil {
     integrityOK = false; integrityDetail = "manifest does not cover mandatory file \(required)"
 }
-// TENTH AUDIT — the directory must contain EXACTLY the manifest's files
-// plus manifest.json: a deleted-and-delisted file or a smuggled unlisted
-// file both fail. Dotfiles (.DS_Store etc.) are OS artifacts, excluded.
-if integrityOK, let actual = try? FileManager.default.contentsOfDirectory(atPath: bundleDir.path) {
-    let expected = Set(manifest.files.keys).union(["manifest.json"])
-    if let extra = Set(actual.filter { !$0.hasPrefix(".") }).subtracting(expected).sorted().first {
-        integrityOK = false; integrityDetail = "unlisted file in bundle: \(extra)"
+// TENTH/ELEVENTH AUDIT — the directory must contain EXACTLY the manifest's
+// files plus manifest.json: deleted-and-delisted files and smuggled unlisted
+// files both fail, and an ENUMERATION FAILURE fails too (fail-closed). Only
+// the specific macOS browsing artifacts are ignored (.DS_Store, AppleDouble
+// ._*) — any other hidden file is a smuggled file.
+if integrityOK {
+    if let actual = try? FileManager.default.contentsOfDirectory(atPath: bundleDir.path) {
+        let expected = Set(manifest.files.keys).union(["manifest.json"])
+        let osArtifact: (String) -> Bool = { $0 == ".DS_Store" || $0.hasPrefix("._") }
+        if let extra = Set(actual.filter { !osArtifact($0) }).subtracting(expected).sorted().first {
+            integrityOK = false; integrityDetail = "unlisted file in bundle: \(extra)"
+        }
+    } else {
+        integrityOK = false; integrityDetail = "bundle directory could not be enumerated — exact-contents check impossible, refused"
     }
 }
 if integrityOK {

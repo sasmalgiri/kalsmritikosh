@@ -24,22 +24,82 @@ REGISTRY_ROWS=$(grep '^| `' CLAIMS.md)
 REGISTRY_IDS=$(printf '%s\n' "$REGISTRY_ROWS" \
   | sed -E 's/^\| `([^`]+)`.*$/\1/' | sort)
 
-# 1 — registry ids are unique (exactly one row per id).
-DUP_IDS=$(printf '%s\n' "$REGISTRY_IDS" | uniq -d)
-if [ -n "$DUP_IDS" ]; then
-  echo "::error::CLAIMS.md — duplicate claim id row(s):"; echo "$DUP_IDS"; fail=1
-fi
+# 1 + 2a + 3 — the STRUCTURAL id gate (eleventh audit): parse the HTML,
+# collect the text INSIDE each element carrying a data-claim id, and require
+# every registry fragment to occur inside at least one element carrying its
+# id (swapping ids between elements fails); every site id must have exactly
+# one registry row, and vice versa.
+if ! python3 - <<'PY'
+import glob, html.parser, re, sys
 
-# 2 — per registry row: id on site + fragment on site + proof alive.
+def norm(s): return re.sub(r"\s+", " ", s).strip()
+
+class Collector(html.parser.HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.stack = []           # [(ids, depth_when_opened)]
+        self.depth = 0
+        self.texts = {}           # id -> [element texts]
+        self.open_texts = []      # parallel to stack: accumulating text
+    def handle_starttag(self, tag, attrs):
+        if tag in ("br", "img", "meta", "link", "input", "hr"): return
+        self.depth += 1
+        ids = None
+        for k, v in attrs:
+            if k == "data-claim" and v: ids = v.split()
+        if ids:
+            self.stack.append((ids, self.depth))
+            self.open_texts.append([])
+    def handle_endtag(self, tag):
+        if tag in ("br", "img", "meta", "link", "input", "hr"): return
+        if self.stack and self.stack[-1][1] == self.depth:
+            ids, _ = self.stack.pop()
+            text = norm(" ".join(self.open_texts.pop()))
+            for i in ids:
+                self.texts.setdefault(i, []).append(text)
+        self.depth -= 1
+    def handle_data(self, data):
+        for bucket in self.open_texts: bucket.append(data)
+
+# (file, id) -> [element texts]: the binding is checked PER FILE, so a page
+# cannot borrow another page's copy — swapping ids between elements on one
+# page fails even when a mirror page carries the correct pairing.
+per_file = {}
+for path in glob.glob("docs/**/*.html", recursive=True):
+    c = Collector()
+    c.feed(open(path, encoding="utf-8").read())
+    for i, ts in c.texts.items(): per_file.setdefault((path, i), []).extend(ts)
+
+rows = []
+for line in open("CLAIMS.md", encoding="utf-8"):
+    m = re.match(r"^\| `([^`]+)` \| `([^`]+)` \|", line)
+    if m: rows.append((m.group(1), m.group(2)))
+
+fail = False
+seen = set()
+site_ids = {i for (_, i) in per_file}
+frag_by_id = dict((cid, norm(frag)) for cid, frag in rows)
+for cid, frag in rows:
+    if cid in seen:
+        print(f"::error::CLAIMS.md — duplicate claim id row: {cid}"); fail = True
+    seen.add(cid)
+    if cid not in site_ids:
+        print(f"::error::CLAIMS.md — id '{cid}' has no data-claim element on the site"); fail = True
+for (path, cid), ts in sorted(per_file.items()):
+    if cid not in frag_by_id:
+        print(f"::error::site data-claim id '{cid}' ({path}) has no CLAIMS.md row"); fail = True
+        continue
+    if not any(frag_by_id[cid] in t for t in ts):
+        print(f"::error::{path} — no element tagged '{cid}' contains its registered fragment: {frag_by_id[cid]}"); fail = True
+sys.exit(1 if fail else 0)
+PY
+then fail=1; fi
+
+# 2b — per registry row: the proof must be alive.
 while IFS='|' read -r _ id claim proof _; do
   id="$(echo "$id" | sed -e 's/^[[:space:]]*`//' -e 's/`[[:space:]]*$//')"
-  claim="$(echo "$claim" | sed -e 's/^[[:space:]]*`//' -e 's/`[[:space:]]*$//')"
   proof="$(echo "$proof" | xargs)"
   [ -z "$id" ] && continue
-  grep -Fxq "$id" <<< "$SITE_IDS_UNIQUE" \
-    || { echo "::error::CLAIMS.md — id '$id' has no data-claim attribute on the site"; fail=1; }
-  grep -rqF "$claim" docs --include="*.html" \
-    || { echo "::error::CLAIMS.md — registered claim '$id' no longer on the site: $claim (update the registry with the copy)"; fail=1; }
   case "$proof" in
     test:*)
       sym="${proof#test:}"
@@ -64,13 +124,6 @@ while IFS='|' read -r _ id claim proof _; do
     *) echo "::error::CLAIMS.md — row '$id' has no recognized proof kind: $proof"; fail=1 ;;
   esac
 done < <(printf '%s\n' "$REGISTRY_ROWS")
-
-# 3 — site → registry: every data-claim id on the site has a registry row.
-while IFS= read -r sid; do
-  [ -z "$sid" ] && continue
-  grep -Fxq "$sid" <<< "$REGISTRY_IDS" \
-    || { echo "::error::site data-claim id '$sid' has no CLAIMS.md row"; fail=1; }
-done <<< "$SITE_IDS_UNIQUE"
 
 # 4 — refused vocabulary must never ship.
 for phrase in "provable compliance" "provably compliant" "legally compliant" "guarantees compliance" "court-admissible"; do

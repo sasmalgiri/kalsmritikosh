@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 116
+    public static let latestVersion = 117
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -612,7 +612,8 @@ public enum SchemaMigrations {
         (113, v113),
         (114, v114),
         (115, v115),
-        (116, v116)
+        (116, v116),
+        (117, v117)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6229,5 +6230,33 @@ public enum SchemaMigrations {
     // committing to a v1 public head has ever left a released build.
     private static let v116: String = """
     UPDATE audit_chain SET public_prev = NULL, public_hash = NULL;
+    """
+
+    // MARK: - v117 — phase artifacts bound to case + revision + scope (eleventh audit)
+    //
+    // A phase observation must be bound to the EXACT case state it was
+    // produced under: FK to investigation_cases, the case revision, and the
+    // INV-01-C4 scope fingerprint — and one artifact may serve exactly one
+    // case (UNIQUE(phase_kind, artifact_id)), so a case-A answer can never
+    // count as case-B phase evidence. Pre-v117 rows carried no binding and
+    // cannot be trusted retroactively — they are DROPPED (fail-closed: those
+    // phases return to machine-unobserved; attestation still covers them).
+    private static let v117: String = """
+    DROP TABLE case_phase_artifacts;
+    CREATE TABLE case_phase_artifacts (
+        id                TEXT PRIMARY KEY,
+        case_id           TEXT NOT NULL,
+        case_revision     INTEGER NOT NULL,
+        scope_fingerprint TEXT NOT NULL,
+        phase_kind        TEXT NOT NULL,
+        artifact_id       TEXT NOT NULL,
+        detail            TEXT NOT NULL DEFAULT '',
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        UNIQUE(phase_kind, artifact_id),
+        CHECK(case_revision >= 1),
+        CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*')
+    );
+    CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
     """
 }

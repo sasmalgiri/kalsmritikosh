@@ -131,9 +131,15 @@ public actor InvestigationDataLabService {
         // no phase evidence exists (eighth audit: completion, not intent). A
         // failed observation write is logged, never swallowed — the phase then
         // stays machine-unobserved, which is the fail-closed direction.
+        // ELEVENTH AUDIT — bound to the exact case state (revision + the
+        // INV-01-C4 scope fingerprint of THIS preparation's resolved scope).
         if let artifacts {
             do {
-                try await artifacts.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
+                let fingerprint = CaseScopeFingerprinter.fingerprint(
+                    caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
+                try await artifacts.record(caseID: caseID, caseRevision: record.caseHeader.revision,
+                                           scopeFingerprint: fingerprint,
+                                           phase: .dataLab, artifactID: datasetID,
                                            detail: "preset=\(preset.id)", at: date)
             } catch {
                 KalsmritikoshLog.storage.error("dataLab phase-artifact record failed (phase stays unobserved): \(error)")

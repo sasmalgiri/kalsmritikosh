@@ -106,16 +106,28 @@ struct PhaseObservationTests {
         #expect(model.frozenSutra?.id == review.id, "the review protocol governs the run")
     }
 
-    @Test("The v115 artifact ledger surfaces ask and dataLab observations; both must point at REAL artifacts")
+    @Test("Artifact observations are bound to a REAL case, its CURRENT revision, and its scope; artifacts serve ONE case")
     func artifactLedgerObserved() async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-artifacts")
         let repo = CasePhaseArtifactRepository(database: h.db)
-        let caseID = UUID()
+        // A REAL case (with revision) in a real workspace — the binding target.
+        let wsID = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "Obs WS", template: .investigation))
+        let created = try await h.cases.createCase(workspaceID: wsID, title: "Obs Case", actor: "me", at: t0)
+        let caseID = created.id
+        let revision = created.revision
+        let fp = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: revision,
+                                                    scope: RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: []))
+        // ELEVENTH AUDIT — a NONEXISTENT case is refused outright.
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: UUID(), caseRevision: 1, scopeFingerprint: fp,
+                                  phase: .ask, artifactID: UUID(), detail: "x", at: t0)
+        }
         // TENTH AUDIT — an ask observation pointing at a nonexistent answer
         // (or one never locked verifiedFinal) is REFUSED.
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: caseID, phase: .ask, artifactID: UUID(),
-                                  detail: "question=abcd1234", at: t0)
+            try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+                                  phase: .ask, artifactID: UUID(), detail: "question=abcd1234", at: t0)
         }
         // A REAL durably committed answer records normally: drive the actual
         // AEE-M2 ledger to verifiedFinal and use ITS answer ID.
@@ -126,28 +138,46 @@ struct PhaseObservationTests {
             citations: [], answerState: .unknown, confidence: 0.8, at: t0)
         try await ledger.markReviewReady(answerID: answerID, at: t0)
         try await ledger.lockVerifiedFinal(answerID: answerID, at: t0)
-        _ = try await repo.record(caseID: caseID, phase: .ask, artifactID: answerID,
+        // ELEVENTH AUDIT — a STALE case revision is refused (scope changed
+        // between producing the artifact and recording the observation).
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, caseRevision: revision + 7, scopeFingerprint: fp,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)
+        }
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+                                  phase: .ask, artifactID: answerID,
                                   detail: "question=abcd1234", at: t0)
+        // ELEVENTH AUDIT — the SAME answer cannot become phase evidence for a
+        // SECOND case (one artifact, one case); same case is idempotent.
+        let other = try await h.cases.createCase(workspaceID: wsID, title: "Other Case", actor: "me", at: t0)
+        let otherFP = CaseScopeFingerprinter.fingerprint(caseID: other.id, caseRevision: other.revision,
+                                                         scope: RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: []))
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: other.id, caseRevision: other.revision, scopeFingerprint: otherFP,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)
+        }
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)   // idempotent
         // NINTH AUDIT — a dataLab observation pointing at a nonexistent
         // dataset is REFUSED (referential truth, not a bare UUID column).
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: caseID, phase: .dataLab, artifactID: UUID(),
+            try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+                                  phase: .dataLab, artifactID: UUID(),
                                   detail: "preset=source-inventory", at: t0)
         }
         // A REAL dataset row records normally.
-        let wsID = UUID()
-        try await h.workspaces.upsert(Workspace(id: wsID, title: "Obs WS", template: .investigation))
         let datasetID = UUID()
         try await h.db.exec("""
         INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at)
         VALUES (?, ?, 'Obs DS', 'advanced', 1, ?, ?);
         """, [.uuid(datasetID), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970)])
-        _ = try await repo.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+                                  phase: .dataLab, artifactID: datasetID,
                                   detail: "preset=source-inventory", at: t0)
         let service = PhaseObservationService(artifacts: repo)
         let obs = await service.observations(caseID: caseID)
         #expect(obs[.ask]?.artifactCount == 1)
         #expect(obs[.dataLab]?.artifactCount == 1)
-        #expect(await service.observations(caseID: UUID()).isEmpty)
+        #expect(await service.observations(caseID: other.id).isEmpty)
     }
 }

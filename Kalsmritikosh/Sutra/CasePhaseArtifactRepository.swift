@@ -32,11 +32,34 @@ public actor CasePhaseArtifactRepository {
         /// The named artifact does not exist in its authority — an
         /// observation row must never point at nothing (ninth audit).
         case artifactMissing(UUID)
+        /// The named case does not exist (eleventh audit — FK-backed).
+        case caseNotFound(UUID)
+        /// The supplied case revision is not the case's CURRENT revision —
+        /// the scope changed between producing the artifact and recording
+        /// the observation; refuse rather than bind stale evidence.
+        case caseRevisionStale(supplied: Int, current: Int)
+        /// The artifact is already bound to a DIFFERENT case — one artifact
+        /// is phase evidence for exactly one case, never two.
+        case artifactAlreadyBound(artifactID: UUID, boundCaseID: UUID)
     }
 
     @discardableResult
-    public func record(caseID: UUID, phase: PersonaJobKind, artifactID: UUID,
+    public func record(caseID: UUID, caseRevision: Int, scopeFingerprint: CaseScopeFingerprint,
+                       phase: PersonaJobKind, artifactID: UUID,
                        detail: String, at date: Date) async throws -> UUID {
+        // ELEVENTH AUDIT — an observation is bound to the EXACT case state:
+        // the case must exist (also FK-enforced), the supplied revision must
+        // be the case's CURRENT revision, and the INV-01-C4 scope
+        // fingerprint is stored immutably so a later scope change is
+        // detectable as staleness. One artifact serves ONE case.
+        let caseRows = try await database.query(
+            "SELECT revision FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
+        guard let current = caseRows.first?.int(0) else {
+            throw CasePhaseArtifactError.caseNotFound(caseID)
+        }
+        guard Int(current) == caseRevision else {
+            throw CasePhaseArtifactError.caseRevisionStale(supplied: caseRevision, current: Int(current))
+        }
         // NINTH/TENTH AUDIT — referential truth per phase kind: an
         // observation row must never point at nothing. A dataLab artifact
         // must be a REAL dataset row; an ask artifact must be a REAL answer
@@ -56,11 +79,24 @@ public actor CasePhaseArtifactRepository {
         default:
             break
         }
+        // One artifact → one case (backed by UNIQUE(phase_kind, artifact_id)):
+        // re-recording for the SAME case is idempotent; for another, refused.
+        let bound = try await database.query(
+            "SELECT id, case_id FROM case_phase_artifacts WHERE phase_kind = ? AND artifact_id = ? LIMIT 1;",
+            [.text(phase.rawValue), .uuid(artifactID)])
+        if let row = bound.first, let existingID = row.uuid(0), let boundCase = row.uuid(1) {
+            guard boundCase == caseID else {
+                throw CasePhaseArtifactError.artifactAlreadyBound(artifactID: artifactID, boundCaseID: boundCase)
+            }
+            return existingID
+        }
         let id = UUID()
         try await database.exec("""
-        INSERT INTO case_phase_artifacts (id, case_id, phase_kind, artifact_id, detail, created_at)
-        VALUES (?, ?, ?, ?, ?, ?);
-        """, [.uuid(id), .uuid(caseID), .text(phase.rawValue), .uuid(artifactID),
+        INSERT INTO case_phase_artifacts
+            (id, case_id, case_revision, scope_fingerprint, phase_kind, artifact_id, detail, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """, [.uuid(id), .uuid(caseID), .integer(Int64(caseRevision)), .text(scopeFingerprint.value),
+              .text(phase.rawValue), .uuid(artifactID),
               .text(detail), .real(date.timeIntervalSince1970)])
         return id
     }

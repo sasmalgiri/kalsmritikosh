@@ -179,18 +179,24 @@ public nonisolated enum ConformanceBundle {
             integrityOK = false
             verdict.details.append("integrity: manifest does not cover mandatory file \(required)")
         }
-        // TENTH AUDIT — the directory must contain EXACTLY the manifest's
-        // files plus manifest.json itself: a deleted-and-delisted file or a
-        // smuggled unlisted file both fail integrity, so "the bundle
-        // contents match the manifest" means the WHOLE folder, not a subset.
-        // Dotfiles (.DS_Store etc.) are OS browsing artifacts and are
-        // excluded — stated in BUNDLE_FORMAT.md.
-        if let actual = try? fm.contentsOfDirectory(atPath: directory.path) {
+        // TENTH/ELEVENTH AUDIT — the directory must contain EXACTLY the
+        // manifest's files plus manifest.json itself: a deleted-and-delisted
+        // file or a smuggled unlisted file both fail integrity. Enumeration
+        // failure FAILS too (an unlistable directory could hide anything —
+        // fail-closed, never skipped). Only the specific macOS browsing
+        // artifacts are ignored (.DS_Store, AppleDouble ._*) — any other
+        // hidden file is a smuggled file (stated in BUNDLE_FORMAT.md).
+        do {
+            let actual = try fm.contentsOfDirectory(atPath: directory.path)
             let expected = Set(manifest.files.keys).union([manifestFile])
-            for extra in Set(actual.filter { !$0.hasPrefix(".") }).subtracting(expected).sorted() {
+            let osArtifact: (String) -> Bool = { $0 == ".DS_Store" || $0.hasPrefix("._") }
+            for extra in Set(actual.filter { !osArtifact($0) }).subtracting(expected).sorted() {
                 integrityOK = false
                 verdict.details.append("integrity: unlisted file in bundle: \(extra)")
             }
+        } catch {
+            integrityOK = false
+            verdict.details.append("integrity: bundle directory could not be enumerated — exact-contents check impossible, refused")
         }
         for (name, expected) in manifest.files {
             guard let data = read(name) else {

@@ -87,7 +87,13 @@ struct MigrationMatrixTests {
         #expect(try await MigrationFixtureBuilder.tableExists(db, "case_method_runs"),
                 "v113 case_method_runs table missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "case_phase_artifacts"),
-                "v115 case_phase_artifacts table missing")
+                "v115/v117 case_phase_artifacts table missing")
+        // v117 — the phase-artifact ledger is case-bound: revision + scope
+        // fingerprint columns must exist after a full migrate.
+        let cpaCols = try await db.query("PRAGMA table_info(case_phase_artifacts);", [])
+            .compactMap { $0.string(1) }
+        #expect(cpaCols.contains("case_revision") && cpaCols.contains("scope_fingerprint"),
+                "v117 case binding columns missing")
         // v116 resets pre-rule-v2 public links: after a full migrate, no row
         // may carry a public hash computed under the v114 payload-only rule.
         let v1Links = try await db.query(
@@ -107,7 +113,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 116)          // v115 case_phase_artifacts · v116 public-chain rule-v2 reset (eighth audit)
+        #expect(SchemaMigrations.latestVersion == 117)          // v116 public-chain rule-v2 reset · v117 case-bound phase artifacts (eleventh audit)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

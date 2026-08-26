@@ -147,7 +147,7 @@ jobs:
           d = "/tmp/kv-downgrade"
           files = {}
           for f in sorted(os.listdir(d)):
-              if f in ("manifest.json", "README.txt"): continue
+              if f == "manifest.json": continue
               files[f] = hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest()
           open(os.path.join(d, "manifest.json"), "w").write(
               json.dumps({"formatVersion": 1, "files": files}, sort_keys=True, separators=(",", ":")))
@@ -174,6 +174,15 @@ jobs:
               json.dumps(m, sort_keys=True, separators=(",", ":")))
           PY
           if swift verifier/kalverify.swift /tmp/kv-sev; then echo "::error::severity-demoted bundle verified"; exit 1; fi
+          # Attack 5 — hidden smuggled file (eleventh audit): only .DS_Store /
+          # AppleDouble are tolerated; any other dotfile must fail INTEGRITY.
+          rm -rf /tmp/kv-hidden && cp -R "$FIXTURE" /tmp/kv-hidden && printf 'stowaway' > /tmp/kv-hidden/.extra.json
+          if swift verifier/kalverify.swift /tmp/kv-hidden; then echo "::error::hidden smuggled file verified"; exit 1; fi
+          # Attack 6 — unenumerable directory (eleventh audit): exact-contents
+          # checking must fail closed, never be silently skipped.
+          rm -rf /tmp/kv-noenum && cp -R "$FIXTURE" /tmp/kv-noenum && chmod 311 /tmp/kv-noenum
+          if swift verifier/kalverify.swift /tmp/kv-noenum; then chmod 755 /tmp/kv-noenum; echo "::error::unenumerable bundle verified"; exit 1; fi
+          chmod 755 /tmp/kv-noenum
           echo "kalverify attack matrix: all attacks refused, clean bundle verified."
 
       - name: Upload logs + result bundle on failure

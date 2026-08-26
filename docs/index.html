@@ -450,7 +450,7 @@
   <p class="lead center" data-claim="privacy.no-servers">No servers. No accounts. No analytics or telemetry. No training on your data — because we never receive it.</p>
   <div class="grid g3">
     <div class="card" data-claim="privacy.models-bundled privacy.no-egress"><div class="ic">🖥️</div><h3>On-device AI — nothing to download</h3><p>Reading, search, and answers all run locally: the semantic-search models ship inside the app — a release-acceptance step verifies the compiled models are present in the archive before any build is published — and written answers use Apple's on-device model. The app makes no network connections at all — enforced by the macOS sandbox itself.</p></div>
-    <div class="card"><div class="ic">🙈</div><h3>Nothing collected</h3><p>App Store privacy label (as declared): “Data Not Collected.” There's nothing for us to lose or leak.</p></div>
+    <div class="card" data-claim="privacy.nothing-collected"><div class="ic">🙈</div><h3>Nothing collected</h3><p>App Store privacy label (as declared): “Data Not Collected.” There's nothing for us to lose or leak.</p></div>
     <div class="card" data-claim="privacy.erase-everything"><div class="ic">🗑️</div><h3>Delete anytime</h3><p>One click erases the entire ledger. Your original files are never touched.</p></div>
   </div>
 </div></section>
@@ -480,11 +480,11 @@
 <!-- FAQ -->
 <section class="faq"><div class="wrap">
   <h2>More questions</h2>
-  <details><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
+  <details data-claim="privacy.never-leaves"><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
   <details data-claim="answers.refuses-unsupported"><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
   <details><summary>What can I feed it?</summary><p>PDF, Word (DOCX), Excel/CSV, PowerPoint (PPTX), EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP. Scans and images are read with on-device OCR. Audio and video files are catalogued and preserved but not yet transcribed; legacy formats (DOC/PPT/Keynote/MSG/PST) are preserved for later processing.</p></details>
   <details><summary>What do I need to run it?</summary><p>A Mac on macOS 15.6 or later for ingest, search, and evidence review. AI-written answers use Apple's on-device model, which requires macOS 26 or later with Apple Intelligence enabled on a supported Mac — everything else works without it.</p></details>
-  <details><summary>How do I delete my data?</summary><p>Settings → Your data → “Delete all my data.” It erases the whole ledger instantly; your original files on disk are untouched.</p></details>
+  <details data-claim="privacy.erase-everything"><summary>How do I delete my data?</summary><p>Settings → Your data → “Delete all my data.” It erases the whole ledger instantly; your original files on disk are untouched.</p></details>
 </div></section>
 
 <!-- GET -->

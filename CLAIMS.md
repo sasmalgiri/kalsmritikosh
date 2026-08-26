@@ -7,9 +7,12 @@ exactly one row here with a living proof.** CI (`scripts/check-claims.sh`)
 verifies on every push, in BOTH directions:
 
 - registry → site: every row's id appears in a `data-claim` attribute, its
-  verbatim fragment still exists in the site source, and its proof is alive;
+  verbatim fragment occurs INSIDE the text of at least one element carrying
+  that id (structural — swapping ids between elements fails, eleventh
+  audit), and its proof is alive;
 - site → registry: every `data-claim` id found in the HTML has exactly one
-  row here.
+  row here. An id may tag several elements (mirrors/paraphrases); the
+  fragment must live inside at least one of them.
 
 A keyword heuristic additionally scans for enforcement-flavored copy that
 carries neither a `data-claim` attribute nor a `claims-exempt` marker — as a
@@ -57,6 +60,7 @@ Proof kinds:
 | `privacy.models-bundled` | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
+| `privacy.nothing-collected` | `Data Not Collected` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the
