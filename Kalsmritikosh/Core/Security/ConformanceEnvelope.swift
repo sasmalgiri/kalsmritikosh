@@ -237,15 +237,31 @@ public nonisolated enum StudioDeliverableVerifier {
 
 /// THE public-chain computation (Phase D) — one definition used by the
 /// sealing service, the in-app bundle verifier, and the generated CLI.
+///
+/// Rule v2 (eighth audit): every link binds the FULL entry — sequence,
+/// source, event ID and occurrence time, not just the payload — so no
+/// wrapper metadata in an exported trail can be edited without breaking
+/// the fold to the SIGNED head. occurredAt is bound as its canonical
+/// ISO-8601 string (whole seconds, UTC), the exact form the bundle
+/// serializes, so the computation is identical before and after the
+/// JSON round-trip.
 public nonisolated enum PublicAuditChain {
-    public static let genesis = "GENESIS-public-audit-chain-v1"
+    public static let genesis = "GENESIS-public-audit-chain-v2"
 
-    public static func link(payload: String, prev: String) -> String {
-        SHA256.hash(data: Data((payload + "|" + prev).utf8))
+    /// The canonical string a link hashes: seq|source|eventID|occurredAt|payload.
+    public static func canonicalEntry(seq: Int, source: String, eventID: UUID,
+                                      occurredAt: Date, payload: String) -> String {
+        "\(seq)|\(source)|\(eventID.uuidString)|\(iso8601(occurredAt))|\(payload)"
+    }
+
+    public static func link(entry: String, prev: String) -> String {
+        SHA256.hash(data: Data((entry + "|" + prev).utf8))
             .map { String(format: "%02x", $0) }.joined()
     }
 
     /// Fold the exported trail and require it to reach the SIGNED head.
+    /// Each hash is recomputed from the entry's OWN seq/source/eventID/
+    /// occurredAt/payload fields, so editing any of them breaks the chain.
     /// Returns a human-readable failure, or nil when the chain replays.
     public static func replay(_ trail: [AuditTrailEntry], expectedHead: String) -> String? {
         var prev = genesis
@@ -253,9 +269,12 @@ public nonisolated enum PublicAuditChain {
             guard entry.publicPrev == prev else {
                 return "public chain broken at seq \(entry.seq): prev link does not match"
             }
-            let computed = link(payload: entry.canonicalPayload, prev: prev)
+            let canonical = canonicalEntry(seq: entry.seq, source: entry.source,
+                                           eventID: entry.eventID, occurredAt: entry.occurredAt,
+                                           payload: entry.canonicalPayload)
+            let computed = link(entry: canonical, prev: prev)
             guard computed == entry.publicHash else {
-                return "public chain broken at seq \(entry.seq): recomputed hash does not match"
+                return "public chain broken at seq \(entry.seq): recomputed hash does not match (payload or metadata edited)"
             }
             prev = computed
         }
@@ -263,5 +282,12 @@ public nonisolated enum PublicAuditChain {
             return "recomputed public chain head does not match the SIGNED head"
         }
         return nil
+    }
+
+    private static func iso8601(_ date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        return f.string(from: date)
     }
 }

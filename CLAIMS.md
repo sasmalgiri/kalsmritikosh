@@ -32,6 +32,20 @@ Proof kinds:
 | `models ship inside the app` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `sealed receipt` | ci:report-receipt-integrity |
 | `machine-observed phases` | test:certificateSplit |
+| `every line traceable to a source` | test:ungroundedFlagged |
+| `end in the actual hardcopy` | test:hardcopy |
+| `deliverable seal` | test:studioSealVerifies |
+| `UNSEALED` | grep:_UNSEALED:Kalsmritikosh/Core/Security/ConformanceSeal.swift |
+| `replays a keyless` | test:publicChainSealsAndReplays |
+| `trail metadata cannot be edited` | test:publicChainSealsAndReplays |
+
+Coverage boundary (eighth audit, stated honestly): the registry registers the
+site's VERIFIABILITY and PRIVACY claims — the sentences whose falsehood would
+mislead a verifier or a buyer about what the software enforces. Narrative and
+descriptive copy (feature tours, screenshots, positioning prose) is not
+exhaustively registered; the reverse direction (site → registry) is reviewed
+manually when copy changes, and any sentence that asserts an enforcement or
+guarantee MUST get a row before it ships.
 
 Claims that must NEVER appear (refused vocabulary — CI fails if found):
 - "provable compliance" / "provably compliant"

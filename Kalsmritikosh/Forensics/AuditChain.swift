@@ -78,23 +78,24 @@ public actor AuditChainService {
     /// chain lets an OUTSIDE verifier replay the ledger from exported event
     /// payloads to the head SIGNED in the conformance envelope; the HMAC
     /// chain remains the local tamper-evidence (its key never leaves the
-    /// Keychain). Rows sealed before v114 carry no public hash — the public
-    /// chain starts at the first post-v114 seal, stated on the wire.
+    /// Keychain). Rule v2 (eighth audit) binds seq/source/eventID/occurredAt
+    /// into every link, not just the payload; rows sealed under earlier rules
+    /// carry no public hash (reset by migration v116) — the public chain
+    /// starts at the first post-v116 seal, stated on the wire.
     public static let publicGenesis = PublicAuditChain.genesis
-
-    private static func publicSHA(_ payload: String, prev: String) -> String {
-        PublicAuditChain.link(payload: payload, prev: prev)
-    }
 
     private let database: Database
     private let secret: SymmetricKey
     /// Ordered-event providers for each source ledger (injected so the service
-    /// stays free of repository-specific decode logic and is trivially testable).
-    private let eventProvider: @Sendable () async -> [AuditChainEvent]
+    /// stays free of repository-specific decode logic and is trivially
+    /// testable). THROWING (eighth audit): a provider that cannot read its
+    /// ledger must fail the whole seal/verify — a partial event set would
+    /// otherwise let a truncated chain report intact.
+    private let eventProvider: @Sendable () async throws -> [AuditChainEvent]
 
     public init(database: Database,
                 secret: Data,
-                eventProvider: @escaping @Sendable () async -> [AuditChainEvent]) {
+                eventProvider: @escaping @Sendable () async throws -> [AuditChainEvent]) {
         self.database = database
         self.secret = SymmetricKey(data: secret)
         self.eventProvider = eventProvider
@@ -119,7 +120,7 @@ public actor AuditChainService {
     /// order, continuing the existing chain. Returns the number newly sealed.
     @discardableResult
     public func seal(now: Date = Date()) async throws -> Int {
-        let events = await eventProvider().sorted(by: Self.order)
+        let events = try await eventProvider().sorted(by: Self.order)
         let sealedIDs = try await sealedEventKeys()
         var (lastSeq, prevHash) = try await tail()
         var publicPrev = try await publicTailHash()
@@ -130,9 +131,15 @@ public actor AuditChainService {
             if sealedIDs.contains(key) { continue }
             let payloadHash = hmac(e.canonicalPayload)
             let entryHash = hmac(payloadHash + prevHash)
-            // Phase D — the parallel PUBLIC chain over the same payloads.
-            let publicHash = Self.publicSHA(e.canonicalPayload, prev: publicPrev)
             let seq = lastSeq + 1
+            // Phase D — the parallel PUBLIC chain. Rule v2: the link binds the
+            // FULL entry (seq/source/eventID/occurredAt/payload), the same
+            // canonical string an outside verifier recomputes from the trail.
+            let publicHash = PublicAuditChain.link(
+                entry: PublicAuditChain.canonicalEntry(seq: seq, source: e.source.rawValue,
+                                                       eventID: e.eventID, occurredAt: e.occurredAt,
+                                                       payload: e.canonicalPayload),
+                prev: publicPrev)
             try await database.exec("""
             INSERT INTO audit_chain (seq, source, event_id, occurred_at, payload_hash, prev_hash, entry_hash, sealed_at, public_prev, public_hash)
             VALUES (?,?,?,?,?,?,?,?,?,?);
@@ -169,7 +176,7 @@ public actor AuditChainService {
         FROM audit_chain WHERE public_hash IS NOT NULL ORDER BY seq ASC;
         """, [])
         var payloadByKey: [String: String] = [:]
-        for e in await eventProvider() {
+        for e in try await eventProvider() {
             payloadByKey[e.source.rawValue + ":" + e.eventID.uuidString] = e.canonicalPayload
         }
         return rows.compactMap { r in
@@ -191,7 +198,7 @@ public actor AuditChainService {
         let rows = try await allSeals()
         // Current source events, keyed for re-derivation.
         var payloadByKey: [String: String] = [:]
-        for e in await eventProvider() {
+        for e in try await eventProvider() {
             payloadByKey[e.source.rawValue + ":" + e.eventID.uuidString] = e.canonicalPayload
         }
 

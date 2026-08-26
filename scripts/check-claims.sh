@@ -25,8 +25,16 @@ while IFS='|' read -r _ claim proof _; do
       body="${proof#grep:}"; pattern="${body%%:*}"; path="${body#*:}"
       grep -rq "$pattern" "$path" || { echo "::error::CLAIMS.md — proof pattern '$pattern' not in $path (claim: $claim)"; fail=1; } ;;
     owner:*)
+      # An owner: proof is CONDITIONAL — the named file must be a real,
+      # living checklist (eighth audit: existence alone proved nothing).
       f="${proof#owner:}"
-      [ -f "$f" ] || { echo "::error::CLAIMS.md — owner file '$f' missing (claim: $claim)"; fail=1; } ;;
+      if [ ! -f "$f" ]; then
+        echo "::error::CLAIMS.md — owner file '$f' missing (claim: $claim)"; fail=1
+      elif ! grep -qE '\- \[[ x]\]' "$f"; then
+        echo "::error::CLAIMS.md — owner file '$f' carries no checklist items (claim: $claim)"; fail=1
+      else
+        echo "check-claims note: '$claim' is owner-conditional — true only once the acts in $f are checked off"
+      fi ;;
     *) continue ;;
   esac
   grep -rqF "$claim" docs --include="*.html" \

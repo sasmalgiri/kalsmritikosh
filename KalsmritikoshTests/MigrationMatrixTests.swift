@@ -88,6 +88,11 @@ struct MigrationMatrixTests {
                 "v113 case_method_runs table missing")
         #expect(try await MigrationFixtureBuilder.tableExists(db, "case_phase_artifacts"),
                 "v115 case_phase_artifacts table missing")
+        // v116 resets pre-rule-v2 public links: after a full migrate, no row
+        // may carry a public hash computed under the v114 payload-only rule.
+        let v1Links = try await db.query(
+            "SELECT COUNT(*) FROM audit_chain WHERE public_hash IS NOT NULL;", [])
+        #expect((v1Links.first?.int(0) ?? -1) == 0, "v116 must reset v114-rule public links")
     }
 
     private func assertHealthyLatest(_ db: Database) async throws {
@@ -102,7 +107,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 115)          // v114 public audit-chain hashes · v115 case_phase_artifacts (ask/dataLab observability)
+        #expect(SchemaMigrations.latestVersion == 116)          // v115 case_phase_artifacts · v116 public-chain rule-v2 reset (eighth audit)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

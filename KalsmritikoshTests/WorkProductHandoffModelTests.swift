@@ -291,9 +291,15 @@ struct WorkProductHandoffModelTests {
             cases: h.cases, resolver: CaseRetrievalScopeResolver(evidence: store),
             evidence: store, custody: CustodyRepository(database: h.db), database: h.db)
         let handoff = WorkProductHandoffService(cases: h.cases, findings: h.findings, closure: h.closure, custody: custody)
+        // EIGHTH AUDIT — strict approval REFUSES without an audit chain, so
+        // the success path must wire one (fresh ledger: heads at genesis).
+        let governanceRepo = GovernanceEventsRepository(database: h.db)
+        let chain = AuditChainService(database: h.db, secret: Data("test-secret".utf8),
+                                      eventProvider: { try await governanceRepo.auditChainEvents() })
         let model = WorkProductHandoffModel(handoff: handoff, findings: h.findings, closure: h.closure,
                                             assessments: ConformanceAssessmentRepository(database: h.db),
-                                            governance: GovernanceEventsRepository(database: h.db),
+                                            auditChain: chain,
+                                            governance: governanceRepo,
                                             approvalTxn: ApprovalTransactionRepository(database: h.db))
         model.sealingKeyOverride = P256.Signing.PrivateKey()
         await model.load(caseID: created.id)

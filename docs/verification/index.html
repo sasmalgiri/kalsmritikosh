@@ -75,11 +75,13 @@
 
   <h2>Studio deliverables</h2>
   <p>Every studio report that leaves the app (copy/print/export) carries a signed
-  deliverable seal. Verify one with the same tool:</p>
+  deliverable seal — and when a Mac cannot sign, the report says <em>UNSEALED</em>
+  on its face instead of pretending. Verify one with the same tool:</p>
   <pre>swift kalverify.swift --studio /path/to/sealed-report.md</pre>
   <p class="muted">Bundles from strict-mode approvals also export the public audit trail
   (<code>audit-events.json</code>, event metadata only) — the verifier replays a keyless
-  SHA-256 chain over it to the head signed in the envelope.</p>
+  SHA-256 chain over it to the head signed in the envelope. Each link binds the event's
+  sequence, source, ID, time and payload, so trail metadata cannot be edited either.</p>
 
   <p class="muted" style="margin-top:40px">Kalsmritikosh runs 100% on-device and makes no
   network connections; bundles contain rule outcomes and hashes, never your source documents.</p>

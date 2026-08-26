@@ -1,10 +1,17 @@
 # RELEASE_EVIDENCE_INDEX
 
-**Status: CURRENT.** Created 2026-07-24 (MASTER-001). One index for every release gate and the
+**Status: LIVING INDEX — every row is a DATED snapshot, not a statement about HEAD.**
+Created 2026-07-24 (MASTER-001). One index for every release gate and the
 evidence that proves it. A gate is **PASS** only when it names concrete, reproducible evidence
 (a green CI run URL/id, a test identifier, a recorded owner-hardware run, a signed-build log).
 No gate is PASS on assertion alone. Authority: `SHIP_DECISIONS.md` §3 + this file, under
 `WHOLE_PROJECT_COMPLETION_PROGRAM.md`.
+
+**Current-HEAD truth sources (eighth audit):** the CI status of the exact HEAD is the
+GitHub Actions run on that SHA — never a row here; the living whole-suite floor is
+`ci/test-baseline.json` (hosted count, updated every merge); the audit-response log is
+`CONFORMANCE_ROADMAP.md`. Historic counts below (781/794/967-era) are correct for their
+dated SHAs and are NOT current totals.
 
 Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_DATA` · `RELEASE` ·
 `PASS`.
@@ -114,7 +121,12 @@ create workspace → add real sources → complete primary workflow → inspect 
 
 ---
 
-**Note on current CI evidence.** The latest `main` records **781/781 tests green on a real
-hosted GitHub run** (see §G) — local counts are no longer the sole gate. Remaining F-series
+**Note on current CI evidence.** §G rows are dated snapshots of the runs they name.
+The CURRENT whole-suite floor lives in `ci/test-baseline.json` (hosted count, updated
+every merge); the current HEAD's CI verdict is the Actions run on that exact SHA.
+Honest record (eighth audit): run 32957155819 on `a002135` (Phase B-2) FAILED
+`architecture-guards` — `CasePhaseArtifactRepository` placed `PersonaJobKind` in
+`Storage/Repositories/`, which the persona-neutral-truth guard forbids; fixed by moving
+the repository to `Sutra/` in the eighth-audit response commit. Remaining F-series
 gates stay below `PASS` until their specific jobs exist (CI-001B) and the branch ruleset is
 configured + recorded here.

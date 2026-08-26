@@ -70,13 +70,26 @@ public nonisolated enum ConformanceBundle {
     /// Export a sealed assessment as a verification bundle folder. Refuses an
     /// unsealed record — there is nothing for an outsider to verify.
     /// `auditTrail` (Phase D): the public-chain event payloads; MANDATORY
-    /// when the signed envelope commits to a public chain head — a v2 bundle
-    /// without its trail could not be independently replayed.
+    /// when the signed envelope commits to a non-genesis public chain head —
+    /// a v2 bundle without its trail could not be independently replayed.
+    ///
+    /// EIGHTH AUDIT — the trail is TRUNCATED to the prefix ending at the
+    /// SIGNED head. The ledger keeps advancing after sealing (the approval's
+    /// own governance event seals next), so exporting the full current trail
+    /// would fold past the signed head and fail replay. The signed head is a
+    /// statement about the ledger AT sealing time; later events appear in
+    /// later exports. A signed genesis head (fresh ledger) needs no trail.
     public static func write(stored: StoredConformanceAssessment, to directory: URL,
                              auditTrail: [AuditTrailEntry]? = nil) throws {
         guard let seal = stored.seal else { throw ConformanceBundleError.notSealed }
-        if seal.envelope.publicAuditChainHead != nil && (auditTrail?.isEmpty ?? true) {
-            throw ConformanceBundleError.missingAuditTrail
+        var trailToShip: [AuditTrailEntry] = []
+        if let signedHead = seal.envelope.publicAuditChainHead,
+           signedHead != PublicAuditChain.genesis {
+            let ordered = (auditTrail ?? []).sorted { $0.seq < $1.seq }
+            guard let headIndex = ordered.lastIndex(where: { $0.publicHash == signedHead }) else {
+                throw ConformanceBundleError.missingAuditTrail
+            }
+            trailToShip = Array(ordered[...headIndex])
         }
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -100,10 +113,11 @@ public nonisolated enum ConformanceBundle {
         if let manifest = stored.assessment.evidenceManifest {
             payload.append((evidenceManifestFile, try ConformanceCanonical.data(of: manifest)))
         }
-        // Phase D — the public audit trail (metadata payloads only): outside
-        // verifiers fold SHA256(payload || prev) to the SIGNED public head.
-        if let auditTrail, !auditTrail.isEmpty {
-            payload.append((auditEventsFile, try ConformanceCanonical.data(of: auditTrail)))
+        // Phase D — the public audit trail (metadata payloads only), truncated
+        // to the SIGNED head above: outside verifiers fold the rule-v2 links
+        // to exactly that head.
+        if !trailToShip.isEmpty {
+            payload.append((auditEventsFile, try ConformanceCanonical.data(of: trailToShip)))
         }
         for (name, data) in payload {
             try data.write(to: directory.appendingPathComponent(name), options: .atomic)
@@ -148,10 +162,21 @@ public nonisolated enum ConformanceBundle {
             verdict.details.append("integrity: manifest.json missing or unreadable")
             return verdict
         }
-        if manifest.formatVersion != Self.formatVersion {
-            verdict.details.append("integrity: unknown format version \(manifest.formatVersion)")
-        }
+        // EIGHTH AUDIT — hard failures, not notes: an unknown format version
+        // is refused (a future format may carry obligations this verifier
+        // does not know how to enforce), and the manifest must cover the
+        // MANDATORY file set — an attacker-rewritten `{"files":{}}` manifest
+        // must not pass integrity vacuously.
         var integrityOK = true
+        if manifest.formatVersion != Self.formatVersion {
+            integrityOK = false
+            verdict.details.append("integrity: unknown format version \(manifest.formatVersion) — refused")
+        }
+        for required in [attestationFile, protocolFile, evaluationsFile, factsFile, publicKeyFile]
+        where manifest.files[required] == nil {
+            integrityOK = false
+            verdict.details.append("integrity: manifest does not cover mandatory file \(required)")
+        }
         for (name, expected) in manifest.files {
             guard let data = read(name) else {
                 integrityOK = false; verdict.details.append("integrity: \(name) missing"); continue
@@ -273,7 +298,12 @@ public nonisolated enum ConformanceBundle {
                             verdict.details.append("replay: recomputed run binding does not match the SIGNED runStateSHA256")
                         }
                     } else {
-                        verdict.details.append("replay note: run binding not independently recomputable (facts predate the binding-components format)")
+                        // EIGHTH AUDIT — a signed run binding whose components
+                        // are absent from the facts FAILS: current-format
+                        // bundles always carry them, so their absence means
+                        // the binding cannot be independently recomputed.
+                        replayOK = false
+                        verdict.details.append("replay: the envelope signs runStateSHA256 but the facts carry no binding components — unverifiable binding refused")
                     }
                 }
             } else {
@@ -304,8 +334,17 @@ public nonisolated enum ConformanceBundle {
         // (SHA256(payload || prev)) exactly to that head. The private HMAC
         // chain stays local; this one anyone can replay.
         if let signedHead = sealed.envelope.publicAuditChainHead {
-            if let trailData = read(auditEventsFile),
-               let trail = try? decoder().decode([AuditTrailEntry].self, from: trailData) {
+            if signedHead == PublicAuditChain.genesis {
+                // A fresh ledger's head IS genesis: valid with no trail. A
+                // shipped trail claiming to fold to genesis is inconsistent.
+                if let trailData = read(auditEventsFile),
+                   let trail = try? decoder().decode([AuditTrailEntry].self, from: trailData),
+                   !trail.isEmpty {
+                    replayOK = false
+                    verdict.details.append("replay: the signed public head is genesis but the bundle ships a non-empty trail")
+                }
+            } else if let trailData = read(auditEventsFile),
+                      let trail = try? decoder().decode([AuditTrailEntry].self, from: trailData) {
                 if let failure = Self.replayPublicChain(trail, expectedHead: signedHead) {
                     replayOK = false
                     verdict.details.append("replay: \(failure)")

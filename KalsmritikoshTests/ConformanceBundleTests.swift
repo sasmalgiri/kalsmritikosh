@@ -180,10 +180,14 @@ struct ConformanceBundleTests {
         let forgedAttestation = try ConformanceCanonical.data(of: attestation)
         try forgedAttestation.write(to: dir.appendingPathComponent("attestation.json"))
 
-        // ...and recompute the manifest so INTEGRITY passes.
+        // ...and recompute the manifest so INTEGRITY passes. The modeled
+        // forger keeps the FULL mandatory file set (eighth audit: a manifest
+        // missing mandatory files now fails integrity outright, so the only
+        // interesting forgery is a complete, internally consistent one).
         func sha(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
         var files: [String: String] = [:]
-        for name in ["attestation.json", "protocol.json", "rule-evaluations.json", "public-key.hex"] {
+        for name in ["attestation.json", "protocol.json", "rule-evaluations.json",
+                     "evaluation-facts.json", "public-key.hex"] {
             files[name] = sha(try Data(contentsOf: dir.appendingPathComponent(name)))
         }
         try ConformanceCanonical.data(of: ConformanceBundle.Manifest(formatVersion: 1, files: files))
@@ -193,6 +197,29 @@ struct ConformanceBundleTests {
         #expect(v.integrity == .passed, "the forger made the hashes internally consistent")
         #expect(v.authenticity == .failed, "the signature over the canonical envelope must still fail")
         #expect(v.conformanceReplay == .notChecked)
+    }
+
+    /// EIGHTH AUDIT — an attacker-rewritten `{"files":{}}` manifest must not
+    /// pass integrity vacuously, and an unknown format version is refused.
+    @Test("An emptied manifest and an unknown format version both fail integrity")
+    func emptiedManifestAndUnknownVersionRefused() throws {
+        let dir = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir)
+        try Data(#"{"files":{},"formatVersion":1}"#.utf8)
+            .write(to: dir.appendingPathComponent("manifest.json"))
+        let emptied = ConformanceBundle.verify(at: dir)
+        #expect(emptied.integrity == .failed)
+        #expect(emptied.details.contains { $0.contains("mandatory file") })
+
+        let dir2 = try tempDir()
+        try ConformanceBundle.write(stored: try sealedStored(), to: dir2)
+        let manifestData = try Data(contentsOf: dir2.appendingPathComponent("manifest.json"))
+        let bumped = String(decoding: manifestData, as: UTF8.self)
+            .replacingOccurrences(of: #""formatVersion":1"#, with: #""formatVersion":9"#)
+        try Data(bumped.utf8).write(to: dir2.appendingPathComponent("manifest.json"))
+        let unknown = ConformanceBundle.verify(at: dir2)
+        #expect(unknown.integrity == .failed)
+        #expect(unknown.details.contains { $0.contains("unknown format version") })
     }
 
     /// Acceptance test 7: the verifier recomputes the same status the app sealed

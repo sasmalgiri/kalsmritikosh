@@ -421,26 +421,32 @@ public final class WorkProductHandoffModel {
                                                      assessedRunRevision: nextRevision,
                                                      receiptSeal: f.receipt.seal,
                                                      databaseSchemaVersion: SchemaMigrations.latestVersion)
-                if let chain = self.auditChain {
-                    do {
-                        _ = try await chain.seal(now: date)
-                        let v = try await chain.verify()
-                        guard v.isIntact else {
-                            throw ConformanceGateError.auditChainUnavailable(
-                                "broken link at seq \(v.firstBrokenSeq ?? v.missingEventSeq ?? -1)")
-                        }
-                        linkage.unsealedAuditEvents = v.unsealedCount
-                        let h = try await chain.head()
-                        linkage.auditChainHead = h.hash
-                        linkage.auditEventCount = h.sealedSeq
-                        // Phase D — the PUBLIC chain head is signed too, so
-                        // outsiders can replay the exported trail to it.
-                        linkage.publicAuditChainHead = try await chain.publicHead()
-                    } catch let gateError as ConformanceGateError {
-                        throw gateError
-                    } catch {
-                        throw ConformanceGateError.auditChainUnavailable(String(describing: error))
+                // EIGHTH AUDIT — the chain is REQUIRED in strict mode: an
+                // absent chain (key creation failed, wiring missing) must
+                // refuse the approval, never silently produce a certificate
+                // without ledger binding. Fail-open here was the finding.
+                guard let chain = self.auditChain else {
+                    throw ConformanceGateError.auditChainUnavailable(
+                        "no audit chain is wired — strict approval refuses to seal without ledger binding")
+                }
+                do {
+                    _ = try await chain.seal(now: date)
+                    let v = try await chain.verify()
+                    guard v.isIntact else {
+                        throw ConformanceGateError.auditChainUnavailable(
+                            "broken link at seq \(v.firstBrokenSeq ?? v.missingEventSeq ?? -1)")
                     }
+                    linkage.unsealedAuditEvents = v.unsealedCount
+                    let h = try await chain.head()
+                    linkage.auditChainHead = h.hash
+                    linkage.auditEventCount = h.sealedSeq
+                    // Phase D — the PUBLIC chain head is signed too, so
+                    // outsiders can replay the exported trail to it.
+                    linkage.publicAuditChainHead = try await chain.publicHead()
+                } catch let gateError as ConformanceGateError {
+                    throw gateError
+                } catch {
+                    throw ConformanceGateError.auditChainUnavailable(String(describing: error))
                 }
                 let sealed: SealedConformance
                 do { sealed = try ConformanceSeal.seal(assessment: projected, key: self.sealingKeyOverride, linkage: linkage) }

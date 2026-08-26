@@ -53,22 +53,45 @@ struct PhaseDTests {
                                     canonicalPayload: forged[1].canonicalPayload + "X",
                                     publicPrev: forged[1].publicPrev, publicHash: forged[1].publicHash)
         #expect(PublicAuditChain.replay(forged, expectedHead: head) != nil)
+        // RULE v2 (eighth audit): edited wrapper METADATA breaks the replay
+        // too — the link binds seq/source/eventID/occurredAt, not just the
+        // payload, so swapping an event ID cannot survive the fold.
+        var metaForged = trail
+        metaForged[1] = AuditTrailEntry(seq: metaForged[1].seq, source: metaForged[1].source,
+                                        eventID: UUID(), occurredAt: metaForged[1].occurredAt,
+                                        canonicalPayload: metaForged[1].canonicalPayload,
+                                        publicPrev: metaForged[1].publicPrev, publicHash: metaForged[1].publicHash)
+        #expect(PublicAuditChain.replay(metaForged, expectedHead: head) != nil)
+        var timeForged = trail
+        timeForged[0] = AuditTrailEntry(seq: timeForged[0].seq, source: timeForged[0].source,
+                                        eventID: timeForged[0].eventID,
+                                        occurredAt: timeForged[0].occurredAt.addingTimeInterval(3600),
+                                        canonicalPayload: timeForged[0].canonicalPayload,
+                                        publicPrev: timeForged[0].publicPrev, publicHash: timeForged[0].publicHash)
+        #expect(PublicAuditChain.replay(timeForged, expectedHead: head) != nil)
     }
 
     // MARK: Bundle v2 (trail-carrying)
 
+    /// A synthetic trail entry folded with the shared RULE-V2 computation
+    /// (the link binds seq/source/eventID/occurredAt/payload).
+    private func trailEntry(seq: Int, payload: String, prev: String) -> AuditTrailEntry {
+        let eventID = UUID()
+        let hash = PublicAuditChain.link(
+            entry: PublicAuditChain.canonicalEntry(seq: seq, source: "governance", eventID: eventID,
+                                                   occurredAt: t0, payload: payload),
+            prev: prev)
+        return AuditTrailEntry(seq: seq, source: "governance", eventID: eventID, occurredAt: t0,
+                               canonicalPayload: payload, publicPrev: prev, publicHash: hash)
+    }
+
     private func sealedWithPublicHead() throws -> (StoredConformanceAssessment, [AuditTrailEntry]) {
-        // A synthetic two-entry public trail, folded with the shared rule.
-        let e1Payload = "actor=me;at=1.0;caseID=C;detail=standard=x;kind=findings.approved"
-        let h1 = PublicAuditChain.link(payload: e1Payload, prev: PublicAuditChain.genesis)
-        let e2Payload = "actor=me;at=2.0;caseID=C;detail=revision=1;kind=bundle.exported"
-        let h2 = PublicAuditChain.link(payload: e2Payload, prev: h1)
-        let trail = [
-            AuditTrailEntry(seq: 1, source: "governance", eventID: UUID(), occurredAt: t0,
-                            canonicalPayload: e1Payload, publicPrev: PublicAuditChain.genesis, publicHash: h1),
-            AuditTrailEntry(seq: 2, source: "governance", eventID: UUID(), occurredAt: t0,
-                            canonicalPayload: e2Payload, publicPrev: h1, publicHash: h2),
-        ]
+        let e1 = trailEntry(seq: 1, payload: "actor=me;at=1.0;caseID=C;detail=standard=x;kind=findings.approved",
+                            prev: PublicAuditChain.genesis)
+        let e2 = trailEntry(seq: 2, payload: "actor=me;at=2.0;caseID=C;detail=revision=1;kind=bundle.exported",
+                            prev: e1.publicHash)
+        let trail = [e1, e2]
+        let h2 = e2.publicHash
         let sutra = SutraCompiler.shared()
         let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
         let attested = Set(SutraRuleCompiler.rules(for: sutra)
@@ -122,6 +145,62 @@ struct PhaseDTests {
         let stripped = ConformanceBundle.verify(at: dirB)
         #expect(stripped.conformanceReplay == .failed)
         #expect(stripped.details.contains { $0.contains("audit-events.json is missing") })
+    }
+
+    @Test("A trail that advanced past the SIGNED head is truncated at export and still verifies")
+    func trailTruncatedToSignedHead() throws {
+        // EIGHTH AUDIT — the ledger keeps sealing after the envelope signs
+        // its head (the approval's own governance event, later activity).
+        // Export must ship the prefix ending at the SIGNED head, not the
+        // whole current trail, or replay folds past the head and fails.
+        let (stored, trail) = try sealedWithPublicHead()
+        let e3 = trailEntry(seq: 3, payload: "actor=me;at=3.0;caseID=C;detail=later;kind=findings.approved",
+                            prev: trail[1].publicHash)
+        let advanced = trail + [e3]
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("phased-trunc-\(UUID().uuidString)", isDirectory: true)
+        try ConformanceBundle.write(stored: stored, to: dir, auditTrail: advanced)
+        let verdict = ConformanceBundle.verify(at: dir)
+        #expect(verdict.allPassed, "\(verdict.details)")
+        // The shipped trail carries exactly the signed prefix.
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let shipped = try decoder.decode([AuditTrailEntry].self,
+            from: Data(contentsOf: dir.appendingPathComponent("audit-events.json")))
+        #expect(shipped.count == 2)
+        #expect(shipped.last?.publicHash == stored.seal?.envelope.publicAuditChainHead)
+    }
+
+    @Test("A fresh-ledger approval (signed head = genesis) exports and verifies without a trail")
+    func genesisHeadBundleVerifies() throws {
+        // EIGHTH AUDIT — on a zero-event ledger the envelope signs the chain
+        // GENESIS. That bundle needs no audit-events.json and must verify.
+        let sutra = SutraCompiler.shared()
+        let spine: Set<PersonaJobKind> = [.caseIntake, .findings]
+        let attested = Set(SutraRuleCompiler.rules(for: sutra)
+            .filter { $0.phaseKind.map(spine.contains) ?? true }.map(\.id))
+        var facts = ConformanceFacts(completedPhaseKinds: spine,
+                                     standardOfProofDeclared: true,
+                                     openItemsAcknowledged: true,
+                                     humanDecisionsMade: spine,
+                                     attestedRuleIDs: attested)
+        let runID = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEFFFF0003")!
+        facts.runReceiptSeal = "receipt-seal-0003"
+        facts.runCaseRevision = 1
+        let binding = try ConformanceCanonical.sha256(of: ConformanceRunBinding(
+            runID: runID, receiptSeal: "receipt-seal-0003", caseRevision: 1))
+        let assessment = SutraConformance.assess(facts: facts, against: sutra, at: t0,
+                                                 runID: runID, runStateSHA256: binding)
+        let sealed = try ConformanceSeal.seal(
+            assessment: assessment, build: "1.0 (test)", key: key,
+            linkage: ConformanceSealLinkage(publicAuditChainHead: PublicAuditChain.genesis))
+        let stored = StoredConformanceAssessment(caseID: UUID(), runRevision: 1,
+                                                 assessment: assessment, seal: sealed, createdAt: t0)
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("phased-genesis-\(UUID().uuidString)", isDirectory: true)
+        try ConformanceBundle.write(stored: stored, to: dir)   // no trail — valid
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("audit-events.json").path))
+        let verdict = ConformanceBundle.verify(at: dir)
+        #expect(verdict.allPassed, "\(verdict.details)")
     }
 
     // MARK: Studio deliverable verification (shared verifier)

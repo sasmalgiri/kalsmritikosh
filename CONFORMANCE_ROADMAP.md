@@ -474,3 +474,62 @@ the underlying ledgers those derivations read).
 - With B-2, the "phases can never complete" class is fully closed: every
   phase of every built-in protocol is machine-observable, and the signed
   observed/attested split on the certificate shows exactly which ones were.
+
+## Eighth-audit response (2026-08-26) — the audit was RIGHT about the red run; all eight findings closed
+
+**Correction, first:** this repo's status was reported as "CI-green, queue
+empty" while the Phase B-2 run (32957155819, `a002135`) was still QUEUED. It
+went RED on `architecture-guards`. The claim was premature and wrong; the run
+outcome is recorded honestly in `RELEASE_EVIDENCE_INDEX.md`.
+
+1. **Guard red (release blocker).** `CasePhaseArtifactRepository` used
+   `PersonaJobKind` inside `Storage/Repositories/`, which the
+   persona-neutral-truth guard forbids. The repository exists purely for
+   conformance observation, so it MOVED to `Sutra/` (where phase vocabulary
+   is legitimate). Guard green.
+2. **Artifact truth.** Ask records an observation ONLY for answers that
+   actually shipped (`!refused`) with a DURABLE artifact identity derived
+   from SHA-256(caseID‖question) — never a random UUID; DataLab records
+   AFTER the whole preparation (fields+rows+bindings) succeeded, not at
+   dataset creation. Failed observation writes are LOGGED, never swallowed
+   (the phase then stays machine-unobserved — the fail-closed direction).
+3. **Strict approval fail-open on a missing chain.** approve() now REFUSES
+   (`auditChainUnavailable`) when no audit chain is wired; the chain's
+   eventProvider is THROWING, so a ledger-read failure fails seal/verify
+   instead of silently shrinking the event set; AppState logs a missing
+   Keychain secret at fault level.
+4. **Signed head vs. advancing ledger.** The envelope's public head is, by
+   construction, sealed BEFORE the approval's own governance event (the head
+   cannot include the event recording the very approval being sealed).
+   Export now TRUNCATES the trail to the prefix ending at the SIGNED head;
+   a fresh ledger's genesis head exports with no trail and verifies. Both
+   stated in BUNDLE_FORMAT.md; proven by tests
+   (trailTruncatedToSignedHead, genesisHeadBundleVerifies).
+5. **Public link rule v2 (v116).** Each link now binds
+   `seq|source|eventID|occurredAt|payload` — exported trail METADATA can no
+   longer be edited without breaking the fold. Genesis bumped to
+   `GENESIS-public-audit-chain-v2`; v116 resets v114-rule links (pre-release
+   rule change; the private HMAC chain is untouched).
+6. **Verifier hardening (both verifiers — shared source).** Unknown manifest
+   formatVersion REFUSED; manifest must cover the mandatory file set (an
+   emptied `{"files":{}}` cannot pass integrity vacuously); a signed
+   runStateSHA256 whose binding components are absent from the facts FAILS
+   instead of noting.
+7. **Claims registry.** Registered: "every line traceable to a source",
+   "end in the actual hardcopy", "deliverable seal", "replays a keyless",
+   "trail metadata cannot be edited", and the UNSEALED disclosure (the site
+   now says a non-signing Mac produces a report marked UNSEALED on its face
+   — the honest form of the old sentence). `owner:` proofs now print their
+   conditional status and require a living checklist. Coverage boundary
+   STATED in CLAIMS.md: narrative copy is not exhaustively registered;
+   enforcement/guarantee sentences must get a row before shipping.
+8. **Stale docs.** BUNDLE_FORMAT.md now lists evaluation-facts.json /
+   evidence-manifest.json / audit-events.json with their mandatory
+   conditions, documents rule v2 + truncation + genesis, and corrects the
+   rule-comparison statement (both verifiers compare full typed rules).
+   RELEASE_EVIDENCE_INDEX.md header now states rows are dated snapshots,
+   names the living truth sources, and records the red run honestly.
+
+Declared boundaries unchanged (classic mode by owner directive, self-asserted
+roles, no source bytes in bundles, private HMAC key + public v2 chain,
+gitignored BGE models built at archive time, no legal-compliance claims).

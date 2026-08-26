@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import OSLog
 
 public nonisolated struct InvestigationDataset: Sendable {
     public let caseID: UUID
@@ -96,11 +97,6 @@ public actor InvestigationDataLabService {
             workspaceID: record.caseHeader.workspaceID,
             title: "\(record.caseHeader.title) — \(preset.displayName)", mode: .advanced, actor: actor, at: date)
         let datasetID = rec.dataset.id
-        // PHASE B-2 — observable dataLab phase (best-effort record).
-        if let artifacts {
-            try? await artifacts.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
-                                        detail: "preset=\(preset.id)", at: date)
-        }
 
         // Fields, in preset order.
         var fieldID: [String: UUID] = [:]
@@ -129,6 +125,19 @@ public actor InvestigationDataLabService {
             rec = try await datasets.bindSource(cellID: cell.id, targetKind: .sourceVersion, targetID: version.uuidString,
                                                 sourceVersionID: version, locator: nil,
                                                 expectedRevision: rec.dataset.revision, actor: actor, at: date)
+        }
+        // PHASE B-2 — observable dataLab phase, recorded ONLY after the whole
+        // preparation succeeded (fields + rows + bindings). A throw above means
+        // no phase evidence exists (eighth audit: completion, not intent). A
+        // failed observation write is logged, never swallowed — the phase then
+        // stays machine-unobserved, which is the fail-closed direction.
+        if let artifacts {
+            do {
+                try await artifacts.record(caseID: caseID, phase: .dataLab, artifactID: datasetID,
+                                           detail: "preset=\(preset.id)", at: date)
+            } catch {
+                KalsmritikoshLog.storage.error("dataLab phase-artifact record failed (phase stays unobserved): \(error)")
+            }
         }
         return InvestigationDataset(caseID: caseID, presetID: preset.id, scope: scope, dataset: rec,
                                     includedSourceVersionIDs: included, withheldBySensitivity: withheld)

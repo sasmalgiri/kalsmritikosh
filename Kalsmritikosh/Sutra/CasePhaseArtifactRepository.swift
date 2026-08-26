@@ -28,6 +28,17 @@ public actor CasePhaseArtifactRepository {
             .map { String(format: "%02x", $0) }.joined().prefix(16))
     }
 
+    /// DURABLE identity for an ask artifact (eighth audit): derived from
+    /// SHA-256(caseID || question), so the same shipped answer maps to the
+    /// same artifact ID across re-asks instead of a fresh random UUID —
+    /// without ever persisting the question itself.
+    public nonisolated static func askArtifactID(caseID: UUID, question: String) -> UUID {
+        let bytes = Array(SHA256.hash(data: Data((caseID.uuidString + "|" + question).utf8)).prefix(16))
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
+                           bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+                           bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
     @discardableResult
     public func record(caseID: UUID, phase: PersonaJobKind, artifactID: UUID,
                        detail: String, at date: Date) async throws -> UUID {

@@ -9,16 +9,19 @@ reference verifier (Foundation + CryptoKit only) lives at
 
 | File | Content |
 |---|---|
-| `protocol.json` | The exact constitution (Sūtra) the run was assessed against — the canonical JSON snapshot frozen at run start. |
-| `rule-evaluations.json` | Every typed rule with its single outcome (`passed` / `failed` / `notApplicable` / `notEvaluated` / `approvedDeviation` / `evaluatorError`), evaluator ID and detail — canonical encoding. |
-| `attestation.json` | The signed seal: envelope + ECDSA P-256 signature (DER, hex) + public key (X9.63, hex). |
-| `public-key.hex` | The signer's public key again, as a standalone file for convenience. |
-| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file. |
+| `protocol.json` | The exact constitution (Sūtra) the run was assessed against — the canonical JSON snapshot frozen at run start. MANDATORY. |
+| `rule-evaluations.json` | Every typed rule with its single outcome (`passed` / `failed` / `notApplicable` / `notEvaluated` / `approvedDeviation` / `evaluatorError`), evaluator ID and detail — canonical encoding. MANDATORY. |
+| `attestation.json` | The signed seal: envelope + ECDSA P-256 signature (DER, hex) + public key (X9.63, hex). MANDATORY. |
+| `evaluation-facts.json` | The canonical consulted facts the evaluators ran over (phase completion, decisions, attestations, run-binding components). MANDATORY — a bundle that cannot be replayed is refused at export, and `factsSHA256` is signed. |
+| `evidence-manifest.json` | The run's evidence manifest (source-version IDs + custody content hashes) when the signed envelope carries `evidenceManifestSHA256`. Metadata only — never document content. |
+| `audit-events.json` | The PUBLIC audit trail (Phase D), truncated to the SIGNED head. MANDATORY when the envelope signs a non-genesis `publicAuditChainHead`. |
+| `public-key.hex` | The signer's public key again, as a standalone file for convenience. MANDATORY. |
+| `manifest.json` | `{ "formatVersion": 1, "files": { "<name>": "<sha256 hex>" } }` over every other file. Verifiers REFUSE an unknown `formatVersion` and REFUSE a manifest that does not cover the mandatory file set (eighth audit — an emptied manifest cannot pass integrity vacuously). |
 | `README.txt` | Human instructions. |
 
-No source documents are included — only rule outcomes and hashes. The
-`evidenceManifestSHA256` in the envelope commits to the run's custody manifest
-(source-version IDs + content hashes) without revealing it.
+No source documents are included — only rule outcomes, metadata and hashes.
+The evidence manifest, when exported, reveals source-version IDs and content
+hashes (custody metadata), never content.
 
 ## Canonicalization (the signing contract)
 
@@ -51,8 +54,13 @@ canonically (from the mirrored struct in the spec) to check the signature.
    over the facts (applicability → required-phase failure → deviation →
    kind-specific gates → attestation), and require every (rule id → outcome)
    to reproduce exactly. This catches a wrongly computed evaluation even when
-   it was legitimately signed. The in-app verifier additionally compares full
-   rule definitions (id + kind + severity + text).
+   it was legitimately signed. BOTH verifiers (in-app and the generated CLI —
+   which is the app's own source concatenated, not a mirror) compare FULL
+   rule definitions: every rule field participates via typed equality.
+   When the envelope signs `runStateSHA256`, the facts MUST carry the
+   binding components (`runReceiptSeal`, `runCaseRevision`) and the binding
+   MUST recompute — components absent fails REPLAY (unverifiable binding
+   refused, eighth audit).
 
 Each verdict gates the next; report all three separately — never a single
 blended "genuine" claim.
@@ -89,18 +97,34 @@ REPLAY. `evidenceManifestSHA256`, when present, likewise requires a matching
 Optional fields are omitted when absent (never `null`), which the sorted-keys
 canonical form preserves deterministically.
 
-## Phase D additions (2026-08-26)
+## Phase D additions (2026-08-26; rule v2 — eighth audit)
 
 - `audit-events.json` — the PUBLIC audit trail: an array of
   `{seq, source, eventID, occurredAt, canonicalPayload, publicPrev, publicHash}`
-  (canonical JSON). Verifiers fold `SHA256(canonicalPayload || "|" || prev)`
-  from genesis `GENESIS-public-audit-chain-v1` and require the final hash to
-  equal the envelope's SIGNED `publicAuditChainHead`. When the envelope
-  carries that field, this file is MANDATORY — its absence fails REPLAY
-  (downgrade refused). Payloads are event METADATA only; document content
-  never ships.
-- Envelope field `publicAuditChainHead` (optional; nil on pre-v114 seals —
-  the public chain starts at the first post-v114 seal, stated here).
+  (canonical JSON). **Chain rule v2:** each link is
+  `SHA256(canonicalEntry || "|" || prev)` where
+  `canonicalEntry = "<seq>|<source>|<eventID>|<occurredAt ISO-8601 UTC, whole seconds>|<canonicalPayload>"`,
+  folded from genesis `GENESIS-public-audit-chain-v2`. The link binds the
+  entry's METADATA as well as its payload — editing `seq`, `source`,
+  `eventID` or `occurredAt` in an exported trail breaks the fold. The final
+  hash must equal the envelope's SIGNED `publicAuditChainHead`. When the
+  envelope signs a non-genesis head, this file is MANDATORY — its absence
+  fails REPLAY (downgrade refused). Payloads are event METADATA only;
+  document content never ships.
+- **Truncation to the signed head:** the ledger keeps sealing after the
+  envelope signs its head (the approval's own governance event seals next,
+  by construction — the head cannot include the event that records the very
+  approval being sealed). Export therefore ships the trail PREFIX ending at
+  the signed head; the approval event appears in later exports' trails and
+  in the ledger itself. A trail extending past the signed head is an export
+  bug and fails replay.
+- **Genesis head:** a fresh, zero-event ledger's head IS the genesis
+  constant. Such a bundle ships no `audit-events.json` and is valid; a
+  non-empty trail claiming to fold to genesis fails.
+- Envelope field `publicAuditChainHead` (optional; nil on pre-v114 seals).
+  Rows sealed under the v114 payload-only rule were RESET by schema v116
+  (pre-release rule change) — the public chain starts at the first
+  post-v116 seal, stated here.
 - Studio deliverables: `swift kalverify.swift --studio <sealed.md>` verifies
   a sealed studio report — content hash above the seal separator + ECDSA
   P-256 over the canonical `StudioDeliverableEnvelope` — with the app's own

@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import OSLog
 
 /// The immutable scope context for one investigation, resolved from the case's authorized bindings.
 /// (INV-01-C4 will extend this with a deterministic scope fingerprint for staleness/audit.)
@@ -110,13 +111,24 @@ public actor InvestigationAnswerService {
         let scoped = SourceScopedRetriever(base: baseRetriever, evidence: evidence, scope: context.scope)
         let brain = makeBrain(scoped)
         let verified = await brain.answer(question: question, access: access)
-        // PHASE B-2 — observable ask phase (question digest only; best-effort).
-        // Hashing lives in the artifact repository — this service computes no
-        // digests of its own (the one-system fingerprint guard).
-        if let artifacts {
-            try? await artifacts.record(caseID: caseID, phase: .ask, artifactID: UUID(),
-                                        detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",
-                                        at: Date())
+        // PHASE B-2 — observable ask phase (question digest only). Recorded
+        // ONLY for answers that actually shipped: a refusal produced no work
+        // product, so it must not count as phase evidence (eighth audit).
+        // Hashing and artifact-identity derivation live in the artifact
+        // repository — this service computes no digests of its own (the
+        // one-system fingerprint guard). A failed write loses only the
+        // OBSERVATION (the phase stays machine-unobserved — fail-closed for
+        // conformance), but it is logged, never swallowed.
+        if let artifacts, !verified.refused {
+            do {
+                try await artifacts.record(
+                    caseID: caseID, phase: .ask,
+                    artifactID: CasePhaseArtifactRepository.askArtifactID(caseID: caseID, question: question),
+                    detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",
+                    at: Date())
+            } catch {
+                KalsmritikoshLog.storage.error("ask phase-artifact record failed (phase stays unobserved): \(error)")
+            }
         }
         return InvestigationAnswer(context: context, verified: verified)
     }

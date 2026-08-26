@@ -1560,15 +1560,31 @@ public nonisolated enum StudioDeliverableVerifier {
 
 /// THE public-chain computation (Phase D) — one definition used by the
 /// sealing service, the in-app bundle verifier, and the generated CLI.
+///
+/// Rule v2 (eighth audit): every link binds the FULL entry — sequence,
+/// source, event ID and occurrence time, not just the payload — so no
+/// wrapper metadata in an exported trail can be edited without breaking
+/// the fold to the SIGNED head. occurredAt is bound as its canonical
+/// ISO-8601 string (whole seconds, UTC), the exact form the bundle
+/// serializes, so the computation is identical before and after the
+/// JSON round-trip.
 public nonisolated enum PublicAuditChain {
-    public static let genesis = "GENESIS-public-audit-chain-v1"
+    public static let genesis = "GENESIS-public-audit-chain-v2"
 
-    public static func link(payload: String, prev: String) -> String {
-        SHA256.hash(data: Data((payload + "|" + prev).utf8))
+    /// The canonical string a link hashes: seq|source|eventID|occurredAt|payload.
+    public static func canonicalEntry(seq: Int, source: String, eventID: UUID,
+                                      occurredAt: Date, payload: String) -> String {
+        "\(seq)|\(source)|\(eventID.uuidString)|\(iso8601(occurredAt))|\(payload)"
+    }
+
+    public static func link(entry: String, prev: String) -> String {
+        SHA256.hash(data: Data((entry + "|" + prev).utf8))
             .map { String(format: "%02x", $0) }.joined()
     }
 
     /// Fold the exported trail and require it to reach the SIGNED head.
+    /// Each hash is recomputed from the entry's OWN seq/source/eventID/
+    /// occurredAt/payload fields, so editing any of them breaks the chain.
     /// Returns a human-readable failure, or nil when the chain replays.
     public static func replay(_ trail: [AuditTrailEntry], expectedHead: String) -> String? {
         var prev = genesis
@@ -1576,9 +1592,12 @@ public nonisolated enum PublicAuditChain {
             guard entry.publicPrev == prev else {
                 return "public chain broken at seq \(entry.seq): prev link does not match"
             }
-            let computed = link(payload: entry.canonicalPayload, prev: prev)
+            let canonical = canonicalEntry(seq: entry.seq, source: entry.source,
+                                           eventID: entry.eventID, occurredAt: entry.occurredAt,
+                                           payload: entry.canonicalPayload)
+            let computed = link(entry: canonical, prev: prev)
             guard computed == entry.publicHash else {
-                return "public chain broken at seq \(entry.seq): recomputed hash does not match"
+                return "public chain broken at seq \(entry.seq): recomputed hash does not match (payload or metadata edited)"
             }
             prev = computed
         }
@@ -1586,6 +1605,13 @@ public nonisolated enum PublicAuditChain {
             return "recomputed public chain head does not match the SIGNED head"
         }
         return nil
+    }
+
+    private static func iso8601(_ date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        return f.string(from: date)
     }
 }
 // ═══════════ END shared app core: Kalsmritikosh/Core/Security/ConformanceEnvelope.swift ═══════════
@@ -1684,9 +1710,22 @@ guard let manifestData = read("manifest.json"),
 }
 var integrityOK = true
 var integrityDetail = ""
-for (name, expected) in manifest.files {
-    guard let data = read(name) else { integrityOK = false; integrityDetail = "\(name) missing"; break }
-    if sha256Hex(data) != expected { integrityOK = false; integrityDetail = "\(name) hash mismatch"; break }
+// EIGHTH AUDIT — hard failures, not gaps: an unknown format version is
+// refused, and the manifest must cover the MANDATORY file set so a rewritten
+// `{"files":{}}` manifest cannot pass integrity vacuously.
+if manifest.formatVersion != 1 {
+    integrityOK = false; integrityDetail = "unknown format version \(manifest.formatVersion) — refused"
+}
+for required in ["attestation.json", "protocol.json", "rule-evaluations.json",
+                 "evaluation-facts.json", "public-key.hex"]
+where integrityOK && manifest.files[required] == nil {
+    integrityOK = false; integrityDetail = "manifest does not cover mandatory file \(required)"
+}
+if integrityOK {
+    for (name, expected) in manifest.files {
+        guard let data = read(name) else { integrityOK = false; integrityDetail = "\(name) missing"; break }
+        if sha256Hex(data) != expected { integrityOK = false; integrityDetail = "\(name) hash mismatch"; break }
+    }
 }
 report("INTEGRITY", integrityOK, integrityDetail)
 guard integrityOK else { exit(1) }
@@ -1806,21 +1845,34 @@ func rerunEvaluators() -> String? {
             }
             print("REPLAY note: run binding RECOMPUTED from signed facts — matches the sealed runStateSHA256")
         } else {
-            print("REPLAY note: run binding not independently recomputable (facts predate the binding-components format)")
+            // EIGHTH AUDIT — a signed run binding whose components are absent
+            // from the facts FAILS: current-format bundles always carry them.
+            return "the envelope signs runStateSHA256 but the facts carry no binding components — unverifiable binding refused"
         }
     }
     // PUBLIC AUDIT CHAIN (Phase D): when the signed envelope commits to a
-    // public head, the exported trail is REQUIRED and must fold — with the
-    // app's own PublicAuditChain computation — exactly to that head.
+    // non-genesis public head, the exported trail is REQUIRED and must fold —
+    // with the app's own PublicAuditChain rule-v2 computation (each link binds
+    // seq/source/eventID/occurredAt/payload) — exactly to that head. A signed
+    // GENESIS head (fresh ledger) is valid with no trail.
     if let signedHead = attestation.envelope.publicAuditChainHead {
-        guard let trailData = read("audit-events.json"),
-              let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData) else {
-            return "signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused"
+        if signedHead == PublicAuditChain.genesis {
+            if let trailData = read("audit-events.json"),
+               let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData),
+               !trail.isEmpty {
+                return "the signed public head is genesis but the bundle ships a non-empty trail"
+            }
+            print("REPLAY note: public head is the chain genesis (fresh ledger) — no trail required")
+        } else {
+            guard let trailData = read("audit-events.json"),
+                  let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData) else {
+                return "signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused"
+            }
+            if let failure = PublicAuditChain.replay(trail, expectedHead: signedHead) {
+                return failure
+            }
+            print("REPLAY note: public audit chain REPLAYED over \(trail.count) exported event(s) — matches the SIGNED head")
         }
-        if let failure = PublicAuditChain.replay(trail, expectedHead: signedHead) {
-            return failure
-        }
-        print("REPLAY note: public audit chain REPLAYED over \(trail.count) exported event(s) — matches the SIGNED head")
     }
     // RERUN with the app's own assess(): every evaluator, every gate, the
     // same code — outcome, evaluator ID and detail must all reproduce.

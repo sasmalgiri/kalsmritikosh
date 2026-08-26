@@ -2293,12 +2293,17 @@ public final class AppState {
             // custody + fact reviews + governance acts (fifth audit — the chain
             // covers approval/assessment/export history, not just evidence).
             if let auditSecret = AuditChainSecret.loadOrGenerate() {
+                // EIGHTH AUDIT — the provider THROWS on any ledger-read
+                // failure instead of substituting []. A partial event set
+                // would let a truncated chain verify as intact; a thrown
+                // error makes seal/verify fail, which strict approval
+                // treats as a refusal.
                 let auditChainService = AuditChainService(
                     database: db, secret: auditSecret,
                     eventProvider: { [weak custodyRepo, weak factReviewsRepo, weak governanceRepo] in
-                        var out = (try? await custodyRepo?.auditChainEvents()) ?? []
-                        out += (try? await factReviewsRepo?.auditChainEvents()) ?? []
-                        out += (try? await governanceRepo?.auditChainEvents()) ?? []
+                        var out = try await custodyRepo?.auditChainEvents() ?? []
+                        out += try await factReviewsRepo?.auditChainEvents() ?? []
+                        out += try await governanceRepo?.auditChainEvents() ?? []
                         return out
                     })
                 self.auditChain = auditChainService
@@ -2306,6 +2311,10 @@ public final class AppState {
                 await backgroundScheduler.schedule(BackgroundTaskScheduler.Job(
                     id: "audit.chain.seal", interval: 600,
                     body: { [weak auditChainService] in _ = try? await auditChainService?.seal() }))
+            } else {
+                // Strict approval REFUSES without a chain (fail-closed), so a
+                // missing Keychain secret must be loud, not a silent nil.
+                KalsmritikoshLog.app.fault("audit-chain secret unavailable — no chain wired; strict-mode approvals will refuse until this is resolved")
             }
             self.sensitiveScopes = sensitiveScopesRepo
             self.screenAuthorizer = ScreenScopeAuthorizer(repository: sensitiveScopesRepo)

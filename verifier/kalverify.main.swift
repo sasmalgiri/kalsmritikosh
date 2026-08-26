@@ -91,9 +91,22 @@ guard let manifestData = read("manifest.json"),
 }
 var integrityOK = true
 var integrityDetail = ""
-for (name, expected) in manifest.files {
-    guard let data = read(name) else { integrityOK = false; integrityDetail = "\(name) missing"; break }
-    if sha256Hex(data) != expected { integrityOK = false; integrityDetail = "\(name) hash mismatch"; break }
+// EIGHTH AUDIT — hard failures, not gaps: an unknown format version is
+// refused, and the manifest must cover the MANDATORY file set so a rewritten
+// `{"files":{}}` manifest cannot pass integrity vacuously.
+if manifest.formatVersion != 1 {
+    integrityOK = false; integrityDetail = "unknown format version \(manifest.formatVersion) — refused"
+}
+for required in ["attestation.json", "protocol.json", "rule-evaluations.json",
+                 "evaluation-facts.json", "public-key.hex"]
+where integrityOK && manifest.files[required] == nil {
+    integrityOK = false; integrityDetail = "manifest does not cover mandatory file \(required)"
+}
+if integrityOK {
+    for (name, expected) in manifest.files {
+        guard let data = read(name) else { integrityOK = false; integrityDetail = "\(name) missing"; break }
+        if sha256Hex(data) != expected { integrityOK = false; integrityDetail = "\(name) hash mismatch"; break }
+    }
 }
 report("INTEGRITY", integrityOK, integrityDetail)
 guard integrityOK else { exit(1) }
@@ -213,21 +226,34 @@ func rerunEvaluators() -> String? {
             }
             print("REPLAY note: run binding RECOMPUTED from signed facts — matches the sealed runStateSHA256")
         } else {
-            print("REPLAY note: run binding not independently recomputable (facts predate the binding-components format)")
+            // EIGHTH AUDIT — a signed run binding whose components are absent
+            // from the facts FAILS: current-format bundles always carry them.
+            return "the envelope signs runStateSHA256 but the facts carry no binding components — unverifiable binding refused"
         }
     }
     // PUBLIC AUDIT CHAIN (Phase D): when the signed envelope commits to a
-    // public head, the exported trail is REQUIRED and must fold — with the
-    // app's own PublicAuditChain computation — exactly to that head.
+    // non-genesis public head, the exported trail is REQUIRED and must fold —
+    // with the app's own PublicAuditChain rule-v2 computation (each link binds
+    // seq/source/eventID/occurredAt/payload) — exactly to that head. A signed
+    // GENESIS head (fresh ledger) is valid with no trail.
     if let signedHead = attestation.envelope.publicAuditChainHead {
-        guard let trailData = read("audit-events.json"),
-              let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData) else {
-            return "signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused"
+        if signedHead == PublicAuditChain.genesis {
+            if let trailData = read("audit-events.json"),
+               let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData),
+               !trail.isEmpty {
+                return "the signed public head is genesis but the bundle ships a non-empty trail"
+            }
+            print("REPLAY note: public head is the chain genesis (fresh ledger) — no trail required")
+        } else {
+            guard let trailData = read("audit-events.json"),
+                  let trail = try? jsonDecoder().decode([AuditTrailEntry].self, from: trailData) else {
+                return "signed envelope commits to a public audit-chain head but audit-events.json is missing or unreadable — downgrade refused"
+            }
+            if let failure = PublicAuditChain.replay(trail, expectedHead: signedHead) {
+                return failure
+            }
+            print("REPLAY note: public audit chain REPLAYED over \(trail.count) exported event(s) — matches the SIGNED head")
         }
-        if let failure = PublicAuditChain.replay(trail, expectedHead: signedHead) {
-            return failure
-        }
-        print("REPLAY note: public audit chain REPLAYED over \(trail.count) exported event(s) — matches the SIGNED head")
     }
     // RERUN with the app's own assess(): every evaluator, every gate, the
     // same code — outcome, evaluator ID and detail must all reproduce.

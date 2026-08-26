@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 115
+    public static let latestVersion = 116
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -611,7 +611,8 @@ public enum SchemaMigrations {
         (112, v112),
         (113, v113),
         (114, v114),
-        (115, v115)
+        (115, v115),
+        (116, v116)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6214,5 +6215,19 @@ public enum SchemaMigrations {
         created_at  REAL NOT NULL
     );
     CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
+    """
+
+    // MARK: - v116 — public-chain rule v2 reset (eighth audit)
+    //
+    // The public (keyless SHA-256) chain link now binds the FULL entry —
+    // seq, source, event ID and occurrence time — not just the payload, so
+    // exported trail metadata cannot be edited without breaking the fold to
+    // the signed head. Links written under the v114 payload-only rule cannot
+    // satisfy rule v2, so they are RESET (the private HMAC chain, the actual
+    // tamper evidence, is untouched); the public chain restarts at the next
+    // seal under the v2 genesis. Pre-release rule change: no signed envelope
+    // committing to a v1 public head has ever left a released build.
+    private static let v116: String = """
+    UPDATE audit_chain SET public_prev = NULL, public_hash = NULL;
     """
 }
