@@ -131,7 +131,7 @@ enum GuideContent {
         (.history, "History — the evidence-backed narrative",
          "A readable reconstruction of what happened, composed from the dated events in your ledger, with every claim traceable to its source."),
         (.sources, "Sources — what the ledger knows",
-         "Add folders and files here. Text extracts directly from PDF, Word, Excel/CSV, PowerPoint, EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP; images/scans are read by OCR and audio is transcribed on-device. Every file is hashed, parsed into cited evidence, and indexed; duplicates are detected. Anything unreadable is recorded honestly — never faked."),
+         "Add folders and files here. Text extracts directly from PDF, Word, Excel/CSV, PowerPoint, EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP; images/scans are read by OCR. Audio and video are catalogued and preserved — transcribe them on demand in Transcripts (on-device Apple Speech, English). Every file is hashed, parsed into cited evidence, and indexed; duplicates are detected. Anything unreadable is recorded honestly — never faked."),
         (.timeline, "Timeline — your documents as dated events",
          "Every dated fact extracted from your sources, in order. Filter by date range, entity, or event kind. Open an event to see its participants, source document, and causal links."),
         (.search, "Search — exact or by meaning",
@@ -203,7 +203,7 @@ enum GuideContent {
             ("Full LLM", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
-            ("Transcription", "Turns audio and video into text. Slower; done on-device automatically for recordings.")
+            ("Transcription", "Turns audio and video into text — on demand, per file, fully on-device (Apple Speech, English). Never runs automatically during ingest.")
         ])
     ]
 }

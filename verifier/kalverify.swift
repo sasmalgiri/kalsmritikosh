@@ -86,11 +86,12 @@ public nonisolated enum LegalNotice {
     """
 
     public static let thirdPartyStatement = """
-    Built with Apple frameworks (Vision, Speech, Natural Language, Core ML). On-device \
-    reasoning is Built with Llama (Meta Llama 3.2 / 3.1, under the Llama Community \
-    Licence). Semantic search uses on-device BGE embedding + reranker models (MIT). All \
-    processing is on-device; respective model licences and third-party notices apply and \
-    ship with the app.
+    Built with Apple frameworks (Vision, Speech, Natural Language, Core ML). Written \
+    answers use Apple’s on-device Foundation Models (part of macOS 26 and later, where \
+    available); no third-party reasoning model ships with the app. Semantic search uses \
+    bundled on-device BGE embedding + reranker models (BAAI, MIT licence). All \
+    processing is on-device; the model licences and third-party notices ship inside \
+    the app.
     """
 
     /// No professional relationship — the clause the strongest legal-tech
@@ -114,9 +115,8 @@ public nonisolated enum LegalNotice {
     punitive damages, or for lost profits, lost data, or business interruption, under \
     any legal theory, even if advised of the possibility. Total aggregate liability for \
     all claims is capped at the amount you paid for the app in the twelve months before \
-    the claim arose (zero while the app is free). Some jurisdictions do not allow some \
-    of these exclusions, so parts may not apply to you. These provisions allocate risk \
-    and are a basis of the bargain.
+    the claim arose. Some jurisdictions do not allow some of these exclusions, so parts \
+    may not apply to you. These provisions allocate risk and are a basis of the bargain.
     """
 
     /// AI output — the 2026-practice clause: probabilistic output, human
@@ -163,18 +163,18 @@ public nonisolated enum LegalNotice {
         "Conformance means this run satisfied the app's encoded rules at the stated version — not certification, endorsement, or legal compliance by any governing body."
 
     /// Version of these notices — bump on any material change, keep the date.
-    public static let termsVersion = "1.4 (2026-08-23)"
+    public static let termsVersion = "1.5 (2026-08-27)"
 
-    /// Subscription-proof payment terms: written to hold unchanged whether the
-    /// app is free (today) or subscription-based (later).
+    /// Payment terms: written to hold unchanged whether the app is a one-time
+    /// purchase (v1, per SHIP_DECISIONS) or gains paid tiers later.
     public static let subscriptionStatement = """
-    The app is currently free. If paid tiers or subscriptions are introduced, all \
-    purchases, renewals, cancellations, and refunds are handled by Apple through your \
-    App Store account under Apple’s terms; the developer never sees or stores your \
-    payment details. Prices and tier boundaries may change prospectively with notice — \
-    never retroactively. Whatever the tier: your documents, ledger, and reports remain \
-    yours, stay on your device, remain exportable at no charge, and a lapsed or \
-    cancelled subscription never locks you out of data you created.
+    The app is a one-time purchase on the Mac App Store — no subscription, no \
+    per-gigabyte fees. All purchases and refunds are handled by Apple through your App \
+    Store account under Apple’s terms; the developer never sees or stores your payment \
+    details. If additional paid tiers are introduced, prices and tier boundaries may \
+    change prospectively with notice — never retroactively. Whatever the tier: your \
+    documents, ledger, and reports remain yours, stay on your device, remain exportable \
+    at no charge, and no tier change ever locks you out of data you created.
     """
 
     /// How these notices change — the versioned, prospective change process.
@@ -187,10 +187,11 @@ public nonisolated enum LegalNotice {
     your data remains exportable.
     """
 
-    /// Required attribution for the bundled reasoning model (Meta Llama Community
-    /// Licence). Surfaced in Settings → Legal & Privacy and About. See
-    /// MODEL_ATTRIBUTIONS.md for the full obligation set.
-    public static let modelAttribution = "Built with Llama"
+    // "Built with Llama" attribution REMOVED (release-readiness pass,
+    // 2026-08-27): v1 ships NO Llama model — reasoning is Apple Foundation
+    // Models (macOS 26+) with the deterministic engine everywhere. The Llama
+    // Community Licence attribution obligation applies only if the OPTIONAL
+    // v1.x downloaded-GGUF path ever ships; see MODEL_ATTRIBUTIONS.md.
 
     /// Shown once in Settings so the operator knows this is template copy.
     public static let counselNote = """

@@ -10,9 +10,20 @@ engine everywhere (SHIP_DECISIONS §1, GOV-001/GOV-004).
 
 ---
 
-## BAAI bge-small-en-v1.5 (embeddings) — MIT License
+## BGE models (FlagEmbedding project, BAAI) — MIT License
 
-Copyright (c) BAAI.
+- `BAAI/bge-small-en-v1.5` (embedder) — pinned revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`
+- `BAAI/bge-reranker-base` (reranker) — pinned revision `2cfc18c9415c912f9d8155881c133215df768a70`
+
+Both Hugging Face repos declare MIT via metadata (no LICENSE file in the model
+repo); the verbatim upstream licence is the FlagEmbedding project's MIT text.
+The build scripts download ONLY these pinned revisions and write a
+`MODEL_PIN.json` (source revision + sha256 of every produced artifact) next to
+each compiled model, so the archive's models are provably the pinned builds.
+
+MIT License
+
+Copyright (c) 2022 staoxiao
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this
 software and associated documentation files (the "Software"), to deal in the Software
@@ -30,12 +41,6 @@ PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIG
 HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
 CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
----
-
-## BGE reranker (Core ML) — MIT License (BAAI)
-
-Same MIT terms as above.
 
 ---
 

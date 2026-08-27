@@ -17,9 +17,26 @@ public final class PrivacyGate: @unchecked Sendable {
 
     private let noLLMKey = "kalsmritikosh.privacy.offlineNoLLM"
 
+    /// RELEASE builds compile-lock this to `false` (fifteenth review): the
+    /// shipped product contract is zero network, so cloud routing cannot be
+    /// enabled by any persisted setting, migration artifact, or defaults
+    /// tampering. The setter is inert outside DEBUG. Dev builds keep the
+    /// toggle for provider experiments.
     public nonisolated var allowCloudRouting: Bool {
-        get { queue.sync { UserDefaults.standard.bool(forKey: defaultsKey) } }
-        set { queue.sync { UserDefaults.standard.set(newValue, forKey: defaultsKey) } }
+        get {
+            #if DEBUG
+            queue.sync { UserDefaults.standard.bool(forKey: defaultsKey) }
+            #else
+            false
+            #endif
+        }
+        set {
+            #if DEBUG
+            queue.sync { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
+            #else
+            _ = newValue
+            #endif
+        }
     }
 
     /// Fully-private / offline stance: when true, the CapabilityRegistry

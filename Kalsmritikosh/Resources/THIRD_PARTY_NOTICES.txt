@@ -6,11 +6,16 @@ answers use Apple's on-device Foundation Models, part of macOS 26 and later,
 where available).
 
 ------------------------------------------------------------------------------
-BAAI bge-small-en-v1.5 (embedding model) — MIT License
-BGE reranker (Core ML) — MIT License
+BGE models (FlagEmbedding project, BAAI) — MIT License
+  - BAAI/bge-small-en-v1.5 (embedder), pinned revision
+    5c38ec7c405ec4b44b94cc5a9bb96e735b38267a
+  - BAAI/bge-reranker-base (reranker), pinned revision
+    2cfc18c9415c912f9d8155881c133215df768a70
 ------------------------------------------------------------------------------
 
-Copyright (c) BAAI.
+MIT License
+
+Copyright (c) 2022 staoxiao
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in

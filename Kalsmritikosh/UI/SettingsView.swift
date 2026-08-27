@@ -1240,7 +1240,7 @@ public struct SettingsView: View {
                     .foregroundStyle(Theme.brand)
                 Text("Help & feedback").font(.title3.bold())
             }
-            Text("Found a problem or have an idea? Tell us — it's the whole point of the free release. The button below opens a draft in your own Mail app: Kalsmritikosh itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
+            Text("Found a problem or have an idea? Tell us — early feedback shapes what gets built next. The button below opens a draft in your own Mail app: Kalsmritikosh itself sends nothing, and you see and can edit everything (including the app/system version lines) before you choose to send.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button {
@@ -1452,12 +1452,21 @@ public struct SettingsView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Privacy").font(.title3.bold())
-            Toggle("Allow cloud-routed providers", isOn: $allowCloud)
+            // RELEASE-READINESS (fifteenth review): the cloud-routing toggle is a
+            // DEV-ONLY control. The release product contract is zero network —
+            // PrivacyGate is compile-locked to no-cloud in Release, so showing a
+            // toggle there would contradict the shipped behavior.
+            #if DEBUG
+            Toggle("Allow cloud-routed providers (dev builds only)", isOn: $allowCloud)
                 .onChange(of: allowCloud) { _, newValue in
                     PrivacyGate.shared.allowCloudRouting = newValue
                 }
-            Text("When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. Local-network providers (Ollama on this machine) are always allowed regardless.")
+            Text("Dev-build control. When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. In Release builds this gate is compile-locked off and no cloud or local-network provider is reachable.")
                 .font(.caption).foregroundStyle(.secondary)
+            #else
+            Label("All processing is on-device. Cloud routing is compiled out of this build.", systemImage: "lock.shield")
+                .font(.caption).foregroundStyle(.secondary)
+            #endif
 
             Divider().padding(.vertical, 4)
 

@@ -25,7 +25,7 @@ evidence it can cite. If the fact isn't in your ingested files (or hasn't finish
 tells you honestly instead of guessing.
 
 **Why is a file listed as "couldn't be processed"?** Some formats are supported with limits, some
-are preserved-only, and audio/video aren't transcribed in this version. The Sources screen shows
+are preserved-only. Audio/video files are catalogued and preserved at ingest — they are never auto-transcribed; use the Transcripts screen to transcribe a file on demand, fully on-device (Apple Speech; English in this version). Convert can also transcribe as an explicit one-shot export. The Sources screen shows
 exactly which files didn't make it and why. See the Supported Formats page.
 
 **Why are answers deterministic-only on my Mac?** Rich AI answers use Apple's on-device Foundation
@@ -55,7 +55,7 @@ container before launching. Re-ingesting your original folders also rebuilds the
 
 ## Known limitations (v1)
 
-- Audio/video are recognized but **not transcribed** (deferred).
+- Audio/video: catalogued + preserved at ingest; **on-demand** on-device transcription in Transcripts (Apple Speech, English in this version) — never automatic.
 - Some legacy/office formats are extracted with disclosed limits; a few are preserved-only.
 - Advertised scale is the **tested figure** on the store page — not an unlimited claim.
 - Optional downloaded local models are **not** in v1.

@@ -12,10 +12,47 @@ import warnings
 
 warnings.filterwarnings("ignore")
 
+
+# RELEASE PIN (fifteenth review) — a mutable Hugging Face HEAD download can
+# never be release evidence. The revision below is the exact repo commit this
+# release converts; refresh deliberately (and re-record) via
+#   https://huggingface.co/api/models/<repo>  (field "sha").
+# Both BGE repos are MIT (FlagEmbedding project, Copyright (c) 2022 staoxiao).
+import hashlib, json
+
+def _sha256(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+def write_model_pin(dest, repo, revision, artifacts):
+    """Record the pinned source + sha256 of every produced artifact file, so the
+    final archive's models are provably the ones built from the pinned revision."""
+    manifest = {"repo": repo, "revision": revision,
+                "license": "MIT (FlagEmbedding project, Copyright (c) 2022 staoxiao)",
+                "artifacts": {}}
+    for a in artifacts:
+        p = os.path.join(dest, a)
+        if os.path.isdir(p):
+            for root, _, files in os.walk(p):
+                for fn in sorted(files):
+                    fp = os.path.join(root, fn)
+                    manifest["artifacts"][os.path.relpath(fp, dest)] = _sha256(fp)
+        elif os.path.isfile(p):
+            manifest["artifacts"][a] = _sha256(p)
+    out = os.path.join(dest, "MODEL_PIN.json")
+    with open(out, "w") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+    print(f"==> wrote {out} ({len(manifest['artifacts'])} artifact hashes)", flush=True)
+
 print("=== Stage 1: snapshot_download ===", flush=True)
 from huggingface_hub import snapshot_download
 
-src = snapshot_download("BAAI/bge-reranker-base")
+RERANKER_REPO = "BAAI/bge-reranker-base"
+RERANKER_REVISION = "2cfc18c9415c912f9d8155881c133215df768a70"  # pinned — see build-bge-embedder.py note
+src = snapshot_download(RERANKER_REPO, revision=RERANKER_REVISION)
 print(f"  → snapshot at {src}", flush=True)
 
 # Copy tokenizer assets up next to the .mlpackage.
@@ -65,6 +102,9 @@ mlmodel = ct.convert(
 print("=== Stage 5: save .mlpackage ===", flush=True)
 out_path = os.path.join(out_dir, "BGEReranker.mlpackage")
 mlmodel.save(out_path)
+artifacts = ["BGEReranker.mlpackage", "tokenizer.json", "tokenizer_config.json", "sentencepiece.bpe.model"]
+write_model_pin(out_dir, RERANKER_REPO, RERANKER_REVISION,
+                [a for a in artifacts if os.path.exists(os.path.join(out_dir, a))])
 print(f"DONE → {out_path}", flush=True)
 print(f"Files in {out_dir}:", flush=True)
 for f in sorted(os.listdir(out_dir)):

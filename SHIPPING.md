@@ -3,7 +3,7 @@
 # Shipping — Mac App Store release runbook
 
 The locked launch path is **Mac App Store only**, **one-time Personal pricing**, **no
-cloud release**, **no DMG/notarization**, **minimum macOS 26** (per `SHIP_DECISIONS.md`).
+cloud release**, **no DMG/notarization**, **minimum macOS 15.6, capability-adaptive** — AI-written answers require macOS 26+ (per `SHIP_DECISIONS.md` GOV-004).
 This file is the current runbook. The prior DMG / GB-tiered-cloud-pricing / sqlite-vec
 material is retained, superseded, in the appendix — do not act on it.
 
@@ -38,7 +38,7 @@ clean-machine install; legal pages hosted; metadata complete.
 
 ## 4. Archive & upload
 
-1. Product → Archive (Release configuration, `MACOSX_DEPLOYMENT_TARGET = 26.0`).
+1. Product → Archive (Release configuration, `MACOSX_DEPLOYMENT_TARGET = 15.6` uniformly — GOV-004).
 2. Organizer → Distribute App → **App Store Connect** → Upload.
 3. In App Store Connect: attach build, complete metadata, privacy nutrition labels
    (declare on-device processing / no data collection), pricing (one-time Personal),

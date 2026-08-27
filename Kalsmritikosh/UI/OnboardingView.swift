@@ -126,7 +126,7 @@ public struct OnboardingView: View {
                 seeRow("Presentations", "PPTX", "rectangle.on.rectangle")
                 seeRow("Email", "MBOX, EML, EMLX (Apple Mail)", "envelope")
                 seeRow("Images", "PNG, JPG, HEIC, TIFF, WebP (with OCR)", "photo")
-                seeRow("Audio (experimental)", "MP3, WAV, M4A — transcribed; video uses the audio track only", "waveform")
+                seeRow("Audio & video", "MP3, WAV, M4A, video — catalogued and preserved at ingest; transcribe on demand in Transcripts (on-device, English)", "waveform")
                 seeRow("Archives", "ZIP — expanded then ingested", "archivebox")
             }
             Divider().padding(.vertical, 6)

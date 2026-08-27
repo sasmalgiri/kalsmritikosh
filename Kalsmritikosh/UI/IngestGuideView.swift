@@ -47,7 +47,7 @@ public struct IngestGuideView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("How long to ingest 100 MB")
                 .font(Theme.display(22, .bold))
-            Text("Estimated wall-clock time for 100 MB of a single file type, in each system mode. Scanned PDFs, images and audio cost far more (OCR / transcription).")
+            Text("Estimated wall-clock time for 100 MB of a single file type, in each system mode. Scanned PDFs and images cost far more (OCR). Audio/video is catalogued at ingest, not transcribed — on-demand transcription in Transcripts is a separate, later cost.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -121,7 +121,7 @@ public struct IngestGuideView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Why the difference")
                 .font(.caption.weight(.semibold))
-            Text("• Ledger mode: rule-based extraction + one document-card LLM call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep LLM only for the important (hot) slice.\n• Full LLM runs an LLM pass on every chunk, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) and transcription (audio, video) are expensive in every mode because the text has to be recovered first.")
+            Text("• Ledger mode: rule-based extraction + one document-card LLM call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep LLM only for the important (hot) slice.\n• Full LLM runs an LLM pass on every chunk, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) is expensive in every mode because the text has to be recovered first. Audio/video is NOT transcribed during ingest — it is catalogued and preserved; transcription runs only on demand (Transcripts screen, on-device).")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -45,7 +45,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 >
 > **Supported files** include common document, spreadsheet, presentation, email, image (with text
 > recognition), and structured-data formats. Some formats are supported with limits and are shown
-> honestly in-app; audio and video are recognized but not transcribed in this version.
+> honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
 >
 > _Kalsmritikosh is an informational aid. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
@@ -56,9 +56,9 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 
 ## URLs
 
-- **Privacy URL:** _(host `PRIVACY_POLICY.md`)_
-- **Support URL:** _(host `SUPPORT.md`)_
-- **Terms/EULA:** _(host `TERMS_OF_USE.md`, or use Apple's standard LEULA + this as supplement)_
+- **Privacy URL:** https://sasmalgiri.github.io/kalsmritikosh/privacy.html
+- **Support URL:** https://sasmalgiri.github.io/kalsmritikosh/support.html
+- **Terms/EULA:** https://sasmalgiri.github.io/kalsmritikosh/terms.html (Apple's standard LEULA also applies where no custom EULA is presented)
 
 ## Screenshots (plan — capture on a demo corpus with NO real PII)
 
@@ -75,21 +75,21 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic — safe for
 > Kalsmritikosh is a **local evidence/archive workspace**. It processes only files the user
 > explicitly selects via macOS security-scoped folder access. **No account is required** and
 > **core processing is on-device**; the release build contains no network provider and sends no
-> data off the device. Rich answers use Apple's on-device Foundation Models on supported macOS 26
-> hardware; on other Macs the app runs in a deterministic, no-model mode.
+> data off the device. Rich answers use Apple's on-device Foundation Models on supported macOS 26+
+> hardware; on macOS 15.6–25 the app runs in a deterministic, no-model mode.
 >
 > **To demo:** launch → Sources → add the included demo folder (or any folder of documents) →
 > "Ingest All" → open **Ask** and enter a question → the answer appears with clickable source
 > citations. Work products export from the Studio/report screens.
 >
 > **No hidden purchases** (one-time price). **No model download** in this version. Minimum OS
-> macOS 26.
+> macOS 15.6; AI-written answers require macOS 26+ with Apple Intelligence on supported hardware.
 
 ## Do-NOT-claim checklist (verified against this copy)
 
 - [x] Does not claim *every* format (says "common … formats", "some with limits").
 - [x] Does not claim legal admissibility (explicit "not legal advice / verify against sources").
-- [x] Does not claim full video understanding (says audio/video not transcribed).
+- [x] Does not claim full video understanding (says audio/video are preserved at ingest; transcription is on-demand, on-device, English-only in this version).
 - [x] Does not claim 1 TB / unlimited scale (no scale number in copy; store page uses tested figure).
 - [x] Does not claim a bundled reasoning model (says Apple on-device where supported, else deterministic).
 - [x] Does not claim "no network" falsely (accurate: release has no network provider, no downloader in v1).

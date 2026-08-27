@@ -9,8 +9,8 @@ run / hardware / Apple account and must be filled before submission. Gate author
 
 | Field | Value |
 |---|---|
-| git SHA | current `main` after PRs #70–#74 _(update to the tagged release commit at archive time)_ |
-| Schema version | **v102** (`SchemaMigrations.latestVersion`) |
+| git SHA | _(owner fills at archive time — the release-candidate commit after the fifteenth-review fixes; predecessor context: `743455a` audits 11–13 closed, hosted run 33040783033 7/7 green)_ |
+| Schema version | **v119** (`SchemaMigrations.latestVersion` — v117/118 case-bound phase evidence + self-heal recovery, v119 dataset case origin) |
 | App version / build | `[owner: e.g. 1.0 (1)]` |
 | Xcode / macOS SDK | `[owner: e.g. Xcode 26.x / macOS 26 SDK]` |
 | Minimum OS | **macOS 15.6, capability-adaptive (GOV-004)** — `MACOSX_DEPLOYMENT_TARGET = 15.6` uniform, CI-enforced by `ci/guards/release-configuration.sh`. Foundation Models runtime-gated; macOS 15.6–25 runs honestly deterministic-only. |
@@ -39,7 +39,7 @@ every push. `PrivacyInfo.xcprivacy` declares "Data Not Collected" and names no n
 
 | Suite | Result |
 |---|---|
-| Whole suite (`build-and-test`) | **total=3389, passed=3387, failed=0, skipped=2** (PR #73 run 31170924940; floor 3389 in `ci/test-baseline.json`) |
+| Whole suite (`build-and-test`) | **total=3731, passed=3729, failed=0, skipped=2** (run 33040783033 on `743455a`; floor 3731 in `ci/test-baseline.json` — re-verify against the final RC run at archive time) |
 | Migration matrix (named check) | green, floor 375 (fresh→latest, historical→latest, reopen, double-migration, rollback, fk/integrity checks) |
 | Parser fixtures (named check) | green, floor 126 — every advertised structural format has a dedicated fixture suite (gate F1) |
 | Sensitive export (named check) | green, floor 122 (S2 PASS) |
@@ -103,7 +103,7 @@ macOS 15.6–25 machine if available to witness the honest deterministic-only mo
 
 ## Known limitations (v1)
 
-- Audio/video recognized but not transcribed (deferred by design).
+- Audio/video catalogued + preserved at ingest (never auto-transcribed); on-demand on-device transcription in Transcripts (Apple Speech, en-US in this version).
 - PPT/PST/OST/MSG/NSF remain unsupported; RAR/7z recognized with custody preserved and an
   explicit honest-unsupported manifest (never silently empty).
 - Optional downloaded local GGUF models deferred to v1.x (GOV-001).
