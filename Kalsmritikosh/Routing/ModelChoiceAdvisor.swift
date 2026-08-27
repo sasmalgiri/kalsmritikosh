@@ -123,6 +123,8 @@ public enum ModelChoiceAdvisor {
                     ]
                 )
             }
+            #if DEBUG
+            // Dev builds can actually install Ollama/MLX — say so.
             return .init(
                 severity: .critical,
                 currentProviderID: nil,
@@ -135,6 +137,24 @@ public enum ModelChoiceAdvisor {
                     "No reasoning-capable provider is registered for this build."
                 ]
             )
+            #else
+            // SIXTEENTH REVIEW — in Release, deterministic-only is the PROMISED
+            // valid mode on macOS 15.6–25 (SHIP_DECISIONS GOV-004, owner
+            // decision 2: generative is OPTIONAL). There is nothing for the
+            // user to install; never mark the shipped contract critical.
+            return .init(
+                severity: .ok,
+                currentProviderID: nil,
+                currentProviderName: nil,
+                recommendedProviderID: nil,
+                recommendedProviderName: nil,
+                summary: "Deterministic evidence mode — answers come straight from your ledger, fully on-device.",
+                details: [
+                    "AI-written prose requires macOS 26 or later with Apple Intelligence on supported hardware.",
+                    "Search, timelines, entities, contradictions, gaps, and cited deterministic reports are fully available in this mode."
+                ]
+            )
+            #endif
         }
 
         let current = currentReasoning!

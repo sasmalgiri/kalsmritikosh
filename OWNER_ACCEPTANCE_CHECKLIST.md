@@ -132,13 +132,19 @@ latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB
   Contents/Resources — the website's "models ship inside the app" claim is
   true ONLY when this step is done.
 
-- [ ] **Verify the model pins in the archive** (fifteenth review): the build
-  scripts download ONLY the pinned Hugging Face revisions
-  (`bge-small-en-v1.5 @ 5c38ec7c…`, `bge-reranker-base @ 2cfc18c9…`) and write
-  `MODEL_PIN.json` (source revision + sha256 of every produced artifact) next
-  to each model under `Kalsmritikosh/Resources/`. Confirm both MODEL_PIN.json
-  files exist, their recorded revisions match the pins in the scripts, and the
-  bundled `THIRD_PARTY_NOTICES.txt` is present in the archived app.
+- [ ] **Verify the model pins — hashes recomputed, not existence-checked**
+  (fifteenth + sixteenth reviews): the build scripts download ONLY the pinned
+  Hugging Face revisions (`bge-small-en-v1.5 @ 5c38ec7c…`,
+  `bge-reranker-base @ 2cfc18c9…`) and write `MODEL_PIN.json` next to each
+  model. Run `bash scripts/verify-model-pins.sh` — it RECOMPUTES every
+  recorded sha256 and fails on any missing, changed, or unlisted artifact.
+  Then, at archive time, run
+  `bash scripts/verify-model-pins.sh --record-compiled <archive .app>` (records
+  sha256 of every compiled `.mlmodelc` file into
+  `release/COMPILED_MODEL_HASHES.json` — compiled bytes cannot be derived from
+  the `.mlpackage` hashes) and verify the exported/installed copy with
+  `--verify-compiled`. Also confirm the bundled `THIRD_PARTY_NOTICES.txt` is
+  present in the archived app.
 
 - [ ] **Confirm the App Store seller/legal entity name** (fifteenth review): a
   paid app's seller name in App Store Connect must be the registered legal

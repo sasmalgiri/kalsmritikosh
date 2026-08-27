@@ -85,7 +85,29 @@ if [ -n "$PLIST_HITS" ]; then
   FAIL=1
 fi
 
+# ── 3c. Tracked entitlements must not grant network access ─────────────────
+# (Sixteenth review.) The active build settings govern the product, but a
+# tracked entitlements file granting network.client/server is a future-signing
+# risk: anything that ever signs against the file directly would ship egress.
+ENT_FILES=$(git ls-files "*.entitlements" 2>/dev/null || find . -name "*.entitlements" -not -path "./.git/*")
+for ent in $ENT_FILES; do
+  [ -f "$ent" ] || continue
+  NET=$(python3 - "$ent" <<'PYENT'
+import plistlib, sys
+with open(sys.argv[1], "rb") as f:
+    d = plistlib.load(f)
+bad = [k for k in ("com.apple.security.network.client",
+                   "com.apple.security.network.server") if d.get(k) is True]
+print(" ".join(bad))
+PYENT
+)
+  if [ -n "$NET" ]; then
+    echo "::error::Release-configuration guard: tracked entitlements file '$ent' grants network access ($NET) — the product contract is zero network; set it to false"
+    FAIL=1
+  fi
+done
+
 if [ "$FAIL" -ne 0 ]; then
   exit 1
 fi
-echo "Release-configuration guard clean (floor 15.6, offline Release, no Ollama release metadata)."
+echo "Release-configuration guard clean (floor 15.6, offline Release, no Ollama release metadata, no network entitlements)."

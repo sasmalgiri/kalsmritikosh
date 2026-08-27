@@ -171,15 +171,26 @@ enum GuideContent {
     /// statuses above — the buttons a user presses and the words the app uses.
     /// Each group renders under its own heading in the Guide. Kept in step with
     /// docs/GLOSSARY.md; edit both together.
-    static let termGroups: [(title: String, symbol: String, items: [(term: String, definition: String)])] = [
-        ("Buttons & options", "slider.horizontal.3", [
+    /// "Buttons & options" items, built imperatively because the cloud toggle
+    /// exists only in dev builds (sixteenth review) — the Release guide must
+    /// not document a control that isn't there, and `#if` cannot appear
+    /// inside a collection literal.
+    private static var buttonsAndOptionsItems: [(term: String, definition: String)] {
+        var items: [(term: String, definition: String)] = [
             ("Ingest", "Reading and filing your documents into searchable, dated, cited facts. Runs automatically when you add files — you don't press anything."),
             ("Distill memory", "Sums up where each main person and company stands right now, from all their scattered mentions. Optional; the app answers fine without it."),
-            ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default."),
-            ("Allow cloud providers", "Off by default. Leave it off to keep every file, question, and answer entirely on your Mac."),
-            ("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."),
-            ("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses.")
-        ]),
+            ("Background maintenance", "Lets the app tidy summaries and memory while your Mac is idle, and stop the moment you return. Off by default.")
+        ]
+        #if DEBUG
+        items.append(("Allow cloud providers (dev builds)", "Dev-only toggle. Release builds have no cloud path at all — every file, question, and answer stays on your Mac."))
+        #endif
+        items.append(("Coalesce email threads", "Treats a whole email reply-chain as one item instead of one per message — cleaner memory. Needs a re-import to take effect."))
+        items.append(("Show low-quality (T3)", "Also shows the shaky, low-trust items. Off = cleaner answers; on = see everything, including weak guesses."))
+        return items
+    }
+
+    static let termGroups: [(title: String, symbol: String, items: [(term: String, definition: String)])] = [
+        ("Buttons & options", "slider.horizontal.3", buttonsAndOptionsItems),
         ("What the app stores", "tray.full", [
             ("Ledger", "The app's structured memory — the one database where every fact, date, person, and source lives. The intelligence is here, not in the AI model."),
             ("Knowledge Object", "One document (or email) after the app has read and normalized it."),

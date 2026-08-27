@@ -40,6 +40,7 @@ cp -R "$BUILD_DIR/BGEReranker.mlpackage"     "$RES_DIR/"
 cp    "$BUILD_DIR/tokenizer.json"            "$RES_DIR/"
 cp    "$BUILD_DIR/tokenizer_config.json"     "$RES_DIR/"
 cp    "$BUILD_DIR/sentencepiece.bpe.model"   "$RES_DIR/" 2>/dev/null || true
+cp    "$BUILD_DIR/special_tokens_map.json"    "$RES_DIR/" 2>/dev/null || true
 cp    "$BUILD_DIR/MODEL_PIN.json"            "$RES_DIR/"
 cp    "$BUILD_DIR/special_tokens_map.json"   "$RES_DIR/"
 

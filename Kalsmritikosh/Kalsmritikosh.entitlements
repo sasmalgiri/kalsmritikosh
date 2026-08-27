@@ -8,8 +8,18 @@
     <true/>
     <key>com.apple.security.files.bookmarks.app-scope</key>
     <true/>
+    <!--
+      SIXTEENTH REVIEW — network client is FALSE in the tracked file. The
+      product contract is zero network in Release (the active build settings
+      ENABLE_OUTGOING/INCOMING_NETWORK_CONNECTIONS = NO already enforce it);
+      keeping true here was a future-signing risk if anything ever signed
+      against this file directly. Dev-build Ollama access, when needed, is a
+      LOCAL, deliberate, uncommitted toggle — never a tracked default.
+      ci/guards/release-configuration.sh rejects network-client=true in any
+      tracked entitlements file.
+    -->
     <key>com.apple.security.network.client</key>
-    <true/>
+    <false/>
     <key>com.apple.security.device.audio-input</key>
     <false/>
     <!--

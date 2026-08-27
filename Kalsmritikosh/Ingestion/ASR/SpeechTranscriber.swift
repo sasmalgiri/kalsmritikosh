@@ -108,7 +108,10 @@ public actor SpeechTranscriber: AudioTranscribing {
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         } else if !PrivacyGate.shared.allowCloudRouting {
-            throw ASRError("On-device transcription isn't available for this language and cloud routing is off. Enable 'Allow cloud-routed providers' in Settings, or use a supported language.")
+            // SIXTEENTH REVIEW — never point users at a control that does not
+            // exist in Release (cloud routing is compile-locked off). The
+            // honest contract: this version transcribes en-US, fully on-device.
+            throw ASRError("On-device speech recognition isn't available for this language. This version transcribes English (en-US) only, fully on your Mac.")
         }
         if #available(macOS 13.0, iOS 16.0, *) {
             request.addsPunctuation = true
@@ -145,7 +148,10 @@ public actor SpeechTranscriber: AudioTranscribing {
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         } else if !PrivacyGate.shared.allowCloudRouting {
-            throw ASRError("On-device transcription isn't available for this language and cloud routing is off. Enable 'Allow cloud-routed providers' in Settings, or use a supported language.")
+            // SIXTEENTH REVIEW — never point users at a control that does not
+            // exist in Release (cloud routing is compile-locked off). The
+            // honest contract: this version transcribes en-US, fully on-device.
+            throw ASRError("On-device speech recognition isn't available for this language. This version transcribes English (en-US) only, fully on your Mac.")
         }
         if #available(macOS 13.0, iOS 16.0, *) { request.addsPunctuation = true }
 

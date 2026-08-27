@@ -1,8 +1,14 @@
 # App Store / Distribution Readiness — Phase L
 
-This document captures the App Store / notarization checklist and the
-runtime decisions made in Phase L to satisfy Apple's review criteria
-without amputating capabilities.
+> **DOC STATUS: PARTIALLY SUPERSEDED (sixteenth review, 2026-08-27).** The
+> authority is `SHIP_DECISIONS.md` (GOV-001/GOV-004) + `APP_STORE_RELEASE.md`:
+> **Mac App Store only, zero network in Release, no Ollama/cloud in the
+> release product, no local-network permission.** Sections below that
+> describe Ollama HTTP, cloud LLM endpoints, local-network usage strings, or
+> a Developer ID path are HISTORICAL Phase-L material — do not act on them.
+
+This document captured the App Store / notarization checklist and the
+runtime decisions made in Phase L.
 
 ## Distribution targets
 
@@ -29,7 +35,7 @@ distribution path. No `#if APPSTORE` compile flag needed.
 | `com.apple.security.app-sandbox` | `true` | Required for Mac App Store |
 | `com.apple.security.files.user-selected.read-write` | `true` | NSOpenPanel folder picks |
 | `com.apple.security.files.bookmarks.app-scope` | `true` | Persisted security-scoped bookmarks |
-| `com.apple.security.network.client` | `true` | Local Ollama HTTP + user-configured cloud LLM endpoints |
+| `com.apple.security.network.client` | `false` | Zero-network product contract (GOV-001). Release build settings also disable outgoing/incoming connections; the guard rejects `true` in any tracked entitlements file. |
 | `com.apple.security.device.audio-input` | `false` | We don't capture mic audio (we ingest pre-recorded files only) |
 | `com.apple.security.automation.apple-events` | `false` | We don't script other apps |
 | `com.apple.security.cs.allow-unsigned-executable-memory` | `false` | No JIT / runtime code load |
@@ -42,10 +48,10 @@ distribution path. No `#if APPSTORE` compile flag needed.
 
 - `NSPrivacyTracking = false` — zero tracking
 - `NSPrivacyTrackingDomains = []`
-- `NSPrivacyCollectedDataTypes` — only `OtherUserContent`, linked to
-  the user's identity, with purpose `AppFunctionality`. Collection
-  is conditional: only when the user explicitly configures a cloud
-  LLM endpoint AND issues a query.
+- `NSPrivacyCollectedDataTypes` — empty in the shipped manifest (the App
+  Store label is **Data Not Collected**; there is no cloud endpoint in the
+  release product). The historical Phase-L conditional-collection note is
+  superseded.
 - `NSPrivacyAccessedAPITypes` — required-reason declarations:
   - `FileTimestamp` → reason `C617.1` (inside app/group container)
   - `SystemBootTime` → reason `35F9.1` (measure time spent in app)
@@ -59,7 +65,7 @@ in **Project → Info → Custom macOS Application Target Properties**:
 
 | Key | String value |
 |---|---|
-| `NSLocalNetworkUsageDescription` | `Kalsmritikosh connects to your local Ollama daemon (http://localhost:11434) for on-device LLM generation when configured.` |
+| ~~`NSLocalNetworkUsageDescription`~~ | SUPERSEDED — do NOT add. The release product makes no network connections; the release-configuration guard fails the build if this key appears in the Release configuration. |
 | `NSDocumentsFolderUsageDescription` | `To ingest emails, documents, PDFs, and other files into your private knowledge ledger.` |
 | `NSDownloadsFolderUsageDescription` | `Same as Documents — to ingest files you've placed there.` |
 | `NSDesktopFolderUsageDescription` | `Same as Documents.` |
@@ -145,12 +151,9 @@ Plus an eval-gate CI workflow that fails the build when:
 
 ## Review-time gotchas
 
-1. **Local network usage prompt**: macOS will show a one-time
-   permission dialog when Ollama is first contacted. The
-   `NSLocalNetworkUsageDescription` string above is what appears.
-2. **Folder pickers**: NSOpenPanel prompts the user per-folder. The
+1. **Folder pickers**: NSOpenPanel prompts the user per-folder. The
    first ingest after install will trigger one prompt per root.
-3. **Background ingest**: Kalsmritikosh does NOT use BGTaskScheduler or
+2. **Background ingest**: Kalsmritikosh does NOT use BGTaskScheduler or
    continuous capture. All work runs only while the app is open.
-4. **Crash logs**: enable symbolication uploads in the Organizer
+3. **Crash logs**: enable symbolication uploads in the Organizer
    so App Store reviewers can attach trace data.

@@ -23,7 +23,7 @@ questions from that record on your Mac.
 - **Not a system of legal record** and **not a guarantee of admissibility.** The App surfaces
   evidence with citations; it does not certify authenticity or legal weight.
 - **Not a complete extractor.** Some formats are supported with disclosed limits, some are
-  preserved-only, and audio/video are not transcribed in this version (see the Supported Formats
+  preserved-only, and audio/video are catalogued and preserved at ingest — transcription runs only on demand, fully on-device (Apple Speech, English in this version) (see the Supported Formats
   page). The App shows its own coverage honestly; do not assume completeness.
 
 ## 4. Your responsibilities

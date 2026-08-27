@@ -26,7 +26,7 @@ file, which page). It runs entirely on your Mac — nothing leaves the machine.
 | **Ingest** (happens automatically) | "Reading and filing your documents." | Turns raw files into searchable, dated, cited facts. You don't press anything — it runs when you add files. |
 | **Distill memory now** | "Sum up where each person/company stands, right now." | Builds a one-paragraph, up-to-date summary for the main people and organizations in your files (see *Distilled memory* below). Press it once after a big import if you want subject summaries ready instantly. Optional — the app works without it. |
 | **Background maintenance** | "Tidy up quietly while I'm not using the Mac." | Lets the app improve summaries/memory during idle time. **Off** by default. |
-| **Allow cloud-routed providers** | "May I use an online AI model?" | Off by default. Leave it **off** to stay 100% on-device and private. |
+| **Allow cloud-routed providers** | "May I use an online AI model?" | Dev builds only. The shipping app has no cloud path at all — it is compiled out, so there is nothing to switch. |
 | **Coalesce email threads** | "Treat a whole reply-chain as one item." | Cleaner memory for busy mailboxes. Needs a re-import to take effect. |
 | **Show low-quality (T3) results** | "Also show me the shaky, low-trust stuff." | Off = cleaner answers. On = see everything, including guesses. |
 
@@ -97,7 +97,7 @@ The app trades **time for depth**. Faster = lighter reading; deeper = more AI wo
 | **Full LLM** | Runs the AI over every slice of every document. Deepest, but can take **hours** on big archives. |
 | **Quality costs time** | The core rule: better/deeper analysis takes longer. The app defaults to fast + all-on-device, and lets you opt into more depth. |
 | **OCR** | "Read text out of a scanned page or photo." | Slower, used automatically for scans/images. |
-| **Transcription** | "Turn audio/video into text." | Slower, used automatically for recordings. |
+| **Transcription** | "Turn audio/video into text." | On demand only (Transcripts screen), fully on-device (Apple Speech, English in this version) — never automatic during ingest. |
 
 ---
 

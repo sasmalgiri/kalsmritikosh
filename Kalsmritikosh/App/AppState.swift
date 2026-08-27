@@ -1042,7 +1042,13 @@ public final class AppState {
                 )
             )
             } // internalProvidersEnabled (MLX reasoning)
-            await capabilities.register(LlamaCppProvider())
+            // SIXTEENTH REVIEW — LlamaCpp is an INTENTIONAL NON-SHIPPING
+            // PROVIDER STUB (SHIP_DECISIONS §4): registered in internal
+            // builds only, so a Release capability resolution can never
+            // surface an unavailable local-model path.
+            if internalProvidersEnabled {
+                await capabilities.register(LlamaCppProvider())
+            }
 
             // G2-3 — register user-supplied .gguf files persisted
             // via SettingsView's file importer. Each entry becomes

@@ -21,7 +21,7 @@ These are the only remaining items, and none is code I can write:
 
 1. **App run + eval** — launch, ingest, ask; fill EVAL-001/002 + gold metrics into `RELEASE_EVIDENCE_v1.md`.
 2. **Scale runs (SCL-001…004)** — record 1/10/<N> GB timings on your Mac → sets the "tested to N GB" store figure.
-3. **Signing + archive (REL-001)** — set your team + `MACOSX_DEPLOYMENT_TARGET = 26.0`, Product → Archive.
+3. **Signing + archive (REL-001)** — set your team; `MACOSX_DEPLOYMENT_TARGET = 15.6` uniformly (GOV-004 — the guard enforces it), Product → Archive.
 4. **Clean-machine test (REL-002)** — full journey on a fresh minimum-spec Mac.
 5. **Owner acceptance (REL-003)** — your 20 representative questions.
 6. **Submit (REL-005/006)** — host the pages above, paste the listing, upload screenshots, sign off.

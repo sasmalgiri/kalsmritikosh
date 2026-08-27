@@ -102,7 +102,8 @@ mlmodel = ct.convert(
 print("=== Stage 5: save .mlpackage ===", flush=True)
 out_path = os.path.join(out_dir, "BGEReranker.mlpackage")
 mlmodel.save(out_path)
-artifacts = ["BGEReranker.mlpackage", "tokenizer.json", "tokenizer_config.json", "sentencepiece.bpe.model"]
+artifacts = ["BGEReranker.mlpackage", "tokenizer.json", "tokenizer_config.json",
+             "special_tokens_map.json", "sentencepiece.bpe.model"]
 write_model_pin(out_dir, RERANKER_REPO, RERANKER_REVISION,
                 [a for a in artifacts if os.path.exists(os.path.join(out_dir, a))])
 print(f"DONE → {out_path}", flush=True)

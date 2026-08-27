@@ -139,13 +139,18 @@ public struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         intelligenceSection
                         Divider()
-                        modelPickerSection
-                        Divider()
                         diagnosticsSection
-                        // P2.6/P8.7 — provider list, BYO models, per-tier pinning
-                        // and the evaluation runner are developer/internal tools,
-                        // not consumer settings. DEBUG/internal builds only.
+                        // P2.6/P8.7 — model picker, provider list, BYO models,
+                        // per-tier pinning and the evaluation runner are
+                        // developer/internal tools, not consumer settings.
+                        // SIXTEENTH REVIEW: the picker moved here too — the
+                        // Release build registers only Apple Foundation Models
+                        // + the bundled BGE models, so there is nothing to
+                        // pick, and its copy referenced cloud/LAN/BYO models
+                        // that do not exist in Release. DEBUG/internal only.
                         #if DEBUG
+                        Divider()
+                        modelPickerSection
                         Divider()
                         providersSection
                         Divider()
@@ -163,7 +168,7 @@ public struct SettingsView: View {
                             .foregroundStyle(Theme.brand)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("Advanced").font(.title3.bold())
-                            Text("Answering depth, model choice, providers, pinning, diagnostics — power users only. The app works fully without touching these.")
+                            Text("Answering depth and diagnostics — power users only. The app works fully without touching these.")
                                 .font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
