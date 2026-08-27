@@ -21,12 +21,25 @@ public nonisolated struct SOPRecord: Sendable, Identifiable, Equatable, Codable 
     public let verifiedOn: String          // yyyy-mm-dd of last verification
     public let reviewIntervalDays: Int     // periodic-check cadence
 
+    /// The date this record's periodic re-check falls due (verifiedOn +
+    /// interval), or nil when verifiedOn fails to parse (D-8).
+    public func dueDate(calendar: Calendar = .current) -> Date? {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
+        guard let base = f.date(from: verifiedOn) else { return nil }
+        return calendar.date(byAdding: .day, value: reviewIntervalDays, to: base)
+    }
+
     /// Due when `now` is past verifiedOn + interval (or the date fails to parse).
     public func isDue(now: Date, calendar: Calendar = .current) -> Bool {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
-        guard let base = f.date(from: verifiedOn),
-              let due = calendar.date(byAdding: .day, value: reviewIntervalDays, to: base) else { return true }
+        guard let due = dueDate(calendar: calendar) else { return true }
         return now >= due
+    }
+
+    /// The same record with an owner-review override applied (D-8).
+    public func withVerifiedOn(_ date: String) -> SOPRecord {
+        SOPRecord(id: id, title: title, governingBody: governingBody,
+                  editionImplemented: editionImplemented, implementedIn: implementedIn,
+                  verifiedOn: date, reviewIntervalDays: reviewIntervalDays)
     }
 }
 
@@ -79,15 +92,27 @@ public nonisolated enum ComplianceBoard {
     /// (id → yyyy-mm-dd of the most recent manual verification).
     public static func due(now: Date, overrides: [String: String] = [:]) -> [SOPRecord] {
         records.filter { r in
-            if let o = overrides[r.id] {
-                var patched = r
-                patched = SOPRecord(id: r.id, title: r.title, governingBody: r.governingBody,
-                                    editionImplemented: r.editionImplemented, implementedIn: r.implementedIn,
-                                    verifiedOn: o, reviewIntervalDays: r.reviewIntervalDays)
-                return patched.isDue(now: now)
-            }
-            return r.isDue(now: now)
+            effective(r, overrides: overrides).isDue(now: now)
         }
+    }
+
+    /// The record with its owner override (if any) applied.
+    private static func effective(_ r: SOPRecord, overrides: [String: String]) -> SOPRecord {
+        overrides[r.id].map { r.withVerifiedOn($0) } ?? r
+    }
+
+    /// The next periodic review to fall due across the whole board, honoring
+    /// owner overrides (D-8): the record with the EARLIEST due date, so the
+    /// findings/approval surface can print "next periodic review …" honestly.
+    /// nil only if every record's date fails to parse.
+    public static func nextDue(now: Date, overrides: [String: String] = [:]) -> (record: SOPRecord, date: Date)? {
+        records
+            .compactMap { r -> (record: SOPRecord, date: Date)? in
+                let e = effective(r, overrides: overrides)
+                guard let d = e.dueDate() else { return nil }
+                return (e, d)
+            }
+            .min { $0.date < $1.date }
     }
 
     /// The board as a hardcopy — exportable, like every other deliverable.

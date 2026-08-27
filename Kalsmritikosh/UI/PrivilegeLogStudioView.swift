@@ -62,6 +62,9 @@ public struct PrivilegeLogStudioView: View {
                         .font(.largeTitle.weight(.bold))
                     Text("Build an FRCP 26(b)(5) privilege log the real-life way: describe each withheld document well enough that the claim can be tested — without revealing what's protected — assert the basis, QC it, and serve the exact table courts expect.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(JurisdictionNotice.studio(instrument: "US FRCP 26(b)(5)(A)"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
                     Button { newLog() } label: { Label("New privilege log", systemImage: "plus.circle.fill") }

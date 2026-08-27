@@ -139,12 +139,17 @@ latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB
   model. Run `bash scripts/verify-model-pins.sh` — it RECOMPUTES every
   recorded sha256 and fails on any missing, changed, or unlisted artifact.
   Then, at archive time, run
-  `bash scripts/verify-model-pins.sh --record-compiled <archive .app>` (records
-  sha256 of every compiled `.mlmodelc` file into
-  `release/COMPILED_MODEL_HASHES.json` — compiled bytes cannot be derived from
-  the `.mlpackage` hashes) and verify the exported/installed copy with
-  `--verify-compiled`. Also confirm the bundled `THIRD_PARTY_NOTICES.txt` is
-  present in the archived app.
+  `bash scripts/verify-model-pins.sh --record-compiled <archive .app>` — it
+  re-runs the source-pin verification FIRST (aborting on any failure), then
+  records sha256 of every compiled `.mlmodelc` file plus the source pins
+  (repo, revision, sha256 of each MODEL_PIN.json) into
+  `release/COMPILED_MODEL_HASHES.json`, binding the compiled record to the
+  pinned sources (compiled bytes cannot be derived from the `.mlpackage`
+  hashes; each MODEL_PIN.json also records the converting toolchain, so a
+  hash change is attributable). Verify the exported/installed copy with
+  `--verify-compiled` — it recomputes the source pins too when the model dirs
+  are present. Also confirm the bundled `THIRD_PARTY_NOTICES.txt` is present
+  in the archived app.
 
 - [ ] **Confirm the App Store seller/legal entity name** (fifteenth review): a
   paid app's seller name in App Store Connect must be the registered legal

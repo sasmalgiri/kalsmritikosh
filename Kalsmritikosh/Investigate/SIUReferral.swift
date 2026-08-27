@@ -193,6 +193,7 @@ public enum SIUReportRenderer {
         let df = DateFormatter(); df.dateStyle = .long
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# SIU Investigation Report — \(s.title.trimmed.isEmpty ? "Untitled" : s.title)\n\n"
+        out += "_\(JurisdictionNotice.studio(instrument: "NAIC Model #901 and NICB indicators (US)"))_\n\n"
 
         // Claim identification block.
         out += "| Claim no. | Insured | Policy | Loss date | Loss type | Claimed amount |\n|---|---|---|---|---|---|\n"

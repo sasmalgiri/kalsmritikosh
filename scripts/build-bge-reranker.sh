@@ -42,7 +42,6 @@ cp    "$BUILD_DIR/tokenizer_config.json"     "$RES_DIR/"
 cp    "$BUILD_DIR/sentencepiece.bpe.model"   "$RES_DIR/" 2>/dev/null || true
 cp    "$BUILD_DIR/special_tokens_map.json"    "$RES_DIR/" 2>/dev/null || true
 cp    "$BUILD_DIR/MODEL_PIN.json"            "$RES_DIR/"
-cp    "$BUILD_DIR/special_tokens_map.json"   "$RES_DIR/"
 
 echo "==> Done. Rebuild the Xcode project to bundle the new model."
 echo "    G2-RERANK-LADDER Tier 3 will activate at runtime when"

@@ -66,6 +66,9 @@ public struct ForensicStudioView: View {
                         .font(.largeTitle.weight(.bold))
                     Text("Follow the money the way a testifying expert must: name the tracing method, list the materials relied upon, build a schedule where every amount drills to its source document, and produce the FRCP 26(a)(2)(B) expert report — findings distinct from opinion, to a reasonable degree of professional certainty.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(JurisdictionNotice.studio(instrument: "US FRCP 26(a)(2)(B) and Daubert"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
                     Button { newEngagement() } label: { Label("New engagement", systemImage: "plus.circle.fill") }

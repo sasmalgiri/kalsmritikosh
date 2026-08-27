@@ -158,7 +158,8 @@ public enum FAReportRenderer {
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Expert Report of \(f.expert.orDashFA) — \(f.title.trimmed.isEmpty ? "Untitled" : f.title)\n\n"
         out += "**Prepared for:** \(f.preparedFor.orDashFA) · **Date:** \(df.string(from: generatedAt))\n"
-        out += "**Prepared pursuant to Fed. R. Civ. P. 26(a)(2)(B).**\n\n---\n\n"
+        out += "**Prepared pursuant to Fed. R. Civ. P. 26(a)(2)(B).**\n"
+        out += "_\(JurisdictionNotice.studio(instrument: "US FRCP 26(a)(2)(B) and Daubert"))_\n\n---\n\n"
 
         out += "## 1. Engagement & scope\n\n\(f.scope.trimmed.isEmpty ? "_Not stated._" : f.scope)\n\n"
         out += "## 2. Qualifications\n\n\(f.qualifications.trimmed.isEmpty ? "_Not stated._" : f.qualifications)\n\n"

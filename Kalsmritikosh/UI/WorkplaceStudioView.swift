@@ -69,6 +69,9 @@ public struct WorkplaceStudioView: View {
                         .font(.largeTitle.weight(.bold))
                     Text("Run a workplace investigation the way it's really done — mandate, allegations framed as questions, evidence, credibility, classified findings on the balance of probabilities — and produce the exact report an investigator signs.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(JurisdictionNotice.studio(instrument: "the balance-of-probabilities standard with notice and opportunity to respond (UK ACAS / US EEOC practice)"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
                     Button { newCase() } label: { Label("New investigation", systemImage: "plus.circle.fill") }

@@ -37,6 +37,9 @@ public struct StudioConfig<M: StudioDeliverable> {
     public var name: String
     public var icon: String
     public var blurb: String
+    /// D-7 — optional jurisdiction disclosure rendered as a caption under the
+    /// blurb, for studios whose template cites a named national instrument.
+    public var jurisdiction: String? = nil
     public var storeKey: String
     public var filenamePrefix: String
     public var newItem: (Date) -> M
@@ -112,6 +115,10 @@ public struct PersonaStudioShell<M: StudioDeliverable, StageContent: View>: View
                     Label(config.name, systemImage: config.icon).font(.largeTitle.weight(.bold))
                     Text(config.blurb).font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let jurisdiction = config.jurisdiction {
+                        Text(jurisdiction).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 HStack(spacing: 10) {
                     Button { newItem() } label: { Label("New", systemImage: "plus.circle.fill") }

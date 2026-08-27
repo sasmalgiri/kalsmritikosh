@@ -64,6 +64,9 @@ public struct SIUStudioView: View {
                         .font(.largeTitle.weight(.bold))
                     Text("Work a referred claim the way an SIU really does: record red flags against objective criteria (indicators, never proof), build the loss chronology, document the investigation, preserve discrepancies, and file the exact report — whether it returns to claims or refers out.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text(JurisdictionNotice.studio(instrument: "NAIC Model #901 and NICB indicators (US)"))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack(spacing: 10) {
                     Button { newReferral() } label: { Label("New claim file", systemImage: "plus.circle.fill") }

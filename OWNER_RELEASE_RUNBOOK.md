@@ -17,8 +17,9 @@ the result. When all boxes are checked, the status becomes **SHIP: GO**._
    `release/RELEASE_EVIDENCE_v1.md`.
 4. [ ] **Clean physical Mac:** run `CLEAN_MACHINE_ACCEPTANCE.md` (offline install proof;
    ideally include one macOS 15.6–25 machine to witness the honest deterministic-only mode).
-5. [ ] **Legal/support pages:** insert your contact details into `docs/legal/PRIVACY_POLICY.md`,
-   `docs/legal/TERMS_EULA.md`, `docs/legal/SUPPORT.md` (drafts are complete), review, and
+5. [ ] **Legal/support pages:** the canonical, ALREADY-LIVE pages are `docs/privacy.html`,
+   `docs/terms.html`, `docs/support.html` (v1.5, 2026-08-27 — contact details included;
+   the old docs/legal/ markdown drafts were removed, D-4). Review, and
    host them (any static host). Put the final URLs into `release/APP_STORE_LISTING.md`.
 6. [ ] **Screenshots:** using the demo corpus from `CLEAN_MACHINE_ACCEPTANCE.md` (PII-free
    ProjectDelta), capture the views listed in `release/APP_STORE_LISTING.md`'s screenshot

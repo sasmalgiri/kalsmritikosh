@@ -594,6 +594,11 @@ public struct WorkProductHandoffView: View {
     @Environment(AppState.self) private var appState
     /// CONFORMANCE STYLE switch — classic summary label vs strict per-rule assessment.
     @AppStorage(FeatureFlags.classicConformanceKey) private var classicConformance = false
+    /// D-8 — the SOP board's owner-review overrides (same key + format as
+    /// ComplianceBoardView: JSON, SOP id → yyyy-MM-dd of manual verification).
+    /// Surfaced read-only at approval time; NEVER written into the sealed
+    /// assessment or certificate.
+    @AppStorage("kalsmritikosh.sopboard.reviews") private var sopReviewBlob = ""
     /// Deviation recording (strict mode): the rule being deviated + its typed authorization.
     @State private var deviationRule: SutraRule?
     @State private var deviationAuthorizer = ""
@@ -683,6 +688,30 @@ public struct WorkProductHandoffView: View {
             .foregroundStyle(closed ? Color.orange : Color.green)
     }
 
+    /// D-8 — SOP edition review state at approval time, from the board's own
+    /// records + the owner's review overrides. Read-only surfacing.
+    @ViewBuilder private var sopReviewStatus: some View {
+        let overrides = (try? JSONDecoder().decode([String: String].self, from: Data(sopReviewBlob.utf8))) ?? [:]
+        let now = Date()
+        let latestVerified = ComplianceBoard.records
+            .map { overrides[$0.id] ?? $0.verifiedOn }
+            .max() ?? "—"
+        VStack(alignment: .leading, spacing: 4) {
+            if let next = ComplianceBoard.nextDue(now: now, overrides: overrides) {
+                Text("SOP editions verified \(latestVerified) · next periodic review \(next.date.formatted(date: .abbreviated, time: .omitted)) — \(next.record.title)")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            let due = ComplianceBoard.due(now: now, overrides: overrides)
+            if !due.isEmpty {
+                Label("\(due.count) SOP edition(s) due for re-verification — open Compliance Board",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     @ViewBuilder
     private func findingsSection(_ model: WorkProductHandoffModel, _ snap: CaseHandoffSnapshot) -> some View {
         @Bindable var model = model
@@ -703,6 +732,10 @@ public struct WorkProductHandoffView: View {
             if let s = model.proofStandard {
                 Text(s.detail).font(.caption2).foregroundStyle(.secondary)
             }
+            // D-8 — the review-due state of the encoded SOP editions, visible at
+            // the moment of approval. UI only: board state is never written into
+            // the sealed assessment or certificate.
+            sopReviewStatus
             HStack(spacing: 10) {
                 Button { Task { await model.buildFindings(actor: "me", at: Date()) } } label: {
                     Label("Build findings", systemImage: "doc.badge.gearshape")

@@ -79,10 +79,15 @@ public enum ModelChoiceAdvisor {
     ///   4. A larger-tier model exists that ALSO fits comfortably
     ///      (< 70% RAM) → suggestion, "you can upgrade".
     ///   5. Otherwise → ok.
+    /// `foundationModelsHint` (D-6) — the provider's own explanation of why
+    /// Apple's on-device model can't answer (nil when it can, or when the
+    /// caller has no better information). Passed in so the advisor stays a
+    /// pure function; used only by the Release deterministic-mode branch.
     public static func advise(
         hardware: HardwareProfile,
         currentReasoning: ModelManifest?,
-        availableReasoning: [ModelManifest]
+        availableReasoning: [ModelManifest],
+        foundationModelsHint: String? = nil
     ) -> ModelChoiceRecommendation {
 
         // Pool of provider manifests that (a) actually do reasoning
@@ -150,7 +155,7 @@ public enum ModelChoiceAdvisor {
                 recommendedProviderName: nil,
                 summary: "Deterministic evidence mode — answers come straight from your ledger, fully on-device.",
                 details: [
-                    "AI-written prose requires macOS 26 or later with Apple Intelligence on supported hardware.",
+                    foundationModelsHint ?? "AI-written prose requires macOS 26 or later with Apple Intelligence on supported hardware.",
                     "Search, timelines, entities, contradictions, gaps, and cited deterministic reports are fully available in this mode."
                 ]
             )

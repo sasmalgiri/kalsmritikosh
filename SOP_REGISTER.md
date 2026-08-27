@@ -1,5 +1,7 @@
 # SOP Register — the app's standing procedures, mapped to the world's governing bodies (2026-08-23)
 
+> Public mirror: `docs/sop-register.html` — update both.
+
 **Why this document exists.** The whole app was built on one idea: an app is not
 a bag of features — it is a set of Standard Operating Procedures, executed
 faithfully, gate by gate, ending in the professional's real deliverable. If

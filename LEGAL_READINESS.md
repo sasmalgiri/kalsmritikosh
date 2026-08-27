@@ -26,7 +26,7 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 - ⚠️ Ensure the licence files are **bundled** in the app (Copy Bundle Resources), not just in the repo. *(owner — pbxproj)*
 
 ## 4. Website legal pages — ✅ present
-- ✅ `docs/legal/PRIVACY_POLICY.md`, `TERMS_EULA.md`, `SUPPORT.md` and the served `privacy.html`, `terms.html`, `support.html`; footer links from the landing page.
+- ✅ ONE canonical public version (D-4, 2026-08-27): the served `docs/privacy.html`, `terms.html`, `support.html` (v1.5). The old `docs/legal/` markdown drafts were REMOVED (they were publicly served as a second, stale version); `release/*.md` drafts are marked SUPERSEDED.
 - ◻︎ Have counsel reconcile the website copy with the in-app `LegalNotice` copy so they don't diverge. *(counsel)*
 
 ## 5. Export compliance & Info.plist — ◻︎ owner (harness cannot edit pbxproj/Info.plist)

@@ -1519,7 +1519,8 @@ public final class AppState {
             let advice = ModelChoiceAdvisor.advise(
                 hardware: hardware,
                 currentReasoning: resolvedReasoningManifest,
-                availableReasoning: allReasoningManifests
+                availableReasoning: allReasoningManifests,
+                foundationModelsHint: FoundationModelsProvider.unavailabilityHint()
             )
             KalsmritikoshLog.app.info("ModelChoiceAdvice severity=\(advice.severity.rawValue, privacy: .public): \(advice.summary, privacy: .public)")
 

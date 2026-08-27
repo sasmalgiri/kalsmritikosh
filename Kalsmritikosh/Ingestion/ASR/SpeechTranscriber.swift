@@ -88,6 +88,15 @@ public struct ASRError: LocalizedError, Sendable {
 public actor SpeechTranscriber: AudioTranscribing {
     public nonisolated let engineID = "apple-speech"
 
+    /// D-1 (completion instructions) — user-facing capability-unavailable
+    /// messages, exposed as constants so tests can hold them to the contract:
+    /// they name the real remedy (System Settings), and never reference cloud
+    /// routing or Apple Intelligence (Speech uses neither).
+    public nonisolated static let recognizerUnavailableMessage =
+        "Speech recognition isn't available right now. Check that English is installed under System Settings → Keyboard → Dictation, and that Kalsmritikosh is allowed under Privacy & Security → Speech Recognition."
+    public nonisolated static let languageAssetsMissingMessage =
+        "On-device English (en-US) transcription needs macOS's Dictation language assets, which aren't installed yet. Turn on Dictation in System Settings → Keyboard → Dictation (English), wait for the download, then try again. Nothing is sent off your Mac."
+
     public init() {}
 
     public func transcribe(audioAt url: URL) async throws -> String {
@@ -99,7 +108,7 @@ public actor SpeechTranscriber: AudioTranscribing {
 
         let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         guard let recognizer, recognizer.isAvailable else {
-            throw ASRError("Speech recognizer unavailable (check language + Apple Intelligence/Dictation availability).")
+            throw ASRError(Self.recognizerUnavailableMessage)
         }
 
         let request = SFSpeechURLRecognitionRequest(url: url)
@@ -108,10 +117,10 @@ public actor SpeechTranscriber: AudioTranscribing {
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         } else if !PrivacyGate.shared.allowCloudRouting {
-            // SIXTEENTH REVIEW — never point users at a control that does not
-            // exist in Release (cloud routing is compile-locked off). The
-            // honest contract: this version transcribes en-US, fully on-device.
-            throw ASRError("On-device speech recognition isn't available for this language. This version transcribes English (en-US) only, fully on your Mac.")
+            // D-1 (completion instructions) — never point users at a control
+            // that does not exist in Release, and tell them the actual remedy:
+            // the on-device Dictation language assets. Nothing leaves the Mac.
+            throw ASRError(Self.languageAssetsMissingMessage)
         }
         if #available(macOS 13.0, iOS 16.0, *) {
             request.addsPunctuation = true
@@ -142,16 +151,16 @@ public actor SpeechTranscriber: AudioTranscribing {
         try await Self.ensureAuthorized()
         let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
         guard let recognizer, recognizer.isAvailable else {
-            throw ASRError("Speech recognizer unavailable (check language + Apple Intelligence/Dictation availability).")
+            throw ASRError(Self.recognizerUnavailableMessage)
         }
         let request = SFSpeechURLRecognitionRequest(url: url)
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         } else if !PrivacyGate.shared.allowCloudRouting {
-            // SIXTEENTH REVIEW — never point users at a control that does not
-            // exist in Release (cloud routing is compile-locked off). The
-            // honest contract: this version transcribes en-US, fully on-device.
-            throw ASRError("On-device speech recognition isn't available for this language. This version transcribes English (en-US) only, fully on your Mac.")
+            // D-1 (completion instructions) — never point users at a control
+            // that does not exist in Release, and tell them the actual remedy:
+            // the on-device Dictation language assets. Nothing leaves the Mac.
+            throw ASRError(Self.languageAssetsMissingMessage)
         }
         if #available(macOS 13.0, iOS 16.0, *) { request.addsPunctuation = true }
 

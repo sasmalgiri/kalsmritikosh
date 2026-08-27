@@ -47,6 +47,24 @@ struct ComplianceBoardTests {
         #expect(!cleared.contains { $0.id == "sop.aiact" })
     }
 
+    @Test("nextDue is the earliest board due date; an override moves it to the next record (D-8)")
+    func nextDueOrdering() {
+        // 2026-08-27, no overrides: the 180-day AI-Act check (2026-08-23 + 180
+        // = 2027-02-19) is the earliest due date on the board.
+        let now = Date(timeIntervalSince1970: 1_788_091_200)   // 2026-08-27 12:00 UTC
+        let next = ComplianceBoard.nextDue(now: now)
+        #expect(next?.record.id == "sop.aiact")
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = Calendar.current.timeZone
+        #expect(next.map { f.string(from: $0.date) } == "2027-02-19")
+        // Re-verifying the AI-Act record on 2027-03-01 pushes its next check to
+        // 2027-08-28 — PAST the 365-day records (2026-08-23 → 2027-08-23), so
+        // nextDue moves to one of those.
+        let postponed = ComplianceBoard.nextDue(now: now, overrides: ["sop.aiact": "2027-03-01"])
+        #expect(postponed?.record.id != "sop.aiact")
+        #expect(postponed.map { f.string(from: $0.date) } == "2027-08-23")
+    }
+
     @Test("The handbook presents the system flow, core SOPs, every constitution, and the board")
     func handbook() {
         let md = SOPHandbook.markdown(now: seedDay)

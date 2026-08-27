@@ -1,3 +1,8 @@
+> **SUPERSEDED (D-4, 2026-08-27)** — the canonical public text is
+> `docs/privacy.html` / `docs/terms.html` / `docs/support.html`
+> (matching `LegalNotice.termsVersion` 1.5, 2026-08-27). This draft is
+> retained for history only; do not link or submit it.
+
 # Kalsmritikosh — Support
 
 _Draft for the owner to host at the App Store "Support URL". Covers the §8 support-operations

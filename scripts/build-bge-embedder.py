@@ -27,11 +27,26 @@ def _sha256(p):
             h.update(chunk)
     return h.hexdigest()
 
+def _toolchain():
+    """D-5 — record the converting toolchain so a hash mismatch can be
+    attributed (a coremltools/torch bump changes compiled bytes)."""
+    import platform, importlib
+    versions = {"python": platform.python_version()}
+    for mod in ("coremltools", "torch", "transformers", "huggingface_hub"):
+        try:
+            versions[mod] = importlib.import_module(mod).__version__
+        except Exception:
+            versions[mod] = "unknown"
+    return versions
+
 def write_model_pin(dest, repo, revision, artifacts):
     """Record the pinned source + sha256 of every produced artifact file, so the
     final archive's models are provably the ones built from the pinned revision."""
+    import platform
     manifest = {"repo": repo, "revision": revision,
                 "license": "MIT (FlagEmbedding project, Copyright (c) 2022 staoxiao)",
+                "toolchain": _toolchain(),
+                "built_on": platform.platform(),
                 "artifacts": {}}
     for a in artifacts:
         p = os.path.join(dest, a)

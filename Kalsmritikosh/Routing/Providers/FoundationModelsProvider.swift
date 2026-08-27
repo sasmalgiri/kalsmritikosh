@@ -55,6 +55,33 @@ public struct FoundationModelsProvider: ModelProvider {
         #endif
     }
 
+    /// Why Apple's on-device model can't answer right now, in the user's
+    /// words — nil when it can (D-6, completion instructions). Surfaced in
+    /// the Settings advisor banner and the deterministic-mode notice so the
+    /// buyer learns the actual remedy (turn on Apple Intelligence / wait for
+    /// the model / unsupported hardware) instead of a generic sentence.
+    public static func unavailabilityHint() -> String? {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, iOS 26.0, *) {
+            switch SystemLanguageModel.default.availability {
+            case .available: return nil
+            case .unavailable(let reason):
+                switch reason {
+                case .appleIntelligenceNotEnabled:
+                    return "Turn on Apple Intelligence in System Settings → Apple Intelligence & Siri to enable AI-written answers. Everything else already works."
+                case .deviceNotEligible:
+                    return "This Mac doesn't support Apple Intelligence, so AI-written answers aren't available here. Everything else works."
+                case .modelNotReady:
+                    return "Apple Intelligence is still preparing its on-device model. Try again in a few minutes."
+                @unknown default:
+                    return "Apple Intelligence isn't available on this Mac right now."
+                }
+            }
+        }
+        #endif
+        return "AI-written prose requires macOS 26 or later with Apple Intelligence on supported hardware."
+    }
+
     public func generate(prompt: String, options: GenerationOptions) async throws -> String {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {

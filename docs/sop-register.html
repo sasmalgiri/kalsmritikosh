@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOP Register — Kalsmritikosh</title>
+<meta name="description" content="The standing procedures Kalsmritikosh enforces, mapped to the governing bodies of the US, UK/Commonwealth, EU, India, and international standards." />
+<style>
+  :root{--bg:#0b0d12;--ink:#eef1f7;--muted:#9aa4b8;--line:rgba(255,255,255,.09);
+    --grad:linear-gradient(120deg,#6d7cff,#22c1a6)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:#8fa0ff}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px 80px}
+  nav{position:sticky;top:0;backdrop-filter:blur(12px);background:rgba(11,13,18,.7);
+    border-bottom:1px solid var(--line)}
+  nav .in{max-width:920px;margin:0 auto;display:flex;gap:18px;align-items:center;height:56px;padding:0 22px}
+  nav .logo{font-weight:700}
+  nav a{color:var(--muted);text-decoration:none;font-size:14px}
+  nav a:hover{color:var(--ink)}
+  .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h1{font-size:34px;letter-spacing:-.02em;margin:44px 0 4px;font-weight:800}
+  h2{font-size:21px;margin:34px 0 8px;font-weight:700}
+  .box{border:1px solid var(--line);border-radius:14px;padding:18px 20px;background:rgba(255,255,255,.03);margin:22px 0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:rgba(255,255,255,.04)}
+  ul,ol{padding-left:22px}
+  li{margin:6px 0}
+  .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<nav><div class="in">
+  <a class="logo" href="index.html"><span class="grad">Kalsmritikosh</span></a>
+  <a href="privacy.html">Privacy</a><a href="terms.html">Terms &amp; EULA</a><a href="support.html">Support</a>
+</div></nav>
+<div class="wrap">
+  <h1>SOP Register</h1>
+  <p class="muted">The app's standing procedures, mapped to the world's governing bodies · 2026-08-23 edition · Mirrors <code>SOP_REGISTER.md</code> @ 285ab26 — update both.</p>
+
+  <div class="box"><strong>Why this document exists.</strong> The whole app was built on one idea:
+  an app is not a bag of features — it is a set of Standard Operating Procedures, executed
+  faithfully, gate by gate, ending in the professional's real deliverable. If that is true, the
+  SOPs must be <em>listed</em>, so any user, auditor, or regulator can read what the app binds
+  itself to and compare it with the actual SOP of the governing body in their own country.
+  Every SOP below is backed by stage gates and tests in code, not aspiration; its
+  machine-readable form is the Sūtra (versioned, amendable, certified per run).</div>
+
+  <h2>Part A — Core SOPs (every workflow, every persona)</h2>
+  <table>
+    <tr><th>#</th><th>SOP</th><th>What it binds</th><th>Backed by</th></tr>
+    <tr><td>A1</td><td>Evidence-only answering</td><td>No claim without cited evidence IDs; validated against the retrieval set</td><td>Claim–evidence contract, evidence gate (ship/downgrade/refuse/surface-conflict)</td></tr>
+    <tr><td>A2</td><td>Conflict preservation</td><td>Conflicting evidence shown with both sources — never averaged</td><td>Contradiction register + the "never average a conflict away" doctrine</td></tr>
+    <tr><td>A3</td><td>Reserved human decisions</td><td>Merges, root causes, dispositions, approvals are made by a person, never auto-asserted</td><td>Sūtra humanDecisions + conformance check</td></tr>
+    <tr><td>A4</td><td>Standard of proof before findings</td><td>Findings cannot be approved without a declared standard</td><td>EvidentiaryStandard gate in handoff</td></tr>
+    <tr><td>A5</td><td>Source reliability rating</td><td>Sources rated A–F × 1–6 before weight is placed on them</td><td>AdmiraltyCode (NATO/Admiralty scale — international)</td></tr>
+    <tr><td>A6</td><td>Chain of custody</td><td>Custody recorded contemporaneously; evidence hashed early</td><td>CustodyEvent per SWGDE/NIST — intl. equivalent ISO/IEC 27037</td></tr>
+    <tr><td>A7</td><td>Privacy by architecture</td><td><span data-claims-exempt="mirror-of-register">No document, question, or ledger content leaves the device</span></td><td>PrivacyGate + sandbox; designed to satisfy GDPR/CCPA/DPDP by never collecting data</td></tr>
+    <tr><td>A8</td><td>AI disclosure at point of use</td><td>Every answer and report declares AI assistance and requires human review</td><td>LegalNotice on answers + reports (EU AI Act Art. 50 posture)</td></tr>
+    <tr><td>A9</td><td>Document history</td><td>Every deliverable carries its audit trail, printed on the hardcopy</td><td>StudioAudit appendix</td></tr>
+    <tr><td>A10</td><td>Amendment-only change</td><td>SOPs change by versioned amendment, never silent rewrite; certificates cite the version verified against</td><td>SutraAmendment + conformance citation</td></tr>
+  </table>
+
+  <h2>Part B — Workflow SOPs by persona, with governing-body mapping</h2>
+  <p class="muted">Legend: ✅ named in-app · ≈ principle matches, local name differs · ⬜ not yet mapped</p>
+  <table>
+    <tr><th>Workflow (studio)</th><th>Standard named in-app</th><th>US</th><th>UK / Commonwealth</th><th>EU (civil law)</th><th>India</th><th>International</th></tr>
+    <tr><td>Investigator — RCA</td><td>8D dual root cause (occurrence + escape)</td><td>✅ 8D / CAPA</td><td>≈ same (8D is global industry)</td><td>≈ same</td><td>≈ same</td><td>✅ ISO 9001 CAPA family</td></tr>
+    <tr><td>Investigator — ACH</td><td>Heuer, <em>Psychology of Intelligence Analysis</em></td><td>✅ CIA tradecraft</td><td>≈ UK PHIA structured analytic techniques</td><td>≈</td><td>≈</td><td>✅ NATO Admiralty scale for sources</td></tr>
+    <tr><td>HR / Compliance</td><td>Balance of probabilities; notice + opportunity to respond</td><td>✅ EEOC-style practice</td><td>≈ ACAS Code (UK)</td><td>≈ works-council norms vary</td><td>≈ POSH Act inquiry rules</td><td>≈ ILO fair-procedure principles</td></tr>
+    <tr><td>Lawyer — privilege log</td><td>FRCP 26(b)(5)(A)</td><td>✅</td><td>≈ CPR PD 57AD disclosure (E&amp;W)</td><td>⬜ privilege differs fundamentally (in-house counsel)</td><td>≈ BSA 2023 / Evidence Act privilege</td><td>—</td></tr>
+    <tr><td>Forensic accountant</td><td>FRCP 26(a)(2)(B), Daubert, named tracing methods</td><td>✅</td><td>≈ CPR Part 35 expert duties</td><td>≈ court-appointed-expert model</td><td>≈ BSA expert evidence</td><td>≈ IFAC/ISA 620 using expert work</td></tr>
+    <tr><td>SIU — insurance fraud</td><td>NAIC Model #901, NICB indicators, good-faith referral</td><td>✅</td><td>≈ ABI/IFB (UK)</td><td>≈ Insurance Europe practice</td><td>≈ IRDAI fraud framework</td><td>—</td></tr>
+    <tr><td>Journalist — fact-check</td><td>Verification + right of reply + alleged-labelling</td><td>≈ SPJ Code</td><td>≈ IPSO Editors' Code (UK)</td><td>≈ EU media councils</td><td>≈ Press Council norms</td><td>✅ the disciplines themselves are the global newsroom canon</td></tr>
+    <tr><td>Researcher — review</td><td>PRISMA 2020 + GRADE</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅ genuinely worldwide (WHO/Cochrane use both)</td></tr>
+    <tr><td>Genealogist</td><td>Genealogical Proof Standard (BCG)</td><td>✅</td><td>≈ AGRA/ASGRA norms</td><td>≈</td><td>≈</td><td>≈ GPS is the de-facto global reference</td></tr>
+    <tr><td>Content creator</td><td>Claims/rights/disclosure/corrections</td><td>✅ FTC endorsement guides</td><td>≈ CMA/ASA (UK)</td><td>≈ UCPD + AI Act disclosure</td><td>≈ ASCI influencer guidelines</td><td>—</td></tr>
+    <tr><td>Individual — binder</td><td>Findability + freshness review</td><td>≈ estate-practice norms</td><td>≈</td><td>≈</td><td>≈</td><td>universal by nature</td></tr>
+  </table>
+
+  <h2>Part C — World-coverage audit (the honest part)</h2>
+  <p><strong>Strong globally.</strong> The core SOPs (Part A) are jurisdiction-independent —
+  evidence, citation, conflicts, human decisions, custody, privacy are the same disciplines
+  everywhere. PRISMA/GRADE, 8D/ISO-CAPA, the Admiralty scale, and the newsroom disciplines are
+  genuinely international. <span data-claims-exempt="mirror-of-register">The architecture
+  (on-device, no data collected) satisfies the strictest privacy regime anywhere by construction,
+  so privacy coverage is worldwide today.</span></p>
+  <p><strong>US-named, world-compatible.</strong> Where a named standard is US-specific (FRCP,
+  NAIC, FTC, BCG), the <em>procedure</em> the studio follows (describe without revealing;
+  separate fact from opinion; disclose material connections; log nil searches) matches the local
+  equivalent listed above — the local <em>citation</em> is what differs. The report headers
+  currently cite the US instrument.</p>
+  <p><strong>Real gaps (ranked).</strong></p>
+  <ol>
+    <li><strong>EU privilege</strong> — the in-house-counsel privilege difference (Akzo Nobel) is
+      substantive, not cosmetic; the privilege-log studio needs an EU mode note.</li>
+    <li><strong>Local citation switching</strong> — a jurisdiction picker that swaps the cited
+      instrument (FRCP ↔ CPR ↔ BSA) on report headers. Structure is ready; this is a catalog +
+      picker, not a rewrite.</li>
+    <li><strong>Civil-law standards of proof</strong> — the standard-of-proof list carries
+      common-law standards; civil-law "intime conviction" / free evaluation should join it.</li>
+    <li><strong>Non-English deliverables</strong> — hardcopies render in English only.</li>
+  </ol>
+  <p><strong>Verdict:</strong> the <em>procedures</em> cover the world; the <em>citations</em>
+  cover the US + international bodies. Items 1–3 above are the path from "US-cited, globally
+  correct" to "locally cited everywhere" — each is a versioned amendment, exactly the change
+  process built for this.</p>
+
+  <h2>Part D — where to read the SOPs in-app</h2>
+  <p>Settings ▸ System ▸ <strong>Sūtra</strong> (the Constitution inspector): every phase's
+  obligations, reserved human decisions, and prohibited conclusions, per discipline, with version
+  and amendment history. This register is the human narrative; the inspector is the binding,
+  machine-readable form. Each workflow's jurisdiction disclosure in-app points here.</p>
+
+  <p class="muted" style="margin-top:40px;font-size:13px">© Eco Sanskriti Innovation ·
+    <a href="privacy.html">Privacy</a> · <a href="terms.html">Terms &amp; EULA</a> · <a href="support.html">Support</a></p>
+</div>
+</body>
+</html>

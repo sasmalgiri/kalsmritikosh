@@ -46,6 +46,7 @@ list of the release spec (§6) and the locked contract in `SHIP_DECISIONS.md`. L
 > **Supported files** include common document, spreadsheet, presentation, email, image (with text
 > recognition), and structured-data formats. Some formats are supported with limits and are shown
 > honestly in-app; audio and video are catalogued and preserved at ingest (never auto-transcribed) — transcribe individual files on demand in Transcripts, fully on-device (Apple Speech, English).
+> Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 >
 > _Kalsmritikosh is an informational aid. Verify important answers against the cited originals; it
 > is not legal, financial, or professional advice._
@@ -84,6 +85,8 @@ Use the demo corpus in `Resources/Fixtures/ProjectDelta` (synthetic — safe for
 >
 > **No hidden purchases** (one-time price). **No model download** in this version. Minimum OS
 > macOS 15.6; AI-written answers require macOS 26+ with Apple Intelligence on supported hardware.
+> Workflows cite US and international instruments; procedures are jurisdiction-neutral and
+> deviations are recorded on the certificate.
 
 ## Do-NOT-claim checklist (verified against this copy)
 

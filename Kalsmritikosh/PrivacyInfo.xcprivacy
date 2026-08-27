@@ -9,9 +9,9 @@
       required-reason APIs we call, and (c) whether we use any
       tracking domains.
 
-      Kalsmritikosh runs entirely on-device. We never transmit user
-      data off the Mac except when the user explicitly configures a
-      cloud LLM provider (in Settings → Routing). All on-disk data
+      Kalsmritikosh runs entirely on-device. The Release build has
+      no network entitlement and registers no network provider; no
+      user data is ever transmitted off the Mac. All on-disk data
       is owned by the user and lives in the app sandbox container
       (~/Library/Containers/<bundle-id>/Data) or in user-selected
       folders accessed via security-scoped bookmarks.

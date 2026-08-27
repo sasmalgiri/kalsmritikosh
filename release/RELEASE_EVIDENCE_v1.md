@@ -9,7 +9,7 @@ run / hardware / Apple account and must be filled before submission. Gate author
 
 | Field | Value |
 |---|---|
-| git SHA | _(owner fills at archive time — the release-candidate commit after the fifteenth-review fixes; predecessor context: `743455a` audits 11–13 closed, hosted run 33040783033 7/7 green)_ |
+| git SHA | release commit (Part 1, completion instructions) — _owner records the exact RC SHA + tag `v1.0-rc1` once its hosted run is 7/7 green; predecessors: `285ab26` run 33051976517 7/7, `4f56060` run 33049496158 7/7_ |
 | Schema version | **v119** (`SchemaMigrations.latestVersion` — v117/118 case-bound phase evidence + self-heal recovery, v119 dataset case origin) |
 | App version / build | `[owner: e.g. 1.0 (1)]` |
 | Xcode / macOS SDK | `[owner: e.g. Xcode 26.x / macOS 26 SDK]` |
@@ -104,6 +104,7 @@ macOS 15.6–25 machine if available to witness the honest deterministic-only mo
 ## Known limitations (v1)
 
 - Audio/video catalogued + preserved at ingest (never auto-transcribed); on-demand on-device transcription in Transcripts (Apple Speech, en-US in this version).
+- Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
 - PPT/PST/OST/MSG/NSF remain unsupported; RAR/7z recognized with custody preserved and an
   explicit honest-unsupported manifest (never silently empty).
 - Optional downloaded local GGUF models deferred to v1.x (GOV-001).

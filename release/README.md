@@ -6,9 +6,9 @@ listing), REL-006 (release evidence), and P8.2 (legal/support pages). I draft; *
 
 | File | Purpose | Task | Your action |
 |---|---|---|---|
-| `PRIVACY_POLICY.md` | On-device, no-collection privacy policy | REL-004 | Host at the Privacy URL; add a contact address |
-| `TERMS_OF_USE.md` | EULA / terms (supplements Apple's LEULA) | REL-004 | Review with counsel; host at Terms field |
-| `SUPPORT.md` | Support page: FAQ, bug-report, backup/restore, limits, rollback | REL-004 / §8 | Host at the Support URL; add a contact |
+| `PRIVACY_POLICY.md` | SUPERSEDED draft — canonical is the LIVE `docs/privacy.html` | REL-004 | Privacy URL: https://sasmalgiri.github.io/kalsmritikosh/privacy.html |
+| `TERMS_OF_USE.md` | SUPERSEDED draft — canonical is the LIVE `docs/terms.html` | REL-004 | Terms URL: https://sasmalgiri.github.io/kalsmritikosh/terms.html |
+| `SUPPORT.md` | SUPERSEDED draft — canonical is the LIVE `docs/support.html` | REL-004 / §8 | Support URL: https://sasmalgiri.github.io/kalsmritikosh/support.html |
 | `APP_STORE_LISTING.md` | Name/subtitle/keywords/description/promo/nutrition labels/review notes/screenshot plan | REL-005 | Paste into App Store Connect; capture screenshots on the demo corpus |
 | `RELEASE_EVIDENCE_v1.md` | Release-evidence record + owner sign-off checklist | REL-006 | Fill the `[owner: …]` fields from a build/run; sign off |
 

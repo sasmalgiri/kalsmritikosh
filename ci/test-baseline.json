@@ -1,5 +1,5 @@
 {
-  "minimumExecutedTests": 3731,
-  "baselineCommit": "743455a",
-  "note": "Whole-suite floor from the HOSTED build-and-test run on 743455a (thirteenth-audit response, run 33040783033): hosted total=3731 passed=3729 failed=0 skipped=2. The hosted count is the authority for this gate — local RunAllTests executes more environment-conditional tests than the runner. Floor RAISED 3728 -> 3731, locking in the authoritative-scope staleness, v117/v118 milestone, and case-bound dataset suites. Schema v119."
+  "minimumExecutedTests": 3739,
+  "baselineCommit": "285ab26",
+  "note": "Whole-suite floor: hosted build-and-test on 285ab26 (run 33051976517) executed total=3731 passed=3729 failed=0 skipped=2; the Part-1 release commit adds 8 tests (SpeechTranscriberMessageTests x2, ModelChoiceAdvisorTests x2, JurisdictionNoticeTests x3, ComplianceBoardTests +1) -> floor 3731 + 8 = 3739 per the completion-instructions rule. The hosted count is the authority \u2014 correct from the release commit's own hosted total if it disagrees. Schema v119."
 }

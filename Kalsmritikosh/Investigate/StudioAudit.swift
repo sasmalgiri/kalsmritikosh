@@ -36,6 +36,8 @@ public nonisolated enum StudioAudit {
         for e in history.sorted(by: { $0.date < $1.date }) {
             out += "- \(df.string(from: e.date)) — \(e.action)\n"
         }
+        // D-7 — every studio hardcopy carries the jurisdiction disclosure.
+        out += "\n_\(JurisdictionNotice.hardcopy)_\n"
         return out
     }
 }

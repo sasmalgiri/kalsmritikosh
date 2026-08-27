@@ -738,6 +738,20 @@ public struct RootView: View {
                 } message: {
                     Text("Ingesting, relationship extraction and semantic indexing are still in progress. Switching the engine loses nothing — the work pauses and resumes automatically. Choose Stop all to halt it now instead.")
                 }
+                // D-6 — the honest deterministic-mode note (CLEAN_MACHINE step 6):
+                // when no on-device generation is available, say WHY — the
+                // FoundationModels unavailability hint — right where the engine
+                // is chosen. The .ok + no-provider combination exists only in
+                // the Release deterministic branch, so dev builds are unchanged.
+                if let advice = appState.modelChoiceAdvice,
+                   advice.severity == .ok, advice.currentProviderID == nil,
+                   let hint = advice.details.first {
+                    Label(hint, systemImage: "info.circle")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                }
                 // ENGINE POWER visibility — the one honest caveat of the flip:
                 // content ingested during Lightning has no semantic index yet.
                 // Surface the backlog so catch-up is never silent.
