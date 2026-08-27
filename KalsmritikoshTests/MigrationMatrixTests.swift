@@ -26,7 +26,13 @@ struct MigrationMatrixTests {
     /// 70 = OPS-002.1 confirmation-authority columns; 71 = OPS-003A SensitiveScope ledger.
     /// 72 = OPS-004 WorkProductRun persistence; 73 = OPS-005 email_participant_occurrences;
     /// 74 = OPS-006 source_reliability_assessments.
-    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73]
+    /// TWELFTH AUDIT — the modern era is covered too: 106 (last version the
+    /// old self-heal sentinel could distinguish), 107 (conformance ledger),
+    /// 111 (governance events + chain recreate), 113 (case_method_runs),
+    /// 115 (unbound case_phase_artifacts), 116 (public-chain reset) — the
+    /// v116→latest step is the exact path the stale sentinel used to skip.
+    static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
+                             106, 107, 111, 113, 115, 116]
 
     // MARK: - Assertions shared across cases
 
@@ -113,7 +119,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 117)          // v116 public-chain rule-v2 reset · v117 case-bound phase artifacts (eleventh audit)
+        #expect(SchemaMigrations.latestVersion == 118)          // v117 case-bound phase artifacts · v118 self-heal recovery rebuild + answer origin (twelfth audit)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate
@@ -145,6 +151,51 @@ struct MigrationMatrixTests {
         #expect(try await userVersion(reopened) == SchemaMigrations.latestVersion)
         let failuresAfterReopen = try await snap.failures(in: reopened)
         #expect(failuresAfterReopen.isEmpty, "preservation failures after reopen: \(failuresAfterReopen)")
+    }
+
+    /// TWELFTH AUDIT P0 — the exact defect: a real v116 database must
+    /// actually RECEIVE the case-binding rebuild (the stale-counter
+    /// self-heal used to stamp v117 without running it, because the
+    /// sentinel had no post-v106 markers). Unbound v115-shape rows are
+    /// dropped; the bound shape + constraints exist after reopening.
+    @Test("A real v116 database receives the case-binding rebuild; unbound rows are dropped")
+    func v116ReceivesCaseBindingRebuild() async throws {
+        let url = MigrationFixtureBuilder.newTemporaryURL()
+        let db = try await MigrationFixtureBuilder.database(atVersion: 116, at: url)
+        // v115 unbound shape at this point — seed an unbound row.
+        try await db.exec("""
+        INSERT INTO case_phase_artifacts (id, case_id, phase_kind, artifact_id, detail, created_at)
+        VALUES (?, ?, 'ask', ?, 'question=dead', 1.0);
+        """, [.uuid(UUID()), .uuid(UUID()), .uuid(UUID())])
+        try await SchemaMigrations.migrate(db)
+        try await assertHealthyLatest(db)
+        // The unbound row is GONE and the bound shape + constraints exist.
+        let reopened = try MigrationFixtureBuilder.reopen(at: url)
+        #expect(try await userVersion(reopened) == SchemaMigrations.latestVersion)
+        let count = try await reopened.query("SELECT COUNT(*) FROM case_phase_artifacts;", []).first?.int(0)
+        #expect(count == 0, "pre-binding rows cannot be trusted retroactively — they must be dropped")
+        let sql = try await reopened.query(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='case_phase_artifacts';", [])
+            .first?.string(0) ?? ""
+        #expect(sql.contains("UNIQUE(phase_kind, artifact_id)"))
+        #expect(sql.contains("REFERENCES investigation_cases(id)"))
+        #expect(sql.contains("scope_fingerprint"))
+    }
+
+    /// TWELFTH AUDIT P0 — field recovery: a database WRONGLY stamped v117
+    /// by the old sentinel (schema still v116-shaped) must be repaired by
+    /// v118's fail-closed rebuild, not skipped again.
+    @Test("A database wrongly stamped v117 by the stale sentinel is repaired by v118")
+    func wronglyStampedV117Recovers() async throws {
+        let url = MigrationFixtureBuilder.newTemporaryURL()
+        let db = try await MigrationFixtureBuilder.database(atVersion: 116, at: url)
+        try await db.setUserVersion(117)   // the field state the old sentinel produced
+        try await SchemaMigrations.migrate(db)
+        try await assertHealthyLatest(db)
+        let cols = try await db.query("PRAGMA table_info(case_phase_artifacts);", [])
+            .compactMap { $0.string(1) }
+        #expect(cols.contains("case_revision") && cols.contains("scope_fingerprint"),
+                "v118 must rebuild the bound shape even when v117 was skipped")
     }
 
     // MARK: - Repeated migration is idempotent + non-destructive

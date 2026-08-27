@@ -14,9 +14,12 @@ verifies on every push, in BOTH directions:
   row here. An id may tag several elements (mirrors/paraphrases); the
   fragment must live inside at least one of them.
 
-A keyword heuristic additionally scans for enforcement-flavored copy that
-carries neither a `data-claim` attribute nor a `claims-exempt` marker — as a
-SECONDARY WARNING (the id gate is the authority, per the tenth audit).
+Coverage of untagged copy (twelfth audit): PRIVACY assertions found in text
+OUTSIDE any `data-claim` element — including `<meta name="description">`
+content — are FAILURES, not warnings (a meta tag carries `data-claim` like
+any element). Enforcement-flavored copy remains a SECONDARY WARNING (the id
+gate is the authority, per the tenth audit). CI self-tests the gate by
+injecting an untagged privacy sentence and requiring failure.
 
 Proof kinds:
 - `test:<symbol>` — a named test in KalsmritikoshTests proves the behavior.
@@ -61,6 +64,8 @@ Proof kinds:
 | `privacy.erase-everything` | `One click erases the entire ledger` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.private-by-design` | `Erase everything in one click` | grep:FULL ERASE:Kalsmritikosh/App/AppState.swift |
 | `privacy.nothing-collected` | `Data Not Collected` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
+| `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
+| `privacy.offline` | `Works fully offline` | ci:sensitive-export |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the

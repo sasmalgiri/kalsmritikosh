@@ -106,72 +106,93 @@ struct PhaseObservationTests {
         #expect(model.frozenSutra?.id == review.id, "the review protocol governs the run")
     }
 
-    @Test("Artifact observations are bound to a REAL case, its CURRENT revision, and its scope; artifacts serve ONE case")
+    @Test("Artifact observations require case, CURRENT revision, computed scope, and artifact ORIGIN; staleness un-observes")
     func artifactLedgerObserved() async throws {
         let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-artifacts")
         let repo = CasePhaseArtifactRepository(database: h.db)
+        let emptyScope = RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: [])
         // A REAL case (with revision) in a real workspace — the binding target.
         let wsID = UUID()
         try await h.workspaces.upsert(Workspace(id: wsID, title: "Obs WS", template: .investigation))
         let created = try await h.cases.createCase(workspaceID: wsID, title: "Obs Case", actor: "me", at: t0)
         let caseID = created.id
         let revision = created.revision
-        let fp = CaseScopeFingerprinter.fingerprint(caseID: caseID, caseRevision: revision,
-                                                    scope: RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: []))
         // ELEVENTH AUDIT — a NONEXISTENT case is refused outright.
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: UUID(), caseRevision: 1, scopeFingerprint: fp,
+            try await repo.record(caseID: UUID(), caseRevision: 1, scope: emptyScope,
                                   phase: .ask, artifactID: UUID(), detail: "x", at: t0)
         }
         // TENTH AUDIT — an ask observation pointing at a nonexistent answer
         // (or one never locked verifiedFinal) is REFUSED.
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+            try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
                                   phase: .ask, artifactID: UUID(), detail: "question=abcd1234", at: t0)
         }
-        // A REAL durably committed answer records normally: drive the actual
-        // AEE-M2 ledger to verifiedFinal and use ITS answer ID.
+        // TWELFTH AUDIT — a GLOBAL answer (no origin) can never be case phase
+        // evidence, even though it is durably committed.
         let ledger = AnswerLedgerRepository(database: h.db)
-        let answerID = try await ledger.beginAnswer(question: "obs q", mission: nil, at: t0)
-        _ = try await ledger.appendWorkingResult(
-            answerID: answerID, body: "grounded body",
-            citations: [], answerState: .unknown, confidence: 0.8, at: t0)
-        try await ledger.markReviewReady(answerID: answerID, at: t0)
-        try await ledger.lockVerifiedFinal(answerID: answerID, at: t0)
-        // ELEVENTH AUDIT — a STALE case revision is refused (scope changed
-        // between producing the artifact and recording the observation).
+        func makeFinalAnswer(origin: UUID?) async throws -> UUID {
+            let id = try await ledger.beginAnswer(question: "obs q \(UUID())", mission: nil,
+                                                  originScopeID: origin, at: t0)
+            _ = try await ledger.appendWorkingResult(
+                answerID: id, body: "grounded body",
+                citations: [], answerState: .unknown, confidence: 0.8, at: t0)
+            try await ledger.markReviewReady(answerID: id, at: t0)
+            try await ledger.lockVerifiedFinal(answerID: id, at: t0)
+            return id
+        }
+        let globalAnswer = try await makeFinalAnswer(origin: nil)
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: caseID, caseRevision: revision + 7, scopeFingerprint: fp,
+            try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
+                                  phase: .ask, artifactID: globalAnswer, detail: "q", at: t0)
+        }
+        // TWELFTH AUDIT — a case-A answer offered FIRST to case B is refused:
+        // artifact ORIGIN determines the case, not binding order.
+        let answerID = try await makeFinalAnswer(origin: caseID)
+        let other = try await h.cases.createCase(workspaceID: wsID, title: "Other Case", actor: "me", at: t0)
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: other.id, caseRevision: other.revision, scope: emptyScope,
                                   phase: .ask, artifactID: answerID, detail: "q", at: t0)
         }
-        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+        // ELEVENTH AUDIT — a STALE case revision is refused.
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, caseRevision: revision + 7, scope: emptyScope,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)
+        }
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
                                   phase: .ask, artifactID: answerID,
                                   detail: "question=abcd1234", at: t0)
-        // ELEVENTH AUDIT — the SAME answer cannot become phase evidence for a
-        // SECOND case (one artifact, one case); same case is idempotent.
-        let other = try await h.cases.createCase(workspaceID: wsID, title: "Other Case", actor: "me", at: t0)
-        let otherFP = CaseScopeFingerprinter.fingerprint(caseID: other.id, caseRevision: other.revision,
-                                                         scope: RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: []))
+        // Same case + same state is idempotent; a DIFFERENT scope for the
+        // same binding is refused (bindings are immutable).
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: other.id, caseRevision: other.revision, scopeFingerprint: otherFP,
+            try await repo.record(caseID: caseID, caseRevision: revision,
+                                  scope: RetrievalSourceScope(isActive: true, authorizedSourceVersionIDs: [UUID()]),
                                   phase: .ask, artifactID: answerID, detail: "q", at: t0)
         }
-        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
-                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)   // idempotent
         // NINTH AUDIT — a dataLab observation pointing at a nonexistent
         // dataset is REFUSED (referential truth, not a bare UUID column).
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
-            try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+            try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
                                   phase: .dataLab, artifactID: UUID(),
                                   detail: "preset=source-inventory", at: t0)
         }
-        // A REAL dataset row records normally.
+        // TWELFTH AUDIT — a dataset from an UNRELATED workspace's case is
+        // refused (dataset origin = its workspace).
+        let foreignWS = UUID()
+        try await h.workspaces.upsert(Workspace(id: foreignWS, title: "Foreign WS", template: .investigation))
+        let foreignCase = try await h.cases.createCase(workspaceID: foreignWS, title: "Foreign", actor: "me", at: t0)
         let datasetID = UUID()
         try await h.db.exec("""
         INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at)
         VALUES (?, ?, 'Obs DS', 'advanced', 1, ?, ?);
         """, [.uuid(datasetID), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970)])
-        _ = try await repo.record(caseID: caseID, caseRevision: revision, scopeFingerprint: fp,
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: foreignCase.id, caseRevision: foreignCase.revision, scope: emptyScope,
+                                  phase: .dataLab, artifactID: datasetID, detail: "preset=x", at: t0)
+        }
+        _ = try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
                                   phase: .dataLab, artifactID: datasetID,
                                   detail: "preset=source-inventory", at: t0)
         let service = PhaseObservationService(artifacts: repo)
@@ -179,5 +200,12 @@ struct PhaseObservationTests {
         #expect(obs[.ask]?.artifactCount == 1)
         #expect(obs[.dataLab]?.artifactCount == 1)
         #expect(await service.observations(caseID: other.id).isEmpty)
+        // TWELFTH AUDIT — a scope change (revision bump) UN-observes the
+        // evidence recorded under the superseded state: only current-revision
+        // bindings count.
+        try await h.db.exec("UPDATE investigation_cases SET revision = revision + 1 WHERE id = ?;",
+                            [.uuid(caseID)])
+        #expect(await service.observations(caseID: caseID).isEmpty,
+                "evidence recorded under a superseded scope must not count as current")
     }
 }

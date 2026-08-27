@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Kalsmritikosh — the private AI that answers with receipts</title>
-<meta name="description" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Every answer links to the exact source. Nothing is uploaded. Nothing is used for training." />
+<meta name="description" data-claim="privacy.no-upload" content="A private, on-device Mac app that turns your documents and emails into a cited evidence ledger. Every answer links to the exact source. Nothing is uploaded, ever. Nothing is used for training." />
 <style>
   :root{
     --bg:#0b0d12; --panel:#12151d; --panel2:#171b26; --ink:#eef1f7; --muted:#9aa4b8;
@@ -110,7 +110,7 @@
 <header class="hero"><div class="wrap">
   <span class="pill" data-claim="privacy.on-device">🔒 100% on-device · nothing uploaded · no training on your data</span>
   <h1>The private AI that answers<br><span class="grad">with receipts.</span></h1>
-  <p class="sub">Kalsmritikosh turns your own documents and emails into a cited evidence ledger.
+  <p class="sub" data-claim="privacy.no-upload">Kalsmritikosh turns your own documents and emails into a cited evidence ledger.
     Every answer links to the exact source with the most precise locator its format allows. It runs entirely on your Mac.
     Nothing is uploaded, ever.</p>
   <div class="cta">
@@ -215,7 +215,7 @@
       <tr><td class="k">Surfaces contradictions</td><td class="col-us yes">Yes — a persistent record, both sides shown</td><td class="k">Can analyse when prompted; not kept as a ledger</td><td class="k">Can analyse when prompted; not kept as a ledger</td></tr>
       <tr><td class="k">Timeline reconstruction</td><td class="col-us yes">Yes — persistent &amp; evidence-linked</td><td class="k">Can generate on request; not maintained</td><td class="k">Can generate on request; not maintained</td></tr>
       <tr><td class="k">Export with citations</td><td class="col-us yes">Yes — citations &amp; audit trail intact</td><td class="k">File export in many products; provenance varies</td><td class="k">Export available; provenance varies</td></tr>
-      <tr><td class="k">Works offline</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+      <tr><td class="k" data-claim="privacy.on-device">Works offline</td><td class="col-us yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
     </tbody>
   </table>
   <p class="muted" style="font-size:13px;margin-top:12px">Comparison reflects the vendors' published documentation as of August 2026; features and defaults vary by product, plan and settings, and change over time. Kalsmritikosh's difference is architectural: evidence, contradictions and timelines are persistent, local, auditable records — not one-off answers.</p>
@@ -224,7 +224,7 @@
 <!-- FAQ -->
 <section class="faq"><div class="wrap">
   <h2>Questions</h2>
-  <details><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
+  <details data-claim="privacy.never-leaves"><summary>Does anything I add get uploaded?</summary><p>No. Your documents, the ledger built from them, your questions, and the answers all stay on your Mac. There's no account and no analytics.</p></details>
   <details data-claim="answers.refuses-unsupported"><summary>Can it still be wrong?</summary><p>Any AI can be. The difference is that Kalsmritikosh only answers from your documents, shows the exact evidence for every claim, flags conflicts, and refuses when the record doesn't support an answer — so you can verify in one click instead of trusting blindly.</p></details>
   <details><summary>What can I feed it?</summary><p>PDF, Word (DOCX), Excel/CSV, PowerPoint (PPTX), EPUB, email (EML/MBOX), HTML, Markdown, text, and ZIP. Scans and images are read with on-device OCR. Audio and video files are catalogued and preserved but not yet transcribed; legacy formats (DOC/PPT/Keynote/MSG/PST) are preserved for later processing.</p></details>
   <details><summary>What do I need to run it?</summary><p>A Mac on macOS 15.6 or later for ingest, search, and evidence review. AI-written answers use Apple's on-device model, which requires macOS 26 or later with Apple Intelligence enabled on a supported Mac — everything else works without it.</p></details>

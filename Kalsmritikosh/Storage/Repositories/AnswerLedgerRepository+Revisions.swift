@@ -96,14 +96,16 @@ extension AnswerLedgerRepository {
         question: String,
         mission: QueryMission?,
         corpusSnapshotID: UUID? = nil,
+        originScopeID: UUID? = nil,
         at when: Date = Date()
     ) async throws -> UUID {
         let answerID = UUID()
         try await database.exec("""
         INSERT INTO answers
             (id, question, answer_state, corpus_snapshot_id, body, confidence, source, created_at,
-             request_id, mission_lane, mission_objective, mission_deliverable, is_terminal, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?);
+             request_id, mission_lane, mission_objective, mission_deliverable, is_terminal, updated_at,
+             origin_scope_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?);
         """, [
             .uuid(answerID), .text(question), .text(AnswerState.unknown.rawValue),
             corpusSnapshotID.map { .uuid($0) } ?? .null, .text(""), .real(0), .null,
@@ -112,7 +114,8 @@ extension AnswerLedgerRepository {
             mission.map { .text($0.primaryLane.rawValue) } ?? .null,
             mission.map { .text($0.objective.rawValue) } ?? .null,
             mission.map { .text($0.deliverable.rawValue) } ?? .null,
-            .real(when.timeIntervalSince1970)
+            .real(when.timeIntervalSince1970),
+            originScopeID.map { .uuid($0) } ?? .null
         ])
         return answerID
     }

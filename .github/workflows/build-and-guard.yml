@@ -35,6 +35,17 @@ jobs:
         # proof (test / CI step / source pattern) must still exist; refused
         # vocabulary ("provable compliance", …) must never ship.
         run: bash scripts/check-claims.sh
+      - name: Claims gate self-test (twelfth audit)
+        # The gate must CATCH what it claims to catch: an injected untagged
+        # privacy sentence must fail it; the tree is restored afterwards.
+        run: |
+          echo '<p>Nothing is uploaded by this self-test sentence.</p>' >> docs/support.html
+          if bash scripts/check-claims.sh > /dev/null 2>&1; then
+            echo "::error::claims gate did NOT catch an untagged privacy assertion"; exit 1
+          fi
+          git checkout docs/support.html
+          bash scripts/check-claims.sh > /dev/null
+          echo "claims gate self-test: untagged privacy assertion correctly refused."
       - name: Upload guard logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

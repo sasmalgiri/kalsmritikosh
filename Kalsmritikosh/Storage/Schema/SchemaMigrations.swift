@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 117
+    public static let latestVersion = 118
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -327,7 +327,9 @@ public enum SchemaMigrations {
                                "ordinal", "created_at", "revision_id"],
             "answers": ["id", "question", "answer_state", "corpus_snapshot_id", "body", "confidence",
                          "source", "created_at", "request_id", "mission_lane", "mission_objective",
-                         "mission_deliverable", "is_terminal", "updated_at"],
+                         "mission_deliverable", "is_terminal", "updated_at",
+                         // v118 — the producing request's bounded scope (answer ORIGIN).
+                         "origin_scope_id"],
             // v90 — MMI typed identity/document fields (NEW table, so the column probe distinguishes
             // v90 from v89).
             "typed_fields": ["id", "source_version_id", "evidence_block_id", "field_type", "raw_value",
@@ -447,10 +449,10 @@ public enum SchemaMigrations {
                                "trained_vector_count", "train_seed", "created_at", "updated_at"],
             "ann_cells": ["model_id", "cell_id", "centroid", "vector_count", "updated_at"],
             "ann_postings": ["model_id", "cell_id", "chunk_id", "q", "scale"],
-            // v104 — AUD-CHAIN tamper-evident audit hash chain sealing the existing append-only
-            // ledgers (one NEW table; its presence distinguishes v104 from v103).
+            // v104 — AUD-CHAIN tamper-evident audit hash chain (+ v114 PUBLIC keyless
+            // links: their presence distinguishes v114+ from v104).
             "audit_chain": ["seq", "source", "event_id", "occurred_at", "payload_hash",
-                            "prev_hash", "entry_hash", "sealed_at"],
+                            "prev_hash", "entry_hash", "sealed_at", "public_prev", "public_hash"],
             // v105 — WORK-CENTER numbered documents + number-range counters (two NEW tables;
             // work_center_documents' presence distinguishes v105 from v104). NEWEST marker.
             "work_center_documents": ["id", "doc_number", "doc_type", "run_id", "def_id", "step_seq",
@@ -458,9 +460,26 @@ public enum SchemaMigrations {
                                       "created_at", "updated_at"],
             "work_center_counters": ["doc_type", "year", "next_seq"],
             // v106 — REGISTERS: append-only edit log making captured documents editable
-            // WITH HISTORY (one NEW table; its presence distinguishes v106 from v105). NEWEST marker.
+            // WITH HISTORY (one NEW table; its presence distinguishes v106 from v105).
             "work_center_record_edits": ["id", "doc_id", "field_key", "old_value", "new_value",
-                                         "editor", "note", "edited_at"]
+                                         "editor", "note", "edited_at"],
+            // TWELFTH AUDIT P0 — the sentinel had NOT been extended past v106,
+            // so the self-heal path stamped real v107+-era databases to latest
+            // without running the pending migrations. Markers for every
+            // migration since:
+            // v107 conformance ledger (+ v112 approval_state column).
+            "conformance_assessments": ["id", "case_id", "run_revision", "sutra_citation",
+                                        "sutra_sha256", "status", "approval_state"],
+            // v108 protocol registry + governance review records.
+            "protocol_registry": ["id", "sutra_id", "version", "sutra_sha256", "pack_json",
+                                  "publisher", "assurance", "signer_key_id"],
+            // v111 governance acts ledger.
+            "governance_events": ["id", "kind", "case_id", "actor", "detail", "occurred_at"],
+            // v113 case ↔ method-run phase linkage.
+            "case_method_runs": ["case_id", "method_run_id", "phase_kind", "created_at"],
+            // v117/v118 case-bound phase artifacts (rebuilt shape).
+            "case_phase_artifacts": ["id", "case_id", "case_revision", "scope_fingerprint",
+                                     "phase_kind", "artifact_id", "detail", "created_at"]
         ]
         for (table, expected) in required {
             let rows = try await database.query("PRAGMA table_info(\(table));", [])
@@ -486,6 +505,19 @@ public enum SchemaMigrations {
             "source_intake_receipts":    "source_versions(id, content_hash)",  // receipt-hash composite FK
             "ingest_file_attempts":      "(logical_source_id IS NULL) = (source_version_id IS NULL)"
         ]
+        // v117/v118 constraints (twelfth audit): the column probe above cannot
+        // see the one-artifact-one-case UNIQUE or the case FK — probe the
+        // stored CREATE SQL directly, like the v81 markers.
+        let v118Markers: [(String, String)] = [
+            ("case_phase_artifacts", "UNIQUE(phase_kind, artifact_id)"),
+            ("case_phase_artifacts", "REFERENCES investigation_cases(id)")
+        ]
+        for (table, marker) in v118Markers {
+            let sql = try await database.query(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?;", [.text(table)])
+                .first?.string(0) ?? ""
+            guard sql.contains(marker) else { return false }
+        }
         for (table, marker) in v81Markers {
             let sql = try await database.query(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name=?;", [.text(table)])
@@ -613,7 +645,8 @@ public enum SchemaMigrations {
         (114, v114),
         (115, v115),
         (116, v116),
-        (117, v117)
+        (117, v117),
+        (118, v118)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6258,5 +6291,41 @@ public enum SchemaMigrations {
         CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*')
     );
     CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
+    """
+
+    // MARK: - v118 — self-heal recovery rebuild + answer origin (twelfth audit)
+    //
+    // P0: the stale-counter self-heal sentinel had not been extended past
+    // v106, so a REAL database at user_version 107–117 with the full v106
+    // shape could be stamped to latest WITHOUT the pending migrations
+    // running — in particular, a v116 database could report v117 while
+    // case_phase_artifacts still had the unbound v115 shape. v118 recovers
+    // FAIL-CLOSED: rebuild the table idempotently to the bound v117 shape
+    // (dropping any rows — unbound rows cannot be trusted retroactively),
+    // and the sentinel below now carries distinguishing markers for every
+    // migration v107…v118, so the skip can never recur.
+    //
+    // v118 also adds the ORIGIN column on answers: the producing request's
+    // bounded evidence scope (the investigation case for case-scoped Asks;
+    // NULL for global Asks). Phase evidence then requires artifact ORIGIN,
+    // not merely first-binding.
+    private static let v118: String = """
+    DROP TABLE IF EXISTS case_phase_artifacts;
+    CREATE TABLE case_phase_artifacts (
+        id                TEXT PRIMARY KEY,
+        case_id           TEXT NOT NULL,
+        case_revision     INTEGER NOT NULL,
+        scope_fingerprint TEXT NOT NULL,
+        phase_kind        TEXT NOT NULL,
+        artifact_id       TEXT NOT NULL,
+        detail            TEXT NOT NULL DEFAULT '',
+        created_at        REAL NOT NULL,
+        FOREIGN KEY(case_id) REFERENCES investigation_cases(id) ON DELETE CASCADE,
+        UNIQUE(phase_kind, artifact_id),
+        CHECK(case_revision >= 1),
+        CHECK(length(scope_fingerprint) = 64 AND scope_fingerprint NOT GLOB '*[^0-9a-f]*')
+    );
+    CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
+    ALTER TABLE answers ADD COLUMN origin_scope_id TEXT;
     """
 }

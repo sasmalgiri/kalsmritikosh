@@ -34,6 +34,15 @@ import glob, html.parser, re, sys
 
 def norm(s): return re.sub(r"\s+", " ", s).strip()
 
+# TWELFTH AUDIT — privacy assertions are load-bearing: any text making one
+# OUTSIDE a data-claim element (including <meta name="description"> content)
+# is an ERROR, not a warning.
+PRIVACY = re.compile(
+    r"(nothing is uploaded|never leaves? your mac|stays? on your mac|no servers"
+    r"|no analytics|no telemetry|fully offline|works offline|data not collected"
+    r"|no network connections?|100% on-device|never receive|no uploads?"
+    r"|no accounts?\b|no tracking)", re.IGNORECASE)
+
 class Collector(html.parser.HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -41,8 +50,21 @@ class Collector(html.parser.HTMLParser):
         self.depth = 0
         self.texts = {}           # id -> [element texts]
         self.open_texts = []      # parallel to stack: accumulating text
+        self.untagged_hits = []   # privacy-pattern text outside any tagged element
+        self.in_script_style = 0
     def handle_starttag(self, tag, attrs):
-        if tag in ("br", "img", "meta", "link", "input", "hr"): return
+        if tag == "meta":
+            a = dict(attrs)
+            if a.get("name") == "description" and a.get("content"):
+                content = norm(a["content"])
+                ids = (a.get("data-claim") or "").split()
+                if ids:
+                    for i in ids: self.texts.setdefault(i, []).append(content)
+                elif PRIVACY.search(content):
+                    self.untagged_hits.append(("meta description", content[:100]))
+            return
+        if tag in ("br", "img", "link", "input", "hr"): return
+        if tag in ("script", "style"): self.in_script_style += 1
         self.depth += 1
         ids = None
         for k, v in attrs:
@@ -52,6 +74,7 @@ class Collector(html.parser.HTMLParser):
             self.open_texts.append([])
     def handle_endtag(self, tag):
         if tag in ("br", "img", "meta", "link", "input", "hr"): return
+        if tag in ("script", "style"): self.in_script_style -= 1
         if self.stack and self.stack[-1][1] == self.depth:
             ids, _ = self.stack.pop()
             text = norm(" ".join(self.open_texts.pop()))
@@ -59,16 +82,22 @@ class Collector(html.parser.HTMLParser):
                 self.texts.setdefault(i, []).append(text)
         self.depth -= 1
     def handle_data(self, data):
-        for bucket in self.open_texts: bucket.append(data)
+        if self.open_texts:
+            for bucket in self.open_texts: bucket.append(data)
+        elif not self.in_script_style:
+            m = PRIVACY.search(norm(data))
+            if m: self.untagged_hits.append((m.group(0), norm(data)[:100]))
 
 # (file, id) -> [element texts]: the binding is checked PER FILE, so a page
 # cannot borrow another page's copy — swapping ids between elements on one
 # page fails even when a mirror page carries the correct pairing.
 per_file = {}
+untagged = []
 for path in glob.glob("docs/**/*.html", recursive=True):
     c = Collector()
     c.feed(open(path, encoding="utf-8").read())
     for i, ts in c.texts.items(): per_file.setdefault((path, i), []).extend(ts)
+    for pattern, snippet in c.untagged_hits: untagged.append((path, pattern, snippet))
 
 rows = []
 for line in open("CLAIMS.md", encoding="utf-8"):
@@ -91,6 +120,9 @@ for (path, cid), ts in sorted(per_file.items()):
         continue
     if not any(frag_by_id[cid] in t for t in ts):
         print(f"::error::{path} — no element tagged '{cid}' contains its registered fragment: {frag_by_id[cid]}"); fail = True
+for path, pattern, snippet in untagged:
+    print(f"::error::{path} — UNTAGGED privacy assertion ('{pattern}') outside any data-claim element: {snippet}")
+    fail = True
 sys.exit(1 if fail else 0)
 PY
 then fail=1; fi

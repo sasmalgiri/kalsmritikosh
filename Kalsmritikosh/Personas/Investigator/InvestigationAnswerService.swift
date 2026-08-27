@@ -120,7 +120,11 @@ public actor InvestigationAnswerService {
         // a real verifiedFinal ledger event.
         var verified: VerifiedAnswer?
         var committedAnswerID: UUID?
-        for await update in await brain.answerStream(question: question, access: access) {
+        // TWELFTH AUDIT — the answer's ORIGIN (this case) is stamped on the
+        // durable answer header at creation, so phase evidence later
+        // requires artifact origin, not merely first binding.
+        for await update in await brain.answerStream(question: question, access: access,
+                                                     originScopeID: caseID) {
             switch update {
             case .verifiedFinal(let a): verified = a; committedAnswerID = a.ledgerAnswerID
             case .corrected(let a, _):  verified = a
@@ -142,7 +146,7 @@ public actor InvestigationAnswerService {
                 // scope fingerprint from THIS request's resolved context).
                 try await artifacts.record(
                     caseID: caseID, caseRevision: context.caseRevision,
-                    scopeFingerprint: context.fingerprint,
+                    scope: context.scope,
                     phase: .ask,
                     artifactID: committedAnswerID,
                     detail: "question=\(CasePhaseArtifactRepository.questionDigest(question))",

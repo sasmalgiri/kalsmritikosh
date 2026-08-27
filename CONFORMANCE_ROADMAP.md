@@ -643,3 +643,47 @@ closed, three partial. All three residuals are now implemented.)
    smuggled `.extra.json` fails (test + CI attack 5), a genuine
    `.DS_Store` does not break a legitimate bundle (test). Stated in
    BUNDLE_FORMAT.md.
+
+## Twelfth-audit response (2026-08-27) — the P0 migration defect + both partials closed
+
+1. **P0 — the stale-counter self-heal skipped v107+ (RELEASE BLOCKER,
+   confirmed).** `isSchemaFullyApplied()`'s marker list had not been
+   extended past v106, so a real database at user_version 107–117 with the
+   full v106 shape was stamped to latest WITHOUT the pending migrations
+   running — a v116 database could report v117 while `case_phase_artifacts`
+   kept the unbound v115 shape. Fixed: schema v118 rebuilds the table
+   FAIL-CLOSED (idempotent DROP IF EXISTS + CREATE — unbound rows cannot be
+   trusted retroactively); the sentinel now carries distinguishing markers
+   for every migration v107…v118 (conformance_assessments+approval_state,
+   protocol_registry, governance_events, case_method_runs, audit_chain
+   public columns, the rebuilt case_phase_artifacts columns) plus stored-SQL
+   probes for the UNIQUE(phase_kind, artifact_id) and case FK; migration
+   milestones now include 106/107/111/113/115/116; dedicated tests prove a
+   real v116 database receives the rebuild (unbound row dropped, constraints
+   present after reopen) and a database WRONGLY stamped v117 in the field is
+   repaired by v118.
+2. **Scope binding enforced after recording.** `phaseCounts` counts only
+   bindings matching the case's CURRENT revision (self-contained join —
+   evidence recorded under a superseded scope is stale and no longer
+   machine-observed; test: a revision bump empties the observations).
+   `record()` now COMPUTES the fingerprint from the supplied scope with the
+   one shared fingerprinter (no caller-supplied value to forge), refuses a
+   same-case re-record at a different state (bindings are immutable), and
+   inserts ATOMICALLY with the revision guard inside the INSERT (zero rows
+   ⇒ the revision moved ⇒ staleness). ARTIFACT ORIGIN now determines the
+   case, not binding order: v118 adds `answers.origin_scope_id`, stamped at
+   answer CREATION by the producing request (the case-scoped Ask passes its
+   case; global Asks carry NULL) and threaded opaquely through
+   MasterBrain.answerStream — an ask artifact must be a durably committed
+   answer whose origin IS the recording case, and a dataLab dataset must
+   live in the case's own workspace. Tests: global answer refused, case-A
+   answer offered FIRST to case B refused, cross-workspace dataset refused.
+3. **Untagged privacy claims are failures.** The structural checker now
+   walks text OUTSIDE data-claim elements — including
+   `<meta name="description">` content — and any privacy-pattern match is
+   an ERROR. All 23 previously untagged assertions are tagged (persona-page
+   "Nothing is uploaded, ever" blocks → new `privacy.no-upload` +
+   `privacy.offline` rows; privacy.html's offline/no-transmission paragraph;
+   both index metas; the website hero; comparison-table cells), and CI
+   self-tests the gate by injecting an untagged privacy sentence and
+   requiring failure.

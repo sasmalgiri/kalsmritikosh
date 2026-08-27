@@ -294,10 +294,15 @@ public actor MasterBrain {
     /// Today's stream therefore yields exactly one `.verified` event;
     /// shipping the API surface now keeps future phase additions from
     /// breaking callers.
+    /// `originScopeID` (twelfth audit) — the OPAQUE identity of the bounded
+    /// evidence scope this request was asked under (an investigation case for
+    /// case-scoped Asks; nil for global Asks). Stamped on the durable answer
+    /// header at creation, so phase evidence can require artifact ORIGIN.
     public func answerStream(
         question: String,
         context: LLMRequestContext? = nil,
-        access: SensitiveAccessContext
+        access: SensitiveAccessContext,
+        originScopeID: UUID? = nil
     ) -> AsyncStream<AnswerUpdate> {
         AsyncStream { continuation in
             Task { [weak self] in
@@ -325,7 +330,8 @@ public actor MasterBrain {
                     access: access
                 ) {
                     for update in await self.finalizeProgressiveAnswer(
-                        question: question, verified: reconstructed, mission: nil) {
+                        question: question, verified: reconstructed, mission: nil,
+                        originScopeID: originScopeID) {
                         continuation.yield(update)
                     }
                     continuation.finish()
@@ -335,7 +341,8 @@ public actor MasterBrain {
                 let (final, mission) = await self.computeVerified(
                     question: question, externalContext: context, access: access)
                 for update in await self.finalizeProgressiveAnswer(
-                    question: question, verified: final, mission: mission) {
+                    question: question, verified: final, mission: mission,
+                    originScopeID: originScopeID) {
                     continuation.yield(update)
                 }
                 continuation.finish()
@@ -1220,9 +1227,11 @@ public actor MasterBrain {
     public func answer(
         question: String,
         context: LLMRequestContext? = nil,
-        access: SensitiveAccessContext
+        access: SensitiveAccessContext,
+        originScopeID: UUID? = nil
     ) async -> VerifiedAnswer {
-        for await update in answerStream(question: question, context: context, access: access) {
+        for await update in answerStream(question: question, context: context, access: access,
+                                         originScopeID: originScopeID) {
             // AEE-M2 — the terminal states are verifiedFinal (locked, durably committed) and
             // incomplete (honest failure). Both carry the VerifiedAnswer for legacy callers.
             switch update {
@@ -1246,7 +1255,8 @@ public actor MasterBrain {
     /// yields `incomplete`, never a final. A refused/uncited answer is recorded incomplete.
     /// When no answer ledger is wired (degraded/tests) the terminal state is still emitted.
     func finalizeProgressiveAnswer(   // internal — exercised directly by AEEM2MasterBrainIntegrationTests
-        question: String, verified: VerifiedAnswer, mission: QueryMission?
+        question: String, verified: VerifiedAnswer, mission: QueryMission?,
+        originScopeID: UUID? = nil
     ) async -> [AnswerUpdate] {
         let groundable = !verified.refused && !verified.citations.isEmpty
         guard let answerLedger else {
@@ -1257,7 +1267,8 @@ public actor MasterBrain {
             return groundable ? [.verifiedFinal(verified)] : [.incomplete(verified)]
         }
         do {
-            let id = try await answerLedger.beginAnswer(question: question, mission: mission, corpusSnapshotID: nil)
+            let id = try await answerLedger.beginAnswer(question: question, mission: mission,
+                                                        corpusSnapshotID: nil, originScopeID: originScopeID)
             guard groundable else {
                 if !verified.citations.isEmpty {
                     _ = try? await answerLedger.appendWorkingResult(

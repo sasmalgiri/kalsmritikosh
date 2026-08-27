@@ -135,10 +135,8 @@ public actor InvestigationDataLabService {
         // INV-01-C4 scope fingerprint of THIS preparation's resolved scope).
         if let artifacts {
             do {
-                let fingerprint = CaseScopeFingerprinter.fingerprint(
-                    caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
                 try await artifacts.record(caseID: caseID, caseRevision: record.caseHeader.revision,
-                                           scopeFingerprint: fingerprint,
+                                           scope: scope,
                                            phase: .dataLab, artifactID: datasetID,
                                            detail: "preset=\(preset.id)", at: date)
             } catch {
