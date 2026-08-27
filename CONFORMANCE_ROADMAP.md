@@ -687,3 +687,32 @@ closed, three partial. All three residuals are now implemented.)
    both index metas; the website hero; comparison-table cells), and CI
    self-tests the gate by injecting an untagged privacy sentence and
    requiring failure.
+
+## Thirteenth-audit response (2026-08-27) — authoritative scope, case-bound datasets, structural claim zones
+
+1. **Phase evidence is now authoritative, not caller-trusted.**
+   `CasePhaseArtifactRepository` resolves the case's CURRENT scope ITSELF
+   (case record → CaseRetrievalScopeResolver → the one fingerprinter) over
+   the same single ledger. `record()` verifies the caller-resolved
+   fingerprint against that authority and refuses `caseScopeNotCurrent` on
+   mismatch; `phaseCounts()` counts only rows matching the CURRENT revision
+   AND CURRENT authoritative fingerprint — so a logical source whose current
+   version moved WITHOUT a case-revision bump un-observes the stale
+   evidence (the exact thirteenth-audit reproduction; test:
+   scopeFingerprintStaleness).
+2. **DataLab origin is the CASE, not the workspace.** Schema v119 adds
+   immutable `workbench_datasets.origin_case_id`, stamped once at creation
+   by the case-scoped DataLab service (no setter exists). Phase evidence
+   requires dataset origin == the recording case: a workspace-global
+   dataset (origin NULL) and a SAME-WORKSPACE sibling case's dataset are
+   both refused regardless of binding order. Sentinel + migration
+   milestones (117, 118) extended; pin bumped to v119.
+3. **The claims gate is structural, not regex-only.** Untagged text is
+   AGGREGATED across inline markup before matching (`Nothing <em>is</em>
+   uploaded` fails), the privacy regex covers the previously missed
+   assertion shapes (never sent / not copied / never uploaded / stored
+   only / local database / no cloud), and privacy pages are claim ZONES:
+   every text node must live inside `data-claim` or `data-claims-exempt`,
+   so uncovered text fails outright with no regex to outsmart.
+   privacy.html is fully tagged (4 new claim rows + structural exemptions);
+   CI self-tests all three failure modes (untagged, inline-split, zone).

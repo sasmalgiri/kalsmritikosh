@@ -16,9 +16,38 @@ import CryptoKit
 
 public actor CasePhaseArtifactRepository {
     private let database: Database
+    /// THIRTEENTH AUDIT — the repository resolves the case's CURRENT
+    /// authoritative scope ITSELF (case record → resolved authorized
+    /// versions → the ONE fingerprinter) over the same single ledger. A
+    /// caller-supplied scope is treated as a CLAIM about the state the
+    /// artifact was produced under; it is verified against this authority
+    /// and refused on mismatch — it can never substitute for it.
+    private var authority: (cases: InvestigationCaseRepository, resolver: CaseRetrievalScopeResolver)?
 
     public init(database: Database) {
         self.database = database
+    }
+
+    /// The case's CURRENT authoritative scope state, resolved from the case
+    /// record and the live source-version authority — never from a caller.
+    /// nil when the case does not exist. (Collaborators are built lazily on
+    /// the main actor — their initializers are MainActor-isolated — over the
+    /// SAME single Database actor, so there is no second ledger.)
+    private func currentAuthoritativeState(caseID: UUID) async throws
+        -> (revision: Int, fingerprint: CaseScopeFingerprint)? {
+        if authority == nil {
+            let db = database
+            authority = await MainActor.run {
+                (InvestigationCaseRepository(database: db),
+                 CaseRetrievalScopeResolver(evidence: EvidenceStore(database: db)))
+            }
+        }
+        guard let authority else { return nil }
+        guard let record = try await authority.cases.fetch(caseID: caseID) else { return nil }
+        let scope = try await authority.resolver.scope(for: record)
+        let fingerprint = CaseScopeFingerprinter.fingerprint(
+            caseID: caseID, caseRevision: record.caseHeader.revision, scope: scope)
+        return (record.caseHeader.revision, fingerprint)
     }
 
     /// The privacy-preserving digest recorded for an ask artifact — the
@@ -48,6 +77,11 @@ public actor CasePhaseArtifactRepository {
         /// A same-case re-record arrived with a DIFFERENT case state than
         /// the stored binding — bindings are immutable (twelfth audit).
         case bindingStateMismatch(artifactID: UUID)
+        /// The caller-resolved scope is not the case's CURRENT authoritative
+        /// scope (thirteenth audit): the underlying source-version set moved
+        /// (e.g. a logical source gained a newer current version) even though
+        /// the case revision did not. Refuse rather than bind stale evidence.
+        case caseScopeNotCurrent(supplied: String, current: String)
     }
 
     @discardableResult
@@ -59,34 +93,39 @@ public actor CasePhaseArtifactRepository {
         // hand in an arbitrary well-shaped value.
         let fingerprint = CaseScopeFingerprinter.fingerprint(
             caseID: caseID, caseRevision: caseRevision, scope: scope)
-        // ELEVENTH AUDIT — an observation is bound to the EXACT case state:
-        // the case must exist (also FK-enforced), the supplied revision must
-        // be the case's CURRENT revision, and the INV-01-C4 scope
-        // fingerprint is stored immutably. One artifact serves ONE case.
-        let caseRows = try await database.query(
-            "SELECT revision, workspace_id FROM investigation_cases WHERE id = ? LIMIT 1;", [.uuid(caseID)])
-        guard let caseRow = caseRows.first, let current = caseRow.int(0),
-              let caseWorkspace = caseRow.uuid(1) else {
+        // ELEVENTH/THIRTEENTH AUDIT — an observation is bound to the EXACT
+        // CURRENT case state, established by THIS repository's own authority
+        // (never the caller): the case must exist, the supplied revision must
+        // be the case's CURRENT revision, and the fingerprint computed from
+        // the caller's scope must equal the fingerprint of the case's CURRENT
+        // authoritative resolved scope — so a moved source-version set is
+        // refused even when the case revision did not change.
+        guard let authority = try await currentAuthoritativeState(caseID: caseID) else {
             throw CasePhaseArtifactError.caseNotFound(caseID)
         }
-        guard Int(current) == caseRevision else {
-            throw CasePhaseArtifactError.caseRevisionStale(supplied: caseRevision, current: Int(current))
+        guard authority.revision == caseRevision else {
+            throw CasePhaseArtifactError.caseRevisionStale(supplied: caseRevision, current: authority.revision)
         }
-        // NINTH/TENTH/TWELFTH AUDIT — referential truth AND ORIGIN per phase
-        // kind. An ask artifact must be a durably committed answer whose
-        // origin_scope_id (stamped at CREATION by the producing request) IS
-        // this case — a global answer or another case's answer is refused. A
-        // dataLab artifact must be a real dataset in the case's OWN
-        // workspace (datasets are workspace artifacts; within-workspace
-        // exclusivity is the one-artifact-one-case UNIQUE below).
+        guard authority.fingerprint == fingerprint else {
+            throw CasePhaseArtifactError.caseScopeNotCurrent(
+                supplied: fingerprint.value, current: authority.fingerprint.value)
+        }
+        // NINTH/TENTH/TWELFTH/THIRTEENTH AUDIT — referential truth AND ORIGIN
+        // per phase kind. An ask artifact must be a durably committed answer
+        // whose origin_scope_id (stamped at CREATION by the producing
+        // request) IS this case. A dataLab artifact must be a real dataset
+        // whose immutable origin_case_id (v119, stamped at CREATION by the
+        // case-scoped DataLab service) IS this case — a workspace-global
+        // dataset or another case's dataset is refused regardless of binding
+        // order, even within the same workspace.
         switch phase {
         case .dataLab:
             let rows = try await database.query(
-                "SELECT workspace_id FROM workbench_datasets WHERE id = ? LIMIT 1;", [.uuid(artifactID)])
-            guard let ws = rows.first?.uuid(0) else {
+                "SELECT origin_case_id FROM workbench_datasets WHERE id = ? LIMIT 1;", [.uuid(artifactID)])
+            guard let row = rows.first else {
                 throw CasePhaseArtifactError.artifactMissing(artifactID)
             }
-            guard ws == caseWorkspace else {
+            guard row.uuid(0) == caseID else {
                 throw CasePhaseArtifactError.artifactOriginMismatch(artifactID: artifactID)
             }
         case .ask:
@@ -146,18 +185,21 @@ public actor CasePhaseArtifactRepository {
     }
 
     /// Per-phase artifact counts for a case (the observation input).
-    /// TWELFTH AUDIT — only bindings matching the case's CURRENT revision
-    /// count: evidence recorded under a superseded scope is stale and no
-    /// longer machine-observed (the INV-01-C4 staleness doctrine applied to
-    /// conformance). The join is self-contained — no caller-supplied
-    /// revision to get wrong.
+    /// TWELFTH/THIRTEENTH AUDIT — only bindings matching the case's CURRENT
+    /// revision AND CURRENT authoritative scope fingerprint count: evidence
+    /// recorded under a superseded scope is stale and no longer
+    /// machine-observed (the INV-01-C4 staleness doctrine applied to
+    /// conformance) — including when the underlying source-version set moved
+    /// without a case-revision bump. The current state is resolved by this
+    /// repository's own authority; there is no caller input to get wrong.
     public func phaseCounts(caseID: UUID) async throws -> [(phase: PersonaJobKind, count: Int)] {
+        guard let authority = try await currentAuthoritativeState(caseID: caseID) else { return [] }
         let rows = try await database.query("""
-        SELECT cpa.phase_kind, COUNT(*)
-        FROM case_phase_artifacts cpa
-        JOIN investigation_cases c ON c.id = cpa.case_id AND c.revision = cpa.case_revision
-        WHERE cpa.case_id = ? GROUP BY cpa.phase_kind;
-        """, [.uuid(caseID)])
+        SELECT phase_kind, COUNT(*)
+        FROM case_phase_artifacts
+        WHERE case_id = ? AND case_revision = ? AND scope_fingerprint = ?
+        GROUP BY phase_kind;
+        """, [.uuid(caseID), .integer(Int64(authority.revision)), .text(authority.fingerprint.value)])
         return rows.compactMap { r in
             guard let raw = r.string(0), let phase = PersonaJobKind(rawValue: raw),
                   let count = r.int(1) else { return nil }

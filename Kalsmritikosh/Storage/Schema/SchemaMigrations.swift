@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 118
+    public static let latestVersion = 119
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -350,7 +350,10 @@ public enum SchemaMigrations {
             // distinguishes v92 from v91). The ONE canonical DataLab dataset authority; the legacy
             // evidence_datasets/dataset_rows prototype is superseded (kept decode-only for compat).
             // These are the NEWEST markers — every future migration MUST add its newest physical marker.
-            "workbench_datasets": ["id", "workspace_id", "title", "mode", "revision", "created_at", "updated_at"],
+            // (+ v119 origin_case_id — the immutable case origin of a case-produced dataset,
+            // thirteenth audit; its presence distinguishes v119 from v118.)
+            "workbench_datasets": ["id", "workspace_id", "title", "mode", "revision", "created_at",
+                                   "updated_at", "origin_case_id"],
             "workbench_fields": ["id", "dataset_id", "name", "value_shape", "ordinal", "created_at"],
             "workbench_rows": ["id", "dataset_id", "ordinal", "created_at"],
             "workbench_cells": ["id", "dataset_id", "row_id", "field_id", "kind", "value", "status", "created_at"],
@@ -646,7 +649,8 @@ public enum SchemaMigrations {
         (115, v115),
         (116, v116),
         (117, v117),
-        (118, v118)
+        (118, v118),
+        (119, v119)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6327,5 +6331,18 @@ public enum SchemaMigrations {
     );
     CREATE INDEX idx_case_phase_artifacts_case ON case_phase_artifacts(case_id, phase_kind);
     ALTER TABLE answers ADD COLUMN origin_scope_id TEXT;
+    """
+
+    // MARK: - v119 — immutable dataset case origin (thirteenth audit)
+    //
+    // A case-produced Workbench dataset carries the case it was produced FOR,
+    // stamped once at creation by the case-scoped DataLab service and never
+    // updated (the repository has no setter). Phase evidence then requires
+    // dataset ORIGIN — a workspace check is not enough: two cases in the SAME
+    // workspace must not be able to claim each other's datasets. NULL means
+    // "not case-produced" (workspace-global or pre-v119), which is never
+    // acceptable as case phase evidence — fail-closed.
+    private static let v119: String = """
+    ALTER TABLE workbench_datasets ADD COLUMN origin_case_id TEXT;
     """
 }

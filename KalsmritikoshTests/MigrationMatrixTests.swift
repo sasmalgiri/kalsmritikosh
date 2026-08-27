@@ -31,8 +31,10 @@ struct MigrationMatrixTests {
     /// 111 (governance events + chain recreate), 113 (case_method_runs),
     /// 115 (unbound case_phase_artifacts), 116 (public-chain reset) — the
     /// v116→latest step is the exact path the stale sentinel used to skip.
+    /// THIRTEENTH AUDIT — 117 (case-bound phase artifacts) and 118 (recovery
+    /// rebuild + answer origin) step to the v119 dataset-origin era.
     static let milestones = [1, 36, 54, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73,
-                             106, 107, 111, 113, 115, 116]
+                             106, 107, 111, 113, 115, 116, 117, 118]
 
     // MARK: - Assertions shared across cases
 
@@ -119,7 +121,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 118)          // v117 case-bound phase artifacts · v118 self-heal recovery rebuild + answer origin (twelfth audit)
+        #expect(SchemaMigrations.latestVersion == 119)          // v118 self-heal recovery + answer origin (twelfth audit) · v119 dataset case origin (thirteenth audit)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate

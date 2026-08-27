@@ -178,18 +178,36 @@ struct PhaseObservationTests {
                                   phase: .dataLab, artifactID: UUID(),
                                   detail: "preset=source-inventory", at: t0)
         }
-        // TWELFTH AUDIT — a dataset from an UNRELATED workspace's case is
-        // refused (dataset origin = its workspace).
+        // TWELFTH/THIRTEENTH AUDIT — dataset origin is the CASE (v119), not
+        // the workspace. A workspace-global dataset (origin NULL) is refused;
+        // a dataset produced FOR case A is refused as phase evidence for a
+        // SAME-WORKSPACE sibling case and for a foreign case alike.
         let foreignWS = UUID()
         try await h.workspaces.upsert(Workspace(id: foreignWS, title: "Foreign WS", template: .investigation))
         let foreignCase = try await h.cases.createCase(workspaceID: foreignWS, title: "Foreign", actor: "me", at: t0)
-        let datasetID = UUID()
+        let globalDataset = UUID()
         try await h.db.exec("""
         INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at)
-        VALUES (?, ?, 'Obs DS', 'advanced', 1, ?, ?);
-        """, [.uuid(datasetID), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970)])
+        VALUES (?, ?, 'Global DS', 'advanced', 1, ?, ?);
+        """, [.uuid(globalDataset), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970)])
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
+                                  phase: .dataLab, artifactID: globalDataset, detail: "preset=x", at: t0)
+        }
+        let datasetID = UUID()
+        try await h.db.exec("""
+        INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at, origin_case_id)
+        VALUES (?, ?, 'Obs DS', 'advanced', 1, ?, ?, ?);
+        """, [.uuid(datasetID), .uuid(wsID), .real(t0.timeIntervalSince1970), .real(t0.timeIntervalSince1970),
+              .uuid(caseID)])
         await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
             try await repo.record(caseID: foreignCase.id, caseRevision: foreignCase.revision, scope: emptyScope,
+                                  phase: .dataLab, artifactID: datasetID, detail: "preset=x", at: t0)
+        }
+        // The same-workspace sibling case ('other', created above) can NOT
+        // claim case A's dataset — the workspace check alone would pass here.
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: other.id, caseRevision: other.revision, scope: emptyScope,
                                   phase: .dataLab, artifactID: datasetID, detail: "preset=x", at: t0)
         }
         _ = try await repo.record(caseID: caseID, caseRevision: revision, scope: emptyScope,
@@ -207,5 +225,50 @@ struct PhaseObservationTests {
                             [.uuid(caseID)])
         #expect(await service.observations(caseID: caseID).isEmpty,
                 "evidence recorded under a superseded scope must not count as current")
+    }
+
+    @Test("A moved source-version set un-observes evidence and refuses new records — no revision bump needed")
+    func scopeFingerprintStaleness() async throws {
+        let h = try await PersonaAcceptanceHarness.make(seed: "phaseobs-fpstale")
+        let repo = CasePhaseArtifactRepository(database: h.db)
+        let wsID = UUID()
+        try await h.workspaces.upsert(Workspace(id: wsID, title: "FP WS", template: .investigation))
+        let seeded = try await h.seedFact(value: "FP fact \(UUID().uuidString)", hashChar: "c")
+        var created = try await h.cases.createCase(workspaceID: wsID, title: "FP Case", actor: "me", at: t0)
+        // Bind the LOGICAL source: the scope resolves to its CURRENT version
+        // (V1) — a resolution that can move underneath the case WITHOUT a
+        // case-revision bump (the thirteenth-audit reproduction).
+        created = try await h.cases.includeSource(caseID: created.id, expectedRevision: created.revision,
+                                                  sourceRef: seeded.fileID.uuidString, sourceKind: .logicalSource,
+                                                  actor: "me", at: t0)
+        let caseID = created.id
+        let scopeV1 = RetrievalSourceScope.authorizing([seeded.svID])
+        let ledger = AnswerLedgerRepository(database: h.db)
+        func makeFinalAnswer() async throws -> UUID {
+            let id = try await ledger.beginAnswer(question: "fp q \(UUID())", mission: nil,
+                                                  originScopeID: caseID, at: t0)
+            _ = try await ledger.appendWorkingResult(answerID: id, body: "grounded body",
+                                                     citations: [], answerState: .unknown, confidence: 0.8, at: t0)
+            try await ledger.markReviewReady(answerID: id, at: t0)
+            try await ledger.lockVerifiedFinal(answerID: id, at: t0)
+            return id
+        }
+        let answerID = try await makeFinalAnswer()
+        _ = try await repo.record(caseID: caseID, caseRevision: created.revision, scope: scopeV1,
+                                  phase: .ask, artifactID: answerID, detail: "q", at: t0)
+        let service = PhaseObservationService(artifacts: repo)
+        #expect(await service.observations(caseID: caseID)[.ask]?.artifactCount == 1)
+        // THIRTEENTH AUDIT — the logical source's CURRENT version moves; the
+        // case revision does NOT change. The recorded evidence must stop
+        // counting (fingerprint no longer matches the authoritative current
+        // scope), and a record under the superseded resolution is refused.
+        try await h.db.exec("UPDATE source_versions SET is_current = 0 WHERE id = ?;", [.uuid(seeded.svID)])
+        #expect(await service.observations(caseID: caseID).isEmpty,
+                "evidence fingerprinted under a moved source-version set must not count")
+        let answer2 = try await makeFinalAnswer()
+        await #expect(throws: CasePhaseArtifactRepository.CasePhaseArtifactError.self) {
+            try await repo.record(caseID: caseID, caseRevision: created.revision, scope: scopeV1,
+                                  phase: .ask, artifactID: answer2, detail: "q", at: t0)
+        }
     }
 }

@@ -39,9 +39,12 @@ public actor WorkbenchDatasetRepository {
     // MARK: - Create
 
     /// Open a new dataset (revision 1, `created` event). The workspace must exist.
+    /// `originCaseID` (v119, thirteenth audit) — the case this dataset was produced FOR,
+    /// stamped once here and IMMUTABLE (no setter exists anywhere in this repository);
+    /// nil means workspace-global, which can never serve as case phase evidence.
     @discardableResult
     public func createDataset(workspaceID: UUID, title: String, mode: WorkbenchDatasetMode,
-                              actor: String, at date: Date) async throws -> WorkbenchDatasetRecord {
+                              actor: String, at date: Date, originCaseID: UUID? = nil) async throws -> WorkbenchDatasetRecord {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { throw WorkbenchError.blankTitle }
         try requireActor(actor)
@@ -51,9 +54,10 @@ public actor WorkbenchDatasetRepository {
         do {
             try await database.exec("SAVEPOINT \(sp);")
             try await database.exec("""
-                INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?);
-                """, [.uuid(id), .uuid(workspaceID), .text(clean), .text(mode.rawValue), .integer(1), .date(date), .date(date)])
+                INSERT INTO workbench_datasets (id, workspace_id, title, mode, revision, created_at, updated_at, origin_case_id)
+                VALUES (?,?,?,?,?,?,?,?);
+                """, [.uuid(id), .uuid(workspaceID), .text(clean), .text(mode.rawValue), .integer(1), .date(date), .date(date),
+                      originCaseID.map { .uuid($0) } ?? .null])
             try await appendEvent(datasetID: id, sequence: 1, revision: 1, action: .created, actor: actor, detail: nil, at: date)
             try await database.exec("RELEASE SAVEPOINT \(sp);")
         } catch { try? await rollback(sp); throw error }

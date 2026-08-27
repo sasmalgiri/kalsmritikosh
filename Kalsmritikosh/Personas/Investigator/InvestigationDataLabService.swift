@@ -93,9 +93,13 @@ public actor InvestigationDataLabService {
         let preset = InvestigationDataLabPresetCatalog.sourceInventory
         let (included, withheld) = try await eligibleSourceVersions(caseID: caseID, access: access)
 
+        // THIRTEENTH AUDIT — the dataset's case ORIGIN is stamped immutably at
+        // creation (v119), so phase evidence later requires origin, not merely
+        // the workspace: a same-workspace sibling case can never claim it.
         var rec = try await datasets.createDataset(
             workspaceID: record.caseHeader.workspaceID,
-            title: "\(record.caseHeader.title) — \(preset.displayName)", mode: .advanced, actor: actor, at: date)
+            title: "\(record.caseHeader.title) — \(preset.displayName)", mode: .advanced, actor: actor, at: date,
+            originCaseID: caseID)
         let datasetID = rec.dataset.id
 
         // Fields, in preset order.

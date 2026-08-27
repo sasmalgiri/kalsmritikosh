@@ -21,6 +21,14 @@ any element). Enforcement-flavored copy remains a SECONDARY WARNING (the id
 gate is the authority, per the tenth audit). CI self-tests the gate by
 injecting an untagged privacy sentence and requiring failure.
 
+Structural coverage (thirteenth audit): untagged text is AGGREGATED across
+inline markup before matching, so `Nothing <em>is</em> uploaded` cannot split
+a protected phrase past the regex. And privacy pages (`*privacy*.html`) are
+claim ZONES: EVERY text node must live inside a `data-claim` or
+`data-claims-exempt` element — uncovered text fails outright, so the gate does
+not depend on the regex anticipating a new phrasing there. CI self-tests both
+(the inline-split probe and an uncovered privacy-page sentence must fail).
+
 Proof kinds:
 - `test:<symbol>` — a named test in KalsmritikoshTests proves the behavior.
 - `ci:<fragment>` — a CI step in .github/workflows enforces it on every push.
@@ -66,6 +74,12 @@ Proof kinds:
 | `privacy.nothing-collected` | `Data Not Collected` | owner:OWNER_ACCEPTANCE_CHECKLIST.md |
 | `privacy.no-upload` | `Nothing is uploaded, ever` | ci:sensitive-export |
 | `privacy.offline` | `Works fully offline` | ci:sensitive-export |
+| `privacy.no-copy` | `not copied to us` | ci:sensitive-export |
+| `privacy.local-only` | `stored only in the app's local database` | ci:sensitive-export |
+| `privacy.no-cloud-model` | `never sent to a cloud model` | ci:sensitive-export |
+| `privacy.no-cloud` | `no cloud` | ci:sensitive-export |
+| `privacy.exports-local` | `never uploaded` | ci:sensitive-export |
+| `privacy.diagnostics-manual` | `never sent automatically` | ci:sensitive-export |
 
 Coverage boundary (eighth–tenth audits, stated honestly): the registry
 registers the site's ENFORCEMENT, VERIFIABILITY and PRIVACY claims — the

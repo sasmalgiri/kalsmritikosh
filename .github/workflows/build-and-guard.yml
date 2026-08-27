@@ -35,17 +35,30 @@ jobs:
         # proof (test / CI step / source pattern) must still exist; refused
         # vocabulary ("provable compliance", …) must never ship.
         run: bash scripts/check-claims.sh
-      - name: Claims gate self-test (twelfth audit)
+      - name: Claims gate self-test (twelfth + thirteenth audit)
         # The gate must CATCH what it claims to catch: an injected untagged
-        # privacy sentence must fail it; the tree is restored afterwards.
+        # privacy sentence must fail it; an INLINE-SPLIT phrase must fail it
+        # (aggregation, thirteenth audit); and ANY uncovered sentence on a
+        # privacy page must fail the zone rule even when no regex matches.
+        # The tree is restored after each probe.
         run: |
           echo '<p>Nothing is uploaded by this self-test sentence.</p>' >> docs/support.html
           if bash scripts/check-claims.sh > /dev/null 2>&1; then
             echo "::error::claims gate did NOT catch an untagged privacy assertion"; exit 1
           fi
           git checkout docs/support.html
+          echo '<p>Nothing <em>is</em> uploaded by this split self-test sentence.</p>' >> docs/support.html
+          if bash scripts/check-claims.sh > /dev/null 2>&1; then
+            echo "::error::claims gate did NOT catch an inline-markup-split privacy assertion"; exit 1
+          fi
+          git checkout docs/support.html
+          echo '<p>A perfectly innocuous self-test sentence.</p>' >> docs/privacy.html
+          if bash scripts/check-claims.sh > /dev/null 2>&1; then
+            echo "::error::claims gate did NOT enforce the privacy-page zone rule"; exit 1
+          fi
+          git checkout docs/privacy.html
           bash scripts/check-claims.sh > /dev/null
-          echo "claims gate self-test: untagged privacy assertion correctly refused."
+          echo "claims gate self-test: untagged, inline-split, and zone-rule probes all correctly refused."
       - name: Upload guard logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
