@@ -50,11 +50,19 @@ struct JurisdictionNoticeTests {
         #expect(StudioAudit.appendix([]).isEmpty)
     }
 
-    @Test("US-instrument hardcopies print the studio-specific disclosure under the title")
+    @Test("Served documents carry the appendix disclosure but NO app-navigation text in the header")
     func rendererDisclosures() {
-        #expect(SIUReportRenderer.markdown(.sample(now: t0), generatedAt: t0)
-            .contains("NAIC Model #901"))
-        #expect(PublishPackageRenderer.markdown(.sample(now: t0), generatedAt: t0)
-            .contains("US FTC Endorsement Guides"))
+        // Reviewer nit (seventeenth review): a SERVED privilege log / report
+        // must not contain "Settings → Compliance Board" navigation copy in
+        // its header — the restrained appendix line is the disclosure. The
+        // legal citation stays.
+        let privilegeLog = PrivilegeLogRenderer.markdown(.sample(now: t0), generatedAt: t0)
+        let siu = SIUReportRenderer.markdown(.sample(now: t0), generatedAt: t0)
+        let publish = PublishPackageRenderer.markdown(.sample(now: t0), generatedAt: t0)
+        for served in [privilegeLog, siu, publish] {
+            #expect(served.contains(JurisdictionNotice.hardcopy))
+            #expect(!served.contains("Settings → Compliance Board"))
+        }
+        #expect(privilegeLog.contains("Pursuant to Fed. R. Civ. P. 26(b)(5)(A)."))
     }
 }

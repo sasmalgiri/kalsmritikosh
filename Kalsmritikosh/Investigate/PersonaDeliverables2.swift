@@ -300,7 +300,6 @@ public enum PublishPackageRenderer {
         let df = DateFormatter(); df.dateStyle = .long
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Publish Package — \(p.title.trimmed.isEmpty ? "Untitled" : p.title)\n\n"
-        out += "_\(JurisdictionNotice.studio(instrument: "the US FTC Endorsement Guides (2023)"))_\n\n"
         out += "**Creator:** \(p.creator.dash) · **Date:** \(df.string(from: generatedAt))\n\n---\n\n"
         out += "## 1. The piece\n\n\(p.piece.dashText)\n\n"
         out += "## 2. Claims — checked to a source\n\n| Claim | Checked | Source |\n|---|---|---|\n"

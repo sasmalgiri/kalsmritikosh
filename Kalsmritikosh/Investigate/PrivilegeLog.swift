@@ -157,8 +157,7 @@ public enum PrivilegeLogRenderer {
         let df = DateFormatter(); df.dateStyle = .long
         var out = LegalNotice.reportDisclaimer + "\n\n"
         out += "# Privilege Log — \(p.title.trimmed.isEmpty ? "Untitled" : p.title)\n\n"
-        out += "**Pursuant to Fed. R. Civ. P. 26(b)(5)(A).**\n"
-        out += "_\(JurisdictionNotice.studio(instrument: "US FRCP 26(b)(5)(A)"))_\n\n"
+        out += "**Pursuant to Fed. R. Civ. P. 26(b)(5)(A).**\n\n"
         out += "**Caption:** \(p.caption.orDashPL)\n"
         out += "**Producing party:** \(p.producingParty.orDashPL) · **Requesting party:** \(p.requestingParty.orDashPL)\n"
         out += "**Prepared by:** \(p.preparedBy.orDashPL) · **Date:** \(df.string(from: generatedAt))\n\n"
