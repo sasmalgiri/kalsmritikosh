@@ -1,18 +1,12 @@
 # Third-Party Notices — Kalsmritikosh
 
-This product includes the following third-party materials. Full licence texts must
-be shipped in the app bundle (About → Legal). Placeholders below are filled with the
-verbatim licence text at packaging time (P3.1 / P8).
-
----
-
-## Meta Llama 3.2 / 3.1 (reasoning models)
-
-© Meta Platforms, Inc. Licensed under the **Llama Community License Agreement**.
-"Built with Llama." See `MODEL_ATTRIBUTIONS.md` for obligations.
-
-> [PACKAGING: paste the full Llama 3.2 and 3.1 Community License Agreement text and
-> Acceptable Use Policy here before submission. Source URLs in MODEL_ATTRIBUTIONS.md.]
+**v1 ships exactly two third-party model families: the bundled BGE embedder and
+BGE reranker (both MIT).** The shipping notice text lives at
+`Kalsmritikosh/Resources/THIRD_PARTY_NOTICES.txt` and is packaged inside the app
+bundle (the folder is a synchronized target group). No Llama model, no llama.cpp
+runtime, and no other third-party weights ship in v1 — the reasoning provider is
+Apple Foundation Models (part of macOS 26+), runtime-gated, with the deterministic
+engine everywhere (SHIP_DECISIONS §1, GOV-001/GOV-004).
 
 ---
 
@@ -45,20 +39,24 @@ Same MIT terms as above.
 
 ---
 
-## llama.cpp (native inference runtime) — MIT License
-
-Copyright (c) 2023 The ggml authors / Georgi Gerganov.
-
-> [PACKAGING: paste the full llama.cpp MIT licence text here once the SwiftPM/xcframework
-> dependency is pinned in P1.2, with the exact commit/tag.]
-
----
-
 ## Apple frameworks
 
 FoundationModels, Core ML, Vision, PDFKit, NaturalLanguage, etc. are provided under the
 Apple SDK Agreement; no separate redistribution notice required.
 
 ---
-Last updated: 2026-07-13. This file is a template; the bracketed licence bodies are
-pasted verbatim at packaging time. Do not ship with placeholders remaining.
+
+## v1.x OPTIONAL — NOT SHIPPED IN v1 (do not attach to a v1 submission)
+
+Retained for the deferred optional downloaded-GGUF path only (SHIP_DECISIONS §4).
+If that path ever ships, paste the verbatim licence bodies before submission:
+
+- **Meta Llama 3.2 / 3.1** — © Meta Platforms, Inc., Llama Community License
+  Agreement; "Built with Llama" attribution and naming obligations per
+  `MODEL_ATTRIBUTIONS.md`.
+- **llama.cpp** — © 2023 The ggml authors / Georgi Gerganov, MIT; pin the exact
+  commit/tag when the dependency lands (P1.2).
+
+---
+Last updated: 2026-08-27 (release-readiness pass: Llama/llama.cpp moved to the
+non-shipping v1.x section; the shipping BGE notice is bundled as a target resource).

@@ -7,7 +7,7 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 ---
 
 ## 1. In-app declarations (code) — ✅ solid
-- ✅ **Single source of truth:** `Core/LegalNotice.swift` — answer footer, Ask entry line, full **report disclaimer**, accuracy / privacy / terms / third-party statements, model attribution ("Built with Llama"), and a counsel note.
+- ✅ **Single source of truth:** `Core/LegalNotice.swift` — answer footer, Ask entry line, full **report disclaimer**, accuracy / privacy / terms / third-party statements, and a counsel note. (The "Built with Llama" attribution was REMOVED 2026-08-27 — v1 ships no Llama model; it returns only if the optional v1.x GGUF path ships.)
 - ✅ **Settings ▸ Legal & Privacy** (always visible, not behind Advanced): headline "an evidence aid, not an authority", accuracy, privacy, terms, acknowledgments, counsel note.
 - ✅ **Per-answer disclaimer** on AI answers; **per-persona export disclaimers** (`PersonaTemplateCatalog.disclaimer(for:)`).
 - ✅ **Every exported report leads with the disclaimer** — including the two studios shipped this cycle: **Reasoning Studio (RCA)** and **Competing Hypotheses (ACH)** reports now prepend `LegalNotice.reportDisclaimer` (locked by tests). "Not legal, financial, or professional advice" — which covers the illustrative **clinical differential** discipline (also flagged "not medical advice" in its Sūtra provenance).
@@ -21,8 +21,8 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 
 ## 3. Third-party notices & model licences — ✅ present, ◻︎ one file to drop in
 - ✅ `Legal/THIRD_PARTY_NOTICES.md`; `Legal/LICENSES/BGE_MIT_LICENSE.txt`; `Legal/LICENSES/LLAMA_LICENSE_README.md`.
-- ✅ In-app acknowledgments (Apple frameworks; **Built with Llama**, Meta Llama Community Licence; BGE embedding/reranker MIT).
-- ◻︎ **Drop the official full Meta Llama Community Licence text** into `Legal/LICENSES/` (currently a README pointer) and confirm the **"Built with Llama"** attribution placement satisfies Meta's terms. *(owner)*
+- ✅ In-app acknowledgments (Apple frameworks; Apple Foundation Models on macOS 26+; BGE embedding/reranker MIT — notice bundled at `Kalsmritikosh/Resources/THIRD_PARTY_NOTICES.txt`).
+- ✅ **N/A for v1** — no Llama model ships (SHIP_DECISIONS GOV-001); the Llama licence/attribution obligations apply only to the optional v1.x downloaded-GGUF path.
 - ⚠️ Ensure the licence files are **bundled** in the app (Copy Bundle Resources), not just in the repo. *(owner — pbxproj)*
 
 ## 4. Website legal pages — ✅ present
@@ -45,7 +45,7 @@ Status keys: ✅ done · ◻︎ owner/counsel action · ⚠️ verify.
 ## Blocking items before submission (all owner/counsel — none are code)
 1. ◻︎ Counsel review + jurisdiction adaptation of **Privacy Policy, Terms/EULA, disclaimers** (esp. investigative personas).
 2. ◻︎ App Store Connect: **"Data Not Collected"** label; encryption declaration (`ITSAppUsesNonExemptEncryption`); age rating; category.
-3. ◻︎ Bundle the **official Llama licence text** + confirm **"Built with Llama"** attribution placement; confirm licence files are copied into the app bundle.
+3. ✅ Bundle third-party licence text: DONE for v1 — the BGE MIT notice ships in the app bundle (`Resources/THIRD_PARTY_NOTICES.txt`, verified in the built app). Llama licence N/A for v1 (no Llama model ships).
 4. ⚠️ Final pass: confirm no telemetry/third-party SDK in the shipping target.
 
 **Bottom line:** the app is **legally hardened in code** — private by design, disclaimed on every AI output and every exported report (now including the new studios), lawful-use terms in place, notices present. What remains is **not code**: counsel review of the policy text and the App-Store/Info.plist declarations, which only the owner can complete.

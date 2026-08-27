@@ -1,7 +1,7 @@
 # App Store metadata — v1.0 (paste-ready)
 
 ## Promotional Text (≤170)
-Free at launch. Your documents become a cited evidence ledger — worked by real
+One-time purchase, yours for good. Your documents become a cited evidence ledger — worked by real
 professional SOPs, entirely on your Mac. No cloud, no account, nothing uploaded. Ever.
 
 ## Description (≤4000)
@@ -52,9 +52,9 @@ on-device intelligence. No account. No analytics. No training on your data —
 because we never receive it. (That's also why the download is larger:
 your AI never phones home.)
 
-FREE WHILE WE LISTEN
-Kalsmritikosh is free at launch while we learn from early users. Your data
-remains yours and exportable, always.
+YOURS, NOT RENTED
+Kalsmritikosh is a one-time purchase — no subscription, no per-gigabyte fees.
+Your data remains yours and exportable, always.
 
 Requires macOS 15.6 or later. AI-written answers use Apple's on-device model
 where available; the app is fully useful without it — instant, deterministic,
@@ -97,7 +97,7 @@ file hashing via CryptoKit). Answer "None of the algorithms mentioned" /
 exempt if the questionnaire appears.
 
 ## Other
-- Price: Free (Pricing and Availability section)
+- Price: one-time purchase, $29–$49 tier per SHIP_DECISIONS §1 (owner sets the exact tier in Pricing and Availability)
 - Privacy label: Data Not Collected
 - App Sandbox Information (optional field): can note user-selected
   read/write files only; no network entitlements.

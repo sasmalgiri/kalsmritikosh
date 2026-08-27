@@ -34,9 +34,11 @@
    - Privacy label: **Data Not Collected** (truthful — no network at all).
    - `ITSAppUsesNonExemptEncryption = NO` (no network traffic to encrypt).
    - Age rating questionnaire; category: Productivity or Business.
-   - Price: **Free** (owner decision: free launch to gather problems;
-     subscription later — terms already subscription-proof at v1.4).
-   - Attach the official Meta Llama licence text (MODEL_ATTRIBUTIONS.md).
+   - Price: **one-time purchase, $29–$49 tier** (SHIP_DECISIONS §1; owner
+     sets the exact tier). Terms hold across tiers as of LegalNotice v1.5.
+   - Third-party notices: bundled BGE MIT notice ships inside the app
+     (Resources/THIRD_PARTY_NOTICES.txt); NO Llama licence applies to v1
+     (no Llama model ships — see MODEL_ATTRIBUTIONS.md).
    - Description: own the ~600 MB size — "a larger download because your AI
      never phones home"; lead with the SOP system + zero-network claims
      (mirrors docs/index.html, already aligned with in-app notices).
@@ -44,8 +46,8 @@
 5. **Submit for review.**
 
 ## In parallel (not blocking)
-- Counsel review of LegalNotice v1.4 + governing-law/disputes clause
-  (required before charging money; optional for the free launch).
+- Counsel review of LegalNotice v1.5 + governing-law/disputes clause
+  (required before charging money — v1 is a paid one-time purchase).
 - Trademark clearance for "Kalsmritikosh".
 
 ## After approval
