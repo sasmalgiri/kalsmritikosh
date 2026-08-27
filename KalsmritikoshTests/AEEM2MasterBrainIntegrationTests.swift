@@ -16,7 +16,10 @@ import Testing
 @Suite("AEE-M2 — MasterBrain durable answer integration", .serialized)
 struct AEEM2MasterBrainIntegrationTests {
 
-    private func makeLedger(atVersion v: Int = 89) async throws -> (AnswerLedgerRepository, Database) {
+    // Default to the LATEST schema — production ledgers are always fully migrated, and
+    // beginAnswer writes latest-era columns (v118 origin_scope_id). Pinning an old version
+    // is only for negative tests (see persistenceFailureYieldsIncomplete's v88 ledger).
+    private func makeLedger(atVersion v: Int = SchemaMigrations.latestVersion) async throws -> (AnswerLedgerRepository, Database) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("aee-m2-brain-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
