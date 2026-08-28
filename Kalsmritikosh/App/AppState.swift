@@ -3529,6 +3529,11 @@ public final class AppState {
         //    the parent directory, so removing the tree succeeds. Recreated on demand.
         let vaultRoot = db.url.deletingLastPathComponent().appendingPathComponent("EvidenceVault", isDirectory: true)
         try? FileManager.default.removeItem(at: vaultRoot)
+        // 5. Return the freed pages to the filesystem. Without VACUUM the
+        //    emptied knowledge.sqlite keeps its full pre-erase size on disk
+        //    (owner witness: 121 MB with every table at 0 rows), which reads
+        //    as "my data wasn't deleted" — a promise breach for an erase.
+        try? await db.exec("VACUUM;", [])
         newFilesSinceLaunch = 0
         KalsmritikoshLog.app.info("Deleted all ingested data (\(tables.count, privacy: .public) tables cleared) — user-initiated full erase")
         return tables.count

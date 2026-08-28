@@ -339,6 +339,9 @@ public struct RootView: View {
     @State private var showAddFolder = false
     /// ⌘K command palette visibility.
     @State private var showPalette: Bool = false
+    /// D-10 — set when a palette/menu entry targets a Settings group; the
+    /// router hands it to SettingsView, which expands + scrolls + flashes.
+    @State private var pendingSettingsAnchor: SettingsAnchor?
     /// "?" keyboard cheat-sheet visibility.
     @State private var showShortcutHelp: Bool = false
     /// Text in the always-visible header search box.
@@ -560,6 +563,14 @@ public struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshNavigate)) { note in
             if let raw = note.object as? String, let dest = Destination(rawValue: raw) {
                 navigate(to: dest)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kalsmritikoshPaletteEntry)) { note in
+            // Menu-bar items post catalog entry ids so menus and the palette
+            // share ONE behavior table (D-10) — no second routing to drift.
+            if let id = note.object as? String,
+               let entry = PaletteCatalog.entries().first(where: { $0.id == id }) {
+                handlePaletteTarget(entry.target)
             }
         }
         .onChange(of: appState.pendingWorkCenterDefID) { _, newValue in
@@ -1327,9 +1338,7 @@ public struct RootView: View {
                     .onTapGesture { showPalette = false }
                 CommandPaletteView(
                     isPresented: $showPalette,
-                    onNavigate: { navigate(to: $0) },
-                    onAddFolder: addFolderFromPalette,
-                    onIngestAll: { Task { await appState.ingestAllRoots() } }
+                    onSelect: handlePaletteTarget
                 )
                 .padding(.top, 90)
             }
@@ -1340,6 +1349,28 @@ public struct RootView: View {
     /// Open a folder picker directly from the palette, register it, and jump
     /// to Sources — the whole "add source" flow in one keyboard-driven pass.
     private func addFolderFromPalette() { showAddFolder = true }
+
+    /// D-10 — the single router for everything a palette entry or menu item
+    /// can do. Destructive entries never reach `.action` here: the catalog
+    /// (test-enforced) targets them at a Settings anchor, so the type-to-
+    /// confirm sheet in Settings remains the only trigger for the erase.
+    private func handlePaletteTarget(_ target: PaletteTarget) {
+        switch target {
+        case .screen(let dest):
+            navigate(to: dest)
+        case .settingsAnchor(let anchor):
+            pendingSettingsAnchor = anchor
+            navigate(to: .settings)
+        case .action(.addFolder):
+            addFolderFromPalette()
+        case .action(.ingestAll):
+            Task { await appState.ingestAllRoots() }
+        case .action:
+            // Every other PaletteActionID maps to a screen or an anchor in
+            // the catalog; reaching here means catalog and router drifted.
+            break
+        }
+    }
 
     // MARK: Detail router
 
@@ -1411,7 +1442,7 @@ public struct RootView: View {
         case .redaction:    RedactionView()
         case .guide:        GuideView(onNavigate: { navigate(to: $0) })
         case .sutra:        SutraView()
-        case .settings:     SettingsView()
+        case .settings:     SettingsView(anchor: $pendingSettingsAnchor)
         }
     }
 
@@ -1531,53 +1562,25 @@ private struct SidebarRow: View {
 
 // MARK: - Command palette (⌘K)
 
-/// One executable entry in the palette — a screen jump or a top action.
-private struct PaletteCommand: Identifiable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let icon: String
-    let run: () -> Void
-}
-
-/// ⌘K command palette. The keyboard-first way to reach any screen or run a
-/// top action without touching the sidebar — the pattern popularized by
-/// Linear / Raycast / Superhuman. Autofocused, fuzzy subsequence match
-/// (type "cvt" → Convert), Enter runs the top hit, ↑/↓ move, Esc closes.
+/// ⌘K command palette. The keyboard-first way to reach any screen, Settings
+/// group, or top action without touching the sidebar — the pattern
+/// popularized by Linear / Raycast / Superhuman. D-10: entries and matching
+/// come from PaletteCatalog, so "delete", "sop", or "subtitles" find the
+/// feature by real-life words, ranked (title prefix > word > fuzzy >
+/// keyword). Enter runs the top hit, ↑/↓ move, Esc closes.
 private struct CommandPaletteView: View {
     @Binding var isPresented: Bool
-    let onNavigate: (Destination) -> Void
-    let onAddFolder: () -> Void
-    let onIngestAll: () -> Void
+    let onSelect: (PaletteTarget) -> Void
 
     @State private var query = ""
     @State private var highlighted = 0
     @FocusState private var fieldFocused: Bool
 
-    private var commands: [PaletteCommand] {
-        var cmds: [PaletteCommand] = Destination.allCases.map { dest in
-            PaletteCommand(
-                id: "go.\(dest.rawValue)",
-                title: dest.title,
-                subtitle: dest.blurb,
-                icon: dest.icon
-            ) { onNavigate(dest) }
-        }
-        cmds.append(PaletteCommand(
-            id: "act.addFolder", title: "Add Folder…",
-            subtitle: "Watch a new folder", icon: "folder.badge.plus",
-            run: onAddFolder))
-        cmds.append(PaletteCommand(
-            id: "act.ingest", title: "Ingest All",
-            subtitle: "Re-scan every watched folder now",
-            icon: "arrow.triangle.2.circlepath", run: onIngestAll))
-        return cmds
-    }
+    /// The catalog is static; build once per palette open.
+    private let allEntries = PaletteCatalog.entries()
 
-    private var filtered: [PaletteCommand] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        guard !q.isEmpty else { return commands }
-        return commands.filter { paletteFuzzyMatch(q, $0.title) }
+    private var filtered: [PaletteEntry] {
+        PaletteCatalog.matches(query: query, in: allEntries)
     }
 
     var body: some View {
@@ -1603,8 +1606,8 @@ private struct CommandPaletteView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 24)
                         } else {
-                            ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, cmd in
-                                paletteRow(cmd, index: idx).id(idx)
+                            ForEach(Array(filtered.enumerated()), id: \.element.id) { idx, entry in
+                                paletteRow(entry, index: idx).id(idx)
                             }
                         }
                     }
@@ -1645,15 +1648,15 @@ private struct CommandPaletteView: View {
         .onKeyPress(.escape) { isPresented = false; return .handled }
     }
 
-    private func paletteRow(_ cmd: PaletteCommand, index: Int) -> some View {
-        Button { run(cmd) } label: {
+    private func paletteRow(_ entry: PaletteEntry, index: Int) -> some View {
+        Button { run(entry) } label: {
             HStack(spacing: 10) {
-                Image(systemName: cmd.icon)
+                Image(systemName: entry.icon)
                     .frame(width: 22)
                     .foregroundStyle(Theme.brand)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(cmd.title).font(.callout.weight(.medium))
-                    Text(cmd.subtitle).font(.caption2).foregroundStyle(.secondary)
+                    Text(entry.title).font(.callout.weight(.medium))
+                    Text(entry.subtitle).font(.caption2).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 if index == highlighted { keycap("return") }
@@ -1688,25 +1691,10 @@ private struct CommandPaletteView: View {
         run(filtered[highlighted])
     }
 
-    private func run(_ cmd: PaletteCommand) {
+    private func run(_ entry: PaletteEntry) {
         isPresented = false
-        cmd.run()
+        onSelect(entry.target)
     }
-}
-
-/// Case-insensitive subsequence match: every character of `needle` appears
-/// in order (not necessarily adjacent) within `haystack`. So "cvt" matches
-/// "Convert" and "tgl" matches "Toggle".
-private func paletteFuzzyMatch(_ needle: String, _ haystack: String) -> Bool {
-    var iterator = haystack.lowercased().makeIterator()
-    for ch in needle.lowercased() {
-        var found = false
-        while let h = iterator.next() {
-            if h == ch { found = true; break }
-        }
-        if !found { return false }
-    }
-    return true
 }
 
 // MARK: - Persona picker (first-run "choose your focus")

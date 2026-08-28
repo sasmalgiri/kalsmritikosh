@@ -51,5 +51,24 @@ struct KalsmritikoshApp: App {
                 }
         }
         .defaultSize(width: 1100, height: 720)
+        .commands {
+            // D-10 — menu-bar mirrors of palette entries. Each item posts its
+            // catalog entry id; RootView resolves it through the SAME target
+            // router as ⌘K, so the menu can never drift from the palette.
+            // Bonus: macOS Help-menu search now finds these by name.
+            CommandGroup(after: .newItem) {
+                Button("Add Folder…") { postPaletteEntry("act.addFolder") }
+                Button("Ingest All") { postPaletteEntry("act.ingestAll") }
+            }
+            CommandGroup(after: .appSettings) {
+                // Navigation only: opens Settings anchored at "Your data".
+                // The type-to-confirm sheet there remains the sole erase trigger.
+                Button("Delete All My Data…") { postPaletteEntry("act.deleteAllData") }
+            }
+        }
+    }
+
+    private func postPaletteEntry(_ id: String) {
+        NotificationCenter.default.post(name: .kalsmritikoshPaletteEntry, object: id)
     }
 }

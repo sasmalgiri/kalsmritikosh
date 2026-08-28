@@ -102,9 +102,28 @@ public struct SettingsView: View {
     /// "release readiness" check is prominent. Off by default.
     @AppStorage("kalsmritikosh.settings.showMoreDiagnostics") private var showMoreDiagnostics = false
 
-    public init() {}
+    /// D-10 — anchor requested by the ⌘K palette / menu bar. When set, the
+    /// matching group is expanded, scrolled into view, and flashed twice.
+    @Binding private var anchor: SettingsAnchor?
+    @State private var flashedAnchor: SettingsAnchor?
+
+    public init(anchor: Binding<SettingsAnchor?> = .constant(nil)) {
+        self._anchor = anchor
+    }
 
     public var body: some View {
+        ScrollViewReader { proxy in
+            settingsScroll
+                .onChange(of: anchor) { _, new in
+                    if let new { reveal(new, proxy: proxy) }
+                }
+                .task {
+                    if let a = anchor { reveal(a, proxy: proxy) }
+                }
+        }
+    }
+
+    private var settingsScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -122,16 +141,16 @@ public struct SettingsView: View {
                 }
                 #if DEBUG
                 if let setup = appState.ollamaSetupSuggestion {
-                    settingsGroup("Local model setup", "cpu") { ollamaSetupSection(setup) }
+                    settingsGroup("Local model setup", "cpu", anchor: .localModelSetup) { ollamaSetupSection(setup) }
                 }
                 #endif
-                settingsGroup("Answering & modes", "slider.horizontal.3") { systemModeSection }
-                settingsGroup("Privacy", "hand.raised") { privacySection }
-                settingsGroup("Background maintenance", "moon.zzz") { maintenanceSection }
-                settingsGroup("Ingest options", "tray.and.arrow.down") { optionalIngestSection }
-                settingsGroup("Your data", "trash") { dataSection }
-                settingsGroup("Help & feedback", "envelope") { feedbackSection }
-                settingsGroup("Legal & privacy", "checkmark.shield") { legalSection }
+                settingsGroup("Answering & modes", "slider.horizontal.3", anchor: .answeringModes) { systemModeSection }
+                settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
+                settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
+                settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
+                settingsGroup("Your data", "trash", anchor: .yourData) { dataSection }
+                settingsGroup("Help & feedback", "envelope", anchor: .helpFeedback) { feedbackSection }
+                settingsGroup("Legal & privacy", "checkmark.shield", anchor: .legalPrivacy) { legalSection }
 
                 // ── Advanced (collapsed by default) ───────────────────────
                 Divider()
@@ -1178,8 +1197,10 @@ public struct SettingsView: View {
 
     /// Collapsible wrapper so each Settings category is hidden behind a click —
     /// Settings opens as a short list of headers, expand only what you need.
+    /// D-10: every group carries a SettingsAnchor (palette-coverage.sh fails
+    /// CI if one is missing) so ⌘K can expand, scroll to, and flash it.
     @ViewBuilder
-    private func settingsGroup<Content: View>(_ title: String, _ icon: String, @ViewBuilder _ content: @escaping () -> Content) -> some View {
+    private func settingsGroup<Content: View>(_ title: String, _ icon: String, anchor: SettingsAnchor, @ViewBuilder _ content: @escaping () -> Content) -> some View {
         DisclosureGroup(isExpanded: Binding(
             get: { openSettingsGroups.contains(title) },
             set: { open in
@@ -1191,6 +1212,44 @@ public struct SettingsView: View {
             Label(title, systemImage: icon).font(.headline)
         }
         .padding(.vertical, 3)
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Theme.brand.opacity(flashedAnchor == anchor ? 0.18 : 0))
+        )
+        .padding(.horizontal, -6)
+        .id(anchor)
+    }
+
+    /// D-10 — expand the anchored group, scroll it to the top, and flash it
+    /// twice so the eye lands on the right place; then clear the request so
+    /// the same anchor can fire again later.
+    private func reveal(_ a: SettingsAnchor, proxy: ScrollViewProxy) {
+        openSettingsGroups.insert(groupTitle(for: a))
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))   // let the group expand first
+            withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(a, anchor: .top) }
+            for _ in 0..<2 {
+                withAnimation(.easeIn(duration: 0.18)) { flashedAnchor = a }
+                try? await Task.sleep(for: .milliseconds(300))
+                withAnimation(.easeOut(duration: 0.18)) { flashedAnchor = nil }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            anchor = nil
+        }
+    }
+
+    private func groupTitle(for a: SettingsAnchor) -> String {
+        switch a {
+        case .localModelSetup:       return "Local model setup"
+        case .answeringModes:        return "Answering & modes"
+        case .privacy:               return "Privacy"
+        case .backgroundMaintenance: return "Background maintenance"
+        case .ingestOptions:         return "Ingest options"
+        case .yourData:              return "Your data"
+        case .helpFeedback:          return "Help & feedback"
+        case .legalPrivacy:          return "Legal & privacy"
+        }
     }
 
     /// Your data — the global "erase everything" control. Always visible so it's

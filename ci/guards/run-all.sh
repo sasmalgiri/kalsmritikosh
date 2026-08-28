@@ -11,6 +11,7 @@ GUARDS=(
   sensitive-scope-mutation-bypass.sh
   release-configuration.sh
   persona-neutral-truth.sh
+  palette-coverage.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
