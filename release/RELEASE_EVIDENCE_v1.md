@@ -105,6 +105,15 @@ macOS 15.6–25 machine if available to witness the honest deterministic-only mo
 
 - Audio/video catalogued + preserved at ingest (never auto-transcribed); on-demand on-device transcription in Transcripts (Apple Speech, en-US in this version).
 - Workflows cite US and international instruments; procedures are jurisdiction-neutral and deviations are recorded on the certificate.
+- Binary strings audit (v1.0-rc3 archive, 2026-08-28, Step-5 physical proof): the
+  Release binary contains Ollama-related strings (setup guidance, provider error
+  text, `brew install ollama`, port probes) and OOXML template XML. These are the
+  compiled-but-never-registered dev-only provider sources (registration is
+  `internalProvidersEnabled`-gated, PrivacyGate compile-locked, sandbox has no
+  network entitlement) and the native DOCX/XLSX writer's templates. Recorded per
+  the runbook rule: copy must never claim "no Ollama code in the binary" — the
+  claim is no Ollama PATH is reachable, which the entitlements + registration
+  gating + zero-byte network witness prove.
 - PPT/PST/OST/MSG/NSF remain unsupported; RAR/7z recognized with custody preserved and an
   explicit honest-unsupported manifest (never silently empty).
 - Optional downloaded local GGUF models deferred to v1.x (GOV-001).

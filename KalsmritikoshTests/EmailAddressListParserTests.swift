@@ -91,4 +91,21 @@ struct EmailAddressListParserTests {
         #expect(result.count == 1)
         #expect(result[0].address == "user.name@example.com")
     }
+
+    @Test("Trailing unparseable tokens never trap — the v1.0-rc3 ingest crash")
+    func trailingUnparseableTokensNeverTrap() {
+        // Each of these previously drove the scanner to endIndex inside a
+        // failing sub-parser, and the recovery advance then called
+        // String.index(after: endIndex) — a Swift runtime trap that crashed
+        // Release ingest (EXC_BREAKPOINT, EmailAddressListParser.swift:44,
+        // 2026-08-28 runtime witness). They must all return gracefully.
+        #expect(EmailAddressListParser.parse("notanemail").isEmpty)
+        #expect(EmailAddressListParser.parse("abc <xyz").isEmpty)
+        #expect(EmailAddressListParser.parse("\"Quoted Name\"").isEmpty)
+        #expect(EmailAddressListParser.parse("undisclosed-recipients:;").isEmpty)
+        #expect(EmailAddressListParser.parse("<noat>").isEmpty)
+        // A valid entry before a trailing invalid one still parses.
+        let mixed = EmailAddressListParser.parse("a@b.example, notanemail")
+        #expect(mixed.map(\.address) == ["a@b.example"])
+    }
 }

@@ -1,0 +1,27 @@
+{
+  "app": "Kalsmritikosh.app",
+  "compiled": {
+    "BGEReranker.mlmodelc/analytics/coremldata.bin": "fe8bf7151728ccc0e629ad4c1690a70a6f70de2a2c7aa26fba5bdc23b71ca47f",
+    "BGEReranker.mlmodelc/coremldata.bin": "96cf7414cbc83bde2995a7eb9fdf415bcecc66a731630d037a99d858ca37c7a6",
+    "BGEReranker.mlmodelc/metadata.json": "0e96c5e5d325723f5e98d5ba0d44ce7f1a81f62f7552cce8816a68a35f040d94",
+    "BGEReranker.mlmodelc/model.mil": "6ca65c16294ce31123f2ff704e5d0685d6071d921a4f4f26f39eb108ab57a102",
+    "BGEReranker.mlmodelc/weights/weight.bin": "9f4c63b8c9eb517f5f7e789fea0ae65282e1b782264806ef6584c2622ea72002",
+    "BGESmallEmbedder.mlmodelc/analytics/coremldata.bin": "d1a997e076222dcc6042973b5f98b6a879ffc860b22f789d2dd08654fc7eae5b",
+    "BGESmallEmbedder.mlmodelc/coremldata.bin": "abaf1543dbb888686d8a3b1cfe440ffc1dd3e26592f96c87d9ef63850d726798",
+    "BGESmallEmbedder.mlmodelc/metadata.json": "d5d42bc43e881c40e8d88457df2641e9df8107b3d40d84b651902f3c844ffbb4",
+    "BGESmallEmbedder.mlmodelc/model.mil": "2c5f3fa1b5e458b04c6a65e1c7f94ad11039a88aeb28f9803f2861cb33a5a485",
+    "BGESmallEmbedder.mlmodelc/weights/weight.bin": "490e0c399953c30f77816f55289e905f081c46651ba353d90e7f6974804928a1"
+  },
+  "source_pins": {
+    "Kalsmritikosh/Resources/BGEReranker": {
+      "pin_sha256": "4ff2611a13cc26d412b9b4f21dbc73127b77f881fb0761b4fd651e25a8f9b960",
+      "repo": "BAAI/bge-reranker-base",
+      "revision": "2cfc18c9415c912f9d8155881c133215df768a70"
+    },
+    "Kalsmritikosh/Resources/BGESmallEmbedder": {
+      "pin_sha256": "c6cab34281a85fd264ea48067fb0de5f1866bc9d335f1f5da35d0830281bcb80",
+      "repo": "BAAI/bge-small-en-v1.5",
+      "revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
+    }
+  }
+}

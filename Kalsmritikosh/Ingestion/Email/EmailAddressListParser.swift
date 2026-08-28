@@ -40,7 +40,13 @@ public nonisolated enum EmailAddressListParser {
             if let addr = nextAddress(s, from: &pos) {
                 results.append(addr)
             } else {
-                // Unrecognised character — advance to prevent an infinite loop.
+                // Unrecognised/unparseable token. The sub-parsers may already
+                // have consumed to endIndex before returning nil (unclosed
+                // bracket, invalid trailing address, bare group terminator) —
+                // index(after: endIndex) TRAPS, which crashed Release ingest
+                // on a real email header (v1.0-rc3 runtime witness,
+                // 2026-08-28). Advance only when there is somewhere to go.
+                guard pos < s.endIndex else { break }
                 pos = s.index(after: pos)
             }
         }
