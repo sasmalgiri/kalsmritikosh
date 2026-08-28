@@ -30,6 +30,17 @@ struct CanonicalFactComparatorTests {
         #expect(cmp.compare(f("date", "12 Jan 2024"), f("date", "13 Jan 2024")) == .contradictory)
     }
 
+    @Test("Dates compare at the coarser precision — month-only never contradicts a day date")
+    func dateGrain() {
+        // Port-review item 6: "March 2024" vs "14 March 2024" was flagged
+        // contradictory because canonical strings ("2024-03-00" vs
+        // "2024-03-14") differ; the month-only source simply knows less.
+        #expect(cmp.compare(f("date", "March 2024"), f("date", "14 March 2024")) == .equivalent)
+        #expect(cmp.compare(f("date", "2024"), f("date", "March 2024")) == .equivalent)
+        #expect(cmp.compare(f("date", "April 2024"), f("date", "14 March 2024")) == .contradictory)
+        #expect(cmp.compare(f("date", "March 2023"), f("date", "March 2024")) == .contradictory)
+    }
+
     @Test("Org suffix/case differences are equivalent")
     func orgNames() {
         #expect(cmp.compare(f("employer", "Orchid Chemicals Ltd"), f("employer", "orchid chemicals")) == .equivalent)

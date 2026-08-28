@@ -128,7 +128,7 @@ public struct RuleEventExtractor: EventExtractor {
         ]
 
         for (kind, markers) in rules {
-            for marker in markers where content.contains(marker) {
+            for marker in markers where Self.hasCompletedOccurrence(of: marker, in: content) {
                 // A5.3 — event-specific attributes. Financial events carry the
                 // monetary amount + currency parsed from the source text so the
                 // ledger stores a comparable quantity (this is the data the
@@ -295,6 +295,43 @@ public struct RuleEventExtractor: EventExtractor {
         // contains the event's marker/summary phrase (the exact substring the
         // rule fired on). No blocks wired → events are returned unchanged.
         return Self.attachSourceBlocks(to: events, blocks: blocks)
+    }
+
+    // MARK: - Modality guard (port-review item 7b)
+
+    /// Words that flip a completed-form marker into a plan, a negation, or a
+    /// hypothesis when they immediately precede it: "will be delivered on
+    /// Friday" is a promise, "no payment received" is the OPPOSITE fact, and
+    /// "if payment received" is a condition. Checked against a short window
+    /// before each occurrence — never the whole document, so an unrelated
+    /// earlier "not" cannot suppress a genuine event.
+    static let modalityBlockers: [String] = [
+        "will be ", "will ", "shall ", "would be ", "would ", "to be ",
+        "not been ", "not ", "no ", "never ", "if ", "unless ", "until ",
+        "expected to ", "expect to ", "scheduled to ", "plan to ",
+        "planning to ", "intend to ", "intends to ", "may be ", "might be ",
+        "should be ", "pending ", "yet to be ",
+    ]
+
+    /// True when at least one occurrence of `marker` is NOT preceded (within
+    /// a 28-character window) by a modality blocker — i.e. the document
+    /// states the event in completed form somewhere, not only as a plan,
+    /// negation, or condition.
+    static func hasCompletedOccurrence(of marker: String, in content: String) -> Bool {
+        var searchStart = content.startIndex
+        while let r = content.range(of: marker, range: searchStart..<content.endIndex) {
+            let windowStart = content.index(r.lowerBound, offsetBy: -28,
+                                            limitedBy: content.startIndex) ?? content.startIndex
+            var before = content[windowStart..<r.lowerBound]
+            // The window never crosses a sentence boundary — "we will not
+            // delay. payment received." states the payment unconditionally.
+            if let cut = before.lastIndex(where: { ".!?\n".contains($0) }) {
+                before = before[before.index(after: cut)...]
+            }
+            if !modalityBlockers.contains(where: { before.contains($0) }) { return true }
+            searchStart = r.upperBound
+        }
+        return false
     }
 
     /// Attach `sourceBlockIDs` (up to 5) to each event by matching its summary

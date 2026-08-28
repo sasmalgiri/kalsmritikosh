@@ -159,8 +159,21 @@ public struct AnswerSynthesizer: Sendable {
                 provider: provider, prompt: refinePrompt, system: refineSystem, maxTokens: 700,
                 purpose: "answer.refine", context: context
             ), refined.count >= 2 {
-                KalsmritikoshLog.brain.info("AnswerSynthesizer: applied evidence-checked refine (depth=\(String(describing: depth), privacy: .public))")
-                answer = refined
+                // Numeric fact-lock pre-gate (FactLockGate): the refine may
+                // only rewrite language. Any number/date token in the refined
+                // text that appears NOWHERE in the draft, findings, or
+                // evidence is an invented fact — ship the draft instead.
+                // Inline citation markers like [2][3] are references, not
+                // facts; strip them before tokenizing the candidate.
+                let bare = refined.replacingOccurrences(
+                    of: #"\[\d+\]"#, with: "", options: .regularExpression)
+                if FactLockGate.isFactLocked(candidate: bare,
+                                             sources: [answer, boundedFindings, evidence]) {
+                    KalsmritikoshLog.brain.info("AnswerSynthesizer: applied evidence-checked refine (depth=\(String(describing: depth), privacy: .public))")
+                    answer = refined
+                } else {
+                    KalsmritikoshLog.brain.info("AnswerSynthesizer: refine rejected — introduced number tokens absent from draft/findings/evidence; keeping draft")
+                }
             }
         }
 

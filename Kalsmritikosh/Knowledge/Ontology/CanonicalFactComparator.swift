@@ -26,6 +26,14 @@ public struct CanonicalFactComparator: Sendable {
     public nonisolated func compare(_ a: GenericFact, _ b: GenericFact) -> Relation {
         guard a.field == b.field, sameSubject(a, b) else { return .incomparable }
         let shape = FactSchemaRegistry.expectedShape(of: a.field)
+        // Dates compare at the COARSER of the two precisions: "March 2024"
+        // does not contradict "14 March 2024" — the month-only source simply
+        // knows less (port-review item 6; canonical-string comparison flagged
+        // exactly this as a false contradiction).
+        if shape == .date,
+           let equivalent = dateGrainEquivalent(a.value, b.value) {
+            return equivalent ? .equivalent : .contradictory
+        }
         return canonical(a.value, shape) == canonical(b.value, shape) ? .equivalent : .contradictory
     }
 
@@ -88,5 +96,42 @@ public struct CanonicalFactComparator: Sendable {
             return String(format: "%04d-%02d-%02d", y, m, day ?? 0)
         }
         return value.filter { $0.isNumber }  // fallback: digits only
+    }
+
+    // MARK: - Precision-grain date comparison
+
+    /// Parsed calendar components; `month`/`day` are nil when the value
+    /// doesn't state them. Same token-assignment rules as `canonicalDate`
+    /// (day before month for bare numbers) so the two paths never disagree
+    /// on what "12/01/2024" means.
+    nonisolated func dateComponents(_ value: String) -> (year: Int, month: Int?, day: Int?)? {
+        let months = ["jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
+                      "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12]
+        let lower = value.lowercased()
+        var day: Int?; var month: Int?; var year: Int?
+        for (name, num) in months where lower.contains(name) { month = num }
+        let nums = lower.split { !$0.isNumber }.compactMap { Int($0) }
+        for n in nums {
+            if n > 1900 && n < 2100 { year = n }
+            else if n <= 31 && day == nil { day = n }
+            else if n <= 12 && month == nil { month = n }
+        }
+        guard let y = year else { return nil }
+        return (y, month, day)
+    }
+
+    /// Grain-aware equivalence: compare only the components BOTH values
+    /// state. "March 2024" ≡ "14 March 2024" (month grain); "14 March 2024"
+    /// ≢ "20 March 2024" (day grain); "2024" ≡ "March 2024" (year grain).
+    /// nil when either side has no parseable year — the caller falls back to
+    /// canonical-string comparison.
+    nonisolated func dateGrainEquivalent(_ a: String, _ b: String) -> Bool? {
+        guard let ca = dateComponents(a), let cb = dateComponents(b) else { return nil }
+        if ca.year != cb.year { return false }
+        if let ma = ca.month, let mb = cb.month {
+            if ma != mb { return false }
+            if let da = ca.day, let db = cb.day, da != db { return false }
+        }
+        return true
     }
 }
