@@ -255,12 +255,12 @@ public struct OnboardingView: View {
     }
 
     /// Resolve the bundled demo archive's URL. Returns nil when the
-    /// fixture isn't shipped in the bundle (e.g. unit-test builds
-    /// where Resources/Fixtures was stripped).
+    /// fixture isn't shipped in this build. Delegates to DemoArchive,
+    /// which also handles the FLATTENED resource layout the synchronized
+    /// folder produces (the old subdirectory lookup returned nil there and
+    /// this button silently vanished — RC physical proof, 2026-08-28).
     static func bundledDemoArchiveURL() -> URL? {
-        Bundle.main.url(forResource: "ProjectDelta",
-                        withExtension: nil,
-                        subdirectory: "Fixtures")
+        DemoArchive.url()
     }
 
     private func tryDemoArchive(at url: URL) {

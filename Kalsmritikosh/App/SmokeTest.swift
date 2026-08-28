@@ -812,8 +812,9 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         }
 
         // Filename matching finds the supplier_abc_*.eml fixtures in the
-        // bundled ProjectDelta corpus.
-        if let resourceRoot = Bundle.main.url(forResource: "ProjectDelta", withExtension: nil) {
+        // bundled ProjectDelta corpus (DemoArchive handles the flattened
+        // resource layout; the old direct lookup silently skipped this check).
+        if let resourceRoot = DemoArchive.url() {
             let matches = AppState.scanFiles(
                 at: resourceRoot,
                 matching: ["supplier", "abc"],
@@ -1341,26 +1342,20 @@ private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
 // MARK: - Helpers
 
 private func fixtureURLs() throws -> [URL] {
-    let bundle = Bundle.main
-    guard let resourcePath = bundle.resourcePath else {
-        throw NSError(
-            domain: "kalsmritikosh.smoke",
-            code: 2,
-            userInfo: [NSLocalizedDescriptionKey: "Bundle has no resource path."]
+    // DemoArchive resolves the corpus in BOTH bundle layouts (real folder, or
+    // the synchronized-folder FLATTENED layout, materialized on demand). The
+    // old .eml-only fallback silently dropped the two markdown fixtures
+    // (contract.md, amendment-7.md) in flattened builds.
+    if let root = DemoArchive.url() {
+        let items = try FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey]
         )
+        return items
+            .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
     }
-    let root = URL(fileURLWithPath: resourcePath)
-        .appendingPathComponent("ProjectDelta", isDirectory: true)
-    guard FileManager.default.fileExists(atPath: root.path) else {
-        // Fallback: search recursively in the bundle for our fixture filenames.
-        return bundle.urls(forResourcesWithExtension: "eml", subdirectory: nil) ?? []
-    }
-    let items = try FileManager.default.contentsOfDirectory(
-        at: root,
-        includingPropertiesForKeys: [.isRegularFileKey]
-    )
-    return items
-        .filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
+    // Last resort (stripped builds): whatever fixture emails exist top-level.
+    return Bundle.main.urls(forResourcesWithExtension: "eml", subdirectory: nil) ?? []
 }
 
 // T6 helpers — fake counting embedder.
