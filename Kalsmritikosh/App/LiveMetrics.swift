@@ -149,7 +149,12 @@ public final class LiveMetrics {
             (try? await app.objects?.count()) ?? 0
         }()
         async let chunkCount: Int = await Self.tableCount(database: app.database, table: "chunks")
-        async let vectorCount: Int = await Self.tableCount(database: app.database, table: "vectors")
+        // Embeddings live in chunk_embeddings (per-model store) — the legacy
+        // `vectors` table was migrated into it and stays empty for all new
+        // data, so counting it froze the "Chunks → Vectors" bar at 0%
+        // (rc8 witness finding). DISTINCT chunk_id: one chunk may carry
+        // embeddings from more than one model.
+        async let vectorCount: Int = await Self.embeddedChunkCount(database: app.database)
         async let entityCount: Int = {
             (try? await app.entities?.canonicalCount()) ?? 0
         }()
@@ -247,6 +252,18 @@ public final class LiveMetrics {
         guard let database else { return 0 }
         guard let rows = try? await database.query(
             "SELECT COUNT(*) FROM \(table);",
+            []
+        ) else { return 0 }
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
+    /// Chunks with at least one embedding — the same authority the health
+    /// check and inventory use (DataHealthCheck, KnowledgeInventory).
+    /// Internal (not private) so the regression test can pin the source table.
+    static func embeddedChunkCount(database: Database?) async -> Int {
+        guard let database else { return 0 }
+        guard let rows = try? await database.query(
+            "SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings;",
             []
         ) else { return 0 }
         return Int(rows.first?.int(0) ?? 0)
