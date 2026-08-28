@@ -40,4 +40,23 @@ struct PatentDomainPackTests {
     func quiet() {
         #expect(PatentDomainPack.extractFacts(fromText: "Lunch at noon?", subjectLabel: "x", blockID: block).isEmpty)
     }
+
+    @Test("Application and granted numbers are DISTINCT fields — the 555489 ground-truth case")
+    func applicationVsGrantedNumberFields() {
+        // Owner ground-truth failure (2026-08-28): a grant letter carries BOTH
+        // numbers; the old extractor filed the first match only, under one
+        // shared field, so the granted number lost the majority vote to the
+        // application number and never surfaced in the answer.
+        let text = "Title: Hybrid Reluctance Induction Motor. Indian Application No: 202331019665. "
+            + "The application has been granted and the Patent No. 555489 accorded."
+        let f = PatentDomainPack.extractFacts(fromText: text, subjectLabel: "patent", blockID: block)
+        let values = Dictionary(grouping: f, by: \.field).mapValues { $0.map(\.value) }
+        #expect(values["applicationnumber"]?.contains { $0.contains("202331019665") } == true,
+                "application number under its OWN field")
+        #expect(values["patentnumber"]?.contains { $0.contains("555489") } == true,
+                "granted number under patentNumber")
+        #expect(values["patentnumber"]?.contains { $0.contains("202331019665") } != true,
+                "application number must NOT pollute patentNumber")
+        #expect(values["status"] == ["granted"])
+    }
 }

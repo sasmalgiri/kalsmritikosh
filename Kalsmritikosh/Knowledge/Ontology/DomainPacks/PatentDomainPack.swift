@@ -58,9 +58,25 @@ public enum PatentDomainPack {
         blockID: UUID
     ) -> [GenericFact] {
         var facts: [GenericFact] = []
-        if let number = firstMatch(numberPattern, in: text) {
-            facts.append(GenericFact(subjectLabel: subjectLabel, field: "patentNumber",
-                                     value: number.trimmingCharacters(in: .whitespaces),
+        // Release-quality fix (2026-08-28, owner ground-truth case): ONE field
+        // for application/publication/GRANTED numbers made them conflicting
+        // values of a single attribute, so the majority (the application
+        // number, quoted in every email) buried the granted patent number —
+        // and firstMatch dropped the second number in grant letters that
+        // carry both. Extract ALL matches, each under the field its own
+        // prefix names; values keep their full matched text unchanged.
+        var seen = Set<String>()
+        for match in allMatches(numberPattern, in: text) {
+            let value = match.trimmingCharacters(in: .whitespaces)
+            let lower = value.lowercased()
+            let field: String
+            if lower.hasPrefix("application") { field = "applicationNumber" }
+            else if lower.hasPrefix("publication") { field = "publicationNumber" }
+            else { field = "patentNumber" }
+            let key = field + "|" + value.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: field,
+                                     value: value,
                                      status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [blockID]))
         }
         if let st = status(in: text) {
@@ -73,9 +89,13 @@ public enum PatentDomainPack {
     // MARK: - Helpers
 
     nonisolated static func firstMatch(_ pattern: String, in s: String) -> String? {
-        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return nil }
+        allMatches(pattern, in: s).first
+    }
+
+    nonisolated static func allMatches(_ pattern: String, in s: String) -> [String] {
+        guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [] }
         let ns = s as NSString
-        guard let m = re.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
-        return ns.substring(with: m.range)
+        return re.matches(in: s, range: NSRange(location: 0, length: ns.length))
+            .map { ns.substring(with: $0.range) }
     }
 }
