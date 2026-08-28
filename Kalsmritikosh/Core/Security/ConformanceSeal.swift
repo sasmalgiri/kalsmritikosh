@@ -141,7 +141,7 @@ public nonisolated enum ConformanceSigningKey {
 /// bind identity on every install without a local trust decision. nil = not
 /// yet pinned (verification stays TOFU/allowlist-based, labelled honestly).
 public nonisolated enum PinnedDeveloperKey {
-    public static let keyID: String? = nil   // [owner: set before release build]
+    public static let keyID: String? = "f760b04ce2d5030c"   // pinned 2026-08-28 (secure-enclave, release Mac)
 }
 
 public nonisolated enum TrustedSigners {
