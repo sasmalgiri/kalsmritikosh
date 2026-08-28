@@ -312,6 +312,25 @@ public actor MasterBrain {
                 await self.priorityGate?.beginInteractive()
                 defer { let g = self.priorityGate; Task { await g?.endInteractive() } }
 
+                // §8.4 `.unsupported` — a conversational/meta utterance is not a
+                // question about the archive: refuse honestly BEFORE any retrieval.
+                // (v1.0-rc5 acceptance finding: "how are you online?" keyword-
+                // matched unrelated ledger facts and shipped a 37%-confidence
+                // fact dump instead of a refusal.) The refusal flows through the
+                // SAME durable finalize path as every other refused answer.
+                if LLMQueryClassifier.isConversational(question) {
+                    let refused = VerifiedAnswer(
+                        body: "", citations: [], confidence: .zero, refused: true,
+                        refusalReason: "That looks like a message to the app, not a question about your archive. Kalsmritikosh answers only from your ingested documents — ask about the people, dates, amounts, or events in them.")
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: refused, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
+
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
                 // as analysisProgress; the durable grounded answer follows below.

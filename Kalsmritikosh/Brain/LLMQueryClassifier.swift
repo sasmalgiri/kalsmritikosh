@@ -35,9 +35,42 @@ public enum LLMQueryClassifier {
         return s.contains("investigate") || s.contains("investigation")
     }
 
+    /// Whole-utterance conversational/meta detection (§8.4 `.unsupported`).
+    /// CONSERVATIVE by design: only SHORT utterances that clearly address the
+    /// app itself ("how are you online?", "hello", "who are you") — a longer
+    /// archival question that merely contains one of these phrases is never
+    /// matched. Found in v1.0-rc5 owner acceptance: such inputs were forced
+    /// into `.ordinary`, retrieval keyword-matched unrelated ledger facts,
+    /// and the engine shipped a low-confidence fact dump instead of the
+    /// honest refusal the evidence contract requires.
+    public static func isConversational(_ question: String) -> Bool {
+        let normalized = question.lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "?!.,;:"))
+        guard !normalized.isEmpty, normalized.count <= 48 else { return false }
+        let exact: Set<String> = [
+            "hi", "hello", "hey", "yo", "ok", "okay", "test", "testing", "help",
+            "thanks", "thank you", "good morning", "good afternoon", "good evening",
+            "who are you", "what are you", "what can you do", "how do you work",
+            "are you there", "are you ok", "are you okay",
+        ]
+        if exact.contains(normalized) { return true }
+        // Short utterances OPENING with a to-the-app phrase, with at most a
+        // few trailing characters ("how are you online?", "hi there!").
+        let prefixes = ["how are you", "are you online", "are you there",
+                        "hello there", "hi there"]
+        for p in prefixes where normalized.hasPrefix(p) && normalized.count <= p.count + 12 {
+            return true
+        }
+        return false
+    }
+
     /// Base classification from intent + phrasing. `.deterministic` and
     /// `.unsupported` are applied later by MasterBrain from runtime signals.
     public static func classify(question: String, intent: UserIntent) -> LLMQueryClass {
+        if isConversational(question) {
+            return .unsupported
+        }
         if isExplicitInvestigation(question) {
             return .investigation
         }
