@@ -39,9 +39,12 @@ def _toolchain():
             versions[mod] = "unknown"
     return versions
 
-def write_model_pin(dest, repo, revision, artifacts):
+def write_model_pin(dest, repo, revision, artifacts, pin_name):
     """Record the pinned source + sha256 of every produced artifact file, so the
-    final archive's models are provably the ones built from the pinned revision."""
+    final archive's models are provably the ones built from the pinned revision.
+    pin_name must be UNIQUE across model dirs: Xcode's synchronized folder
+    flattens loose files into Contents/Resources, so two files both named
+    MODEL_PIN.json collide ("Multiple commands produce …")."""
     import platform
     manifest = {"repo": repo, "revision": revision,
                 "license": "MIT (FlagEmbedding project, Copyright (c) 2022 staoxiao)",
@@ -57,7 +60,7 @@ def write_model_pin(dest, repo, revision, artifacts):
                     manifest["artifacts"][os.path.relpath(fp, dest)] = _sha256(fp)
         elif os.path.isfile(p):
             manifest["artifacts"][a] = _sha256(p)
-    out = os.path.join(dest, "MODEL_PIN.json")
+    out = os.path.join(dest, pin_name)
     with open(out, "w") as f:
         json.dump(manifest, f, indent=2, sort_keys=True)
     print(f"==> wrote {out} ({len(manifest['artifacts'])} artifact hashes)", flush=True)
@@ -113,5 +116,6 @@ pred = mlmodel.predict({"input_ids": ex["input_ids"].int().numpy(),
                         "attention_mask": ex["attention_mask"].int().numpy()})
 shape = np.array(list(pred.values())[0]).shape
 assert shape == (1, 384), f"unexpected output shape {shape}"
-write_model_pin(DEST, EMBEDDER_REPO, EMBEDDER_REVISION, ["BGESmallEmbedder.mlpackage", "vocab.txt"])
+write_model_pin(DEST, EMBEDDER_REPO, EMBEDDER_REVISION, ["BGESmallEmbedder.mlpackage", "vocab.txt"],
+                pin_name="BGESmallEmbedder.MODEL_PIN.json")
 print(f"==> OK — saved BGESmallEmbedder.mlpackage + vocab.txt to {DEST} (output {shape})", flush=True)

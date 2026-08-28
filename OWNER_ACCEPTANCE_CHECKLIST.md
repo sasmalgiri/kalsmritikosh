@@ -135,14 +135,14 @@ latency, Fast latency, Full Evidence latency, peak memory (Activity Monitor), DB
 - [ ] **Verify the model pins — hashes recomputed, not existence-checked**
   (fifteenth + sixteenth reviews): the build scripts download ONLY the pinned
   Hugging Face revisions (`bge-small-en-v1.5 @ 5c38ec7c…`,
-  `bge-reranker-base @ 2cfc18c9…`) and write `MODEL_PIN.json` next to each
-  model. Run `bash scripts/verify-model-pins.sh` — it RECOMPUTES every
+  `bge-reranker-base @ 2cfc18c9…`) and write `<Model>.MODEL_PIN.json` next to each
+  model (uniquely named — the bundle flattens loose resource files). Run `bash scripts/verify-model-pins.sh` — it RECOMPUTES every
   recorded sha256 and fails on any missing, changed, or unlisted artifact.
   Then, at archive time, run
   `bash scripts/verify-model-pins.sh --record-compiled <archive .app>` — it
   re-runs the source-pin verification FIRST (aborting on any failure), then
   records sha256 of every compiled `.mlmodelc` file plus the source pins
-  (repo, revision, sha256 of each MODEL_PIN.json) into
+  (repo, revision, sha256 of each model's pin file) into
   `release/COMPILED_MODEL_HASHES.json`, binding the compiled record to the
   pinned sources (compiled bytes cannot be derived from the `.mlpackage`
   hashes; each MODEL_PIN.json also records the converting toolchain, so a

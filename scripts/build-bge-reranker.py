@@ -39,9 +39,12 @@ def _toolchain():
             versions[mod] = "unknown"
     return versions
 
-def write_model_pin(dest, repo, revision, artifacts):
+def write_model_pin(dest, repo, revision, artifacts, pin_name):
     """Record the pinned source + sha256 of every produced artifact file, so the
-    final archive's models are provably the ones built from the pinned revision."""
+    final archive's models are provably the ones built from the pinned revision.
+    pin_name must be UNIQUE across model dirs: Xcode's synchronized folder
+    flattens loose files into Contents/Resources, so two files both named
+    MODEL_PIN.json collide ("Multiple commands produce …")."""
     import platform
     manifest = {"repo": repo, "revision": revision,
                 "license": "MIT (FlagEmbedding project, Copyright (c) 2022 staoxiao)",
@@ -57,7 +60,7 @@ def write_model_pin(dest, repo, revision, artifacts):
                     manifest["artifacts"][os.path.relpath(fp, dest)] = _sha256(fp)
         elif os.path.isfile(p):
             manifest["artifacts"][a] = _sha256(p)
-    out = os.path.join(dest, "MODEL_PIN.json")
+    out = os.path.join(dest, pin_name)
     with open(out, "w") as f:
         json.dump(manifest, f, indent=2, sort_keys=True)
     print(f"==> wrote {out} ({len(manifest['artifacts'])} artifact hashes)", flush=True)
@@ -120,7 +123,8 @@ mlmodel.save(out_path)
 artifacts = ["BGEReranker.mlpackage", "tokenizer.json", "tokenizer_config.json",
              "special_tokens_map.json", "sentencepiece.bpe.model"]
 write_model_pin(out_dir, RERANKER_REPO, RERANKER_REVISION,
-                [a for a in artifacts if os.path.exists(os.path.join(out_dir, a))])
+                [a for a in artifacts if os.path.exists(os.path.join(out_dir, a))],
+                pin_name="BGEReranker.MODEL_PIN.json")
 print(f"DONE → {out_path}", flush=True)
 print(f"Files in {out_dir}:", flush=True)
 for f in sorted(os.listdir(out_dir)):

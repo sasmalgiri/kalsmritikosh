@@ -71,9 +71,9 @@ def verify_source():
     failed = False
     source_pins = {}
     for model_dir in MODEL_DIRS:
-        pin_path = os.path.join(model_dir, "MODEL_PIN.json")
+        pin_path = os.path.join(model_dir, os.path.basename(model_dir) + ".MODEL_PIN.json")
         if not os.path.isfile(pin_path):
-            print(f"::error::{model_dir}: MODEL_PIN.json missing — rebuild with the pinned script")
+            print(f"::error::{model_dir}: {os.path.basename(pin_path)} missing — rebuild with the pinned script")
             failed = True
             continue
         pin = json.load(open(pin_path))
@@ -167,11 +167,11 @@ elif mode == "verify-compiled":
             fail = True
         # Bind back to the sources when they are present on this Mac.
         pins = record.get("source_pins", {})
-        if pins and all(os.path.isfile(os.path.join(d, "MODEL_PIN.json")) for d in pins):
+        if pins and all(os.path.isfile(os.path.join(d, os.path.basename(d) + ".MODEL_PIN.json")) for d in pins):
             for d, p in sorted(pins.items()):
-                got = sha256(os.path.join(d, "MODEL_PIN.json"))
+                got = sha256(os.path.join(d, os.path.basename(d) + ".MODEL_PIN.json"))
                 if got != p.get("pin_sha256"):
-                    print(f"::error::{d}: MODEL_PIN.json differs from the one the compiled record was made from")
+                    print(f"::error::{d}: its MODEL_PIN differs from the one the compiled record was made from")
                     fail = True
             if not fail:
                 print("source pins recomputed and matched.")
