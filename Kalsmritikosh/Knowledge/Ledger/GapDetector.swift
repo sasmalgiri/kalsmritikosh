@@ -63,19 +63,34 @@ public nonisolated struct GapDetector: Sendable {
         guard present.count >= 3, let lo = present.min(), let hi = present.max(),
               hi > lo else { return [] }
 
-        let missing = (lo...hi).filter { !present.contains($0) }
-        guard !missing.isEmpty else { return [] }
+        // Decide sparseness ARITHMETICALLY before touching the range: every
+        // present value lies in lo...hi, so the missing count is exact. The
+        // old code materialized `(lo...hi).filter` FIRST — one label with a
+        // large embedded integer (a 12-digit account ID, a timestamp) made
+        // that loop iterate BILLIONS of values on the main actor: the
+        // hours-long Ask starvation found in the v1.0-rc4 runtime witness.
+        let (span, overflow) = hi.subtractingReportingOverflow(lo)
+        guard !overflow, span < Int.max else { return [] }
+        let rangeSize = span + 1
+        let missingCount = rangeSize - present.count
+        guard missingCount > 0 else { return [] }
 
         // Too sparse to be a genuine sequence.
-        let rangeSize = hi - lo + 1
-        if missing.count * 2 > rangeSize { return [] }
+        if missingCount * 2 > rangeSize { return [] }
+
+        // The guard above bounds this walk: rangeSize ≤ 2 × present.count.
+        var missing: [Int] = []
+        for n in lo...hi where !present.contains(n) {
+            missing.append(n)
+            if missing.count == 25 { break }
+        }
 
         let sortedPresent = present.sorted()
         let previewList = sortedPresent.prefix(10)
             .map(String.init)
             .joined(separator: ", ")
 
-        return missing.prefix(25).map { n in
+        return missing.map { n in
             GapNode(
                 kind: .sequenceHole,
                 description: "\(kindHint) #\(n) appears missing",
