@@ -59,4 +59,20 @@ struct PatentDomainPackTests {
                 "application number must NOT pollute patentNumber")
         #expect(values["status"] == ["granted"])
     }
+
+    @Test("A date after 'Patent' is never captured as a patent number")
+    func dateNotAPatentNumber() {
+        // Owner real-data case (2026-08-29): the number pattern's [\d,/]{5,}
+        // swallowed "22/03/2023" out of "Patent : 22/03/2023".
+        let f = PatentDomainPack.extractFacts(
+            fromText: "Patent : 22/03/2023. Patent No. 555489 granted.",
+            subjectLabel: "patent", blockID: block)
+        let patents = f.filter { $0.field == "patentnumber" }.map(\.value)
+        #expect(patents.contains { $0.contains("555489") }, "real patent number kept")
+        #expect(!patents.contains { $0.contains("22/03/2023") || $0.contains("22032023") },
+                "the date must not be a patent number: \(patents)")
+        #expect(PatentDomainPack.isDateShapedNumber("Patent : 22/03/2023"))
+        #expect(PatentDomainPack.isDateShapedNumber("2023-03-22"))
+        #expect(!PatentDomainPack.isDateShapedNumber("Patent No. 555489"))
+    }
 }

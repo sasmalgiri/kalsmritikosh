@@ -52,6 +52,20 @@ struct CanonicalFactComparatorTests {
         #expect(cmp.compare(f("amount", "1"), f("date", "1")) == .incomparable)
     }
 
+    @Test("Identifier label/punctuation spellings dedupe; distinct numbers still contradict")
+    func identifierSpellings() {
+        // Owner real-data case: 555489 appeared as three spellings.
+        #expect(cmp.compare(f("patentnumber", "Patent No. 555489"),
+                            f("patentnumber", "Patent No 555489")) == .equivalent)
+        #expect(cmp.compare(f("patentnumber", "Patent No. : 555489"),
+                            f("patentnumber", "Patent No 555489")) == .equivalent)
+        #expect(cmp.compare(f("patentnumber", "Patent No. 555489"),
+                            f("patentnumber", "Patent No. 555490")) == .contradictory)
+        // An alphanumeric identifier keeps its suffix (no label words to strip).
+        #expect(cmp.compare(f("patentnumber", "US1234567B2"),
+                            f("patentnumber", "US1234567B1")) == .contradictory)
+    }
+
     @Test("contradictions(in:) returns only genuine conflicts")
     func setContradictions() {
         let facts = [f("amount", "₹3,800"), f("amount", "Rs 3800"), f("amount", "₹9,000")]

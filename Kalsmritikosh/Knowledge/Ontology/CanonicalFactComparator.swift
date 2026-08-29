@@ -62,7 +62,9 @@ public struct CanonicalFactComparator: Sendable {
             return value.filter { $0.isNumber }
         case .date:
             return canonicalDate(value)
-        case .email, .identifier, .url, .phone:
+        case .identifier:
+            return canonicalIdentifier(value)
+        case .email, .url, .phone:
             return value.lowercased().filter { !$0.isWhitespace }
         default:
             // Names/text: lowercase, drop punctuation/whitespace, and common org suffixes so
@@ -75,6 +77,32 @@ public struct CanonicalFactComparator: Sendable {
                 .replacingOccurrences(of: "inc", with: "")
             return stripped.filter { $0.isLetter || $0.isNumber }
         }
+    }
+
+    /// Label words that a reference number carries as a PREFIX, not as part of
+    /// its identity: "Patent No. 555489" and "Patent No 555489" are the same
+    /// patent. Stripping these before comparison collapses the label/
+    /// punctuation spellings that otherwise read as distinct values (owner
+    /// real-data case: 555489 appeared under three spellings → false conflict).
+    nonisolated static let identifierLabelWords: Set<String> = [
+        "patent", "application", "publication", "no", "number", "num", "nos",
+        "dated", "date", "grant", "granted", "filing", "filed", "of", "the",
+        "reg", "registration", "invoice", "inv", "case", "ref", "reference"
+    ]
+
+    /// Canonical identifier: lowercase, drop label words, keep the remaining
+    /// alphanumerics joined — so "Patent No. 555489" ≡ "Patent No 555489" ≡
+    /// "555489", while an alphanumeric like "US1234567B2" (no label words)
+    /// stays intact and distinct from "US1234568B2".
+    nonisolated func canonicalIdentifier(_ value: String) -> String {
+        let tokens = value.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+            .filter { !Self.identifierLabelWords.contains($0) }
+        let joined = tokens.joined()
+        // If the value was ALL label words, fall back to bare alphanumerics
+        // so two genuinely-empty-after-strip values still compare equal.
+        return joined.isEmpty ? value.lowercased().filter { $0.isLetter || $0.isNumber } : joined
     }
 
     /// Normalize a date to yyyy-mm-ish digits so different formats compare equal when they

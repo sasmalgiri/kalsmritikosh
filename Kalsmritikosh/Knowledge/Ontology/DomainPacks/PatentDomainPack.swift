@@ -68,6 +68,11 @@ public enum PatentDomainPack {
         var seen = Set<String>()
         for match in allMatches(numberPattern, in: text) {
             let value = match.trimmingCharacters(in: .whitespaces)
+            // Owner real-data fix (2026-08-29): the number pattern's
+            // `[\d,\/]{5,}` swallows a date after "Patent" ("Patent :
+            // 22/03/2023"). A date is never a patent/application number —
+            // the grant/filing dates are extracted separately below.
+            if isDateShapedNumber(value) { continue }
             let lower = value.lowercased()
             let field: String
             if lower.hasPrefix("application") { field = "applicationNumber" }
@@ -116,6 +121,16 @@ public enum PatentDomainPack {
     }
 
     // MARK: - Helpers
+
+    /// A captured "number" whose digit portion is actually a calendar date
+    /// (dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd) — never a patent/application no.
+    nonisolated static func isDateShapedNumber(_ value: String) -> Bool {
+        let patterns = [
+            #"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"#,   // 22/03/2023, 22-03-23
+            #"\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b"#,     // 2023-03-22
+        ]
+        return patterns.contains { value.range(of: $0, options: .regularExpression) != nil }
+    }
 
     nonisolated static func firstMatch(_ pattern: String, in s: String) -> String? {
         allMatches(pattern, in: s).first

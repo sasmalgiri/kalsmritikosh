@@ -84,6 +84,34 @@ struct SlotAnswerComposerTests {
         #expect(c?.singleCanonicalValue == true)
     }
 
+    @Test("Real-data noise: 555489 spellings collapse and the mislabeled application number is dropped")
+    func realDataDedupAndMislabel() {
+        // The owner's re-ingested ledger: 555489 in three spellings, the
+        // application number 202331019665 mislabeled under patentNumber in a
+        // couple of blocks while dominant as applicationNumber. Expect the ONE
+        // clean patent number, no conflict.
+        let certObj = UUID(), emailObj = UUID()
+        let p1 = fact("patentNumber", "Patent No. 555489")   // certificate (authority)
+        let p2 = fact("patentNumber", "Patent No 555489")
+        let p3 = fact("patentNumber", "Patent No. : 555489")
+        let mis = fact("patentNumber", "Patent No. 202331019665")  // application no. mislabeled
+        let app1 = fact("applicationNumber", "Application No. 202331019665")
+        let app2 = fact("applicationNumber", "Application No 202331019665")
+        let app3 = fact("applicationNumber", "Application No: 202331019665")
+        let facts = [p1, p2, p3, mis, app1, app2, app3]
+        let evals = [evalFor(p1, objectID: certObj), evalFor(p2, objectID: emailObj),
+                     evalFor(p3, objectID: emailObj), evalFor(mis, objectID: emailObj),
+                     evalFor(app1, objectID: certObj), evalFor(app2, objectID: emailObj),
+                     evalFor(app3, objectID: emailObj)]
+        let c = SlotAnswerComposer.compose(
+            slotFieldIDs: ["patentnumber"], facts: facts, evaluations: evals,
+            authorityObjectIDs: [certObj], documentsSearched: 70)
+        #expect(c?.isConflict == false, "spellings + mislabel produced a false conflict")
+        #expect(c?.singleCanonicalValue == true)
+        #expect(c?.primaryText == "Patent No. 555489.")
+        #expect(c?.primaryText.contains("202331019665") == false, "application number surfaced as the patent number")
+    }
+
     // MARK: - D-15 honest not-found
 
     @Test("Missing requested field → the not-found NAMES the field and the related evidence")

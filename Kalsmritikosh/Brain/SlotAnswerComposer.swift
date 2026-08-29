@@ -67,7 +67,30 @@ public enum SlotAnswerComposer {
                              isAuthority: authorityObjectIDs.contains(obj))
         }
 
-        let requested = surfaceable.filter { $0.fact.field == requestedField }
+        var requested = surfaceable.filter { $0.fact.field == requestedField }
+
+        // Cross-field mislabel guard (owner real-data case): a reference
+        // number that is more strongly attested under a DIFFERENT identifier
+        // field is a mis-extraction — the application number 202331019665 was
+        // captured under "Patent No." in a couple of blocks while appearing
+        // as applicationNumber everywhere else. Drop a candidate whose
+        // canonical identifier is carried MORE OFTEN by another field. Scoped
+        // to identifier slots; conservative (strict domination only).
+        if FactSchemaRegistry.expectedShape(of: requestedField) == .identifier {
+            let cmp = CanonicalFactComparator()
+            var countByCanonField: [String: [String: Int]] = [:]
+            for f in facts where FactSchemaRegistry.expectedShape(of: f.field) == .identifier {
+                let canon = cmp.canonical(f.value, .identifier)
+                countByCanonField[canon, default: [:]][f.field, default: 0] += 1
+            }
+            requested = requested.filter { cand in
+                let canon = cmp.canonical(cand.fact.value, .identifier)
+                let counts = countByCanonField[canon] ?? [:]
+                let mine = counts[requestedField] ?? 0
+                let other = counts.filter { $0.key != requestedField }.map(\.value).max() ?? 0
+                return other <= mine
+            }
+        }
 
         guard !requested.isEmpty else {
             // D-15 — the honest not-found NAMES the missing field, and
