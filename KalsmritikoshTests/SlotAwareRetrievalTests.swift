@@ -42,7 +42,8 @@ struct SlotAwareRetrievalTests {
         return koID
     }
 
-    private func retriever(_ db: Database, withFacts: Bool) -> HybridRetriever {
+    private func retriever(_ db: Database, withFacts: Bool,
+                           policy: SensitiveRetrievalPolicy? = nil) -> HybridRetriever {
         HybridRetriever(
             memory: MemoryRepository(database: db),
             events: EventsRepository(database: db),
@@ -53,7 +54,34 @@ struct SlotAwareRetrievalTests {
             vectors: SQLiteVectorStore(database: db, modelID: "apple.nl.v1"),
             embedder: NLEmbedder(),
             objects: KnowledgeObjectRepository(database: db),
-            genericFacts: withFacts ? GenericFactRepository(database: db) : nil)
+            genericFacts: withFacts ? GenericFactRepository(database: db) : nil,
+            sensitivePolicy: policy)
+    }
+
+    private func patentIntent() async -> UserIntent {
+        (try? await RuleIntentDetector().detect(question: "what is the patent number"))
+            ?? UserIntent(kind: .factualLookup, scope: .global, rawQuestion: "what is the patent number")
+    }
+
+    private func scope(max: SensitivityLevel) -> SensitiveAccessContext {
+        SensitiveAccessContext(scope: SensitiveScope(
+            workspaceID: UUID(), maximumSensitivity: max,
+            permitsPrivilegedMaterial: false, purpose: .retrieval))
+    }
+
+    /// Seed the FTS-invisible cert chunk (neither "patent" nor "number") + its
+    /// patent-number fact, plus decoys that DO match "patent" so bm25 fills
+    /// with them. Returns the cert block id.
+    private func seedPatentLedger(_ db: Database) async throws -> UUID {
+        let certBlock = UUID()
+        _ = try await addKO(db, koText: "Registry extract sheet.", chunkText: "Registry extract sheet, entry 7.", blockID: certBlock)
+        for i in 0..<20 {
+            _ = try await addKO(db, koText: "patent discussion \(i)", chunkText: "We discussed the patent status in meeting \(i).", blockID: UUID())
+        }
+        try await GenericFactRepository(database: db).upsert(
+            GenericFact(subjectLabel: "Grant letter", field: "patentNumber", value: "Patent No. 555489",
+                        status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [certBlock]))
+        return certBlock
     }
 
     @Test("A slot fact whose chunk FTS never ranks is still surfaced by slot-aware retrieval")
@@ -85,6 +113,58 @@ struct SlotAwareRetrievalTests {
         let ftsOnly = try await ChunksRepository(database: db).searchFTS("patent number", limit: 25)
         #expect(!ftsOnly.contains { $0.evidenceBlockID == certBlock },
                 "the cert chunk should be invisible to plain FTS — test corpus drifted")
+    }
+
+    // MARK: - Boundary triad (post-rc13): the slot path's trust boundary,
+    // executed rather than inherited. All three legs required.
+
+    @Test("Leg 1 (recall, permitted): scope permits the block → slot fact surfaces")
+    func slotRecallUnderPermittingScope() async throws {
+        let db = try await makeDB()
+        let certBlock = try await seedPatentLedger(db)
+        _ = certBlock
+        // KO seeded (default internal label); an internal ceiling permits it.
+        let policy = SensitiveRetrievalPolicy(repository: SensitiveScopeRepository(database: db))
+        let authorized = try await retriever(db, withFacts: true, policy: policy)
+            .retrieve(for: await patentIntent(), layers: [], access: scope(max: .internalLevel))
+        #expect(authorized.result.genericFacts.contains { $0.field == "patentnumber" && $0.value.contains("555489") },
+                "permitted scope must surface the slot fact")
+    }
+
+    @Test("Leg 2 (path-proof, no policy): fact surfaces AND arrived viaLayer .metadata")
+    func slotPathReachesOutputViaMetadata() async throws {
+        let db = try await makeDB()
+        let certBlock = try await seedPatentLedger(db)
+        // No policy → the only barrier is absent; proves the injection path
+        // reaches output (without this leg, Leg 3 could pass vacuously).
+        let result = try await retriever(db, withFacts: true).retrieve(for: await patentIntent(), layers: [])
+        #expect(result.genericFacts.contains { $0.field == "patentnumber" && $0.value.contains("555489") },
+                "no-policy run must surface the slot fact")
+        let certChunk = result.chunks.first { $0.chunk.evidenceBlockID == certBlock }
+        #expect(certChunk != nil, "the fact-bearing chunk must be in the returned set")
+        #expect(certChunk?.viaLayer == .metadata,
+                "the injected chunk must arrive viaLayer .metadata — if the policy filter branches by layer, inherited coverage would miss it")
+    }
+
+    @Test("Leg 3 (denial): blocking scope removes the material from BOTH facts and chunks")
+    func slotDenialUnderBlockingScope() async throws {
+        let db = try await makeDB()
+        let certBlock = try await seedPatentLedger(db)
+        // The block IS injectable at the repo layer (unfiltered by design) —
+        // proving the gate, not the repo, is what denies it.
+        let injectable = try await GenericFactRepository(database: db).sourceBlocks(forFields: ["patentnumber"])
+        #expect(injectable.contains(certBlock), "repo must return the block unfiltered — the gate is the only barrier")
+
+        // Seeded KO carries the default internal label; a PUBLIC ceiling blocks it.
+        let policy = SensitiveRetrievalPolicy(repository: SensitiveScopeRepository(database: db))
+        let authorized = try await retriever(db, withFacts: true, policy: policy)
+            .retrieve(for: await patentIntent(), layers: [], access: scope(max: .publicLevel))
+        // Assert BOTH streams separately — a fact filtered while its chunk
+        // rides (or vice versa) is a leak.
+        #expect(!authorized.result.genericFacts.contains { $0.value.contains("555489") },
+                "BOUNDARY HOLE: out-of-scope patent fact surfaced under a blocking scope")
+        #expect(!authorized.result.chunks.contains { $0.chunk.evidenceBlockID == certBlock },
+                "BOUNDARY HOLE: out-of-scope fact-bearing chunk surfaced under a blocking scope")
     }
 
     @Test("sourceBlocks(forFields:) returns the fact's blocks; chunksForEvidenceBlocks hydrates them")
