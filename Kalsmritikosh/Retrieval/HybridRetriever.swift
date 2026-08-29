@@ -745,7 +745,20 @@ public actor HybridRetriever: Retriever {
     private func metadataLayer(_ intent: UserIntent) async throws -> [RetrievedChunk] {
         let q = intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
-        let hits = try await chunks.searchFTS(q, limit: 25)
+        var hits = try await chunks.searchFTS(q, limit: 25)
+        if hits.isEmpty {
+            // D-16 — a natural question ("what is the granted patent number")
+            // is an implicit-AND FTS5 match: no chunk contains "what", so raw
+            // MATCH returns nothing and Tier-0/1 lookup retrieval went blind
+            // until vectors drained. Retry with OR-joined content words (the
+            // entity layer's token rule) so keyword recall works from the
+            // first ingest pass.
+            let tokens = q.components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { $0.count >= 3 && !Self.questionWords.contains($0.lowercased()) }
+            if !tokens.isEmpty {
+                hits = (try? await chunks.searchFTS(tokens.joined(separator: " OR "), limit: 25)) ?? []
+            }
+        }
         var collected: [RetrievedChunk] = hits.enumerated().map { idx, chunk in
             RetrievedChunk(
                 chunk: chunk,

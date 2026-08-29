@@ -185,10 +185,17 @@ public enum FactSchemaRegistry {
     ]
 
     /// Expected value shape for a canonical field (best-effort; defaults to text).
+    /// D-11/D-12 — the domain-pack slot fields carry their real shapes so the
+    /// comparator dedupes dates grain-aware and identifiers case-insensitively.
     nonisolated static let shapes: [String: ValueShape] = [
         "amount": .money, "date": .date, "employer": .text, "role": .text,
         "counterparty": .text, "status": .text, "email": .email, "phone": .phone,
-        "location": .text
+        "location": .text,
+        "grantdate": .date, "filingdate": .date,
+        "patentnumber": .identifier, "applicationnumber": .identifier,
+        "publicationnumber": .identifier, "invoicenumber": .identifier,
+        "casenumber": .identifier, "pan": .identifier, "gstin": .identifier,
+        "doi": .identifier,
     ]
 
     public nonisolated static func normalizeField(_ raw: String) -> String {

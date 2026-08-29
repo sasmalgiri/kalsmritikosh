@@ -464,8 +464,48 @@ public struct EvidenceVerifier: Verifier {
 
         let intentKindRaw = intent.kind.rawValue
 
+        // D-11/D-12 — compile the plan ONCE; when the question names a
+        // registered fact field, compose the slot answer from the surfaced
+        // facts (their carried evaluations decide surfaceability).
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        let slot = SlotAnswerComposer.compose(
+            slotFieldIDs: plan.slotFieldIDs,
+            facts: retrieval.genericFacts,
+            evaluations: retrieval.claimEvaluations,
+            authorityObjectIDs: retrieval.authorityObjectIDs,
+            documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count)
+
+        // D-14 — the slot-question confidence profile: a uniquely-attested
+        // value from a structured source with no conflict on the requested
+        // field floors at 0.8 × coverage factor. Components logged so
+        // EvalKit can assert them.
+        var effectiveReport = report
+        if let slot, !slot.isNotFound {
+            let floored = DefaultConfidenceEngine.slotProfileFloor(
+                base: report.combined,
+                singleCanonicalValue: slot.singleCanonicalValue,
+                structuredSource: slot.structuredSource,
+                conflictOnRequestedField: slot.isConflict,
+                ingestCoverage: ingestCoverage)
+            if floored.value != report.combined.value {
+                KalsmritikoshLog.brain.info("EvidenceVerifier: slot profile floor \(report.combined.value, privacy: .public) -> \(floored.value, privacy: .public) (single=\(slot.singleCanonicalValue, privacy: .public) structured=\(slot.structuredSource, privacy: .public) conflict=\(slot.isConflict, privacy: .public))")
+                effectiveReport = ConfidenceReport(
+                    combined: floored,
+                    sourceCount: report.sourceCount,
+                    distinctSourceObjectIDs: report.distinctSourceObjectIDs,
+                    agreementScore: report.agreementScore,
+                    contradictions: report.contradictions,
+                    droppedUnverifiable: report.droppedUnverifiable,
+                    newestEvidenceDate: report.newestEvidenceDate,
+                    freshness: report.freshness,
+                    coverage: report.coverage,
+                    coverageGaps: report.coverageGaps,
+                    ingestCoverage: report.ingestCoverage)
+            }
+        }
+
         guard !claims.isEmpty,
-              report.combined >= minimumConfidence,
+              effectiveReport.combined >= minimumConfidence,
               citations.count >= minimumCitations
         else {
             return VerifiedAnswer(
@@ -473,29 +513,30 @@ public struct EvidenceVerifier: Verifier {
                 answerText: nil,
                 intentKind: intentKindRaw,
                 citations: [],
-                confidence: report.combined,
-                contradictions: report.contradictions,
+                confidence: effectiveReport.combined,
+                contradictions: effectiveReport.contradictions,
                 refused: true,
                 refusalReason: claims.isEmpty
                     ? "No expert produced any claim."
                     : (citations.count < minimumCitations && droppedPhantomCitations > 0)
                         ? "All candidate citations failed canonical source resolution (\(droppedPhantomCitations) phantom citation(s) rejected)."
                         : "Evidence below confidence threshold (\(minimumConfidence.value)).",
-                report: report
+                report: effectiveReport
             )
         }
 
-        let rendered = renderAnswer(intent: intent, findings: findings, retrieval: retrieval, report: report)
+        let rendered = renderAnswer(intent: intent, findings: findings, retrieval: retrieval,
+                                    report: effectiveReport, plan: plan, slot: slot)
         return VerifiedAnswer(
             body: rendered.body,
             answerText: rendered.answerText,
             intentKind: intentKindRaw,
             citations: citations,
-            confidence: report.combined,
-            contradictions: report.contradictions,
+            confidence: effectiveReport.combined,
+            contradictions: effectiveReport.contradictions,
             refused: false,
             refusalReason: nil,
-            report: report,
+            report: effectiveReport,
             walkSteps: retrieval.walkSteps
         )
     }
@@ -514,17 +555,19 @@ public struct EvidenceVerifier: Verifier {
         intent: UserIntent,
         findings: [ExpertFindings],
         retrieval: RetrievalResult,
-        report: ConfidenceReport
+        report: ConfidenceReport,
+        plan: QueryPlan,
+        slot: SlotAnswerComposition?
     ) -> RenderedAnswer {
-        // 1) Prefer claims that cite document chunks (KOs) — those are
-        //    the synthesized answer for factual questions. When the LLM
-        //    ran, these are real sentences answering the question. When
-        //    the heuristic fallback ran, these are the top retrieval
-        //    snippets — still better than event-title bullets because
-        //    they contain the actual document text.
+        // 0) D-12/D-15 — a slot question renders the ONE composed sentence
+        //    (value, explicit conflict, or field-named honest not-found) as
+        //    the primary answer. Everything the old path dumped (other
+        //    fields, subjects, cautions) stays in the detail footer.
         let docClaims = findings.flatMap(\.claims).filter { !$0.supportingObjectIDs.isEmpty }
         let answerText: String
-        if !docClaims.isEmpty {
+        if let slot {
+            answerText = slot.primaryText
+        } else if !docClaims.isEmpty {
             // G2-RENDER-FIX (Fast Eval #2 follow-up) — rank doc-claims
             // by the maximum retrieval score across the KOs they cite,
             // not by expert-iteration order. With synthetic-questions
@@ -571,6 +614,10 @@ public struct EvidenceVerifier: Verifier {
         //    This is for the user's situational awareness; it does NOT
         //    contribute to keyword-hit scoring.
         var footerParts: [String] = []
+        // D-12 — the other fields on file, compacted to one detail line.
+        if let also = slot?.alsoOnFile {
+            footerParts.append(also)
+        }
         let subjectLine = subjectHeading(intent: intent, retrieval: retrieval)
         if !subjectLine.isEmpty {
             footerParts.append(subjectLine)
@@ -578,29 +625,43 @@ public struct EvidenceVerifier: Verifier {
         // RET-006 — honest sufficiency disclosure: if the question asked for specific
         // fields the retrieved evidence does not contain, say so neutrally rather than
         // leaving a vague gap. Absence is disclosed, never presented as proof.
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
-        let sufficiency = EvidenceSufficiencyAssessor()
-            .assess(plan: plan, evidenceTexts: retrieval.chunks.map(\.chunk.text))
-        let disclosure = sufficiency.disclosure()
-        if !disclosure.isEmpty {
-            footerParts.append(disclosure)
+        // D-15: a slot question's absence is already the PRIMARY sentence,
+        // named precisely — the generic footer line would duplicate it.
+        if slot == nil {
+            let sufficiency = EvidenceSufficiencyAssessor()
+                .assess(plan: plan, evidenceTexts: retrieval.chunks.map(\.chunk.text))
+            let disclosure = sufficiency.disclosure()
+            if !disclosure.isEmpty {
+                footerParts.append(disclosure)
+            }
         }
-        // CLM-002 — flag any causal over-claim: if the answer asserts a cause but the
-        // evidence shows only sequence, say so (adjacency is not causation).
-        let causalCaution = CausalLanguageGuard()
-            .assess(claims: [answerText], evidenceTexts: retrieval.chunks.map(\.chunk.text))
-        if !causalCaution.isEmpty {
-            footerParts.append(causalCaution)
+        // CLM-001/CLM-002 — the causal and verbatim-grounding guards exist
+        // for MODEL prose. A slot answer is deterministic ledger data whose
+        // citations already bind it to its block — and canonical money
+        // rendering ("Rs20,000 INR" → "₹20,000") would trip the verbatim
+        // check falsely. Guards run on the generated paths only.
+        if slot == nil {
+            let causalCaution = CausalLanguageGuard()
+                .assess(claims: [answerText], evidenceTexts: retrieval.chunks.map(\.chunk.text))
+            if !causalCaution.isEmpty {
+                footerParts.append(causalCaution)
+            }
+            let grounding = ClaimGrounding().check(claim: answerText, evidenceTexts: retrieval.chunks.map(\.chunk.text))
+            if grounding.hasUngroundedMaterial {
+                footerParts.append("Caution: not found verbatim in the evidence: "
+                    + grounding.ungroundedTokens.joined(separator: ", ") + ".")
+            }
         }
-        // CLM-001 — flag ungrounded material specifics: if the answer states an amount/date/
-        // multi-word name that does NOT appear in the retrieved evidence, caution rather than
-        // present it as established.
-        let grounding = ClaimGrounding().check(claim: answerText, evidenceTexts: retrieval.chunks.map(\.chunk.text))
-        if grounding.hasUngroundedMaterial {
-            footerParts.append("Caution: not found verbatim in the evidence: "
-                + grounding.ungroundedTokens.joined(separator: ", ") + ".")
-        }
-        if report.agreementScore <= 0.6 {
+        // D-14 — the disagreement note is scoped: on a slot question it
+        // appears only when the disagreement touches the REQUESTED field
+        // (the composed conflict); disagreements about unrequested fields
+        // belong in the detail, not stamped across a clean single-value
+        // answer. Non-slot questions keep the global-agreement behavior.
+        if let slot {
+            if slot.isConflict {
+                footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — both values are shown above.")
+            }
+        } else if report.agreementScore <= 0.6 {
             footerParts.append("Note: experts disagreed across some of these claims.")
         }
         let body: String
@@ -631,9 +692,12 @@ public struct EvidenceVerifier: Verifier {
         // Defensively re-filter through EntityQualityGate so the rendered
         // line never surfaces hostname-shape / stoplist / weekday strings
         // even if a pre-T13.4 row survived in the canonical table.
+        // D-13 — presentation hygiene: keepsForPresentation is STRICTER than
+        // shouldKeep (mail/infra brands like "Gmail"/"Smtpnet" stay in the
+        // ledger but never print as subjects).
         let strong = retrieval.entities
             .filter { $0.kind == .organization || $0.kind == .person || $0.kind == .project || $0.kind == .vendor || $0.kind == .client }
-            .filter { entityQualityGate?.shouldKeep($0) ?? true }
+            .filter { entityQualityGate?.keepsForPresentation($0) ?? true }
             .sorted { $0.confidence > $1.confidence }
             .prefix(6)
             .map(\.value)
@@ -669,6 +733,11 @@ public struct EvidenceVerifier: Verifier {
             }
         }
         for label in domains where label.count > 2 {
+            // D-13 — a mined domain stem is only org-shaped when the domain
+            // was multi-token ("supplier-abc.com" → "Supplier ABC"). Single-
+            // token stems are almost always infrastructure ("Gmail",
+            // "Hxcore", "Smtpnet") — the mail's plumbing, not a subject.
+            guard label.contains(" ") else { continue }
             // Same gate check via a synthesized organization entity so
             // hostname-shape domain stems (Tyzpr01mb4530, Seqmbx01) get
             // filtered before they ever reach the rendered line.
@@ -679,12 +748,18 @@ public struct EvidenceVerifier: Verifier {
                     sourceObjectID: UUID(),
                     confidence: .medium
                 )
-                if !gate.shouldKeep(probe) { continue }
+                if !gate.keepsForPresentation(probe) { continue }
             }
             if !subjects.contains(where: { $0.localizedCaseInsensitiveContains(label) }) {
                 subjects.append(label)
             }
         }
-        return subjects.isEmpty ? "" : "Subjects in scope: \(subjects.joined(separator: ", "))."
+        // D-13 — drop empty/whitespace entries and case-insensitive dupes
+        // before joining; the screenshot's footer carried both.
+        var seen = Set<String>()
+        let cleaned = subjects
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        return cleaned.isEmpty ? "" : "Subjects in scope: \(cleaned.joined(separator: ", "))."
     }
 }

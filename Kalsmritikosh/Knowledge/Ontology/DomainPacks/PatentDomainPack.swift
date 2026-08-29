@@ -83,7 +83,36 @@ public enum PatentDomainPack {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "status", value: st,
                                      status: .sourceAsserted, confidence: 0.75, sourceBlockIDs: [blockID]))
         }
+        // D-16 — the grant/filing DATES are distinct slot fields ("on which
+        // date was the patent granted" answers from grantDate, never from a
+        // generic date). Labels follow the IPO grant-letter forms the story-
+        // spine extractor already triggers on ("Date of Grant :", "Date of
+        // Filing :", "granted on …").
+        for (pattern, field) in datePatterns {
+            if let raw = firstMatch(pattern, in: text) {
+                let value = dateValue(fromLabelMatch: raw)
+                if !value.isEmpty {
+                    facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: value,
+                                             status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [blockID]))
+                }
+            }
+        }
         return facts
+    }
+
+    /// Labeled date lines → slot fields. The capture keeps the full date text
+    /// (values keep their matched text unchanged, per pack convention).
+    nonisolated static let datePatterns: [(String, String)] = [
+        (#"(?:date\s+of\s+grant|granted\s+on)\s*[:\-]?\s*([0-9]{1,2}(?:st|nd|rd|th)?[ \-/]*(?:[A-Za-z]+|[0-9]{1,2})[ ,\-/]*[0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"#, "grantDate"),
+        (#"(?:date\s+of\s+filing|filed\s+on)\s*[:\-]?\s*([0-9]{1,2}(?:st|nd|rd|th)?[ \-/]*(?:[A-Za-z]+|[0-9]{1,2})[ ,\-/]*[0-9]{2,4}|[0-9]{4}-[0-9]{2}-[0-9]{2})"#, "filingDate"),
+    ]
+
+    /// The date portion of a labeled match ("Date of Grant : 29 November 2024"
+    /// → "29 November 2024"): everything from the first digit, trimmed —
+    /// robust to ":", "-", and bare "granted on" forms alike.
+    nonisolated static func dateValue(fromLabelMatch raw: String) -> String {
+        guard let idx = raw.firstIndex(where: \.isNumber) else { return "" }
+        return String(raw[idx...]).trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - Helpers

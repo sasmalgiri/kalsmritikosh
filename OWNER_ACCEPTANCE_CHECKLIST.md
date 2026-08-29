@@ -18,6 +18,11 @@ rows, SC1/SC2). Estimated total: one focused day plus ingest wait time._
 
 ## 1. Private-archive ingest + 20 representative questions (OWNER-ONLY A)
 
+> **Re-ingest first (80ac42d):** archives ingested before the patent field split keep
+> merged-field rows until their sources re-ingest. Erase and re-add the archive (or at
+> least the patent sources) before asking the 20 questions, so acceptance measures the
+> CURRENT extraction, not pre-fix rows.
+
 1. [ ] Launch the release build. Add your real archive folder(s) via **Sources → Add Folder**.
 2. [ ] Wait for Tier-0/1 ingest to complete (Live tab shows progress); note ingest duration: `[…]`.
 3. [ ] Let background enrichment run (leave the app open ~30 min for Tier-2 on a large archive).

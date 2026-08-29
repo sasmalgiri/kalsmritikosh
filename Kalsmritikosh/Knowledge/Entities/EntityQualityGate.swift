@@ -65,6 +65,44 @@ public struct EntityQualityGate: Sendable {
         "natural language", "nltagger", "nlembedding"
     ]
 
+    /// D-13 — mail/infrastructure brand names that are real strings from
+    /// real headers (they STAY in the ledger) but never belong on the
+    /// rendered "Subjects in scope" line: they are the plumbing the mail
+    /// travelled through, not who the archive is about.
+    public nonisolated static let mailInfraBrands: Set<String> = [
+        "gmail", "google", "outlook", "yahoo", "hotmail", "rediffmail",
+        "aol", "icloud", "protonmail", "zoho", "live", "msn",
+        "mailer-daemon", "postmaster", "noreply", "no-reply", "donotreply",
+    ]
+
+    /// Host-fragment prefixes ("smtpnet", "imap01", "mx2", "pop3srv"…).
+    public nonisolated static let mailInfraPrefixes: [String] = [
+        "smtp", "imap", "pop3", "mx", "mailer-daemon", "noreply", "no-reply",
+    ]
+
+    /// D-13 — presentation-only hygiene for the answer footer. STRICTER than
+    /// `shouldKeep` (which also guards ingestion): a name may be worth
+    /// KEEPING in the ledger yet not worth PRINTING as a subject. Nothing is
+    /// deleted — this filters the rendered line only.
+    public nonisolated func keepsForPresentation(_ entity: Entity) -> Bool {
+        guard shouldKeep(entity) else { return false }
+        return !Self.isMailInfraName(entity.value)
+    }
+
+    public nonisolated static func isMailInfraName(_ value: String) -> Bool {
+        let lower = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if mailInfraBrands.contains(lower) { return true }
+        for prefix in mailInfraPrefixes where lower.hasPrefix(prefix) {
+            // "smtpnet", "imap01", "mx2" — technical host fragments are the
+            // prefix plus a short suffix with no space. A multi-word org
+            // name that happens to share the letters keeps its space and
+            // survives.
+            let rest = lower.dropFirst(prefix.count)
+            if rest.count <= 6 && !rest.contains(" ") { return true }
+        }
+        return false
+    }
+
     // MARK: - API
 
     /// `true` iff the entity passes every gate. Per-kind rules apply

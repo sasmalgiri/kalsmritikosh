@@ -54,6 +54,7 @@ public struct EvidenceSufficiency: Sendable, Hashable {
         case .terms:          return "terms"
         case .identity:       return "identity"
         case .cause:          return "cause/reason"
+        case .identifier:     return "reference number"
         case .other:          return "requested detail"
         }
     }

@@ -43,6 +43,7 @@ public enum RequestedField: String, Codable, Sendable, Hashable, CaseIterable {
     case terms              // contract terms/clauses/conditions
     case identity           // "who is", identity of a person/org
     case cause              // "why", root cause
+    case identifier         // D-11 — a registered reference-number field (patent/application/invoice/case/PAN/GSTIN)
     case other              // catch-all when no specific facet is detected
 }
 
@@ -92,6 +93,11 @@ public nonisolated struct QueryPlan: Codable, Sendable, Hashable {
     public let queryClass: LLMQueryClass
     public let evidencePolicy: EvidencePolicy
     public let rationale: String
+    /// D-11 — the registered ledger fact fields (normalized lowercase ids)
+    /// this question names, resolved by SlotFieldResolver. Non-empty makes
+    /// this a SLOT question: the answer layer composes the one requested
+    /// value (or an honest field-named not-found) instead of a claims dump.
+    public let slotFieldIDs: [String]
 
     public nonisolated init(
         rawQuestion: String,
@@ -102,7 +108,8 @@ public nonisolated struct QueryPlan: Codable, Sendable, Hashable {
         category: QueryCategory,
         queryClass: LLMQueryClass,
         evidencePolicy: EvidencePolicy,
-        rationale: String
+        rationale: String,
+        slotFieldIDs: [String] = []
     ) {
         self.rawQuestion = rawQuestion
         self.targetSubjects = targetSubjects
@@ -113,6 +120,27 @@ public nonisolated struct QueryPlan: Codable, Sendable, Hashable {
         self.queryClass = queryClass
         self.evidencePolicy = evidencePolicy
         self.rationale = rationale
+        self.slotFieldIDs = slotFieldIDs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case rawQuestion, targetSubjects, requestedFields, timeScope,
+             preferredSourceRoles, category, queryClass, evidencePolicy,
+             rationale, slotFieldIDs
+    }
+
+    public nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.rawQuestion = try c.decode(String.self, forKey: .rawQuestion)
+        self.targetSubjects = try c.decode([String].self, forKey: .targetSubjects)
+        self.requestedFields = try c.decode([RequestedField].self, forKey: .requestedFields)
+        self.timeScope = try c.decodeIfPresent(UserIntent.Timeframe.self, forKey: .timeScope)
+        self.preferredSourceRoles = try c.decode([PreferredSourceRole].self, forKey: .preferredSourceRoles)
+        self.category = try c.decode(QueryCategory.self, forKey: .category)
+        self.queryClass = try c.decode(LLMQueryClass.self, forKey: .queryClass)
+        self.evidencePolicy = try c.decode(EvidencePolicy.self, forKey: .evidencePolicy)
+        self.rationale = try c.decode(String.self, forKey: .rationale)
+        self.slotFieldIDs = try c.decodeIfPresent([String].self, forKey: .slotFieldIDs) ?? []
     }
 }
 
@@ -129,11 +157,16 @@ public struct QueryPlanCompiler: Sendable {
         let q = intent.rawQuestion.lowercased()
 
         let subjects = Self.targetSubjects(from: intent)
-        let fields = Self.requestedFields(in: q)
+        // D-11 — registered fact fields the question names, resolved BEFORE
+        // the generic mapping so "what is the granted patent number" becomes
+        // a slot request for `patentnumber`, never a `.definition`.
+        let slots = SlotFieldResolver.resolve(in: q)
+        let fields = Self.requestedFields(in: q, slots: slots)
         let roles = Self.preferredRoles(for: fields, question: q)
         let policy = EvidencePolicy(requiresCorroboration: Self.requiresCorroboration(queryClass))
 
         let rationale = "subjects=\(subjects.count); fields=\(fields.map(\.rawValue)); "
+            + "slots=\(slots.map(\.fieldID)); "
             + "roles=\(roles.map(\.rawValue)); corroboration=\(policy.requiresCorroboration)"
 
         return QueryPlan(
@@ -145,7 +178,8 @@ public struct QueryPlanCompiler: Sendable {
             category: category,
             queryClass: queryClass,
             evidencePolicy: policy,
-            rationale: rationale
+            rationale: rationale,
+            slotFieldIDs: slots.map(\.fieldID)
         )
     }
 
@@ -178,9 +212,17 @@ public struct QueryPlanCompiler: Sendable {
 
     // MARK: - Field detection (deterministic keyword patterns)
 
-    nonisolated static func requestedFields(in q: String) -> [RequestedField] {
+    nonisolated static func requestedFields(
+        in q: String,
+        slots: [SlotFieldResolver.Resolution] = []
+    ) -> [RequestedField] {
         var fields: [RequestedField] = []
         func add(_ f: RequestedField) { if !fields.contains(f) { fields.append(f) } }
+
+        // D-11 — the slot classes lead. A question that names a registered
+        // fact field gets that field's class; the generic keyword mapping
+        // below still runs so secondary facets (status, date…) are kept.
+        for slot in slots { add(slot.requestedField) }
 
         // Monetary amount
         if q.contains("how much") || q.contains("amount") || q.contains("paid") || q.contains("cost")
@@ -231,8 +273,11 @@ public struct QueryPlanCompiler: Sendable {
             || q.contains("contact details") || q.contains("contact info") || q.contains("mobile number") {
             add(.contactInfo)
         }
-        // Definition / identity / cause
-        if q.hasPrefix("what is") || q.hasPrefix("what are") || q.contains("explain") || q.contains("describe") {
+        // Definition / identity / cause. D-11: "what is the ⟨registered
+        // field⟩" is a SLOT request, never a definition — "what is love"
+        // still maps here because it names no fact field.
+        if slots.isEmpty,
+           q.hasPrefix("what is") || q.hasPrefix("what are") || q.contains("explain") || q.contains("describe") {
             add(.definition)
         }
         if q.hasPrefix("who is") || q.hasPrefix("who was") || q.contains("identity of") {
@@ -264,6 +309,8 @@ public struct QueryPlanCompiler: Sendable {
                 add(.official)                    // a grant/certificate wins a status question
             case .identity:
                 add(.biographical); add(.identityDocument)
+            case .identifier:
+                add(.official)                    // a certificate/grant carries the reference number
             case .definition, .cause:
                 add(.report)
             case .date, .location, .quantity, .contactInfo, .other:

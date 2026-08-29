@@ -120,6 +120,24 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
     /// Freshness time-constant in days for status/current intents.
     public static let statusFreshnessTau: Double = 90
 
+    /// D-14 — the slot-question confidence profile. A uniquely-attested
+    /// identifier from a structured source with no conflict on the REQUESTED
+    /// field is not a 37% answer: floor it at 0.8 BEFORE the ingest-coverage
+    /// multiplier (T11 behavior untouched — the same max(coverage, 0.5)
+    /// factor applies to the floor). Returns `base` unchanged when any
+    /// profile condition fails.
+    public nonisolated static func slotProfileFloor(
+        base: Confidence,
+        singleCanonicalValue: Bool,
+        structuredSource: Bool,
+        conflictOnRequestedField: Bool,
+        ingestCoverage: Double
+    ) -> Confidence {
+        guard singleCanonicalValue, structuredSource, !conflictOnRequestedField else { return base }
+        let ingestFactor = ingestCoverage < 1.0 ? max(ingestCoverage, 0.5) : 1.0
+        return Confidence(max(base.value, 0.8 * ingestFactor))
+    }
+
     public init() {}
 
     public func evaluate(

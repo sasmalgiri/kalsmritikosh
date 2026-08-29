@@ -89,10 +89,12 @@ public struct ReasoningExpert: Expert {
             // by their carried evaluation's presentation. Only `refuse` is dropped.
             guard let eval = evalByID[f.id], eval.decision.maySurface,
                   let obj = eval.evidence.first?.objectID, let presentation = eval.presentation else { continue }
-            let field = f.field.prefix(1).uppercased() + f.field.dropFirst()
-            let unit = f.unit.map { " \($0)" } ?? ""
+            // D-12 — humanize the ledger field id ("applicationnumber" →
+            // "Application number") and render money canonically; the raw
+            // capitalize-first produced "Applicationnumber: …" run-ons.
+            let field = SlotFieldResolver.humanLabel(forFieldID: f.field)
             claims.append(ExpertFindings.Claim(
-                statement: "\(Self.framePrefix(presentation))\(field): \(f.value)\(unit)",
+                statement: "\(Self.framePrefix(presentation))\(field): \(SlotAnswerComposer.renderValue(f))",
                 supportingObjectIDs: [obj],
                 confidence: Confidence(f.confidence),
                 evidenceGranularity: .coarse,
