@@ -190,6 +190,24 @@ public actor ChunksRepository {
         return rows.compactMap(decode)
     }
 
+    /// Chunks whose `evidence_block_id` is one of `blockIDs` (non-rejected).
+    /// Slot-aware retrieval uses this to pull the block that CARRIES a
+    /// requested fact value into the candidate set regardless of bm25 rank;
+    /// the chunks still pass through the caller's scope filter downstream.
+    public func chunksForEvidenceBlocks(_ blockIDs: [UUID], limit: Int = 60) async throws -> [Chunk] {
+        let ids = Array(Set(blockIDs)).prefix(200)
+        guard !ids.isEmpty else { return [] }
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        FROM chunks
+        WHERE evidence_block_id IN (\(placeholders)) AND review_status IS NULL
+        ORDER BY rowid
+        LIMIT ?;
+        """, ids.map { SQLValue.uuid($0) } + [.integer(Int64(limit))])
+        return rows.compactMap(decode)
+    }
+
     // MARK: - Human-in-loop review status (v51)
 
     /// Soft-exclude ("reject") or restore a chunk. "rejected" excludes it from

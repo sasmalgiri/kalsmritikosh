@@ -270,6 +270,26 @@ public actor HybridRetriever: Retriever {
         let densityKOs = Set(mentionCounts.filter { $0.value >= 3 }.map(\.key))
 
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+
+        // Slot-aware retrieval — a registered fact-field question ("what is the
+        // patent no") must reach the block that CARRIES that field even when
+        // bm25 buries its chunk under keyword co-mentions (owner real-data
+        // case: the patent-number chunk ranked #99 of 338 "patent" hits, past
+        // the metadata layer's 25-hit window, so the fact never rode retrieval
+        // and the slot answered a false "not found"). Pull the fact-bearing
+        // chunks in directly; they join `collectedChunks` BEFORE the scope
+        // filter below, so this widens recall, never the trust boundary.
+        if let genericFacts, !plan.slotFieldIDs.isEmpty {
+            let blocks = (try? await genericFacts.sourceBlocks(forFields: plan.slotFieldIDs, limit: 200)) ?? []
+            if !blocks.isEmpty {
+                let slotChunks = (try? await chunks.chunksForEvidenceBlocks(blocks, limit: 60)) ?? []
+                let existing = Set(collectedChunks.map(\.chunk.id))
+                for ch in slotChunks where !existing.contains(ch.id) {
+                    collectedChunks.append(RetrievedChunk(chunk: ch, score: 0.5, viaLayer: .metadata))
+                }
+            }
+        }
+
         let hasSpecificRole = plan.preferredSourceRoles.contains { $0 != .any && $0 != .correspondence }
         if let objects, hasSpecificRole {
             // Candidate set by mention EXISTENCE + the retrieved set — NOT mention

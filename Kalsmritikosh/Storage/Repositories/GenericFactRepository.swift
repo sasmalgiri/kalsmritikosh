@@ -97,6 +97,34 @@ public actor GenericFactRepository {
         Int((try await database.query("SELECT COUNT(*) FROM generic_facts;", [])).first?.int(0) ?? 0)
     }
 
+    /// Slot-aware retrieval (D-11..D-16 support): the distinct source-block ids
+    /// of every fact whose field is one of `fields` (normalized lowercase ids,
+    /// e.g. "patentnumber"). Used to pull the block that CARRIES a requested
+    /// slot value into retrieval directly, so a registered fact field is
+    /// answered from the ledger even when bm25 buries its chunk under keyword
+    /// co-mentions. The returned blocks still flow through the caller's scope
+    /// filter — this widens recall, not the trust boundary.
+    public func sourceBlocks(forFields fields: [String], limit: Int = 200) async throws -> [UUID] {
+        let norm = Array(Set(fields.map { $0.lowercased() }))
+        guard !norm.isEmpty else { return [] }
+        let placeholders = norm.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT source_blocks_json FROM generic_facts
+        WHERE lower(field) IN (\(placeholders)) ORDER BY confidence DESC LIMIT ?;
+        """, norm.map { SQLValue.text($0) } + [.integer(Int64(limit))])
+        var out: [UUID] = []
+        var seen = Set<UUID>()
+        for row in rows {
+            guard let json = row.string(0), let data = json.data(using: .utf8),
+                  let ids = try? JSONDecoder().decode([String].self, from: data) else { continue }
+            for s in ids {
+                guard let id = UUID(uuidString: s), seen.insert(id).inserted else { continue }
+                out.append(id)
+            }
+        }
+        return out
+    }
+
     /// Deterministic paged enumeration of ALL facts (for the Claim-producer backfill).
     public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [GenericFact] {
         let rows = try await database.query("""
