@@ -16,6 +16,25 @@ dated SHAs and are NOT current totals.
 Evidence states: `PENDING` · `IMPLEMENTED` · `UNIT` · `INTEGRATION` · `REAL_DATA` · `RELEASE` ·
 `PASS`.
 
+**Known caveat carried into 1.0 (ingestion review, 6dd5274) — READ BEFORE TOUCHING THE COMPOSER.**
+The v1.0 ledger holds extraction rows that current code would never write: one
+identifier in several label/punctuation spellings, a date once captured in
+identifier position, an application number occasionally mislabeled under
+"Patent No." The 1.0 answers are correct because **query-time guards hide this
+noise** — `CanonicalFactComparator` identifier canonicalization (dedupe
+spellings), `SlotAnswerComposer`'s cross-field mislabel drop, and
+`PatentDomainPack.isDateShapedNumber` (all in `6dd5274`). These are *defences*
+for a write-time error whose real fix is Ingestion Train 1 (C-1 capture-group
+extraction + C-2 pack versioning + re-extraction), deferred to v1.0.x. **A
+future composer/comparator change that weakens these guards could unhide the
+old noise on legacy rows.** Any such change must re-run the patent witness
+(below) and keep it green. Coverage numbers count these legacy rows as real
+facts until re-extraction runs. Patent witness anchor (owner real archive,
+re-ingested 2026-08-29): "what is the granted patent number" → **Patent No.
+555489**, one cited sentence, no conflict, no "experts disagreed" note. This
+exact expectation is Ingestion Train 1's red-then-green target across the C-1
+data rewrite.
+
 ## A. Functional gates
 | Gate | Requirement | Evidence | State |
 |---|---|---|---|
