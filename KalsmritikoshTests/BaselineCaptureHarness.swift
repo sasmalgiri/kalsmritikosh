@@ -12,8 +12,11 @@
 //  sorted-key JSON, header with tree hash + schema/DB identity) so a diff many
 //  phases from now is attributable, not archaeology.
 //
-//  Tooling only — never the app target. Run:
-//    xcodebuild test -only-testing:KalsmritikoshTests/BaselineCaptureHarness
+//  Tooling only — never the app target. Run single-clone (parallel destinations
+//  double CPU contention and skew the latency table):
+//    TEST_RUNNER_BASELINE_TREE_HASH=<stamp> xcodebuild test \
+//      -only-testing:KalsmritikoshTests/BaselineCaptureHarness \
+//      -parallel-testing-enabled NO
 //
 
 import Foundation
@@ -24,9 +27,11 @@ import Testing
 @MainActor
 struct BaselineCaptureHarness {
 
-    /// The exact tree the capture ran against, passed in at invocation
-    /// (`BASELINE_TREE_HASH=$(git rev-parse --short HEAD)`), so the artifact
-    /// header is attributable rather than a stale constant.
+    /// The exact tree the capture ran against, passed in at invocation, so the
+    /// artifact header is attributable rather than a stale constant. xcodebuild
+    /// only forwards env vars prefixed `TEST_RUNNER_` to the test-host process
+    /// (the bare var stamped "unknown" on the first capture attempt), so invoke:
+    ///   TEST_RUNNER_BASELINE_TREE_HASH=<stamp> xcodebuild test ...
     static let treeHash = ProcessInfo.processInfo.environment["BASELINE_TREE_HASH"] ?? "unknown"
 
     /// Fixed, ordered — the order is part of the artifact contract. Spread
@@ -51,6 +56,9 @@ struct BaselineCaptureHarness {
         let body: String
         let citationCount: Int
         let citations: [String]
+        /// Per-question wall-clock — the I-6 "before" latency table. This
+        /// capture is the only chance to record the pre-fix cost.
+        let secondsWallClock: Double
     }
     struct Drain: Codable {
         let embedderDimension: Int
@@ -124,9 +132,11 @@ struct BaselineCaptureHarness {
         // 3) Ask the fixed set through the exact UI entry path.
         var records: [Record] = []
         for q in Self.questions {
+            let t0 = Date()
             let a = await state.brain.answer(
                 question: q,
                 access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            let secs = Date().timeIntervalSince(t0)
             records.append(Record(
                 question: q,
                 refused: a.refused,
@@ -135,8 +145,9 @@ struct BaselineCaptureHarness {
                 answerText: a.answerText,
                 body: a.body,
                 citationCount: a.citations.count,
-                citations: a.citations.map { String(describing: $0) }.sorted()))
-            print("BASELINE Q: \(q)\n         → refused=\(a.refused) conf=\(String(format: "%.2f", a.confidence.value)) text=\(a.answerText ?? "nil")")
+                citations: a.citations.map { String(describing: $0) }.sorted(),
+                secondsWallClock: secs))
+            print("BASELINE Q: \(q)\n         → refused=\(a.refused) conf=\(String(format: "%.2f", a.confidence.value)) secs=\(String(format: "%.1f", secs)) text=\(a.answerText ?? "nil")")
         }
 
         // 4) Drain measurement (spike c) — time the resolved embedder over a fixed
@@ -174,8 +185,12 @@ struct BaselineCaptureHarness {
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys, .prettyPrinted]
         let data = try enc.encode(artifact)
-        let outURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads/kalsmritikosh-baseline-\(Self.treeHash).json")
+        // The test host is the SANDBOXED app: homeDirectoryForCurrentUser is
+        // the container home and its Downloads is not writable (Cocoa 513 on
+        // the first capture attempt). Write to the container tmp — always
+        // writable — and print the path; the caller copies it out.
+        let outURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("kalsmritikosh-baseline-\(Self.treeHash).json")
         try data.write(to: outURL)
         print("BASELINE ARTIFACT: \(outURL.path)  (\(data.count) bytes, \(records.count) questions, drain=\(drain != nil))")
 
