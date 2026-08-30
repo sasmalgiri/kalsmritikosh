@@ -112,6 +112,31 @@ struct SlotAnswerComposerTests {
         #expect(c?.primaryText.contains("202331019665") == false, "application number surfaced as the patent number")
     }
 
+    @Test("Live-witness case: a date under patentNumber is dropped at query time, no false conflict")
+    func queryTimeDateGuardOnLegacyRow() {
+        // The owner's rc13 live witness: the legacy ledger holds
+        // "Patent : 22/03/2023" (a date) under patentNumber alongside 555489,
+        // producing a false 2-value conflict at 36%. rc12's date reject is
+        // write-time only; this proves the query-time guard defends the
+        // legacy row without a re-ingest.
+        let certObj = UUID(), emailObj = UUID()
+        let p1 = fact("patentNumber", "Patent No. 555489")
+        let p2 = fact("patentNumber", "Patent No 555489")
+        let dateRow = fact("patentNumber", "Patent : 22/03/2023")   // legacy garbage
+        let facts = [p1, p2, dateRow]
+        let evals = [evalFor(p1, objectID: certObj), evalFor(p2, objectID: emailObj),
+                     evalFor(dateRow, objectID: emailObj)]
+        let c = SlotAnswerComposer.compose(
+            slotFieldIDs: ["patentnumber"], facts: facts, evaluations: evals,
+            authorityObjectIDs: [certObj], documentsSearched: 70)
+        #expect(c?.isConflict == false, "date-shaped legacy row produced a false conflict")
+        #expect(c?.singleCanonicalValue == true)
+        #expect(c?.primaryText == "Patent No. 555489.")
+        #expect(c?.primaryText.contains("22/03/2023") == false, "a date surfaced as the patent number")
+        #expect(SlotAnswerComposer.isDateShapedIdentifier("Patent : 22/03/2023"))
+        #expect(!SlotAnswerComposer.isDateShapedIdentifier("Patent No. 555489"))
+    }
+
     // MARK: - D-15 honest not-found
 
     @Test("Missing requested field → the not-found NAMES the field and the related evidence")

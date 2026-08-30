@@ -69,6 +69,17 @@ public enum SlotAnswerComposer {
 
         var requested = surfaceable.filter { $0.fact.field == requestedField }
 
+        if FactSchemaRegistry.expectedShape(of: requestedField) == .identifier {
+            // Query-time date guard (owner live-witness, rc13): a calendar date
+            // captured under an identifier field ("Patent : 22/03/2023") must
+            // never be offered as a reference-number value — it surfaced as a
+            // false conflict against the real patent number. The write-time
+            // twin (PatentDomainPack.isDateShapedNumber) stops NEW ingests;
+            // this defends LEGACY rows already in the ledger without a
+            // re-ingest. Generic across identifier slots (invoice/case/PAN…).
+            requested = requested.filter { !Self.isDateShapedIdentifier($0.fact.value) }
+        }
+
         // Cross-field mislabel guard (owner real-data case): a reference
         // number that is more strongly attested under a DIFFERENT identifier
         // field is a mis-extraction — the application number 202331019665 was
@@ -255,6 +266,18 @@ public enum SlotAnswerComposer {
 
     nonisolated static func canonicalValue(_ fact: GenericFact, comparator: CanonicalFactComparator) -> String {
         comparator.canonical(fact.value, FactSchemaRegistry.expectedShape(of: fact.field))
+    }
+
+    /// A value whose digits form a calendar date (dd/mm/yyyy, dd-mm-yyyy,
+    /// yyyy-mm-dd) — never a reference number. Query-time twin of
+    /// PatentDomainPack.isDateShapedNumber; kept identical so a legacy row and
+    /// a freshly-extracted one are judged the same way.
+    nonisolated static func isDateShapedIdentifier(_ value: String) -> Bool {
+        let patterns = [
+            #"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"#,
+            #"\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b"#,
+        ]
+        return patterns.contains { value.range(of: $0, options: .regularExpression) != nil }
     }
 
     /// One compact detail line for the footer: the strongest OTHER fields on
