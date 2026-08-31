@@ -14,7 +14,18 @@ import Foundation
 import OSLog
 
 public actor CapabilityResolvedEmbedder: Embedder {
+    /// CACHE-IDENTITY DEFAULT — NOT the serving model's dimension. This is
+    /// the fallback's dimension, fixed at init because it keys cache/model
+    /// identity ("embedder-<dimension>") before any provider has resolved.
+    /// For the dimension of whoever actually answered, see
+    /// `servingDimension`/`servingProviderID` (set after first resolve).
+    /// The rc0 baseline artifact mislabeled its drain because of this name.
     public let dimension: Int
+    /// Diagnostics for receipts/harnesses (ratified, unit B): identity of
+    /// the provider that actually served, populated after the first
+    /// successful embed. nil until then; fallback use records the fallback.
+    public private(set) var servingProviderID: String?
+    public private(set) var servingDimension: Int?
     private let capabilities: CapabilityRegistry
     private let fallback: NLEmbedder
     /// Session circuit-breaker: once the resolved provider times out or fails,
@@ -48,10 +59,15 @@ public actor CapabilityResolvedEmbedder: Embedder {
             let vector = await Self.race(timeout: Self.singleTimeout) {
                 (try? await provider.embed(text: text)) ?? []
             }
-            if let vector, !vector.isEmpty { return vector }
+            if let vector, !vector.isEmpty {
+                recordServing(id: provider.id, dimension: vector.count)
+                return vector
+            }
             markProviderUnhealthy(provider.id)
         }
-        return await fallback.embed(text)
+        let v = await fallback.embed(text)
+        recordServing(id: "apple.nl.v1(fallback)", dimension: fallback.dimension)
+        return v
     }
 
     public func embedBatch(_ texts: [String]) async -> [[Float]] {
@@ -64,11 +80,19 @@ public actor CapabilityResolvedEmbedder: Embedder {
                 (try? await provider.embedBatch(texts: texts)) ?? []
             }
             if let vectors, vectors.count == texts.count, !vectors.contains(where: \.isEmpty) {
+                recordServing(id: provider.id, dimension: vectors.first?.count ?? 0)
                 return vectors
             }
             markProviderUnhealthy(provider.id)
         }
-        return await fallback.embedBatch(texts)
+        let vs = await fallback.embedBatch(texts)
+        recordServing(id: "apple.nl.v1(fallback)", dimension: fallback.dimension)
+        return vs
+    }
+
+    private func recordServing(id: String, dimension: Int) {
+        servingProviderID = id
+        servingDimension = dimension
     }
 
     private func markProviderUnhealthy(_ providerID: String) {

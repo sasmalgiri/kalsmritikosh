@@ -48,25 +48,18 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
         candidates: [String]
     ) async -> [Double]? {
         guard !candidates.isEmpty else { return [] }
-        guard let modelURL = locateModelURL() else {
-            KalsmritikoshLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) not bundled; pass-through")
+        // PERF (pre-V2 unit B): the tier is a struct constructed FRESH per
+        // verify (EvidenceVerifier builds the ladder per call), so compiling
+        // the mlpackage + loading the 250k-token vocab per score() call paid
+        // the full model lifecycle on every answer — the dominant share of
+        // steady-state slot-question latency. Cache at PROCESS scope, the
+        // embedder's PERF-2 pattern; MLModel prediction is thread-safe.
+        guard let runtime = Self.sharedRuntime(modelName: modelName, maxLength: maxSequenceLength) else {
+            KalsmritikoshLog.brain.info("\(id, privacy: .public): model \(modelName, privacy: .public) or tokenizer not bundled/loadable; pass-through")
             return nil
         }
-        guard let tokenizer = BGETokenizer(maxLength: maxSequenceLength) else {
-            KalsmritikoshLog.brain.info("\(id, privacy: .public): tokenizer.json not bundled; pass-through")
-            return nil
-        }
-        let model: MLModel
-        do {
-            let compiledURL: URL = try {
-                if modelURL.pathExtension == "mlmodelc" { return modelURL }
-                return try MLModel.compileModel(at: modelURL)
-            }()
-            model = try MLModel(contentsOf: compiledURL)
-        } catch {
-            KalsmritikoshLog.brain.error("\(id, privacy: .public): model load failed: \(String(describing: error), privacy: .public); pass-through")
-            return nil
-        }
+        let model = runtime.model
+        let tokenizer = runtime.tokenizer
 
         var scores: [Double] = []
         scores.reserveCapacity(candidates.count)
@@ -87,6 +80,46 @@ public struct CoreMLCrossEncoderTier: RerankerTier {
         }
         KalsmritikoshLog.brain.info("\(id, privacy: .public): scored \(scores.count, privacy: .public) candidates")
         return scores
+    }
+
+    // MARK: - Process-scoped runtime cache (unit B)
+
+    final class Runtime: @unchecked Sendable {
+        let model: MLModel
+        let tokenizer: BGETokenizer
+        init(model: MLModel, tokenizer: BGETokenizer) {
+            self.model = model
+            self.tokenizer = tokenizer
+        }
+    }
+
+    private static let runtimeLock = NSLock()
+    nonisolated(unsafe) private static var runtimes: [String: Runtime] = [:]
+
+    /// Compile + load ONCE per (modelName, maxLength) per process. Returns
+    /// nil when the model or tokenizer isn't bundled — same pass-through
+    /// contract as before, decided once instead of per call.
+    static func sharedRuntime(modelName: String, maxLength: Int) -> Runtime? {
+        let key = "\(modelName)#\(maxLength)"
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+        if let cached = runtimes[key] { return cached }
+        guard let modelURL = CoreMLCrossEncoderTier(modelName: modelName, maxSequenceLength: maxLength).locateModelURL(),
+              let tokenizer = BGETokenizer(maxLength: maxLength) else { return nil }
+        do {
+            let compiledURL: URL = try {
+                if modelURL.pathExtension == "mlmodelc" { return modelURL }
+                return try MLModel.compileModel(at: modelURL)
+            }()
+            let model = try MLModel(contentsOf: compiledURL)
+            let runtime = Runtime(model: model, tokenizer: tokenizer)
+            runtimes[key] = runtime
+            KalsmritikoshLog.brain.info("CoreMLCrossEncoderTier: runtime cached for \(modelName, privacy: .public) (compile+vocab paid once per process)")
+            return runtime
+        } catch {
+            KalsmritikoshLog.brain.error("CoreMLCrossEncoderTier: model load failed: \(String(describing: error), privacy: .public); pass-through")
+            return nil
+        }
     }
 
     private func locateModelURL() -> URL? {
