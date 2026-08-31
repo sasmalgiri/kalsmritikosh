@@ -54,6 +54,10 @@ public final class BGETokenizer: @unchecked Sendable {
     /// position. Each bucket is pre-sorted by descending length so
     /// the first hasPrefix hit is the longest.
     private let tokensByFirstChar: [Character: [(String, Int32)]]
+    /// Longest vocab piece in characters, measured at load (16 for the
+    /// bundled bge-reranker vocab). Bounds how much input the greedy
+    /// scan can ever consume: ≤ maxLength × maxPieceLength characters.
+    private let maxPieceLength: Int
     public let maxLength: Int
 
     /// Loads the bundled `tokenizer.json` and prepares the vocab.
@@ -79,12 +83,14 @@ public final class BGETokenizer: @unchecked Sendable {
         var vocab: [String: Int32] = [:]
         vocab.reserveCapacity(rawVocab.count)
         var buckets: [Character: [(String, Int32)]] = [:]
+        var maxPieceLength = 1
         for (index, pair) in rawVocab.enumerated() {
             guard pair.count >= 1, let token = pair[0] as? String, !token.isEmpty else { continue }
             let id = Int32(index)
             vocab[token] = id
             let head = token.first!
             buckets[head, default: []].append((token, id))
+            maxPieceLength = max(maxPieceLength, token.count)
         }
         // Pre-sort each bucket by length descending so the first
         // matching prefix is the longest.
@@ -93,6 +99,7 @@ public final class BGETokenizer: @unchecked Sendable {
         }
         self.vocab = vocab
         self.tokensByFirstChar = buckets
+        self.maxPieceLength = maxPieceLength
         self.maxLength = maxLength
         KalsmritikoshLog.brain.info("BGETokenizer loaded \(vocab.count, privacy: .public) tokens in \(buckets.count, privacy: .public) buckets (greedy mode)")
     }
@@ -141,7 +148,15 @@ public final class BGETokenizer: @unchecked Sendable {
     /// Prepends SentencePiece's "▁" word-boundary marker and then
     /// scans char-by-char, picking the longest vocab match.
     private func tokenize(_ text: String) -> [Int32] {
-        let normalized = "\(Self.wordBoundary)" + text
+        // Provably neutral input cap: the loop below emits at most
+        // maxLength − 2 tokens and every emitted token consumes at least
+        // 1 and at most maxPieceLength characters, so only the first
+        // maxLength × maxPieceLength characters can ever be read. Chunks
+        // beyond that (the ledger's oversized/SVG noise) previously cost
+        // O(N²) wall-clock for output-identical results.
+        let capBound = maxLength * maxPieceLength
+        let capped = text.count > capBound ? String(text.prefix(capBound)) : text
+        let normalized = "\(Self.wordBoundary)" + capped
             .replacingOccurrences(of: " ", with: "\(Self.wordBoundary)")
         var out: [Int32] = []
         var idx = normalized.startIndex
@@ -150,12 +165,14 @@ public final class BGETokenizer: @unchecked Sendable {
             // Only consider tokens whose first char matches the
             // current position. Within that bucket they're already
             // sorted by descending length so the first hasPrefix hit
-            // is the longest valid match.
+            // is the longest valid match. (No length pre-check:
+            // Substring.count walks the whole remaining tail — O(N)
+            // per comparison — while hasPrefix alone is O(token) and
+            // already returns false for tokens longer than the tail.)
             var matched: (String, Int32)?
             if let firstChar = remaining.first,
                let bucket = tokensByFirstChar[firstChar] {
                 for (token, id) in bucket {
-                    if token.count > remaining.count { continue }
                     if remaining.hasPrefix(token) {
                         matched = (token, id)
                         break
