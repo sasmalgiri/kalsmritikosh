@@ -20,6 +20,19 @@ public struct EvidenceVerifier: Verifier {
     /// NOT global so aggregation answers can still cite many sources.
     public static let maxCitationsPerClaim = 3
 
+    /// Unit-A binding #3 — TIME is an input to freshness-aware confidence,
+    /// so harness runs treat it like one. Production uses the real clock
+    /// (freshness decay is correct product behavior, untouched). When
+    /// KALSMRITIKOSH_REFERENCE_NOW is set (epoch seconds; test runs pass it
+    /// via the TEST_RUNNER_ prefix), that instant is the answer path's
+    /// "now", making sealed artifacts byte-comparable across days — the
+    /// zero-epsilon seal. Never set in the shipped app.
+    nonisolated static func referenceNow() -> Date {
+        guard let raw = ProcessInfo.processInfo.environment["KALSMRITIKOSH_REFERENCE_NOW"],
+              let secs = TimeInterval(raw) else { return Date() }
+        return Date(timeIntervalSince1970: secs)
+    }
+
     /// UPDATE_14 — intent-aware global cap on distinct doc citations.
     /// After the per-claim cap + cross-claim dedupe, the survivor list
     /// still ran 6–8 docs deep because 5+ experts each contributed top
@@ -234,7 +247,7 @@ public struct EvidenceVerifier: Verifier {
             intentKind: intent.kind,
             intentWindow: intentWindow,
             ingestCoverage: ingestCoverage,
-            now: Date()
+            now: Self.referenceNow()
         )
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given

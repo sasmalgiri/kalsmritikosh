@@ -83,6 +83,15 @@ struct BaselineCaptureHarness {
         /// (I-6 splits first-answer-after-launch vs steady-state). Optional
         /// so the rc0 (unquiesced, first-answer) artifact still decodes.
         let quiesced: Bool?
+        /// The pinned freshness clock (KALSMRITIKOSH_REFERENCE_NOW, epoch
+        /// seconds) the answers were computed against — part of the seal's
+        /// identity; without it, time-sensitive confidences drift between
+        /// runs and cross-time comparisons smear (unit-A binding #3).
+        let referenceNowEpoch: String?
+        /// What this baseline blesses: DETERMINISM, not quality. Content
+        /// quality is governed separately by V0's recorded reds, which
+        /// flip on their own schedule (owner binding, reseal ruling).
+        let blesses: String?
     }
     struct Artifact: Codable {
         let header: Header
@@ -229,7 +238,9 @@ struct BaselineCaptureHarness {
             schemaVersion: SchemaMigrations.latestVersion,
             capturedAtISO: iso.string(from: Date()),
             dbCopyRowCounts: counts,
-            quiesced: quiesce)
+            quiesced: quiesce,
+            referenceNowEpoch: ProcessInfo.processInfo.environment["KALSMRITIKOSH_REFERENCE_NOW"],
+            blesses: "determinism-not-quality: reproducibility contract only; content quality is governed by V0's recorded reds, which flip separately")
         let artifact = Artifact(header: header, records: records, drain: drain)
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys, .prettyPrinted]
