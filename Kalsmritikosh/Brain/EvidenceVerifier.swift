@@ -276,11 +276,27 @@ public struct EvidenceVerifier: Verifier {
         // distinct-document cap applied last.
         var seenObjects = Set<KnowledgeObject.ID>()
         var citations: [VerifiedAnswer.Citation] = []
-        for claim in claims {
+        // Unit-A: the OUTER claim order shapes the shipped receipt (first
+        // claim to reach an object owns its snippet) — rank it by the same
+        // key as the answer text (max score → statement), never raw
+        // findings order.
+        let citationOrderedClaims = claims.sorted { a, b in
+            let aScore = a.supportingObjectIDs.compactMap { scoreByObject[$0] }.max() ?? 0
+            let bScore = b.supportingObjectIDs.compactMap { scoreByObject[$0] }.max() ?? 0
+            if aScore != bScore { return aScore > bScore }
+            return a.statement < b.statement
+        }
+        for claim in citationOrderedClaims {
+            // DETERMINISM RULE (pre-V2 unit A, applies to EVERY ranking sort
+            // and EVERY top-K cut in the answer path): the ordering key is
+            // score → evidentiary tier (where present) → stable content key.
+            // A score-only comparator leaves ties to per-process hash order,
+            // which changes both citation ORDER and cut MEMBERSHIP run-to-run.
             let ranked = claim.supportingObjectIDs.sorted { lhs, rhs in
                 let ls = scoreByObject[lhs] ?? -.infinity
                 let rs = scoreByObject[rhs] ?? -.infinity
-                return ls > rs
+                if ls != rs { return ls > rs }
+                return lhs.uuidString < rhs.uuidString
             }
             for objectID in ranked.prefix(Self.maxCitationsPerClaim) {
                 guard !seenObjects.contains(objectID) else { continue }
@@ -589,7 +605,10 @@ public struct EvidenceVerifier: Verifier {
                     .compactMap { scoreByObject[$0] }.max() ?? 0
                 let bScore = b.supportingObjectIDs
                     .compactMap { scoreByObject[$0] }.max() ?? 0
-                return aScore > bScore
+                if aScore != bScore { return aScore > bScore }
+                // Unit-A tie-break: stable content key, so the .prefix(5)
+                // cut has deterministic MEMBERSHIP, not just ordering.
+                return a.statement < b.statement
             }
             answerText = rankedDocClaims
                 .prefix(5)
@@ -698,7 +717,11 @@ public struct EvidenceVerifier: Verifier {
         let strong = retrieval.entities
             .filter { $0.kind == .organization || $0.kind == .person || $0.kind == .project || $0.kind == .vendor || $0.kind == .client }
             .filter { entityQualityGate?.keepsForPresentation($0) ?? true }
-            .sorted { $0.confidence > $1.confidence }
+            .sorted {
+                // Unit-A tie-break for the .prefix(6) membership cut.
+                if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }
+                return $0.value < $1.value
+            }
             .prefix(6)
             .map(\.value)
         for value in strong where value.count > 2 {

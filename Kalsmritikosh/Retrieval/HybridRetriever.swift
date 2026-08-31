@@ -364,7 +364,14 @@ public actor HybridRetriever: Retriever {
             let selector = HierarchicalEvidenceSelector()
             let selTerms = selector.terms(from: plan)
             let present = Set(collectedChunks.map(\.chunk.objectID))
-            for ko in authorityKOs where !present.contains(ko) {
+            // Unit-A determinism: authority injection ORDER shapes the
+            // collected-chunk sequence — iterate a stable order, never
+            // the Set's per-process hash order (authorityRanking first,
+            // matching the final materialization rule at the return).
+            let orderedAuthority = authorityRanking.isEmpty
+                ? authorityKOs.sorted { $0.uuidString < $1.uuidString }
+                : authorityRanking
+            for ko in orderedAuthority where !present.contains(ko) {
                 let injected = (try? await chunks.findByObjectID(ko)) ?? []
                 let pick = selTerms.isEmpty
                     ? Array(injected.indices.prefix(4))
@@ -575,10 +582,15 @@ public actor HybridRetriever: Retriever {
             break
         }
 
+        // Unit-A determinism: dedupe preserving candidate order — iterating
+        // Set(candidates) ordered the memory hits by per-process hash seed.
+        var seenCandidates = Set<String>()
+        let orderedCandidates = candidates.filter { !$0.isEmpty && seenCandidates.insert($0).inserted }
+
         // Hot path: hashmap lookups via MemoryHashCache.
         let cacheReady = await memoryCache?.isWarm() ?? false
         if let cache = memoryCache, cacheReady {
-            for candidate in Set(candidates) where !candidate.isEmpty {
+            for candidate in orderedCandidates {
                 for kind in MemoryObject.SubjectKind.allCases {
                     if let current = await cache.lookup(kind: kind, identifier: candidate),
                        seen.insert(current.id).inserted {
@@ -587,7 +599,7 @@ public actor HybridRetriever: Retriever {
                 }
             }
         } else {
-            for candidate in Set(candidates) where !candidate.isEmpty {
+            for candidate in orderedCandidates {
                 for kind in MemoryObject.SubjectKind.allCases {
                     if let current = try? await memory.current(forSubject: kind, identifier: candidate),
                        seen.insert(current.id).inserted {
@@ -722,7 +734,11 @@ public actor HybridRetriever: Retriever {
         let ftsQuery = topicTokens.joined(separator: " OR ")
         if !ftsQuery.isEmpty,
            let ftsHits = try? await chunks.searchFTS(ftsQuery, limit: 25) {
-            let koIDs = Array(Set(ftsHits.map(\.objectID))).prefix(20)
+            // Unit-A determinism: dedupe preserving FTS rank order — Set
+            // iteration fed this .prefix(20) MEMBERSHIP cut per-process
+            // hash order (the run-to-run candidate-set flips).
+            var seenKO = Set<KnowledgeObject.ID>()
+            let koIDs = ftsHits.map(\.objectID).filter { seenKO.insert($0).inserted }.prefix(20)
             if !koIDs.isEmpty {
                 let topicEntities = (try? await entities.findInObjects(
                     Array(koIDs),
