@@ -82,6 +82,16 @@ struct BaselineCaptureHarness {
 
     @Test("Capture rc13 answers on the real ledger → deterministic artifact")
     func captureBaseline() async throws {
+        // Operator-invoked ONLY: without the tree-hash stamp this must skip.
+        // On hosted CI earlier suite tests create a ledger at the default
+        // location, so a file-existence check alone does NOT gate — the
+        // harness then captures the runner's fixture ledger and the rung-1
+        // anchor assert fails (adcd4b7's hosted run). The stamp doubles as
+        // the invocation switch.
+        guard Self.treeHash != "unknown" else {
+            print("BASELINE: no TEST_RUNNER_BASELINE_TREE_HASH — operator capture only; skipping (CI path).")
+            return
+        }
         let liveURL = DatabaseLocations.defaultDatabaseURL
         guard FileManager.default.fileExists(atPath: liveURL.path) else {
             print("BASELINE: no live ledger at \(liveURL.path) — nothing to anchor; skipping.")
