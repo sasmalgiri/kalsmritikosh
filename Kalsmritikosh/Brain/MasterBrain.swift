@@ -16,6 +16,31 @@
 import Foundation
 import os   // AEE-M2 — os.Logger string interpolation for the durable-commit failure path
 
+/// Stage-interval clock (owner binding 2026-09-01): perf attribution requires
+/// PROPORTIONAL evidence — a per-stage table that sums to the wall clock,
+/// never frame spotting (the unit-B locus prediction failed because a sampled
+/// stack showed distinctive frames, not dominant time). Enabled only when
+/// KALSMRITIKOSH_STAGE_CLOCK=1 (test runs, via TEST_RUNNER_ prefix); inert in
+/// production. Used sequentially within one answer task.
+nonisolated final class StageClock: @unchecked Sendable {
+    nonisolated static let enabled = ProcessInfo.processInfo.environment["KALSMRITIKOSH_STAGE_CLOCK"] == "1"
+    private let t0 = Date()
+    private var lastMark = Date()
+    private var rows: [(String, Double)] = []
+    func mark(_ stage: String) {
+        guard Self.enabled else { return }
+        let now = Date()
+        rows.append((stage, now.timeIntervalSince(lastMark)))
+        lastMark = now
+    }
+    func dump(question: String) {
+        guard Self.enabled else { return }
+        let total = Date().timeIntervalSince(t0)
+        let table = rows.map { "\($0.0)=\(String(format: "%.2f", $0.1))s" }.joined(separator: " ")
+        print("STAGECLOCK q=\"\(question.prefix(32))\" \(table) total=\(String(format: "%.2f", total))s")
+    }
+}
+
 public actor MasterBrain {
     private let intentDetector: IntentDetector?
     private let router: Router?
@@ -1359,6 +1384,7 @@ public actor MasterBrain {
             )
         }
 
+        let stageClock = StageClock()
         let intent: UserIntent
         do {
             intent = try await intentDetector.detect(question: question)
@@ -1437,6 +1463,7 @@ public actor MasterBrain {
         // Short-circuit "what changed" briefings if a WeeklyBriefingGenerator
         // is wired and the question is temporal-delta shaped. The matcher
         // is intentionally narrow so "new project" / "new supplier" don't
+        stageClock.mark("detect")
         // hijack the regular expert pipeline.
         let q = question.lowercased()
         let temporalDeltaShape =
@@ -1478,6 +1505,7 @@ public actor MasterBrain {
             )
         }
 
+        stageClock.mark("route")
         // G2-0 — one retrieval per question, shared across every expert
         // AND the verifier. Was: N+1 retrieval calls per question (one
         // per expert + one for the verifier), each repeating the same
@@ -1488,6 +1516,7 @@ public actor MasterBrain {
         let firstRetrieval = (try? await retriever.retrieve(
             for: intent, layers: decision.retrievalLayers, access: access))?.result ?? RetrievalResult()
 
+        stageClock.mark("retrieve1")
         // AEE-M1 — adaptive evidence lane. When an upgrade bridge is wired AND the mission
         // needs evidence-ready DECISIVE sources, raise ONLY those exact source versions to
         // the readiness floor (never the whole archive); the corrective pass below is the
@@ -1499,6 +1528,7 @@ public actor MasterBrain {
                 mission: mission, retrieval: firstRetrieval, bridge: aeeUpgradeBridge)
         }
 
+        stageClock.mark("aee")
         // RET-007 — bounded corrective retrieval. If the first pass didn't cover the
         // fields the question asked for, run ONE focused second pass biased at the
         // still-missing fields + the plan's subjects, and MERGE it in (base ordering
@@ -1515,6 +1545,7 @@ public actor MasterBrain {
             }
         )
 
+        stageClock.mark("corrective")
         let context = ExpertContext(
             retriever: retriever,
             capabilities: capabilities,
@@ -1529,6 +1560,7 @@ public actor MasterBrain {
             context: context
         )
 
+        stageClock.mark("experts")
         let retrievalForVerifier = sharedRetrieval
 
         let verified: VerifiedAnswer
@@ -1583,6 +1615,8 @@ public actor MasterBrain {
         // can distinguish it from the historical / RAG paths. The
         // existing Verifier doesn't set `source`, so we re-emit
         // the value with the field stamped in.
+        stageClock.mark("verify+fallback")
+        stageClock.dump(question: question)
         // `category` was compiled once at the top of this method (with the mission) and is
         // reused here — the expert path no longer re-classifies the question for the trace.
         let trace = ReasoningTrace(
