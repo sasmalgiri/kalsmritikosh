@@ -1,0 +1,311 @@
+//
+//  V0AdversarialFixtureTests.swift
+//  KalsmritikoshTests
+//
+//  V0 (Stage 1, unit 1.1) — the program's first deliberate failures: the
+//  NoiseFixtureGenerator's adversarial classes run against CURRENT
+//  extraction, and each promise gap is recorded as an executable red.
+//
+//  Red discipline: known defects are wrapped in `withKnownIssue`, so the
+//  suite is CI-green TODAY and FAILS THE DAY THE FIX LANDS — forcing the
+//  wrapper's removal, which is the red→green flip, in the fixing commit
+//  (V2 extractor correctness, V3 entity gate/anchors, unit 1.8 causal
+//  bounding, V6/NF not-found contract, Train 3 C-4 cross-block assembly).
+//
+//  Binding #1: rungs 1 / 1n / 2 have fixture-twins here, so batched live
+//  witnesses are confirmation, never first detection.
+//
+
+import Foundation
+import Testing
+@testable import Kalsmritikosh
+
+@Suite("V0 — adversarial fixtures (reds recorded)", .serialized)
+@MainActor
+struct V0AdversarialFixtureTests {
+
+    static let gen = NoiseFixtureGenerator()
+
+    // MARK: - Extraction-level reds (REAL write path: facts as stored by ingest)
+    //
+    // First V0 run's lesson (recorded): DomainFactExtractor on a whole
+    // document yields nothing — production extracts per evidence BLOCK.
+    // These reds therefore assert against the rig's generic_facts table,
+    // the actual write path.
+
+    /// Field names are matched shape-insensitively (lowercased, spaces
+    /// stripped): the stored spelling differs from the model's camelCase —
+    /// first V0 runs matched zero rows on 'patentNumber' while the answers
+    /// displayed stored patent facts. The raw field inventory is printed so
+    /// the red output stays self-describing.
+    private func storedValues(_ rig: FixtureRig, field: String) async throws -> [String] {
+        let rows = try await rig.db.query("SELECT field, value FROM generic_facts", [])
+        let all = rows.compactMap { r -> (String, String)? in
+            guard let f = r.string(0), let v = r.string(1) else { return nil }
+            return (f, v)
+        }
+        print("V0 fact inventory: \(all.map(\.0).sorted())")
+        let want = field.lowercased().replacingOccurrences(of: " ", with: "")
+        return all.filter { $0.0.lowercased().replacingOccurrences(of: " ", with: "") == want }.map(\.1)
+    }
+
+    @Test("RED C-1: 3+ label spellings collapse to ONE stored value (today: label-fused variants)")
+    func labelVariantsCollapse() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let values = try await storedValues(rig, field: "patentNumber")
+        print("V0 RED labelVariants: stored patentNumber values = \(values)")
+        #expect(!values.isEmpty, "ingest stored no patentNumber facts at all")
+        withKnownIssue("C-1: values are label-fused; spellings don't collapse until V2 capture groups") {
+            #expect(Set(values).count == 1, "spellings stored as \(Set(values).count) distinct values")
+        }
+    }
+
+    @Test("RED C-1: stored identifier value carries NO alphabetic label token; mislabel bait stays out of patentNumber")
+    func storedValueShapeAndMislabel() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let values = try await storedValues(rig, field: "patentNumber")
+        print("V0 RED shape/mislabel: patentNumber values = \(values)")
+        #expect(!values.isEmpty)
+        // Date bait must already be rejected at write time (rc12) — hard green.
+        #expect(!values.contains { $0.contains("22/03/2023") }, "a slash-date was stored as a patent number")
+        withKnownIssue("C-1: full-match storage fuses the label into the value until V2") {
+            #expect(!values.contains { $0.lowercased().contains("patent") },
+                    "label token stored in value")
+        }
+        withKnownIssue("C-1/C-9: single-source mislabel lands under patentNumber until V2 (rc12's drop is query-time and needs dominance)") {
+            #expect(!values.contains { $0.contains(Self.gen.applicationNumber) },
+                    "mislabeled application number stored under patentNumber")
+        }
+    }
+
+    @Test("RED (deferred): OCR digit substitution recovers no value today — recorded verbatim")
+    func ocrSubstitution() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.ocrGrantLetter, name: "scan.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let values = try await storedValues(rig, field: "patentNumber")
+        print("V0 RED ocr: stored patentNumber values = \(values)")
+        withKnownIssue("OCR-substituted values are not recovered/flagged; generator class recorded (post-V2 normalizer scope)") {
+            #expect(values.contains { $0.contains("7OO321") || $0.filter(\.isNumber).contains("700321") },
+                    "no patentNumber fact recovered from the OCR page")
+        }
+    }
+
+    @Test("RED (deferred to Train 3 C-4): page break splits label from value — no fact today")
+    func pageBreakSplit() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.pageBreakSplitLetter, name: "split.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let values = try await storedValues(rig, field: "patentNumber")
+        print("V0 RED pageBreak: stored patentNumber values = \(values)")
+        withKnownIssue("C-4 cross-block assembly is Train 3; this fixture stays red until then") {
+            #expect(values.contains { $0.contains("700321") }, "label/value split across the page break yields no fact")
+        }
+    }
+
+    @Test("RED C-1: quoted reply + table + prose restatements collapse to one normalized value")
+    func quotedReplyAndTable() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.quotedReplyWithTable, name: "reply.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let values = try await storedValues(rig, field: "patentNumber")
+        print("V0 RED quotedReply: stored patentNumber values = \(values)")
+        #expect(!values.isEmpty, "no patentNumber fact from the reply/table document")
+        withKnownIssue("C-1: spacing/format variants stay distinct until V2 normalization") {
+            #expect(Set(values).count == 1, "restatements stored as \(Set(values).count) distinct values")
+        }
+    }
+
+    // MARK: - Entity-noise red (full rig — V3's gate)
+
+    @Test("RED V3/E-1: entity noise (Nil Nil, leading punctuation, email-as-person, filename subject) survives the gate")
+    func entityNoiseGate() async throws {
+        // First V0 run's lesson (recorded): prose attendee lists yield no
+        // entities — the LIVE noise ("Nil Nil", ", Shabana Khan", emails as
+        // person) enters through EMAIL PARTICIPANT extraction. The fixture
+        // is therefore an .eml with junk participants, matching the archive.
+        let rig = try await FixtureRig.make(document: Self.gen.entityNoiseEmail, name: "noise.eml")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let rows = try await rig.db.query("SELECT value FROM entities", [])
+        let names = rows.compactMap { $0.string(0) }
+        let junk = names.filter { n in
+            let t = n.trimmingCharacters(in: .whitespaces)
+            return t.lowercased() == "nil nil" || t.hasPrefix(",") || t.contains("@")
+                || t.lowercased().contains(".pdf") || t.lowercased().contains("file processing bot")
+        }
+        // Self-describing diagnostics: where DID the participants land?
+        let tables = (try await rig.db.query(
+            "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%particip%' OR name LIKE '%entit%')", []))
+            .compactMap { $0.string(0) }
+        var counts: [String: Int] = [:]
+        for t in tables {
+            counts[t] = Int((try await rig.db.query("SELECT COUNT(*) FROM \(t)", [])).first?.int(0) ?? 0)
+        }
+        print("V0 RED entityNoise: gated entities = \(names); table counts = \(counts)")
+        if names.isEmpty {
+            withKnownIssue("fixture-unrealism recorded: the rig's synchronous ingest does not reproduce the live participant→entity promotion; recalibrate when V3 opens (the live ledger's junk entities prove the production path does promote)") {
+                #expect(!names.isEmpty, "no entities from the .eml fixture in this rig")
+            }
+        } else {
+            withKnownIssue("E-1: the quality gate's rules are incomplete until V3; rejections must be counted, not silent") {
+                #expect(junk.isEmpty, "noise entities survived the gate: \(junk)")
+            }
+        }
+    }
+
+    // MARK: - Rung fixture-twins (binding #1)
+
+    @Test("RED rung-1 twin: noisy letter must answer the slot question cleanly — V0 DISCOVERY: it does not")
+    func rung1Twin() async throws {
+        // First V0 run's DISCOVERY (a real guard hole, found by the fixture
+        // before any live witness — binding #1 doing its job): the rc12
+        // cross-field mislabel drop requires the baited value to be DOMINANT
+        // under its true field; a single-source mislabel slips it, and the
+        // answer is a false conflict carrying the application number. The
+        // live archive answers cleanly only because its mislabel happens to
+        // be non-dominant. Traced to V2 (write-time capture groups kill the
+        // mislabel at the source) + C-10 (corroboration-aware merge).
+        let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let a = try await rig.answer("what is the granted patent number")
+        print("V0 RED rung-1 twin: refused=\(a.refused) conf=\(a.confidence.value) text=\(a.answerText ?? "nil")")
+        #expect(!a.refused)
+        withKnownIssue("V2/C-10: single-source mislabel produces a false conflict on the noisy fixture") {
+            #expect(a.answerText?.contains("700321") == true, "rung-1 twin lost the patent number")
+            #expect(a.answerText?.contains(Self.gen.applicationNumber) == false, "application number leaked into the primary")
+            #expect(a.answerText?.lowercased().contains("conflict") == false, "noise produced a false conflict")
+        }
+    }
+
+    @Test("RED rung-1n twin: known-absent field must return a verified not-found naming the field")
+    func rung1nTwin() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let a = try await rig.answer("what is the trademark number")
+        print("V0 RED rung-1n twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(160))")
+        withKnownIssue("NF-1..3 land at V6: the negative witness must name the missing field with a retrieval receipt") {
+            let text = (a.answerText ?? "") + " " + a.body
+            #expect(text.lowercased().contains("trademark"), "not-found does not name the absent field")
+            #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a verified not-found")
+        }
+    }
+
+    @Test("RED rung-2 twin: timeline of the patent must be one anchored, ordered, cited chain")
+    func rung2Twin() async throws {
+        let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let a = try await rig.answer("timeline of the patent")
+        print("V0 RED rung-2 twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(200))")
+        withKnownIssue("V3 anchor entities + V4 event scoping: no patent anchor exists yet, so the chain cannot thread") {
+            let text = ((a.answerText ?? "") + " " + a.body).lowercased()
+            #expect(text.contains("march 2023") && text.contains("june 2025"),
+                    "timeline does not carry the filing→grant chain")
+            #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a dated chain")
+        }
+    }
+
+    // MARK: - Causal-explosion red (binding #2, addenda §A → unit 1.8)
+
+    @Test("RED unit 1.8: near-identical thread events explode into pairwise CONTRIBUTED_TO; the seeded CAUSED must survive")
+    func causalExplosion() async throws {
+        // A real ingested KO parents the seeded events (events.source_object_id
+        // is FK-constrained — first V0 run's constraint failure, recorded).
+        let rig = try await FixtureRig.make(document: "Thread seed document.", name: "seed.md")
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+        let db = rig.db
+        let koID = (try await db.query("SELECT id FROM knowledge_objects LIMIT 1", []))
+            .first?.string(0).flatMap(UUID.init(uuidString:))
+        let sourceID = try #require(koID, "rig produced no knowledge object")
+
+        let events = EventsRepository(database: db)
+        let threadCount = 40
+        let seeded = Self.gen.threadEvents(
+            count: threadCount, sourceObjectID: sourceID,
+            baseDate: Date(timeIntervalSince1970: 1_750_000_000))
+        try await events.insertBatch(seeded)
+
+        let discoverer = CausalDiscoverer(
+            database: db, events: events,
+            entities: EntitiesRepository(database: db),
+            objects: KnowledgeObjectRepository(database: db),
+            links: EventLinksRepository(database: db))
+        let emitted = await discoverer.runOnce()
+
+        let contributed = Int((try await db.query(
+            "SELECT COUNT(*) FROM event_links WHERE relation = 'CONTRIBUTED_TO'", [])).first?.int(0) ?? 0)
+        let caused = Int((try await db.query(
+            "SELECT COUNT(*) FROM event_links WHERE relation = 'CAUSED'", [])).first?.int(0) ?? 0)
+        let perEventBound = 5
+        print("V0 RED causal: events=\(seeded.count) emitted=\(emitted) CONTRIBUTED_TO=\(contributed) CAUSED=\(caused) bound=\(perEventBound * seeded.count)")
+
+        // The true causal link must exist now AND after the bounding fix.
+        #expect(caused >= 1, "the lexical-trigger CAUSED link was not discovered")
+        withKnownIssue("unit 1.8: O(n²) pairwise emission has no per-event cap until the bounding lands") {
+            #expect(contributed <= perEventBound * seeded.count,
+                    "\(contributed) CONTRIBUTED_TO links for \(seeded.count) events — noise manufacturing")
+        }
+    }
+}
+
+// MARK: - Shared fixture rig (PatentSlotGoldTests pattern, reusable for V0+)
+
+/// Real ingest + real retriever + real verifier over one synthetic document —
+/// the deterministic end-to-end rig the gold packs use, extracted for reuse.
+@MainActor
+struct FixtureRig {
+    let db: Database
+    let retriever: HybridRetriever
+    let verifier: EvidenceVerifier
+    let dir: URL
+
+    static func make(document: String, name: String) async throws -> FixtureRig {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("v0rig-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try document.write(to: dir.appendingPathComponent(name), atomically: true, encoding: .utf8)
+
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        try await db.exec("PRAGMA foreign_keys = ON;")
+        let vault = EvidenceVault(root: dir.appendingPathComponent("vault", isDirectory: true))
+        let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db, vault: vault))
+        let objects = KnowledgeObjectRepository(database: db)
+        let chunks = ChunksRepository(database: db)
+        let coordinator = IngestCoordinator(
+            universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
+            entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
+            files: FilesRepository(database: db), objects: objects,
+            chunks: chunks, evidenceStore: EvidenceStore(database: db),
+            ingestAttempts: IngestAttemptsRepository(database: db),
+            sourceRelations: SourceRelationsRepository(database: db),
+            genericFacts: GenericFactRepository(database: db),
+            readiness: SourceReadinessRepository(database: db),
+            containerInspection: ContainerInspectionRepository(database: db),
+            intakeCoordinator: intake)
+        _ = try await coordinator.ingest(fileAt: dir.appendingPathComponent(name))
+
+        let retriever = HybridRetriever(
+            memory: MemoryRepository(database: db),
+            events: EventsRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            chunks: chunks,
+            summaries: SummariesRepository(database: db),
+            graph: GraphStore(relationships: RelationshipsRepository(database: db)),
+            vectors: SQLiteVectorStore(database: db, modelID: "apple.nl.v1"),
+            embedder: NLEmbedder(),
+            objects: objects,
+            genericFacts: GenericFactRepository(database: db))
+        return FixtureRig(db: db, retriever: retriever,
+                          verifier: EvidenceVerifier(answerabilityMinRetrievalScore: 0.0), dir: dir)
+    }
+
+    func answer(_ question: String) async throws -> VerifiedAnswer {
+        let intent = (try? await RuleIntentDetector().detect(question: question))
+            ?? UserIntent(kind: .factualLookup, scope: .global, rawQuestion: question)
+        let retrieval = try await retriever.retrieve(for: intent, layers: [])
+        let claims = ReasoningExpert.factClaims(from: retrieval)
+        let findings = ExpertFindings(
+            expertID: "expert.reasoning", claims: claims,
+            confidence: claims.isEmpty ? .zero : .medium, droppedUnverifiable: 0)
+        return try await verifier.verify(intent: intent, findings: [findings], retrieval: retrieval)
+    }
+}
