@@ -63,6 +63,18 @@ struct BaselineParityHarness {
             return
         }
 
+        // Quiesce to match a quiesced (steady-state) baseline: drain to empty
+        // + a discarded warm-up ask absorbs the boot race (disposition 2 —
+        // whatever wobble survives quiescence is product-level nondeterminism).
+        if ProcessInfo.processInfo.environment["BASELINE_QUIESCE"] == "1" {
+            let t0 = Date()
+            _ = await state.enrichmentDrainer?.drainAll()
+            _ = await state.brain.answer(
+                question: "warmup discard",
+                access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            print("PARITY QUIESCE: drainAll + warm-up ask took \(String(format: "%.1f", Date().timeIntervalSince(t0)))s")
+        }
+
         var mismatches = 0
         var rung1TextIdentical = true
         for old in artifact.records {
@@ -84,6 +96,21 @@ struct BaselineParityHarness {
             print("PARITY Q: \(old.question)\n       → text=\(sameText ? "IDENTICAL" : "DIFFERS") body=\(sameBody ? "IDENTICAL" : "DIFFERS") citations=\(sameCits ? "IDENTICAL" : "DIFFERS") meta=\(sameMeta ? "IDENTICAL" : "DIFFERS") | \(String(format: "%.1f", old.secondsWallClock))s → \(String(format: "%.1f", secs))s (\(String(format: "%.0f", speedup))×)")
             if !sameText {
                 print("PARITY DIFF text —\n  baseline: \(old.answerText ?? "nil")\n  now:      \(a.answerText ?? "nil")")
+            }
+            // Disposition-2 characterization: on a citation diff, print BOTH
+            // sides so same-objects-different-snippets vs different-objects is
+            // decidable from the log; on a meta diff, print the confidence
+            // delta magnitude.
+            if !sameCits {
+                let now = a.citations.map { String(describing: $0) }.sorted()
+                print("PARITY DIFF citations —\n  baseline:\n    " + old.citations.joined(separator: "\n    ")
+                      + "\n  now:\n    " + now.joined(separator: "\n    "))
+            }
+            if a.confidence.value != old.confidence {
+                print("PARITY DIFF confidence — baseline=\(old.confidence) now=\(a.confidence.value) Δ=\(String(format: "%+.4f", a.confidence.value - old.confidence))")
+            }
+            if a.intentKind != old.intentKind || a.refused != old.refused {
+                print("PARITY DIFF intent/refusal — baseline=\(old.intentKind ?? "nil")/\(old.refused) now=\(a.intentKind ?? "nil")/\(a.refused)")
             }
         }
         await state.shutdown()

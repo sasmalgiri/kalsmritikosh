@@ -67,12 +67,22 @@ struct BaselineCaptureHarness {
         let seconds: Double
         let embeddingsPerSecond: Double
         let estGBPerHour: Double
+        /// Which provider actually served (disposition 1: the rc0 artifact's
+        /// dim=300 was CapabilityResolvedEmbedder.dimension — pinned to the
+        /// NLEmbedder fallback — not the provider that answered). Optional so
+        /// the rc0 artifact still decodes.
+        let providerID: String?
     }
     struct Header: Codable {
         let treeHash: String
         let schemaVersion: Int
         let capturedAtISO: String
         let dbCopyRowCounts: [String: Int]
+        /// True when the capture awaited drain-quiescence + a discarded
+        /// warm-up ask before the question set — the STEADY-STATE baseline
+        /// (I-6 splits first-answer-after-launch vs steady-state). Optional
+        /// so the rc0 (unquiesced, first-answer) artifact still decodes.
+        let quiesced: Bool?
     }
     struct Artifact: Codable {
         let header: Header
@@ -139,6 +149,19 @@ struct BaselineCaptureHarness {
             return
         }
 
+        // 2b) Quiesce: drain enrichment to empty, then absorb the boot race
+        //     (HNSW rebuild, model loads, QueryPriorityGate) with a discarded
+        //     warm-up ask. The question set below then measures STEADY-STATE.
+        let quiesce = ProcessInfo.processInfo.environment["BASELINE_QUIESCE"] == "1"
+        if quiesce {
+            let t0 = Date()
+            _ = await state.enrichmentDrainer?.drainAll()
+            _ = await state.brain.answer(
+                question: "warmup discard",
+                access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            print("BASELINE QUIESCE: drainAll + warm-up ask took \(String(format: "%.1f", Date().timeIntervalSince(t0)))s")
+        }
+
         // 3) Ask the fixed set through the exact UI entry path.
         var records: [Record] = []
         for q in Self.questions {
@@ -160,25 +183,40 @@ struct BaselineCaptureHarness {
             print("BASELINE Q: \(q)\n         → refused=\(a.refused) conf=\(String(format: "%.2f", a.confidence.value)) secs=\(String(format: "%.1f", secs)) text=\(a.answerText ?? "nil")")
         }
 
-        // 4) Drain measurement (spike c) — time the resolved embedder over a fixed
-        //    sample of real chunk texts. Records which embedder answered (dimension).
+        // 4) Drain measurement (spike c) — time PRODUCTION's embedder over a
+        //    fixed sample of real chunk texts, recording the provider that
+        //    actually served. Disposition 1: the rc0 run went through
+        //    CapabilityResolvedEmbedder, whose `dimension` is pinned to the
+        //    NLEmbedder fallback (300) no matter who answers — the label was
+        //    wrong, not necessarily the timing. Pin to CoreMLEmbedderProvider
+        //    (bge-small.v1, what the live ledger's 9,632 vectors carry) and
+        //    fall back honestly.
         var drain: Drain? = nil
-        if let caps = state.capabilities {
+        do {
             let sample = (try? await ChunksRepository(database: Database(url: copyURL)).sample(limit: 200)) ?? []
             let texts = sample.map(\.text).filter { !$0.isEmpty }
             if !texts.isEmpty {
-                let embedder = CapabilityResolvedEmbedder(capabilities: caps)
-                let dim = await embedder.dimension
                 let bytes = texts.reduce(0) { $0 + $1.utf8.count }
+                let bge = CoreMLEmbedderProvider()
+                var vectors: [[Float]] = []
+                var providerID = "unresolved"
                 let t0 = Date()
-                _ = await embedder.embedBatch(texts)
+                if await bge.isAvailable(), let v = try? await bge.embedBatch(texts: texts) {
+                    vectors = v
+                    providerID = "bge-small.v1"
+                } else {
+                    vectors = await NLEmbedder().embedBatch(texts)
+                    providerID = "apple.nl.v1(fallback)"
+                }
                 let secs = Date().timeIntervalSince(t0)
+                let dim = vectors.first?.count ?? 0
                 let eps = secs > 0 ? Double(texts.count) / secs : 0
                 let gbph = secs > 0 ? (Double(bytes) / secs) * 3600.0 / 1_000_000_000.0 : 0
                 drain = Drain(embedderDimension: dim, sampleCount: texts.count,
                               sourceBytes: bytes, seconds: secs,
-                              embeddingsPerSecond: eps, estGBPerHour: gbph)
-                print("BASELINE DRAIN: dim=\(dim) sample=\(texts.count) secs=\(String(format: "%.2f", secs)) eps=\(String(format: "%.1f", eps)) estGB/h=\(String(format: "%.3f", gbph))")
+                              embeddingsPerSecond: eps, estGBPerHour: gbph,
+                              providerID: providerID)
+                print("BASELINE DRAIN: provider=\(providerID) dim=\(dim) sample=\(texts.count) secs=\(String(format: "%.2f", secs)) eps=\(String(format: "%.1f", eps)) estGB/h=\(String(format: "%.3f", gbph))")
             }
         }
 
@@ -190,7 +228,8 @@ struct BaselineCaptureHarness {
             treeHash: Self.treeHash,
             schemaVersion: SchemaMigrations.latestVersion,
             capturedAtISO: iso.string(from: Date()),
-            dbCopyRowCounts: counts)
+            dbCopyRowCounts: counts,
+            quiesced: quiesce)
         let artifact = Artifact(header: header, records: records, drain: drain)
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys, .prettyPrinted]
