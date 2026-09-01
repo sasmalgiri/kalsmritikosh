@@ -89,6 +89,22 @@ struct SourceFourDiagnosticTests {
         // questions ×3 — scoping whether the varying-integer class touches
         // answerable paths or only the out-of-scope corner. The component
         // that moves when the confidence moves NAMES source #4.
+        // Pre-C probe (owner binding): the live ledger has ZERO memory_objects,
+        // so the +1 distinct source between asks is written DURING the run —
+        // name the writer TABLE by diffing row counts around every ask.
+        let watched = ["knowledge_objects", "memory_objects", "generic_facts",
+                       "events", "chunks", "entities", "answer_revision_events",
+                       "memory_changes"]
+        func tableCounts() async -> [String: Int] {
+            var out: [String: Int] = [:]
+            for t in watched {
+                if let n = try? await state.database?.query("SELECT COUNT(*) FROM \(t)", []).first?.int(0) {
+                    out[t] = Int(n)
+                }
+            }
+            return out
+        }
+        var prevCounts = await tableCounts()
         let questions = BaselineCaptureHarness.questions
         for q in questions {
             var bits: [UInt64] = []
@@ -96,6 +112,12 @@ struct SourceFourDiagnosticTests {
                 let a = await state.brain.answer(question: q,
                                                  access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
                 bits.append(a.confidence.value.bitPattern)
+                let now = await tableCounts()
+                let deltas = now.compactMap { k, v -> String? in
+                    let d = v - (prevCounts[k] ?? v); return d != 0 ? "\(k)+\(d)" : nil
+                }.sorted()
+                if !deltas.isEmpty { print("S4 WRITER ask-delta q=\"\(q.prefix(28))\"[\(i)]: \(deltas.joined(separator: " "))") }
+                prevCounts = now
                 let r = a.report
                 print("S4 COMP q=\"\(q.prefix(28))\" ask=\(i) conf=\(a.confidence.value)"
                       + " dropped=\(r?.droppedUnverifiable ?? -1)"

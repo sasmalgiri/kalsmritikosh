@@ -256,6 +256,13 @@ struct FixtureRig {
     let retriever: HybridRetriever
     let verifier: EvidenceVerifier
     let dir: URL
+    let coordinator: IngestCoordinator
+
+    /// Ingest an additional document into the rig (C-i fixture seeds a
+    /// decoy parent object the question under test never retrieves).
+    func ingest(fileAt url: URL) async throws {
+        _ = try await coordinator.ingest(fileAt: url)
+    }
 
     static func make(document: String, name: String) async throws -> FixtureRig {
         let dir = FileManager.default.temporaryDirectory
@@ -295,7 +302,8 @@ struct FixtureRig {
             objects: objects,
             genericFacts: GenericFactRepository(database: db))
         return FixtureRig(db: db, retriever: retriever,
-                          verifier: EvidenceVerifier(answerabilityMinRetrievalScore: 0.0), dir: dir)
+                          verifier: EvidenceVerifier(answerabilityMinRetrievalScore: 0.0), dir: dir,
+                          coordinator: coordinator)
     }
 
     func answer(_ question: String) async throws -> VerifiedAnswer {

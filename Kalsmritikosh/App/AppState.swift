@@ -2445,6 +2445,12 @@ public final class AppState {
             self.backgroundMemoryDistiller = backgroundDistiller
             self.brain = brain
             self.ingest = ingest
+            // UNIT C-ii — the receipt's ledger-state stamp reads SQLite's
+            // data_version (a mutation counter, nearly free) at ask start.
+            await brain.setLedgerStateProvider { [weak database] in
+                guard let database else { return nil }
+                return (try? await database.query("PRAGMA data_version;", []))?.first?.int(0)
+            }
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
 

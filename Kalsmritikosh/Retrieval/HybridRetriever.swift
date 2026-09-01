@@ -185,20 +185,21 @@ public actor HybridRetriever: Retriever {
             usedLayers.append(layer)
             switch layer {
             case .memory:
+                // UNIT C-i (owner ruling 2026-09-01) — PROVENANCE-CLASS LAW:
+                // artifacts derived from the answer path's own output
+                // ("exhaust": distilled MemoryObjects, answer commits, and
+                // any future self-writer) NEVER enter the answer path's
+                // candidate set. Candidacy is the enforcement point because
+                // an exhaust row crossing a top-K boundary displaces a real
+                // chunk and flips TEXT, not just confidence — the measured
+                // defect was self-corroboration: a memory distilled from
+                // ask N's answer hydrated its keyEventIDs into ask N+1's
+                // evidence (+1 distinctSourceObjectIDs, the 0.002 lattice).
+                // The layer stays for routing; it contributes NOTHING
+                // evidentiary. Memory helping future answers is an
+                // explicitly non-evidentiary channel (Phase-3+ design).
                 let memoryHits = try await memoryLayer(intent)
                 collectedMemoryNarratives.append(contentsOf: memoryHits.map(\.narrative))
-                // Hydrate the events behind the memory hits so downstream
-                // experts have grounded evidence. Don't short-circuit
-                // entirely — the brain wants both the narrative and the
-                // raw events the experts can reason over.
-                if !memoryHits.isEmpty {
-                    collectedSummaries.append(contentsOf: memoryHits.map(memoryAsSummary))
-                    let allEventIDs = memoryHits.flatMap(\.keyEventIDs)
-                    if !allEventIDs.isEmpty {
-                        let hydrated = try await events.findByIDs(allEventIDs)
-                        collectedEvents.append(contentsOf: hydrated)
-                    }
-                }
             case .timeline:
                 // Always let subsequent layers contribute. Even when a
                 // healthy event set exists, entity hydration matters for
@@ -1025,6 +1026,8 @@ public actor HybridRetriever: Retriever {
 
     // MARK: - Helpers
 
+    /// UNIT C-i: retired from the answer path (exhaust must not become a
+    /// Summary candidate). Kept for non-evidentiary surfaces (Phase-3 design).
     private func memoryAsSummary(_ memory: MemoryObject) -> Summary {
         Summary(
             level: .knowledgeBase,

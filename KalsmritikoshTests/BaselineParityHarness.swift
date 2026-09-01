@@ -93,7 +93,12 @@ struct BaselineParityHarness {
                 rung1TextIdentical = false
             }
             let speedup = secs > 0 ? old.secondsWallClock / secs : 0
-            print("PARITY Q: \(old.question)\n       → text=\(sameText ? "IDENTICAL" : "DIFFERS") body=\(sameBody ? "IDENTICAL" : "DIFFERS") citations=\(sameCits ? "IDENTICAL" : "DIFFERS") meta=\(sameMeta ? "IDENTICAL" : "DIFFERS") | \(String(format: "%.1f", old.secondsWallClock))s → \(String(format: "%.1f", secs))s (\(String(format: "%.0f", speedup))×)")
+            // UNIT C-ii: the contract is (question, stamped state, pinned
+            // clock) → same bytes. Record the stamp so comparisons are
+            // like-stamp-to-like-stamp; a stamp mismatch EXPLAINS a diff
+            // rather than indicting determinism.
+            let stamp = a.ledgerState.map(String.init) ?? "nil"
+            print("PARITY Q: \(old.question)\n       → text=\(sameText ? "IDENTICAL" : "DIFFERS") body=\(sameBody ? "IDENTICAL" : "DIFFERS") citations=\(sameCits ? "IDENTICAL" : "DIFFERS") meta=\(sameMeta ? "IDENTICAL" : "DIFFERS") ledgerState=\(stamp) | \(String(format: "%.1f", old.secondsWallClock))s → \(String(format: "%.1f", secs))s (\(String(format: "%.0f", speedup))×)")
             if !sameText {
                 print("PARITY DIFF text —\n  baseline: \(old.answerText ?? "nil")\n  now:      \(a.answerText ?? "nil")")
             }

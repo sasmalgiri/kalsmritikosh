@@ -134,6 +134,14 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// only. Conformance observation requires this ID, never the state name.
     public let ledgerAnswerID: UUID?
 
+    /// UNIT C-ii (owner ruling 2026-09-01) — the ledger-state stamp: the
+    /// SQLite data_version observed at ASK START. The determinism contract
+    /// for a mutating ledger reads: same question + same stamped state +
+    /// pinned clock → same bytes; parity compares like-stamp-to-like-stamp.
+    /// Mutable so MasterBrain stamps the terminal answer without touching
+    /// every construction site. nil when no provider is wired (legacy paths).
+    public var ledgerState: Int64?
+
     public nonisolated init(
         body: String,
         answerText: String? = nil,
@@ -178,7 +186,7 @@ public struct VerifiedAnswer: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState, ledgerAnswerID
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState, ledgerAnswerID, ledgerState
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -197,6 +205,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.reasoningTrace = try c.decodeIfPresent(ReasoningTrace.self, forKey: .reasoningTrace)
         self.answerState = try c.decodeIfPresent(AnswerState.self, forKey: .answerState) ?? .unknown
         self.ledgerAnswerID = try c.decodeIfPresent(UUID.self, forKey: .ledgerAnswerID)
+        self.ledgerState = try c.decodeIfPresent(Int64.self, forKey: .ledgerState)
     }
 
     public struct Citation: Codable, Sendable, Hashable {

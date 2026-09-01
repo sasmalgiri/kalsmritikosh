@@ -1268,18 +1268,32 @@ public actor MasterBrain {
         )
     }
 
+    /// UNIT C-ii — reads the ledger's SQLite data_version so the receipt can
+    /// carry the ask-start ledger state. Wired by AppState at boot; nil in
+    /// rigs that don't need the stamp.
+    public var ledgerStateProvider: (@Sendable () async -> Int64?)?
+    public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
+        ledgerStateProvider = p
+    }
+
     public func answer(
         question: String,
         context: LLMRequestContext? = nil,
         access: SensitiveAccessContext,
         originScopeID: UUID? = nil
     ) async -> VerifiedAnswer {
+        // C-ii: stamp the ledger state observed at ASK START — the receipt's
+        // determinism contract is (question, stamped state, pinned clock).
+        let askStartLedgerState = await ledgerStateProvider?()
         for await update in answerStream(question: question, context: context, access: access,
                                          originScopeID: originScopeID) {
             // AEE-M2 — the terminal states are verifiedFinal (locked, durably committed) and
             // incomplete (honest failure). Both carry the VerifiedAnswer for legacy callers.
             switch update {
-            case .verifiedFinal(let answer), .incomplete(let answer): return answer
+            case .verifiedFinal(let answer), .incomplete(let answer):
+                var stamped = answer
+                stamped.ledgerState = askStartLedgerState
+                return stamped
             default: continue
             }
         }
