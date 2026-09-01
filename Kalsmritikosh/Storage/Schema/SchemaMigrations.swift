@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 119
+    public static let latestVersion = 120
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -650,7 +650,8 @@ public enum SchemaMigrations {
         (116, v116),
         (117, v117),
         (118, v118),
-        (119, v119)
+        (119, v119),
+        (120, v120)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6344,5 +6345,32 @@ public enum SchemaMigrations {
     // acceptable as case phase evidence — fail-closed.
     private static let v119: String = """
     ALTER TABLE workbench_datasets ADD COLUMN origin_case_id TEXT;
+    """
+
+    // MARK: - v120 — the v1.1 Stage-1 column batch (V1, one migration)
+    //
+    // All nullable/advisory; NO behavior change in v120 itself (V1 spec).
+    // - producer_version on facts/entities/events: NULL = v0 — absence is a
+    //   version; the SourceReprocessingCoordinator's staleness predicate
+    //   selects exactly the legacy set per producer once producers register.
+    // - chunk_version + embedding_model_version on chunks: the Stage-2
+    //   re-chunk of the 141 oversized chunks and any embedder swap become
+    //   versioned rewrites instead of erase/re-ingest.
+    // - B-1 bi-temporal on generic_facts: supersession is recorded, never
+    //   averaged ("X until DATE, then Y").
+    // - exhaust_class on knowledge_objects: the provenance-class flag (unit
+    //   C-i law) — future answer-path writers self-mark; evidentiary
+    //   surfaces filter on the class, so pipe #3 is excluded by
+    //   construction. NULL = primary source material.
+    private static let v120: String = """
+    ALTER TABLE generic_facts ADD COLUMN producer_version INTEGER;
+    ALTER TABLE generic_facts ADD COLUMN valid_at REAL;
+    ALTER TABLE generic_facts ADD COLUMN invalid_at REAL;
+    ALTER TABLE generic_facts ADD COLUMN superseded_by TEXT;
+    ALTER TABLE entities ADD COLUMN producer_version INTEGER;
+    ALTER TABLE events ADD COLUMN producer_version INTEGER;
+    ALTER TABLE chunks ADD COLUMN chunk_version INTEGER;
+    ALTER TABLE chunks ADD COLUMN embedding_model_version TEXT;
+    ALTER TABLE knowledge_objects ADD COLUMN exhaust_class TEXT;
     """
 }

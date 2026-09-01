@@ -121,7 +121,7 @@ struct MigrationMatrixTests {
     @Test("The migration list is gap-free and a fresh database reaches the latest schema")
     func freshDatabaseReachesLatest() async throws {
         #expect(SchemaMigrations.migrationListIsConsistent)     // 1...latestVersion, gap-free
-        #expect(SchemaMigrations.latestVersion == 119)          // v118 self-heal recovery + answer origin (twelfth audit) · v119 dataset case origin (thirteenth audit)
+        #expect(SchemaMigrations.latestVersion == 120)          // v119 dataset case origin (thirteenth audit) · v120 v1.1 Stage-1 column batch (producer_version, chunk_version, embedding_model_version, B-1 bitemporal, exhaust_class)
         let db = try await MigrationFixtureBuilder.database(atVersion: 0)   // unmigrated
         #expect(try await userVersion(db) == 0)
         try await SchemaMigrations.migrate(db)                  // full migrate
