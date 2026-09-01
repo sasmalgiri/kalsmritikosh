@@ -27,8 +27,9 @@ public actor EventsRepository {
                     kind: e.kind)
                 : e.status
             try await database.exec("""
-            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO events (id, kind, date, end_date, title, summary, source_object_id, confidence, attributes_json, date_confidence, quality_tier, date_precision, status,
+                                producer_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, \(DerivedProducerVersions.events));
             """, [
                 .uuid(e.id),
                 .text(e.kind.rawValue),

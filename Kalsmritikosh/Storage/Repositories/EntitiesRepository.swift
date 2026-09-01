@@ -725,8 +725,9 @@ public actor EntitiesRepository {
         // far: 'T1' < 'T2' < 'T3' lexicographically, so MIN selects
         // T1 over T2/T3. Same row, best-known tier.
         let rows = try await database.query("""
-        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json, quality_tier)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json, quality_tier,
+                              producer_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, \(DerivedProducerVersions.entities))
         ON CONFLICT(kind, normalized) DO UPDATE SET
             confidence = max(entities.confidence, excluded.confidence),
             value = CASE WHEN excluded.confidence > entities.confidence
