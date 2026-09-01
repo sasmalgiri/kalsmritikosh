@@ -107,7 +107,11 @@ struct SourceFourDiagnosticTests {
             return out
         }
         var prevCounts = await tableCounts()
-        let questions = BaselineCaptureHarness.questions
+        // Unit-E permutation axis: anomaly follows ask INDEX = consumption;
+        // follows the QUESTION regardless of position = conditional sampling.
+        let questions = ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
+            ? BaselineCaptureHarness.questions.reversed().map { $0 }
+            : BaselineCaptureHarness.questions
         for q in questions {
             var bits: [UInt64] = []
             for i in 0..<3 {
@@ -120,6 +124,9 @@ struct SourceFourDiagnosticTests {
                 }.sorted()
                 if !deltas.isEmpty { print("S4 WRITER ask-delta q=\"\(q.prefix(28))\"[\(i)]: \(deltas.joined(separator: " "))") }
                 prevCounts = now
+                // Unit-E discriminator: identical inter-ask procedure to the
+                // capture — async writers land BEFORE the next ask.
+                await BaselineCaptureHarness.settleBetweenAsks(db: state.database)
                 let r = a.report
                 print("S4 COMP q=\"\(q.prefix(28))\" ask=\(i) conf=\(a.confidence.value)"
                       + " dropped=\(r?.droppedUnverifiable ?? -1)"

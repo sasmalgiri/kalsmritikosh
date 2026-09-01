@@ -89,6 +89,16 @@ public struct FoundationModelsProvider: ModelProvider {
             let instructions = options.systemPrompt ?? "You are Kalsmritikosh, a precise knowledge-OS assistant."
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: Prompt(prompt))
+            // Unit-E discriminator (env-gated, inert in production): identical
+            // prompt hashes with differing output hashes = SAMPLING shaping
+            // downstream state; differing prompt hashes = upstream state.
+            // Sessions are per-call (fresh above), so transcript state is
+            // structurally excluded — this log adjudicates the remainder.
+            if ProcessInfo.processInfo.environment["KALSMRITIKOSH_FM_CALL_LOG"] == "1" {
+                var ph = Hasher(); ph.combine(prompt); ph.combine(instructions)
+                var oh = Hasher(); oh.combine(response.content)
+                print("FMCALL prompt=\(String(UInt(bitPattern: ph.finalize()), radix: 16)) output=\(String(UInt(bitPattern: oh.finalize()), radix: 16)) promptLen=\(prompt.count) outLen=\(response.content.count)")
+            }
             return response.content
         }
         throw ModelProviderError.unavailable(providerID: id)

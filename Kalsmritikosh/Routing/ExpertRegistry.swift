@@ -17,14 +17,17 @@ public actor ExpertRegistry {
         experts[expert.id] = expert
     }
 
+    // UNIT E: the registry is a Dictionary — unsorted `values` handed the
+    // expert lineup to callers in hash order (arbitrary order given
+    // authority, at the lineup itself). Stable content key = expert id.
     public func all() -> [any Expert] {
-        Array(experts.values)
+        experts.values.sorted { $0.id < $1.id }
     }
 
     public func experts(for intent: UserIntent) -> [any Expert] {
         let required = domains(for: intent)
-        if required.isEmpty { return Array(experts.values) }
-        return experts.values.filter { !$0.domains.isDisjoint(with: required) }
+        if required.isEmpty { return all() }
+        return all().filter { !$0.domains.isDisjoint(with: required) }
     }
 
     public func expert(byID id: String) -> (any Expert)? {
