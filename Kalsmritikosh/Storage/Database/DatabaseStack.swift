@@ -153,6 +153,7 @@ public actor Database {
     }
 
     deinit {
+        if let snapshotHandle { sqlite3_close_v2(snapshotHandle) }
         if let rawHandle {
             // v2 schedules cleanup if any statements are still alive;
             // v1 would leak the handle outright in that case.
@@ -167,6 +168,14 @@ public actor Database {
     /// warning per open fd, and ongoing queries get `invalidated open
     /// fd: N` errors. Idempotent: subsequent calls become no-ops.
     public func close() {
+        // C-ii: release the snapshot connection too — deleting a VACUUM
+        // copy while it stays open logs "vnode unlinked while in use".
+        if let snap = snapshotHandle {
+            if askSnapshotActive { try? Self.execRaw(handle: snap, sql: "COMMIT;") }
+            askSnapshotActive = false
+            sqlite3_close_v2(snap)
+            snapshotHandle = nil
+        }
         guard let handle = rawHandle else { return }
         sqlite3_close_v2(handle)
         rawHandle = nil

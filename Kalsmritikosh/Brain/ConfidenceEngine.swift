@@ -174,7 +174,17 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
         }
 
         let sourceCount = claims.reduce(0) { $0 + $1.supportingObjectIDs.count }
-        let distinctSources = Set(claims.flatMap(\.supportingObjectIDs)).count
+        let distinctSourceSet = Set(claims.flatMap(\.supportingObjectIDs))
+        let distinctSources = distinctSourceSet.count
+        // Adjudication instrument (seal-#3 residual): when enabled, dump the
+        // full sorted distinct-source set so a ±1 count across runs resolves
+        // to the differing object's IDENTITY (exhaust-class → C-i coverage
+        // gap; legitimate → between-ask sequence race). Env-gated, inert in
+        // production.
+        if ProcessInfo.processInfo.environment["KALSMRITIKOSH_DUMP_SOURCES"] == "1" {
+            let ids = distinctSourceSet.map(\.uuidString).sorted().joined(separator: ",")
+            print("SOURCESET n=\(distinctSources) ids=\(ids)")
+        }
 
         let agreement = computeAgreement(claims)
         let contradictions = detectContradictions(claims)

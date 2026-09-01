@@ -59,6 +59,10 @@ struct BaselineCaptureHarness {
         /// Per-question wall-clock — the I-6 "before" latency table. This
         /// capture is the only chance to record the pre-fix cost.
         let secondsWallClock: Double
+        /// The ask-start ledger-state stamp (C-ii) — like-stamp comparison
+        /// is adjudicated per QUESTION, not per artifact. Optional so older
+        /// artifacts decode.
+        let ledgerState: Int64?
     }
     struct Drain: Codable {
         let embedderDimension: Int
@@ -121,6 +125,21 @@ struct BaselineCaptureHarness {
             if secs < threshold { return true }
         }
         return false
+    }
+
+    /// Poll the watched tables until two consecutive polls agree — async
+    /// between-ask writers have landed. Capped; sub-second when quiet.
+    static func settleBetweenAsks(db: Database?) async {
+        guard let db else { return }
+        var last = -1
+        for _ in 0..<60 {
+            let counts = (try? await db.liveQuery(
+                "SELECT (SELECT COUNT(*) FROM memory_objects) + (SELECT COUNT(*) FROM answer_revision_events) + (SELECT COUNT(*) FROM generic_facts) + (SELECT COUNT(*) FROM events)", []))?.first?.int(0)
+            let now = Int(counts ?? -2)
+            if now == last { return }
+            last = now
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
     }
 
     @Test("Capture rc13 answers on the real ledger → deterministic artifact")
@@ -213,7 +232,14 @@ struct BaselineCaptureHarness {
                 body: a.body,
                 citationCount: a.citations.count,
                 citations: a.citations.map { String(describing: $0) }.sorted(),
-                secondsWallClock: secs))
+                secondsWallClock: secs,
+                ledgerState: a.ledgerState))
+            // INTER-ASK SETTLE (adjudication step 2): the boot settle-loop
+            // principle extended to ask boundaries — async between-ask
+            // writers (distillation, revision commits) land BEFORE the next
+            // ask starts, so stamp sequences are run-stable and like-stamp
+            // comparison is automatic.
+            await Self.settleBetweenAsks(db: state.database)
             print("BASELINE Q: \(q)\n         → refused=\(a.refused) conf=\(String(format: "%.2f", a.confidence.value)) secs=\(String(format: "%.1f", secs)) text=\(a.answerText ?? "nil")")
         }
 

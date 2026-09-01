@@ -94,7 +94,15 @@ struct BaselineParityHarness {
             // like-stamp-to-like-stamp; a stamp mismatch EXPLAINS a diff
             // rather than indicting determinism.
             let stamp = a.ledgerState.map(String.init) ?? "nil"
-            print("PARITY Q: \(old.question)\n       → text=\(sameText ? "IDENTICAL" : "DIFFERS") body=\(sameBody ? "IDENTICAL" : "DIFFERS") citations=\(sameCits ? "IDENTICAL" : "DIFFERS") meta=\(sameMeta ? "IDENTICAL" : "DIFFERS") ledgerState=\(stamp) | \(String(format: "%.1f", old.secondsWallClock))s → \(String(format: "%.1f", secs))s (\(String(format: "%.0f", speedup))×)")
+            // Like-stamp adjudication: when the sealed record carries its
+            // ask-start stamp, a diff at UNLIKE stamps is explained (the
+            // worlds differed), a diff at LIKE stamps indicts determinism.
+            let sealStamp = old.ledgerState.map(String.init) ?? "unrecorded"
+            let likeStamp = (old.ledgerState != nil) ? (a.ledgerState == old.ledgerState ? "LIKE" : "UNLIKE") : "n/a"
+            print("PARITY Q: \(old.question)\n       → text=\(sameText ? "IDENTICAL" : "DIFFERS") body=\(sameBody ? "IDENTICAL" : "DIFFERS") citations=\(sameCits ? "IDENTICAL" : "DIFFERS") meta=\(sameMeta ? "IDENTICAL" : "DIFFERS") ledgerState=\(stamp) vs seal=\(sealStamp) [\(likeStamp)] | \(String(format: "%.1f", old.secondsWallClock))s → \(String(format: "%.1f", secs))s (\(String(format: "%.0f", speedup))×)")
+            // Inter-ask settle: identical procedure to the capture, so the
+            // stamp sequences are run-stable and comparable.
+            await BaselineCaptureHarness.settleBetweenAsks(db: state.database)
             if !sameText {
                 print("PARITY DIFF text —\n  baseline: \(old.answerText ?? "nil")\n  now:      \(a.answerText ?? "nil")")
             }
