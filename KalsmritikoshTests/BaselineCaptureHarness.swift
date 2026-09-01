@@ -99,6 +99,25 @@ struct BaselineCaptureHarness {
         let drain: Drain?
     }
 
+    /// QUIESCENCE-IN-FACT, shared by capture/parity/probe: drain enrichment,
+    /// then repeat the discarded warm-up ask until its wall clock settles
+    /// under `threshold` (boot rebuild no longer starving retrieval), capped
+    /// at `maxRounds`. Returns whether it settled.
+    static func quiesceInFact(state: AppState, label: String,
+                              threshold: TimeInterval = 10, maxRounds: Int = 12) async -> Bool {
+        _ = await state.enrichmentDrainer?.drainAll()
+        for round in 0..<maxRounds {
+            let t0 = Date()
+            _ = await state.brain.answer(
+                question: "warmup discard",
+                access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+            let secs = Date().timeIntervalSince(t0)
+            print("\(label) QUIESCE round \(round): warm-up \(String(format: "%.1f", secs))s")
+            if secs < threshold { return true }
+        }
+        return false
+    }
+
     @Test("Capture rc13 answers on the real ledger → deterministic artifact")
     func captureBaseline() async throws {
         // Operator-invoked ONLY: without the tree-hash stamp this must skip.
@@ -158,17 +177,18 @@ struct BaselineCaptureHarness {
             return
         }
 
-        // 2b) Quiesce: drain enrichment to empty, then absorb the boot race
-        //     (HNSW rebuild, model loads, QueryPriorityGate) with a discarded
-        //     warm-up ask. The question set below then measures STEADY-STATE.
+        // 2b) QUIESCENCE-IN-FACT (owner redefinition, per the 301s stage-table
+        //     spec): drainAll() returns BEFORE the boot rebuild tasks finish
+        //     (HNSW/community/causal — the in-RAM writers class-4b named), so
+        //     a single warm-up does not guarantee quiescence. True quiescence
+        //     is SELF-MEASURED: repeat the discarded warm-up ask until its
+        //     wall clock falls under the settled threshold — boot work no
+        //     longer starves foreground retrieval — capped so a regression
+        //     can't hang the harness.
         let quiesce = ProcessInfo.processInfo.environment["BASELINE_QUIESCE"] == "1"
         if quiesce {
-            let t0 = Date()
-            _ = await state.enrichmentDrainer?.drainAll()
-            _ = await state.brain.answer(
-                question: "warmup discard",
-                access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-            print("BASELINE QUIESCE: drainAll + warm-up ask took \(String(format: "%.1f", Date().timeIntervalSince(t0)))s")
+            let settled = await Self.quiesceInFact(state: state, label: "BASELINE")
+            if !settled { Issue.record("quiescence did not settle within the round cap — boot work still starving retrieval") }
         }
 
         // 3) Ask the fixed set through the exact UI entry path.

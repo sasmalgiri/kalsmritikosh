@@ -67,12 +67,8 @@ struct BaselineParityHarness {
         // + a discarded warm-up ask absorbs the boot race (disposition 2 —
         // whatever wobble survives quiescence is product-level nondeterminism).
         if ProcessInfo.processInfo.environment["BASELINE_QUIESCE"] == "1" {
-            let t0 = Date()
-            _ = await state.enrichmentDrainer?.drainAll()
-            _ = await state.brain.answer(
-                question: "warmup discard",
-                access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
-            print("PARITY QUIESCE: drainAll + warm-up ask took \(String(format: "%.1f", Date().timeIntervalSince(t0)))s")
+            let settled = await BaselineCaptureHarness.quiesceInFact(state: state, label: "PARITY")
+            if !settled { Issue.record("quiescence did not settle within the round cap") }
         }
 
         var mismatches = 0

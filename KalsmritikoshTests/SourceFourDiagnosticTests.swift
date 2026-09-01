@@ -82,9 +82,11 @@ struct SourceFourDiagnosticTests {
         let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: copyURL)
         guard case .ready = state.phase else { await state.shutdown(); return }
-        _ = await state.enrichmentDrainer?.drainAll()
-        _ = await state.brain.answer(question: "warmup discard",
-                                     access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
+        // Quiescence-in-fact — the ×3 probe below is the GRADER for the
+        // transferred 4b prediction: post-true-quiescence, 1-of-3 on all
+        // seven; anything less is the STOP that names the residual.
+        let settled = await BaselineCaptureHarness.quiesceInFact(state: state, label: "S4")
+        if !settled { Issue.record("quiescence did not settle — probe would grade a moving target") }
         // Owner ruling: log ConfidenceReport components for ALL SEVEN
         // questions ×3 — scoping whether the varying-integer class touches
         // answerable paths or only the out-of-scope corner. The component

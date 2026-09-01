@@ -195,7 +195,14 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
 
         // Apply ingest-coverage multiplier per T10: while ingest is
         // incomplete, final confidence is multiplied by max(coverage, 0.5).
-        let combinedAdjusted = Confidence(combined.value * ingestFactor)
+        // CANONICAL ROUNDING AT SOURCE (nondeterminism class 5, owner
+        // pre-ruling): floating-point accumulation ORDER can shift the
+        // scalar by ~1 ULP (~1e-16) run-to-run at identical evidence — the
+        // graded probe's last residual. Round to a stated precision, 1e-12:
+        // nine orders below any semantic step (slot floors move in 1e-3),
+        // four above ULP noise. Representation, not tolerance — comparisons
+        // stay exact equality.
+        let combinedAdjusted = Confidence(((combined.value * ingestFactor) * 1e12).rounded() / 1e12)
 
         return ConfidenceReport(
             combined: combinedAdjusted,
