@@ -142,6 +142,15 @@ public struct VerifiedAnswer: Codable, Sendable {
     /// every construction site. nil when no provider is wired (legacy paths).
     public var ledgerState: Int64?
 
+    /// UNIT D — the Resolution Boundary's receipt: the question as RESOLVED
+    /// by the session layer (reference resolution, ellipsis expansion) before
+    /// retrieval. Interpretation is a source; A-1 covers it. Today resolution
+    /// is the identity (no rewriter exists yet), so this records the question
+    /// verbatim; when a resolver lands, its output lands HERE, and everything
+    /// downstream stays a pure function of (resolvedQuestion, ledgerState,
+    /// pinned clock).
+    public var resolvedQuestion: String?
+
     public nonisolated init(
         body: String,
         answerText: String? = nil,
@@ -186,7 +195,7 @@ public struct VerifiedAnswer: Codable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState, ledgerAnswerID, ledgerState
+        case body, answerText, intentKind, citations, confidence, contradictions, refused, refusalReason, report, walkSteps, source, reasoningTrace, answerState, ledgerAnswerID, ledgerState, resolvedQuestion
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -206,6 +215,7 @@ public struct VerifiedAnswer: Codable, Sendable {
         self.answerState = try c.decodeIfPresent(AnswerState.self, forKey: .answerState) ?? .unknown
         self.ledgerAnswerID = try c.decodeIfPresent(UUID.self, forKey: .ledgerAnswerID)
         self.ledgerState = try c.decodeIfPresent(Int64.self, forKey: .ledgerState)
+        self.resolvedQuestion = try c.decodeIfPresent(String.self, forKey: .resolvedQuestion)
     }
 
     public struct Citation: Codable, Sendable, Hashable {

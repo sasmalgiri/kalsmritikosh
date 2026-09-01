@@ -1293,6 +1293,9 @@ public actor MasterBrain {
             case .verifiedFinal(let answer), .incomplete(let answer):
                 var stamped = answer
                 stamped.ledgerState = askStartLedgerState
+                // UNIT D — resolution is currently the identity; when a
+                // session-layer rewriter lands, its output replaces this.
+                stamped.resolvedQuestion = question
                 return stamped
             default: continue
             }

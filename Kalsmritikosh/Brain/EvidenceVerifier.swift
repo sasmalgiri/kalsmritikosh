@@ -430,18 +430,21 @@ public struct EvidenceVerifier: Verifier {
                     candidates: snippets
                 )
             } else if let reranker {
-                // Default: Ollama LLM prompted scoring with intent context.
-                let snapshot = await sessionProfile?.snapshot()
-                let recentTurns: [String] = snapshot
-                    .map { $0.recentTurns.reversed().map(\.rawQuestion) }
-                    ?? []
-                let mentioned: [String] = snapshot?.mentionedEntities ?? []
+                // UNIT D — THE RESOLUTION BOUNDARY (owner ruling 2026-09-01):
+                // session state may REWRITE THE QUESTION, never touch the
+                // evidence. Downstream of resolution the answer is a pure
+                // function of (resolved question, stamped ledgerState, pinned
+                // clock), so session-derived signals are removed from every
+                // scoring surface — including this non-release Ollama branch,
+                // which was the session's only downstream read. Conversation
+                // context belongs in the question-resolution step upstream of
+                // retrieval, receipted via VerifiedAnswer.resolvedQuestion.
                 let context = Reranker.Context(
                     intentKind: intent.kind.rawValue,
                     questionShape: Reranker.questionShape(intent.rawQuestion),
                     keyEntities: intent.entityHints,
-                    recentTurns: recentTurns,
-                    mentionedEntities: mentioned
+                    recentTurns: [],
+                    mentionedEntities: []
                 )
                 scores = await reranker.score(
                     question: intent.rawQuestion,
