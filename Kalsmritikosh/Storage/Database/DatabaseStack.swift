@@ -38,8 +38,68 @@ public actor Database {
     /// Repository writes that wrap a multi-await BEGIN/COMMIT block
     /// MUST acquire the gate via `beginTransaction()` first, releasing
     /// it via `commitTransaction()` or `rollbackTransaction()`.
-    private var transactionInProgress = false
+    internal var transactionInProgress = false
     private var transactionWaiters: [CheckedContinuation<Void, Never>] = []
+
+    // MARK: - Ask snapshot (unit C-ii read-split, owner bindings 2026-09-01)
+    //
+    // The answer path's evidence reads go through a SECOND, read-only WAL
+    // connection holding one read transaction per ask: in-flight asks see a
+    // stable world; writes (answer commits, distillation) land on the main
+    // connection and become visible BETWEEN asks, never during. The ledger
+    // commit read-back (lockVerifiedFinal validating its own row mid-ask)
+    // uses `liveQuery` explicitly — the ONLY sanctioned live read during a
+    // snapshot; the audit counter below catches any other (binding #4).
+    internal var snapshotHandle: OpaquePointer?
+    internal var askSnapshotActive = false
+    /// Nesting depth of active savepoints — savepoint-scoped reads route
+    /// live (read-your-own-writes), everything else snapshots during an ask.
+    internal var inSavepoint = 0
+    /// Completeness audit: live-connection reads issued while a snapshot is
+    /// active. Expected = the ledger read-backs only; anything else is a
+    /// silently reintroduced leak.
+    public private(set) var liveReadsDuringSnapshot = 0
+
+    public var isAskSnapshotActive: Bool { askSnapshotActive }
+
+    internal func noteLiveReadDuringSnapshot() { liveReadsDuringSnapshot += 1 }
+
+    /// Open (lazily) the read-only connection, begin one read transaction,
+    /// and return the ledger-state stamp read ON THE SNAPSHOT CONNECTION at
+    /// that instant (binding #3: the stamp and the snapshot are the same
+    /// moment by construction). nil when a snapshot is already active or
+    /// the connection cannot open — callers degrade to live reads.
+    public func beginAskSnapshot() -> Int64? {
+        guard !askSnapshotActive else { return nil }
+        if snapshotHandle == nil {
+            var db: OpaquePointer?
+            let flags: Int32 = SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX
+            guard sqlite3_open_v2(url.path, &db, flags, nil) == SQLITE_OK, let opened = db else {
+                sqlite3_close(db)
+                return nil
+            }
+            try? Self.execRaw(handle: opened, sql: "PRAGMA busy_timeout=30000;")
+            snapshotHandle = opened
+        }
+        guard let snap = snapshotHandle else { return nil }
+        guard (try? Self.execRaw(handle: snap, sql: "BEGIN;")) != nil else { return nil }
+        var stamp: Int64?
+        var stmt: OpaquePointer?
+        if sqlite3_prepare_v2(snap, "PRAGMA data_version;", -1, &stmt, nil) == SQLITE_OK, let prepared = stmt {
+            if sqlite3_step(prepared) == SQLITE_ROW { stamp = sqlite3_column_int64(prepared, 0) }
+            sqlite3_finalize(prepared)
+        }
+        askSnapshotActive = true
+        return stamp
+    }
+
+    /// Release the ask's read transaction — UNCONDITIONALLY safe (binding
+    /// #3: defer-style at ask end; a lingering read txn pins WAL growth).
+    public func endAskSnapshot() {
+        defer { askSnapshotActive = false }
+        guard askSnapshotActive, let snap = snapshotHandle else { return }
+        try? Self.execRaw(handle: snap, sql: "COMMIT;")
+    }
 
     public init(url: URL) throws {
         self.url = url
@@ -155,6 +215,12 @@ public actor Database {
         _ name: String,
         _ body: @Sendable (isolated Database) throws -> T
     ) throws -> T {
+        // UNIT C-ii: savepoint bodies are read-your-own-writes territory by
+        // definition (the ledger commit validates rows it just wrote), so
+        // reads inside them route LIVE even while an ask snapshot is active —
+        // the structural form of the "commit reads stay live" split.
+        inSavepoint += 1
+        defer { inSavepoint -= 1 }
         try execRaw("SAVEPOINT \(name);")
         do {
             let result = try body(self)

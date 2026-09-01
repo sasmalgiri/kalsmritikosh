@@ -1268,12 +1268,18 @@ public actor MasterBrain {
         )
     }
 
-    /// UNIT C-ii — reads the ledger's SQLite data_version so the receipt can
-    /// carry the ask-start ledger state. Wired by AppState at boot; nil in
-    /// rigs that don't need the stamp.
+    /// UNIT C-ii — the ask snapshot: `begin` opens the read-only snapshot
+    /// transaction and returns the ledger-state stamp read ON that
+    /// connection at that instant; `end` releases it unconditionally.
+    /// Wired by AppState at boot; nil in rigs that don't need the stamp
+    /// (they read live, unstamped — legacy behavior).
     public var ledgerStateProvider: (@Sendable () async -> Int64?)?
+    public var askSnapshotEnd: (@Sendable () async -> Void)?
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
         ledgerStateProvider = p
+    }
+    public func setAskSnapshotEnd(_ p: @escaping @Sendable () async -> Void) {
+        askSnapshotEnd = p
     }
 
     public func answer(
@@ -1291,6 +1297,9 @@ public actor MasterBrain {
             // incomplete (honest failure). Both carry the VerifiedAnswer for legacy callers.
             switch update {
             case .verifiedFinal(let answer), .incomplete(let answer):
+                // UNIT C-ii binding #3: release the snapshot unconditionally
+                // at ask end — a lingering read transaction pins WAL growth.
+                await askSnapshotEnd?()
                 var stamped = answer
                 stamped.ledgerState = askStartLedgerState
                 // UNIT D — resolution is currently the identity; when a
@@ -1300,6 +1309,7 @@ public actor MasterBrain {
             default: continue
             }
         }
+        await askSnapshotEnd?()
         // Stream finished without a terminal event — defensive.
         return VerifiedAnswer(
             body: "Kalsmritikosh produced no terminal answer.",

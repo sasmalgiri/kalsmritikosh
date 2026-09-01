@@ -104,10 +104,26 @@ extension Database {
         if let stepError { throw stepError }
     }
 
-    /// Execute and collect rows.
+    /// Execute and collect rows. UNIT C-ii: while an ask snapshot is active,
+    /// reads route to the snapshot connection BY CONSTRUCTION — evidence
+    /// reads cannot see mid-ask writes; `liveQuery` is the explicit escape
+    /// (ledger commit read-back only).
     public func query(_ sql: String, _ bindings: [SQLValue] = []) throws -> [SQLRow] {
+        try collectRows(sql: sql, bindings: bindings,
+                        handle: ((askSnapshotActive && inSavepoint == 0 && !transactionInProgress) ? snapshotHandle : nil) ?? rawHandle)
+    }
+
+    /// Read on the LIVE connection regardless of any active snapshot — for
+    /// read-your-own-writes only (lockVerifiedFinal's commit proof). Counted
+    /// while a snapshot is active (the completeness audit, binding #4).
+    public func liveQuery(_ sql: String, _ bindings: [SQLValue] = []) throws -> [SQLRow] {
+        if askSnapshotActive { noteLiveReadDuringSnapshot() }
+        return try collectRows(sql: sql, bindings: bindings, handle: rawHandle)
+    }
+
+    private func collectRows(sql: String, bindings: [SQLValue], handle: OpaquePointer?) throws -> [SQLRow] {
         var rows: [SQLRow] = []
-        try runBinding(sql: sql, bindings: bindings) { stmt in
+        try runBinding(sql: sql, bindings: bindings, handle: handle) { stmt in
             while sqlite3_step(stmt) == SQLITE_ROW {
                 let count = Int(sqlite3_column_count(stmt))
                 var vals: [SQLValue] = []
@@ -146,9 +162,10 @@ extension Database {
     private func runBinding(
         sql: String,
         bindings: [SQLValue],
+        handle: OpaquePointer?? = nil,
         _ body: (OpaquePointer) -> Void
     ) throws {
-        guard let raw = rawHandle else {
+        guard let raw = (handle ?? rawHandle) else {
             throw DatabaseError.prepareFailed(sql: sql, message: "database not open")
         }
         var stmt: OpaquePointer?

@@ -55,4 +55,30 @@ Cadence, autonomy with per-unit assertion-line reports, and stop conditions (any
 
 ---
 
-_End of addenda. The build opens at V0 once the baseline artifact exists (Stage 0)._
+
+---
+
+## §C — The nondeterminism taxonomy (complete, 2026-09-01)
+
+Six classes found, named, and closed **by law, none by hiding** — the determinism arc's deliverable:
+
+| # | Class | Signature | Closed by |
+|---|---|---|---|
+| 1 | Per-process hash order | citation membership/order flips across processes | Unit A: total order (score → tier → stable content key) at every sort AND every top-K cut |
+| 2 | Stable-arbitrary order | SQL result order silently shaping answers ("stable per run, meaningless in content") | Unit A, same law — input-order precedence explicitly rejected |
+| 3 | Wall clock | freshness drifting confidences between runs (Δ ~0.003/25 min) | Pinned reference clock (KALSMRITIKOSH_REFERENCE_NOW); pin joins the artifact header |
+| 4a | Self-mutation: ledger exhaust | a memory distilled from ask N's answer hydrating into ask N+1's evidence (+1 distinct source, the 0.002 lattice) | Unit C-i: provenance-class law — exhaust never enters candidacy; `exhaust_class` column (v120) so future writers self-mark |
+| 4b | Self-mutation: in-RAM boot rebuild | first ~580 s of HNSW/community rebuild shifting vector-leg cut boundaries between asks (invisible to DB probes) | Quiescence-in-fact (self-measuring settle: warm-up repeated until <10 s); production cure filed to the boot item (I-6) |
+| 5 | FP accumulation order | confidence differing in the last two bits (~1.5e-16) at bit-identical components | Canonical rounding at source, precision 1e-12 |
+
+**The 1e-12 decision, two-sided:** nine orders below the smallest semantic step ever observed (the 0.002 lattice), four above ULP noise — *representation, not tolerance*; comparisons stay exact equality, and the seal header carries `confidence_precision: 1e-12` so every future comparison knows what "byte-identical" includes.
+
+**Boot measurement (filed to the I-6 boot item):** ~580 s of rebuild in two ~300 s rounds; the old single warm-up absorbed only round one — the flagship question's "275.8 s retrieve1" was round two. Production implication on record: a user's first minutes are slow *and* unstable (pre-boot-complete answers can differ in evidence membership, not just latency).
+
+**One-drain discipline, vindicated on day one:** V1 registration's trap test printed `stale facts=0 entities=0 events=0` — the staleness predicate selects nothing until a real logic bump (first: V2's patent pack). Recorded here because the *absence* of a false full-drain is invisible later.
+
+**Meta-laws now standing:** every confidence component is a deterministic function of (resolved question, stamped ledger state, pinned clock); self-derived state either resolves the question — receipted — or is excluded entirely; session may rewrite the question, never touch the evidence.
+
+**Toolchain gotcha:** a stale unsigned KalsmritikoshTests.xctest inside the Debug app product (from killed builds) fails CodeSign with "code object is not signed at all" — delete the product and rebuild.
+
+_End of addenda (§A/§B original; §C added 2026-09-01). The build opened at V0; V2 opens after reseal #3._

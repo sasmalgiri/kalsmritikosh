@@ -92,6 +92,11 @@ struct BaselineCaptureHarness {
         /// quality is governed separately by V0's recorded reds, which
         /// flip on their own schedule (owner binding, reseal ruling).
         let blesses: String?
+        /// The confidence representation contract (nondeterminism class 5):
+        /// confidences are canonically rounded at source to this precision,
+        /// so "byte-identical" includes the scalar by construction. Travels
+        /// with the seal so every future comparison knows what it includes.
+        let confidencePrecision: String?
     }
     struct Artifact: Codable {
         let header: Header
@@ -260,7 +265,8 @@ struct BaselineCaptureHarness {
             dbCopyRowCounts: counts,
             quiesced: quiesce,
             referenceNowEpoch: ProcessInfo.processInfo.environment["KALSMRITIKOSH_REFERENCE_NOW"],
-            blesses: "determinism-not-quality: reproducibility contract only; content quality is governed by V0's recorded reds, which flip separately")
+            blesses: "determinism-not-quality: reproducibility contract only; content quality is governed by V0's recorded reds, which flip separately",
+            confidencePrecision: "1e-12")
         let artifact = Artifact(header: header, records: records, drain: drain)
         let enc = JSONEncoder()
         enc.outputFormatting = [.sortedKeys, .prettyPrinted]

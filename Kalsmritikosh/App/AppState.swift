@@ -2448,8 +2448,12 @@ public final class AppState {
             // UNIT C-ii — the receipt's ledger-state stamp reads SQLite's
             // data_version (a mutation counter, nearly free) at ask start.
             await brain.setLedgerStateProvider { [weak database] in
-                guard let database else { return nil }
-                return (try? await database.query("PRAGMA data_version;", []))?.first?.int(0)
+                // C-ii: begin the ask's read snapshot; the returned stamp is
+                // data_version read ON the snapshot connection at ask start.
+                await database?.beginAskSnapshot()
+            }
+            await brain.setAskSnapshotEnd { [weak database] in
+                await database?.endAskSnapshot()
             }
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
