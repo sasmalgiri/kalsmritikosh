@@ -31,7 +31,23 @@ struct EmploymentDomainPackTests {
         for f in facts {
             #expect(f.status == .sourceAsserted)
             #expect(f.sourceBlockIDs == [block])
+            #expect(f.producerVersion == DerivedProducerVersions.facts, "\(f.field) stamped v1")
+            #expect(f.rawMatch == f.value, "text atom keeps its source as rawMatch")
         }
+    }
+
+    @Test("Org normalizer: employer legal-suffix variance trims (dedup) WITHOUT collapsing distinct stems")
+    func orgNormalizerCaution() {
+        let cmp = CanonicalFactComparator()
+        func emp(_ v: String) -> GenericFact {
+            GenericFact(subjectLabel: "Sasmal", field: "employer", value: v,
+                        status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [block])
+        }
+        // Same employer, suffix variance → equivalent (Pvt Ltd ≡ Private Limited).
+        #expect(cmp.compare(emp("Hospira India Pvt Ltd"), emp("Hospira India Private Limited")) == .equivalent)
+        // Two real employers sharing no stem stay distinct; and a shared-stem pair
+        // that differs in the distinctive token stays TWO.
+        #expect(cmp.compare(emp("Orchid Chemical"), emp("Orchid Technologies")) == .contradictory)
     }
 
     @Test("Quiet on non-résumé text")

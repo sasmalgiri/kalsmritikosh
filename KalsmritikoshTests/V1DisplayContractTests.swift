@@ -46,6 +46,8 @@ struct V1DisplayContractTests {
     func everyEmittableFieldHasAContract() {
         assertContractsCovered(PatentDomainPack.emittedFields, pack: "patent")
         assertContractsCovered(ContractDomainPack.emittedFields, pack: "contract")
+        assertContractsCovered(TransactionDomainPack.emittedFields, pack: "transaction")
+        assertContractsCovered(EmploymentDomainPack.emittedFields, pack: "employment")
     }
 
     @Test("Identifier display constants equal the witnessed answer-surface prefixes")

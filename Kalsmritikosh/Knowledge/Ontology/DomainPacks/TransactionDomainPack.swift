@@ -39,8 +39,18 @@ public enum TransactionDomainPack {
         recognizers.reduce(base) { $0.registering($1) }
     }
 
+    /// The fields this pack emits under producer_version=1 — the display-contract
+    /// completeness authority. amount = money (renderMoney canon); counterparty =
+    /// org/name (org normalizer at comparison); date = precision-canon (inherited).
+    public nonisolated static let emittedFields: [String] = ["amount", "counterparty", "date"]
+
     /// Extract transaction facts (amount, counterparty, date) from receipt-like text.
     /// Returns evidence-linked GenericFacts; empty when the text isn't transactional.
+    /// V2 (A3): amount keeps its EXISTING normalizer (the reference pattern — never
+    /// a parallel one); the date stores the precision-aware ISO ATOM via the
+    /// inherited C-7 normalizer; counterparty stores the source name faithfully,
+    /// its legal-suffix variance trimmed by the comparator's org normalizer AT
+    /// COMPARISON (dedup) without collapsing distinct stems. All stamped v1.
     public nonisolated static func extractFacts(
         fromText text: String,
         subjectLabel: String,
@@ -51,15 +61,19 @@ public enum TransactionDomainPack {
         if let amount = firstMatch(#"(?:₹|rs\.?|inr|\$)\s?[\d,]+(?:\.\d{1,2})?"#, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "amount", value: normalize(amount),
                                      unit: currencyUnit(amount), status: .sourceAsserted,
-                                     confidence: 0.8, sourceBlockIDs: [blockID]))
+                                     confidence: 0.8, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: amount, sourceCount: 1))
         }
         if let payee = counterparty(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "counterparty", value: payee,
-                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID]))
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: payee, sourceCount: 1))
         }
-        if let date = firstMatch(#"\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b"#, in: text) {
-            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: date,
-                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID]))
+        if let raw = firstMatch(#"\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b"#, in: text),
+           let iso = PatentDomainPack.normalizeDate(raw) {
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
         }
         return facts
     }

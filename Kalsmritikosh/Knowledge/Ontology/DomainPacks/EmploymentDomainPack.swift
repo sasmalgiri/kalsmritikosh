@@ -40,7 +40,17 @@ public enum EmploymentDomainPack {
     nonisolated static let rolePattern =
         #"\b(?:[A-Z][A-Za-z]+\s+){0,3}(?:Executive|Manager|Engineer|Officer|Chemist|Analyst|Consultant|Director|Coordinator|Co-?ordinator|Developer|Lead|Specialist|Administrator|Associate)\b"#
 
+    /// The fields this pack emits under producer_version=1 — both text shape
+    /// (employer = org, role): identity render, no displayLabel/date contract.
+    /// The employer's legal-suffix variance is trimmed by the comparator's org
+    /// normalizer AT COMPARISON (dedup), never collapsing distinct stems.
+    public nonisolated static let emittedFields: [String] = ["employer", "role"]
+
     /// Extract employment facts (employer, role) from résumé-like text.
+    /// V2 (A3): employer + role are stored faithfully as text ATOMS (no fusion,
+    /// no write-trim — the org normalizer runs at comparison so display keeps the
+    /// full name while dedup trims suffix variance). rawMatch keeps the source;
+    /// both stamped with the current producer version.
     public nonisolated static func extractFacts(
         fromText text: String,
         subjectLabel: String,
@@ -51,12 +61,14 @@ public enum EmploymentDomainPack {
         var seenOrg = Set<String>()
         for org in allMatches(orgPattern, in: text) where seenOrg.insert(org.lowercased()).inserted {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "employer", value: org,
-                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID]))
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: org, sourceCount: 1))
             if facts.count >= 4 { break }
         }
         if let role = firstMatch(rolePattern, in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "role", value: role,
-                                     status: .sourceAsserted, confidence: 0.65, sourceBlockIDs: [blockID]))
+                                     status: .sourceAsserted, confidence: 0.65, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: role, sourceCount: 1))
         }
         return facts
     }
