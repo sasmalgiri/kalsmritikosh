@@ -83,9 +83,24 @@ public actor Database {
         }
         guard let snap = snapshotHandle else { return nil }
         guard (try? Self.execRaw(handle: snap, sql: "BEGIN;")) != nil else { return nil }
-        var stamp: Int64?
+        // Pin the WAL read snapshot with a GUARANTEED read — SQLite takes the
+        // read snapshot at the first SELECT in a deferred transaction, so the
+        // isolation must not depend on the (schema-dependent) stamp query
+        // below succeeding. data_version is always present.
+        try? Self.execRaw(handle: snap, sql: "PRAGMA data_version;")
+        // EVIDENCE-STATE STAMP (owner ruling 2026-09-02): the contract says
+        // the stamp measures EVIDENCE mutation — but PRAGMA data_version bumps
+        // on ANY write, including lawful cache/exhaust inserts (embedding_cache,
+        // memory_objects, answer_revision_events). Those warm-the-cache writes
+        // must NOT read as a world change, so a cold-cache ask and a warm-cache
+        // ask over identical evidence would stamp differently and the parity
+        // contract would smear. Stamp is therefore a row-count sum over the
+        // EVIDENCE tables only — cache and exhaust excluded by construction —
+        // read on the snapshot connection (the ask-start evidence world).
+        var stamp: Int64 = 0
         var stmt: OpaquePointer?
-        if sqlite3_prepare_v2(snap, "PRAGMA data_version;", -1, &stmt, nil) == SQLITE_OK, let prepared = stmt {
+        let stampSQL = "SELECT (SELECT COUNT(*) FROM knowledge_objects)+(SELECT COUNT(*) FROM chunks)+(SELECT COUNT(*) FROM generic_facts)+(SELECT COUNT(*) FROM entities)+(SELECT COUNT(*) FROM events);"
+        if sqlite3_prepare_v2(snap, stampSQL, -1, &stmt, nil) == SQLITE_OK, let prepared = stmt {
             if sqlite3_step(prepared) == SQLITE_ROW { stamp = sqlite3_column_int64(prepared, 0) }
             sqlite3_finalize(prepared)
         }

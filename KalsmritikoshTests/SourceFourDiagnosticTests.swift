@@ -109,12 +109,19 @@ struct SourceFourDiagnosticTests {
         var prevCounts = await tableCounts()
         // Unit-E permutation axis: anomaly follows ask INDEX = consumption;
         // follows the QUESTION regardless of position = conditional sampling.
-        let questions = ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
-            ? BaselineCaptureHarness.questions.reversed().map { $0 }
-            : BaselineCaptureHarness.questions
+        // Unit-E hunt axis (owner): Q7 SOLO in a fresh process — still
+        // accumulating = self-feeding (its own asks deposit what the next
+        // ask inhales); stable solo = fed by the other questions' processing.
+        let solo = ProcessInfo.processInfo.environment["PROBE_SOLO_Q7"] == "1"
+        let questions = solo
+            ? ["what is the capital of France"]
+            : (ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
+               ? BaselineCaptureHarness.questions.reversed().map { $0 }
+               : BaselineCaptureHarness.questions)
+        let asksPerQuestion = solo ? 5 : 3
         for q in questions {
             var bits: [UInt64] = []
-            for i in 0..<3 {
+            for i in 0..<asksPerQuestion {
                 let a = await state.brain.answer(question: q,
                                                  access: SensitiveAccessContext(scope: .globalOwnerRetrieval()))
                 bits.append(a.confidence.value.bitPattern)

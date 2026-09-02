@@ -34,19 +34,36 @@ public actor CachedEmbedder: Embedder {
         self.modelID = modelID ?? "embedder-\(underlying.dimension)"
     }
 
+    /// Unit-E purity check (env-gated, inert in production): on every cache
+    /// hit, recompute fresh and compare at bitPattern level. The Ask-Scope
+    /// Law's clause — purity is bitwise: same key → same BITS, or this is a
+    /// value-mutating layer wearing memoization clothing.
+    nonisolated private static let purityCheck = ProcessInfo.processInfo.environment["KALSMRITIKOSH_EMBED_PURITY"] == "1"
+
+    private func auditPurity(_ label: String, key: String, cached: [Float], text: String) async {
+        guard Self.purityCheck else { return }
+        let fresh = await underlying.embed(text)
+        let equal = cached.count == fresh.count
+            && zip(cached, fresh).allSatisfy { $0.bitPattern == $1.bitPattern }
+        print("EMBEDPURITY \(label) key=\(key.prefix(16)) \(equal ? "BITWISE-PURE" : "IMPURE") len=\(text.count)")
+    }
+
     public func embed(_ text: String) async -> [Float] {
         let key = cacheKey(text)
         // L1 — in-memory LRU.
         if let cached = await cache.value(for: key) {
             await LLMCallCounters.shared.recordEmbedCacheHit()
+            if Self.purityCheck { print("EMBEDHIT L1 key=\(key.prefix(16))"); await auditPurity("L1", key: key, cached: cached, text: text) }
             return cached
         }
+        if Self.purityCheck { print("EMBEDMISS L1 key=\(key.prefix(16)) len=\(text.count)") }
         // L2 — persistent SQLite cache.
         if let persistent {
             let hash = EmbeddingCacheRepository.hash(text)
             if let hit = await persistent.lookup(modelID: modelID, textHash: hash), !hit.isEmpty {
                 await LLMCallCounters.shared.recordEmbedCacheHit()
                 await cache.set(key, hit)
+                if Self.purityCheck { print("EMBEDHIT L2 key=\(key.prefix(16))"); await auditPurity("L2", key: key, cached: hit, text: text) }
                 return hit
             }
             await LLMCallCounters.shared.recordEmbedCacheMiss()
