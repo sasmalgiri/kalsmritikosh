@@ -533,7 +533,8 @@ public struct EvidenceVerifier: Verifier {
             facts: retrieval.genericFacts,
             evaluations: retrieval.claimEvaluations,
             authorityObjectIDs: retrieval.authorityObjectIDs,
-            documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count)
+            documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count,
+            scoreByObject: scoreByObject)
 
         // D-14 — the slot-question confidence profile: a uniquely-attested
         // value from a structured source with no conflict on the requested

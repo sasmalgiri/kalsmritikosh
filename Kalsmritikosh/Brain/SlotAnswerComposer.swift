@@ -51,18 +51,32 @@ public enum SlotAnswerComposer {
         facts: [GenericFact],
         evaluations: [ClaimEvaluation],
         authorityObjectIDs: [UUID],
-        documentsSearched: Int
+        documentsSearched: Int,
+        scoreByObject: [KnowledgeObject.ID: Double] = [:]
     ) -> SlotAnswerComposition? {
         guard let requestedField = slotFieldIDs.first else { return nil }
         let label = SlotFieldResolver.humanLabel(forFieldID: requestedField)
         let evalByID = Dictionary(evaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
 
         // Surfaceable facts only — the carried evaluation decides (never
-        // re-derived), keyed by first evidence object for citations.
+        // re-derived). The citation anchor is chosen by the CRITERION-
+        // REPRESENTATIVE RULE (owner 2026-09-02, positional-read audit): a
+        // single-slot read from an order-independent evidence set selects by
+        // criterion (highest retrieval score, stable-key tiebreak), never by
+        // position. `eval.evidence.first` was the SlotAnswerComposer:65 sibling
+        // of the ReasoningExpert bug — stable-by-luck on the rung-1 witness.
         let surfaceable: [Candidate] = facts.compactMap { f in
             guard let eval = evalByID[f.id], eval.decision.maySurface,
                   let presentation = eval.presentation,
-                  let obj = eval.evidence.first?.objectID else { return nil }
+                  let obj = ReasoningExpert.stableRepresentative(eval.evidence, scoreByObject: scoreByObject)
+            else { return nil }
+            // Post-fix diagnostic (env-gated): raw `.first` vs the chosen
+            // criterion anchor — a DIFFER marks where the disease was masked.
+            if ProcessInfo.processInfo.environment["KALSMRITIKOSH_DUMP_ANCHOR_PROBE"] == "1",
+               eval.evidence.count > 1 {
+                let firstRaw = eval.evidence.first?.objectID
+                print("ANCHORPROBE site=composer reqField=\(requestedField) field=\(f.field) n=\(eval.evidence.count) first=\(firstRaw.map { String($0.uuidString.prefix(8)) } ?? "nil") criterion=\(String(obj.uuidString.prefix(8))) \(firstRaw == obj ? "MATCH" : "DIFFER")")
+            }
             return Candidate(fact: f, objectID: obj, presentation: presentation,
                              isAuthority: authorityObjectIDs.contains(obj))
         }

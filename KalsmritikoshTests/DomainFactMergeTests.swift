@@ -37,6 +37,10 @@ struct DomainFactMergeTests {
         #expect(pat.count == 1, "three spellings did not collapse: \(pat.map(\.value))")
         #expect(pat.first?.sourceCount == 3, "sourceCount must equal distinct source blocks")
         #expect(Set(pat.first?.sourceBlockIDs ?? []).count == 3)
+        // Origin-fix: merged sourceBlockIDs are SORTED by the unit-A stable key
+        // (Array(Set) hash-order laundering killed at the write).
+        let got = pat.first?.sourceBlockIDs ?? []
+        #expect(got == got.sorted { $0.uuidString < $1.uuidString }, "sourceBlockIDs not stably sorted")
     }
 
     @Test("Two genuinely different values under one field survive as two facts — the disagreement is not averaged away")

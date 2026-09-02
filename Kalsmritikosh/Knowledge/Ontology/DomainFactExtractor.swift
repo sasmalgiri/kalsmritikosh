@@ -47,7 +47,7 @@ public struct DomainFactExtractor: Sendable {
             let canon = comparator.canonical(f.value, shape)
             let key = "\(f.subjectLabel.lowercased())|\(f.field)|\(canon)"
             if let existing = byKey[key] {
-                let blocks = Array(Set(existing.sourceBlockIDs + f.sourceBlockIDs))
+                let blocks = stableBlocks(existing.sourceBlockIDs + f.sourceBlockIDs)
                 let strongerIsF = f.confidence > existing.confidence
                 byKey[key] = GenericFact(id: existing.id, subjectID: existing.subjectID ?? f.subjectID,
                                          subjectLabel: existing.subjectLabel, field: existing.field,
@@ -57,13 +57,13 @@ public struct DomainFactExtractor: Sendable {
                                          sourceBlockIDs: blocks,
                                          producerVersion: existing.producerVersion ?? f.producerVersion,
                                          rawMatch: existing.rawMatch ?? f.rawMatch,
-                                         sourceCount: Set(blocks).count)
+                                         sourceCount: blocks.count)
             } else {
                 byKey[key] = GenericFact(id: f.id, subjectID: f.subjectID,
                                          subjectLabel: f.subjectLabel, field: f.field,
                                          value: f.value, unit: f.unit,
                                          assessment: f.assessment, confidence: f.confidence,
-                                         sourceBlockIDs: f.sourceBlockIDs,
+                                         sourceBlockIDs: stableBlocks(f.sourceBlockIDs),
                                          producerVersion: f.producerVersion,
                                          rawMatch: f.rawMatch,
                                          sourceCount: Set(f.sourceBlockIDs).count)
@@ -71,6 +71,15 @@ public struct DomainFactExtractor: Sendable {
             }
         }
         return resolveIdentifierCollisions(order.compactMap { byKey[$0] })
+    }
+
+    /// ORIGIN-FIX (owner 2026-09-02, positional-read audit): dedupe AND SORT
+    /// evidence blocks by the unit-A stable key. `Array(Set(...))` alone laundered
+    /// a per-process hash order into every downstream `.first` reader (the
+    /// sourceBlockIDs.first sub-class); sorting at the write makes those reads
+    /// lawful-by-construction — the class dies where it's born (the C-i shape).
+    nonisolated static func stableBlocks(_ ids: [UUID]) -> [UUID] {
+        Array(Set(ids)).sorted { $0.uuidString < $1.uuidString }
     }
 
     /// V2 (C-10) — cross-field mislabel resolution at the SOURCE, CAGED (owner
@@ -151,7 +160,7 @@ public struct DomainFactExtractor: Sendable {
             let key = "\(f.field)|\(canon(f))"
             if FactSchemaRegistry.expectedShape(of: f.field) == .identifier,
                let extra = extraBlocks[key], !extra.isEmpty {
-                let blocks = Array(Set(f.sourceBlockIDs + extra))
+                let blocks = stableBlocks(f.sourceBlockIDs + extra)
                 out.append(GenericFact(id: f.id, subjectID: f.subjectID, subjectLabel: f.subjectLabel,
                                        field: f.field, value: f.value, unit: f.unit,
                                        assessment: f.assessment, confidence: f.confidence,
