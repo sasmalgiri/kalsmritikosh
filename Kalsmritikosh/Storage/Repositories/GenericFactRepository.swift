@@ -31,8 +31,8 @@ public actor GenericFactRepository {
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
              evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-             producer_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             producer_version, raw_match, source_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(fact.id),
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
@@ -43,9 +43,15 @@ public actor GenericFactRepository {
             .text(a.basis.rawValue), .text(a.review.rawValue), .text(a.origin.rawValue),
             .text(a.availability.rawValue), .text(a.conflict.rawValue),
             .text((a.legacyStatus ?? enc).rawValue),
-            // V1: new rows carry the declared producer version (0 ≡ NULL ≡
-            // current — nothing is stale until a logic bump, first at V2).
-            .integer(Int64(DerivedProducerVersions.facts))
+            // V1: the row records the version the fact DECLARES (the pack
+            // stamps its own DerivedProducerVersions value), defaulting to the
+            // current era only when the fact is silent — so a v0 fact over a
+            // NULL archive stays 0 ≡ NULL ≡ current, and a v1 fact round-trips
+            // as v1. raw_match/source_count are receipts: the pre-normalized
+            // surface and the distinct-document corroboration count.
+            .integer(Int64(fact.producerVersion ?? DerivedProducerVersions.facts)),
+            fact.rawMatch.map { SQLValue.text($0) } ?? .null,
+            fact.sourceCount.map { SQLValue.integer(Int64($0)) } ?? .null
         ])
     }
 
@@ -57,7 +63,8 @@ public actor GenericFactRepository {
     public func facts(subjectLabel: String, field: String) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count
         FROM generic_facts WHERE subject_label = ? AND field = ? ORDER BY confidence DESC;
         """, [.text(subjectLabel), .text(FactSchemaRegistry.normalizeField(field))])
         return rows.compactMap(Self.decode)
@@ -70,7 +77,8 @@ public actor GenericFactRepository {
     public func facts(subjectID: UUID, fields: Set<String>? = nil) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count
         FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
         """, [.uuid(subjectID)])
         let all = rows.compactMap(Self.decode)
@@ -91,7 +99,8 @@ public actor GenericFactRepository {
         let binds = ids.map { SQLValue.text("%\($0.uuidString)%") }
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count
         FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
         """, binds)
         return rows.compactMap(Self.decode)
@@ -133,7 +142,8 @@ public actor GenericFactRepository {
     public func all(offset: Int = 0, pageSize: Int = 1_000) async throws -> [GenericFact] {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count
         FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
         """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
         return rows.compactMap(Self.decode)
@@ -143,7 +153,8 @@ public actor GenericFactRepository {
     public func page(afterID: UUID?, pageSize: Int) async throws -> [GenericFact] {
         let cols = """
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
-               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count
         FROM generic_facts
         """
         let rows: [SQLRow]
@@ -166,8 +177,16 @@ public actor GenericFactRepository {
             evidenceBasis: r.string(9), reviewDisposition: r.string(10), proposalOrigin: r.string(11),
             availabilityStatus: r.string(12), conflictStatus: r.string(13),
             legacyStatus: r.string(14), status: r.string(6)))
+        // Cols 15/16/17: producer_version, raw_match, source_count. NULL columns
+        // decode to nil — a legacy row (written before v121, or by a producer
+        // that leaves them unset) reads back as producerVersion == nil ≡ v0 and
+        // renders legacy. The version dialect is proven end-to-end here, at the
+        // SQL read path, not inferred from the model layer.
         return GenericFact(id: id, subjectID: r.uuid(1), subjectLabel: label, field: field,
                            value: value, unit: r.string(5), assessment: assessment,
-                           confidence: r.double(7) ?? 0, sourceBlockIDs: blocks)
+                           confidence: r.double(7) ?? 0, sourceBlockIDs: blocks,
+                           producerVersion: r.int(15).map(Int.init),
+                           rawMatch: r.string(16),
+                           sourceCount: r.int(17).map(Int.init))
     }
 }
