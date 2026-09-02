@@ -70,8 +70,8 @@ public nonisolated enum HistorySubject: Sendable, Hashable, Codable {
             return .place(id)
         case .money, .currency, .invoiceNumber, .paymentID:
             return .asset(id)
-        case .emailAddress, .phoneNumber, .date, .deadline, .milestone, .other:
-            return .entity(id)
+        case .emailAddress, .phoneNumber, .date, .deadline, .milestone, .identifierAnchor, .other:
+            return .entity(id)   // V3 anchors are ID-scoped subjects; History wiring is Phase A (scope fence)
         }
     }
 }

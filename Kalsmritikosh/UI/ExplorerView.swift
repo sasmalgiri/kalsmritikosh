@@ -516,6 +516,7 @@ public struct ExplorerView: View {
              .paymentID:        return "dollarsign.circle"
         case .date, .deadline,
              .milestone:        return "calendar"
+        case .identifierAnchor:  return "number"
         case .other:             return "circle"
         }
     }

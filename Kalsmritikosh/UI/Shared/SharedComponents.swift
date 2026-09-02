@@ -67,6 +67,7 @@ public struct EntityChip: View {
         case .date, .deadline, .milestone: return "calendar"
         case .address, .city, .country, .location: return "mappin.and.ellipse"
         case .project, .deliverable: return "shippingbox"
+        case .identifierAnchor: return "number"
         case .other: return "tag"
         }
     }

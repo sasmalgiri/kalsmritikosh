@@ -91,6 +91,14 @@ public struct Entity: Codable, Identifiable, Hashable, Sendable {
         case project
         case deliverable
 
+        // V3 (C-8) — the anchor: a real-world subject identified by a canonical
+        // identifier (patent/application/publication/invoice/case…). ONE case,
+        // specialized by DATA: the registry field id rides in
+        // attributes["anchorField"], so every identifier-anchored subject shares
+        // this case while display + behavior specialize by field. Identity is
+        // (anchorField, canonicalValue) — never conflated across fields.
+        case identifierAnchor
+
         case other
     }
 }
