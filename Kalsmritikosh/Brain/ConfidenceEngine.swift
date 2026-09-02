@@ -185,6 +185,23 @@ public struct DefaultConfidenceEngine: ConfidenceEngine {
             let ids = distinctSourceSet.map(\.uuidString).sorted().joined(separator: ",")
             print("SOURCESET n=\(distinctSources) ids=\(ids)")
         }
+        // ORDERED-EVIDENCE PROBE (owner 2026-09-02, Q2 tripwire): measurement
+        // only — the FULL ORDERED input as it reaches the distinctSources Set,
+        // so a per-ask ±1–2 count resolves to WHICH object enters/leaves, at
+        // WHICH index (the upstream assembly's fingerprint), and whether the
+        // list carries duplicates (order-sensitive dedupe) vs different
+        // membership (assembly wobble). Env-gated, inert in production.
+        if ProcessInfo.processInfo.environment["KALSMRITIKOSH_DUMP_EVIDENCE_ORDER"] == "1" {
+            func clean(_ s: String) -> String {
+                String(s.prefix(28)).replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: "\n", with: "/")
+            }
+            for (ci, claim) in claims.enumerated() {
+                print("EVORDER CLAIM[\(ci)] conf=\(claim.confidence.value) nobj=\(claim.supportingObjectIDs.count) stmt=\(clean(claim.statement))")
+            }
+            let seq = claims.flatMap(\.supportingObjectIDs).map(\.uuidString)
+            let dupes = seq.count - Set(seq).count
+            print("EVORDER SEQ n=\(seq.count) distinct=\(distinctSources) dupes=\(dupes): \(seq.joined(separator: ","))")
+        }
 
         let agreement = computeAgreement(claims)
         let contradictions = detectContradictions(claims)
