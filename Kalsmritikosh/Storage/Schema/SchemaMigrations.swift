@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 121
+    public static let latestVersion = 122
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -652,7 +652,8 @@ public enum SchemaMigrations {
         (118, v118),
         (119, v119),
         (120, v120),
-        (121, v121)
+        (121, v121),
+        (122, v122)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6389,5 +6390,20 @@ public enum SchemaMigrations {
     private static let v121: String = """
     ALTER TABLE generic_facts ADD COLUMN raw_match TEXT;
     ALTER TABLE generic_facts ADD COLUMN source_count INTEGER;
+    """
+
+    // V2 (C-10) gate-3 provenance (owner ruling 2026-09-02). When the cross-field
+    // mislabel resolver REASSIGNS a value to its true home field, the reassigned
+    // evidence blocks ride along as corroboration — but a forensic reader of the
+    // receipt would see a block whose text says "Patent No. …" cited under
+    // applicationNumber and read it as an error. `reassigned_from` records the
+    // origin field id the mislabel was captured under, so the reassignment is
+    // auditable, not silent: the receipt can annotate "includes a reassigned
+    // attestation (originally labeled <reassigned_from>)". ADVISORY — NEVER
+    // sealed (the evidence-state stamp counts rows, not this column) and NEVER
+    // gates surfacing; it is also QUERYABLE, so reassignment counts by field pair
+    // join the guard-telemetry family (a reassignment-rate spike = rule defect).
+    private static let v122: String = """
+    ALTER TABLE generic_facts ADD COLUMN reassigned_from TEXT;
     """
 }

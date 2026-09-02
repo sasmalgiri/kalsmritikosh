@@ -31,8 +31,8 @@ public actor GenericFactRepository {
         INSERT OR REPLACE INTO generic_facts
             (id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json, created_at,
              evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-             producer_version, raw_match, source_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+             producer_version, raw_match, source_count, reassigned_from)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """, [
             .uuid(fact.id),
             fact.subjectID.map { SQLValue.uuid($0) } ?? .null,
@@ -51,7 +51,9 @@ public actor GenericFactRepository {
             // surface and the distinct-document corroboration count.
             .integer(Int64(fact.producerVersion ?? DerivedProducerVersions.facts)),
             fact.rawMatch.map { SQLValue.text($0) } ?? .null,
-            fact.sourceCount.map { SQLValue.integer(Int64($0)) } ?? .null
+            fact.sourceCount.map { SQLValue.integer(Int64($0)) } ?? .null,
+            // V2 gate-3: advisory origin field a reassigned mislabel came from.
+            fact.reassignedFrom.map { SQLValue.text($0) } ?? .null
         ])
     }
 
@@ -64,7 +66,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count
+               producer_version, raw_match, source_count, reassigned_from
         FROM generic_facts WHERE subject_label = ? AND field = ? ORDER BY confidence DESC;
         """, [.text(subjectLabel), .text(FactSchemaRegistry.normalizeField(field))])
         return rows.compactMap(Self.decode)
@@ -78,7 +80,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count
+               producer_version, raw_match, source_count, reassigned_from
         FROM generic_facts WHERE subject_id = ? ORDER BY confidence DESC, id ASC;
         """, [.uuid(subjectID)])
         let all = rows.compactMap(Self.decode)
@@ -100,7 +102,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count
+               producer_version, raw_match, source_count, reassigned_from
         FROM generic_facts WHERE \(clauses) ORDER BY confidence DESC;
         """, binds)
         return rows.compactMap(Self.decode)
@@ -143,7 +145,7 @@ public actor GenericFactRepository {
         let rows = try await database.query("""
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count
+               producer_version, raw_match, source_count, reassigned_from
         FROM generic_facts ORDER BY id ASC LIMIT ? OFFSET ?;
         """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
         return rows.compactMap(Self.decode)
@@ -154,7 +156,7 @@ public actor GenericFactRepository {
         let cols = """
         SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
                evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
-               producer_version, raw_match, source_count
+               producer_version, raw_match, source_count, reassigned_from
         FROM generic_facts
         """
         let rows: [SQLRow]
@@ -187,6 +189,7 @@ public actor GenericFactRepository {
                            confidence: r.double(7) ?? 0, sourceBlockIDs: blocks,
                            producerVersion: r.int(15).map(Int.init),
                            rawMatch: r.string(16),
-                           sourceCount: r.int(17).map(Int.init))
+                           sourceCount: r.int(17).map(Int.init),
+                           reassignedFrom: r.string(18))   // col 18 (v122): advisory reassignment origin
     }
 }

@@ -68,6 +68,10 @@ struct DomainFactMergeTests {
         // TRUE field — nothing is deleted; the source still supports the fact.
         #expect(Set(app.first?.sourceBlockIDs ?? []) == [b, c])
         #expect(app.first?.sourceCount == 2, "reassigned block must raise the true field's corroboration")
+        // Gate-3 provenance (v122): the reassignment is auditable, not silent —
+        // the home fact records the field the mislabel was captured under.
+        #expect(app.first?.reassignedFrom == "patentnumber",
+                "reassigned_from must name the origin field; got \(app.first?.reassignedFrom ?? "nil")")
     }
 
     // MARK: - Cage (owner binding 2026-09-02: strength needs a cage)

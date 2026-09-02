@@ -78,13 +78,15 @@ struct GenericFactRepositoryTests {
         let blk = UUID()
         let f = GenericFact(subjectLabel: "patent", field: "patentNumber", value: "555489",
                             status: .sourceAsserted, confidence: 0.8, sourceBlockIDs: [blk],
-                            producerVersion: 1, rawMatch: "Patent No. 555489.", sourceCount: 6)
+                            producerVersion: 1, rawMatch: "Patent No. 555489.", sourceCount: 6,
+                            reassignedFrom: "applicationnumber")
         try await repo.upsert(f)
         let read = try await repo.facts(subjectLabel: "patent", field: "patentNumber")
         let got = try #require(read.first { $0.value == "555489" })
         #expect(got.producerVersion == 1)
         #expect(got.rawMatch == "Patent No. 555489.")
         #expect(got.sourceCount == 6)
+        #expect(got.reassignedFrom == "applicationnumber")   // v122 gate-3 advisory round-trips
     }
 
     /// The MIRROR at the SQL read path: a row written with the three columns

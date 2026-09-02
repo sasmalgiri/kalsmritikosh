@@ -73,6 +73,12 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// C-10 corroboration: distinct DOCUMENTS asserting this value. The merge
     /// maintains the invariant sourceCount == distinct source blocks.
     public let sourceCount: Int?
+    /// V2 (C-10) gate-3 provenance: when the cross-field mislabel resolver
+    /// reassigned this fact's evidence to its true home field, the origin field
+    /// id it was mislabeled under. ADVISORY — never sealed, never gates
+    /// surfacing; makes a reassignment auditable on the receipt. nil when the
+    /// fact was never reassigned.
+    public let reassignedFrom: String?
 
     /// Deprecated compatibility shim — derived from `assessment`. Kept so existing readers
     /// and the repository's legacy `status` column keep working during migration.
@@ -92,7 +98,8 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         sourceBlockIDs: [UUID],
         producerVersion: Int? = nil,
         rawMatch: String? = nil,
-        sourceCount: Int? = nil
+        sourceCount: Int? = nil,
+        reassignedFrom: String? = nil
     ) {
         self.id = id
         self.subjectID = subjectID
@@ -106,6 +113,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.producerVersion = producerVersion
         self.rawMatch = rawMatch
         self.sourceCount = sourceCount
+        self.reassignedFrom = reassignedFrom
     }
 
     /// Legacy initializer — decodes a single `EvidenceStatus` into the separated
@@ -122,12 +130,14 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         sourceBlockIDs: [UUID],
         producerVersion: Int? = nil,
         rawMatch: String? = nil,
-        sourceCount: Int? = nil
+        sourceCount: Int? = nil,
+        reassignedFrom: String? = nil
     ) {
         self.init(id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
                   value: value, unit: unit, assessment: LegacyEvidenceStatusAdapter.decode(status),
                   confidence: confidence, sourceBlockIDs: sourceBlockIDs,
-                  producerVersion: producerVersion, rawMatch: rawMatch, sourceCount: sourceCount)
+                  producerVersion: producerVersion, rawMatch: rawMatch, sourceCount: sourceCount,
+                  reassignedFrom: reassignedFrom)
     }
 
     /// A material fact may appear in a final answer only if its assessment is assertable
@@ -152,7 +162,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// the transition. Decode precedence: valid assessment → valid legacy status → throw.
     private enum CodingKeys: String, CodingKey {
         case id, subjectID, subjectLabel, field, value, unit, assessment, status, confidence, sourceBlockIDs
-        case producerVersion, rawMatch, sourceCount
+        case producerVersion, rawMatch, sourceCount, reassignedFrom
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -168,6 +178,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.producerVersion = try c.decodeIfPresent(Int.self, forKey: .producerVersion)
         self.rawMatch = try c.decodeIfPresent(String.self, forKey: .rawMatch)
         self.sourceCount = try c.decodeIfPresent(Int.self, forKey: .sourceCount)
+        self.reassignedFrom = try c.decodeIfPresent(String.self, forKey: .reassignedFrom)
         if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
             self.assessment = a
         } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .status) {
@@ -193,6 +204,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         try c.encodeIfPresent(producerVersion, forKey: .producerVersion)
         try c.encodeIfPresent(rawMatch, forKey: .rawMatch)
         try c.encodeIfPresent(sourceCount, forKey: .sourceCount)
+        try c.encodeIfPresent(reassignedFrom, forKey: .reassignedFrom)
     }
 }
 

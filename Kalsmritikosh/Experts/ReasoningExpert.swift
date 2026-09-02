@@ -126,8 +126,13 @@ public struct ReasoningExpert: Expert {
         return claims
     }
 
-    /// V2 determinism — the TIE-INCLUSIVE CUT LAW's single-representative form
-    /// (owner ruling 2026-09-02). A factClaim carries ONE supporting object, and
+    /// V2 determinism — the CRITERION-REPRESENTATIVE RULE (owner ruling
+    /// 2026-09-02): a single-slot read from an unordered population selects by a
+    /// stated criterion (score, then stable key), never by position. (Its sibling,
+    /// the Tie-Inclusive Cut Law, governs MULTI-slot cuts — all equals enter or
+    /// none; it cannot govern a single-representative slot, where exactly one must
+    /// be picked. The landed fix is the criterion rule; the name stopped borrowing
+    /// its sibling's.) A factClaim carries ONE supporting object, and
     /// `eval.evidence` is an order-INDEPENDENT set by design (its fingerprint
     /// sorts before hashing). Reading it positionally with `.first` let an
     /// order flip at ingest/retrieval pick a different co-equal evidence object

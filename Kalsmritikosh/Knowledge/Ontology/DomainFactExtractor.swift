@@ -129,6 +129,7 @@ public struct DomainFactExtractor: Sendable {
 
         var dropIndices = Set<Int>()
         var extraBlocks: [String: [UUID]] = [:]             // "field|canon" (home) → reassigned blocks
+        var reassignOrigin: [String: String] = [:]          // "field|canon" (home) → the intruded field it came from
         for (idx, f) in idIndexed {
             let v = canon(f)
             guard (fieldsByValue[v]?.count ?? 0) >= 2 else { continue }       // (a) collision only
@@ -140,21 +141,24 @@ public struct DomainFactExtractor: Sendable {
             guard homeSC >= intrudedSC else { continue }                     // (d) corroboration gate
             dropIndices.insert(idx)
             extraBlocks["\(home)|\(v)", default: []].append(contentsOf: f.sourceBlockIDs)
+            reassignOrigin["\(home)|\(v)"] = f.field                          // gate-3 provenance
         }
         guard !dropIndices.isEmpty else { return facts }
 
         var out: [GenericFact] = []
         for (i, f) in facts.enumerated() {
             if dropIndices.contains(i) { continue }
+            let key = "\(f.field)|\(canon(f))"
             if FactSchemaRegistry.expectedShape(of: f.field) == .identifier,
-               let extra = extraBlocks["\(f.field)|\(canon(f))"], !extra.isEmpty {
+               let extra = extraBlocks[key], !extra.isEmpty {
                 let blocks = Array(Set(f.sourceBlockIDs + extra))
                 out.append(GenericFact(id: f.id, subjectID: f.subjectID, subjectLabel: f.subjectLabel,
                                        field: f.field, value: f.value, unit: f.unit,
                                        assessment: f.assessment, confidence: f.confidence,
                                        sourceBlockIDs: blocks,
                                        producerVersion: f.producerVersion, rawMatch: f.rawMatch,
-                                       sourceCount: Set(blocks).count))
+                                       sourceCount: Set(blocks).count,
+                                       reassignedFrom: f.reassignedFrom ?? reassignOrigin[key]))  // gate-3 advisory
             } else {
                 out.append(f)
             }
