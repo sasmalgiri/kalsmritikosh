@@ -30,7 +30,7 @@ import Foundation
 public enum IdentifierAnchor {
 
     /// The attribute key the field id rides in on an anchor Entity.
-    public static let fieldAttributeKey = "anchorField"
+    public nonisolated static let fieldAttributeKey = "anchorField"
 
     /// The canonical value of an identifier (bare atom: label words stripped,
     /// spacing/punctuation removed) — the SAME normalization the comparator and
@@ -105,5 +105,26 @@ public enum IdentifierAnchor {
             if "\(cf)|\(cv)" == key { return .existing(c.id) }
         }
         return .create
+    }
+
+    /// V3 3c — the mixed-window BRIDGE (anchor-existence-gated). During the
+    /// interval between this code landing and the V5 drain, some facts are v≤1
+    /// (subjectID nil, grouped only by document label) while freshly-written v2
+    /// facts carry an anchor subject. When a v≤1 fact names an identifier that
+    /// ALREADY has an anchor, reads should treat its subject AS that anchor so
+    /// the two eras compare/merge as one thing.
+    ///
+    /// INERT BY CONSTRUCTION: the gate is anchor EXISTENCE, per value. A ledger
+    /// with no anchors yet (the live seven, pre-drain) bridges nothing — the
+    /// lookup misses and the fact keeps its label subject. Only the mixed-ingest
+    /// fixture, which creates an anchor and then reads an unbound fact for the
+    /// same value, exercises the hit path.
+    ///
+    /// `anchorsByKey` maps `identityKey` → anchor id (the read caller loads the
+    /// known anchors once). Returns nil when no anchor exists for (field, value).
+    public nonisolated static func bridge(
+        field: String, value: String, anchorsByKey: [String: Entity.ID]
+    ) -> Entity.ID? {
+        anchorsByKey[identityKey(field: field, value: value)]
     }
 }

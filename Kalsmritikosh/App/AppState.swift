@@ -3184,7 +3184,12 @@ public final class AppState {
         var created = 0
         for (i, id) in allObjectIDs.enumerated() {
             if let content = try? await objects.fetchContent(id: id), !content.isEmpty {
-                let milestones = PatentLegalEventExtractor.extract(text: content, sourceObjectID: id)
+                // V3 3c — thread milestones onto the identifier ANCHOR so the
+                // patent's filed→hearing→objection→grant chain lands on ONE
+                // subject id, not just the NER participants.
+                let anchorIDs = await identifierAnchorIDs(inContent: content, sourceObjectID: id)
+                let milestones = PatentLegalEventExtractor.extract(
+                    text: content, sourceObjectID: id, entityIDs: anchorIDs)
                 if !milestones.isEmpty {
                     try? await events.insertBatch(milestones)
                     created += milestones.count
@@ -3195,6 +3200,28 @@ public final class AppState {
         updateProcess(activity, done: allObjectIDs.count)
         KalsmritikoshLog.knowledge.info("Legal-milestone backfill created \(created, privacy: .public) event(s)")
         return created
+    }
+
+    /// V3 3c — the identifier ANCHORS a document references, resolve-or-created
+    /// (idempotent) so milestone events thread onto the canonical patent /
+    /// application subject. Deterministic; reuses the single DomainFactExtractor
+    /// for identifier detection so backfill and ingest agree on what an anchor is.
+    /// Empty when the entities repo is absent — the caller then threads no anchors.
+    private func identifierAnchorIDs(inContent content: String, sourceObjectID: UUID) async -> [UUID] {
+        guard let entities else { return [] }
+        let facts = DomainFactExtractor().extract(fromText: content, subjectLabel: "", blockID: UUID())
+        var seen = Set<String>()
+        var ids: [UUID] = []
+        for f in facts where FactSchemaRegistry.expectedShape(of: f.field) == .identifier {
+            guard !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let key = IdentifierAnchor.identityKey(field: f.field, value: f.value)
+            guard seen.insert(key).inserted else { continue }
+            if let anchorID = try? await entities.resolveOrCreateAnchor(
+                field: f.field, value: f.value, sourceObjectID: sourceObjectID) {
+                ids.append(anchorID)
+            }
+        }
+        return ids
     }
 
     /// Retrieval self-eval: recall@k measured by querying the vector index with

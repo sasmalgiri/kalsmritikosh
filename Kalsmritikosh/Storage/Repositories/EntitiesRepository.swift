@@ -117,6 +117,62 @@ public actor EntitiesRepository {
         return id
     }
 
+    // MARK: - V3 anchors (C-8)
+
+    /// V3 3c — resolve-or-create an identifier ANCHOR by its (field, canonical
+    /// value) identity. The `normalized` column carries IdentifierAnchor.identityKey
+    /// ("patentnumber|555489"), so the existing UNIQUE(kind, normalized) index does
+    /// two jobs at once: it enforces the D2 coincidence rule (the SAME digits under
+    /// two fields — patent 555489 vs invoice 555489 — are two distinct rows because
+    /// their keys differ) AND it makes the write idempotent (N facts sharing one
+    /// key upsert to exactly ONE anchor row). Returns the canonical anchor id.
+    public func resolveOrCreateAnchor(
+        field: String, value: String,
+        sourceObjectID: KnowledgeObject.ID, confidence: Confidence = .high
+    ) async throws -> Entity.ID {
+        let identity = IdentifierAnchor.identityKey(field: field, value: value)
+        let anchor = IdentifierAnchor.makeAnchor(
+            field: field, value: value, sourceObjectID: sourceObjectID, confidence: confidence)
+        let attrs = try encoder.encode(anchor.attributes)
+        let attrsStr = String(data: attrs, encoding: .utf8) ?? "{}"
+        let rows = try await database.query("""
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json, quality_tier,
+                              producer_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, \(DerivedProducerVersions.entities))
+        ON CONFLICT(kind, normalized) DO UPDATE SET
+            confidence = max(entities.confidence, excluded.confidence)
+        RETURNING id;
+        """, [
+            .uuid(anchor.id),
+            .text(anchor.kind.rawValue),
+            .text(anchor.value),
+            .text(identity),
+            .uuid(sourceObjectID),
+            .real(confidence.value),
+            .text(attrsStr),
+            .text(anchor.qualityTier.rawValue)
+        ])
+        guard let id = rows.first?.uuid(0) else {
+            throw NSError(domain: "EntitiesRepository", code: 8)
+        }
+        return id
+    }
+
+    /// V3 3c — the anchor lookup table for the mixed-window bridge: identityKey →
+    /// anchor id, over all live identifier anchors. Empty on a ledger with no
+    /// anchors yet, so IdentifierAnchor.bridge is inert by construction. Bounded.
+    public func anchorKeys(limit: Int = 100_000) async throws -> [String: Entity.ID] {
+        let rows = try await database.query("""
+        SELECT normalized, id FROM entities
+        WHERE kind = ? AND merged_into IS NULL LIMIT ?;
+        """, [.text(Entity.Kind.identifierAnchor.rawValue), .integer(Int64(limit))])
+        var out: [String: Entity.ID] = [:]
+        for r in rows {
+            if let key = r.string(0), let id = r.uuid(1) { out[key] = id }
+        }
+        return out
+    }
+
     // MARK: - Reads
 
     public func count(of kind: Entity.Kind) async throws -> Int {

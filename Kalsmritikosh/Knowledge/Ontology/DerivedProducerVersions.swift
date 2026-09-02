@@ -20,17 +20,26 @@
 
 public nonisolated enum DerivedProducerVersions {
     /// DomainFactExtractor + its packs (generic_facts.producer_version).
-    /// Bump when extraction LOGIC changes what a stored fact would contain
-    /// (first bump: V2 capture-group extraction — patent identifiers now store
-    /// the bare normalized atom, dates store precision-aware ISO; both are a
-    /// changed stored representation, so the era advances from 0 to 1).
-    public static let facts = 1
+    /// Bump when extraction LOGIC changes what a stored fact would contain.
+    ///   0→1 (V2): capture-group extraction — identifiers store the bare
+    ///        normalized atom, dates store precision-aware ISO.
+    ///   1→2 (V3 3c): the WRITER BINDING — an identifier fact now carries a
+    ///        canonical subject (subjectID → its anchor entity). A v2 fact
+    ///        contains the anchor link a v1 fact lacks, so the stored
+    ///        representation changed and the era advances. The V5 drain rewrites
+    ///        v1 rows to bind their subjects.
+    public static let facts = 2
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
-    /// First bump: V3's gate hardening + anchor entities.
-    public static let entities = 0
+    /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
+    /// entities — the entity population a v1 producer emits differs from v0
+    /// (junk classes gated out; identifier anchors added), so the era advances.
+    public static let entities = 1
 
     /// Event extraction (events.producer_version).
-    /// First bump: V4's class-gated event scoping.
-    public static let events = 0
+    /// First bump 0→1 (V3 3c): milestone events now thread onto the identifier
+    /// ANCHOR (backfillLegalMilestones passes anchor ids), so a v1 event's
+    /// participant set can contain the anchor a v0 event never referenced. The
+    /// V5 drain rebuilds milestones to apply the threading to the live archive.
+    public static let events = 1
 }
