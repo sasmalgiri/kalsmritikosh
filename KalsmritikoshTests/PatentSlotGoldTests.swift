@@ -152,7 +152,11 @@ struct PatentSlotGoldTests {
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let a = try await answer(rig, "on which date was the patent granted")
         #expect(!a.refused)
-        #expect(a.answerText?.contains("17 June 2025") == true, "got: \(a.answerText ?? "nil")")
+        // V2 date canon (enumerated gold change, owner binding 2026-09-01): a
+        // v1 grant date stores precision-aware ISO and renders the seal-anchored
+        // day form DD/MM/YYYY — "17 June 2025" → "17/06/2025". Surface-gold-
+        // unchanged is scoped to IDENTIFIER fields; date surfaces move to canon.
+        #expect(a.answerText?.contains("17/06/2025") == true, "got: \(a.answerText ?? "nil")")
         #expect(a.answerText?.hasPrefix("Grant date:") == true)
     }
 

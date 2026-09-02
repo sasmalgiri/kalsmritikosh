@@ -49,35 +49,35 @@ struct V0AdversarialFixtureTests {
         return all.filter { $0.0.lowercased().replacingOccurrences(of: " ", with: "") == want }.map(\.1)
     }
 
-    @Test("RED C-1: 3+ label spellings collapse to ONE stored value (today: label-fused variants)")
+    @Test("GREEN C-1: 3+ label spellings collapse to ONE stored value (V2 capture groups + merge)")
     func labelVariantsCollapse() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let values = try await storedValues(rig, field: "patentNumber")
-        print("V0 RED labelVariants: stored patentNumber values = \(values)")
+        print("V0→GREEN labelVariants: stored patentNumber values = \(values)")
         #expect(!values.isEmpty, "ingest stored no patentNumber facts at all")
-        withKnownIssue("C-1: values are label-fused; spellings don't collapse until V2 capture groups") {
-            #expect(Set(values).count == 1, "spellings stored as \(Set(values).count) distinct values")
-        }
+        // V2: six label spellings of 700321 → one bare atom; the cross-field
+        // mislabel (an application number under "Patent No.") is reassigned to
+        // its true field. One patent, one spelling.
+        #expect(Set(values).count == 1, "spellings stored as \(Set(values).count) distinct values")
     }
 
-    @Test("RED C-1: stored identifier value carries NO alphabetic label token; mislabel bait stays out of patentNumber")
+    @Test("GREEN C-1: stored identifier value carries NO alphabetic label token; mislabel bait stays out of patentNumber")
     func storedValueShapeAndMislabel() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let values = try await storedValues(rig, field: "patentNumber")
-        print("V0 RED shape/mislabel: patentNumber values = \(values)")
+        print("V0→GREEN shape/mislabel: patentNumber values = \(values)")
         #expect(!values.isEmpty)
         // Date bait must already be rejected at write time (rc12) — hard green.
         #expect(!values.contains { $0.contains("22/03/2023") }, "a slash-date was stored as a patent number")
-        withKnownIssue("C-1: full-match storage fuses the label into the value until V2") {
-            #expect(!values.contains { $0.lowercased().contains("patent") },
-                    "label token stored in value")
-        }
-        withKnownIssue("C-1/C-9: single-source mislabel lands under patentNumber until V2 (rc12's drop is query-time and needs dominance)") {
-            #expect(!values.contains { $0.contains(Self.gen.applicationNumber) },
-                    "mislabeled application number stored under patentNumber")
-        }
+        // V2 capture groups store the bare atom — no label token fused in.
+        #expect(!values.contains { $0.lowercased().contains("patent") },
+                "label token stored in value")
+        // V2 write-time cross-field resolution reassigns the mislabeled
+        // application number to its true field — it never lands under patentNumber.
+        #expect(!values.contains { $0.contains(Self.gen.applicationNumber) },
+                "mislabeled application number stored under patentNumber")
     }
 
     @Test("RED (deferred): OCR digit substitution recovers no value today — recorded verbatim")
@@ -103,16 +103,16 @@ struct V0AdversarialFixtureTests {
         }
     }
 
-    @Test("RED C-1: quoted reply + table + prose restatements collapse to one normalized value")
+    @Test("GREEN C-1: quoted reply + table + prose restatements collapse to one normalized value")
     func quotedReplyAndTable() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.quotedReplyWithTable, name: "reply.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let values = try await storedValues(rig, field: "patentNumber")
-        print("V0 RED quotedReply: stored patentNumber values = \(values)")
+        print("V0→GREEN quotedReply: stored patentNumber values = \(values)")
         #expect(!values.isEmpty, "no patentNumber fact from the reply/table document")
-        withKnownIssue("C-1: spacing/format variants stay distinct until V2 normalization") {
-            #expect(Set(values).count == 1, "restatements stored as \(Set(values).count) distinct values")
-        }
+        // V2: spacing/format variants ("Patent  No.   700321" vs "Patent No. 700321")
+        // normalize to the same atom and merge to one value.
+        #expect(Set(values).count == 1, "restatements stored as \(Set(values).count) distinct values")
     }
 
     // MARK: - Entity-noise red (full rig — V3's gate)
@@ -154,26 +154,22 @@ struct V0AdversarialFixtureTests {
 
     // MARK: - Rung fixture-twins (binding #1)
 
-    @Test("RED rung-1 twin: noisy letter must answer the slot question cleanly — V0 DISCOVERY: it does not")
+    @Test("GREEN rung-1 twin: noisy letter answers the slot question cleanly — the false conflict is gone")
     func rung1Twin() async throws {
-        // First V0 run's DISCOVERY (a real guard hole, found by the fixture
-        // before any live witness — binding #1 doing its job): the rc12
-        // cross-field mislabel drop requires the baited value to be DOMINANT
-        // under its true field; a single-source mislabel slips it, and the
-        // answer is a false conflict carrying the application number. The
-        // live archive answers cleanly only because its mislabel happens to
-        // be non-dominant. Traced to V2 (write-time capture groups kill the
-        // mislabel at the source) + C-10 (corroboration-aware merge).
+        // Binding #1's discovery, now closed: the rc12 cross-field mislabel
+        // drop was query-time and needed dominance, so a single-source mislabel
+        // slipped through as a false conflict carrying the application number.
+        // V2 kills it at the SOURCE — capture groups store the bare atom and the
+        // write-time cross-field resolver reassigns the mislabeled application
+        // number to its true field before it can conflict with the patent.
         let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let a = try await rig.answer("what is the granted patent number")
-        print("V0 RED rung-1 twin: refused=\(a.refused) conf=\(a.confidence.value) text=\(a.answerText ?? "nil")")
+        print("V0→GREEN rung-1 twin: refused=\(a.refused) conf=\(a.confidence.value) text=\(a.answerText ?? "nil")")
         #expect(!a.refused)
-        withKnownIssue("V2/C-10: single-source mislabel produces a false conflict on the noisy fixture") {
-            #expect(a.answerText?.contains("700321") == true, "rung-1 twin lost the patent number")
-            #expect(a.answerText?.contains(Self.gen.applicationNumber) == false, "application number leaked into the primary")
-            #expect(a.answerText?.lowercased().contains("conflict") == false, "noise produced a false conflict")
-        }
+        #expect(a.answerText?.contains("700321") == true, "rung-1 twin lost the patent number")
+        #expect(a.answerText?.contains(Self.gen.applicationNumber) == false, "application number leaked into the primary")
+        #expect(a.answerText?.lowercased().contains("conflict") == false, "noise produced a false conflict")
     }
 
     @Test("RED rung-1n twin: known-absent field must return a verified not-found naming the field")

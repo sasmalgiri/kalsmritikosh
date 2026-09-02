@@ -18,11 +18,13 @@
 //  Staleness predicate (per table): COALESCE(producer_version, 0) != current.
 //
 
-public enum DerivedProducerVersions {
+public nonisolated enum DerivedProducerVersions {
     /// DomainFactExtractor + its packs (generic_facts.producer_version).
     /// Bump when extraction LOGIC changes what a stored fact would contain
-    /// (first bump: V2 capture-group extraction).
-    public static let facts = 0
+    /// (first bump: V2 capture-group extraction — patent identifiers now store
+    /// the bare normalized atom, dates store precision-aware ISO; both are a
+    /// changed stored representation, so the era advances from 0 to 1).
+    public static let facts = 1
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump: V3's gate hardening + anchor entities.

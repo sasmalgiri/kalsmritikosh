@@ -237,16 +237,43 @@ public enum SlotAnswerComposer {
         // surface is safe BY CONSTANT, immune to source OCR noise and merge
         // internals. `rawMatch` retires to provenance-for-the-receipt only.
         // v0 / nil (the entire live ledger pre-drain) renders value as-is.
-        // (Date fields' ISO→display inverse lands WITH C-7 date normalization
-        // in the writer commit — coupled; no v1 date rows exist yet.)
+        let isV1 = (fact.producerVersion ?? 0) >= 1
+        // V2 (C-7 writer) — a v1 DATE stores precision-aware ISO ("2025-06-17",
+        // "2024-11", "2024"); render the seal-anchored canon (day = DD/MM/YYYY
+        // per seal #3c, month = "November 2024", year = "2024"), NEVER the
+        // source form. A v0 date row keeps its raw text (renders as-is below).
+        if isV1, FactSchemaRegistry.expectedShape(of: fact.field) == .date {
+            let unit = fact.unit.map { " \($0)" } ?? ""
+            return renderCanonicalDate(iso: fact.value) + unit
+        }
         let display: String
-        if (fact.producerVersion ?? 0) >= 1, let dl = Self.displayLabel(forFieldID: fact.field) {
+        if isV1, let dl = Self.displayLabel(forFieldID: fact.field) {
             display = "\(dl) \(fact.value)"
         } else {
             display = fact.value
         }
         let unit = fact.unit.map { " \($0)" } ?? ""
         return display + unit
+    }
+
+    /// V2 (C-7) — the seal-anchored date canon, reconstructed from precision-
+    /// aware ISO. Day precision (yyyy-MM-dd) → "DD/MM/YYYY" (the live
+    /// "29/11/2024" family per seal #3c); month (yyyy-MM) → "Month YYYY";
+    /// year (yyyy) → "YYYY". The display is a CONSTANT of the stored precision,
+    /// never derived from the source spelling or rawMatch. Unparseable → as-is.
+    nonisolated static func renderCanonicalDate(iso: String) -> String {
+        let monthNames = ["January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"]
+        let parts = iso.split(separator: "-").map(String.init)
+        if parts.count >= 3, let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]),
+           (1...12).contains(m) {
+            return String(format: "%02d/%02d/%04d", d, m, y)
+        }
+        if parts.count == 2, let y = Int(parts[0]), let m = Int(parts[1]), (1...12).contains(m) {
+            return "\(monthNames[m - 1]) \(y)"
+        }
+        if parts.count == 1, let y = Int(parts[0]) { return String(y) }
+        return iso
     }
 
     /// V2 2b — per-field display-label constants, set EQUAL to today's
