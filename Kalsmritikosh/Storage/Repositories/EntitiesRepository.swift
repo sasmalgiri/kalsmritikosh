@@ -30,6 +30,22 @@ public actor EntitiesRepository {
     @discardableResult
     public func insertBatch(_ entities: [Entity]) async throws -> [Entity.ID: Entity.ID] {
         var mapping: [Entity.ID: Entity.ID] = [:]
+        #if DEBUG
+        // V3 3b — STRUCTURAL CHOKEPOINT (C-ii completeness-audit tripwire): every
+        // entity WRITE passes here, so UNAMBIGUOUS junk reaching insertBatch means
+        // a creating/fold path skipped the gate-then-fold contract. Scoped to the
+        // hard structural classes (Nil/email/filename/hostname) — never a real
+        // name — so it can't false-trip on an unusual-but-legit test name while
+        // still closing the "future 4th path forgets the gate" class where it's
+        // born. Debug/test-only.
+        let debugGate = EntityQualityGate()
+        let hardJunk: Set<String> = ["nil-family", "email-as-person", "filename-shaped", "hostname-shape"]
+        for e in entities {
+            if let reason = debugGate.classify(e), hardJunk.contains(reason) {
+                assertionFailure("ungated \(reason) entity reached insertBatch: \(e.kind.rawValue) '\(e.value)' — a creating path skipped gate-then-fold")
+            }
+        }
+        #endif
         for e in entities {
             let rawNormalized = rawNormalize(e)
             guard !rawNormalized.isEmpty else { continue }

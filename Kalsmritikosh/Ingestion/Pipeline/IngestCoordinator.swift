@@ -1349,12 +1349,16 @@ public actor IngestCoordinator {
                 if lhs.value != rhs.value { return lhs.value < rhs.value }
                 return lhs.id.uuidString < rhs.id.uuidString
             }
-            if let entityLinker { raw = entityLinker.link(raw) }
-            // T13.4 — drop garbage (weekdays / mail keywords / hostnames /
-            // app-internal identifiers) before storage.
+            // V3 3b — GATE-THEN-FOLD (owner ruling D5): quality-gate BEFORE the
+            // linker folds, so nothing that fails the gate can become a fold
+            // winner or a variant (the live "Nil Nil"-folds-as-a-name defect was
+            // fold-then-gate). The gate is the chokepoint every entity-creating
+            // path passes through; a debug assertion at insertBatch catches any
+            // future ungated write.
             if let entityQualityGate {
                 raw = entityQualityGate.filter(raw)
             }
+            if let entityLinker { raw = entityLinker.link(raw) }
             canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
             extractedEntities = raw
             await pipelineMetrics?.bump(.entities, by: raw.count)

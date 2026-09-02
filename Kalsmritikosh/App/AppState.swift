@@ -2700,14 +2700,27 @@ public final class AppState {
         let ranked = people.sorted { $0.mentionCount > $1.mentionCount }
         var claimed = Set<UUID>()
         var folded = 0
+        // V3 3b — GATE-THEN-FOLD at the reconcile chokepoint: a canonical that
+        // fails the quality gate never folds (neither as a winner nor a variant),
+        // so "Nil Nil" can't become anyone's name. gateRejected counts the live
+        // 4,343's junk blocked each idle pass — climbing pre-drain is the gate
+        // WORKING (owner expectation, beside "staleness lights to 716"), a free
+        // preview of the inventory V5 retires. No delete: folds are refused only.
+        let gate = EntityQualityGate.bundled()
+        func gatePasses(_ value: String) -> Bool {
+            gate.shouldKeep(Entity(kind: .person, value: value, sourceObjectID: UUID()))
+        }
+        var gateRejected = 0
         for i in 0..<ranked.count {
             let winner = ranked[i]
             if claimed.contains(winner.id) { continue }
             guard winner.mentionCount >= 2 else { break }   // list is sorted; rest are <2 too
+            guard gatePasses(winner.value) else { gateRejected += 1; continue }
             for j in (i + 1)..<ranked.count {
                 let loser = ranked[j]
                 if claimed.contains(loser.id) { continue }
                 guard loser.mentionCount <= 1 else { continue }   // only lone slips fold in
+                guard gatePasses(loser.value) else { gateRejected += 1; continue }
                 guard Self.plausibleOCRVariant(winner: winner.normalized, loser: loser.normalized) else { continue }
                 do {
                     try await entities.markOCRVariant(
@@ -2722,6 +2735,9 @@ public final class AppState {
                     KalsmritikoshLog.knowledge.error("Reconcile failed: \(String(describing: error), privacy: .public)")
                 }
             }
+        }
+        if gateRejected > 0 {
+            KalsmritikoshLog.knowledge.info("Reconcile gate refused \(gateRejected, privacy: .public) junk canonical(s) from folding (pre-drain live noise — gate working)")
         }
         return folded
     }

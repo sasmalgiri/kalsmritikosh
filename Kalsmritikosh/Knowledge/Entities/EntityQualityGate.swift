@@ -105,52 +105,72 @@ public struct EntityQualityGate: Sendable {
 
     // MARK: - API
 
-    /// `true` iff the entity passes every gate. Per-kind rules apply
-    /// only to person / organization / vendor / client (the categories
-    /// that NER pollutes); other kinds (date, money, location, …) are
-    /// untouched.
+    /// `true` iff the entity passes every gate.
     public nonisolated func shouldKeep(_ entity: Entity) -> Bool {
+        classify(entity) == nil
+    }
+
+    /// The rejection CLASS an entity fails on, or nil if it passes — the single
+    /// authority `shouldKeep` and the rejection counters both read. Per-kind
+    /// rules apply only to person / organization / vendor / client (the
+    /// categories NER pollutes); other kinds (date, money, location, the V3
+    /// identifierAnchor…) are untouched.
+    public nonisolated func classify(_ entity: Entity) -> String? {
         let surface = entity.value.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = surface.lowercased()
 
-        if surface.count < 2 { return false }
-        if Self.weekdays.contains(lower) { return false }
-        if Self.months.contains(lower) { return false }
-        if stoplist.contains(lower) { return false }
-        if Self.internalIdentifiers.contains(lower) { return false }
+        if surface.count < 2 { return "too-short" }
+        if Self.weekdays.contains(lower) { return "weekday" }
+        if Self.months.contains(lower) { return "month" }
+        if stoplist.contains(lower) { return "stoplist" }
+        if Self.internalIdentifiers.contains(lower) { return "internal-id" }
 
         let isNameKind = isNounKind(entity.kind)
+        guard isNameKind else { return nil }   // non-name kinds are untouched
 
-        if isNameKind, lower.contains("worker") {
-            return false
+        // E-1 (V3 3b): the Nil-family — "Nil", "Nil Nil", "nil / nil" — a header
+        // placeholder NER promotes to a person; never a real name.
+        if Self.isNilFamily(lower) { return "nil-family" }
+
+        // E-1: an email address mis-tagged as a person ("s.khan@example.com").
+        // A real person/org name never contains "@".
+        if surface.contains("@") { return "email-as-person" }
+
+        // E-1: a filename mis-tagged as a subject ("RESPONSE_29.08.2024.pdf").
+        if Self.isFilenameShaped(lower) { return "filename-shaped" }
+
+        if lower.contains("worker") { return "worker" }
+
+        // Single all-lowercase word — common-noun false positive.
+        if surface.allSatisfy({ $0.isLetter || $0 == "-" }), surface == lower {
+            return "lowercase-common-noun"
         }
-
-        // Single all-lowercase word of person/org kind — almost always a
-        // common-noun false positive ("category", "ref", "urls").
-        if isNameKind,
-           surface.allSatisfy({ $0.isLetter || $0 == "-" }),
-           surface == lower {
-            return false
-        }
-
-        // Hostname-shaped (mixed letters + digits, no spaces, ≥6 chars):
-        // "tyzpr01mb4530", "seqmbx01", "d22rediffmail".
-        if isNameKind, isHostnameShape(surface) {
-            return false
-        }
-
-        // A person/org surface whose FIRST token is a bare preposition/conjunction
-        // ("of","and","for"…) is a sentence fragment NER mis-tagged as a name
-        // ("OF MONOESTER FROM AQ ML OF DSE"). Articles (the/a/an) are deliberately
-        // EXCLUDED so real "The Home Depot"-style names survive; real orgs almost
-        // never start with a bare preposition.
-        if isNameKind,
-           let first = surface.split(whereSeparator: { $0.isWhitespace }).first,
+        // Hostname-shaped (mixed letters + digits, no spaces, ≥6 chars).
+        if isHostnameShape(surface) { return "hostname-shape" }
+        // First token a bare preposition/conjunction → mis-tagged sentence fragment.
+        if let first = surface.split(whereSeparator: { $0.isWhitespace }).first,
            Self.leadingStopWords.contains(String(first).lowercased()) {
-            return false
+            return "leading-stopword"
         }
+        return nil
+    }
 
-        return true
+    /// "Nil", "Nil Nil", "nil, nil" — every alnum token is the literal "nil".
+    public nonisolated static func isNilFamily(_ lower: String) -> Bool {
+        let tokens = lower.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        guard !tokens.isEmpty else { return false }
+        return tokens.allSatisfy { $0 == "nil" }
+    }
+
+    /// A common file-extension suffix — the string is a filename, not a subject.
+    public nonisolated static let fileExtensions: Set<String> = [
+        "pdf", "eml", "msg", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+        "csv", "txt", "png", "jpg", "jpeg", "gif", "zip", "rar", "html", "htm"
+    ]
+    public nonisolated static func isFilenameShaped(_ lower: String) -> Bool {
+        guard let dot = lower.lastIndex(of: "."), dot != lower.startIndex else { return false }
+        let ext = String(lower[lower.index(after: dot)...])
+        return fileExtensions.contains(ext)
     }
 
     // (NOTE: per real-archive validation + user directive "keep all data,
@@ -163,12 +183,32 @@ public struct EntityQualityGate: Sendable {
     // on commit.)
 
     public nonisolated func filter(_ entities: [Entity]) -> [Entity] {
-        let kept = entities.filter(shouldKeep)
-        let dropped = entities.count - kept.count
-        if dropped > 0 {
-            KalsmritikoshLog.brain.info("EntityQualityGate dropped \(dropped, privacy: .public) of \(entities.count, privacy: .public)")
+        var kept: [Entity] = []
+        var byClass: [String: Int] = [:]
+        for e in entities {
+            if let reason = classify(e) { byClass[reason, default: 0] += 1 } else { kept.append(e) }
+        }
+        if !byClass.isEmpty {
+            let breakdown = byClass.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ")
+            KalsmritikoshLog.brain.info("EntityQualityGate dropped \(entities.count - kept.count, privacy: .public) of \(entities.count, privacy: .public): \(breakdown, privacy: .public)")
         }
         return kept
+    }
+
+    /// Computed rejection counters (V3 3b, C-ii completeness-audit pattern): the
+    /// by-class rejection tally over a set of entities — no stored table, so
+    /// it's available "from day one" and never drifts from `classify`. Callers
+    /// group by producer_version to key counters per era (V6 guard-silence).
+    /// EXPECTATION (owner, logged beside "staleness lights to 716"): once the
+    /// gate-then-fold reorder lands, the idle reconcile pass counts rejections
+    /// against the EXISTING live 4,343's junk on every cycle — counters climbing
+    /// pre-drain is the gate WORKING, a free preview of the inventory V5 retires.
+    public nonisolated func rejectionAudit(_ entities: [Entity]) -> [String: Int] {
+        var byClass: [String: Int] = [:]
+        for e in entities {
+            if let reason = classify(e) { byClass[reason, default: 0] += 1 }
+        }
+        return byClass
     }
 
     // MARK: - Retroactive purge
