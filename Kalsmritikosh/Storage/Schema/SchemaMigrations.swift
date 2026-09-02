@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 120
+    public static let latestVersion = 121
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -651,7 +651,8 @@ public enum SchemaMigrations {
         (117, v117),
         (118, v118),
         (119, v119),
-        (120, v120)
+        (120, v120),
+        (121, v121)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6372,5 +6373,21 @@ public enum SchemaMigrations {
     ALTER TABLE chunks ADD COLUMN chunk_version INTEGER;
     ALTER TABLE chunks ADD COLUMN embedding_model_version TEXT;
     ALTER TABLE knowledge_objects ADD COLUMN exhaust_class TEXT;
+    """
+
+    // MARK: - v121 — V2 capture-group provenance (C-1 + C-10)
+    //
+    // Nullable/advisory; no behavior change in v121 itself (versioning-before-
+    // logic, per the V1-before-V2 rule). V2's extractor rewrite fills them.
+    // - raw_match: the FULL matched text a fact was captured from ("Patent
+    //   No. 555489"), kept as provenance while `value` becomes the normalized
+    //   atom ("555489") — the Element Calculus split. Six spellings collapse
+    //   to one value, but the receipt can still show all six raw forms.
+    // - source_count: C-10 corroboration — distinct DOCUMENTS asserting this
+    //   value; confidence rises with corroboration instead of first-wins/max.
+    //   Denormalized: the merge asserts source_count == distinct source_blocks.
+    private static let v121: String = """
+    ALTER TABLE generic_facts ADD COLUMN raw_match TEXT;
+    ALTER TABLE generic_facts ADD COLUMN source_count INTEGER;
     """
 }
