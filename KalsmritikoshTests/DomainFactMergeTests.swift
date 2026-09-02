@@ -69,4 +69,40 @@ struct DomainFactMergeTests {
         #expect(Set(app.first?.sourceBlockIDs ?? []) == [b, c])
         #expect(app.first?.sourceCount == 2, "reassigned block must raise the true field's corroboration")
     }
+
+    // MARK: - Cage (owner binding 2026-09-02: strength needs a cage)
+
+    @Test("Coincidence: the SAME value legitimately under two different fields (invoice == case) does NOT cross-reassign")
+    func sameValueTwoFieldsIsNotReassigned() {
+        let a = UUID(), b = UUID()
+        // Each field holds 5567 as its SOLE value — neither is 'intruded', so
+        // value-equality alone must NOT be read as identity of referent.
+        let merged = DomainFactExtractor.merge([
+            fact("invoiceNumber", "5567", block: a),
+            fact("caseNumber", "5567", block: b),
+        ])
+        let inv = merged.filter { $0.field == "invoicenumber" }
+        let cas = merged.filter { $0.field == "casenumber" }
+        #expect(inv.count == 1 && inv.first?.value == "5567", "invoice number wrongly reassigned: \(inv.map(\.value))")
+        #expect(cas.count == 1 && cas.first?.value == "5567", "case number wrongly reassigned: \(cas.map(\.value))")
+    }
+
+    @Test("Corroboration gate: a well-attested value is NOT dragged out of its field by a single mislabel elsewhere")
+    func corroborationGateHoldsWellAttestedValue() {
+        let a = UUID(), b = UUID(), c = UUID(), d = UUID()
+        // patentNumber holds 700321 across TWO blocks (sc 2) plus another value
+        // (so it IS intruded); applicationNumber holds 700321 once as its sole
+        // value. The uncaged "sole-value home" rule would move the well-attested
+        // 700321 INTO applicationNumber — the corroboration gate forbids it
+        // (home sc 1 < intruded sc 2).
+        let merged = DomainFactExtractor.merge([
+            fact("patentNumber", "700321", block: a),
+            fact("patentNumber", "700321", block: b),   // → sc 2
+            fact("patentNumber", "888999", block: d),   // patentNumber now intruded
+            fact("applicationNumber", "700321", block: c),
+        ])
+        let pat = merged.filter { $0.field == "patentnumber" }
+        #expect(pat.contains { $0.value == "700321" && $0.sourceCount == 2 },
+                "the well-attested patent value was dragged out by a weak mislabel: \(pat.map { "\($0.value)#\($0.sourceCount ?? -1)" })")
+    }
 }

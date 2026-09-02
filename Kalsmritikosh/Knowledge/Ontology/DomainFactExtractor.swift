@@ -73,20 +73,42 @@ public struct DomainFactExtractor: Sendable {
         return resolveIdentifierCollisions(order.compactMap { byKey[$0] })
     }
 
-    /// V2 (C-10) — cross-field mislabel resolution at the SOURCE. A canonical
-    /// identifier value claimed by MORE THAN ONE identifier field is a
-    /// collision (the owner ground-truth case: an application number captured
-    /// under "Patent No." in one block while it is the applicationNumber
-    /// everywhere else). When exactly one claiming field holds that value as
-    /// its SOLE value (its true home) and another claiming field also holds a
-    /// DIFFERENT value (so the collision is an intruder there), the value is
-    /// REASSIGNED to its home — its evidence blocks merge in as corroboration,
-    /// nothing is deleted (the no-delete directive) — and dropped from the
-    /// intruded field. A genuine disagreement (two values under one field,
-    /// neither colliding across fields) is left untouched: it survives as a
-    /// conflict for the evidence gate to surface. The write-time twin of the
-    /// composer's query-time cross-field guard: this kills a SAME-block
-    /// mislabel at ingest; the query-time guard still covers cross-block cases.
+    /// V2 (C-10) — cross-field mislabel resolution at the SOURCE, CAGED (owner
+    /// binding 2026-09-02, gate 1). A canonical identifier value claimed by MORE
+    /// THAN ONE identifier field is a collision (the owner ground-truth case: an
+    /// application number captured under "Patent No." in one block while it is
+    /// the applicationNumber everywhere else). Reassignment fires ONLY when ALL
+    /// hold:
+    ///   (a) canonical-VALUE equality across fields — NEVER value shape (no
+    ///       "looks application-shaped" homing; that would be hasPrefix sniffing
+    ///       reborn at write time). The only signal is `canonical(value)`.
+    ///   (b) the intruded field holds a DIFFERENT value too (the collision is
+    ///       redundant there — an intruder, not the field's own answer). This is
+    ///       what separates a MISLABEL from a COINCIDENCE: two fields that each
+    ///       hold the same value as their SOLE value (an invoice number equal to
+    ///       a case number) never cross-reassign — value-equality alone is not
+    ///       identity of referent (gate 2).
+    ///   (c) exactly one claiming field holds the value as its sole value (a
+    ///       single unambiguous home).
+    ///   (d) CORROBORATION GATE — the home's attestation ≥ the intruded
+    ///       attestation. A value can never be moved INTO a field where it is
+    ///       LESS attested than where it sits: this stops a well-witnessed
+    ///       patent number that appears once, mislabeled, under applicationNumber
+    ///       from being dragged out of patentNumber. ("≥" not strict ">": a
+    ///       same-block letter attests every field once, so the honest single-
+    ///       block corroboration is uniformly 1 — reported to the owner.)
+    /// On reassignment the value's evidence blocks ride into the home as
+    /// corroboration (nothing deleted — the no-delete directive) and drop from
+    /// the intruded field. A genuine disagreement (two values under one field,
+    /// neither colliding across fields) is untouched — it survives as a conflict.
+    ///
+    /// SCOPE (owner binding gate 4): this runs inside merge(), which the
+    /// extractor calls PER BLOCK — so the resolver only sees collisions whose
+    /// fields co-occur in ONE block. A mislabel whose true-home value lives in a
+    /// DIFFERENT document is out of scope here and is caught by the composer's
+    /// query-time cross-field guard instead. The V5 drain's predicted-diff must
+    /// state this: within-block reassignment only; cross-block collisions on the
+    /// 716 sources remain the query-time layer's job.
     nonisolated static func resolveIdentifierCollisions(_ facts: [GenericFact]) -> [GenericFact] {
         let cmp = CanonicalFactComparator()
         func canon(_ f: GenericFact) -> String { cmp.canonical(f.value, .identifier) }
@@ -97,19 +119,25 @@ public struct DomainFactExtractor: Sendable {
 
         var fieldsByValue: [String: Set<String>] = [:]     // canonical value → claiming fields
         var valuesByField: [String: Set<String>] = [:]     // field → distinct canonical values
+        var attestation: [String: Int] = [:]               // "field|canon" → corroboration (sourceCount)
         for (_, f) in idIndexed {
-            fieldsByValue[canon(f), default: []].insert(f.field)
-            valuesByField[f.field, default: []].insert(canon(f))
+            let v = canon(f)
+            fieldsByValue[v, default: []].insert(f.field)
+            valuesByField[f.field, default: []].insert(v)
+            attestation["\(f.field)|\(v)"] = f.sourceCount ?? Set(f.sourceBlockIDs).count
         }
 
         var dropIndices = Set<Int>()
         var extraBlocks: [String: [UUID]] = [:]             // "field|canon" (home) → reassigned blocks
         for (idx, f) in idIndexed {
             let v = canon(f)
-            guard (fieldsByValue[v]?.count ?? 0) >= 2 else { continue }       // collision only
-            guard (valuesByField[f.field]?.count ?? 0) > 1 else { continue }  // this field is intruded
+            guard (fieldsByValue[v]?.count ?? 0) >= 2 else { continue }       // (a) collision only
+            guard (valuesByField[f.field]?.count ?? 0) > 1 else { continue }  // (b) this field is intruded
             let homes = (fieldsByValue[v] ?? []).filter { (valuesByField[$0]?.count ?? 0) == 1 }
-            guard homes.count == 1, let home = homes.first, home != f.field else { continue }
+            guard homes.count == 1, let home = homes.first, home != f.field else { continue }  // (c)
+            let homeSC = attestation["\(home)|\(v)"] ?? 0
+            let intrudedSC = attestation["\(f.field)|\(v)"] ?? 1
+            guard homeSC >= intrudedSC else { continue }                     // (d) corroboration gate
             dropIndices.insert(idx)
             extraBlocks["\(home)|\(v)", default: []].append(contentsOf: f.sourceBlockIDs)
         }
