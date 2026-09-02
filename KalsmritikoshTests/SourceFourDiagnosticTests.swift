@@ -112,12 +112,18 @@ struct SourceFourDiagnosticTests {
         // Unit-E hunt axis (owner): Q7 SOLO in a fresh process — still
         // accumulating = self-feeding (its own asks deposit what the next
         // ask inhales); stable solo = fed by the other questions' processing.
-        let solo = ProcessInfo.processInfo.environment["PROBE_SOLO_Q7"] == "1"
-        let questions = solo
-            ? ["what is the capital of France"]
-            : (ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
-               ? BaselineCaptureHarness.questions.reversed().map { $0 }
-               : BaselineCaptureHarness.questions)
+        // Discriminator generalization (owner 2026-09-02, Q2 tripwire): any
+        // single question can be soloed ×5 to grade stable-vs-toggling. Q2 =
+        // "what is the application number" runs the comparator-vs-residual
+        // discriminator; PROBE_SOLO_Q7 stays as the legacy alias.
+        let soloQuestion = ProcessInfo.processInfo.environment["PROBE_SOLO_QUESTION"]
+        let solo = ProcessInfo.processInfo.environment["PROBE_SOLO_Q7"] == "1" || soloQuestion != nil
+        let questions: [String] = soloQuestion.map { [$0] }
+            ?? (ProcessInfo.processInfo.environment["PROBE_SOLO_Q7"] == "1"
+                ? ["what is the capital of France"]
+                : (ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
+                   ? BaselineCaptureHarness.questions.reversed().map { $0 }
+                   : BaselineCaptureHarness.questions))
         let asksPerQuestion = solo ? 5 : 3
         for q in questions {
             var bits: [UInt64] = []
@@ -143,6 +149,12 @@ struct SourceFourDiagnosticTests {
                       + " cover=\(r?.coverage.map { String($0) } ?? "nil")"
                       + " ingest=\(r?.ingestCoverage ?? -1)"
                       + " cits=\(a.citations.count)")
+                // SOURCESET dump (owner discriminator): the sorted citation
+                // set per ask, so a source consolidation (v0 spelling pair now
+                // comparing canonical-equal → one fewer distinct source) is
+                // visible and diffable against the seal's recorded citations.
+                let sourceSet = a.citations.map { String(describing: $0) }.sorted()
+                print("S4 SOURCESET q=\"\(q.prefix(28))\" ask=\(i) [\(sourceSet.count)]: \(sourceSet.joined(separator: " | "))")
             }
             print("S4 COMP verdict q=\"\(q.prefix(28))\": \(Set(bits).count) distinct of \(bits.count)")
         }
