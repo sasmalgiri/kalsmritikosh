@@ -10,6 +10,29 @@
 import Foundation
 import OSLog
 
+/// Task #30 verify+fallback sub-profiler (env-gated KALSMRITIKOSH_VERIFY_CLOCK,
+/// inert in production). Sub-signposts inside verify() that SUM to the stage
+/// the top-level StageClock measures — so the 47 s of the flagship's answer
+/// (retrieve1 collapsed to ~0.2 s; verify+fallback IS the cost now) gets a
+/// per-question breakdown with the cross-encoder candidate count for the
+/// magnitude-model reconciliation (count × unit-B's ~0.86 s/call).
+nonisolated final class VerifyClock: @unchecked Sendable {
+    nonisolated static let enabled = ProcessInfo.processInfo.environment["KALSMRITIKOSH_VERIFY_CLOCK"] == "1"
+    private let t0 = Date()
+    private var last = Date()
+    private var rows: [(String, Double)] = []
+    var rerankCandidates = 0
+    func mark(_ s: String) {
+        guard Self.enabled else { return }
+        let now = Date(); rows.append((s, now.timeIntervalSince(last))); last = now
+    }
+    func dump(_ q: String) {
+        guard Self.enabled else { return }
+        let tbl = rows.map { "\($0.0)=\(String(format: "%.2f", $0.1))s" }.joined(separator: " ")
+        print("VERIFYCLOCK q=\"\(q.prefix(28))\" \(tbl) rerankCands=\(rerankCandidates) total=\(String(format: "%.2f", Date().timeIntervalSince(t0)))s")
+    }
+}
+
 public struct EvidenceVerifier: Verifier {
     /// Per-claim citation cap (Item 1 of UPDATE_08). The previous
     /// `claims.flatMap { ... supportingObjectIDs.map { ... } }` emitted
@@ -232,6 +255,8 @@ public struct EvidenceVerifier: Verifier {
         findings: [ExpertFindings],
         retrieval: RetrievalResult
     ) async throws -> VerifiedAnswer {
+        let vclock = VerifyClock()
+        defer { vclock.dump(intent.rawQuestion) }   // fires at every return
         let claims = findings.flatMap(\.claims)
         let droppedUnverifiable = findings.map(\.droppedUnverifiable).reduce(0, +)
         let intentWindow: DateInterval? = {
@@ -249,6 +274,7 @@ public struct EvidenceVerifier: Verifier {
             ingestCoverage: ingestCoverage,
             now: Self.referenceNow()
         )
+        vclock.mark("claimEval")
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given
         // KnowledgeObject. Objects with no retrieval hit (came in via
@@ -415,6 +441,7 @@ public struct EvidenceVerifier: Verifier {
                     HeuristicKeywordTier(),
                     CoreMLCrossEncoderTier()
                 ])
+                vclock.rerankCandidates = snippets.count
                 scores = await ladder.score(
                     question: intent.rawQuestion,
                     candidates: snippets
@@ -460,6 +487,7 @@ public struct EvidenceVerifier: Verifier {
                 rerankByObject[citation.objectID] = scores[i]
             }
         }
+        vclock.mark("rerank")
 
         // UPDATE_14 + G2-MMR — apply the intent-aware global cap on
         // distinct documents. The pre-MMR rule was a pure lexicographic
