@@ -163,4 +163,19 @@ struct AnchorWriterBindingTests {
         #expect(try await anchors.count(of: .identifierAnchor) == byKey.count,
                 "one anchor row per distinct identity — no duplicates, no orphans")
     }
+
+    @Test("V3 3d — leading-punctuation strip folds with the clean sibling in EITHER arrival order → one clean person")
+    func leadingPunctuationFoldsBothOrders() async throws {
+        for order in [[", Shabana Khan", "Shabana Khan"], ["Shabana Khan", ", Shabana Khan"]] {
+            let (db, ko) = try await freshDBWithKO()
+            let repo = EntitiesRepository(database: db)
+            for name in order {
+                _ = try await repo.insertBatch([Entity(kind: .person, value: name, sourceObjectID: ko)])
+            }
+            let count = Int((try await db.query("SELECT COUNT(*) FROM entities WHERE kind = 'person'", [])).first?.int(0) ?? -1)
+            let value = (try await db.query("SELECT value FROM entities WHERE kind = 'person' LIMIT 1", [])).first?.string(0)
+            #expect(count == 1, "order \(order): expected ONE folded person, got \(count) — the strip created a duplicate")
+            #expect(value == "Shabana Khan", "order \(order): stored display kept a header artifact: \(value ?? "nil")")
+        }
+    }
 }

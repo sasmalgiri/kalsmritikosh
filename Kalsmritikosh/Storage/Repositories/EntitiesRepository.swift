@@ -31,20 +31,7 @@ public actor EntitiesRepository {
     public func insertBatch(_ entities: [Entity]) async throws -> [Entity.ID: Entity.ID] {
         var mapping: [Entity.ID: Entity.ID] = [:]
         #if DEBUG
-        // V3 3b — STRUCTURAL CHOKEPOINT (C-ii completeness-audit tripwire): every
-        // entity WRITE passes here, so UNAMBIGUOUS junk reaching insertBatch means
-        // a creating/fold path skipped the gate-then-fold contract. Scoped to the
-        // hard structural classes (Nil/email/filename/hostname) — never a real
-        // name — so it can't false-trip on an unusual-but-legit test name while
-        // still closing the "future 4th path forgets the gate" class where it's
-        // born. Debug/test-only.
-        let debugGate = EntityQualityGate()
-        let hardJunk: Set<String> = ["nil-family", "email-as-person", "filename-shaped", "hostname-shape"]
-        for e in entities {
-            if let reason = debugGate.classify(e), hardJunk.contains(reason) {
-                assertionFailure("ungated \(reason) entity reached insertBatch: \(e.kind.rawValue) '\(e.value)' — a creating path skipped gate-then-fold")
-            }
-        }
+        for e in entities { Self.assertGatedEntityWrite(e) }
         #endif
         for e in entities {
             let rawNormalized = rawNormalize(e)
@@ -97,6 +84,18 @@ public actor EntitiesRepository {
     ) async throws -> Entity.ID {
         let normalized = label.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { throw NSError(domain: "EntitiesRepository", code: 1) }
+        // V3 3d — this is an entity-write DOOR: gate-then-write like insertBatch,
+        // so a junk org label cannot reach the register ungated. classify()
+        // returns nil for a real org, so this is a no-op for legitimate labels.
+        let orgEntity = Entity(kind: .organization, value: label, sourceObjectID: sourceObjectID)
+        #if DEBUG
+        Self.assertGatedEntityWrite(orgEntity)
+        #endif
+        if let reason = EntityQualityGate().classify(orgEntity),
+           Self.hardJunkClasses.contains(reason) {
+            throw NSError(domain: "EntitiesRepository", code: 9,
+                          userInfo: [NSLocalizedDescriptionKey: "gated org label (\(reason)): \(label)"])
+        }
         let rows = try await database.query("""
         INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json)
         VALUES (?, ?, ?, ?, ?, ?, '{}')
@@ -133,6 +132,13 @@ public actor EntitiesRepository {
         let identity = IdentifierAnchor.identityKey(field: field, value: value)
         let anchor = IdentifierAnchor.makeAnchor(
             field: field, value: value, sourceObjectID: sourceObjectID, confidence: confidence)
+        // V3 3d — structural coverage: this is an entity-write door too. An anchor
+        // name is machine-built from displayLabel constants, so classify() always
+        // passes it (kind-aware — the gate never questions an anchor); the
+        // assertion exists so NO door escapes the chokepoint contract.
+        #if DEBUG
+        Self.assertGatedEntityWrite(anchor)
+        #endif
         let attrs = try encoder.encode(anchor.attributes)
         let attrsStr = String(data: attrs, encoding: .utf8) ?? "{}"
         let rows = try await database.query("""
@@ -754,6 +760,39 @@ public actor EntitiesRepository {
         s.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
+    /// V3 3d — strip leading/trailing quote/comma/period header artifacts from a
+    /// stored DISPLAY name (", Shabana Khan" → "Shabana Khan"; '"Nil Nil"' →
+    /// "Nil Nil") WITHOUT touching interior content or honorifics. This is
+    /// NORMALIZATION, not deletion — the person is kept, wearing no artifact. The
+    /// person FOLD KEY already strips these (stripPersonAffixes), so cleaning the
+    /// display keeps value and key consistent; both arrival orders of
+    /// ", Shabana Khan" / "Shabana Khan" resolve to one entity with a clean name.
+    static func stripEdgePunctuation(_ s: String) -> String {
+        let edges = CharacterSet(charactersIn: "'\"“”‘’.,").union(.whitespaces)
+        return s.trimmingCharacters(in: edges)
+    }
+
+    /// V3 3d — the hard-junk classes that NO entity-write door may admit: the
+    /// unambiguous structural garbage (never a real name / never a by-constant
+    /// anchor name). Shared by the runtime org-label gate and the DEBUG chokepoint
+    /// assertion so both agree on "junk".
+    static let hardJunkClasses: Set<String> = [
+        "nil-family", "email-as-person", "filename-shaped", "hostname-shape", "automated-sender"
+    ]
+
+    #if DEBUG
+    /// V3 3d — the STRUCTURAL CHOKEPOINT, shared by EVERY entity-write door
+    /// (insertBatch, upsertCanonicalOrganization, resolveOrCreateAnchor) so the
+    /// assertion is a TRUE chokepoint, not a checkpoint on one road: a creating/
+    /// promotion path that skips gate-then-fold is caught HERE, by assertion,
+    /// instead of by a fixture three units later. Debug-only.
+    static func assertGatedEntityWrite(_ e: Entity) {
+        if let reason = EntityQualityGate().classify(e), hardJunkClasses.contains(reason) {
+            assertionFailure("ungated \(reason) entity reached a write door: \(e.kind.rawValue) '\(e.value)' — a creating path skipped gate-then-fold")
+        }
+    }
+    #endif
+
     /// Strip surrounding quotes/punctuation and a single leading honorific so
     /// person-name variants fold to one canonical. Deliberately conservative:
     /// only a known honorific as the FIRST token is removed (never trailing
@@ -811,7 +850,9 @@ public actor EntitiesRepository {
         """, [
             .uuid(e.id),
             .text(e.kind.rawValue),
-            .text(Self.collapseWhitespace(e.value)),
+            .text(e.kind == .person
+                  ? Self.stripEdgePunctuation(Self.collapseWhitespace(e.value))
+                  : Self.collapseWhitespace(e.value)),
             .text(normalized),
             .uuid(e.sourceObjectID),
             .real(e.confidence.value),
