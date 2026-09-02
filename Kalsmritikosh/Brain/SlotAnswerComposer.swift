@@ -226,23 +226,43 @@ public enum SlotAnswerComposer {
         if FactSchemaRegistry.expectedShape(of: fact.field) == .money {
             return renderMoney(value: fact.value, unit: fact.unit)
         }
-        // VERSION-AWARE RENDERING (V2 commit 2a): `value` is the display form
-        // for v0 (fused, e.g. "Patent No. 555489") but the normalized ATOM for
-        // v1 (bare "555489"). Rendering the atom through the label path would
-        // produce "Patent number 555489." — a DIFFERENT surface than the v0
-        // witness. A v1 row therefore renders from `rawMatch` (the captured
-        // form carrying the original label), reproducing the byte-identical
-        // surface. v0 / nil — the entire live ledger pre-drain — renders the
-        // value as-is: legacy bytes, avoiding the double-label trap on fused
-        // rows. Behavior-neutral today (every live row is v0).
+        // VERSION-AWARE RENDERING (V2 commit 2a→2b): `value` is the display
+        // form for v0 (fused, "Patent No. 555489") but the normalized ATOM for
+        // v1 (bare "555489"). 2a rendered v1 from `rawMatch` — but after C-10
+        // merges six spellings into one fact, `rawMatch` is WHICHEVER form the
+        // merge stored (first-seen), so the witness would flip with ingestion
+        // order at the drain: arbitrary order given authority, at presentation.
+        // 2b fixes it: v1 identifier fields render from a per-field DISPLAY
+        // LABEL CONSTANT (set equal to today's witnessed surface), so the
+        // surface is safe BY CONSTANT, immune to source OCR noise and merge
+        // internals. `rawMatch` retires to provenance-for-the-receipt only.
+        // v0 / nil (the entire live ledger pre-drain) renders value as-is.
+        // (Date fields' ISO→display inverse lands WITH C-7 date normalization
+        // in the writer commit — coupled; no v1 date rows exist yet.)
         let display: String
-        if (fact.producerVersion ?? 0) >= 1, let raw = fact.rawMatch, !raw.isEmpty {
-            display = raw
+        if (fact.producerVersion ?? 0) >= 1, let dl = Self.displayLabel(forFieldID: fact.field) {
+            display = "\(dl) \(fact.value)"
         } else {
             display = fact.value
         }
         let unit = fact.unit.map { " \($0)" } ?? ""
         return display + unit
+    }
+
+    /// V2 2b — per-field display-label constants, set EQUAL to today's
+    /// witnessed answer surfaces. v1 rows store the bare atom; the surface is
+    /// reconstructed from these constants, NOT from the stored value or the
+    /// merge's `rawMatch` — so the witness is byte-identical by construction,
+    /// independent of ingestion order and source spelling. A test asserts each
+    /// constant equals the current gold prefix for its field. nil → the field
+    /// has no v1 rewrite yet (renders v0 value as-is until its pack lands).
+    nonisolated static func displayLabel(forFieldID field: String) -> String? {
+        switch FactSchemaRegistry.normalizeField(field) {
+        case "patentnumber":      return "Patent No."
+        case "applicationnumber": return "Application No."
+        case "publicationnumber": return "Publication No."
+        default:                  return nil
+        }
     }
 
     /// Deterministic money rendering: the numeric amount from the matched

@@ -167,7 +167,7 @@ struct SlotAnswerComposerTests {
         #expect(SlotAnswerComposer.renderValue(amount) == "₹20,000")
     }
 
-    @Test("V2 commit 2a — version-aware rendering: v0 fused and v1 bare+rawMatch render the IDENTICAL surface")
+    @Test("V2 2b — version-aware rendering via displayLabel: v0 fused and v1 bare render the IDENTICAL surface, by constant")
     func versionAwareRendering() {
         // v0 (the entire live ledger pre-drain): value is the fused display
         // form; render as-is — today's bytes.
@@ -177,19 +177,34 @@ struct SlotAnswerComposerTests {
                              producerVersion: nil, rawMatch: nil)
         #expect(SlotAnswerComposer.renderValue(v0) == "Patent No. 555489")
 
-        // v1 (what V2's extractor writes): value is the normalized ATOM, and
-        // rawMatch carries the captured form — the render must reproduce the
-        // v0 surface byte-for-byte from rawMatch, NOT relabel the bare atom.
+        // v1 (what V2's writer emits): value is the normalized ATOM; the
+        // surface is rebuilt from the per-field displayLabel CONSTANT — NOT
+        // from rawMatch (which, post-C-10-merge, would be ingestion-order-
+        // hostage) and NOT from humanLabel (which would say "Patent number").
         let v1 = GenericFact(subjectLabel: "s", field: "patentNumber",
                              value: "555489", status: .sourceAsserted,
                              confidence: 0.8, sourceBlockIDs: [UUID()],
-                             producerVersion: 1, rawMatch: "Patent No. 555489")
-        #expect(SlotAnswerComposer.renderValue(v1) == "Patent No. 555489")
+                             producerVersion: 1, rawMatch: "PATENT NO.: 555489")
+        #expect(SlotAnswerComposer.renderValue(v1) == "Patent No. 555489",
+                "v1 surface must come from the displayLabel constant, not the OCR-noisy rawMatch")
         #expect(SlotAnswerComposer.renderValue(v0) == SlotAnswerComposer.renderValue(v1),
                 "version-aware render must produce the identical surface across dialects")
-
         // The ATOM is what dedup/comparison use — bare, no label token.
         #expect(v1.value == "555489")
+    }
+
+    @Test("V2 2b — displayLabel constants equal today's witnessed answer-surface prefixes")
+    func displayLabelMatchesWitnessedSurface() {
+        // The gold answer surface is "Patent No. 900123." — its prefix is the
+        // displayLabel. If a pack ever changes the fused surface, this fails,
+        // forcing the constant and the gold to move together (no silent drift).
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "patentNumber") == "Patent No.")
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "applicationNumber") == "Application No.")
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "publicationNumber") == "Publication No.")
+        // Case-insensitive on the field id (normalized internally).
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "patentnumber") == "Patent No.")
+        // A field with no v1 rewrite yet has no constant — renders v0 as-is.
+        #expect(SlotAnswerComposer.displayLabel(forFieldID: "grantDate") == nil)
     }
 
     // MARK: - D-14 slot confidence floor
