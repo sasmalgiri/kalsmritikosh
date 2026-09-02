@@ -167,6 +167,31 @@ struct SlotAnswerComposerTests {
         #expect(SlotAnswerComposer.renderValue(amount) == "₹20,000")
     }
 
+    @Test("V2 commit 2a — version-aware rendering: v0 fused and v1 bare+rawMatch render the IDENTICAL surface")
+    func versionAwareRendering() {
+        // v0 (the entire live ledger pre-drain): value is the fused display
+        // form; render as-is — today's bytes.
+        let v0 = GenericFact(subjectLabel: "s", field: "patentNumber",
+                             value: "Patent No. 555489", status: .sourceAsserted,
+                             confidence: 0.8, sourceBlockIDs: [UUID()],
+                             producerVersion: nil, rawMatch: nil)
+        #expect(SlotAnswerComposer.renderValue(v0) == "Patent No. 555489")
+
+        // v1 (what V2's extractor writes): value is the normalized ATOM, and
+        // rawMatch carries the captured form — the render must reproduce the
+        // v0 surface byte-for-byte from rawMatch, NOT relabel the bare atom.
+        let v1 = GenericFact(subjectLabel: "s", field: "patentNumber",
+                             value: "555489", status: .sourceAsserted,
+                             confidence: 0.8, sourceBlockIDs: [UUID()],
+                             producerVersion: 1, rawMatch: "Patent No. 555489")
+        #expect(SlotAnswerComposer.renderValue(v1) == "Patent No. 555489")
+        #expect(SlotAnswerComposer.renderValue(v0) == SlotAnswerComposer.renderValue(v1),
+                "version-aware render must produce the identical surface across dialects")
+
+        // The ATOM is what dedup/comparison use — bare, no label token.
+        #expect(v1.value == "555489")
+    }
+
     // MARK: - D-14 slot confidence floor
 
     @Test("Slot profile floors confidence at 0.8×coverage-factor; any failed condition keeps base")

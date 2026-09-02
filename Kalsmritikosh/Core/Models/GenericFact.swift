@@ -59,6 +59,21 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// Evidence blocks that support this fact (the claim–evidence contract).
     public let sourceBlockIDs: [UUID]
 
+    // MARK: - V2 capture-group provenance (C-1 + C-10) — the two-layer split
+    //
+    // `value` is the normalized ATOM (Element Calculus: "555489"); these carry
+    // the presentation/corroboration layer. All optional — nil ≡ v0 (pre-V2),
+    // which the composer renders via the legacy path (fused value as-is).
+    /// The producer version that WROTE this row. nil ≡ 0 ≡ v0 (fused value,
+    /// legacy render). v1 = normalized value + `rawMatch` display provenance.
+    public let producerVersion: Int?
+    /// The full matched text the fact was captured from ("Patent No. 555489")
+    /// — display provenance for v1 rows, whose `value` is the bare atom.
+    public let rawMatch: String?
+    /// C-10 corroboration: distinct DOCUMENTS asserting this value. The merge
+    /// maintains the invariant sourceCount == distinct source blocks.
+    public let sourceCount: Int?
+
     /// Deprecated compatibility shim — derived from `assessment`. Kept so existing readers
     /// and the repository's legacy `status` column keep working during migration.
     @available(*, deprecated, message: "Use assessment (+ AssertabilityPolicy)")
@@ -74,7 +89,10 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         unit: String? = nil,
         assessment: EvidenceAssessment,
         confidence: Double,
-        sourceBlockIDs: [UUID]
+        sourceBlockIDs: [UUID],
+        producerVersion: Int? = nil,
+        rawMatch: String? = nil,
+        sourceCount: Int? = nil
     ) {
         self.id = id
         self.subjectID = subjectID
@@ -85,6 +103,9 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.assessment = assessment
         self.confidence = confidence
         self.sourceBlockIDs = sourceBlockIDs
+        self.producerVersion = producerVersion
+        self.rawMatch = rawMatch
+        self.sourceCount = sourceCount
     }
 
     /// Legacy initializer — decodes a single `EvidenceStatus` into the separated
@@ -98,11 +119,15 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         unit: String? = nil,
         status: EvidenceStatus,
         confidence: Double,
-        sourceBlockIDs: [UUID]
+        sourceBlockIDs: [UUID],
+        producerVersion: Int? = nil,
+        rawMatch: String? = nil,
+        sourceCount: Int? = nil
     ) {
         self.init(id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
                   value: value, unit: unit, assessment: LegacyEvidenceStatusAdapter.decode(status),
-                  confidence: confidence, sourceBlockIDs: sourceBlockIDs)
+                  confidence: confidence, sourceBlockIDs: sourceBlockIDs,
+                  producerVersion: producerVersion, rawMatch: rawMatch, sourceCount: sourceCount)
     }
 
     /// A material fact may appear in a final answer only if its assessment is assertable
@@ -127,6 +152,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// the transition. Decode precedence: valid assessment → valid legacy status → throw.
     private enum CodingKeys: String, CodingKey {
         case id, subjectID, subjectLabel, field, value, unit, assessment, status, confidence, sourceBlockIDs
+        case producerVersion, rawMatch, sourceCount
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -139,6 +165,9 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.unit = try c.decodeIfPresent(String.self, forKey: .unit)
         self.confidence = try c.decode(Double.self, forKey: .confidence)
         self.sourceBlockIDs = try c.decodeIfPresent([UUID].self, forKey: .sourceBlockIDs) ?? []
+        self.producerVersion = try c.decodeIfPresent(Int.self, forKey: .producerVersion)
+        self.rawMatch = try c.decodeIfPresent(String.self, forKey: .rawMatch)
+        self.sourceCount = try c.decodeIfPresent(Int.self, forKey: .sourceCount)
         if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
             self.assessment = a
         } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .status) {
@@ -161,6 +190,9 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         try c.encode(LegacyEvidenceStatusAdapter.encode(assessment), forKey: .status)   // compatibility
         try c.encode(confidence, forKey: .confidence)
         try c.encode(sourceBlockIDs, forKey: .sourceBlockIDs)
+        try c.encodeIfPresent(producerVersion, forKey: .producerVersion)
+        try c.encodeIfPresent(rawMatch, forKey: .rawMatch)
+        try c.encodeIfPresent(sourceCount, forKey: .sourceCount)
     }
 }
 

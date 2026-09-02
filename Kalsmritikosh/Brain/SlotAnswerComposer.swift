@@ -226,8 +226,23 @@ public enum SlotAnswerComposer {
         if FactSchemaRegistry.expectedShape(of: fact.field) == .money {
             return renderMoney(value: fact.value, unit: fact.unit)
         }
+        // VERSION-AWARE RENDERING (V2 commit 2a): `value` is the display form
+        // for v0 (fused, e.g. "Patent No. 555489") but the normalized ATOM for
+        // v1 (bare "555489"). Rendering the atom through the label path would
+        // produce "Patent number 555489." — a DIFFERENT surface than the v0
+        // witness. A v1 row therefore renders from `rawMatch` (the captured
+        // form carrying the original label), reproducing the byte-identical
+        // surface. v0 / nil — the entire live ledger pre-drain — renders the
+        // value as-is: legacy bytes, avoiding the double-label trap on fused
+        // rows. Behavior-neutral today (every live row is v0).
+        let display: String
+        if (fact.producerVersion ?? 0) >= 1, let raw = fact.rawMatch, !raw.isEmpty {
+            display = raw
+        } else {
+            display = fact.value
+        }
         let unit = fact.unit.map { " \($0)" } ?? ""
-        return fact.value + unit
+        return display + unit
     }
 
     /// Deterministic money rendering: the numeric amount from the matched
