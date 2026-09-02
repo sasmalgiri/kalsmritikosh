@@ -82,6 +82,10 @@ struct SourceFourDiagnosticTests {
         let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
         await state.boot(databaseURL: copyURL)
         guard case .ready = state.phase else { await state.shutdown(); return }
+        // Canonical ledger guard (owner 2026-09-02): never grade a phantom container.
+        guard await DiagnosticLedger.assertPopulated(state.database, label: "S4") else {
+            await state.shutdown(); return
+        }
         // Quiescence-in-fact — the ×3 probe below is the GRADER for the
         // transferred 4b prediction: post-true-quiescence, 1-of-3 on all
         // seven; anything less is the STOP that names the residual.
@@ -124,7 +128,8 @@ struct SourceFourDiagnosticTests {
                 : (ProcessInfo.processInfo.environment["PROBE_REVERSED"] == "1"
                    ? BaselineCaptureHarness.questions.reversed().map { $0 }
                    : BaselineCaptureHarness.questions))
-        let asksPerQuestion = solo ? 5 : 3
+        let asksPerQuestion = ProcessInfo.processInfo.environment["PROBE_ASKS"].flatMap(Int.init)
+            ?? (solo ? 5 : 3)
         for q in questions {
             var bits: [UInt64] = []
             for i in 0..<asksPerQuestion {

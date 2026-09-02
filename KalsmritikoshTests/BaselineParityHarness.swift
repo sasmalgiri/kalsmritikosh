@@ -62,6 +62,10 @@ struct BaselineParityHarness {
             Issue.record("AppState failed to boot against the copy (phase=\(state.phase))")
             return
         }
+        // Canonical ledger guard (owner 2026-09-02): never grade a phantom container.
+        guard await DiagnosticLedger.assertPopulated(state.database, label: "PARITY") else {
+            await state.shutdown(); return
+        }
 
         // Quiesce to match a quiesced (steady-state) baseline: drain to empty
         // + a discarded warm-up ask absorbs the boot race (disposition 2 —

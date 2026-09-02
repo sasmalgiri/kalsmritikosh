@@ -83,16 +83,38 @@ public struct ReasoningExpert: Expert {
         // Consume the retrieval-produced ClaimEvaluations UNCHANGED (do not re-evaluate or
         // re-resolve evidence). Join with the surfaced facts by ledger id for field/value.
         let evalByID = Dictionary(result.claimEvaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // The per-object retrieval score — the SAME signal EvidenceVerifier ranks
+        // citations by (best chunk score per KnowledgeObject). The claim's single
+        // representative is chosen by this relevance, so a fact's citation anchor
+        // is its most-relevant evidence object, deterministically — not an
+        // arbitrary array position (`.first`) and not a relevance-blind key.
+        var scoreByObject: [KnowledgeObject.ID: Double] = [:]
+        for rc in result.chunks {
+            let id = rc.chunk.objectID
+            scoreByObject[id] = max(scoreByObject[id] ?? -.infinity, rc.score)
+        }
         var claims: [ExpertFindings.Claim] = []
         for f in result.genericFacts {
             // maySurface (not only assertive): inference and conflict REMAIN VISIBLE, framed
             // by their carried evaluation's presentation. Only `refuse` is dropped.
             guard let eval = evalByID[f.id], eval.decision.maySurface,
-                  let obj = eval.evidence.first?.objectID, let presentation = eval.presentation else { continue }
+                  let obj = Self.stableRepresentative(eval.evidence, scoreByObject: scoreByObject),
+                  let presentation = eval.presentation else { continue }
             // D-12 — humanize the ledger field id ("applicationnumber" →
             // "Application number") and render money canonically; the raw
             // capitalize-first produced "Applicationnumber: …" run-ons.
             let field = SlotFieldResolver.humanLabel(forFieldID: f.field)
+            // ORDERED-EVIDENCE PROBE (owner 2026-09-02, Q2 branch discriminator):
+            // the claim's supporting object is eval.evidence.FIRST — a POSITIONAL
+            // read of an array whose fingerprint is order-INDEPENDENT by design.
+            // Dump .first + the order-independent fingerprint + the full evidence
+            // set so a per-ask `.first` flip resolves to same-members-order-varies
+            // (fingerprint STABLE) vs members-vary (fingerprint VARIES). Env-gated.
+            if ProcessInfo.processInfo.environment["KALSMRITIKOSH_DUMP_EVIDENCE_ORDER"] == "1",
+               eval.evidence.count > 1 {
+                let all = eval.evidence.map { String($0.objectID.uuidString.prefix(8)) }.joined(separator: ",")
+                print("EVFIRST field=\(f.field) n=\(eval.evidence.count) first=\(String(obj.uuidString.prefix(8))) fp=\(String(eval.evidenceFingerprint.prefix(12))) all=[\(all)]")
+            }
             claims.append(ExpertFindings.Claim(
                 statement: "\(Self.framePrefix(presentation))\(field): \(SlotAnswerComposer.renderValue(f))",
                 supportingObjectIDs: [obj],
@@ -102,6 +124,36 @@ public struct ReasoningExpert: Expert {
             ))
         }
         return claims
+    }
+
+    /// V2 determinism — the TIE-INCLUSIVE CUT LAW's single-representative form
+    /// (owner ruling 2026-09-02). A factClaim carries ONE supporting object, and
+    /// `eval.evidence` is an order-INDEPENDENT set by design (its fingerprint
+    /// sorts before hashing). Reading it positionally with `.first` let an
+    /// order flip at ingest/retrieval pick a different co-equal evidence object
+    /// per ask — the representative wobbled, and with it distinctSourceObjectIDs
+    /// and the answer's confidence (the seal-#3 Q2 residual, traced to a peripheral
+    /// email tying with the real evidence for a date fact). The representative is
+    /// now chosen by a CRITERION, never by position: the MOST-RELEVANT evidence
+    /// object (highest retrieval score), ties broken by least objectID. Stable,
+    /// order-independent, keeps nobj=1. The relevance key (not a bare objectID)
+    /// matters — EvidenceVerifier ranks CITATIONS by the same per-object score,
+    /// so the highest-score representative keeps a fact's citation anchor its
+    /// most-relevant document; a bare least-objectID key would deterministically
+    /// promote an arbitrary (often low-relevance) co-evidence object and shift
+    /// citations on aggregation questions. The companion to unit A's total order
+    /// — that governs what a cut keeps IN ORDER; this governs which single equal
+    /// a claim keeps AT ALL.
+    nonisolated static func stableRepresentative(
+        _ evidence: [AssertabilityEvidence],
+        scoreByObject: [KnowledgeObject.ID: Double] = [:]
+    ) -> KnowledgeObject.ID? {
+        evidence.map(\.objectID).max { a, b in
+            let sa = scoreByObject[a] ?? -.infinity
+            let sb = scoreByObject[b] ?? -.infinity
+            if sa != sb { return sa < sb }               // higher score is "greater" (preferred)
+            return a.uuidString > b.uuidString           // tie: least objectID is "greater" (preferred)
+        }
     }
 
     /// The framing prefix a claim's presentation requires — an attributed/user/inference/
