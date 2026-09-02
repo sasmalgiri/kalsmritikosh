@@ -22,25 +22,30 @@ import Testing
 @Suite("V2 preflight — every v1-emittable field has a display contract")
 struct V1DisplayContractTests {
 
-    @Test("Every field the v1 patent writer emits has a shape-appropriate display contract")
-    func everyEmittableFieldHasAContract() {
-        for field in PatentDomainPack.emittedFields {
+    /// Every v1-emittable field of a pack has a shape-appropriate display contract.
+    private func assertContractsCovered(_ fields: [String], pack: String) {
+        for field in fields {
             switch FactSchemaRegistry.expectedShape(of: field) {
             case .identifier:
                 #expect(SlotAnswerComposer.displayLabel(forFieldID: field) != nil,
-                        "v1 identifier field '\(field)' has no displayLabel constant — it would surface bare or wrong")
+                        "\(pack): v1 identifier field '\(field)' has no displayLabel constant — would surface bare or wrong")
             case .date:
-                // The precision-canon renderer must resolve all three grains.
                 #expect(SlotAnswerComposer.renderCanonicalDate(iso: "2025-06-17") == "17/06/2025",
-                        "date field '\(field)': day-precision canon is not DD/MM/YYYY (seal #3c family)")
+                        "\(pack) date '\(field)': day-precision canon is not DD/MM/YYYY (seal #3c family)")
                 #expect(SlotAnswerComposer.renderCanonicalDate(iso: "2024-11") == "November 2024",
-                        "date field '\(field)': month-precision canon is not 'Month YYYY'")
+                        "\(pack) date '\(field)': month-precision canon is not 'Month YYYY'")
                 #expect(SlotAnswerComposer.renderCanonicalDate(iso: "2024") == "2024",
-                        "date field '\(field)': year-precision canon is not 'YYYY'")
+                        "\(pack) date '\(field)': year-precision canon is not 'YYYY'")
             default:
-                break   // text/word fields render their bare atom — identity is the contract
+                break   // text/word/money fields render their bare/canonical atom — identity is the contract
             }
         }
+    }
+
+    @Test("Every field each v1 pack emits has a shape-appropriate display contract")
+    func everyEmittableFieldHasAContract() {
+        assertContractsCovered(PatentDomainPack.emittedFields, pack: "patent")
+        assertContractsCovered(ContractDomainPack.emittedFields, pack: "contract")
     }
 
     @Test("Identifier display constants equal the witnessed answer-surface prefixes")

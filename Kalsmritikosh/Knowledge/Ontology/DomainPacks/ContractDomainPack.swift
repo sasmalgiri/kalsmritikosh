@@ -43,7 +43,17 @@ public enum ContractDomainPack {
         return nil
     }
 
+    /// The fields this pack emits under producer_version=1 — the authority the
+    /// display-contract completeness gate checks (status = text/bare; date =
+    /// precision-canon renderer, inherited).
+    public nonisolated static let emittedFields: [String] = ["status", "date"]
+
     /// Extract contract facts (parties, effectiveDate, versionState) as evidence-linked facts.
+    /// V2 (inherited): status is a canonical keyword (no fusion); the date stores
+    /// the precision-aware ISO ATOM via the ALREADY-LANDED C-7 normalizer
+    /// (PatentDomainPack.normalizeDate) — rawMatch keeps the source spelling, the
+    /// display canon (DD/MM/YYYY etc.) is reconstructed at render. Both stamped
+    /// with the current producer version.
     public nonisolated static func extractFacts(
         fromText text: String,
         subjectLabel: String,
@@ -52,12 +62,15 @@ public enum ContractDomainPack {
         var facts: [GenericFact] = []
         if let state = versionState(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "status", value: state,
-                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID]))
+                                     status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: nil, sourceCount: 1))
         }
-        if let date = firstMatch(#"(?:effective|dated|as of)\s+(?:date\s+)?[:\-]?\s*\d{1,2}[/\-.\s][A-Za-z0-9]+[/\-.\s]\d{2,4}"#, in: text)
-            ?? firstMatch(#"\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b"#, in: text) {
-            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: date,
-                                     status: .sourceAsserted, confidence: 0.6, sourceBlockIDs: [blockID]))
+        if let raw = firstMatch(#"(?:effective|dated|as of)\s+(?:date\s+)?[:\-]?\s*\d{1,2}[/\-.\s][A-Za-z0-9]+[/\-.\s]\d{2,4}"#, in: text)
+            ?? firstMatch(#"\b\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}\b"#, in: text),
+           let iso = PatentDomainPack.normalizeDate(raw) {
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: "date", value: iso,
+                                     status: .sourceAsserted, confidence: 0.6, sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
         }
         return facts
     }
