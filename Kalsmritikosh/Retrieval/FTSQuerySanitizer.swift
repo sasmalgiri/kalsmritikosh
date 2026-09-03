@@ -21,22 +21,54 @@ import Foundation
 
 public enum FTSQuerySanitizer {
 
-    /// Sanitize `query` into a valid FTS5 MATCH expression, or "" when no usable
-    /// token remains (the caller treats "" as "no keyword results", never a raw
-    /// pass-through). Deterministic and offline.
+    /// F4.1 — fixed stopword list: tokens that match everything and discriminate
+    /// nothing. A stopword contributes ZERO recall (any document worth finding
+    /// via "Khurana invoice amount" matches on the meaningful terms), but in an
+    /// OR-join it FLOODS the candidate pool — live Q6 showed "there"/"from"/"and"
+    /// displacing Khurana-specific content with résumé junk. Excluding them
+    /// completes the stated join policy: recall-oriented OR of terms THAT CARRY
+    /// INFORMATION. Deterministic, fixed — never tuned per-query.
+    public static let stopwords: Set<String> = [
+        "a", "an", "the", "and", "or", "but", "if", "then", "else",
+        "at", "by", "for", "with", "about", "against", "between", "into",
+        "through", "during", "before", "after", "above", "below", "to", "from",
+        "up", "down", "in", "out", "on", "off", "over", "under", "again", "once",
+        "here", "there", "all", "any", "both", "each", "few", "more", "most",
+        "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+        "so", "than", "too", "very", "can", "will", "just", "should", "now",
+        "is", "are", "was", "were", "be", "been", "being",
+        "have", "has", "had", "having", "do", "does", "did", "doing",
+        "would", "could", "might", "must", "shall", "may",
+        "of", "it", "its", "this", "that", "these", "those",
+        "i", "we", "you", "he", "she", "they", "them", "his", "her", "their",
+        "our", "your", "my", "me", "him", "us",
+        "what", "which", "who", "whom", "whose", "why", "how", "where", "when",
+        "whether", "while"
+    ]
+
+    /// Sanitize `query` into a valid FTS5 MATCH expression, or "" when no
+    /// INFORMATIVE token remains (the caller treats "" as "keyword layer
+    /// abstains" — counted, never a raw pass-through). Deterministic and offline.
     ///
     /// - tokenize on any non-alphanumeric boundary (drops all FTS5 syntax);
-    /// - drop single-character tokens (noise) but KEEP short all-numeric tokens
-    ///   (a year, a short id fragment);
+    /// - IDENTIFIER-SHAPED tokens (any digit) are ALWAYS kept, regardless of
+    ///   length ("555489", "2024", "5" — the atoms this product is named for);
+    /// - alpha tokens need length ≥2 AND must not be stopwords (F4.1);
+    /// - dedupe, first-occurrence order (repeats add no recall);
     /// - double-quote each token as a literal FTS5 term (internal quotes escaped);
-    /// - join with OR (recall — a document matching ANY term surfaces; bm25 `rank`
-    ///   then floats the rarest matched term, i.e. the identifier, to the top).
+    /// - join with OR (recall — a document matching ANY informative term
+    ///   surfaces; bm25 `rank` floats the rarest matched term to the top).
     public static func sanitize(_ query: String) -> String {
+        var seen = Set<String>()
         let tokens = query
             .lowercased()
             .split { !$0.isLetter && !$0.isNumber }
             .map(String.init)
-            .filter { $0.count >= 2 || $0.allSatisfy(\.isNumber) }
+            .filter { tok in
+                if tok.contains(where: \.isNumber) { return true }
+                return tok.count >= 2 && !stopwords.contains(tok)
+            }
+            .filter { seen.insert($0).inserted }
         guard !tokens.isEmpty else { return "" }
         return tokens
             .map { "\"\($0.replacingOccurrences(of: "\"", with: "\"\""))\"" }
