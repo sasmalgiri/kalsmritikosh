@@ -1,0 +1,92 @@
+//
+//  DrainHarness.swift
+//  KalsmritikoshTests
+//
+//  V5 (F7) commit B — the LIVE drain runner. Tooling only, never the app
+//  target; SKIPS (green) unless the operator sets TEST_RUNNER_DRAIN_LIVE=1,
+//  so hosted CI passes through untouched.
+//
+//  This is the ONE sanctioned mutation of the live archive in the entire
+//  program (Master Order F7). Guardrails, in order:
+//    1. SNAPSHOT FIRST — VACUUM INTO ~/Downloads (the owner's rollback copy;
+//       the path is announced in the log before anything is written).
+//    2. Populated-ledger guard — never drain a phantom container.
+//    3. Migrate to the current schema (v123 adds document_class; versioned,
+//       SAVEPOINT-wrapped, exactly what the app does at boot).
+//    4. LedgerDrainCoordinator.drain() — six passes, producer_version as the
+//       resume marker, untouched-tables proof in the receipt.
+//    5. The receipt is printed verbatim and the untouched proof is ASSERTED —
+//       a violation fails the run (STOP), with the snapshot as the way back.
+//
+//  Run:
+//    TEST_RUNNER_DRAIN_LIVE=1 xcodebuild test \
+//      -only-testing:KalsmritikoshTests/DrainHarness -parallel-testing-enabled NO
+//
+
+import Foundation
+import Testing
+@testable import Kalsmritikosh
+
+@Suite("V5 — live drain (operator-invoked only)", .serialized)
+struct DrainHarness {
+
+    @Test("Drain the live archive: snapshot → migrate → six passes → receipt")
+    func drainLiveArchive() async throws {
+        guard ProcessInfo.processInfo.environment["DRAIN_LIVE"] == "1" else {
+            print("DRAIN: TEST_RUNNER_DRAIN_LIVE not set — skipping (operator-invoked only).")
+            return
+        }
+        let liveURL = DatabaseLocations.defaultDatabaseURL
+        guard FileManager.default.fileExists(atPath: liveURL.path) else {
+            print("DRAIN: no live ledger at \(liveURL.path) — skipping.")
+            return
+        }
+
+        // 1 — SNAPSHOT FIRST. The owner's study/rollback copy, path announced.
+        let head = (try? await gitHeadShort()) ?? "unknown"
+        let snapshotURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Downloads/kalsmritikosh-pre-drain-snapshot-\(head).sqlite")
+        do {
+            let src = try Database(url: liveURL)
+            let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
+            try await src.exec("VACUUM main INTO '\(escaped)';", [])
+            await src.close()
+        }
+        print("DRAIN: PRE-DRAIN SNAPSHOT WRITTEN → \(snapshotURL.path)")
+        #expect(FileManager.default.fileExists(atPath: snapshotURL.path), "snapshot must exist before any write")
+
+        // 2+3 — open the LIVE ledger, guard population, migrate to current.
+        let db = try Database(url: liveURL)
+        let koCount = Int((try await db.query("SELECT COUNT(*) FROM knowledge_objects;", [])).first?.int(0) ?? 0)
+        guard koCount > 0 else {
+            await db.close()
+            Issue.record("DRAIN: live ledger reports 0 knowledge objects — refusing to drain a phantom.")
+            return
+        }
+        print("DRAIN: live ledger ko=\(koCount) — migrating to v\(SchemaMigrations.latestVersion) then draining.")
+        try await SchemaMigrations.migrate(db)
+
+        // 4 — the six passes.
+        let coordinator = LedgerDrainCoordinator(
+            database: db,
+            objects: KnowledgeObjectRepository(database: db),
+            entities: EntitiesRepository(database: db),
+            events: EventsRepository(database: db),
+            facts: GenericFactRepository(database: db),
+            evidence: EvidenceStore(database: db))
+        let receipt = try await coordinator.drain()
+        await db.close()
+
+        // 5 — the receipt, verbatim, and the untouched proof asserted.
+        print(receipt.renderLines())
+        #expect(receipt.untouchedProven,
+                "chunks/FTS/embeddings changed during the drain — STOP; snapshot at \(snapshotURL.path)")
+    }
+
+    private func gitHeadShort() async throws -> String {
+        // Test bundles can't shell out reliably; derive a stable run label from
+        // the schema version + date-free counter instead. (The snapshot name
+        // needs uniqueness + traceability, not the literal commit.)
+        "v\(SchemaMigrations.latestVersion)"
+    }
+}
