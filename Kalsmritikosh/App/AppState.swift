@@ -3166,6 +3166,11 @@ public final class AppState {
         // auto-run at boot) never duplicate. Milestones are derived data.
         try? await events.deleteMilestoneEvents()
 
+        // V3 3d (I-5) — scan for OCR-near-duplicate split-suspects, persist the
+        // reversible proposed merges, and get the suspect id set: a split-suspect
+        // anchor NEVER threads a milestone chain (its identity is under review).
+        let suspectAnchors = await reviewAnchorSplitSuspects()
+
         // Gather all object ids up front (cheap — just UUIDs) so the activity
         // has a real total → % + ETA.
         var allObjectIDs: [KnowledgeObject.ID] = []
@@ -3188,6 +3193,7 @@ public final class AppState {
                 // patent's filed→hearing→objection→grant chain lands on ONE
                 // subject id, not just the NER participants.
                 let anchorIDs = await identifierAnchorIDs(inContent: content, sourceObjectID: id)
+                    .filter { !suspectAnchors.contains($0) }   // I-5: split-suspects never thread
                 let milestones = PatentLegalEventExtractor.extract(
                     text: content, sourceObjectID: id, entityIDs: anchorIDs)
                 if !milestones.isEmpty {
@@ -3222,6 +3228,39 @@ public final class AppState {
             }
         }
         return ids
+    }
+
+    /// V3 3d (I-5) — scan the anchor set for OCR-near-duplicate SPLIT-SUSPECTS,
+    /// persist a REVERSIBLE proposed-merge review event for each new one, and
+    /// return the set of split-suspect anchor ids (the suspect `from` sides) so
+    /// callers can exclude them (a split-suspect never threads a milestone chain).
+    ///
+    /// The proposal is a FactReview(action: .merge, reviewer: "system") — reusing
+    /// the existing reversible review vocabulary, NOT a parallel status. Recording
+    /// it is only a SUGGESTION: it never calls the entity merge, so the two anchors
+    /// stay distinct until a human accepts. Idempotent (an existing proposal for a
+    /// pair is not re-recorded), so the boot/backfill re-run never duplicates.
+    @discardableResult
+    public func reviewAnchorSplitSuspects() async -> Set<UUID> {
+        guard let entities else { return [] }
+        let anchors = (try? await entities.allAnchors()) ?? []
+        let proposals = IdentifierAnchorReview.proposedMerges(among: anchors)
+        if let factReviews {
+            for p in proposals {
+                let existing = (try? await factReviews.history(forSubject: p.fromAnchorID)) ?? []
+                let already = existing.contains { $0.action == .merge && $0.newValue == p.toAnchorID.uuidString }
+                if already { continue }
+                let review = FactReview(
+                    subjectKind: .entity, subjectID: p.fromAnchorID, action: .merge,
+                    priorValue: p.fromValue, newValue: p.toAnchorID.uuidString,
+                    reviewer: "system", reason: p.evidence)
+                _ = try? await factReviews.record(review)
+            }
+            if !proposals.isEmpty {
+                KalsmritikoshLog.knowledge.info("I-5: \(proposals.count, privacy: .public) anchor split-suspect merge(s) proposed for review")
+            }
+        }
+        return Set(proposals.map(\.fromAnchorID))
     }
 
     /// Retrieval self-eval: recall@k measured by querying the vector index with

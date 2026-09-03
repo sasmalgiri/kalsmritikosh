@@ -179,6 +179,17 @@ public actor EntitiesRepository {
         return out
     }
 
+    /// V3 3d (I-5) — all live identifier anchors, for the split-suspect detector
+    /// (field + canonical value both ride in the `normalized` column, so no
+    /// attribute decode is needed).
+    public func allAnchors(limit: Int = 100_000) async throws -> [Entity] {
+        let rows = try await database.query("""
+        SELECT id, kind, value, normalized, source_object_id, confidence
+        FROM entities WHERE kind = ? AND merged_into IS NULL LIMIT ?;
+        """, [.text(Entity.Kind.identifierAnchor.rawValue), .integer(Int64(limit))])
+        return rows.compactMap { decodeFullEntity($0) }
+    }
+
     // MARK: - Reads
 
     public func count(of kind: Entity.Kind) async throws -> Int {
