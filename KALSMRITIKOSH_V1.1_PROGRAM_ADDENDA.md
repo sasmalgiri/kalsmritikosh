@@ -81,4 +81,27 @@ Six classes found, named, and closed **by law, none by hiding** — the determin
 
 **Toolchain gotcha:** a stale unsigned KalsmritikoshTests.xctest inside the Debug app product (from killed builds) fails CodeSign with "code object is not signed at all" — delete the product and rebuild.
 
-_End of addenda (§A/§B original; §C added 2026-09-01). The build opened at V0; V2 opens after reseal #3._
+## §D — The integrity law trio (Go 1, 2026-09-03)
+
+Three laws the writer-binding arc (3c → 3d → drain) left standing. Each was ruled after a
+live defect, not invented in advance; each is enforced in code, not promised in prose.
+
+| # | Law | Born from | Enforced by |
+|---|---|---|---|
+| 1 | **No silent drop at the SQL layer.** A write statement that terminates non-DONE THROWS; a read emits a counted diagnostic. Never silence. | 3c's FK violation silently swallowed an anchor insert (wrong id passed; nothing failed, nothing landed) | `Database+Binding.collectRows` write/read split — writes throw, reads log through the storage counter. The split is deliberate: a throwing read would abort retrieval wholesale (proven: gold recall 0.0 on the first blanket attempt), hiding the very layer-death it should surface |
+| 2 | **One chokepoint for entity writes.** Every door that can create an entity — batch insert, canonical-org upsert, anchor resolution — passes the same junk classifier and the same gate assertion. | 3d's ghost census: junk entered through whichever door lacked the newest filter | shared `hardJunkClasses` + `assertGatedEntityWrite` at ALL three doors; complement test asserts real entities still pass |
+| 3 | **Anchors never auto-fold.** Identifier anchors are identity `(field, canonical value)`, exact. Merges are PROPOSED (reversible `FactReview`, reviewer "system"), never executed by the machine. The one fold license: explainable OCR letter-group substitution (rn↔m, cl↔d, vv↔w, li↔u, nn↔m) with exact given name — similarity (JW) is a veto floor only, never a fold reason. | the Sasmal/Sasrnal pair — same person, OCR-split; and its dual, 555489/555480 — different values that MUST NOT fold | `UNIQUE(kind, normalized)` carrying the identity key; `IdentifierAnchorReview.proposedMerges`; the logged-proposal-never-executes fixture |
+
+**The drain rider (SR-01, self-ruled under the standing grant):** the one sanctioned
+rewrite of derived layers ran snapshot-FIRST and proved it — the first launch failed AT
+the snapshot (sandbox denied ~/Downloads) with zero ledger writes; the ruling moved the
+snapshot beside the live ledger (refuse-if-exists guard: a rollback copy is never
+silently overwritten) with an operator mirror to ~/Downloads. Receipt on record:
+716 KOs → v123, 564 stale facts → 1,969 v2, 902 stale events → 864 class-gated v1,
+36 lifecycle milestones, 30 ghosts retired, 253 legacy facts conservatively KEPT
+(no re-extractable blocks — never delete what cannot be regenerated), untouched proof
+chunks/fts/embeddings 10455/10455/9632 [PROVEN]. Seal #4 "the true ledger": 7/7 answers
+byte-identical across ALL fields at LIKE stamps — the citation/meta wobble of every
+pre-drain seal is gone with the junk that caused it.
+
+_End of addenda (§A/§B original; §C added 2026-09-01; §D added 2026-09-03). The build opened at V0; V2 opens after reseal #3._
