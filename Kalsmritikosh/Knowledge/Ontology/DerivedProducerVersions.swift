@@ -34,7 +34,14 @@ public nonisolated enum DerivedProducerVersions {
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
     /// entities — the entity population a v1 producer emits differs from v0
     /// (junk classes gated out; identifier anchors added), so the era advances.
-    public static let entities = 1
+    ///   1→2 (GO2R U0-b): email display names now come from the RFC 2822
+    ///        address-list parser with edge punctuation stripped — a v1
+    ///        producer emitted ", Akhilesh Sharma" and "'Arindam Das'" person
+    ///        entities from To: lists (witnessed live on the owner's archive);
+    ///        a v2 producer cannot. The targeted register refresh rewrites
+    ///        v1 person values in place (strip + collision-merge, never
+    ///        delete) and stamps them v2.
+    public static let entities = 2
 
     /// Event extraction (events.producer_version).
     /// First bump 0→1 (V3 3c): milestone events now thread onto the identifier
