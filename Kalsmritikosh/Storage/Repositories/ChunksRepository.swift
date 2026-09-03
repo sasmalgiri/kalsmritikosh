@@ -164,7 +164,11 @@ public actor ChunksRepository {
     }
 
     public func searchFTS(_ query: String, limit: Int = 50) async throws -> [Chunk] {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        // V1.1 U2.5 — NEVER pass raw query text to FTS5 (task #40: it raised a
+        // logic error on ordinary punctuation and the keyword layer went silently
+        // dead). Sanitize to a quoted-term OR expression; "" means no usable term.
+        let match = FTSQuerySanitizer.sanitize(query)
+        guard !match.isEmpty else { return [] }
         let rows = try await database.query("""
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
@@ -172,7 +176,7 @@ public actor ChunksRepository {
         WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
         ORDER BY rank
         LIMIT ?;
-        """, [.text(query), .integer(Int64(limit))])
+        """, [.text(match), .integer(Int64(limit))])
         return rows.compactMap(decode)
     }
 

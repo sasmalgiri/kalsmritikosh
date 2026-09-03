@@ -29,10 +29,16 @@ public struct RetrievalGoldEval: Sendable {
         public let byClass: [ClassRecall]
         public let overall: Double
         public let total: Int
+        /// U2.5 PER-LAYER VISIBILITY (standing binding after the FTS-dead lesson):
+        /// the keyword (FTS) layer's recall MEASURED IN ISOLATION. A dead layer
+        /// must be visible in the eval itself — not discoverable only via error
+        /// counters. nil when the caller didn't supply the chunks repo.
+        public let ftsRecall: Double?
 
         public func renderLine() -> String {
             let parts = byClass.map { String(format: "%@ %.3f", $0.className, $0.recall) }
-            return "retrieval recall — overall \(String(format: "%.3f", overall)) (n=\(total)); " + parts.joined(separator: ", ")
+            let fts = ftsRecall.map { String(format: " | fts-layer %.3f", $0) } ?? ""
+            return "retrieval recall — overall \(String(format: "%.3f", overall)) (n=\(total)); " + parts.joined(separator: ", ") + fts
         }
     }
 
@@ -44,9 +50,15 @@ public struct RetrievalGoldEval: Sendable {
         retriever: HybridRetriever,
         objects: KnowledgeObjectRepository,
         questions: [EvalKitRunner.Question],
-        scope: UserIntent.Scope = .project("Project Delta")
+        scope: UserIntent.Scope = .project("Project Delta"),
+        chunks: ChunksRepository? = nil
     ) async -> Report {
         var sums: [String: (hit: Double, n: Int)] = [:]
+        var ftsHit = 0.0, ftsN = 0
+        func recall(_ ids: Set<KnowledgeObject.ID>, _ expected: Set<String>) async -> Double {
+            let names = Set(((try? await objects.sourceFilenames(for: ids)) ?? [:]).values)
+            return expected.isEmpty ? 0 : Double(names.intersection(expected).count) / Double(expected.count)
+        }
         for q in questions {
             let intent = UserIntent(
                 kind: .factualLookup, scope: scope, timeframe: nil,
@@ -58,11 +70,18 @@ public struct RetrievalGoldEval: Sendable {
             } else {
                 ids = []
             }
-            let names = Set(((try? await objects.sourceFilenames(for: ids)) ?? [:]).values)
             let expected = Set(q.expectedSourceFiles)
-            let recall = expected.isEmpty ? 0 : Double(names.intersection(expected).count) / Double(expected.count)
-            sums[q.class, default: (0, 0)].hit += recall
+            let r = await recall(ids, expected)
+            sums[q.class, default: (0, 0)].hit += r
             sums[q.class, default: (0, 0)].n += 1
+
+            // PER-LAYER: the keyword layer in ISOLATION (searchFTS alone), so a
+            // dead FTS layer is visible right here in the eval.
+            if let chunks {
+                let ftsIDs = Set(((try? await chunks.searchFTS(q.text, limit: 50)) ?? []).map(\.objectID))
+                ftsHit += await recall(ftsIDs, expected)
+                ftsN += 1
+            }
         }
         let order = ["lookup", "aggregation", "temporal", "multihop"]
         var byClass: [ClassRecall] = []
@@ -75,6 +94,7 @@ public struct RetrievalGoldEval: Sendable {
         }
         let totalHit = sums.values.reduce(0.0) { $0 + $1.hit }
         let totalN = sums.values.reduce(0) { $0 + $1.n }
-        return Report(byClass: byClass, overall: totalN == 0 ? 0 : totalHit / Double(totalN), total: totalN)
+        return Report(byClass: byClass, overall: totalN == 0 ? 0 : totalHit / Double(totalN), total: totalN,
+                      ftsRecall: ftsN > 0 ? ftsHit / Double(ftsN) : nil)
     }
 }
