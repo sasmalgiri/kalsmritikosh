@@ -94,6 +94,13 @@ public enum SlotFieldResolver {
     public nonisolated static func humanLabel(forFieldID fieldID: String) -> String {
         let key = fieldID.lowercased()
         if let label = humanLabels[key] { return label }
+        // F8 — synthetic field-shaped ids ("trademarknumber") render with the
+        // suffix split back out ("Trademark number"), so the abstention names
+        // the field the way the user asked it.
+        for suffix in ["number", "date", "id"] where key.hasSuffix(suffix) && key.count > suffix.count {
+            let stem = String(key.dropLast(suffix.count))
+            return stem.prefix(1).uppercased() + stem.dropFirst() + " " + suffix
+        }
         return fieldID.prefix(1).uppercased() + fieldID.dropFirst()
     }
 
@@ -128,7 +135,37 @@ public enum SlotFieldResolver {
             }
         }
         out = positioned.sorted { $0.position < $1.position }.map(\.r)
+
+        // F8 (rung 1n) — FIELD-SHAPED FALLBACK, only when the vocabulary named
+        // nothing: "what is the trademark number" is unmistakably a field
+        // request even though no pack emits trademark numbers. Recognizing it
+        // routes the ask onto the slot path, whose honest not-found (D-15)
+        // then NAMES the field with a receipt — instead of the general path's
+        // fact-spam. Conservative: "<word> number|id" (identifier) or
+        // "<word> date" (date), word ≥3 chars and never a stopword, so
+        // "a number of things" and "any number" never resolve.
+        if out.isEmpty {
+            out = fieldShapedFallback(in: q)
+        }
         return out
+    }
+
+    /// The F8 fallback recognizer. Deterministic; first match wins.
+    nonisolated static func fieldShapedFallback(in q: String) -> [Resolution] {
+        let suffixes: [(suffix: String, class_: RequestedField)] = [
+            ("number", .identifier), ("id", .identifier), ("date", .date)
+        ]
+        let words = q.split { !$0.isLetter }.map(String.init)
+        for (i, word) in words.enumerated() where i + 1 < words.count {
+            for (suffix, class_) in suffixes where words[i + 1] == suffix {
+                guard word.count >= 3, !FTSQuerySanitizer.stopwords.contains(word) else { continue }
+                let fieldID = FactSchemaRegistry.normalizeField(word + suffix)
+                let label = word.prefix(1).uppercased() + word.dropFirst() + " " + suffix
+                return [Resolution(fieldID: fieldID, requestedField: class_,
+                                   humanLabel: label, domainGroup: "unknown")]
+            }
+        }
+        return []
     }
 
     /// `phrase` present in `text` with word boundaries on both sides — so

@@ -176,17 +176,16 @@ struct V0AdversarialFixtureTests {
         #expect(a.answerText?.lowercased().contains("conflict") == false, "noise produced a false conflict")
     }
 
-    @Test("RED rung-1n twin: known-absent field must return a verified not-found naming the field")
+    @Test("F8 GREEN rung-1n twin: known-absent field returns a verified not-found naming the field, with a receipt")
     func rung1nTwin() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let a = try await rig.answer("what is the trademark number")
-        print("V0 RED rung-1n twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(160))")
-        withKnownIssue("NF-1..3 land at V6: the negative witness must name the missing field with a retrieval receipt") {
-            let text = (a.answerText ?? "") + " " + a.body
-            #expect(text.lowercased().contains("trademark"), "not-found does not name the absent field")
-            #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a verified not-found")
-        }
+        print("F8 rung-1n twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(200))")
+        let text = (a.answerText ?? "") + " " + a.body
+        #expect(text.lowercased().contains("trademark"), "not-found does not name the absent field")
+        #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a verified not-found")
+        #expect(text.contains("Receipt:"), "the abstention must carry its exhaustion receipt")
     }
 
     @Test("RED rung-2 twin: timeline of the patent must be one anchored, ordered, cited chain")

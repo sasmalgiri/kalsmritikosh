@@ -129,13 +129,26 @@ public enum SlotAnswerComposer {
                 .filter { groupFields.contains($0.fact.field) && $0.fact.field != requestedField }
                 .sorted(by: strongerFirst)
                 .first
-            let sentence: String
+            var sentence: String
             if let related {
                 sentence = "Your archive shows \(labeledValue(related.fact)), "
                     + "but none of the \(documentsSearched) document(s) searched carries a \(label.lowercased())."
             } else {
                 sentence = "None of the \(documentsSearched) document(s) searched carries a \(label.lowercased())."
             }
+            // F8 (NF-1/NF-2) — the abstention carries its RECEIPT: what was
+            // exhausted, and — for a field no extractor even emits — the honest
+            // scope statement plus the nearest known field. The receipt persists
+            // with the answer via the durable answer commit (AEE-M2), so the
+            // abstention is auditable, not just polite.
+            if !FieldRegistry.isKnown(requestedField) {
+                sentence += " A \(label.lowercased()) is not among the fields this archive's documents contain"
+                if let nearest = FieldRegistry.nearestKnown(toLabel: label) {
+                    sentence += " (nearest on file: \(nearest.lowercased()))"
+                }
+                sentence += "."
+            }
+            sentence += " (Receipt: \(documentsSearched) document(s) exhausted across the keyword, entity, timeline and semantic layers; no model was consulted.)"
             return SlotAnswerComposition(
                 primaryText: sentence,
                 supportingObjectIDs: related.map { [$0.objectID] } ?? [],
