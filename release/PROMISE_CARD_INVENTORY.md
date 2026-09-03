@@ -31,7 +31,7 @@ Verification vocabulary:
 | conformance.standards-enforced + refused-conclusions | Real standards, enforced | TEST-BACKED | SOP conformance suite |
 | conformance.fail-closed + frozen-hash | Encoded workflow conformance | TEST-BACKED | contractSnapshotSHA256 immutability tests |
 | workflow.element-gates + strict-mode + approval-gate + classic-disclosure | The real deliverable | TEST-BACKED | workflow gating suite |
-| studios.hardcopy | Hardcopy studio | VERIFY-AT-F9 | name the test/witness step |
+| studios.hardcopy | The real deliverable | TEST-BACKED (verified 2026-09-03) | 8 test files: ForensicEngagementTests.hardcopy() + PrivilegeLog/FactCheckMemo/SIUReferral/WorkplaceInvestigation/PersonaDeliverables2/ComplianceBoard/JurisdictionNotice hardcopy tests; every studio hardcopy carries audit trail + jurisdiction notice |
 
 ## 2. Untagged feature cards (the R-2 rider's named four + the rest)
 
@@ -46,7 +46,7 @@ Verification vocabulary:
 ### 🧭 Do the job & hand it off
 | Bullet | Status | Pointer |
 |---|---|---|
-| Professional workflows — 10 professions, numbered document per step | VERIFY-AT-F9 + R-3 | ten-personas parity is the S2-U5 gate; count the shipped personas NOW vs "10" |
+| Professional workflows — 10 professions, numbered document per step | TEST-BACKED (verified 2026-09-03) | PersonaJobCatalogComposer.composeProduction() registers exactly 10 packages (Lawyer, Investigator, SIU, ForensicAccountant, Journalist, Compliance, Researcher, Genealogist, ContentCreator, Individual) — 1:1 with the page's 10 persona cards; PersonaJobCatalogProductionTests pins 16 jobs × unique kinds; R-3 ten-personas PARITY (same quality per persona) remains the S2-U5 gate |
 | Logs & registers (interviews, FOIA, research log + change history) | VERIFY-AT-F9 | Logs & Trackers suite |
 | Review & handoff (conflicts, missing evidence, decision record) | TEST-BACKED | AEE review-loop + FactReview suites |
 | Export with receipts (PDF/Word/Excel, citations baked, tamper-evident receipt) | VERIFY-AT-F9 | **export-citations guard rides here (R-2 rider): citations must survive every export format — name or write the guard test** |
@@ -57,7 +57,7 @@ Verification vocabulary:
 | Caseload triage | VERIFY-AT-F9 | Caseload view + ranking test |
 | Trends across archive | VERIFY-AT-F9 | Trends producer test |
 | Completeness & Live | WITNESSED-ADJACENT | live window shipped (4-part UX); name the completeness metric test |
-| Convert (files between formats, back and forth) | VERIFY-AT-F9 | conversion matrix — "back and forth" is a strong claim; RESCOPE if only one-way for any pair |
+| Convert (files between formats, back and forth) | OWNER-REVIEW AT HOLD 1 | Verified 2026-09-03: ConvertView is a one-shot converter, ~30 input formats → 10 output formats. 9 of the 10 outputs are also inputs, so common pairs (PDF↔DOCX↔TXT↔MD↔HTML↔CSV↔XLSX↔RTF↔JSON) DO convert in both directions — "back and forth" holds on that reading. It does NOT hold as byte-round-trip (no converter does). Page wording is owner-only: either reading stands or soften to "turn files between formats". No dedicated ConvertView test — F9 candidate |
 
 ### 🗑️ Delete anytime
 | Bullet | Status | Pointer |
@@ -82,7 +82,7 @@ Verification vocabulary:
 
 ## 3. Open items this inventory feeds F9
 1. Name (or write) the **export-citations guard** — the one R-2 rider that is a test, not a mapping.
-2. Count shipped professional workflows vs the page's "10 professions" (R-3 pre-check).
-3. "Convert … back and forth" — verify the matrix is truly bidirectional or flag RESCOPE.
+2. ~~Count shipped professional workflows vs "10 professions"~~ CLOSED 2026-09-03: exactly 10, catalog + tests pin it.
+3. ~~"Convert … back and forth"~~ CLOSED to OWNER-REVIEW note (pairs are bidirectional; byte-round-trip is not — wording call is owner-only).
 4. History card wording vs pre-rung-3 reality (story narrative is Go 2 Phase 4).
-5. studios.hardcopy claim — locate its feature + test.
+5. ~~studios.hardcopy~~ CLOSED 2026-09-03: TEST-BACKED across 8 test files.

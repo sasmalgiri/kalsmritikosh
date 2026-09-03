@@ -123,14 +123,24 @@ public enum XLSXExporter {
         return zip.build()
     }
 
-    /// The grid an XLSX represents: the document's table if present, else its citation list.
+    /// The grid an XLSX represents: the document's table if present (with its citation
+    /// block appended below — "Excel with citations baked in" holds for table exports
+    /// too), else the citation list alone.
     private static func gridFor(_ doc: ExportableDocument) -> (columns: [String], rows: [[String]]) {
-        if let t = doc.table { return (t.columns, t.rows) }
-        let cols = ["Label", "Source", "Locator", "Resolved", "Generated summary"]
-        let rows = doc.citations.map { c in
+        let citationHeader = ["Label", "Source", "Locator", "Resolved", "Generated summary"]
+        let citationRows = doc.citations.map { c in
             [c.displayLabel, c.sourceTitle, c.effectiveLocator, c.isResolved ? "yes" : "no", c.isGeneratedSummary ? "yes" : "no"]
         }
-        return (cols, rows)
+        guard let t = doc.table else { return (citationHeader, citationRows) }
+        // A citation-free table export stays byte-identical to the pre-guard writer.
+        guard !citationRows.isEmpty else { return (t.columns, t.rows) }
+        let width = max(t.columns.count, citationHeader.count)
+        var rows = t.rows
+        rows.append([])
+        rows.append(["Citations"])
+        rows.append(citationHeader)
+        rows.append(contentsOf: citationRows)
+        return (pad(t.columns, to: width), rows)
     }
 
     private static func rowXML(index: Int, cells: [String]) -> String {
