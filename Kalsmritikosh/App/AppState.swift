@@ -2745,13 +2745,28 @@ public final class AppState {
     /// Conservative same-person test: identical surname, both multi-token,
     /// high Jaro-Winkler. Tuned to catch "thirshendus sasmal" ≈
     /// "shirshendu sasmal" while never merging two genuinely different people.
-    private static func plausibleOCRVariant(winner: String, loser: String) -> Bool {
+    nonisolated static func plausibleOCRVariant(winner: String, loser: String) -> Bool {
         guard winner != loser else { return false }
         let w = winner.split(separator: " ")
         let l = loser.split(separator: " ")
         guard w.count >= 2, l.count >= 2 else { return false }
-        guard let ws = w.last, let ls = l.last, ws == ls else { return false }  // same surname
-        return NameSimilarity.jaroWinkler(winner, loser) >= 0.88
+        let ws = String(w.last!), ls = String(l.last!)
+        let jw = NameSimilarity.jaroWinkler(winner, loser)
+        if ws == ls {
+            // Same surname → given-name OCR variant ("thirshendus"/"shirshendu"
+            // sasmal). Full-name similarity qualifies.
+            return jw >= 0.88
+        }
+        // V3 3d (F2) — surnames DIFFER: fold ONLY when the given name matches
+        // EXACTLY and the surname delta is FULLY EXPLAINED by ≤1 OCR letter-group
+        // substitution (mechanism). Jaro-Winkler rides ONLY as a veto FLOOR here,
+        // never the qualifying test — so "Sasmal"/"Sasrnal" folds (rn↔m) while
+        // "Nair"/"Singh" and "Sharma"/"Verma" never do.
+        let wGiven = w.dropLast().joined(separator: " ")
+        let lGiven = l.dropLast().joined(separator: " ")
+        guard wGiven == lGiven else { return false }
+        guard NameOCRConfusion.surnameExplainable(ws, ls) else { return false }
+        return jw >= 0.85
     }
 
     // MARK: - System 3: gap detection + investigation (rule-based)
@@ -3166,6 +3181,11 @@ public final class AppState {
         // auto-run at boot) never duplicate. Milestones are derived data.
         try? await events.deleteMilestoneEvents()
 
+        // V3 3d (I-5) — scan for OCR-near-duplicate split-suspects, persist the
+        // reversible proposed merges, and get the suspect id set: a split-suspect
+        // anchor NEVER threads a milestone chain (its identity is under review).
+        let suspectAnchors = await reviewAnchorSplitSuspects()
+
         // Gather all object ids up front (cheap — just UUIDs) so the activity
         // has a real total → % + ETA.
         var allObjectIDs: [KnowledgeObject.ID] = []
@@ -3184,7 +3204,13 @@ public final class AppState {
         var created = 0
         for (i, id) in allObjectIDs.enumerated() {
             if let content = try? await objects.fetchContent(id: id), !content.isEmpty {
-                let milestones = PatentLegalEventExtractor.extract(text: content, sourceObjectID: id)
+                // V3 3c — thread milestones onto the identifier ANCHOR so the
+                // patent's filed→hearing→objection→grant chain lands on ONE
+                // subject id, not just the NER participants.
+                let anchorIDs = await identifierAnchorIDs(inContent: content, sourceObjectID: id)
+                    .filter { !suspectAnchors.contains($0) }   // I-5: split-suspects never thread
+                let milestones = PatentLegalEventExtractor.extract(
+                    text: content, sourceObjectID: id, entityIDs: anchorIDs)
                 if !milestones.isEmpty {
                     try? await events.insertBatch(milestones)
                     created += milestones.count
@@ -3195,6 +3221,61 @@ public final class AppState {
         updateProcess(activity, done: allObjectIDs.count)
         KalsmritikoshLog.knowledge.info("Legal-milestone backfill created \(created, privacy: .public) event(s)")
         return created
+    }
+
+    /// V3 3c — the identifier ANCHORS a document references, resolve-or-created
+    /// (idempotent) so milestone events thread onto the canonical patent /
+    /// application subject. Deterministic; reuses the single DomainFactExtractor
+    /// for identifier detection so backfill and ingest agree on what an anchor is.
+    /// Empty when the entities repo is absent — the caller then threads no anchors.
+    private func identifierAnchorIDs(inContent content: String, sourceObjectID: UUID) async -> [UUID] {
+        guard let entities else { return [] }
+        let facts = DomainFactExtractor().extract(fromText: content, subjectLabel: "", blockID: UUID())
+        var seen = Set<String>()
+        var ids: [UUID] = []
+        for f in facts where FactSchemaRegistry.expectedShape(of: f.field) == .identifier {
+            guard !f.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            let key = IdentifierAnchor.identityKey(field: f.field, value: f.value)
+            guard seen.insert(key).inserted else { continue }
+            if let anchorID = try? await entities.resolveOrCreateAnchor(
+                field: f.field, value: f.value, sourceObjectID: sourceObjectID) {
+                ids.append(anchorID)
+            }
+        }
+        return ids
+    }
+
+    /// V3 3d (I-5) — scan the anchor set for OCR-near-duplicate SPLIT-SUSPECTS,
+    /// persist a REVERSIBLE proposed-merge review event for each new one, and
+    /// return the set of split-suspect anchor ids (the suspect `from` sides) so
+    /// callers can exclude them (a split-suspect never threads a milestone chain).
+    ///
+    /// The proposal is a FactReview(action: .merge, reviewer: "system") — reusing
+    /// the existing reversible review vocabulary, NOT a parallel status. Recording
+    /// it is only a SUGGESTION: it never calls the entity merge, so the two anchors
+    /// stay distinct until a human accepts. Idempotent (an existing proposal for a
+    /// pair is not re-recorded), so the boot/backfill re-run never duplicates.
+    @discardableResult
+    public func reviewAnchorSplitSuspects() async -> Set<UUID> {
+        guard let entities else { return [] }
+        let anchors = (try? await entities.allAnchors()) ?? []
+        let proposals = IdentifierAnchorReview.proposedMerges(among: anchors)
+        if let factReviews {
+            for p in proposals {
+                let existing = (try? await factReviews.history(forSubject: p.fromAnchorID)) ?? []
+                let already = existing.contains { $0.action == .merge && $0.newValue == p.toAnchorID.uuidString }
+                if already { continue }
+                let review = FactReview(
+                    subjectKind: .entity, subjectID: p.fromAnchorID, action: .merge,
+                    priorValue: p.fromValue, newValue: p.toAnchorID.uuidString,
+                    reviewer: "system", reason: p.evidence)
+                _ = try? await factReviews.record(review)
+            }
+            if !proposals.isEmpty {
+                KalsmritikoshLog.knowledge.info("I-5: \(proposals.count, privacy: .public) anchor split-suspect merge(s) proposed for review")
+            }
+        }
+        return Set(proposals.map(\.fromAnchorID))
     }
 
     /// Retrieval self-eval: recall@k measured by querying the vector index with

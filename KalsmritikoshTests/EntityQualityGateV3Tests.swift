@@ -73,4 +73,29 @@ struct EntityQualityGateV3Tests {
         let kept = gate.filter([person("Nil Nil"), person("Shirshendu Sasmal")])
         #expect(kept.map(\.value) == ["Shirshendu Sasmal"])
     }
+
+    @Test("V3 3d — automated-sender rejects bots/daemons but NEVER a real person with a bot-adjacent name (innocence)")
+    func automatedSenderClass() {
+        #expect(gate.classify(person("File Processing Bot")) == "automated-sender")
+        #expect(gate.classify(person("no-reply")) == "automated-sender")
+        #expect(gate.classify(person("Mailer-Daemon")) == "automated-sender")
+        #expect(gate.classify(person("Postmaster")) == "automated-sender")
+        // INNOCENCE — real people / titles with bot-adjacent SUBSTRINGS pass
+        // (whole-token match only; false-rejecting a person is the E-2 sin).
+        #expect(gate.classify(person("Robert Botha")) == nil, "'Botha' must not match 'bot'")
+        #expect(gate.classify(person("Automation Lead, Priya Nair")) == nil, "'Automation' is not an automation token")
+        #expect(gate.classify(person("Abbot Kinney")) == nil, "'Abbot' contains but is not 'bot'")
+        // Kind-aware: automated-sender is PERSON-only — an org keeps its name.
+        #expect(gate.classify(Entity(kind: .organization, value: "Notification Systems Inc", sourceObjectID: UUID())) == nil)
+    }
+
+    @Test("V3 3d — every displayLabel-constant anchor name passes classify() (the gate never questions an anchor)")
+    func anchorNamesAlwaysPassGate() {
+        let identifierFields = FactSchemaRegistry.shapes.filter { $0.value == .identifier }.map(\.key)
+        #expect(!identifierFields.isEmpty, "no identifier fields registered")
+        for field in identifierFields {
+            let anchor = IdentifierAnchor.makeAnchor(field: field, value: "555489", sourceObjectID: UUID())
+            #expect(gate.classify(anchor) == nil, "anchor name '\(anchor.value)' for field \(field) tripped the gate")
+        }
+    }
 }

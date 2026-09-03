@@ -117,39 +117,43 @@ struct V0AdversarialFixtureTests {
 
     // MARK: - Entity-noise red (full rig — V3's gate)
 
-    @Test("RED V3/E-1: entity noise (Nil Nil, leading punctuation, email-as-person, filename subject) survives the gate")
+    @Test("V3/E-1 GREEN: entity noise gated at every door; the register keeps clean names + legitimate email-address entities")
     func entityNoiseGate() async throws {
-        // First V0 run's lesson (recorded): prose attendee lists yield no
-        // entities — the LIVE noise ("Nil Nil", ", Shabana Khan", emails as
-        // person) enters through EMAIL PARTICIPANT extraction. The fixture
-        // is therefore an .eml with junk participants, matching the archive.
+        // The live noise ("Nil Nil", ", Shabana Khan", "File Processing Bot",
+        // emails-as-person) enters through email header → participant/structured
+        // entity promotion. With the rig now entities-wired (V3 3d recalibration),
+        // the promoted entities pass through the SAME quality gate the NER path
+        // does — gate-then-fold at every write door.
         let rig = try await FixtureRig.make(document: Self.gen.entityNoiseEmail, name: "noise.eml")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
-        let rows = try await rig.db.query("SELECT value FROM entities", [])
-        let names = rows.compactMap { $0.string(0) }
-        let junk = names.filter { n in
-            let t = n.trimmingCharacters(in: .whitespaces)
-            return t.lowercased() == "nil nil" || t.hasPrefix(",") || t.contains("@")
+        let rows = try await rig.db.query("SELECT value, kind FROM entities", [])
+        let named: [(value: String, kind: String)] = rows.compactMap {
+            guard let v = $0.string(0), let k = $0.string(1) else { return nil }
+            return (v, k)
+        }
+        // KIND-AWARE junk (the "@" clause was a shape-proxy for a kind-defect):
+        // an address is junk only when worn by a PERSON/org, never as its own
+        // emailAddress-kind entity. ", Shabana Khan" is NORMALIZED to "Shabana
+        // Khan" (kept, no leading comma); "Nil Nil"/"File Processing Bot" are
+        // gated; filename subjects never become person entities.
+        let nounKinds: Set<String> = ["person", "organization", "vendor", "client"]
+        let junk = named.filter { row in
+            let t = row.value.trimmingCharacters(in: .whitespaces)
+            let emailAsPerson = nounKinds.contains(row.kind) && t.contains("@")
+            return t.lowercased() == "nil nil" || t.hasPrefix(",") || emailAsPerson
                 || t.lowercased().contains(".pdf") || t.lowercased().contains("file processing bot")
         }
-        // Self-describing diagnostics: where DID the participants land?
-        let tables = (try await rig.db.query(
-            "SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '%particip%' OR name LIKE '%entit%')", []))
-            .compactMap { $0.string(0) }
-        var counts: [String: Int] = [:]
-        for t in tables {
-            counts[t] = Int((try await rig.db.query("SELECT COUNT(*) FROM \(t)", [])).first?.int(0) ?? 0)
-        }
-        print("V0 RED entityNoise: gated entities = \(names); table counts = \(counts)")
-        if names.isEmpty {
-            withKnownIssue("fixture-unrealism recorded: the rig's synchronous ingest does not reproduce the live participant→entity promotion; recalibrate when V3 opens (the live ledger's junk entities prove the production path does promote)") {
-                #expect(!names.isEmpty, "no entities from the .eml fixture in this rig")
-            }
-        } else {
-            withKnownIssue("E-1: the quality gate's rules are incomplete until V3; rejections must be counted, not silent") {
-                #expect(junk.isEmpty, "noise entities survived the gate: \(junk)")
-            }
-        }
+        print("V3 GREEN entityNoise: register = \(named)")
+        #expect(!named.isEmpty, "rig persisted no entities — the entities wiring regressed")
+        #expect(junk.isEmpty, "noise entities survived the gate: \(junk)")
+
+        // COMPLEMENT (option-B tripwire): the register AFFIRMATIVELY contains the
+        // senders' emailAddress entities. If a future change drops emailAddress
+        // persistence (to satisfy the old "@" wording), this REDS instead of
+        // passing silently — the tail can no longer wag the dog.
+        let emailEntities = named.filter { $0.kind == "emailAddress" }
+        #expect(!emailEntities.isEmpty, "emailAddress entities missing — the register no longer affirms the correct rows")
+        #expect(emailEntities.contains { $0.value.contains("@") }, "emailAddress entity lost its address")
     }
 
     // MARK: - Rung fixture-twins (binding #1)
@@ -273,11 +277,21 @@ struct FixtureRig {
         let intake = UniversalSourceIntakeCoordinator(repository: CanonicalSourceIntakeRepository(database: db, vault: vault))
         let objects = KnowledgeObjectRepository(database: db)
         let chunks = ChunksRepository(database: db)
+        // V3 3d — the fixture-unrealism recalibration flagged at V0: wire the
+        // entities + events repos into the coordinator so the rig PERSISTS
+        // entities (participant/NER promotion, anchors) and events like the
+        // production path, instead of the earlier entities-blind ingest. Any V0
+        // twin whose behaviour shifts as a result is a rig-realism change (not a
+        // pipeline change) — enumerated in the commit message.
+        let entities = EntitiesRepository(database: db)
+        let events = EventsRepository(database: db)
         let coordinator = IngestCoordinator(
             universalRegistry: try UniversalParserRegistryBuilder.standard(ocr: VisionOCR()),
-            entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(), eventExtractor: RuleEventExtractor(),
+            entityExtractor: NLEntityExtractor(), entityLinker: EntityLinker(),
+            entityQualityGate: EntityQualityGate(), eventExtractor: RuleEventExtractor(),
             files: FilesRepository(database: db), objects: objects,
-            chunks: chunks, evidenceStore: EvidenceStore(database: db),
+            chunks: chunks, entities: entities, events: events,
+            evidenceStore: EvidenceStore(database: db),
             ingestAttempts: IngestAttemptsRepository(database: db),
             sourceRelations: SourceRelationsRepository(database: db),
             genericFacts: GenericFactRepository(database: db),
@@ -288,8 +302,8 @@ struct FixtureRig {
 
         let retriever = HybridRetriever(
             memory: MemoryRepository(database: db),
-            events: EventsRepository(database: db),
-            entities: EntitiesRepository(database: db),
+            events: events,
+            entities: entities,
             chunks: chunks,
             summaries: SummariesRepository(database: db),
             graph: GraphStore(relationships: RelationshipsRepository(database: db)),

@@ -699,7 +699,8 @@ public actor IngestCoordinator {
     /// source version + document profile) and derive directly-observed
     /// assertions from it. Best-effort: never fails the ingest.
     @discardableResult
-    private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore) async -> StructuralPersistenceReceipt? {
+    private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore,
+                                      owningObjectID: KnowledgeObject.ID? = nil) async -> StructuralPersistenceReceipt? {
         do {
             // USF-002.1 — capture the COMMITTED receipt; readiness advances structure/metadata/OCR
             // ONLY from this, never from the in-memory parse. A persistence failure returns nil.
@@ -717,7 +718,8 @@ public actor IngestCoordinator {
             // SEM — derive domain-pack GenericFacts from the same blocks (additive;
             // never fails the ingest). Facts carry their block ids for drill-back.
             if let genericFacts {
-                await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts)
+                await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts,
+                                         owningObjectID: owningObjectID)
             }
             // MMI-FINAL — deterministic typed identity/document fields from the SAME persisted
             // blocks (the accepted producer for the typedFieldExtraction readiness dimension).
@@ -820,7 +822,8 @@ public actor IngestCoordinator {
     /// evidence. The subject label is the document's title (or filename stem) so a
     /// document's facts group together. Best-effort — never fails the ingest.
     private func deriveGenericFacts(
-        from doc: ParsedDocument, url: URL, into repo: GenericFactRepository
+        from doc: ParsedDocument, url: URL, into repo: GenericFactRepository,
+        owningObjectID: KnowledgeObject.ID? = nil
     ) async {
         let subjectLabel: String = {
             if let title = doc.blocks.first(where: { $0.kind == .documentTitle }) {
@@ -838,12 +841,59 @@ public actor IngestCoordinator {
             derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id)
         }
         guard !derived.isEmpty else { return }
+        let merged = await bindIdentifierAnchors(DomainFactExtractor.merge(derived),
+                                                 owningObjectID: owningObjectID)
         do {
-            try await repo.upsert(DomainFactExtractor.merge(derived))
+            try await repo.upsert(merged)
             KalsmritikoshLog.ingestion.info("Domain facts: \(derived.count, privacy: .public) fact(s) for \(url.lastPathComponent, privacy: .private)")
         } catch {
             KalsmritikoshLog.ingestion.error("Domain-fact persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// V3 3c — THE WRITER BINDING. For every identifier-shaped fact, resolve-or-
+    /// create its canonical anchor and bind the fact's subject to it, so twelve
+    /// documents that each mention "Patent No. 555489" all point at the ONE
+    /// anchor entity (the ledger stops MENTIONING the patent and starts KNOWING
+    /// it). Resolve-or-create is idempotent at the repo (UNIQUE(kind, normalized)
+    /// on the identity key), so facts sharing a value share one anchor row.
+    /// Non-identifier facts pass through untouched. Best-effort: if the entities
+    /// repo is absent, no owning KnowledgeObject is in hand, or a bind fails, the
+    /// fact still persists (subject unbound) — never fails the ingest; the V5
+    /// drain binds any facts left unbound.
+    ///
+    /// `owningObjectID` MUST be a real knowledge_objects row: an anchor's
+    /// source_object_id carries a FOREIGN KEY into it, so a source-version id (or
+    /// any non-KO uuid) would be rejected. The anchor is cross-document by nature;
+    /// this records only its first-sighting KO, while the fact layer keeps the
+    /// full multi-source footprint (sourceCount + block ids).
+    private func bindIdentifierAnchors(
+        _ facts: [GenericFact], owningObjectID: KnowledgeObject.ID?
+    ) async -> [GenericFact] {
+        guard let entities, let owningObjectID else { return facts }
+        var out: [GenericFact] = []
+        out.reserveCapacity(facts.count)
+        var cache: [String: UUID] = [:]   // identityKey → anchor id, per-document
+        for fact in facts {
+            guard FactSchemaRegistry.expectedShape(of: fact.field) == .identifier,
+                  !fact.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                out.append(fact); continue
+            }
+            let key = IdentifierAnchor.identityKey(field: fact.field, value: fact.value)
+            if let hit = cache[key] {
+                out.append(fact.withSubjectID(hit)); continue
+            }
+            do {
+                let anchorID = try await entities.resolveOrCreateAnchor(
+                    field: fact.field, value: fact.value, sourceObjectID: owningObjectID)
+                cache[key] = anchorID
+                out.append(fact.withSubjectID(anchorID))
+            } catch {
+                KalsmritikoshLog.ingestion.error("Anchor bind failed for \(fact.field, privacy: .public): \(String(describing: error), privacy: .public)")
+                out.append(fact)
+            }
+        }
+        return out
     }
 
     /// USF-001.1 — custody-first ingest, the SOLE path. Registers canonical source +
@@ -1028,7 +1078,8 @@ public actor IngestCoordinator {
         var structuralAttempted = false
         if let structural, let evidenceStore, totalChunks > 0 {
             structuralAttempted = true
-            structuralReceipt = await persistStructuralDoc(structural, url: url, store: evidenceStore)
+            structuralReceipt = await persistStructuralDoc(structural, url: url, store: evidenceStore,
+                                                            owningObjectID: lastObject.id)
             if structuralReceipt != nil {
                 for link in blockOwnership {
                     try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())

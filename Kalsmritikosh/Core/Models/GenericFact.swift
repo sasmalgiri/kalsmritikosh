@@ -140,6 +140,19 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
                   reassignedFrom: reassignedFrom)
     }
 
+    /// V3 3c — a copy with the canonical subject (identifier anchor) bound.
+    /// Pure; keeps every other field (including the fact id and its producer
+    /// version) intact. The writer binding sets this so a fact about
+    /// "Patent No. 555489" points at the ONE anchor entity, not just a label.
+    public nonisolated func withSubjectID(_ subjectID: UUID) -> GenericFact {
+        GenericFact(
+            id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
+            value: value, unit: unit, assessment: assessment, confidence: confidence,
+            sourceBlockIDs: sourceBlockIDs, producerVersion: producerVersion,
+            rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom
+        )
+    }
+
     /// A material fact may appear in a final answer only if its assessment is assertable
     /// AND it carries at least one supporting evidence block.
     @available(*, deprecated, message: "Use ClaimEvaluation + AssertabilityPolicy")

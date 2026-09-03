@@ -9,6 +9,7 @@
 
 import Foundation
 import SQLite3
+import os
 
 // G2-SWIFT6 — `nonisolated(unsafe)` so this top-level constant isn't
 // inferred main-actor-isolated under strict concurrency. The value is
@@ -123,8 +124,10 @@ extension Database {
 
     private func collectRows(sql: String, bindings: [SQLValue], handle: OpaquePointer?) throws -> [SQLRow] {
         var rows: [SQLRow] = []
+        var stepError: DatabaseError?
         try runBinding(sql: sql, bindings: bindings, handle: handle) { stmt in
-            while sqlite3_step(stmt) == SQLITE_ROW {
+            var rc = sqlite3_step(stmt)
+            while rc == SQLITE_ROW {
                 let count = Int(sqlite3_column_count(stmt))
                 var vals: [SQLValue] = []
                 vals.reserveCapacity(count)
@@ -148,9 +151,46 @@ extension Database {
                     }
                 }
                 rows.append(SQLRow(values: vals))
+                rc = sqlite3_step(stmt)
+            }
+            // NO-SILENT-DROP (SQL layer): the loop ends on the TERMINAL rc.
+            // SQLITE_DONE is success; anything else must NEVER be silenced.
+            //  • WRITE routed through query() (INSERT/UPDATE/DELETE/REPLACE …
+            //    RETURNING) → THROW. A rejected write (FK/constraint/busy) that
+            //    returned an empty row set is exactly how the V3 3c anchor FK bug
+            //    hid behind a caller's `rows.first == nil` guard. Same path as
+            //    exec(); makes the write-swallow class uncatchable.
+            //  • READ that step-errors (e.g. an FTS5 MATCH syntax error on
+            //    unsanitised query text — see ChunksRepository.searchFTS) →
+            //    COUNTED DIAGNOSTIC, results unchanged (rows so far). We do NOT
+            //    throw here: that would change retrieval OUTPUT and perturb
+            //    sealed baselines. The silence is removed (the error is now
+            //    logged); the FTS-query-sanitisation fix is a separate, parity-
+            //    gated change. "throw OR counted diagnostic — never silence."
+            if rc != SQLITE_DONE {
+                let msg = String(cString: sqlite3_errstr(rc))
+                if Self.isWriteStatement(sql) {
+                    stepError = .stepFailed(sql: sql, message: msg)
+                } else {
+                    KalsmritikoshLog.storage.error("query step error (read, not silenced): \(msg, privacy: .public) sql=\(String(sql.prefix(80)), privacy: .public)")
+                }
             }
         }
+        if let stepError { throw stepError }
         return rows
+    }
+
+    /// Does this statement MUTATE the ledger? Used by collectRows to decide
+    /// throw-vs-counted-diagnostic on a non-DONE terminal: a rejected WRITE must
+    /// throw (never silently look successful), while a read that step-errors is
+    /// logged but returns its rows-so-far (behaviour-preserving). Leading-keyword
+    /// classification over the trimmed SQL; RETURNING writes route through
+    /// query()/collectRows, which is exactly why this lives here.
+    static func isWriteStatement(_ sql: String) -> Bool {
+        let head = sql.drop(while: { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == "\r" })
+            .prefix(8).uppercased()
+        return head.hasPrefix("INSERT") || head.hasPrefix("UPDATE")
+            || head.hasPrefix("DELETE") || head.hasPrefix("REPLACE")
     }
 
     public func scalar<T>(_ sql: String, _ bindings: [SQLValue] = [], map: (SQLRow) -> T?) throws -> T? {

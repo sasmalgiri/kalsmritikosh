@@ -136,6 +136,15 @@ public struct EntityQualityGate: Sendable {
         // A real person/org name never contains "@".
         if surface.contains("@") { return "email-as-person" }
 
+        // V3 3d (E-1): an AUTOMATED SENDER promoted to a person by header
+        // parsing ("File Processing Bot", "no-reply", "Mailer-Daemon"). PERSON
+        // kind ONLY (an org legitimately named "Notification Systems Inc" is
+        // safe) and HIGH-PRECISION WHOLE-TOKEN match ONLY, so a real human with
+        // a bot-adjacent name or title passes ("Robert Botha", "Automation Lead,
+        // Priya Nair") — false-rejecting a person is the E-2 sin in a new
+        // costume. Ships with its innocence fixture.
+        if entity.kind == .person, Self.isAutomatedSender(lower) { return "automated-sender" }
+
         // E-1: a filename mis-tagged as a subject ("RESPONSE_29.08.2024.pdf").
         if Self.isFilenameShaped(lower) { return "filename-shaped" }
 
@@ -153,6 +162,23 @@ public struct EntityQualityGate: Sendable {
             return "leading-stopword"
         }
         return nil
+    }
+
+    /// V3 3d — high-precision automated-sender tokens. WHOLE-TOKEN match only
+    /// (never substring — "Botha" must not match "bot"); each token's edges are
+    /// trimmed of punctuation but interior hyphens are kept ("no-reply").
+    public nonisolated static let automatedSenderTokens: Set<String> = [
+        "bot", "noreply", "no-reply", "donotreply", "do-not-reply",
+        "mailer-daemon", "daemon", "postmaster", "notification", "notifications"
+    ]
+    /// True iff any whole token of the (lowercased) name is an automation marker.
+    public nonisolated static func isAutomatedSender(_ lower: String) -> Bool {
+        let edges = CharacterSet.alphanumerics.inverted
+        for token in lower.split(whereSeparator: { $0 == " " || $0 == "\t" }) {
+            let clean = String(token).trimmingCharacters(in: edges)
+            if automatedSenderTokens.contains(clean) { return true }
+        }
+        return false
     }
 
     /// "Nil", "Nil Nil", "nil, nil" — every alnum token is the literal "nil".
