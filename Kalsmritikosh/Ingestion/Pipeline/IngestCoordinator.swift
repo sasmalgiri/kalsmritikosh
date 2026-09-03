@@ -1195,6 +1195,9 @@ public actor IngestCoordinator {
 
         do {
             try await objects.insert(object, fileID: fileID)
+            // V4 (D-17 Part A) — stamp the document class at ingest (v123
+            // column). Existing rows stay NULL until the drain backfills them.
+            try? await objects.setDocumentClass(docClass, forID: object.id)
             await pipelineMetrics?.bump(.loaded)
         } catch {
             KalsmritikoshLog.storage.error("KO insert failed for \(rawObject.id.uuidString.prefix(8), privacy: .public): \(String(describing: error), privacy: .public)")

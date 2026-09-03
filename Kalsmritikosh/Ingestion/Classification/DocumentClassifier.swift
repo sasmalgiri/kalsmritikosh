@@ -23,6 +23,13 @@ public enum DocumentClass: String, Codable, CaseIterable, Sendable {
     case video
     case spreadsheet
     case presentation
+    /// V4 (D-17 Part A) — a legal/official proceeding document (patent office
+    /// letter, hearing notice, power of attorney…). The legal event extractor
+    /// is PRIMARY here; commercial boilerplate markers never fire (EV-1).
+    case legalDocument
+    /// V4 (D-17 Part A) — a certificate (grant certificate, registration…).
+    /// Conservative by ruling: only unambiguous certificate language classifies.
+    case certificate
     case other
 }
 
@@ -41,6 +48,24 @@ public struct DocumentClassifier: Sendable {
         }
 
         let body = object.content.lowercased()
+
+        // V4 — legal/certificate BEFORE invoice/contract: a patent-office letter
+        // routinely mentions fees and agreement language, which would otherwise
+        // misclassify it commercially and invite boilerplate events (EV-1).
+        // Markers are conservative — official-proceeding phrasings only.
+        if matchesAny(body, [
+            "the patents act", "controller of patents", "the patent office",
+            "form of authorization of an agent", "hearing notice",
+            "patent rules, 2003", "ld. controller",
+            "intellectual property office", "letter of grant", "register of patents",
+            "application for patent", "date of grant"
+        ]) { return .legalDocument }
+
+        if matchesAny(body, [
+            "this is to certify", "certificate of grant", "certificate of registration",
+            "certificate no.", "certificate number"
+        ]) { return .certificate }
+
         if matchesAny(body, [
             "invoice number", "invoice no", "amount due", "subtotal", "vat",
             "bill to", "payable to"

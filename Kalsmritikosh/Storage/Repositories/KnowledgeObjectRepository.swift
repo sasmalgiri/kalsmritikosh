@@ -37,6 +37,22 @@ public actor KnowledgeObjectRepository {
         ])
     }
 
+    /// V4 (D-17 Part A, v123) — stamp the classified document kind. Fresh
+    /// ingests call this right after insert; existing rows stay NULL until the
+    /// V5 drain backfills them (backfill rides the drain, never standalone).
+    public func setDocumentClass(_ documentClass: DocumentClass, forID id: KnowledgeObject.ID) async throws {
+        try await database.exec(
+            "UPDATE knowledge_objects SET document_class = ? WHERE id = ?;",
+            [.text(documentClass.rawValue), .uuid(id)])
+    }
+
+    /// V4 — the stamped class for one object (nil = pre-V4 row, awaiting drain).
+    public func documentClass(forID id: KnowledgeObject.ID) async throws -> DocumentClass? {
+        let rows = try await database.query(
+            "SELECT document_class FROM knowledge_objects WHERE id = ?;", [.uuid(id)])
+        return rows.first?.string(0).flatMap(DocumentClass.init(rawValue:))
+    }
+
     public func count() async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM knowledge_objects;")
         return Int(rows.first?.int(0) ?? 0)
