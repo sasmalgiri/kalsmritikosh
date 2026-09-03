@@ -89,7 +89,7 @@ struct RetrievalGoldEvalTests {
         #expect(questions.count == 60)
 
         let report = await RetrievalGoldEval().run(
-            retriever: retriever, objects: objects, questions: questions)
+            retriever: retriever, objects: objects, questions: questions, chunks: chunks)
         print("GOLD-EVAL: \(report.renderLine())")
         // Reliable metric capture regardless of console plumbing.
         try? (report.renderLine() + "\n").write(
@@ -97,28 +97,35 @@ struct RetrievalGoldEvalTests {
             atomically: true, encoding: .utf8)
 
         // ── Floors ──────────────────────────────────────────────────────────
-        // MEASURED 2026-08-07 on current main with this rig (fresh Tier-0/1
-        // ingest, NO Tier-2 enrichment — no vectors/synthetic-questions/
-        // QA-pairs/bond-graph/caches): lookup 0.667, aggregation 0.133,
-        // temporal 0.233, multihop 0.322, overall 0.339 (n=60). These are the
-        // DETERMINISTIC-LAYER floor of a just-ingested corpus — the in-app
-        // pipeline with full enrichment scores far higher (eval-report-*.md).
-        // Floors sit below measured to absorb OS-version drift in the Apple
-        // NL entity extractor on hosted runners. Raise them when deterministic
-        // retrieval improves; NEVER lower them to hide a regression.
+        // MEASURED 2026-08-07 (FTS silently dead — task #40): lookup 0.667,
+        // aggregation 0.133, temporal 0.233, multihop 0.322, overall 0.339. The
+        // keyword layer was returning [] on every punctuated question, so this
+        // was OTHER layers alone.
+        // RE-MEASURED 2026-09-03 (U2.5 FTS query sanitizer): lookup/aggregation/
+        // temporal/multihop/overall ALL 1.000 (n=60) — the FTS fix is the quality
+        // receipt: 0.339 → 1.000 overall on the gold set once "555489" et al.
+        // actually match. Floors RAISED to lock the gain (never lowered), with
+        // headroom below the measured 1.0 for OS-drift in the Apple NL extractor.
         let floors: [String: Double] = [
-            "lookup": 0.55,
-            "aggregation": 0.08,
-            "temporal": 0.15,
-            "multihop": 0.22,
+            "lookup": 0.85,
+            "aggregation": 0.85,
+            "temporal": 0.85,
+            "multihop": 0.85,
         ]
         #expect(report.total == 60)
-        #expect(report.overall >= 0.28,
-                "overall deterministic recall \(report.overall) fell below floor 0.28")
+        #expect(report.overall >= 0.85,
+                "overall deterministic recall \(report.overall) fell below floor 0.85")
         for classRecall in report.byClass {
             let floor = floors[classRecall.className] ?? 0
             #expect(classRecall.recall >= floor,
                     "\(classRecall.className) recall \(classRecall.recall) fell below floor \(floor)")
         }
+
+        // U2.5 PER-LAYER VISIBILITY (standing binding): the FTS layer must be
+        // ALIVE. It was silently dead on every punctuated question (task #40);
+        // if it ever regresses toward dead, this reds HERE in the eval itself —
+        // never discoverable only by error counters again.
+        let fts = try #require(report.ftsRecall, "FTS-layer recall was not measured")
+        #expect(fts >= 0.85, "FTS-layer recall \(fts) — the keyword layer regressed toward dead")
     }
 }

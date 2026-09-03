@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import os
 
 public actor ChunksRepository {
     private let database: Database
@@ -164,7 +165,19 @@ public actor ChunksRepository {
     }
 
     public func searchFTS(_ query: String, limit: Int = 50) async throws -> [Chunk] {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        // V1.1 U2.5 — NEVER pass raw query text to FTS5 (task #40: it raised a
+        // logic error on ordinary punctuation and the keyword layer went silently
+        // dead). Sanitize to a quoted-term OR expression of INFORMATIVE tokens.
+        let match = FTSQuerySanitizer.sanitize(query)
+        guard !match.isEmpty else {
+            // F4.1 — GRACEFUL, COUNTED abstention: no informative token remains
+            // (all stopwords/noise). The keyword layer abstains and other layers
+            // carry — same behavior as pre-F4 for this class, now VISIBLE.
+            if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                KalsmritikoshLog.storage.info("FTS abstained (no informative token): \(String(query.prefix(60)), privacy: .private)")
+            }
+            return []
+        }
         let rows = try await database.query("""
         SELECT c.id, c.object_id, c.ordinal, c.text, c.char_start, c.char_end, c.page_number, c.created_at, c.context_prefix, c.context_prefix_source, c.evidence_block_id, c.block_kind
         FROM chunks c
@@ -172,7 +185,7 @@ public actor ChunksRepository {
         WHERE chunks_fts.text MATCH ? AND c.review_status IS NULL
         ORDER BY rank
         LIMIT ?;
-        """, [.text(query), .integer(Int64(limit))])
+        """, [.text(match), .integer(Int64(limit))])
         return rows.compactMap(decode)
     }
 
