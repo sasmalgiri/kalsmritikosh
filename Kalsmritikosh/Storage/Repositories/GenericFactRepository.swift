@@ -108,6 +108,16 @@ public actor GenericFactRepository {
         return rows.compactMap(Self.decode)
     }
 
+    /// V5 DRAIN ONLY — remove stale derived fact rows so the drain can replace
+    /// them with the current-era derivation. Facts are derived projections; the
+    /// no-delete law protects sources/evidence, not stale derivations. Never
+    /// called from the answer path.
+    public func delete(ids: [UUID]) async throws {
+        for id in ids {
+            try await database.exec("DELETE FROM generic_facts WHERE id = ?;", [.uuid(id)])
+        }
+    }
+
     public func count() async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM generic_facts;", [])).first?.int(0) ?? 0)
     }
