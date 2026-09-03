@@ -116,16 +116,14 @@ public struct RuleEventExtractor: EventExtractor {
             ))
         }
 
-        let rules: [(Event.Kind, [String])] = [
-            (.contractSigned, ["signed this agreement", "executed on", "signature page"]),
-            (.contractModified, ["amendment to", "amended on", "addendum"]),
-            (.invoiceIssued, ["invoice issued", "invoice dated", "invoice number"]),
-            (.invoicePaid, ["payment received", "paid in full", "payment confirmed"]),
-            (.meetingHeld, ["minutes of meeting", "we met on", "kickoff meeting"]),
-            (.taskAssigned, ["assigned to", "action item:", "owner:"]),
-            (.deliveryDelayed, ["delivery delayed", "shipment delay", "behind schedule"]),
-            (.deliveryCompleted, ["delivery completed", "delivered on", "shipment received"])
-        ]
+        // V4 (EV-1) — the markers live in EventMarkerTable AS DATA, class-gated:
+        // on a legal document or certificate the commercial rules are silenced
+        // and the legal extractor (PatentLegalEventExtractor) is primary, so a
+        // patent letter mentioning fees no longer manufactures invoice events.
+        // The classification is the same deterministic rule set the coordinator
+        // uses (cheap; pure function of the object).
+        let documentClass = DocumentClassifier().classify(object)
+        let rules = EventMarkerTable.rules(for: documentClass).map { ($0.kind, $0.markers) }
 
         for (kind, markers) in rules {
             for marker in markers where Self.hasCompletedOccurrence(of: marker, in: content) {

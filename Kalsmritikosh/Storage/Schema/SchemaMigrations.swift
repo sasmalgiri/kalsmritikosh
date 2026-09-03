@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 122
+    public static let latestVersion = 123
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -653,7 +653,8 @@ public enum SchemaMigrations {
         (119, v119),
         (120, v120),
         (121, v121),
-        (122, v122)
+        (122, v122),
+        (123, v123)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6405,5 +6406,16 @@ public enum SchemaMigrations {
     // join the guard-telemetry family (a reassignment-rate spike = rule defect).
     private static let v122: String = """
     ALTER TABLE generic_facts ADD COLUMN reassigned_from TEXT;
+    """
+
+    // MARK: - v123 — V4 (D-17 Part A): document_class on knowledge_objects
+    //
+    // The document's classified kind ("email", "invoice", "legalDocument",
+    // "certificate", …) stamped at ingest so event extraction and retrieval can
+    // gate by class (EV-1: commercial markers never fire on a legal document).
+    // NULLABLE by design: fresh ingests stamp it; the BACKFILL for existing rows
+    // RIDES THE V5 DRAIN (never a standalone rewrite of the archive).
+    private static let v123: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN document_class TEXT;
     """
 }
