@@ -194,7 +194,15 @@ struct V0AdversarialFixtureTests {
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let a = try await rig.answer("timeline of the patent")
         print("V0 RED rung-2 twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(200))")
-        withKnownIssue("V3 anchor entities + V4 event scoping: no patent anchor exists yet, so the chain cannot thread") {
+        // R-1 DIAGNOSIS (F7 post-drain, 2026-09-03): the DATA layer is no longer
+        // the blocker — V3 anchors + V4 class-gated milestones exist, and the
+        // live drain rebuilt the full lifecycle chain (FER 2022-11-29 → filed
+        // 2023-03-21 → objections → hearings 2024-08 → granted 2024-11-28, all
+        // dated + ordered + producer_version 1). The remaining gap is ROUTING +
+        // COMPOSER: "timeline of the patent" never reaches a timeline composer
+        // and ships general-path "Reported:" fact-spam instead. The flip is
+        // owned by Go 2 P3-U2 (temporal chains) + the S2-U5 rungs-1/1n/2 gate.
+        withKnownIssue("R-1 diagnosed: routing+composer gap (Go 2 P3-U2); data layer ready — anchored milestones exist") {
             let text = ((a.answerText ?? "") + " " + a.body).lowercased()
             #expect(text.contains("march 2023") && text.contains("june 2025"),
                     "timeline does not carry the filing→grant chain")
