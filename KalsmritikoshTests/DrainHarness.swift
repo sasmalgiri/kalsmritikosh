@@ -103,3 +103,46 @@ struct DrainHarness {
         "v\(SchemaMigrations.latestVersion)"
     }
 }
+
+// MARK: - GO2R U0-b: the register refresh, live (operator-invoked only)
+
+@Suite("U0-b — live entity register refresh (operator-invoked only)", .serialized)
+struct RegisterRefreshHarness {
+
+    @Test("Refresh the live register: snapshot → refresh → receipt → zero dirty remainder")
+    func refreshLiveRegister() async throws {
+        guard ProcessInfo.processInfo.environment["REGISTER_REFRESH_LIVE"] == "1" else {
+            print("REFRESH: TEST_RUNNER_REGISTER_REFRESH_LIVE not set — skipping (operator-invoked only).")
+            return
+        }
+        let liveURL = DatabaseLocations.defaultDatabaseURL
+        guard FileManager.default.fileExists(atPath: liveURL.path) else {
+            print("REFRESH: no live ledger — skipping."); return
+        }
+        // Snapshot FIRST, beside the ledger (SR-01 law), refuse-if-exists.
+        let snapshotURL = liveURL.deletingLastPathComponent()
+            .appendingPathComponent("kalsmritikosh-pre-refresh-snapshot-entities-v2.sqlite")
+        guard !FileManager.default.fileExists(atPath: snapshotURL.path) else {
+            Issue.record("REFRESH: snapshot already exists at \(snapshotURL.path) — move it aside, then re-run.")
+            return
+        }
+        do {
+            let src = try Database(url: liveURL)
+            let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
+            try await src.exec("VACUUM main INTO '\(escaped)';", [])
+            await src.close()
+        }
+        print("REFRESH: PRE-REFRESH SNAPSHOT WRITTEN → \(snapshotURL.path)")
+        #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+        let db = try Database(url: liveURL)
+        try await SchemaMigrations.migrate(db)
+        let refresh = EntityRegisterRefresh(database: db, entities: EntitiesRepository(database: db))
+        let receipt = try await refresh.run()
+        print(receipt.renderLines())
+        let dirty = try await refresh.dirtyRemainder()
+        await db.close()
+        print("REFRESH: dirty remainder after = \(dirty)")
+        #expect(dirty == 0, "the register re-witness must read clean")
+    }
+}
