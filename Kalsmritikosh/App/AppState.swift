@@ -2745,13 +2745,28 @@ public final class AppState {
     /// Conservative same-person test: identical surname, both multi-token,
     /// high Jaro-Winkler. Tuned to catch "thirshendus sasmal" ≈
     /// "shirshendu sasmal" while never merging two genuinely different people.
-    private static func plausibleOCRVariant(winner: String, loser: String) -> Bool {
+    nonisolated static func plausibleOCRVariant(winner: String, loser: String) -> Bool {
         guard winner != loser else { return false }
         let w = winner.split(separator: " ")
         let l = loser.split(separator: " ")
         guard w.count >= 2, l.count >= 2 else { return false }
-        guard let ws = w.last, let ls = l.last, ws == ls else { return false }  // same surname
-        return NameSimilarity.jaroWinkler(winner, loser) >= 0.88
+        let ws = String(w.last!), ls = String(l.last!)
+        let jw = NameSimilarity.jaroWinkler(winner, loser)
+        if ws == ls {
+            // Same surname → given-name OCR variant ("thirshendus"/"shirshendu"
+            // sasmal). Full-name similarity qualifies.
+            return jw >= 0.88
+        }
+        // V3 3d (F2) — surnames DIFFER: fold ONLY when the given name matches
+        // EXACTLY and the surname delta is FULLY EXPLAINED by ≤1 OCR letter-group
+        // substitution (mechanism). Jaro-Winkler rides ONLY as a veto FLOOR here,
+        // never the qualifying test — so "Sasmal"/"Sasrnal" folds (rn↔m) while
+        // "Nair"/"Singh" and "Sharma"/"Verma" never do.
+        let wGiven = w.dropLast().joined(separator: " ")
+        let lGiven = l.dropLast().joined(separator: " ")
+        guard wGiven == lGiven else { return false }
+        guard NameOCRConfusion.surnameExplainable(ws, ls) else { return false }
+        return jw >= 0.85
     }
 
     // MARK: - System 3: gap detection + investigation (rule-based)
