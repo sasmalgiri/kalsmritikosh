@@ -8,8 +8,13 @@
 //
 //  This is the ONE sanctioned mutation of the live archive in the entire
 //  program (Master Order F7). Guardrails, in order:
-//    1. SNAPSHOT FIRST — VACUUM INTO ~/Downloads (the owner's rollback copy;
-//       the path is announced in the log before anything is written).
+//    1. SNAPSHOT FIRST — VACUUM INTO the live ledger's own directory (the
+//       owner's rollback copy; the path is announced in the log before
+//       anything is written). Self-Ruling #1: the sandboxed test host cannot
+//       open real ~/Downloads ("Operation not permitted", proven 2026-09-03,
+//       failed AT the snapshot, ledger untouched) — the container directory
+//       is the one guaranteed-writable same-volume destination; the operator
+//       mirrors the file to ~/Downloads after the run.
 //    2. Populated-ledger guard — never drain a phantom container.
 //    3. Migrate to the current schema (v123 adds document_class; versioned,
 //       SAVEPOINT-wrapped, exactly what the app does at boot).
@@ -43,9 +48,17 @@ struct DrainHarness {
         }
 
         // 1 — SNAPSHOT FIRST. The owner's study/rollback copy, path announced.
+        // Written beside the live ledger (sandbox-writable, same volume);
+        // mirrored to ~/Downloads by the operator after the run.
         let head = (try? await gitHeadShort()) ?? "unknown"
-        let snapshotURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads/kalsmritikosh-pre-drain-snapshot-\(head).sqlite")
+        let snapshotURL = liveURL.deletingLastPathComponent()
+            .appendingPathComponent("kalsmritikosh-pre-drain-snapshot-\(head).sqlite")
+        // A snapshot is a rollback copy — NEVER silently overwritten or deleted.
+        // If one exists (aborted or prior run), the operator moves it aside first.
+        guard !FileManager.default.fileExists(atPath: snapshotURL.path) else {
+            Issue.record("DRAIN: a snapshot already exists at \(snapshotURL.path) — refusing to touch it. Move it aside, then re-run.")
+            return
+        }
         do {
             let src = try Database(url: liveURL)
             let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
