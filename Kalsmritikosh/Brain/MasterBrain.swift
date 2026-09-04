@@ -408,6 +408,23 @@ public actor MasterBrain {
                     originScopeID: originScopeID) {
                     continuation.yield(update)
                 }
+                // P3-U4 part 2 — THE COMPOSE TWIN, inside the owner's fence:
+                // fired AFTER the answer shipped (post-hoc, non-blocking, a
+                // detached task the answer never waits on); refusals never
+                // invoke it (Q0/conversational refused above); FM-unavailable
+                // skips honestly inside the runner; the verdict is a log line
+                // and a counter — it can never touch the answer, its
+                // citations, its confidence, or any sealed envelope.
+                if !final.refused, let caps = self.capabilities {
+                    let q = question
+                    let shipped = final.answerText ?? String(final.body.prefix(400))
+                    let snippets = final.citations.map(\.snippet)
+                    Task.detached(priority: .utility) {
+                        _ = await ComposeTwinRunner.run(
+                            question: q, shippedAnswer: shipped,
+                            snippets: snippets, capabilities: caps)
+                    }
+                }
                 continuation.finish()
             }
         }
