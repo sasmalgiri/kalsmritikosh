@@ -16,8 +16,8 @@ public actor ChunksRepository {
     public func insertBatch(_ chunks: [Chunk]) async throws {
         for chunk in chunks {
             try await database.exec("""
-            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, [
                 .uuid(chunk.id),
                 .uuid(chunk.objectID),
@@ -32,7 +32,9 @@ public actor ChunksRepository {
                 .integer(chunk.admitEmbedding ? 1 : 0),
                 chunk.evidenceBlockID.map { .uuid($0) } ?? .null,
                 chunk.blockKind.map { .text($0) } ?? .null,
-                chunk.sourceVersionID.map { .uuid($0) } ?? .null
+                chunk.sourceVersionID.map { .uuid($0) } ?? .null,
+                .real(chunk.salience),
+                chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null
             ])
         }
     }
@@ -44,7 +46,7 @@ public actor ChunksRepository {
     /// the LLM during ingest.
     public func findChunksMissingContextPrefix(limit: Int = 100) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
         WHERE context_prefix IS NULL
           AND object_id IN (
@@ -130,7 +132,7 @@ public actor ChunksRepository {
     /// writer.
     public func findByObjectID(_ id: KnowledgeObject.ID) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
         """, [.uuid(id)])
         return rows.compactMap(decode)
@@ -141,7 +143,7 @@ public actor ChunksRepository {
     /// hydrates the answer-side KO into a `RetrievedChunk`.
     public func firstChunk(forObjectID id: KnowledgeObject.ID) async throws -> Chunk? {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
         return rows.first.flatMap(decode)
@@ -154,7 +156,7 @@ public actor ChunksRepository {
             // Rejected chunks are excluded here too, so a passage a user
             // soft-excluded stops surfacing via vector-hit / synth hydration.
             let rows = try await database.query("""
-            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
             FROM chunks WHERE id = ? AND review_status IS NULL LIMIT 1;
             """, [.uuid(id)])
             if let row = rows.first, let chunk = decode(row) {
@@ -194,7 +196,7 @@ public actor ChunksRepository {
     /// self-eval to measure recall@k on the user's OWN data.
     public func sample(limit: Int) async throws -> [Chunk] {
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
         WHERE review_status IS NULL AND admit_embedding = 1 AND length(text) >= 40
         ORDER BY rowid
@@ -212,7 +214,7 @@ public actor ChunksRepository {
         guard !ids.isEmpty else { return [] }
         let placeholders = ids.map { _ in "?" }.joined(separator: ",")
         let rows = try await database.query("""
-        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+        SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
         WHERE evidence_block_id IN (\(placeholders)) AND review_status IS NULL
         ORDER BY rowid
@@ -260,7 +262,11 @@ public actor ChunksRepository {
             // Optional row accessors return nil when a SELECT doesn't project
             // these columns, so this is safe for the (few) narrower queries.
             evidenceBlockID: row.uuid(10),
-            blockKind: row.string(11)
+            blockKind: row.string(11),
+            // S2-U1 — projected only by SELECTs that carry column 12; narrower
+            // queries fall back to the neutral prior, same as legacy rows.
+            salience: row.double(12) ?? SalienceTable.neutral,
+            contextTemplateVersion: row.int(13).map(Int.init)
         )
     }
 }

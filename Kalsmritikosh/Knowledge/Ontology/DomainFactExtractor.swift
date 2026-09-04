@@ -17,14 +17,56 @@ import Foundation
 public struct DomainFactExtractor: Sendable {
     public nonisolated init() {}
 
+    /// The five packs as callable roots, in the DEFAULT order (the historical
+    /// sequence — first-seen value form wins in merge, so order is semantic).
+    private nonisolated static let defaultOrder: [PackRoot] = [
+        .employment, .transaction, .contract, .patent, .research
+    ]
+
+    nonisolated enum PackRoot: CaseIterable, Sendable {
+        case employment, transaction, contract, patent, research
+        nonisolated func extractFacts(fromText t: String, subjectLabel s: String, blockID b: UUID) -> [GenericFact] {
+            switch self {
+            case .employment:  return EmploymentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .transaction: return TransactionDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .contract:    return ContractDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .patent:      return PatentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .research:    return ResearchDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            }
+        }
+    }
+
+    /// D-17 Step 4 — class-ordered roots as DATA: the class's own root is
+    /// tried FIRST (a certificate-classed file meets the patent root before
+    /// the employment one), then the remaining packs in the default order.
+    /// EVERY pack still runs on every block (the guardrail: classification
+    /// errors degrade gracefully — an `other`-classed document uses the
+    /// default order and is never excluded).
+    nonisolated static let preferredRootByClass: [DocumentClass: PackRoot] = [
+        .legalDocument: .patent,
+        .certificate:   .patent,
+        .invoice:       .transaction,
+        .receipt:       .transaction,
+        .contract:      .contract,
+        .resume:        .employment,
+        .email:         .employment,
+        .researchPaper: .research,
+    ]
+
+    nonisolated static func packOrder(for docClass: DocumentClass?) -> [PackRoot] {
+        guard let docClass, let preferred = preferredRootByClass[docClass] else { return defaultOrder }
+        return [preferred] + defaultOrder.filter { $0 != preferred }
+    }
+
     /// Run all packs over `text` for `subjectLabel`, linking facts to `blockID`.
-    public nonisolated func extract(fromText text: String, subjectLabel: String, blockID: UUID) -> [GenericFact] {
+    /// `documentClass` orders the roots (class's own first); nil keeps the
+    /// historical order, so existing callers are byte-identical.
+    public nonisolated func extract(fromText text: String, subjectLabel: String, blockID: UUID,
+                                    documentClass: DocumentClass? = nil) -> [GenericFact] {
         var facts: [GenericFact] = []
-        facts += EmploymentDomainPack.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
-        facts += TransactionDomainPack.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
-        facts += ContractDomainPack.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
-        facts += PatentDomainPack.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
-        facts += ResearchDomainPack.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
+        for root in Self.packOrder(for: documentClass) {
+            facts += root.extractFacts(fromText: text, subjectLabel: subjectLabel, blockID: blockID)
+        }
         return Self.merge(facts)
     }
 

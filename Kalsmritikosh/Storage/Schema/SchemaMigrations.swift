@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 123
+    public static let latestVersion = 125
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -654,7 +654,9 @@ public enum SchemaMigrations {
         (120, v120),
         (121, v121),
         (122, v122),
-        (123, v123)
+        (123, v123),
+        (124, v124),
+        (125, v125)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6417,5 +6419,28 @@ public enum SchemaMigrations {
     // RIDES THE V5 DRAIN (never a standalone rewrite of the archive).
     private static let v123: String = """
     ALTER TABLE knowledge_objects ADD COLUMN document_class TEXT;
+    """
+
+    // MARK: - v124 — S2-U1 (D-17 Part B): structural salience on chunks
+    //
+    // How much a chunk's STRUCTURAL position says "this is what the document is
+    // about" (email subject > quoted tail; table row > footer). Written at
+    // insert from the class-aware weight table (SalienceTable); DEFAULT 0.6 =
+    // the neutral prior, so pre-existing rows and unknown kinds change nothing
+    // until the versioned backfill (rides the shared S2 reindex) rewrites them.
+    // Presentation-and-ranking only: nothing is dropped for scoring low.
+    private static let v124: String = """
+    ALTER TABLE chunks ADD COLUMN salience REAL NOT NULL DEFAULT 0.6;
+    """
+
+    // MARK: - v125 — S2-U2 (R-3): deterministic context-prefix template version
+    //
+    // Which version of the DETERMINISTIC prefix template (title · class ·
+    // block kind) produced this chunk's context_prefix. NULL = a legacy
+    // LLM/heuristic prefix or no prefix; the shared S2 reindex rewrites
+    // those rows under the current template. Index-only, like the prefix
+    // itself — never shown, never FTS-indexed.
+    private static let v125: String = """
+    ALTER TABLE chunks ADD COLUMN context_template_version INTEGER;
     """
 }

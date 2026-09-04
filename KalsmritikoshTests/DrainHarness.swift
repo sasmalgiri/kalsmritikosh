@@ -103,3 +103,95 @@ struct DrainHarness {
         "v\(SchemaMigrations.latestVersion)"
     }
 }
+
+// MARK: - GO2R U0-b: the register refresh, live (operator-invoked only)
+
+@Suite("U0-b — live entity register refresh (operator-invoked only)", .serialized)
+struct RegisterRefreshHarness {
+
+    @Test("Refresh the live register: snapshot → refresh → receipt → zero dirty remainder")
+    func refreshLiveRegister() async throws {
+        guard ProcessInfo.processInfo.environment["REGISTER_REFRESH_LIVE"] == "1" else {
+            print("REFRESH: TEST_RUNNER_REGISTER_REFRESH_LIVE not set — skipping (operator-invoked only).")
+            return
+        }
+        let liveURL = DatabaseLocations.defaultDatabaseURL
+        guard FileManager.default.fileExists(atPath: liveURL.path) else {
+            print("REFRESH: no live ledger — skipping."); return
+        }
+        // Snapshot FIRST, beside the ledger (SR-01 law), refuse-if-exists.
+        let snapshotURL = liveURL.deletingLastPathComponent()
+            .appendingPathComponent("kalsmritikosh-pre-refresh-snapshot-entities-v2.sqlite")
+        guard !FileManager.default.fileExists(atPath: snapshotURL.path) else {
+            Issue.record("REFRESH: snapshot already exists at \(snapshotURL.path) — move it aside, then re-run.")
+            return
+        }
+        do {
+            let src = try Database(url: liveURL)
+            let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
+            try await src.exec("VACUUM main INTO '\(escaped)';", [])
+            await src.close()
+        }
+        print("REFRESH: PRE-REFRESH SNAPSHOT WRITTEN → \(snapshotURL.path)")
+        #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+        let db = try Database(url: liveURL)
+        try await SchemaMigrations.migrate(db)
+        let refresh = EntityRegisterRefresh(database: db, entities: EntitiesRepository(database: db))
+        let receipt = try await refresh.run()
+        print(receipt.renderLines())
+        let dirty = try await refresh.dirtyRemainder()
+        await db.close()
+        print("REFRESH: dirty remainder after = \(dirty)")
+        #expect(dirty == 0, "the register re-witness must read clean")
+    }
+}
+
+// MARK: - S2-U3: the shared chunk reindex, live (operator-invoked only)
+
+@Suite("S2-U3 — live chunk reindex (operator-invoked only)", .serialized)
+struct ChunkReindexHarness {
+
+    @Test("Reindex the live chunks: snapshot → split/backfill/gate → receipt")
+    func reindexLiveChunks() async throws {
+        guard ProcessInfo.processInfo.environment["REINDEX_LIVE"] == "1" else {
+            print("REINDEX: TEST_RUNNER_REINDEX_LIVE not set — skipping (operator-invoked only).")
+            return
+        }
+        let liveURL = DatabaseLocations.defaultDatabaseURL
+        guard FileManager.default.fileExists(atPath: liveURL.path) else {
+            print("REINDEX: no live ledger — skipping."); return
+        }
+        let snapshotURL = liveURL.deletingLastPathComponent()
+            .appendingPathComponent("kalsmritikosh-pre-reindex-snapshot-chunks-v2.sqlite")
+        guard !FileManager.default.fileExists(atPath: snapshotURL.path) else {
+            Issue.record("REINDEX: snapshot already exists at \(snapshotURL.path) — move it aside, then re-run.")
+            return
+        }
+        do {
+            let src = try Database(url: liveURL)
+            let escaped = snapshotURL.path.replacingOccurrences(of: "'", with: "''")
+            try await src.exec("VACUUM main INTO '\(escaped)';", [])
+            await src.close()
+        }
+        print("REINDEX: PRE-REINDEX SNAPSHOT WRITTEN → \(snapshotURL.path)")
+        #expect(FileManager.default.fileExists(atPath: snapshotURL.path))
+
+        let db = try Database(url: liveURL)
+        try await SchemaMigrations.migrate(db)
+        // The pre-state block set: every evidence block with chunk coverage
+        // must still have coverage after (citations anchor to blocks).
+        let blocksBefore = Int((try await db.query(
+            "SELECT COUNT(DISTINCT evidence_block_id) FROM chunks WHERE evidence_block_id IS NOT NULL;", []))
+            .first?.int(0) ?? 0)
+        let receipt = try await ChunkReindexCoordinator(database: db).run()
+        let blocksAfter = Int((try await db.query(
+            "SELECT COUNT(DISTINCT evidence_block_id) FROM chunks WHERE evidence_block_id IS NOT NULL;", []))
+            .first?.int(0) ?? 0)
+        await db.close()
+        print(receipt.renderLines())
+        print("REINDEX: block coverage \(blocksBefore) → \(blocksAfter)")
+        #expect(blocksAfter >= blocksBefore, "no evidence block may lose chunk coverage")
+        #expect(receipt.citationsBlocksPreserved, "nothing oversized may remain")
+    }
+}

@@ -808,10 +808,8 @@ public struct EmailLoader: Ingestor {
             pattern: "[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}",
             options: []
         )
-        let nameInAngleRegex = try? NSRegularExpression(
-            pattern: "\"?([^<\"]+?)\"?\\s*<[^>]+>",
-            options: []
-        )
+        // (The old name-in-angle-brackets regex lived here; replaced by
+        // EmailAddressListParser in U0-b — it could not see list commas.)
 
         func addEmailsAndNames(from header: String?) {
             guard let header, !header.isEmpty else { return }
@@ -829,23 +827,25 @@ public struct EmailLoader: Ingestor {
                     ))
                 }
             }
-            if let nameInAngleRegex {
-                for match in nameInAngleRegex.matches(in: header, range: range) {
-                    if match.numberOfRanges > 1 {
-                        let nameRange = match.range(at: 1)
-                        let raw = ns.substring(with: nameRange)
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                        // Skip empty / obviously non-name values; let
-                        // EntityQualityGate decide on edge cases.
-                        if raw.count >= 2, raw.contains(where: \.isLetter) {
-                            out.append(Entity(
-                                kind: .person,
-                                value: raw,
-                                sourceObjectID: sourceObjectID,
-                                confidence: .high
-                            ))
-                        }
-                    }
+            // U0-b: display names via the RFC 2822 address-list parser — the
+            // old angle-bracket regex was blind to list commas, so the second
+            // and later entries of a To: list became ", Name" person entities
+            // and quoted names kept their quotes ('Arindam Das'); witnessed
+            // live on the owner's archive. The parser understands quoting and
+            // list separators; edge punctuation is stripped before the value
+            // is ever constructed (the 3c write-time strip stays as belt).
+            for parsed in EmailAddressListParser.parse(header) {
+                guard let name = parsed.displayName else { continue }
+                let raw = EntitiesRepository.stripEdgePunctuation(name)
+                // Skip empty / obviously non-name values; let
+                // EntityQualityGate decide on edge cases.
+                if raw.count >= 2, raw.contains(where: \.isLetter) {
+                    out.append(Entity(
+                        kind: .person,
+                        value: raw,
+                        sourceObjectID: sourceObjectID,
+                        confidence: .high
+                    ))
                 }
             }
         }

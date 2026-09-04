@@ -700,7 +700,8 @@ public actor IngestCoordinator {
     /// assertions from it. Best-effort: never fails the ingest.
     @discardableResult
     private func persistStructuralDoc(_ parse: StructuralParse, url: URL, store: EvidenceStore,
-                                      owningObjectID: KnowledgeObject.ID? = nil) async -> StructuralPersistenceReceipt? {
+                                      owningObjectID: KnowledgeObject.ID? = nil,
+                                      documentClass: DocumentClass? = nil) async -> StructuralPersistenceReceipt? {
         do {
             // USF-002.1 — capture the COMMITTED receipt; readiness advances structure/metadata/OCR
             // ONLY from this, never from the in-memory parse. A persistence failure returns nil.
@@ -719,7 +720,7 @@ public actor IngestCoordinator {
             // never fails the ingest). Facts carry their block ids for drill-back.
             if let genericFacts {
                 await deriveGenericFacts(from: parse.doc, url: url, into: genericFacts,
-                                         owningObjectID: owningObjectID)
+                                         owningObjectID: owningObjectID, documentClass: documentClass)
             }
             // MMI-FINAL — deterministic typed identity/document fields from the SAME persisted
             // blocks (the accepted producer for the typedFieldExtraction readiness dimension).
@@ -823,7 +824,8 @@ public actor IngestCoordinator {
     /// document's facts group together. Best-effort — never fails the ingest.
     private func deriveGenericFacts(
         from doc: ParsedDocument, url: URL, into repo: GenericFactRepository,
-        owningObjectID: KnowledgeObject.ID? = nil
+        owningObjectID: KnowledgeObject.ID? = nil,
+        documentClass: DocumentClass? = nil
     ) async {
         let subjectLabel: String = {
             if let title = doc.blocks.first(where: { $0.kind == .documentTitle }) {
@@ -838,7 +840,10 @@ public actor IngestCoordinator {
             guard !block.kind.isBoilerplate else { continue }
             let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
             guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
-            derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id)
+            // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's
+            // own pack meets the block first; nil keeps the historical order.
+            derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
+                                                   documentClass: documentClass)
         }
         guard !derived.isEmpty else { return }
         let merged = await bindIdentifierAnchors(DomainFactExtractor.merge(derived),
@@ -1079,7 +1084,8 @@ public actor IngestCoordinator {
         if let structural, let evidenceStore, totalChunks > 0 {
             structuralAttempted = true
             structuralReceipt = await persistStructuralDoc(structural, url: url, store: evidenceStore,
-                                                            owningObjectID: lastObject.id)
+                                                            owningObjectID: lastObject.id,
+                                                            documentClass: docClass)
             if structuralReceipt != nil {
                 for link in blockOwnership {
                     try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
@@ -1226,14 +1232,34 @@ public actor IngestCoordinator {
             let admit = !isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted
             // USF-002.1 — stamp the EXACT source version so per-version FTS coverage is provable and
             // a parent's indexing readiness can never count a child attachment's chunks.
-            return c.withAdmitEmbedding(admit).withSourceVersion(sourceVersionID)
+            // S2-U1 — stamp structural salience from the class-aware weight
+            // table (the class is known here; the chunker is class-blind).
+            return c.withAdmitEmbedding(admit)
+                .withSourceVersion(sourceVersionID)
+                .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
         }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
         // same prefix. Skipped when chunks.count < 2 (single-chunk
         // small docs already are their own context) or when no
         // generator is wired.
-        if let gen = contextPrefixGenerator, chunked.count >= 2 {
+        // S2-U2 (R-3) — the DETERMINISTIC context prefix (title · class ·
+        // block kind) replaces the model-written one: an embedding input must
+        // replay identically, and a template does. Applied to every chunk of
+        // a multi-chunk document; the version stamp makes future template
+        // changes a visible era. The LLM generator below is consulted only
+        // when NO template prefix rendered (all-unknown structure).
+        if chunked.count >= 2 {
+            let docTitle: String? = blocks.first(where: { $0.kind == .documentTitle })
+                .map { $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText }
+            chunked = chunked.map { c in
+                let prefix = ContextPrefixTemplate.render(
+                    title: docTitle, documentClass: docClass, blockKind: c.blockKind)
+                return prefix == nil ? c : c.withTemplatePrefix(prefix)
+            }
+        }
+        if let gen = contextPrefixGenerator, chunked.count >= 2,
+           chunked.allSatisfy({ $0.contextTemplateVersion == nil }) {
             // Sequential — Ollama serializes inference internally, so a
             // parallel TaskGroup only stacks per-chunk timeouts on top
             // of each other (the 4th queued chunk waits for 3 chunks

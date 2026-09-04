@@ -265,7 +265,7 @@ public struct EvidenceVerifier: Verifier {
             return DateInterval(start: s, end: e)
         }()
         let ingestCoverage: Double = await ingestCoverageProvider?() ?? 1.0
-        let report = await engine.evaluate(
+        var report = await engine.evaluate(
             claims: claims,
             droppedUnverifiable: droppedUnverifiable,
             events: retrieval.events,
@@ -274,6 +274,14 @@ public struct EvidenceVerifier: Verifier {
             ingestCoverage: ingestCoverage,
             now: Self.referenceNow()
         )
+        // S2-U1 consumer 3 — the bounded salience advisory (±0.02 max): the
+        // mean structural salience across the retrieved chunks nudges the
+        // combined confidence as a logged tiebreaker, never a driver.
+        if !retrieval.chunks.isEmpty {
+            let mean = retrieval.chunks.map(\.chunk.salience).reduce(0, +)
+                / Double(retrieval.chunks.count)
+            report = engine.applySalienceAdvisory(report, meanCitedSalience: mean)
+        }
         vclock.mark("claimEval")
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given
@@ -415,8 +423,38 @@ public struct EvidenceVerifier: Verifier {
         // rerankByObject empty makes the survivor sort fall back to
         // `scoreByObject`, which is what aggregation wants.
         let bypassRerank = Self.isAggregationShape(intent) || rerankerDisabled
+        // S2-U1/S2-U4 — mean structural salience per object, computed once:
+        // the rerank factor, the slot tiebreak, and the candidate cap all read it.
+        var meanSalienceByObject: [KnowledgeObject.ID: Double] = [:]
+        do {
+            var agg: [KnowledgeObject.ID: (t: Double, n: Int)] = [:]
+            for rc in retrieval.chunks {
+                let cur = agg[rc.chunk.objectID] ?? (0, 0)
+                agg[rc.chunk.objectID] = (cur.t + rc.chunk.salience, cur.n + 1)
+            }
+            meanSalienceByObject = agg.mapValues { $0.t / Double($0.n) }
+        }
         if !citations.isEmpty, !bypassRerank {
-            let snippets = citations.map { citation -> String in
+            // S2-U4 Fix C — the candidate CAP: the cross-encoder pays seconds
+            // per candidate, and low-structure junk was consuming the budget.
+            // Candidates enter the reranker in salience × retrieval order,
+            // capped; the rest are NEVER dropped from the answer — they just
+            // skip the expensive scoring and keep their retrieval ordering
+            // (no rerank entry → the MMR relevance falls back to neutral).
+            // Total order on ties (unit A law): content key, never hash order.
+            let rerankBudget = 12
+            let rerankCitations: [VerifiedAnswer.Citation]
+            if citations.count > rerankBudget {
+                rerankCitations = citations.sorted { a, b in
+                    let wa = (meanSalienceByObject[a.objectID] ?? SalienceTable.neutral) * (scoreByObject[a.objectID] ?? 0.5)
+                    let wb = (meanSalienceByObject[b.objectID] ?? SalienceTable.neutral) * (scoreByObject[b.objectID] ?? 0.5)
+                    if wa != wb { return wa > wb }
+                    return a.objectID.uuidString < b.objectID.uuidString
+                }.prefix(rerankBudget).map { $0 }
+            } else {
+                rerankCitations = citations
+            }
+            let snippets = rerankCitations.map { citation -> String in
                 // Prefer a chunk text snippet for the candidate. The
                 // citation's own `snippet` (a claim statement) is a
                 // weak signal because the claim is what we're scoring
@@ -483,8 +521,19 @@ public struct EvidenceVerifier: Verifier {
                 // so the sort falls back to scoreByObject.
                 scores = []
             }
-            for (i, citation) in citations.enumerated() where i < scores.count {
+            for (i, citation) in rerankCitations.enumerated() where i < scores.count {
                 rerankByObject[citation.objectID] = scores[i]
+            }
+        }
+        // S2-U1 consumer 1 — BOUNDED structural-salience factor on the rerank
+        // score: ×(0.85 + 0.3 × meanSalience), i.e. ±15% around neutral 0.6's
+        // ~1.03. Salience refines relevance ordering; it can never override
+        // semantic relevance (the bound) and never touches scoreByObject, so
+        // reranker-off runs are byte-identical to before.
+        if !rerankByObject.isEmpty {
+            for (objectID, score) in rerankByObject {
+                guard let mean = meanSalienceByObject[objectID] else { continue }
+                rerankByObject[objectID] = score * (0.85 + 0.3 * mean)
             }
         }
         vclock.mark("rerank")
@@ -534,7 +583,8 @@ public struct EvidenceVerifier: Verifier {
             evaluations: retrieval.claimEvaluations,
             authorityObjectIDs: retrieval.authorityObjectIDs,
             documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count,
-            scoreByObject: scoreByObject)
+            scoreByObject: scoreByObject,
+            salienceByObject: meanSalienceByObject)
 
         // D-14 — the slot-question confidence profile: a uniquely-attested
         // value from a structured source with no conflict on the requested

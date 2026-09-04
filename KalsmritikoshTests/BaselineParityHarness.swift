@@ -128,15 +128,18 @@ struct BaselineParityHarness {
         }
         await state.shutdown()
 
-        // All-field byte-parity is UNACHIEVABLE even with zero code change —
-        // proven by a control run (2026-08-31, pre-fix code vs its own sealed
-        // artifact): citations/meta/body wobble run-to-run (unstable citation
-        // record ids, confidence drift, boot-drain race on the fresh copy).
-        // The ENFORCED invariant is the stable core — the rung-1 anchor text,
-        // identical across all control and treatment runs. The full per-field
-        // table above is the diagnostic record; judge changes against a
-        // same-code control profile, not against zero.
+        // Pre-drain law: all-field byte-parity was UNACHIEVABLE even with zero
+        // code change (control run 2026-08-31 — citations/meta wobble from the
+        // junk the drain later retired), so only the rung-1 anchor text was
+        // enforced. POST-DRAIN LAW (GO2R amendment 5): seal #4 proved 7/7
+        // byte-identical on EVERY field across five runs — the wobble died
+        // with the junk. When the artifact carries a drain receipt, the
+        // carve-out is retired and FULL-FIELD parity is the enforced invariant.
         #expect(rung1TextIdentical, "rung-1 anchor text changed — NOT perf-only")
-        print("PARITY: \(artifact.records.count - mismatches)/\(artifact.records.count) answers byte-identical to \(artifact.header.treeHash) (see per-field table; enforced invariant = rung-1 text)")
+        if artifact.drain != nil {
+            #expect(mismatches == 0,
+                    "post-drain artifacts enforce FULL-FIELD byte parity — \(mismatches) answer(s) diverged (see per-field table)")
+        }
+        print("PARITY: \(artifact.records.count - mismatches)/\(artifact.records.count) answers byte-identical to \(artifact.header.treeHash) (enforced: \(artifact.drain != nil ? "ALL FIELDS" : "rung-1 text"))")
     }
 }

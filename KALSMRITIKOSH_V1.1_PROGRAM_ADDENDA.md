@@ -104,4 +104,21 @@ chunks/fts/embeddings 10455/10455/9632 [PROVEN]. Seal #4 "the true ledger": 7/7 
 byte-identical across ALL fields at LIKE stamps — the citation/meta wobble of every
 pre-drain seal is gone with the junk that caused it.
 
-_End of addenda (§A/§B original; §C added 2026-09-01; §D added 2026-09-03). The build opened at V0; V2 opens after reseal #3._
+## §E — HOLD 1 record (2026-09-03) + GO 2 REVISED
+
+**HOLD 1 = COMPLETE, witnessed live by the owner on the real archive** (his session, his
+questions, his screenshots). Findings, every one scheduled by GO 2 REVISED: the résumé
+leak into a patent ask (P3-U0 subject resolution + surfacing gate), the "Bill Delhi"
+scope bycatch (P3-U0), comma/quote-corrupted person entities from email display-name
+splitting (U0-b, own unit, producer bump + targeted refresh), and the fact-spam answer
+shapes (P3-U1/U2 — the "Reported:" fallback dies; existence composer first). The
+"ledger is true" claim carries this enumerated caveat until U0-b lands. Rung-2's
+wrapper note states its true condition (routing+composer, P3-U2 — corrected at 2831a7e).
+R-2 card dispositions (release/PROMISE_CARD_INVENTORY.md): 10-professions EXACT ·
+studios.hardcopy TEST-BACKED · Convert "back and forth" = owner wording call at HOLD 2 ·
+export-citations guard 10/10 (SR-02 fixed XLSX) · History card wording rides rung 3.
+Sequencing from here is GO 2 REVISED verbatim: U0-a/b/c → S2-U1…U5/#5 → P3-U0…U5/#6 →
+P4/#7 → P5 + RC-1…RC-8 → HOLD 2. PROJECT COMPLETE now includes RC-8 (Language Contract)
+and App Review passed.
+
+_End of addenda (§A/§B original; §C added 2026-09-01; §D added 2026-09-03; §E added 2026-09-03 night). The build opened at V0; V2 opens after reseal #3._
