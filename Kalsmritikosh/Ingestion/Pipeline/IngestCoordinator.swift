@@ -1237,7 +1237,23 @@ public actor IngestCoordinator {
         // same prefix. Skipped when chunks.count < 2 (single-chunk
         // small docs already are their own context) or when no
         // generator is wired.
-        if let gen = contextPrefixGenerator, chunked.count >= 2 {
+        // S2-U2 (R-3) — the DETERMINISTIC context prefix (title · class ·
+        // block kind) replaces the model-written one: an embedding input must
+        // replay identically, and a template does. Applied to every chunk of
+        // a multi-chunk document; the version stamp makes future template
+        // changes a visible era. The LLM generator below is consulted only
+        // when NO template prefix rendered (all-unknown structure).
+        if chunked.count >= 2 {
+            let docTitle: String? = blocks.first(where: { $0.kind == .documentTitle })
+                .map { $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText }
+            chunked = chunked.map { c in
+                let prefix = ContextPrefixTemplate.render(
+                    title: docTitle, documentClass: docClass, blockKind: c.blockKind)
+                return prefix == nil ? c : c.withTemplatePrefix(prefix)
+            }
+        }
+        if let gen = contextPrefixGenerator, chunked.count >= 2,
+           chunked.allSatisfy({ $0.contextTemplateVersion == nil }) {
             // Sequential — Ollama serializes inference internally, so a
             // parallel TaskGroup only stacks per-chunk timeouts on top
             // of each other (the 4th queued chunk waits for 3 chunks

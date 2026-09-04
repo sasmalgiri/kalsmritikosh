@@ -63,6 +63,10 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// neutral prior (also the v124 column default for legacy rows).
     /// Presentation-and-ranking only — never drops anything.
     public let salience: Double
+    /// S2-U2 (R-3) — which deterministic prefix-template era wrote
+    /// `contextPrefix`. NULL = legacy LLM/heuristic prefix or none; the
+    /// shared reindex refreshes older eras.
+    public let contextTemplateVersion: Int?
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -81,7 +85,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         evidenceBlockID: UUID? = nil,
         blockKind: String? = nil,
         sourceVersionID: UUID? = nil,
-        salience: Double = SalienceTable.neutral
+        salience: Double = SalienceTable.neutral,
+        contextTemplateVersion: Int? = nil
     ) {
         self.id = id
         self.objectID = objectID
@@ -97,6 +102,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.blockKind = blockKind
         self.sourceVersionID = sourceVersionID
         self.salience = salience
+        self.contextTemplateVersion = contextTemplateVersion
     }
 
     /// Returns a copy with the structural salience set (S2-U1). Used by
@@ -106,7 +112,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
               pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
               contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
               evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: sourceVersionID,
-              salience: s)
+              salience: s, contextTemplateVersion: contextTemplateVersion)
     }
 
     /// Returns a copy with the exact source-version id set (USF-002.1). Used by IngestCoordinator
@@ -116,7 +122,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
               pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
               contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
               evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: versionID,
-              salience: salience)
+              salience: salience, contextTemplateVersion: contextTemplateVersion)
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
@@ -137,8 +143,20 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             evidenceBlockID: evidenceBlockID,
             blockKind: blockKind,
             sourceVersionID: sourceVersionID,
-            salience: salience
+            salience: salience,
+            contextTemplateVersion: contextTemplateVersion
         )
+    }
+
+    /// S2-U2 — a copy with the DETERMINISTIC template prefix + its version
+    /// stamp (replaces withContextPrefix on the template path).
+    public nonisolated func withTemplatePrefix(_ prefix: String?) -> Chunk {
+        Chunk(id: id, objectID: objectID, ordinal: ordinal, text: text, characterRange: characterRange,
+              pageNumber: pageNumber, createdAt: createdAt,
+              contextPrefix: prefix, contextPrefixSource: prefix == nil ? nil : "template",
+              admitEmbedding: admitEmbedding, evidenceBlockID: evidenceBlockID, blockKind: blockKind,
+              sourceVersionID: sourceVersionID, salience: salience,
+              contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion)
     }
 
     /// Returns a copy with the embedding-admission flag set (Stage 1 gate).
@@ -157,7 +175,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             evidenceBlockID: evidenceBlockID,
             blockKind: blockKind,
             sourceVersionID: sourceVersionID,
-            salience: salience
+            salience: salience,
+            contextTemplateVersion: contextTemplateVersion
         )
     }
 
@@ -165,7 +184,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
         case pageNumber, createdAt, contextPrefix, contextPrefixSource, admitEmbedding
-        case evidenceBlockID, blockKind, sourceVersionID, salience
+        case evidenceBlockID, blockKind, sourceVersionID, salience, contextTemplateVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -186,6 +205,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.blockKind = try c.decodeIfPresent(String.self, forKey: .blockKind)
         self.sourceVersionID = try c.decodeIfPresent(UUID.self, forKey: .sourceVersionID)
         self.salience = try c.decodeIfPresent(Double.self, forKey: .salience) ?? SalienceTable.neutral
+        self.contextTemplateVersion = try c.decodeIfPresent(Int.self, forKey: .contextTemplateVersion)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -205,5 +225,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encodeIfPresent(blockKind, forKey: .blockKind)
         try c.encodeIfPresent(sourceVersionID, forKey: .sourceVersionID)
         try c.encode(salience, forKey: .salience)
+        try c.encodeIfPresent(contextTemplateVersion, forKey: .contextTemplateVersion)
     }
 }
