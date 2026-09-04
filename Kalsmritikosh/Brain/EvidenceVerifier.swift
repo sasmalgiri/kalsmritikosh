@@ -768,7 +768,13 @@ public struct EvidenceVerifier: Verifier {
                 // cut has deterministic MEMBERSHIP, not just ordering.
                 return a.statement < b.statement
             }
+            // W-2 (owner witness) — IDENTICAL rendered statements collapse to
+            // one: post-drain, several documents carry the same fact, and the
+            // same "Reported: …" line printed five times reads as noise, not
+            // corroboration. First occurrence wins (the ranked order stands).
+            var seenStatements = Set<String>()
             answerText = rankedDocClaims
+                .filter { seenStatements.insert($0.statement).inserted }
                 .prefix(5)
                 .map(\.statement)
                 .joined(separator: " ")
