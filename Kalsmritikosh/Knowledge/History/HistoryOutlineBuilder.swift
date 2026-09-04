@@ -21,19 +21,33 @@ public nonisolated struct HistoryOutlineBuilder: Sendable {
     /// title so the gap engine and the placement twin can find it.
     public static let unplacedChapterTitle = "Unplaced evidence"
     public static let undatedChapterTitle = "Undated material"
+    /// P4-U4 (SR-6) — rejected items are EXCLUDED from the story but kept
+    /// VISIBLE in their own final chapter, never silently dropped.
+    public static let reviewedOutChapterTitle = "Reviewed out"
 
     public init() {}
 
     public func build(material: HistoryMaterial, items: [HistoryItem],
                       corpusSnapshotID: UUID? = nil,
                       sourceContext: StorySourceContext = .empty) -> HistoryOutline {
+        // P4-U4 (SR-6) — the review gate first: rejected items leave the
+        // story here and reappear only in the visible "Reviewed out" chapter.
+        let rejected = items.filter { $0.reviewStatus == .rejected }
+            .sorted { $0.id.uuidString < $1.id.uuidString }
+        let live = items.filter { $0.reviewStatus != .rejected }
+
         // Partition dated vs undated (undated = no concrete start date).
-        let dated = items.filter { $0.start?.start != nil }
+        // P4-U4 (SR-5) — on the same date, a USER-CORRECTED item outranks the
+        // machine's reading (total order: date, corrected-first, id).
+        let dated = live.filter { $0.start?.start != nil }
             .sorted { a, b in
                 let da = a.start!.start!, db = b.start!.start!
-                return da != db ? da < db : a.id.uuidString < b.id.uuidString
+                if da != db { return da < db }
+                let ca = a.reviewStatus == .corrected, cb = b.reviewStatus == .corrected
+                if ca != cb { return ca }
+                return a.id.uuidString < b.id.uuidString
             }
-        let undated = items.filter { $0.start?.start == nil }
+        let undated = live.filter { $0.start?.start == nil }
             .sorted { $0.id.uuidString < $1.id.uuidString }
 
         // P4-U2 — PLACEMENT under the H-laws (structure-first). Each dated
@@ -153,6 +167,13 @@ public nonisolated struct HistoryOutlineBuilder: Sendable {
                 ordinal: ordinal, title: Self.unplacedChapterTitle,
                 subtitle: "Items whose sources tie equally to more than one episode — placement needs review",
                 itemIDs: unplaced.map(\.id)))
+            ordinal += 1
+        }
+        if !rejected.isEmpty {
+            chapters.append(HistoryChapterPlan(
+                ordinal: ordinal, title: Self.reviewedOutChapterTitle,
+                subtitle: "Excluded by your review — kept visible, never silently dropped",
+                itemIDs: rejected.map(\.id)))
         }
 
         // Actors: item actors ∪ first-degree neighbours ∪ the subject itself.
@@ -170,10 +191,11 @@ public nonisolated struct HistoryOutlineBuilder: Sendable {
             assertionCount: material.assertions.count, genericFactCount: material.genericFacts.count,
             eventCount: material.events.count)
 
-        // Keep the full item list in a stable order: chronological then undated.
+        // Keep the full item list in a stable order: chronological, undated,
+        // then the reviewed-out tail (visible, never silently dropped).
         return HistoryOutline(
             subject: material.subject, corpusSnapshotID: corpusSnapshotID,
-            items: dated + undated, chapters: chapters, actors: actors,
+            items: dated + undated + rejected, chapters: chapters, actors: actors,
             relationships: material.relationships, coverage: coverage)
     }
 }

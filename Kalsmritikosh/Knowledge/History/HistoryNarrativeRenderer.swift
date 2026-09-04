@@ -99,6 +99,9 @@ public nonisolated struct HistoryNarrativeRenderer: Sendable {
         if chapterTitle == HistoryOutlineBuilder.unplacedChapterTitle {
             return "\(n) item(s) awaiting placement review."
         }
+        if chapterTitle == HistoryOutlineBuilder.reviewedOutChapterTitle {
+            return "\(n) item(s) excluded by your review."
+        }
         let phrases = items.compactMap { datePhrase($0.start) }
         guard let first = phrases.first, let last = phrases.last else {
             return "\(n) item(s) without an established date."
@@ -118,10 +121,17 @@ public nonisolated struct HistoryNarrativeRenderer: Sendable {
     // MARK: - Deterministic sentence + date phrasing (precision-honest)
 
     static func sentence(for item: HistoryItem) -> String {
-        if let phrase = datePhrase(item.start) {
-            return "\(phrase): \(item.title)."
+        // P4-U4 (SR-6/SR-5) — the review loop speaks in the prose: rejected
+        // items are excluded from the story yet named here, and a correction
+        // carries its badge.
+        if item.reviewStatus == .rejected {
+            return "\(item.title) (excluded by review)."
         }
-        return "\(item.title) (date not established)."
+        let badge = item.reviewStatus == .corrected ? " (user-corrected)" : ""
+        if let phrase = datePhrase(item.start) {
+            return "\(phrase): \(item.title)\(badge)."
+        }
+        return "\(item.title) (date not established)\(badge)."
     }
 
     static func datePhrase(_ t: TemporalValue?) -> String? {

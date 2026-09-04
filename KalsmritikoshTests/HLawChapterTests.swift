@@ -27,12 +27,14 @@ struct HLawChapterTests {
                 assertionCount: 0, genericFactCount: 0, relationshipCount: 0, unscopedSubject: false))
     }
 
-    private func item(_ title: String, day: Int, evidence: [UUID]) -> HistoryItem {
+    private func item(_ title: String, day: Int, evidence: [UUID],
+                      review: HistoryReviewStatus = .unreviewed) -> HistoryItem {
         HistoryItem(subject: .person(subjectID), kind: .event, title: title,
                     start: TemporalValue(start: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 + day * 86_400)),
                                          precision: .day, confidence: 0.9),
                     evidenceStatus: .sourceAsserted, confidence: 0.9,
-                    evidence: evidence.map { EvidenceReference(objectID: $0) })
+                    evidence: evidence.map { EvidenceReference(objectID: $0) },
+                    reviewStatus: review)
     }
 
     @Test("H-5: items chapter by email episode, chronologically; fallback items keep year buckets")
@@ -118,6 +120,33 @@ struct HLawChapterTests {
         let outline = HistoryOutlineBuilder().build(material: material(), items: items)
         #expect(outline.chapters.map(\.title) == ["2023", "2024"])
         #expect(outline.everyItemChaptered)
+    }
+
+    @Test("SR-5/SR-6: a correction outranks on the same date; a rejection is excluded visibly")
+    func reviewLoop() {
+        let src = UUID()
+        let machine = item("Grant date per the letter", day: 10, evidence: [src])
+        let correctedItem = item("Grant date as you corrected it", day: 10, evidence: [src], review: .corrected)
+        let rejectedItem = item("A parse ghost", day: 12, evidence: [src], review: .rejected)
+
+        let outline = HistoryOutlineBuilder().build(
+            material: material(), items: [machine, correctedItem, rejectedItem])
+
+        // Corrected outranks the machine reading on the same date.
+        let year = outline.chapters.first { $0.title == "2023" }
+        #expect(year?.itemIDs.first == correctedItem.id)
+        // Rejected is excluded from the story chapters yet visible at the end.
+        #expect(outline.chapters.last?.title == HistoryOutlineBuilder.reviewedOutChapterTitle)
+        #expect(outline.chapters.last?.itemIDs == [rejectedItem.id])
+        #expect(outline.everyItemChaptered, "excluded VISIBLY — never dropped")
+        #expect(PlacementTwin.check(outline: outline).isEmpty)
+
+        // The renderer speaks the review states.
+        let narrative = HistoryNarrativeRenderer().render(outline: outline)
+        #expect(narrative.chapters.first { $0.title == "2023" }?.prose.contains("(user-corrected)") == true)
+        let reviewedOut = narrative.chapters.last
+        #expect(reviewedOut?.prose == "A parse ghost (excluded by review).")
+        #expect(reviewedOut?.gist == "1 item(s) excluded by your review.")
     }
 
     @Test("Placement twin: a lawful outline passes; a broken one is flagged; only advisory rows are written")

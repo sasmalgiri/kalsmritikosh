@@ -24,6 +24,7 @@ public enum QuestionShape: String, Sendable, CaseIterable {
     case existence    // "is/was/has the X …?" — yes/no from the ledger
     case timeline     // "timeline of …" — the ordered, dated, cited chain
     case count        // "how many …?" — counts from counts
+    case story        // P4-U4 — "tell me the story of …" — the reconstruction engine
     case outOfScope   // world knowledge — fixed refusal, zero retrieval/model
 }
 
@@ -40,7 +41,12 @@ public enum QuestionShapeRouter {
     /// EARLIER in this list wins. unresolved is safest (full pipeline);
     /// outOfScope is least safe (it refuses).
     public nonisolated static let safestOrder: [QuestionShape] = [
-        .unresolved, .timeline, .existence, .count, .outOfScope,
+        .unresolved, .timeline, .story, .existence, .count, .outOfScope,
+    ]
+
+    /// Story openers (data): the reconstruction ask.
+    nonisolated static let storyOpeners: [String] = [
+        "story of", "tell me the story", "tell the story",
     ]
 
     /// World-knowledge openers — high-precision Q0 patterns (data).
@@ -68,6 +74,7 @@ public enum QuestionShapeRouter {
         if worldKnowledgePatterns.contains(where: { q.contains($0) }), !hasArchiveReferent(q) {
             return .outOfScope
         }
+        if storyOpeners.contains(where: { q.contains($0) }) { return .story }
         if ["timeline of", "history of", "chronology of"].contains(where: { q.contains($0) }) { return .timeline }
         if countOpeners.contains(where: { q.hasPrefix($0) }) { return .count }
         if existenceOpeners.contains(where: { q.hasPrefix($0) }) { return .existence }
@@ -86,6 +93,7 @@ public enum QuestionShapeRouter {
            !hasArchiveReferent(normalized(question)) {
             return .outOfScope
         }
+        if tokens.contains("story") { return .story }
         if !tokens.isDisjoint(with: ["timeline", "chronology", "history"]) { return .timeline }
         if tokens.contains("many") || tokens.contains("count") { return .count }
         let yesNoLeads: Set<String> = ["is", "was", "were", "has", "have", "did", "does", "are"]
@@ -137,6 +145,7 @@ public enum QuestionShapeRouter {
         case .existence:  return "a yes-or-no question"
         case .timeline:   return "a timeline question"
         case .count:      return "a counting question"
+        case .story:      return "a story question"
         case .outOfScope: return "outside the archive"
         }
     }

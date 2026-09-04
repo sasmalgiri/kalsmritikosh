@@ -374,6 +374,22 @@ public actor MasterBrain {
                     continuation.finish()
                     return
                 }
+                // P4-U4 rung 3 — a STORY-shaped question goes to the
+                // reconstruction engine's durable door: subject resolved by
+                // anchors, chaptered under the H-laws, persisted with a review
+                // state, every sentence standing on a named item. The composer
+                // returning nil (no door wired, or an engine failure) falls
+                // through to the normal pipeline — never a dead end.
+                if routed.shape == .story, let compose = await self.storyComposer,
+                   let story = await compose(question) {
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: story, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
 
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
@@ -1311,6 +1327,12 @@ public actor MasterBrain {
     /// (they read live, unstamped — legacy behavior).
     public var ledgerStateProvider: (@Sendable () async -> Int64?)?
     public var askSnapshotEnd: (@Sendable () async -> Void)?
+    /// P4-U4 — the story door: wired by AppState to the reconstruction
+    /// engine + renderer + durable artifact persistence. nil in rigs.
+    public var storyComposer: (@Sendable (String) async -> VerifiedAnswer?)?
+    public func setStoryComposer(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+        storyComposer = c
+    }
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
         ledgerStateProvider = p
     }

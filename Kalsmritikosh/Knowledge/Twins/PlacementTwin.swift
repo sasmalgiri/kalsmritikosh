@@ -53,6 +53,7 @@ public enum PlacementTwin {
         let structural = outline.chapters.filter {
             $0.title != HistoryOutlineBuilder.undatedChapterTitle
                 && $0.title != HistoryOutlineBuilder.unplacedChapterTitle
+                && $0.title != HistoryOutlineBuilder.reviewedOutChapterTitle
         }
         let earliest = structural.compactMap { ch in
             ch.itemIDs.compactMap { itemsByID[$0]?.start?.start }.min()
