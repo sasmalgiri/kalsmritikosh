@@ -355,6 +355,25 @@ public actor MasterBrain {
                     continuation.finish()
                     return
                 }
+                // P3-U1 Q0 — an out-of-scope (world-knowledge) question refuses
+                // HERE: zero retrieval, zero model, sub-second. The route twin
+                // has already had its say (disagreement → never outOfScope, the
+                // safest shape wins), so a false refusal requires BOTH disjoint
+                // checkers to misfire on a question with no archive referent.
+                // Same durable finalize path as every refusal.
+                let routed = QuestionShapeRouter.route(question)
+                if routed.shape == .outOfScope {
+                    let refused = VerifiedAnswer(
+                        body: "", citations: [], confidence: .zero, refused: true,
+                        refusalReason: QuestionShapeRouter.outOfScopeRefusal)
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: refused, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
 
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
