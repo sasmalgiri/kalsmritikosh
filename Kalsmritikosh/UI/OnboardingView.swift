@@ -202,6 +202,19 @@ public struct OnboardingView: View {
             Text("Kalsmritikosh will dynamically pick a model that fits your hardware. You can override in Settings later.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            // RC-2 — requirements honesty, stated up front: what on-device AI
+            // needs, and that evidence-only mode is a STATE, not an error.
+            VStack(alignment: .leading, spacing: 6) {
+                Label("On-device AI — what it needs", systemImage: "cpu")
+                    .font(.callout.weight(.semibold))
+                Text("AI-written prose needs Apple silicon with Apple Intelligence enabled (English, supported regions). Without it, Kalsmritikosh still answers every question from your evidence — quotes, dates, and counts, each with citations — just in plainer prose. Answers may also be slower until first indexing completes.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 520, alignment: .leading)
+            }
+            .padding(.top, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("On-device AI requirements: AI prose needs Apple silicon with Apple Intelligence enabled. Without it, every answer still comes from your evidence with citations, in plainer prose. Answers may be slower until first indexing completes.")
         }
         .frame(maxWidth: 520)
     }
