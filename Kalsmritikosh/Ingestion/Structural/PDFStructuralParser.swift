@@ -80,8 +80,8 @@ public struct PDFStructuralParser: StructuralParser {
 
             // Native layer missing or garbled → render + OCR this page.
             #if canImport(AppKit)
-            let ocrText = await Self.renderAndOCR(page: page, ocr: ocr)
-            if !ocrText.isEmpty {
+            let (ocrText, ocrGrid) = await Self.renderAndOCR(page: page, ocr: ocr)
+            if !ocrText.isEmpty || !ocrGrid.isEmpty {
                 ocrPages += 1
                 for (p, para) in Self.paragraphize(ocrText).enumerated() {
                     blocks.append(EvidenceBlock(
@@ -91,6 +91,37 @@ public struct PDFStructuralParser: StructuralParser {
                         extractionMethod: .ocr, extractionConfidence: 0.6
                     ))
                     ordinal += 1
+                }
+                // C-6b — a genuinely tabular scanned page yields .table +
+                // per-row .tableRow blocks (the image parser's exact shape):
+                // every structured-row consumer sees the scan as it sees a CSV.
+                if !ocrGrid.isEmpty {
+                    let columnCount = ocrGrid.map(\.count).max() ?? 0
+                    let tableBlock = EvidenceBlock(
+                        documentID: documentID, sourceVersionID: sourceVersionID, ordinal: ordinal,
+                        kind: .table,
+                        rawText: "Table: \(ocrGrid.count) rows × \(columnCount) columns",
+                        locator: SourceLocator(page: pageNumber),
+                        extractionMethod: .ocr, extractionConfidence: 0.7,
+                        attributes: ["rowCount": AnyCodable(.int(Int64(ocrGrid.count))),
+                                     "columnCount": AnyCodable(.int(Int64(columnCount)))]
+                    )
+                    blocks.append(tableBlock)
+                    ordinal += 1
+                    for (r, row) in ocrGrid.enumerated() {
+                        let padded = row + Array(repeating: "", count: max(0, columnCount - row.count))
+                        blocks.append(EvidenceBlock(
+                            documentID: documentID, sourceVersionID: sourceVersionID,
+                            parentBlockID: tableBlock.id,
+                            ordinal: ordinal, kind: .tableRow,
+                            rawText: padded.joined(separator: " | "),
+                            locator: SourceLocator(page: pageNumber, row: r),
+                            extractionMethod: .ocr, extractionConfidence: 0.7,
+                            attributes: ["row": AnyCodable(.int(Int64(r))),
+                                         "cells": AnyCodable(.array(padded.map { .string($0) }))]
+                        ))
+                        ordinal += 1
+                    }
                 }
             } else if !native.isEmpty {
                 // OCR failed too — keep the (garbled) native text so the page is
@@ -186,28 +217,30 @@ public struct PDFStructuralParser: StructuralParser {
     /// Render a page upright (PDFKit's own rasterizer honors /Rotate) and OCR it.
     /// Mirrors the legacy PDFLoader render path; a tabular grid is appended when
     /// the page is genuinely a table.
-    private static func renderAndOCR(page: PDFPage, ocr: any OCREngine) async -> String {
+    private static func renderAndOCR(page: PDFPage, ocr: any OCREngine) async -> (text: String, grid: [[String]]) {
         let bounds = page.bounds(for: .mediaBox)
         let scale: CGFloat = 2.0
         let size = NSSize(width: bounds.width * scale, height: bounds.height * scale)
-        guard size.width > 1, size.height > 1 else { return "" }
+        guard size.width > 1, size.height > 1 else { return ("", []) }
         let image = page.thumbnail(of: size, for: .mediaBox)
 
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("kalsmritikosh-pdfstruct-\(UUID().uuidString).png")
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:]) else { return "" }
-        do { try png.write(to: tmp) } catch { return "" }
+              let png = rep.representation(using: .png, properties: [:]) else { return ("", []) }
+        do { try png.write(to: tmp) } catch { return ("", []) }
         defer { try? FileManager.default.removeItem(at: tmp) }
 
+        // C-6b — the grid returns STRUCTURED, not flattened to TSV prose:
+        // the caller emits .table/.tableRow blocks (the same shape the image
+        // parser and the CSV path produce), so a scanned bank statement is as
+        // first-class to DataLab / Fund Flow / the transaction pack as a CSV.
         let printed = (await ocr.recognizePrinted(at: tmp)).joined(separator: "\n")
         let grid = await ocr.recognizeTable(at: tmp)
         let columnCount = grid.map(\.count).max() ?? 0
-        guard grid.count >= 2, columnCount >= 2 else { return printed }
-        let tsv = grid.map { $0.joined(separator: "\t") }.joined(separator: "\n")
-        let base = printed.trimmingCharacters(in: .whitespacesAndNewlines)
-        return base.isEmpty ? tsv : "\(base)\n\n\(tsv)"
+        guard grid.count >= 2, columnCount >= 2 else { return (printed, []) }
+        return (printed, grid)
     }
     #endif
 }
