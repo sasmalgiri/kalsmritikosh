@@ -3776,6 +3776,28 @@ public final class AppState {
         return try? await repo.save(result, narrative: narrative, at: Date())
     }
 
+    /// P4-U1 — the SECOND door: persist a story built straight from a question.
+    /// Lands as `unreviewed` (the Dossier's door keeps `verified`), stamped with
+    /// the ledger state it was built on, and dedup'd by (anchor, request-shape,
+    /// ledger stamp): the same story asked again on an unchanged ledger returns
+    /// the existing artifact instead of a new row. Only a COMPLETED
+    /// reconstruction reaches this door — a cancelled stream never yields a
+    /// result, so it persists nothing.
+    @discardableResult
+    public func persistStoryFromAsk(_ result: HistoryReconstructionResult,
+                                    narrative: HistoryNarrative?,
+                                    anchorKey: String) async -> UUID? {
+        guard let repo = historyArtifacts else { return nil }
+        guard let stamp = try? await repo.currentLedgerStamp() else { return nil }
+        if let existing = try? await repo.existingCurrent(
+            anchorKey: anchorKey, requestShape: "story", ledgerStamp: stamp) {
+            return existing
+        }
+        return try? await repo.save(result, narrative: narrative, at: Date(),
+                                    reviewState: "unreviewed", anchorKey: anchorKey,
+                                    requestShape: "story", ledgerStamp: stamp)
+    }
+
     /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives
     /// ONLY each interrupted run's not-done files (content-hash idempotent, so a
     /// file that actually finished is a cheap no-op), then finalizes the run.

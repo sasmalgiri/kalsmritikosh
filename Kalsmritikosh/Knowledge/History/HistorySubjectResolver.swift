@@ -122,6 +122,55 @@ public struct HistorySubjectResolver: Sendable {
         return .ambiguous(candidates.map(\.cand))
     }
 
+    // MARK: - Story path (P4-U1)
+
+    /// How a story ask's subject resolved. Fail-closed: no anchor, no story —
+    /// the honest message names what WOULD resolve, never guesses a subject.
+    public enum StoryResolution: Sendable {
+        case resolved(ResolvedHistorySubject, anchorKey: String)
+        /// Several anchors match ("the patent" with two patents on file) —
+        /// listed for the user, never picked for them.
+        case ambiguous(message: String)
+        case notResolvable(message: String)
+    }
+
+    /// P4-U1 — resolve a story question via IDENTIFIER ANCHORS ONLY, using the
+    /// same deterministic charter the answer path uses (an identifier value in
+    /// the question, or a definite reference to the one document of its kind
+    /// on file). Anything else fails closed with the honest message — a story
+    /// subject is never guessed from retrieval bycatch. Person-scoped stories
+    /// keep their existing door (the Dossier passes a picked Entity.ID).
+    public func resolveStory(question: String, anchors: [Entity]) async throws -> StoryResolution {
+        let charter = SubjectResolver.resolve(question: question, anchors: anchors)
+        switch charter.method {
+        case .identifierInQuestion, .definiteReference:
+            guard let primary = charter.anchors.first,
+                  let key = primary.normalizedValue, !key.isEmpty,
+                  let resolved = try await resolve(entityID: primary.id) else {
+                return .notResolvable(message: "The resolved subject could not be loaded from the register.")
+            }
+            // The anchor's own source document is story evidence even when the
+            // identifier has no mention rows yet.
+            var evidence = resolved.matchedEvidenceObjectIDs
+            if !evidence.contains(primary.sourceObjectID) {
+                evidence.append(primary.sourceObjectID)
+            }
+            return .resolved(ResolvedHistorySubject(
+                subject: resolved.subject,
+                displayName: resolved.displayName,
+                canonicalEntityID: resolved.canonicalEntityID,
+                aliases: resolved.aliases,
+                resolutionConfidence: resolved.resolutionConfidence,
+                matchedEvidenceObjectIDs: evidence,
+                ambiguityCandidates: resolved.ambiguityCandidates), anchorKey: key)
+        case .ambiguous:
+            return .ambiguous(message: charter.receiptLine)
+        case .none:
+            return .notResolvable(message:
+                "A story needs a subject the archive can anchor — name the document's number, or say \u{201C}the patent\u{201D} (or invoice, contract, case) when there is exactly one on file.")
+        }
+    }
+
     // MARK: - Internals
 
     private func resolved(from entity: Entity, id: Entity.ID, confidence: Double) async throws -> ResolvedHistorySubject {

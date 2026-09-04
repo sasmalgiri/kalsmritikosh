@@ -25,11 +25,21 @@ public actor HistoryArtifactRepository {
 
     /// Persist a reconstruction result + optional rendered narrative as ONE artifact.
     /// Returns the new artifact id.
+    ///
+    /// P4-U1 — two doors, one saver. The Dossier's door keeps the historical
+    /// default (`reviewState: "verified"`, no dedup triple). The Ask door
+    /// passes `reviewState: "unreviewed"` plus (anchorKey, requestShape,
+    /// ledgerStamp) so identical asks on an unchanged ledger dedup instead
+    /// of piling up rows.
     @discardableResult
     public func save(_ result: HistoryReconstructionResult,
                      narrative: HistoryNarrative? = nil,
                      title: String? = nil,
-                     at now: Date) async throws -> UUID {
+                     at now: Date,
+                     reviewState: String = "verified",
+                     anchorKey: String? = nil,
+                     requestShape: String? = nil,
+                     ledgerStamp: String? = nil) async throws -> UUID {
         let artifactID = UUID()
         let outline = result.outline
         let subject = outline.subject
@@ -37,8 +47,9 @@ public actor HistoryArtifactRepository {
         try await database.exec("""
         INSERT INTO history_artifacts
             (id, subject_kind, subject_id, subject_label, corpus_snapshot_id, engine_version,
-             request_json, title, summary, coverage_json, quality_json, created_at, superseded_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL);
+             request_json, title, summary, coverage_json, quality_json, created_at, superseded_by,
+             review_state, anchor_key, request_shape, ledger_stamp)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?);
         """, [
             .uuid(artifactID), .text(subject.subject.kindTag),
             subject.canonicalEntityID.map { SQLValue.uuid($0) } ?? .null,
@@ -47,7 +58,11 @@ public actor HistoryArtifactRepository {
             .text(result.engineVersion), .text("{}"),
             .text(title ?? "History of \(subject.displayName)"),
             narrative.map { SQLValue.text($0.summary) } ?? .null,
-            .text(coverageJSON), .text("{}"), .real(now.timeIntervalSince1970)
+            .text(coverageJSON), .text("{}"), .real(now.timeIntervalSince1970),
+            .text(reviewState),
+            anchorKey.map { SQLValue.text($0) } ?? .null,
+            requestShape.map { SQLValue.text($0) } ?? .null,
+            ledgerStamp.map { SQLValue.text($0) } ?? .null
         ])
 
         // Chapter id per ordinal, plus a map item→chapter for item rows.
@@ -135,6 +150,37 @@ public actor HistoryArtifactRepository {
         return rows.compactMap(Self.decodeHeader)
     }
 
+    /// P4-U1 dedup: the current (non-superseded) artifact for an exact
+    /// (anchor, request-shape, ledger version) triple — the same story asked
+    /// again on an unchanged ledger returns THIS id instead of a new row.
+    public func existingCurrent(anchorKey: String, requestShape: String,
+                                ledgerStamp: String) async throws -> UUID? {
+        let rows = try await database.query("""
+        SELECT id FROM history_artifacts
+        WHERE anchor_key = ? AND request_shape = ? AND ledger_stamp = ?
+          AND superseded_by IS NULL
+        ORDER BY created_at DESC LIMIT 1;
+        """, [.text(anchorKey), .text(requestShape), .text(ledgerStamp)])
+        return rows.first?.uuid(0)
+    }
+
+    /// P4-U1 — the durable ledger stamp: core-table counts plus the ingest
+    /// watermark. Changes whenever documents, events, facts, or the entity
+    /// register change — exactly the things a story stands on. Durable across
+    /// restarts (unlike SQLite's per-connection data_version) and cheap
+    /// (COUNT + MAX on indexed tables).
+    public func currentLedgerStamp() async throws -> String {
+        let row = (try await database.query("""
+        SELECT (SELECT COUNT(*) FROM knowledge_objects),
+               (SELECT CAST(COALESCE(MAX(updated_at), 0) AS INTEGER) FROM knowledge_objects),
+               (SELECT COUNT(*) FROM events),
+               (SELECT COUNT(*) FROM generic_facts),
+               (SELECT COUNT(*) FROM entities WHERE merged_into IS NULL);
+        """, [])).first
+        let parts = (0..<5).map { row?.int($0) ?? 0 }
+        return "ko:\(parts[0]):\(parts[1])|ev:\(parts[2])|gf:\(parts[3])|en:\(parts[4])"
+    }
+
     public func supersede(_ oldID: UUID, by newID: UUID, at now: Date) async throws {
         try await database.exec("UPDATE history_artifacts SET superseded_by = ? WHERE id = ?;", [.uuid(newID), .uuid(oldID)])
     }
@@ -169,7 +215,8 @@ public actor HistoryArtifactRepository {
 
     private static let headerColumns = """
     SELECT id, subject_kind, subject_id, subject_label, corpus_snapshot_id, engine_version,
-           title, summary, coverage_json, created_at, superseded_by
+           title, summary, coverage_json, created_at, superseded_by,
+           review_state, anchor_key, request_shape, ledger_stamp
     """
     private nonisolated static func decodeHeader(_ r: SQLRow) -> HistoryArtifact? {
         guard let id = r.uuid(0), let kind = r.string(1), let label = r.string(3),
@@ -181,6 +228,8 @@ public actor HistoryArtifactRepository {
             id: id, subjectKind: kind, subjectID: r.uuid(2), subjectLabel: label,
             corpusSnapshotID: r.uuid(4), engineVersion: engine, title: title, summary: r.string(7),
             coverage: coverage, createdAt: Date(timeIntervalSince1970: r.double(9) ?? 0),
-            supersededBy: r.uuid(10))
+            supersededBy: r.uuid(10),
+            reviewState: r.string(11) ?? "verified", anchorKey: r.string(12),
+            requestShape: r.string(13), ledgerStamp: r.string(14))
     }
 }
