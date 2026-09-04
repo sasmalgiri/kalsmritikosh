@@ -215,6 +215,14 @@ enum GuideContent {
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
             ("Transcription", "Turns audio and video into text — on demand, per file, fully on-device (Apple Speech, English). Never runs automatically during ingest.")
+        ]),
+        // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
+        ("What's next (1.2)", "map", [
+            ("Multilingual archives", "One semantic index that understands your documents' own languages — no translate-to-English shortcut."),
+            ("Deeper story review", "Approve, correct, or reject story beats inline; your review feeds the next reconstruction."),
+            ("More formats", "Legacy Office (DOC/XLS/PPT) and mail stores (MSG/PST)."),
+            ("Better transcription", "On-demand transcription improvements for long audio and video."),
+            ("The promise that doesn't change", "Everything stays on-device. The privacy contract is permanent.")
         ])
     ]
 }
