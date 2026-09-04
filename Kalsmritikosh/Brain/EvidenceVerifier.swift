@@ -227,6 +227,9 @@ public struct EvidenceVerifier: Verifier {
     /// reranker; an answer whose citations all fail resolution refuses.
     /// Nil → pre-P1 behavior, preserved for existing unit fixtures.
     private let citationResolver: CitationResolver?
+    /// P3-U0 — the identifier-anchor register feed for subject resolution.
+    /// nil (tests/legacy wiring) → no charter resolves → footer omitted.
+    private let anchorsProvider: (@Sendable () async -> [Entity])?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -237,7 +240,8 @@ public struct EvidenceVerifier: Verifier {
         reranker: Reranker? = nil,
         sessionProfile: SessionProfile? = nil,
         answerabilityMinRetrievalScore: Double = 0.20,
-        citationResolver: CitationResolver? = nil
+        citationResolver: CitationResolver? = nil,
+        anchorsProvider: (@Sendable () async -> [Entity])? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -248,6 +252,7 @@ public struct EvidenceVerifier: Verifier {
         self.sessionProfile = sessionProfile
         self.answerabilityMinRetrievalScore = answerabilityMinRetrievalScore
         self.citationResolver = citationResolver
+        self.anchorsProvider = anchorsProvider
     }
 
     public func verify(
@@ -283,6 +288,13 @@ public struct EvidenceVerifier: Verifier {
             report = engine.applySalienceAdvisory(report, meanCitedSalience: mean)
         }
         vclock.mark("claimEval")
+        // P3-U0 — deterministic subject resolution against the anchor register.
+        var resolvedCharter: ResolvedSubjectCharter? = nil
+        if let provider = anchorsProvider {
+            let charter = SubjectResolver.resolve(question: intent.rawQuestion, anchors: await provider())
+            KalsmritikoshLog.brain.info("subject.resolution: \(charter.method.rawValue, privacy: .public) — \(charter.receiptLine, privacy: .public)")
+            resolvedCharter = charter
+        }
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given
         // KnowledgeObject. Objects with no retrieval hit (came in via
@@ -637,7 +649,8 @@ public struct EvidenceVerifier: Verifier {
         }
 
         let rendered = renderAnswer(intent: intent, findings: findings, retrieval: retrieval,
-                                    report: effectiveReport, plan: plan, slot: slot)
+                                    report: effectiveReport, plan: plan, slot: slot,
+                                    resolvedCharter: resolvedCharter)
         return VerifiedAnswer(
             body: rendered.body,
             answerText: rendered.answerText,
@@ -668,7 +681,8 @@ public struct EvidenceVerifier: Verifier {
         retrieval: RetrievalResult,
         report: ConfidenceReport,
         plan: QueryPlan,
-        slot: SlotAnswerComposition?
+        slot: SlotAnswerComposition?,
+        resolvedCharter: ResolvedSubjectCharter? = nil
     ) -> RenderedAnswer {
         // 0) D-12/D-15 — a slot question renders the ONE composed sentence
         //    (value, explicit conflict, or field-named honest not-found) as
@@ -732,9 +746,12 @@ public struct EvidenceVerifier: Verifier {
         if let also = slot?.alsoOnFile {
             footerParts.append(also)
         }
-        let subjectLine = subjectHeading(intent: intent, retrieval: retrieval)
-        if !subjectLine.isEmpty {
-            footerParts.append(subjectLine)
+        // P3-U0 — the subject line is the RESOLUTION's output, never retrieval
+        // bycatch (the owner's live "Bill Delhi" finding). A resolved charter
+        // renders "About: …"; no charter → the line is OMITTED. The old mined
+        // subjects-in-scope heading is dead on this path.
+        if let about = resolvedCharter?.footerText {
+            footerParts.append(about)
         }
         // RET-006 — honest sufficiency disclosure: if the question asked for specific
         // fields the retrieved evidence does not contain, say so neutrally rather than
