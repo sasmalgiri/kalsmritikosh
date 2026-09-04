@@ -2395,7 +2395,12 @@ public final class AppState {
             self.historyEngine = HistoryReconstructionEngine(
                 entities: entities, events: events, assertions: assertionsRepo,
                 genericFacts: genericFactsRepo, relationships: relationships,
-                blockResolver: evidenceStoreRepo)
+                blockResolver: evidenceStoreRepo,
+                // P4-U2 — the H-law source context: email episodes + document
+                // classes read from the ledger for the story's own evidence.
+                storyContext: { [weak objects] ids in
+                    (try? await objects?.storySourceContext(for: ids)) ?? .empty
+                })
             self.historyArtifacts = HistoryArtifactRepository(database: db)
             self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
@@ -3793,9 +3798,17 @@ public final class AppState {
             anchorKey: anchorKey, requestShape: "story", ledgerStamp: stamp) {
             return existing
         }
-        return try? await repo.save(result, narrative: narrative, at: Date(),
-                                    reviewState: "unreviewed", anchorKey: anchorKey,
-                                    requestShape: "story", ledgerStamp: stamp)
+        let saved = try? await repo.save(result, narrative: narrative, at: Date(),
+                                         reviewState: "unreviewed", anchorKey: anchorKey,
+                                         requestShape: "story", ledgerStamp: stamp)
+        // P4-U2 — the placement twin re-checks the outline against the H-laws
+        // AFTER persistence. Checker, never writer: its only output is
+        // advisory review rows; the artifact is untouched either way.
+        if let saved, let db = database {
+            let findings = PlacementTwin.check(outline: result.outline)
+            await PlacementTwin.record(findings: findings, artifactID: saved, database: db)
+        }
+        return saved
     }
 
     /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives

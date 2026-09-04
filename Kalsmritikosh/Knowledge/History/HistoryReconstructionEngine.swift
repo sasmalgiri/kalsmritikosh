@@ -25,6 +25,10 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
     /// history items carry exact citations (S0.5). Optional so the engine still builds
     /// when no evidence store is available; production always injects one.
     private let blockResolver: EvidenceBlockResolving?
+    /// P4-U2 — resolves the material's source objects to their episode keys +
+    /// document classes so chapters assemble under the H-laws. Optional: nil
+    /// (or an empty context) reproduces the original year-bucket outline.
+    private let storyContext: (@Sendable ([KnowledgeObject.ID]) async -> StorySourceContext)?
     private let clock: @Sendable () -> Date
 
     public init(
@@ -34,6 +38,7 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         genericFacts: GenericFactRepository,
         relationships: RelationshipsRepository,
         blockResolver: EvidenceBlockResolving? = nil,
+        storyContext: (@Sendable ([KnowledgeObject.ID]) async -> StorySourceContext)? = nil,
         clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.resolver = HistorySubjectResolver(entities: entities)
@@ -43,6 +48,7 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         self.outlineBuilder = HistoryOutlineBuilder()
         self.reconciler = HistoryReconciliationEngine()
         self.blockResolver = blockResolver
+        self.storyContext = storyContext
         self.clock = clock
     }
 
@@ -84,7 +90,12 @@ public actor HistoryReconstructionEngine: HistoryReconstructing {
         yield(.temporalising(claims: claims.count))
 
         yield(.reconciling)
-        let base = outlineBuilder.build(material: material, items: items, corpusSnapshotID: request.corpusSnapshotID)
+        // P4-U2 — the H-law source context (episodes + document classes);
+        // empty when no provider is wired, which keeps the original outline.
+        let context = await storyContext?(material.evidenceObjectIDs) ?? .empty
+        let base = outlineBuilder.build(material: material, items: items,
+                                        corpusSnapshotID: request.corpusSnapshotID,
+                                        sourceContext: context)
         let outline = reconciler.reconcile(outline: base, material: material, independenceKeys: request.independenceKeys)
         yield(.outlineReady(outline))
 

@@ -416,6 +416,43 @@ extension KnowledgeObjectRepository {
         return out
     }
 
+    /// P4-U2 — the story's per-source facts: each object's email-thread
+    /// episode key (normalized subject, the same law the threading view uses)
+    /// and its document class (v123). Scoped to the story's own evidence
+    /// objects; sources without a subject or class simply stay absent, which
+    /// sends their items down the original year-bucket path.
+    public func storySourceContext(for objectIDs: [KnowledgeObject.ID]) async throws -> StorySourceContext {
+        guard !objectIDs.isEmpty else { return .empty }
+        var episodeKey: [KnowledgeObject.ID: String] = [:]
+        var episodeDisplay: [String: String] = [:]
+        var documentClass: [KnowledgeObject.ID: String] = [:]
+        // Chunked IN-clause (stories touch tens of objects, not thousands).
+        for slice in stride(from: 0, to: objectIDs.count, by: 200).map({ Array(objectIDs[$0..<min($0 + 200, objectIDs.count)]) }) {
+            let marks = Array(repeating: "?", count: slice.count).joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT id, document_class, metadata_json FROM knowledge_objects
+            WHERE id IN (\(marks)) ORDER BY id;
+            """, slice.map { SQLValue.uuid($0) })
+            for row in rows {
+                guard let id = row.uuid(0) else { continue }
+                if let cls = row.string(1), !cls.isEmpty { documentClass[id] = cls }
+                if let metaJSON = row.string(2) {
+                    let meta = parseMetadataBag(metaJSON)
+                    if let subject = meta.first(where: { $0.key.lowercased() == "subject" })?.value,
+                       !subject.isEmpty {
+                        let key = EmailThreadingService.normalizeSubject(subject)
+                        episodeKey[id] = key
+                        // First display subject wins, deterministically by object id order.
+                        if episodeDisplay[key] == nil { episodeDisplay[key] = subject }
+                    }
+                }
+            }
+        }
+        return StorySourceContext(episodeKeyByObject: episodeKey,
+                                  episodeDisplayByKey: episodeDisplay,
+                                  documentClassByObject: documentClass)
+    }
+
     /// Email messages with their header digest (subject / from / date) pulled
     /// from KO metadata, plus the source file's content hash for exact-duplicate
     /// detection. Used by the email dedup + threading view. Filtered to objects
