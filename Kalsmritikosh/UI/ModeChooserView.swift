@@ -56,7 +56,7 @@ public struct ModeChooserView: View {
                 .font(Theme.display(23, .bold))
                 .foregroundStyle(Theme.brandGradient())
                 .multilineTextAlignment(.center)
-            Text("Pick an ingestion path. **Full LLM** (assertive) extracts the most meaning up front — richest ledger, slowest. **Ledger event-driven** (fast) runs rules + embeddings only and defers the LLM to question time. Each card shows how it behaves and roughly how long it takes per 100 MB. You can change this later in Settings.")
+            Text("Pick an ingestion path. **Full AI** (assertive) extracts the most meaning up front — richest ledger, slowest. **Ledger event-driven** (fast) runs rules and semantic indexing only and defers the AI to question time. Each card shows how it behaves and roughly how long it takes per 100 MB. You can change this later in Settings.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

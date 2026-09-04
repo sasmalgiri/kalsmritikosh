@@ -63,8 +63,8 @@ public struct IngestGuideView: View {
                 .foregroundStyle(CalibrationStore.isCalibrated ? .green : .orange)
                 .imageScale(.small)
             Text(CalibrationStore.isCalibrated
-                 ? "Calibrated to THIS Mac (\(CalibrationStore.sampleCount) LLM calls, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)."
-                 : "These figures assume a \(IngestEstimator.referenceMachineDescription) — NOT your Mac. After your first LLM-heavy ingest they self-calibrate to this Mac.")
+                 ? "Calibrated to THIS Mac (\(CalibrationStore.sampleCount) LLM calls, \(String(format: "%.1f", IngestEstimator.effectiveSecondsPerLLMCall))s/call)."  // jargon-ok: developer diagnostics
+                 : "These figures assume a \(IngestEstimator.referenceMachineDescription) — NOT your Mac. After your first LLM-heavy ingest they self-calibrate to this Mac.")  // jargon-ok: developer diagnostics
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -83,7 +83,7 @@ public struct IngestGuideView: View {
                 Text("File type · /100 MB").font(.caption.weight(.bold)).frame(maxWidth: .infinity, alignment: .leading)
                 Text("Ledger").font(.caption.weight(.bold)).foregroundStyle(.green).frame(width: 74, alignment: .trailing)
                 Text("Hot/W/C").font(.caption.weight(.bold)).foregroundStyle(.orange).frame(width: 74, alignment: .trailing)
-                Text("Full LLM").font(.caption.weight(.bold)).foregroundStyle(Theme.brand).frame(width: 74, alignment: .trailing)
+                Text("Full AI").font(.caption.weight(.bold)).foregroundStyle(Theme.brand).frame(width: 74, alignment: .trailing)
             }
         }
         .padding(.horizontal, 4)
@@ -121,7 +121,7 @@ public struct IngestGuideView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Why the difference")
                 .font(.caption.weight(.semibold))
-            Text("• Ledger mode: rule-based extraction + one document-card LLM call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep LLM only for the important (hot) slice.\n• Full LLM runs an LLM pass on every chunk, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) is expensive in every mode because the text has to be recovered first. Audio/video is NOT transcribed during ingest — it is catalogued and preserved; transcription runs only on demand (Transcripts screen, on-device).")
+            Text("• Ledger mode: rule-based extraction + one document-card AI call per file (its first chunk); time is dominated by parsing/OCR/transcription.\n• Hot/Warm/Cold: one document-card call per file + deep AI only for the important (hot) slice.\n• Full AI runs an AI pass over every slice of text, so text-heavy archives balloon into hours.\n• OCR (scanned PDF, images) is expensive in every mode because the text has to be recovered first. Audio/video is NOT transcribed during ingest — it is catalogued and preserved; transcription runs only on demand (Transcripts screen, on-device).")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

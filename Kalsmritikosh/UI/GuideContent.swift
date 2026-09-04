@@ -211,7 +211,7 @@ enum GuideContent {
         ("Speed vs. depth", "gauge.with.dots.needle.67percent", [
             ("Ledger mode", "Fastest: rule-based reading and indexing with almost no AI at import. The default — you can search right away."),
             ("Hot / Warm / Cold", "Reads everything lightly, then spends extra AI effort only on the important (\"hot\") part."),
-            ("Full LLM", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
+            ("Full AI", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
             ("Transcription", "Turns audio and video into text — on demand, per file, fully on-device (Apple Speech, English). Never runs automatically during ingest.")

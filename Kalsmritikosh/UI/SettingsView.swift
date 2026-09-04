@@ -242,7 +242,7 @@ public struct SettingsView: View {
                 .overlay(Capsule().stroke((ok ? Color.green : Color.red).opacity(0.30), lineWidth: 1))
             }
             .buttonStyle(.plain)
-            .help("Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds.")
+            .help("Re-run the fast self-check (deterministic logic + all Convert formats). No LLM, a few seconds.")  // jargon-ok: developer diagnostics
         } else {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.mini)
@@ -283,7 +283,7 @@ public struct SettingsView: View {
             DisclosureGroup(isExpanded: $showMoreDiagnostics) {
               VStack(alignment: .leading, spacing: 8) {
             #if DEBUG
-            Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")
+            Text("**Run Full Diagnostics** — one-button orchestrator. Runs the smoke test + Fast Eval + Gate 3 Multi-hop in sequence and writes a single unified `diagnostics-summary.md` you can share. ~10–12 minutes end-to-end.")  // jargon-ok: developer diagnostics
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -447,7 +447,7 @@ public struct SettingsView: View {
             #if DEBUG
             Divider().padding(.vertical, 4)
 
-            Text("Rebuild synthetic questions — runs the heuristic generator over chunks of KOs ingested BEFORE the G2 wiring landed. Populates synthetic_questions + its FTS index so the question-shaped retrieval layer can match. No LLM calls; runs in seconds. Idempotent — KOs that already have questions are skipped.")
+            Text("Rebuild synthetic questions — runs the heuristic generator over chunks of KOs ingested BEFORE the G2 wiring landed. Populates synthetic_questions + its FTS index so the question-shaped retrieval layer can match. No LLM calls; runs in seconds. Idempotent — KOs that already have questions are skipped.")  // jargon-ok: developer diagnostics
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -495,7 +495,7 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 4)
 
-            Text("Gate 3 Multi-hop — runs only M1..M4, the typed-multihop subset the bond engine is designed to answer. Watch the Walk cov. / Walk steps/Q columns in the report to verify the schema-aware retrieval layer is firing.")
+            Text("Gate 3 Multi-hop — runs only M1..M4, the typed-multihop subset the bond engine is designed to answer. Watch the Walk cov. / Walk steps/Q columns in the report to verify the schema-aware retrieval layer is firing.")  // jargon-ok: developer diagnostics
                 .font(.caption).foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 Button {
@@ -504,7 +504,7 @@ public struct SettingsView: View {
                     if gate3Running {
                         Label("Running…", systemImage: "hourglass")
                     } else {
-                        Label("Run Gate 3 Multi-hop (M1–M4)", systemImage: "point.3.connected.trianglepath.dotted")
+                        Label("Run Gate 3 Multi-hop (M1–M4)", systemImage: "point.3.connected.trianglepath.dotted")  // jargon-ok: developer diagnostics
                     }
                 }
                 .disabled(gate3Running)
@@ -747,8 +747,8 @@ public struct SettingsView: View {
         releaseReadinessRunning = true
         releaseReadinessReport = nil
         releaseReadinessStatus = mode == .fast
-            ? "Fast gate — schema → deterministic logic → convert exporters → engine/MoE → bundle → capability → live health (no LLM)…"
-            : "Deep eval — everything in Fast PLUS smoke + Fast Eval + Gate 3 (LLM-heavy, may take hours)…"
+            ? "Fast gate — schema → deterministic logic → convert exporters → engine/MoE → bundle → capability → live health (no LLM)…"  // jargon-ok: developer diagnostics
+            : "Deep eval — everything in Fast PLUS smoke + Fast Eval + Gate 3 (LLM-heavy, may take hours)…"  // jargon-ok: developer diagnostics
         defer { releaseReadinessRunning = false }
         let result = await ReleaseReadiness.run(appState, mode: mode)
         releaseReadinessReport = result
@@ -772,7 +772,7 @@ public struct SettingsView: View {
         }
         realDataProbeStatus = """
         ✓ Real-data probe: \(result.questionCount) question(s)
-        avg \(String(format: "%.1f", result.avgCallsPerQuestion)) LLM call(s)/question · avg \(String(format: "%.1f", result.avgLatencySeconds))s/question · \(String(format: "%.1f", result.totalSeconds))s total
+        avg \(String(format: "%.1f", result.avgCallsPerQuestion)) LLM call(s)/question · avg \(String(format: "%.1f", result.avgLatencySeconds))s/question · \(String(format: "%.1f", result.totalSeconds))s total  // jargon-ok: developer diagnostics
         Report: \(result.reportURL?.lastPathComponent ?? "—")
         """
     }
@@ -848,7 +848,7 @@ public struct SettingsView: View {
 
     private func runAllDiagnostics() async {
         allDiagnosticsRunning = true
-        allDiagnosticsStatus = "Running smoke + Fast Eval + Gate 3 Multi-hop… (~10–12 min)"
+        allDiagnosticsStatus = "Running smoke + Fast Eval + Gate 3 Multi-hop… (~10–12 min)"  // jargon-ok: developer diagnostics
         defer { allDiagnosticsRunning = false }
         do {
             let result = try await Gate1Baseline.generateAllDiagnostics()
@@ -1028,7 +1028,7 @@ public struct SettingsView: View {
             let probeLine = result.retrievalProbeURL.map { "L1 retrieval probe: \($0.path)" } ?? "L1 retrieval probe: (not written)"
             let coverageLine = result.coverageProbeURL.map { "Ingest coverage: \($0.path)" } ?? "Ingest coverage: (not written)"
             let reasoningLine = result.reasoningProviderID.map {
-                "Reasoning provider: \($0) (LLM-on baseline)"
+                "Reasoning provider: \($0) (LLM-on baseline)"  // jargon-ok: developer diagnostics
             } ?? "Reasoning provider: none (HEURISTIC FLOOR baseline)"
             baselineStatus = """
             ✓ Report written
@@ -1143,15 +1143,15 @@ public struct SettingsView: View {
                     .foregroundStyle(Theme.brand)
                 Text("Engine").font(.title3.bold())
             }
-            Text("This build runs a single pipeline: the minimum-LLM, ledger-first engine. Ingestion uses zero generative LLM — rules, embeddings and a full-text index only. The model is used only at question time, to explain the evidence it retrieves.")
+            Text("This build runs a single pipeline: the minimum-AI, ledger-first engine. Ingestion uses no generative AI — rules, semantic indexing and a full-text index only. The model is used only at question time, to explain the evidence it retrieves.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Label("Ledger event-driven · minimum LLM", systemImage: "checkmark.seal.fill")
+            Label("Ledger event-driven · minimum AI", systemImage: "checkmark.seal.fill")
                 .font(.callout.weight(.medium))
                 .foregroundStyle(Theme.brand)
 
-            Label("Ingest: LLM off · Embeddings on · Full-text on · Ledger on",
+            Label("Ingest: AI off · Semantic index on · Full-text on · Ledger on",
                   systemImage: "gauge.with.dots.needle.33percent")
                 .font(.caption2).foregroundStyle(.secondary)
 
@@ -1381,7 +1381,7 @@ public struct SettingsView: View {
                     message: "Each option below adds on-device model passes: better, more faithful answers but slower replies. Turn them off for speed — answers stay grounded in your evidence either way.",
                     systemImage: "brain.head.profile",
                     bullets: [
-                        "Fully private (no LLM) — fastest, rule-based only",
+                        "Fully private (no AI) — fastest, rule-based only",
                         "Parallel expert council + Self-critique — deepest, slowest",
                         "Off ⇒ ~1 pass · All on ⇒ several passes per answer"
                     ]
@@ -1394,7 +1394,7 @@ public struct SettingsView: View {
             Divider().padding(.vertical, 2)
 
             // Fully private (no LLM) — PrivacyGate.
-            Toggle("Fully private (no LLM)", isOn: Binding(
+            Toggle("Fully private (no AI)", isOn: Binding(
                 get: { PrivacyGate.shared.offlineNoLLM },
                 set: { PrivacyGate.shared.offlineNoLLM = $0 }
             ))

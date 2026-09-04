@@ -97,7 +97,7 @@ public struct LiveDashboardView: View {
                         bullets: [
                             "Pipeline stages + throughput (files/sec)",
                             "Enrichment tiers (hot/warm/cold) and detected gaps",
-                            "Provider health, cache hit-rate, LLM call counts"
+                            "Provider health, cache hit-rate, LLM call counts"  // jargon-ok: developer diagnostics
                         ]
                     )
                 }
@@ -226,7 +226,7 @@ public struct LiveDashboardView: View {
             HStack(spacing: 6) {
                 Image(systemName: "bolt.badge.clock")
                     .foregroundStyle(Theme.brand)
-                Text("LLM budget")
+                Text("LLM budget")  // jargon-ok: developer diagnostics
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -280,7 +280,7 @@ public struct LiveDashboardView: View {
                 tierTile(EnrichmentTier.cold.displayName, tierCounts[.cold] ?? 0, "snowflake", .secondary)
                 tierTile("Gaps flagged", gapCount, "questionmark.diamond", .pink)
             }
-            Text("Only hot documents get deep LLM enrichment in Hot/Warm/Cold mode.")
+            Text("Only hot documents get deep AI enrichment in Hot/Warm/Cold mode.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }

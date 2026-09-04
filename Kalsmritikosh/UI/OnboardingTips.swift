@@ -38,7 +38,7 @@ struct ConvertTip: Tip {
 @available(macOS 15.0, *)
 struct InsightsTip: Tip {
     var title: Text { Text("Find the gaps") }
-    var message: Text? { Text("Insights surfaces missing documents and conflicting facts across your archive — rule-based, no LLM.") }
+    var message: Text? { Text("Insights surfaces missing documents and conflicting facts across your archive — rule-based, no AI involved.") }
     var image: Image? { Image(systemName: "lightbulb.max") }
 }
 

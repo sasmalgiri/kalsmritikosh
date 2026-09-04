@@ -68,7 +68,7 @@ public struct InsightsView: View {
                     .foregroundStyle(Theme.brandGradient())
                 InfoPopoverButton(
                     title: "What Insights finds",
-                    message: "Rule-based analysis over your ledger — no LLM. Surfaces likely-missing documents and facts your sources disagree on, and lets you interrogate any event.",
+                    message: "Rule-based analysis over your ledger — no AI involved. Surfaces likely-missing documents and facts your sources disagree on, and lets you interrogate any event.",
                     systemImage: "lightbulb.max",
                     bullets: [
                         "Gaps: numbered-sequence holes, dangling references, orphaned replies",
@@ -77,7 +77,7 @@ public struct InsightsView: View {
                     ]
                 )
             }
-            Text("Missing links and rule-based investigation — no LLM, all from your ledger.")
+            Text("Missing links and rule-based investigation — no AI involved, all from your ledger.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if let last = appState.ledgerLastMaintainedAt {
