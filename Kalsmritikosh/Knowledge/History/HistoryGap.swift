@@ -24,6 +24,10 @@ public enum HistoryGapKind: String, Codable, Sendable, CaseIterable {
     case coverageGapUnsupportedFormat
     case possibleMissingAttachment
     case possibleMissingEmailInThread
+    /// P4-U2 (H-2) — an item whose evidence ties equally to more than one
+    /// episode. Ambiguity is expanded into a reviewable gap, never guessed
+    /// into a placement.
+    case unplacedEvidence
 }
 
 public struct HistoryGap: Sendable, Codable, Hashable, Identifiable {
@@ -102,6 +106,20 @@ public nonisolated struct HistoryGapEngine: Sendable {
                     inferenceBasis: prev.1.evidence + cur.1.evidence, confidence: 0.6))
             }
         }
+        // P4-U2 (H-2) — every item the builder left unplaced becomes a typed,
+        // reviewable gap: the ambiguity is SHOWN, never smoothed.
+        if let unplacedChapter = outline.chapters.first(where: { $0.title == HistoryOutlineBuilder.unplacedChapterTitle }) {
+            for id in unplacedChapter.itemIDs {
+                guard let item = outline.items.first(where: { $0.id == id }) else { continue }
+                gaps.append(HistoryGap(
+                    kind: .unplacedEvidence, subject: subject,
+                    description: "“\(item.title)” ties equally to more than one episode — its placement needs review.",
+                    affectedPeriod: item.start,
+                    expectedEvidenceTypes: ["a source naming the episode directly"],
+                    inferenceBasis: item.evidence, confidence: 0.6))
+            }
+        }
+
         // Deterministic order.
         return gaps.sorted { ($0.kind.rawValue, $0.description) < ($1.kind.rawValue, $1.description) }
     }

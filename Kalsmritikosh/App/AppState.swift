@@ -2395,7 +2395,12 @@ public final class AppState {
             self.historyEngine = HistoryReconstructionEngine(
                 entities: entities, events: events, assertions: assertionsRepo,
                 genericFacts: genericFactsRepo, relationships: relationships,
-                blockResolver: evidenceStoreRepo)
+                blockResolver: evidenceStoreRepo,
+                // P4-U2 — the H-law source context: email episodes + document
+                // classes read from the ledger for the story's own evidence.
+                storyContext: { [weak objects] ids in
+                    (try? await objects?.storySourceContext(for: ids)) ?? .empty
+                })
             self.historyArtifacts = HistoryArtifactRepository(database: db)
             self.sourceRelations = sourceRelationsRepo
             // Phase J.13 — live observability. The pipeline-metrics
@@ -2454,6 +2459,11 @@ public final class AppState {
             self.ingest = ingest
             // UNIT C-ii — the receipt's ledger-state stamp reads SQLite's
             // data_version (a mutation counter, nearly free) at ask start.
+            // P4-U4 rung 3 — the story door: story-shaped questions go to the
+            // reconstruction engine + renderer + durable artifact persistence.
+            await brain.setStoryComposer { [weak self] question in
+                await self?.composeStoryAnswer(question: question)
+            }
             await brain.setLedgerStateProvider { [weak database] in
                 // C-ii: begin the ask's read snapshot; the returned stamp is
                 // data_version read ON the snapshot connection at ask start.
@@ -3774,6 +3784,116 @@ public final class AppState {
     public func persistHistory(_ result: HistoryReconstructionResult, narrative: HistoryNarrative?) async -> UUID? {
         guard let repo = historyArtifacts else { return nil }
         return try? await repo.save(result, narrative: narrative, at: Date())
+    }
+
+    /// P4-U1 — the SECOND door: persist a story built straight from a question.
+    /// Lands as `unreviewed` (the Dossier's door keeps `verified`), stamped with
+    /// the ledger state it was built on, and dedup'd by (anchor, request-shape,
+    /// ledger stamp): the same story asked again on an unchanged ledger returns
+    /// the existing artifact instead of a new row. Only a COMPLETED
+    /// reconstruction reaches this door — a cancelled stream never yields a
+    /// result, so it persists nothing.
+    @discardableResult
+    public func persistStoryFromAsk(_ result: HistoryReconstructionResult,
+                                    narrative: HistoryNarrative?,
+                                    anchorKey: String) async -> UUID? {
+        guard let repo = historyArtifacts else { return nil }
+        guard let stamp = try? await repo.currentLedgerStamp() else { return nil }
+        if let existing = try? await repo.existingCurrent(
+            anchorKey: anchorKey, requestShape: "story", ledgerStamp: stamp) {
+            return existing
+        }
+        let saved = try? await repo.save(result, narrative: narrative, at: Date(),
+                                         reviewState: "unreviewed", anchorKey: anchorKey,
+                                         requestShape: "story", ledgerStamp: stamp)
+        // P4-U2 — the placement twin re-checks the outline against the H-laws
+        // AFTER persistence. Checker, never writer: its only output is
+        // advisory review rows; the artifact is untouched either way.
+        if let saved, let db = database {
+            let findings = PlacementTwin.check(outline: result.outline)
+            await PlacementTwin.record(findings: findings, artifactID: saved, database: db)
+        }
+        return saved
+    }
+
+    /// P4-U4 rung 3 — the STORY ANSWER, end to end: subject resolved via
+    /// identifier anchors (never guessed), reconstructed by the engine,
+    /// chaptered under the H-laws, rendered with gists and span citations,
+    /// PERSISTED through the unreviewed door (dedup'd + stamped), gaps listed
+    /// by kind. Ambiguity lists the candidates; no anchor refuses with the
+    /// honest message; an engine failure returns nil so the normal pipeline
+    /// carries (never a dead end).
+    public func composeStoryAnswer(question: String) async -> VerifiedAnswer? {
+        guard let entities, let engine = historyEngine else { return nil }
+        let anchors = (try? await entities.allAnchors()) ?? []
+        guard let resolution = try? await HistorySubjectResolver(entities: entities)
+            .resolveStory(question: question, anchors: anchors) else { return nil }
+
+        switch resolution {
+        case .notResolvable(let message):
+            return VerifiedAnswer(body: "", citations: [], confidence: .zero,
+                                  refused: true, refusalReason: message)
+        case .ambiguous(let message):
+            return VerifiedAnswer(body: message, citations: [], confidence: Confidence(0.5),
+                                  source: .historical)
+        case .resolved(let subject, let anchorKey):
+            var result: HistoryReconstructionResult?
+            for await update in engine.reconstruct(subject: subject.subject, request: HistoryRequest()) {
+                if case .verified(let r) = update { result = r }
+            }
+            guard let result else { return nil }
+            let narrative = HistoryNarrativeRenderer().render(outline: result.outline)
+            let artifactID = await persistStoryFromAsk(result, narrative: narrative, anchorKey: anchorKey)
+
+            var body = narrative.summary
+            for chapter in narrative.chapters {
+                body += "\n\n## \(chapter.title)\n"
+                if let gist = chapter.gist { body += gist + "\n" }
+                body += chapter.prose
+            }
+            // Gaps by kind, plain-language, deterministic order.
+            let gaps = result.outline.gaps
+            if !gaps.isEmpty {
+                let byKind = Dictionary(grouping: gaps, by: \.kind)
+                    .map { (Self.plainGapKind($0.key), $0.value.count) }
+                    .sorted { $0.0 < $1.0 }
+                body += "\n\nOpen questions: " + byKind.map { "\($0.0) (\($0.1))" }.joined(separator: " · ")
+            }
+            body += "\n\nThis story was saved to your archive"
+                + (artifactID != nil ? " and awaits your review." : ".")
+
+            // Citations: the items' distinct source documents, deterministic order.
+            var seen = Set<KnowledgeObject.ID>()
+            let citations = result.outline.items
+                .flatMap(\.evidence).map(\.objectID)
+                .filter { seen.insert($0).inserted }
+                .sorted { $0.uuidString < $1.uuidString }
+                .prefix(10)
+                .map { VerifiedAnswer.Citation(objectID: $0, snippet: "Story evidence") }
+            return VerifiedAnswer(body: body, answerText: body, citations: Array(citations),
+                                  confidence: Confidence(0.75), source: .historical)
+        }
+    }
+
+    /// "missingEndDate" → "missing end date" (RC-8 plain language, no jargon).
+    nonisolated static func plainGapKind(_ kind: HistoryGapKind) -> String {
+        kind.rawValue.map { $0.isUppercase ? " \($0.lowercased())" : String($0) }.joined()
+    }
+
+    /// P4-U2 (B-4) — budgeted, advisory LEADS for a story's open gaps: each
+    /// gap's expected-evidence targets run as archive searches; candidate
+    /// documents surface for review. A lead never closes a gap and never
+    /// touches the outline; a gap with no hits stays honestly open.
+    public func storyGapLeads(for gaps: [HistoryGap]) async -> [GapLead] {
+        guard let chunks else { return [] }
+        let result = await GapLeadFinder().findLeads(for: gaps) { [weak chunks] query in
+            let hits = (try? await chunks?.searchFTS(query, limit: 10)) ?? []
+            return hits.map(\.objectID)
+        }
+        if result.gapsDeferred > 0 {
+            KalsmritikoshLog.app.info("story gap leads: \(result.gapsTried) gap(s) tried, \(result.gapsDeferred) deferred to the next pass")
+        }
+        return result.leads
     }
 
     /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives

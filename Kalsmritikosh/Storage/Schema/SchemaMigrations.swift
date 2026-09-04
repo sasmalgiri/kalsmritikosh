@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 126
+    public static let latestVersion = 127
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -657,7 +657,8 @@ public enum SchemaMigrations {
         (123, v123),
         (124, v124),
         (125, v125),
-        (126, v126)
+        (126, v126),
+        (127, v127)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6463,5 +6464,23 @@ public enum SchemaMigrations {
         PRIMARY KEY (object_id, term)
     );
     CREATE INDEX IF NOT EXISTS idx_document_terms_term ON document_terms(term);
+    """
+
+    // MARK: - v127 — P4-U1: the story's second door (durable, honest persistence)
+    //
+    // history_artifacts gains the Ask-door columns: review_state ('verified'
+    // for the Dossier's reviewed path — the historical default — vs
+    // 'unreviewed' for stories persisted straight from a question),
+    // anchor_key + request_shape + ledger_stamp for dedup by
+    // (anchor, request-shape, ledger version) and for stale-flagging: an
+    // artifact whose stamp no longer matches the live ledger is SHOWN as
+    // possibly out of date — never silently wrong, never deleted.
+    private static let v127: String = """
+    ALTER TABLE history_artifacts ADD COLUMN review_state TEXT NOT NULL DEFAULT 'verified';
+    ALTER TABLE history_artifacts ADD COLUMN anchor_key TEXT;
+    ALTER TABLE history_artifacts ADD COLUMN request_shape TEXT;
+    ALTER TABLE history_artifacts ADD COLUMN ledger_stamp TEXT;
+    CREATE INDEX IF NOT EXISTS idx_history_artifacts_dedup
+        ON history_artifacts(anchor_key, request_shape, ledger_stamp);
     """
 }
