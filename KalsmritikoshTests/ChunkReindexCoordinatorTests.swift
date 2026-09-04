@@ -112,5 +112,12 @@ struct ChunkReindexCoordinatorTests {
         #expect(split.count >= 2, "a 2,550-char single paragraph must split, got \(split.count) piece(s)")
         #expect(split.allSatisfy { $0.count <= ChunkReindexCoordinator.oversizeChars })
         #expect(split.joined() == single, "no text may be lost in the split")
+        // Live run 2's stragglers: text over the line in SCALARS (SQL's unit)
+        // but under it in graphemes — Devanagari with combining marks.
+        let hindi = String(repeating: "परीक्षण रिपोर्ट आवेदन संख्या जांच का परिणाम। ", count: 60)
+        let hSplit = ChunkReindexCoordinator.split(hindi, target: 1_600)
+        #expect(hSplit.allSatisfy { $0.unicodeScalars.count <= 2_000 },
+                "every piece must be inside the line in SQL's own unit")
+        #expect(hSplit.joined() == hindi)
     }
 }

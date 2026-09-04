@@ -155,25 +155,32 @@ public struct ChunkReindexCoordinator {
         }
     }
 
-    /// Paragraph-boundary split to ~target chars; a paragraph longer than
-    /// 2× target hard-splits on sentence/space boundaries. Deterministic.
+    /// Paragraph-boundary split to ~target, measured in UNICODE SCALARS —
+    /// the same unit SQLite's length() counts, so the split decision and the
+    /// oversize SELECT can never disagree (live run 2's three stragglers were
+    /// Devanagari/curly-quote text: over the line in scalars, under it in
+    /// Swift graphemes). A paragraph alone over target hard-splits at
+    /// space/period boundaries. Deterministic; lossless.
     nonisolated static func split(_ text: String, target: Int) -> [String] {
-        guard text.count > oversizeChars else { return [text] }
+        func scalars(_ s: any StringProtocol) -> Int { s.unicodeScalars.count }
+        guard scalars(text) > target else { return [text] }
         var pieces: [String] = []
         var current = ""
         func flush() { if !current.isEmpty { pieces.append(current); current = "" } }
         for para in text.components(separatedBy: "\n\n") {
             let unit = para.isEmpty ? "\n" : para
-            if current.count + unit.count + 2 > target, !current.isEmpty { flush() }
-            // Any paragraph that alone would leave an oversized piece must
-            // hard-split — the live run proved single-paragraph chunks of
-            // 2,000–3,200 chars fell through the old (target × 2) line:
-            // 136 of 141 stayed whole and the STOP fired (correctly).
-            if unit.count > target {
+            if scalars(current) + scalars(unit) + 2 > target, !current.isEmpty { flush() }
+            if scalars(unit) > target {
                 flush()
                 var rest = Substring(unit)
-                while rest.count > target {
-                    let cut = rest.index(rest.startIndex, offsetBy: target)
+                while scalars(rest) > target {
+                    // Walk graphemes until the scalar budget is reached.
+                    var cut = rest.startIndex
+                    var used = 0
+                    while cut < rest.endIndex, used < target {
+                        used += rest[cut].unicodeScalars.count
+                        cut = rest.index(after: cut)
+                    }
                     let window = rest[..<cut]
                     let breakAt = window.lastIndex(where: { $0 == "." || $0 == " " }).map(rest.index(after:)) ?? cut
                     pieces.append(String(rest[..<breakAt]))
