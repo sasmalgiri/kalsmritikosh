@@ -165,7 +165,11 @@ public struct ChunkReindexCoordinator {
         for para in text.components(separatedBy: "\n\n") {
             let unit = para.isEmpty ? "\n" : para
             if current.count + unit.count + 2 > target, !current.isEmpty { flush() }
-            if unit.count > target * 2 {
+            // Any paragraph that alone would leave an oversized piece must
+            // hard-split — the live run proved single-paragraph chunks of
+            // 2,000–3,200 chars fell through the old (target × 2) line:
+            // 136 of 141 stayed whole and the STOP fired (correctly).
+            if unit.count > target {
                 flush()
                 var rest = Substring(unit)
                 while rest.count > target {

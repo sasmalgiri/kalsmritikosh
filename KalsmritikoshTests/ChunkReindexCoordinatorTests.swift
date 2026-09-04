@@ -104,5 +104,13 @@ struct ChunkReindexCoordinatorTests {
         #expect(a.allSatisfy { $0.count <= 2_000 })
         // Small text passes through untouched.
         #expect(ChunkReindexCoordinator.split("short", target: 1_600) == ["short"])
+        // THE LIVE-RUN LESSON: a single paragraph of 2,000–3,200 chars (no
+        // \n\n anywhere) must still split — 136 of 141 live chunks were this
+        // shape and the old splitter passed them through whole.
+        let single = String(repeating: "The examiner raised an objection. ", count: 75) // ~2,550 chars, one paragraph
+        let split = ChunkReindexCoordinator.split(single, target: 1_600)
+        #expect(split.count >= 2, "a 2,550-char single paragraph must split, got \(split.count) piece(s)")
+        #expect(split.allSatisfy { $0.count <= ChunkReindexCoordinator.oversizeChars })
+        #expect(split.joined() == single, "no text may be lost in the split")
     }
 }
