@@ -487,6 +487,23 @@ public struct EvidenceVerifier: Verifier {
                 rerankByObject[citation.objectID] = scores[i]
             }
         }
+        // S2-U1 consumer 1 — BOUNDED structural-salience factor on the rerank
+        // score: ×(0.85 + 0.3 × meanSalience), i.e. ±15% around neutral 0.6's
+        // ~1.03. Salience refines relevance ordering; it can never override
+        // semantic relevance (the bound) and never touches scoreByObject, so
+        // reranker-off runs are byte-identical to before.
+        if !rerankByObject.isEmpty {
+            var salienceSum: [KnowledgeObject.ID: (total: Double, n: Int)] = [:]
+            for rc in retrieval.chunks {
+                let cur = salienceSum[rc.chunk.objectID] ?? (0, 0)
+                salienceSum[rc.chunk.objectID] = (cur.total + rc.chunk.salience, cur.n + 1)
+            }
+            for (objectID, score) in rerankByObject {
+                guard let agg = salienceSum[objectID], agg.n > 0 else { continue }
+                let mean = agg.total / Double(agg.n)
+                rerankByObject[objectID] = score * (0.85 + 0.3 * mean)
+            }
+        }
         vclock.mark("rerank")
 
         // UPDATE_14 + G2-MMR — apply the intent-aware global cap on
