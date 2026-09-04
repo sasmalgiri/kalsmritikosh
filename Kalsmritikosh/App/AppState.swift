@@ -1381,7 +1381,14 @@ public final class AppState {
                         let found = (try? await events.findByIDs(Array(ids))) ?? []
                         return Set(found.map(\.id))
                     }
-                )
+                ),
+                // P3-U0 — the anchor register feed: subject resolution reads
+                // the live identifier anchors (small; 6 on the owner's
+                // archive) so "the patent" resolves deterministically.
+                anchorsProvider: { [weak entities] in
+                    guard let entities else { return [] }
+                    return (try? await entities.allAnchors()) ?? []
+                }
             )
             let memoryDistiller = MemoryDistiller(
                 memory: memoryRepo,

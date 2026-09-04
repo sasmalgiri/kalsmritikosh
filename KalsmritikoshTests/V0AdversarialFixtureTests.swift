@@ -188,26 +188,22 @@ struct V0AdversarialFixtureTests {
         #expect(text.contains("Receipt:"), "the abstention must carry its exhaustion receipt")
     }
 
-    @Test("RED rung-2 twin: timeline of the patent must be one anchored, ordered, cited chain")
+    @Test("RUNG 2 — GREEN (P3-U2): timeline of the patent is one ordered, dated, cited chain")
     func rung2Twin() async throws {
         let rig = try await FixtureRig.make(document: Self.gen.noisyGrantLetter, name: "grant-letter.md")
         defer { try? FileManager.default.removeItem(at: rig.dir) }
         let a = try await rig.answer("timeline of the patent")
-        print("V0 RED rung-2 twin: refused=\(a.refused) text=\(a.answerText ?? "nil") body=\(a.body.prefix(200))")
-        // R-1 DIAGNOSIS (F7 post-drain, 2026-09-03): the DATA layer is no longer
-        // the blocker — V3 anchors + V4 class-gated milestones exist, and the
-        // live drain rebuilt the full lifecycle chain (FER 2022-11-29 → filed
-        // 2023-03-21 → objections → hearings 2024-08 → granted 2024-11-28, all
-        // dated + ordered + producer_version 1). The remaining gap is ROUTING +
-        // COMPOSER: "timeline of the patent" never reaches a timeline composer
-        // and ships general-path "Reported:" fact-spam instead. The flip is
-        // owned by Go 2 P3-U2 (temporal chains) + the S2-U5 rungs-1/1n/2 gate.
-        withKnownIssue("R-1 diagnosed: routing+composer gap (Go 2 P3-U2); data layer ready — anchored milestones exist") {
-            let text = ((a.answerText ?? "") + " " + a.body).lowercased()
-            #expect(text.contains("march 2023") && text.contains("june 2025"),
-                    "timeline does not carry the filing→grant chain")
-            #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a dated chain")
-        }
+        print("V0 rung-2 twin (GREEN): refused=\(a.refused) text=\(a.answerText ?? "nil")")
+        // FLIPPED 2026-09-04 (P3-U2): R-1's diagnosis held exactly — the data
+        // layer was ready (V3 anchors + V4 milestones + the drain's chain);
+        // the missing half was routing + the TimelineComposer. Both exist now:
+        // the .timeline shape routes here and the composer renders the
+        // ordered chain from the event record, every line cited, no model.
+        let text = ((a.answerText ?? "") + " " + a.body).lowercased()
+        #expect(text.contains("march 2023") && text.contains("june 2025"),
+                "timeline must carry the filing→grant chain, got: \(a.answerText ?? "nil")")
+        #expect(!a.body.contains("Reported:"), "fact-spam shipped instead of a dated chain")
+        #expect(a.citations.contains { $0.eventID != nil }, "every line anchors an event row")
     }
 
     // MARK: - Causal-explosion red (binding #2, addenda §A → unit 1.8)

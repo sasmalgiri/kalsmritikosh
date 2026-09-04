@@ -161,7 +161,45 @@ public struct EntityQualityGate: Sendable {
            Self.leadingStopWords.contains(String(first).lowercased()) {
             return "leading-stopword"
         }
+        // P3-U0 (GO2R): TITLE-SHAPED — a web-page/job-portal title fragment
+        // promoted to a subject ("Auro Laboratories Ltd - Career"). The
+        // trailing navigation token gives it away; witnessed on the owner's
+        // live archive. REJECTED (it is a page title, not a party).
+        if Self.isTitleShaped(surface) { return "title-shaped" }
         return nil
+    }
+
+    /// P3-U0 — trailing navigation/page tokens that mark a TITLE, not a name.
+    /// Checked after " - " / " – " / " | " separators so a person legitimately
+    /// named e.g. "Homer Career" (no separator) passes.
+    nonisolated static let titleNavigationTails: Set<String> = [
+        "career", "careers", "home", "about", "login", "jobs", "profile",
+        "contact", "signin", "sign in", "apply",
+    ]
+    nonisolated static func isTitleShaped(_ surface: String) -> Bool {
+        for sep in [" - ", " – ", " — ", " | "] {
+            if let tail = surface.components(separatedBy: sep).last,
+               surface.contains(sep),
+               titleNavigationTails.contains(tail.trimmingCharacters(in: .whitespaces).lowercased()) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// P3-U0 — PLACE-NAME SURNAME suspect: a "First Last" person whose last
+    /// token is a well-known place ("Bill Delhi") is DEMOTED (suspect flag for
+    /// review + never surfaced unasked), NEVER deleted — real people carry
+    /// place surnames ("Jack London"). Advisory, not a rejection class.
+    nonisolated static let placeSurnames: Set<String> = [
+        "delhi", "mumbai", "london", "paris", "berlin", "tokyo", "sydney",
+        "chicago", "houston", "austin", "dallas", "phoenix", "denver",
+    ]
+    public nonisolated func isPlaceNameSurnameSuspect(_ entity: Entity) -> Bool {
+        guard entity.kind == .person else { return false }
+        let tokens = entity.value.split(whereSeparator: { $0.isWhitespace })
+        guard tokens.count == 2, let last = tokens.last else { return false }
+        return Self.placeSurnames.contains(String(last).lowercased())
     }
 
     /// V3 3d — high-precision automated-sender tokens. WHOLE-TOKEN match only

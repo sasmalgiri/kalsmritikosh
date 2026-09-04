@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 125
+    public static let latestVersion = 126
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -656,7 +656,8 @@ public enum SchemaMigrations {
         (122, v122),
         (123, v123),
         (124, v124),
-        (125, v125)
+        (125, v125),
+        (126, v126)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6442,5 +6443,25 @@ public enum SchemaMigrations {
     // itself — never shown, never FTS-indexed.
     private static let v125: String = """
     ALTER TABLE chunks ADD COLUMN context_template_version INTEGER;
+    """
+
+    // MARK: - v126 — TT (Amendment A1): term salience per document
+    //
+    // The WINNER TERMS of each document: in-doc frequency × archive rarity ×
+    // structural salience × corroboration. Identifiers rank highest by
+    // construction; proper nouns need corroboration (≥2 documents). The topic
+    // tree's labels and seeds read from here; versioned so a scoring change
+    // is an era, refreshed by targeted refresh — never silent drift.
+    private static let v126: String = """
+    CREATE TABLE IF NOT EXISTS document_terms (
+        object_id        TEXT NOT NULL REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+        term             TEXT NOT NULL,
+        score            REAL NOT NULL,
+        is_identifier    INTEGER NOT NULL DEFAULT 0,
+        corroboration    INTEGER NOT NULL DEFAULT 1,
+        producer_version INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (object_id, term)
+    );
+    CREATE INDEX IF NOT EXISTS idx_document_terms_term ON document_terms(term);
     """
 }

@@ -227,6 +227,9 @@ public struct EvidenceVerifier: Verifier {
     /// reranker; an answer whose citations all fail resolution refuses.
     /// Nil → pre-P1 behavior, preserved for existing unit fixtures.
     private let citationResolver: CitationResolver?
+    /// P3-U0 — the identifier-anchor register feed for subject resolution.
+    /// nil (tests/legacy wiring) → no charter resolves → footer omitted.
+    private let anchorsProvider: (@Sendable () async -> [Entity])?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -237,7 +240,8 @@ public struct EvidenceVerifier: Verifier {
         reranker: Reranker? = nil,
         sessionProfile: SessionProfile? = nil,
         answerabilityMinRetrievalScore: Double = 0.20,
-        citationResolver: CitationResolver? = nil
+        citationResolver: CitationResolver? = nil,
+        anchorsProvider: (@Sendable () async -> [Entity])? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -248,6 +252,7 @@ public struct EvidenceVerifier: Verifier {
         self.sessionProfile = sessionProfile
         self.answerabilityMinRetrievalScore = answerabilityMinRetrievalScore
         self.citationResolver = citationResolver
+        self.anchorsProvider = anchorsProvider
     }
 
     public func verify(
@@ -283,6 +288,13 @@ public struct EvidenceVerifier: Verifier {
             report = engine.applySalienceAdvisory(report, meanCitedSalience: mean)
         }
         vclock.mark("claimEval")
+        // P3-U0 — deterministic subject resolution against the anchor register.
+        var resolvedCharter: ResolvedSubjectCharter? = nil
+        if let provider = anchorsProvider {
+            let charter = SubjectResolver.resolve(question: intent.rawQuestion, anchors: await provider())
+            KalsmritikoshLog.brain.info("subject.resolution: \(charter.method.rawValue, privacy: .public) — \(charter.receiptLine, privacy: .public)")
+            resolvedCharter = charter
+        }
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given
         // KnowledgeObject. Objects with no retrieval hit (came in via
@@ -615,6 +627,87 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
+        // P3-U2 — an EXISTENCE or COUNT question answers from the event record
+        // directly: the composer asks the table the question the general path
+        // never asked (the owner watched "Reported:" spam ship while the
+        // granted milestone sat retrieved and unread). Deterministic, cited to
+        // the event rows, charter footer attached, zero model. Runs only when
+        // no slot composed (a named fact field still outranks the shape).
+        if slot == nil {
+            let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
+            let docsSearched = Set(retrieval.chunks.map(\.chunk.objectID)).count
+            let composed: EventAnswerComposition? = {
+                switch shape {
+                case .existence:
+                    return EventAnswerComposer.composeExistence(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
+                case .count:
+                    return EventAnswerComposer.composeCount(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
+                case .timeline:
+                    return EventAnswerComposer.composeTimeline(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
+                default:
+                    return nil
+                }
+            }()
+            if let composed {
+                var body = composed.primaryText
+                if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+                body += "\n\n(\(composed.receiptLine))"
+                let eventCitations = composed.supportingEvents.map { e in
+                    VerifiedAnswer.Citation(objectID: e.sourceObjectID, eventID: e.id, snippet: e.title)
+                }
+                KalsmritikoshLog.brain.info("EventAnswerComposer: \(shape.rawValue, privacy: .public) answered from \(composed.supportingEvents.count, privacy: .public) event(s)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: composed.primaryText,
+                    intentKind: intentKindRaw,
+                    citations: eventCitations,
+                    confidence: composed.isNotFound
+                        ? Confidence(0.85)
+                        : (composed.supportingEvents.first?.confidence ?? effectiveReport.combined),
+                    contradictions: effectiveReport.contradictions,
+                    refused: false,
+                    report: effectiveReport)
+            }
+        }
+
+        // P3-U4 — the QUOTE floor runs BEFORE the claims guard: a verbatim
+        // quoted sentence needs no LLM claim to stand (the words are the
+        // evidence). Genealogy's "when was Edith born" refused here because
+        // zero packs produce claims for prose-only archives — the quote is
+        // exactly the honest answer.
+        // The quote may preempt a CLAIM DUMP (every doc-claim wearing a frame
+        // prefix — "Reported:", "Derived:" — is a restated fact, not an
+        // answer) or an empty claim set; it never preempts real composed
+        // prose (an FM sentence carries no frame prefix).
+        let framePrefixes = ["Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"]
+        let substantiveDocClaims = claims.filter { !$0.supportingObjectIDs.isEmpty }
+        let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
+            framePrefixes.contains { c.statement.hasPrefix($0) }
+        }
+        if slot == nil, claimsAreDumpOnly,
+           let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            var body = SentenceQuoteComposer.render(quoted)
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            body += "\n\n(\(quoted.receiptLine))"
+            KalsmritikoshLog.brain.info("SentenceQuoteComposer: quoted answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
+            return VerifiedAnswer(
+                body: body,
+                answerText: SentenceQuoteComposer.render(quoted),
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: quoted.objectID, chunkID: quoted.chunkID,
+                                                    snippet: String(quoted.sentence.prefix(180)))],
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
+        }
+
         guard !claims.isEmpty,
               effectiveReport.combined >= minimumConfidence,
               citations.count >= minimumCitations
@@ -637,7 +730,8 @@ public struct EvidenceVerifier: Verifier {
         }
 
         let rendered = renderAnswer(intent: intent, findings: findings, retrieval: retrieval,
-                                    report: effectiveReport, plan: plan, slot: slot)
+                                    report: effectiveReport, plan: plan, slot: slot,
+                                    resolvedCharter: resolvedCharter)
         return VerifiedAnswer(
             body: rendered.body,
             answerText: rendered.answerText,
@@ -668,7 +762,8 @@ public struct EvidenceVerifier: Verifier {
         retrieval: RetrievalResult,
         report: ConfidenceReport,
         plan: QueryPlan,
-        slot: SlotAnswerComposition?
+        slot: SlotAnswerComposition?,
+        resolvedCharter: ResolvedSubjectCharter? = nil
     ) -> RenderedAnswer {
         // 0) D-12/D-15 — a slot question renders the ONE composed sentence
         //    (value, explicit conflict, or field-named honest not-found) as
@@ -676,6 +771,12 @@ public struct EvidenceVerifier: Verifier {
         //    fields, subjects, cautions) stays in the detail footer.
         let docClaims = findings.flatMap(\.claims).filter { !$0.supportingObjectIDs.isEmpty }
         let answerText: String
+        // P3-U4 (SR-7's deterministic floor) — when the answer lives in PROSE
+        // no pack extracts, the strongest honest sentence is QUOTED VERBATIM
+        // as the primary: a quote cannot hallucinate. It outranks the claim
+        // dump (which stays in the body); a named fact field (slot) still
+        // outranks the quote. The FM paraphrase, when available, composes
+        // ABOVE this floor in a later unit — this line never goes away.
         if let slot {
             answerText = slot.primaryText
         } else if !docClaims.isEmpty {
@@ -705,7 +806,13 @@ public struct EvidenceVerifier: Verifier {
                 // cut has deterministic MEMBERSHIP, not just ordering.
                 return a.statement < b.statement
             }
+            // W-2 (owner witness) — IDENTICAL rendered statements collapse to
+            // one: post-drain, several documents carry the same fact, and the
+            // same "Reported: …" line printed five times reads as noise, not
+            // corroboration. First occurrence wins (the ranked order stands).
+            var seenStatements = Set<String>()
             answerText = rankedDocClaims
+                .filter { seenStatements.insert($0.statement).inserted }
                 .prefix(5)
                 .map(\.statement)
                 .joined(separator: " ")
@@ -732,10 +839,14 @@ public struct EvidenceVerifier: Verifier {
         if let also = slot?.alsoOnFile {
             footerParts.append(also)
         }
-        let subjectLine = subjectHeading(intent: intent, retrieval: retrieval)
-        if !subjectLine.isEmpty {
-            footerParts.append(subjectLine)
+        // P3-U0 — the subject line is the RESOLUTION's output, never retrieval
+        // bycatch (the owner's live "Bill Delhi" finding). A resolved charter
+        // renders "About: …"; no charter → the line is OMITTED. The old mined
+        // subjects-in-scope heading is dead on this path.
+        if let about = resolvedCharter?.footerText {
+            footerParts.append(about)
         }
+
         // RET-006 — honest sufficiency disclosure: if the question asked for specific
         // fields the retrieved evidence does not contain, say so neutrally rather than
         // leaving a vague gap. Absence is disclosed, never presented as proof.
