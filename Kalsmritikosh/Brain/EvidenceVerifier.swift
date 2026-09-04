@@ -646,6 +646,10 @@ public struct EvidenceVerifier: Verifier {
                     return EventAnswerComposer.composeCount(
                         question: intent.rawQuestion, events: retrieval.events,
                         documentsSearched: docsSearched)
+                case .timeline:
+                    return EventAnswerComposer.composeTimeline(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
                 default:
                     return nil
                 }

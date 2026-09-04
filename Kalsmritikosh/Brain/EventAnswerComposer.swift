@@ -103,6 +103,37 @@ public enum EventAnswerComposer {
             receiptLine: "Counted from the dated event record; every occurrence cited; no model was consulted.")
     }
 
+    // MARK: - timeline (rung 2)
+
+    /// The ordered, dated, cited chain — every line one event, ascending.
+    /// Renders ALL dated events in the retrieval set (the timeline layer has
+    /// already scoped them); empty → nil (abstain, the pipeline runs).
+    public nonisolated static func composeTimeline(
+        question: String,
+        events: [Event],
+        documentsSearched: Int
+    ) -> EventAnswerComposition? {
+        var seen = Set<String>()
+        var distinct: [Event] = []
+        for e in events.sorted(by: {
+            if $0.date != $1.date { return $0.date < $1.date }
+            if $0.title != $1.title { return $0.title < $1.title }
+            return $0.id.uuidString < $1.id.uuidString
+        }) {
+            let key = "\(lowercasedTitle(e.title))|\(Self.dayFormatter.string(from: e.date))"
+            if seen.insert(key).inserted { distinct.append(e) }
+        }
+        guard !distinct.isEmpty else { return nil }
+        let lines = distinct.prefix(12).map { e in
+            "\(Self.dateFormatter.string(from: e.date)) — \(e.title)"
+        }
+        return EventAnswerComposition(
+            primaryText: lines.joined(separator: "\n"),
+            supportingEvents: Array(distinct.prefix(12)),
+            isNotFound: false,
+            receiptLine: "The chain is composed from \(min(distinct.count, 12)) dated event(s), each cited; no model was consulted.")
+    }
+
     // MARK: - shared matching
 
     /// nil = the question names no known event word (the composer abstains —
