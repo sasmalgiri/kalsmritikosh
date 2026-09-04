@@ -627,6 +627,51 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
+        // P3-U2 — an EXISTENCE or COUNT question answers from the event record
+        // directly: the composer asks the table the question the general path
+        // never asked (the owner watched "Reported:" spam ship while the
+        // granted milestone sat retrieved and unread). Deterministic, cited to
+        // the event rows, charter footer attached, zero model. Runs only when
+        // no slot composed (a named fact field still outranks the shape).
+        if slot == nil {
+            let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
+            let docsSearched = Set(retrieval.chunks.map(\.chunk.objectID)).count
+            let composed: EventAnswerComposition? = {
+                switch shape {
+                case .existence:
+                    return EventAnswerComposer.composeExistence(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
+                case .count:
+                    return EventAnswerComposer.composeCount(
+                        question: intent.rawQuestion, events: retrieval.events,
+                        documentsSearched: docsSearched)
+                default:
+                    return nil
+                }
+            }()
+            if let composed {
+                var body = composed.primaryText
+                if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+                body += "\n\n(\(composed.receiptLine))"
+                let eventCitations = composed.supportingEvents.map { e in
+                    VerifiedAnswer.Citation(objectID: e.sourceObjectID, eventID: e.id, snippet: e.title)
+                }
+                KalsmritikoshLog.brain.info("EventAnswerComposer: \(shape.rawValue, privacy: .public) answered from \(composed.supportingEvents.count, privacy: .public) event(s)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: composed.primaryText,
+                    intentKind: intentKindRaw,
+                    citations: eventCitations,
+                    confidence: composed.isNotFound
+                        ? Confidence(0.85)
+                        : (composed.supportingEvents.first?.confidence ?? effectiveReport.combined),
+                    contradictions: effectiveReport.contradictions,
+                    refused: false,
+                    report: effectiveReport)
+            }
+        }
+
         guard !claims.isEmpty,
               effectiveReport.combined >= minimumConfidence,
               citations.count >= minimumCitations
