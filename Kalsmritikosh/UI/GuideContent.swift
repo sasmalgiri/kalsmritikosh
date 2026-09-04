@@ -211,10 +211,18 @@ enum GuideContent {
         ("Speed vs. depth", "gauge.with.dots.needle.67percent", [
             ("Ledger mode", "Fastest: rule-based reading and indexing with almost no AI at import. The default — you can search right away."),
             ("Hot / Warm / Cold", "Reads everything lightly, then spends extra AI effort only on the important (\"hot\") part."),
-            ("Full LLM", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
+            ("Full AI", "Runs the AI over every slice of every document. Deepest, but can take hours on big archives."),
             ("Quality costs time", "Deeper analysis takes longer. The app defaults to fast and fully on-device, and lets you opt into more depth."),
             ("OCR", "Reads text out of scanned pages and photos. Slower; used automatically for scans and images."),
             ("Transcription", "Turns audio and video into text — on demand, per file, fully on-device (Apple Speech, English). Never runs automatically during ingest.")
+        ]),
+        // RC-2 — the 1.2 roadmap, linked from Help (direction, not dates).
+        ("What's next (1.2)", "map", [
+            ("Multilingual archives", "One semantic index that understands your documents' own languages — no translate-to-English shortcut."),
+            ("Deeper story review", "Approve, correct, or reject story beats inline; your review feeds the next reconstruction."),
+            ("More formats", "Legacy Office (DOC/XLS/PPT) and mail stores (MSG/PST)."),
+            ("Better transcription", "On-demand transcription improvements for long audio and video."),
+            ("The promise that doesn't change", "Everything stays on-device. The privacy contract is permanent.")
         ])
     ]
 }

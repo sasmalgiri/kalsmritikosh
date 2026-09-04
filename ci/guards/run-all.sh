@@ -12,6 +12,9 @@ GUARDS=(
   release-configuration.sh
   persona-neutral-truth.sh
   palette-coverage.sh
+  required-reason-apis.sh
+  notices-coverage.sh
+  ui-language-contract.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do

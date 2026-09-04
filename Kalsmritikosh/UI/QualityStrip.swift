@@ -223,7 +223,7 @@ public struct QualityStrip: View {
                     planRow(label: "Experts", value: trace.expertIDs.joined(separator: ", "))
                 }
                 if !trace.llmPurposes.isEmpty {
-                    planRow(label: "LLM calls", value: trace.llmPurposes.joined(separator: ", "))
+                    planRow(label: "LLM calls", value: trace.llmPurposes.joined(separator: ", "))  // jargon-ok: developer diagnostics
                 }
                 if !trace.assumptions.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {

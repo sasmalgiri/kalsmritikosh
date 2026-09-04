@@ -14,6 +14,9 @@ engine everywhere (SHIP_DECISIONS §1, GOV-001/GOV-004).
 
 - `BAAI/bge-small-en-v1.5` (embedder) — pinned revision `5c38ec7c405ec4b44b94cc5a9bb96e735b38267a`
 - `BAAI/bge-reranker-base` (reranker) — pinned revision `2cfc18c9415c912f9d8155881c133215df768a70`
+- The models' tokenizer/vocabulary assets (`vocab.txt`, `tokenizer.json`,
+  `tokenizer_config.json`, `special_tokens_map.json`) ship from the SAME pinned
+  revisions under the same MIT license.
 
 Both Hugging Face repos declare MIT via metadata (no LICENSE file in the model
 repo); the verbatim upstream licence is the FlagEmbedding project's MIT text.

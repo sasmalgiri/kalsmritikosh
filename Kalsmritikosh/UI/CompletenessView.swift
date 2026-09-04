@@ -152,9 +152,13 @@ public struct CompletenessView: View {
                         .foregroundStyle(.secondary)
                 }
                 if let ocr = row.ocrPagesUsed, ocr > 0 {
-                    Text("\(ocr) OCR")
+                    // RC-2 — the honesty marker: scanned pages were recovered
+                    // by OCR, so extraction may be incomplete. Said plainly.
+                    Text("\(ocr) page\(ocr == 1 ? "" : "s") via OCR — extraction may be incomplete")
                         .font(.caption2)
                         .foregroundStyle(.orange)
+                        .help("These pages were scanned images; the text was recovered by optical character recognition and may be incomplete or imperfect.")
+                        .accessibilityLabel("\(ocr) pages read via OCR — extraction may be incomplete")
                 }
                 if let q = row.quotedBytesRemoved, q > 0 {
                     Text("-\(formatBytes(q)) quoted")
