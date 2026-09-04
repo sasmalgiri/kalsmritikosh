@@ -265,7 +265,7 @@ public struct EvidenceVerifier: Verifier {
             return DateInterval(start: s, end: e)
         }()
         let ingestCoverage: Double = await ingestCoverageProvider?() ?? 1.0
-        let report = await engine.evaluate(
+        var report = await engine.evaluate(
             claims: claims,
             droppedUnverifiable: droppedUnverifiable,
             events: retrieval.events,
@@ -274,6 +274,14 @@ public struct EvidenceVerifier: Verifier {
             ingestCoverage: ingestCoverage,
             now: Self.referenceNow()
         )
+        // S2-U1 consumer 3 — the bounded salience advisory (±0.02 max): the
+        // mean structural salience across the retrieved chunks nudges the
+        // combined confidence as a logged tiebreaker, never a driver.
+        if !retrieval.chunks.isEmpty {
+            let mean = retrieval.chunks.map(\.chunk.salience).reduce(0, +)
+                / Double(retrieval.chunks.count)
+            report = engine.applySalienceAdvisory(report, meanCitedSalience: mean)
+        }
         vclock.mark("claimEval")
         // Per-object ranking signal: best (max) hybrid retrieval score
         // across the chunks in `retrieval.chunks` that belong to a given
@@ -551,7 +559,17 @@ public struct EvidenceVerifier: Verifier {
             evaluations: retrieval.claimEvaluations,
             authorityObjectIDs: retrieval.authorityObjectIDs,
             documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count,
-            scoreByObject: scoreByObject)
+            scoreByObject: scoreByObject,
+            salienceByObject: {
+                // S2-U1 — mean structural salience per source object, the
+                // slot ranking's tiebreak grain.
+                var agg: [KnowledgeObject.ID: (t: Double, n: Int)] = [:]
+                for rc in retrieval.chunks {
+                    let cur = agg[rc.chunk.objectID] ?? (0, 0)
+                    agg[rc.chunk.objectID] = (cur.t + rc.chunk.salience, cur.n + 1)
+                }
+                return agg.mapValues { $0.t / Double($0.n) }
+            }())
 
         // D-14 — the slot-question confidence profile: a uniquely-attested
         // value from a structured source with no conflict on the requested

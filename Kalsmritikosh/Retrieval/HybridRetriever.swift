@@ -286,7 +286,13 @@ public actor HybridRetriever: Retriever {
                 let slotChunks = (try? await chunks.chunksForEvidenceBlocks(blocks, limit: 60)) ?? []
                 let existing = Set(collectedChunks.map(\.chunk.id))
                 for ch in slotChunks where !existing.contains(ch.id) {
-                    collectedChunks.append(RetrievedChunk(chunk: ch, score: 0.5, viaLayer: .metadata))
+                    // S2-U1 consumer 4 — the injection score reads structural
+                    // salience: 0.2 + 0.5 × s (= the old flat 0.5 at the 0.6
+                    // neutral prior, so legacy rows and unknown structure are
+                    // byte-identical to before; a table-row fact source now
+                    // enters ahead of a footer one).
+                    collectedChunks.append(RetrievedChunk(
+                        chunk: ch, score: 0.2 + 0.5 * ch.salience, viaLayer: .metadata))
                 }
             }
         }

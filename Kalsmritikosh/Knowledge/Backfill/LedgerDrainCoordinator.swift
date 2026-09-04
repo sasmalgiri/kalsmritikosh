@@ -178,12 +178,17 @@ public final class LedgerDrainCoordinator {
             }
             return ko.sourceFile.deletingPathExtension().lastPathComponent
         }()
+        // S2-U1 (D-17 Step 4) — class-ordered roots: the KO's stored class
+        // puts its own pack first (a certificate meets the patent root before
+        // the employment one); nil class keeps the historical order.
+        let docClass = try? await objects.documentClass(forID: ko.id)
         var derived: [GenericFact] = []
         for block in blocks {
             guard !block.kind.isBoilerplate else { continue }
             let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
             guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
-            derived += extractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id)
+            derived += extractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
+                                         documentClass: docClass ?? nil)
         }
         var merged = DomainFactExtractor.merge(derived)
         // Anchor binding (3c semantics), sourced to this KO.

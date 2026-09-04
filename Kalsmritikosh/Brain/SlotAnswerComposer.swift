@@ -42,6 +42,9 @@ public enum SlotAnswerComposer {
         let objectID: UUID
         let presentation: ClaimPresentation
         let isAuthority: Bool
+        /// S2-U1 — mean structural salience of the source object's retrieved
+        /// chunks; a TIEBREAK after rank (tier + source-class), never before.
+        var salience: Double = SalienceTable.neutral
     }
 
     /// Compose the slot answer for `slotFieldIDs` from the retrieval-surfaced
@@ -52,7 +55,8 @@ public enum SlotAnswerComposer {
         evaluations: [ClaimEvaluation],
         authorityObjectIDs: [UUID],
         documentsSearched: Int,
-        scoreByObject: [KnowledgeObject.ID: Double] = [:]
+        scoreByObject: [KnowledgeObject.ID: Double] = [:],
+        salienceByObject: [KnowledgeObject.ID: Double] = [:]
     ) -> SlotAnswerComposition? {
         guard let requestedField = slotFieldIDs.first else { return nil }
         let label = SlotFieldResolver.humanLabel(forFieldID: requestedField)
@@ -78,7 +82,8 @@ public enum SlotAnswerComposer {
                 print("ANCHORPROBE site=composer reqField=\(requestedField) field=\(f.field) n=\(eval.evidence.count) first=\(firstRaw.map { String($0.uuidString.prefix(8)) } ?? "nil") criterion=\(String(obj.uuidString.prefix(8))) \(firstRaw == obj ? "MATCH" : "DIFFER")")
             }
             return Candidate(fact: f, objectID: obj, presentation: presentation,
-                             isAuthority: authorityObjectIDs.contains(obj))
+                             isAuthority: authorityObjectIDs.contains(obj),
+                             salience: salienceByObject[obj] ?? SalienceTable.neutral)
         }
 
         var requested = surfaceable.filter { $0.fact.field == requestedField }
@@ -212,6 +217,10 @@ public enum SlotAnswerComposer {
     nonisolated static func strongerFirst(_ a: Candidate, _ b: Candidate) -> Bool {
         let ra = rank(a), rb = rank(b)
         if ra != rb { return ra > rb }
+        // S2-U1 consumer 2 — structural salience breaks rank ties: a value
+        // from a table row beats the same value restated in a signature
+        // block. Strictly AFTER tier + source-class (both live in rank).
+        if a.salience != b.salience { return a.salience > b.salience }
         if a.fact.field != b.fact.field { return a.fact.field > b.fact.field }
         return a.fact.value < b.fact.value
     }

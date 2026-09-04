@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import os
 
 public struct ConfidenceReport: Codable, Sendable, Hashable {
     public let combined: Confidence
@@ -99,6 +100,35 @@ public protocol ConfidenceEngine: Sendable {
 }
 
 extension ConfidenceEngine {
+    /// S2-U1 consumer 3 — the structural-salience ADVISORY component. The
+    /// combined confidence moves by at most ±0.02 (0.05 × the mean cited
+    /// salience's deviation from the 0.6 neutral prior): a tiebreaker, never
+    /// a driver. Logged with its exact delta so EvalKit can assert the bound.
+    /// nil / empty salience input returns the report untouched.
+    public func applySalienceAdvisory(
+        _ report: ConfidenceReport,
+        meanCitedSalience: Double?
+    ) -> ConfidenceReport {
+        guard let s = meanCitedSalience else { return report }
+        let delta = 0.05 * (min(max(s, 0), 1) - SalienceTable.neutral)
+        guard delta != 0 else { return report }
+        let adjusted = min(max(report.combined.value + delta, 0), 1)
+        KalsmritikoshLog.brain.info("confidence.salienceAdvisory: mean=\(s, format: .fixed(precision: 3)) delta=\(delta, format: .fixed(precision: 4))")
+        return ConfidenceReport(
+            combined: Confidence(adjusted),
+            sourceCount: report.sourceCount,
+            distinctSourceObjectIDs: report.distinctSourceObjectIDs,
+            agreementScore: report.agreementScore,
+            contradictions: report.contradictions,
+            droppedUnverifiable: report.droppedUnverifiable,
+            newestEvidenceDate: report.newestEvidenceDate,
+            freshness: report.freshness,
+            coverage: report.coverage,
+            coverageGaps: report.coverageGaps,
+            ingestCoverage: report.ingestCoverage
+        )
+    }
+
     /// Convenience for callers that don't yet compute T10 inputs.
     public func evaluate(
         claims: [ExpertFindings.Claim],
