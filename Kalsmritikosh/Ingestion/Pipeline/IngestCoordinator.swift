@@ -1226,7 +1226,11 @@ public actor IngestCoordinator {
             let admit = !isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted
             // USF-002.1 — stamp the EXACT source version so per-version FTS coverage is provable and
             // a parent's indexing readiness can never count a child attachment's chunks.
-            return c.withAdmitEmbedding(admit).withSourceVersion(sourceVersionID)
+            // S2-U1 — stamp structural salience from the class-aware weight
+            // table (the class is known here; the chunker is class-blind).
+            return c.withAdmitEmbedding(admit)
+                .withSourceVersion(sourceVersionID)
+                .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
         }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the

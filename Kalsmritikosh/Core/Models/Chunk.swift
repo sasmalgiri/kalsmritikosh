@@ -57,6 +57,12 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// not a source authority). New production chunks carry it so indexing readiness can be
     /// reconstructed per exact version; nil for legacy chunks whose ownership was unprovable.
     public let sourceVersionID: UUID?
+    /// S2-U1 (D-17 Part B) — structural salience [0,1]: how strongly this
+    /// chunk's position says "this is what the document is about" (subject
+    /// line > quoted tail). Computed from SalienceTable at ingest; 0.6 is the
+    /// neutral prior (also the v124 column default for legacy rows).
+    /// Presentation-and-ranking only — never drops anything.
+    public let salience: Double
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -74,7 +80,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         admitEmbedding: Bool = true,
         evidenceBlockID: UUID? = nil,
         blockKind: String? = nil,
-        sourceVersionID: UUID? = nil
+        sourceVersionID: UUID? = nil,
+        salience: Double = SalienceTable.neutral
     ) {
         self.id = id
         self.objectID = objectID
@@ -89,6 +96,17 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.evidenceBlockID = evidenceBlockID
         self.blockKind = blockKind
         self.sourceVersionID = sourceVersionID
+        self.salience = salience
+    }
+
+    /// Returns a copy with the structural salience set (S2-U1). Used by
+    /// IngestCoordinator once the document class is known.
+    public nonisolated func withSalience(_ s: Double) -> Chunk {
+        Chunk(id: id, objectID: objectID, ordinal: ordinal, text: text, characterRange: characterRange,
+              pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
+              contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
+              evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: sourceVersionID,
+              salience: s)
     }
 
     /// Returns a copy with the exact source-version id set (USF-002.1). Used by IngestCoordinator
@@ -97,7 +115,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         Chunk(id: id, objectID: objectID, ordinal: ordinal, text: text, characterRange: characterRange,
               pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
               contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
-              evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: versionID)
+              evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: versionID,
+              salience: salience)
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
@@ -117,7 +136,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             admitEmbedding: admitEmbedding,
             evidenceBlockID: evidenceBlockID,
             blockKind: blockKind,
-            sourceVersionID: sourceVersionID
+            sourceVersionID: sourceVersionID,
+            salience: salience
         )
     }
 
@@ -136,7 +156,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             admitEmbedding: admit,
             evidenceBlockID: evidenceBlockID,
             blockKind: blockKind,
-            sourceVersionID: sourceVersionID
+            sourceVersionID: sourceVersionID,
+            salience: salience
         )
     }
 
@@ -144,7 +165,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         case id, objectID, ordinal, text
         case characterRangeLower, characterRangeUpper
         case pageNumber, createdAt, contextPrefix, contextPrefixSource, admitEmbedding
-        case evidenceBlockID, blockKind, sourceVersionID
+        case evidenceBlockID, blockKind, sourceVersionID, salience
     }
 
     public init(from decoder: Decoder) throws {
@@ -164,6 +185,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.evidenceBlockID = try c.decodeIfPresent(UUID.self, forKey: .evidenceBlockID)
         self.blockKind = try c.decodeIfPresent(String.self, forKey: .blockKind)
         self.sourceVersionID = try c.decodeIfPresent(UUID.self, forKey: .sourceVersionID)
+        self.salience = try c.decodeIfPresent(Double.self, forKey: .salience) ?? SalienceTable.neutral
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -182,5 +204,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encodeIfPresent(evidenceBlockID, forKey: .evidenceBlockID)
         try c.encodeIfPresent(blockKind, forKey: .blockKind)
         try c.encodeIfPresent(sourceVersionID, forKey: .sourceVersionID)
+        try c.encode(salience, forKey: .salience)
     }
 }
