@@ -676,6 +676,38 @@ public struct EvidenceVerifier: Verifier {
             }
         }
 
+        // P3-U4 — the QUOTE floor runs BEFORE the claims guard: a verbatim
+        // quoted sentence needs no LLM claim to stand (the words are the
+        // evidence). Genealogy's "when was Edith born" refused here because
+        // zero packs produce claims for prose-only archives — the quote is
+        // exactly the honest answer.
+        // The quote may preempt a CLAIM DUMP (every doc-claim wearing a frame
+        // prefix — "Reported:", "Derived:" — is a restated fact, not an
+        // answer) or an empty claim set; it never preempts real composed
+        // prose (an FM sentence carries no frame prefix).
+        let framePrefixes = ["Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"]
+        let substantiveDocClaims = claims.filter { !$0.supportingObjectIDs.isEmpty }
+        let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
+            framePrefixes.contains { c.statement.hasPrefix($0) }
+        }
+        if slot == nil, claimsAreDumpOnly,
+           let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            var body = SentenceQuoteComposer.render(quoted)
+            if let about = resolvedCharter?.footerText { body += "\n\n" + about }
+            body += "\n\n(\(quoted.receiptLine))"
+            KalsmritikoshLog.brain.info("SentenceQuoteComposer: quoted answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
+            return VerifiedAnswer(
+                body: body,
+                answerText: SentenceQuoteComposer.render(quoted),
+                intentKind: intentKindRaw,
+                citations: [VerifiedAnswer.Citation(objectID: quoted.objectID, chunkID: quoted.chunkID,
+                                                    snippet: String(quoted.sentence.prefix(180)))],
+                confidence: Confidence(0.8),
+                contradictions: effectiveReport.contradictions,
+                refused: false,
+                report: effectiveReport)
+        }
+
         guard !claims.isEmpty,
               effectiveReport.combined >= minimumConfidence,
               citations.count >= minimumCitations
@@ -739,6 +771,12 @@ public struct EvidenceVerifier: Verifier {
         //    fields, subjects, cautions) stays in the detail footer.
         let docClaims = findings.flatMap(\.claims).filter { !$0.supportingObjectIDs.isEmpty }
         let answerText: String
+        // P3-U4 (SR-7's deterministic floor) — when the answer lives in PROSE
+        // no pack extracts, the strongest honest sentence is QUOTED VERBATIM
+        // as the primary: a quote cannot hallucinate. It outranks the claim
+        // dump (which stays in the body); a named fact field (slot) still
+        // outranks the quote. The FM paraphrase, when available, composes
+        // ABOVE this floor in a later unit — this line never goes away.
         if let slot {
             answerText = slot.primaryText
         } else if !docClaims.isEmpty {
@@ -808,6 +846,7 @@ public struct EvidenceVerifier: Verifier {
         if let about = resolvedCharter?.footerText {
             footerParts.append(about)
         }
+
         // RET-006 — honest sufficiency disclosure: if the question asked for specific
         // fields the retrieved evidence does not contain, say so neutrally rather than
         // leaving a vague gap. Absence is disclosed, never presented as proof.
