@@ -3811,6 +3811,22 @@ public final class AppState {
         return saved
     }
 
+    /// P4-U2 (B-4) — budgeted, advisory LEADS for a story's open gaps: each
+    /// gap's expected-evidence targets run as archive searches; candidate
+    /// documents surface for review. A lead never closes a gap and never
+    /// touches the outline; a gap with no hits stays honestly open.
+    public func storyGapLeads(for gaps: [HistoryGap]) async -> [GapLead] {
+        guard let chunks else { return [] }
+        let result = await GapLeadFinder().findLeads(for: gaps) { [weak chunks] query in
+            let hits = (try? await chunks?.searchFTS(query, limit: 10)) ?? []
+            return hits.map(\.objectID)
+        }
+        if result.gapsDeferred > 0 {
+            KalsmritikoshLog.app.info("story gap leads: \(result.gapsTried) gap(s) tried, \(result.gapsDeferred) deferred to the next pass")
+        }
+        return result.leads
+    }
+
     /// PI.3 — resume runs left mid-flight by a crash/quit/power-loss. Re-drives
     /// ONLY each interrupted run's not-done files (content-hash idempotent, so a
     /// file that actually finished is a cheap no-op), then finalizes the run.
