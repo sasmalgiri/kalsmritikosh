@@ -48,8 +48,10 @@ public enum GeneralKnowledgeLane {
     }
 
     /// The rendered block: banner FIRST, always — the law a test pins.
+    /// RS-U6 — the model stamp closes the block: this text is 100%
+    /// AI-authored, so its receipt names the author.
     public nonisolated static func render(_ text: String) -> String {
-        banner + "\n\n" + text
+        banner + "\n\n" + text + "\n\n(" + LegalNotice.modelStamp() + ")"
     }
 
     /// One bounded model call, zero retrieval. nil = FM unavailable or the

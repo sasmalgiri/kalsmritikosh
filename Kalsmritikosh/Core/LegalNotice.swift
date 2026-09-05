@@ -19,6 +19,16 @@ public nonisolated enum LegalNotice {
     public static let answerFooter =
         "AI-assisted answer — it can be incomplete or wrong. Verify every fact against the cited sources before you rely on it. Not legal, financial, or professional advice."
 
+    /// RS-U6 (owner directive, rides the release train) — every AI-authored
+    /// sentence's receipt names WHO wrote it: provider, framework, and the OS
+    /// build (Apple's on-device model versions with the OS, so the build IS
+    /// the model version). Receipt-only; deterministic text never carries it.
+    public static func modelStamp(providerID: String = "Apple on-device AI") -> String {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        let build = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+        return "AI text by \(providerID) (FoundationModels, \(build))"
+    }
+
     /// One-liner for the Ask entry / empty state.
     public static let askEntry =
         "Answers are reconstructed from your documents and can contain mistakes — always check them against the cited sources."

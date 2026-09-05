@@ -37,6 +37,10 @@ struct GeneralKnowledgeLaneTests {
         let rendered = GeneralKnowledgeLane.render("Paris is the capital of France.")
         #expect(rendered.hasPrefix(GeneralKnowledgeLane.banner),
                 "an unsourced sentence may never appear above its banner")
+        // RS-U6 — the block closes with the model stamp: author named, always.
+        #expect(rendered.contains("AI text by"), "the AI-authored block names its author")
+        #expect(LegalNotice.modelStamp().contains("FoundationModels"))
+        #expect(LegalNotice.modelStamp().contains("macOS"))
         #expect(GeneralKnowledgeLane.banner.contains("Not from your documents"))
         #expect(GeneralKnowledgeLane.banner.contains("may be wrong") ||
                 GeneralKnowledgeLane.banner.contains("It may be wrong"))

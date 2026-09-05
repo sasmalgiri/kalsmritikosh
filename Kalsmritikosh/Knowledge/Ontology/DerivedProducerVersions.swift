@@ -28,7 +28,10 @@ public nonisolated enum DerivedProducerVersions {
     ///        contains the anchor link a v1 fact lacks, so the stored
     ///        representation changed and the era advances. The V5 drain rewrites
     ///        v1 rows to bind their subjects.
-    public static let facts = 2
+    /// v3 — W-4 (owner witness): the patent pack's prefix law + canon
+    /// validity gate; the drain re-extracts every document's facts and the
+    /// register re-mints its anchors. No re-ingest.
+    public static let facts = 3
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor

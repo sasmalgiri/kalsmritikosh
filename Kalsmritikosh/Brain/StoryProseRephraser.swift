@@ -74,7 +74,9 @@ public enum StoryProseRephraser {
             logger.info("story.prose: rephrase REJECTED by the grounding gate — deterministic prose kept")
             return nil
         }
-        return trimmed
+        // RS-U6 — the stamp rides OUTSIDE the gated candidate (receipt, not
+        // content): the prose passed the gate; the receipt names its author.
+        return trimmed + "\n\n(" + LegalNotice.modelStamp() + ")"
     }
 
     // MARK: - token helpers (pure)

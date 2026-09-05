@@ -44,8 +44,15 @@ public enum PatentDomainPack {
     /// the label lives only as a per-field display constant at render time. This
     /// is the two-layer split: the ledger holds "700321", the surface says
     /// "Patent No. 700321", composed from a constant — never fused into storage.
+    /// W-4 (owner witness, 2026-09-06): two laws hardened after live junk.
+    ///   - "patent(?!\s+application)" — "Patent Application-N" is an
+    ///     APPLICATION reference; the patent label may never claim it.
+    ///   - the country-code prefix is case-SENSITIVE and ATTACHED
+    ///     ((?-i:[A-Z]{2})? with no space): under case-insensitive matching,
+    ///     the tail of "granted 202331019665" minted the junk canon
+    ///     "ed202331019665" — two prose letters posing as a country code.
     nonisolated static let numberCapturePattern =
-        #"(?<label>patent|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>[A-Z]{0,2}\s?\d[\d,]{4,}[A-Z0-9]*)"#
+        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}[A-Z0-9]*)"#
 
     /// The fields this pack can emit under producer_version=1 — the authority
     /// the completeness invariant (SlotAnswerComposer display contracts) checks
@@ -175,9 +182,21 @@ public enum PatentDomainPack {
     /// removed. "US 1,234,567 B2" → "US1234567B2"; " 700321 " → "700321". The
     /// stored value is this atom; the label is a display constant, never stored.
     nonisolated static func normalizeIdentifier(_ raw: String) -> String {
-        raw.trimmingCharacters(in: .whitespaces)
+        let atom = raw.trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        // W-4 validity gate: an identifier atom starts with a digit, or with
+        // a REAL country code — exactly two UPPERCASE letters attached to a
+        // digit. Anything else ("ed202331019665") is prose shrapnel: empty
+        // out, and the caller's empty-guard drops it.
+        if let first = atom.first, first.isNumber { return atom }
+        let prefix = atom.prefix(2)
+        if prefix.count == 2, prefix.allSatisfy({ $0.isLetter && $0.isUppercase }),
+           atom.dropFirst(2).first?.isNumber == true {
+            return atom
+        }
+        return ""
     }
 
     /// V2 (C-7) — normalize a labeled date's text to precision-aware ISO:
