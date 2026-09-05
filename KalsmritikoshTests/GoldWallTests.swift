@@ -31,7 +31,6 @@ struct GoldWallTests {
         let never: [String]
         /// The truth lives in PROSE no extraction pack carries — the row is
         /// a recorded RED until P3-U4's grounded composition answers it.
-        var proseFactOwnedByP3U4: Bool = false
     }
 
     static let wall: [Row] = [
@@ -91,21 +90,14 @@ struct GoldWallTests {
             print("GOLD-WALL \(archive): '\(row.question)' → refused=\(a.refused) text=\(String(text.prefix(160)))")
 
             if let truth = row.truth {
-                if row.proseFactOwnedByP3U4 {
-                    // The truth lives in prose no pack extracts — the RECORDED
-                    // RED that P3-U4's grounded composition flips (the V0
-                    // discipline: green today, FAILS the day the fix lands).
-                    withKnownIssue("P3-U4: prose facts need grounded AI composition — no extraction pack carries this field") {
-                        #expect(!a.refused && truth.allSatisfy { text.contains($0) },
-                                "\(archive): '\(row.question)' — prose truth not yet composed")
-                    }
-                } else {
-                    // FALSE-NOT-FOUND = 0 (Sev-1): an answerable row never refuses.
-                    #expect(!a.refused, "\(archive): '\(row.question)' was REFUSED — false not-found (Sev-1)")
-                    for t in truth {
-                        #expect(text.contains(t),
-                                "\(archive): '\(row.question)' missing true value '\(t)' — got: \(String(text.prefix(200)))")
-                    }
+                // FALSE-NOT-FOUND = 0 (Sev-1): an answerable row never refuses.
+                // (The P3-U4 withKnownIssue branch is GONE: the quote floor
+                // flipped all three prose rows, so every row now faces the
+                // hard assertions — no known-issue shelter remains.)
+                #expect(!a.refused, "\(archive): '\(row.question)' was REFUSED — false not-found (Sev-1)")
+                for t in truth {
+                    #expect(text.contains(t),
+                            "\(archive): '\(row.question)' missing true value '\(t)' — got: \(String(text.prefix(200)))")
                 }
             } else {
                 // REFUSAL/ABSTENTION = 1.0: no asserted value for an absent field.

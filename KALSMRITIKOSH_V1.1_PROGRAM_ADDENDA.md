@@ -111,6 +111,12 @@ questions, his screenshots). Findings, every one scheduled by GO 2 REVISED: the 
 leak into a patent ask (P3-U0 subject resolution + surfacing gate), the "Bill Delhi"
 scope bycatch (P3-U0), comma/quote-corrupted person entities from email display-name
 splitting (U0-b, own unit, producer bump + targeted refresh), and the fact-spam answer
+> **[SUPERSEDED 2026-09-05 — SHIPPED]** P3-U0..U4, TT, and VT landed in PR #128
+> (squash-merged; the unit commits live on branch v11-go2-p3: P3-U1 bb2a32a,
+> P3-U2 3941916/a068e23 — rung 2 flipped, P3-U3 89dfdad gold wall, P3-U4
+> 415eb4c/e48ee45 quote floor + compose twin, TT fd15085, VT cc631d8/1e1db96).
+> The text below is kept as written for the record.
+
 shapes (P3-U1/U2 — the "Reported:" fallback dies; existence composer first). The
 "ledger is true" claim carries this enumerated caveat until U0-b lands. Rung-2's
 wrapper note states its true condition (routing+composer, P3-U2 — corrected at 2831a7e).
