@@ -16,6 +16,7 @@ import SwiftUI
 public struct LibraryView: View {
     @Environment(AppState.self) private var appState
     @State private var topics: [TopicMatch] = []
+    @State private var bigPicture: [TopicRetriever.BigPictureNode] = []
     @State private var loading = true
     @State private var lastError: String?
     /// HISTORY follow-on — when the user taps a topic, this opens
@@ -104,6 +105,34 @@ public struct LibraryView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
+                    // TT (Amendment A1) — "See the big picture": the topic
+                    // tree's level-1 nodes, deterministically labelled
+                    // (the anchor's display name where one anchors the
+                    // subtree, else its corroborated winner terms).
+                    if !bigPicture.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("See the big picture", systemImage: "square.grid.3x1.below.line.grid.1x2")
+                                .font(.headline)
+                            Text("The broad threads running through your archive — each one groups several of the topics below.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            ForEach(bigPicture) { node in
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(node.title).font(.callout.weight(.semibold))
+                                    Spacer()
+                                    Text("\(node.memberCount) connected")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 4)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("Big-picture thread: \(node.title), \(node.memberCount) connected people and things")
+                            }
+                        }
+                        .padding(12)
+                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                        Divider().padding(.vertical, 4)
+                    }
                     ForEach(topics, id: \.communityID) { topic in
                         topicRow(topic)
                     }
@@ -232,5 +261,6 @@ public struct LibraryView: View {
             return
         }
         topics = await retriever.listTopics(limit: 200)
+        bigPicture = await retriever.listBigPicture()
     }
 }

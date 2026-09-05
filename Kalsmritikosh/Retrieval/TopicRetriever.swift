@@ -119,6 +119,36 @@ public actor TopicRetriever {
         )
     }
 
+    /// TT (Amendment A1) — the BIG-PICTURE nodes: the topic tree's level-1
+    /// parents with their deterministic labels (anchor display names where
+    /// present, else corroborated winner terms). String-keyed ("L1-…"), so
+    /// they get their own small shape rather than borrowing TopicMatch.
+    public struct BigPictureNode: Sendable, Identifiable {
+        public let id: String
+        public let title: String
+        public let memberCount: Int
+    }
+
+    public func listBigPicture(limit: Int = 20) async -> [BigPictureNode] {
+        let rows: [SQLRow]
+        do {
+            rows = try await database.query("""
+            SELECT community_id, title, member_count
+            FROM community_summaries
+            WHERE level = 1
+            ORDER BY member_count DESC, community_id
+            LIMIT ?;
+            """, [.integer(Int64(limit))])
+        } catch {
+            return []
+        }
+        return rows.compactMap { row in
+            guard let id = row.string(0), let title = row.string(1), let count = row.int(2)
+            else { return nil }
+            return BigPictureNode(id: id, title: title, memberCount: Int(count))
+        }
+    }
+
     /// List recent topics ordered by member count. Used by the
     /// future LibraryView (Phase E.2) to render a topic tree.
     public func listTopics(limit: Int = 50) async -> [TopicMatch] {

@@ -230,6 +230,12 @@ public struct EvidenceVerifier: Verifier {
     /// P3-U0 — the identifier-anchor register feed for subject resolution.
     /// nil (tests/legacy wiring) → no charter resolves → footer omitted.
     private let anchorsProvider: (@Sendable () async -> [Entity])?
+    /// P5 residual (the live hearings-count gap) — a SHAPE-AWARE event fetch:
+    /// existence/count/timeline questions ask the event table directly by the
+    /// question's own vocabulary when retrieval surfaced no matching events
+    /// (factualLookup retrieval ranks chunks, not milestones, so "how many
+    /// hearings" never met the hearing rows). nil → retrieval-only (legacy).
+    private let eventsByTitleTokens: (@Sendable ([String]) async -> [Event])?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -241,7 +247,8 @@ public struct EvidenceVerifier: Verifier {
         sessionProfile: SessionProfile? = nil,
         answerabilityMinRetrievalScore: Double = 0.20,
         citationResolver: CitationResolver? = nil,
-        anchorsProvider: (@Sendable () async -> [Entity])? = nil
+        anchorsProvider: (@Sendable () async -> [Entity])? = nil,
+        eventsByTitleTokens: (@Sendable ([String]) async -> [Event])? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -253,6 +260,7 @@ public struct EvidenceVerifier: Verifier {
         self.answerabilityMinRetrievalScore = answerabilityMinRetrievalScore
         self.citationResolver = citationResolver
         self.anchorsProvider = anchorsProvider
+        self.eventsByTitleTokens = eventsByTitleTokens
     }
 
     public func verify(
@@ -636,19 +644,40 @@ public struct EvidenceVerifier: Verifier {
         if slot == nil {
             let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
             let docsSearched = Set(retrieval.chunks.map(\.chunk.objectID)).count
+            // P5 residual — the SHAPE-AWARE event fetch: when an event-shaped
+            // question's vocabulary matches nothing in the retrieval set (the
+            // live hearings-count gap: chunk-ranked retrieval never carried
+            // the milestone rows), ask the event table directly by those
+            // terms. Deterministic, bounded, cited like any event answer.
+            var shapeEvents = retrieval.events
+            if [.existence, .count, .timeline].contains(shape),
+               let fetch = eventsByTitleTokens {
+                let wanted = EventAnswerComposer.vocabularyTerms(in: intent.rawQuestion)
+                let alreadyMatched = EventAnswerComposer.matchEvents(
+                    question: intent.rawQuestion, events: shapeEvents) ?? []
+                if !wanted.isEmpty, alreadyMatched.isEmpty {
+                    let fetched = await fetch(wanted)
+                    let known = Set(shapeEvents.map(\.id))
+                    let fresh = fetched.filter { !known.contains($0.id) }
+                    if !fresh.isEmpty {
+                        shapeEvents += fresh
+                        KalsmritikoshLog.brain.info("EventAnswerComposer: shape-aware fetch added \(fresh.count, privacy: .public) event(s) for \(shape.rawValue, privacy: .public)")
+                    }
+                }
+            }
             let composed: EventAnswerComposition? = {
                 switch shape {
                 case .existence:
                     return EventAnswerComposer.composeExistence(
-                        question: intent.rawQuestion, events: retrieval.events,
+                        question: intent.rawQuestion, events: shapeEvents,
                         documentsSearched: docsSearched)
                 case .count:
                     return EventAnswerComposer.composeCount(
-                        question: intent.rawQuestion, events: retrieval.events,
+                        question: intent.rawQuestion, events: shapeEvents,
                         documentsSearched: docsSearched)
                 case .timeline:
                     return EventAnswerComposer.composeTimeline(
-                        question: intent.rawQuestion, events: retrieval.events,
+                        question: intent.rawQuestion, events: shapeEvents,
                         documentsSearched: docsSearched)
                 default:
                     return nil
@@ -705,6 +734,26 @@ public struct EvidenceVerifier: Verifier {
                 confidence: Confidence(0.8),
                 contradictions: effectiveReport.contradictions,
                 refused: false,
+                report: effectiveReport)
+        }
+
+        // P5 residual — THE "Reported:" KILL: a question that asks for one
+        // specific value, whose only material is frame-prefixed restatements
+        // (no slot, no quotable sentence), has NO answer in that material.
+        // The honest not-found outranks the dump — the fact-spam class the
+        // owner witnessed can never render again for a value question.
+        if slot == nil, claimsAreDumpOnly, !substantiveDocClaims.isEmpty,
+           QuestionShapeRouter.seeksSpecificValue(intent.rawQuestion) {
+            KalsmritikoshLog.brain.info("EvidenceVerifier: value question with dump-only claims — honest not-found outranks the dump")
+            return VerifiedAnswer(
+                body: "Kalsmritikosh can't ground an answer to that yet.",
+                answerText: nil,
+                intentKind: intentKindRaw,
+                citations: [],
+                confidence: effectiveReport.combined,
+                contradictions: effectiveReport.contradictions,
+                refused: true,
+                refusalReason: "The question asks for a specific value that no extracted field or quotable sentence carries.",
                 report: effectiveReport)
         }
 
