@@ -15,6 +15,7 @@ GUARDS=(
   required-reason-apis.sh
   notices-coverage.sh
   ui-language-contract.sh
+  app-claims-coverage.sh
 )
 rc=0
 for g in "${GUARDS[@]}"; do
