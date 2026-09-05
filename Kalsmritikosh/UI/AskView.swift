@@ -30,6 +30,10 @@ public struct AskView: View {
     /// can render the quality strip directly (instead of folding it
     /// into a plain-text body line).
     @State private var verifiedAnswers: [UUID: VerifiedAnswer] = [:]
+    /// GK — the general-knowledge blocks, keyed by the archive answer's turn.
+    /// UI STATE ONLY, deliberately: never a persisted turn (the brain may read
+    /// prior turns as context), never in the ledger, never exportable.
+    @State private var generalKnowledgeBlocks: [UUID: String] = [:]
     /// Phase H — currently-open investigation sheet. Holds the
     /// in-flight Investigation as the runner streams updates. nil
     /// when no sheet is showing.
@@ -589,6 +593,25 @@ public struct AskView: View {
                             .padding(.horizontal, 10)
                             .padding(.bottom, 6)
                     }
+                    // GK — the SECOND LANE: banner-marked, visually separate,
+                    // below the archive lane's receipt. Never shares a block
+                    // with grounded text; never persisted; never exported.
+                    if let gk = generalKnowledgeBlocks[turn.id] {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Not from your documents", systemImage: "globe")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.orange)
+                            Text(gk)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                        .padding(12)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.orange.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [5])))
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("General knowledge, not from your documents: \(gk)")
+                    }
                 }
                 .frame(maxWidth: 620, alignment: .leading)
                 .contextMenu {
@@ -831,6 +854,22 @@ public struct AskView: View {
             // Ledger-AI v28 — persist the answer against a fresh corpus
             // snapshot (closed-corpus contract). Best-effort.
             await appState.recordAnswer(question: q, answer: answer)
+
+            // GK — the second lane: only AFTER the archive lane finished and
+            // REFUSED, only when the setting is on. One model call, zero
+            // retrieval; FM unavailable → the honest note. The block is UI
+            // state keyed to this turn — nothing here is persisted, recorded,
+            // cited, or exportable.
+            if FeatureFlags.generalKnowledgeLaneValue(),
+               GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason) {
+                if let caps = appState.capabilities {
+                    let gkText = await GeneralKnowledgeLane.answer(question: q, capabilities: caps)
+                    await MainActor.run {
+                        self.generalKnowledgeBlocks[placeholderID] = gkText.map(GeneralKnowledgeLane.render)
+                            ?? GeneralKnowledgeLane.unavailableNote
+                    }
+                }
+            }
 
             if userOrdinal == 0 {
                 let head = String(q.prefix(60))
