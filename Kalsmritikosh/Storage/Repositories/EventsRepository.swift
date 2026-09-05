@@ -102,6 +102,23 @@ public actor EventsRepository {
         return results
     }
 
+    /// P5 residual — the shape-aware fetch's door: events whose title carries
+    /// any of the question's vocabulary terms (whole-word, case-insensitive
+    /// via LIKE bounds), rejected rows excluded, total-ordered. Bounded.
+    public func findByTitleTokens(_ tokens: [String], limit: Int = 200) async throws -> [Event] {
+        guard !tokens.isEmpty else { return [] }
+        let conditions = tokens.map { _ in "lower(title) LIKE ?" }.joined(separator: " OR ")
+        let params: [SQLValue] = tokens.map { .text("%\($0.lowercased())%") } + [.integer(Int64(limit))]
+        let rows = try await database.query("""
+        SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision
+        FROM events
+        WHERE review_status IS NULL AND (\(conditions))
+        ORDER BY date DESC, id
+        LIMIT ?;
+        """, params)
+        return rows.compactMap(decode)
+    }
+
     public func recent(limit: Int = 200) async throws -> [Event] {
         let rows = try await database.query("""
         SELECT id, kind, date, end_date, title, summary, source_object_id, confidence, date_confidence, quality_tier, date_precision, status

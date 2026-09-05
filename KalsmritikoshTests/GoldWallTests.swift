@@ -113,6 +113,11 @@ struct GoldWallTests {
                 #expect(!text.contains(bad),
                         "\(archive): '\(row.question)' asserted the tripwire '\(bad)'")
             }
+            // P5 residual — the GLOBAL "Reported:" ban: the fact-spam frame
+            // may never render in ANY wall answer. A value gets the value, a
+            // quote, or the honest not-found — never a dump of restatements.
+            #expect(!text.contains("Reported:"),
+                    "\(archive): '\(row.question)' rendered the banned 'Reported:' frame")
         }
     }
 }

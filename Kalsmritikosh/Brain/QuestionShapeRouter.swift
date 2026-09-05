@@ -118,6 +118,17 @@ public enum QuestionShapeRouter {
                            receiptLine: "Question shape: \(plain(safest)) (checkers disagreed — the safer reading was taken).")
     }
 
+    /// P5 residual — does the question ask for ONE specific value? Such a
+    /// question is never answered by a dump of restated facts: it gets the
+    /// value, a quote, or the honest not-found. Data, not code.
+    nonisolated static let valueOpeners: [String] = [
+        "what is the", "what was the", "what's the", "how much", "how many",
+    ]
+    public nonisolated static func seeksSpecificValue(_ question: String) -> Bool {
+        let q = normalized(question)
+        return valueOpeners.contains { q.hasPrefix($0) }
+    }
+
     /// The fixed Q0 refusal — one sentence, plain language, zero model.
     public nonisolated static let outOfScopeRefusal =
         "That looks like general knowledge, not a question about your archive. Kalsmritikosh answers only from your ingested documents — ask about the people, dates, amounts, or events in them."

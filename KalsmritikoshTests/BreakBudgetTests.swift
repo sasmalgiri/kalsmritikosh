@@ -74,6 +74,20 @@ struct BreakBudgetTests {
         }
     }
 
+    // MARK: - P5 residual — the value-question detector + vocabulary door
+
+    @Test("Value questions are detected as data; event vocabulary extracts deterministically")
+    func valueDetectorAndVocabulary() {
+        #expect(QuestionShapeRouter.seeksSpecificValue("what is the signal contractor's tender price"))
+        #expect(QuestionShapeRouter.seeksSpecificValue("how many hearings were there"))
+        #expect(!QuestionShapeRouter.seeksSpecificValue("who is Shirshendu Sasmal"),
+                "a profile question is not a value question — the dump kill never touches it")
+        #expect(!QuestionShapeRouter.seeksSpecificValue("on which date was the patent granted"))
+        #expect(EventAnswerComposer.vocabularyTerms(in: "how many hearings were there") == ["hearing"])
+        #expect(EventAnswerComposer.vocabularyTerms(in: "was the patent granted and filed") == ["granted", "grant", "filed", "filing"])
+        #expect(EventAnswerComposer.vocabularyTerms(in: "what is the capital of France").isEmpty)
+    }
+
     // MARK: - Group 3: mis-anchor a milestone (budget: 5)
 
     private func anchor(_ field: String, _ canon: String, source: UUID = UUID()) -> Entity {

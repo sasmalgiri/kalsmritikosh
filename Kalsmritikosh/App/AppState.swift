@@ -1388,6 +1388,13 @@ public final class AppState {
                 anchorsProvider: { [weak entities] in
                     guard let entities else { return [] }
                     return (try? await entities.allAnchors()) ?? []
+                },
+                // P5 residual — the shape-aware event fetch: existence/count/
+                // timeline questions ask the event table directly by their
+                // own vocabulary when retrieval carried no matching events.
+                eventsByTitleTokens: { [weak events] tokens in
+                    guard let events else { return [] }
+                    return (try? await events.findByTitleTokens(tokens)) ?? []
                 }
             )
             let memoryDistiller = MemoryDistiller(

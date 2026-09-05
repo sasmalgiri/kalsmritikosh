@@ -138,10 +138,18 @@ public enum EventAnswerComposer {
 
     /// nil = the question names no known event word (the composer abstains —
     /// the normal pipeline runs); [] = named but nothing matches.
-    nonisolated static func matchEvents(question: String, events: [Event]) -> [Event]? {
+    /// The event-title terms this question's vocabulary names — the same map
+    /// matchEvents uses, exposed so the shape-aware fetch can ask the event
+    /// table for exactly these terms.
+    public nonisolated static func vocabularyTerms(in question: String) -> [String] {
         let qTokens = question.lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-        let wanted = qTokens.flatMap { eventVocabulary[$0] ?? [] }
+        var seen = Set<String>()
+        return qTokens.flatMap { eventVocabulary[$0] ?? [] }.filter { seen.insert($0).inserted }
+    }
+
+    nonisolated static func matchEvents(question: String, events: [Event]) -> [Event]? {
+        let wanted = vocabularyTerms(in: question)
         guard !wanted.isEmpty else { return nil }
         let matches = events.filter { e in
             let titleTokens = Set(e.title.lowercased()
