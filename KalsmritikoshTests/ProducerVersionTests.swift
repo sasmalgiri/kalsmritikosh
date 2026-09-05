@@ -23,7 +23,7 @@ struct ProducerVersionTests {
 
     @Test("Post-V3 bump: fresh rows carry the current era; the legacy NULL fact is stale; the predicate stays live for the next era")
     func stalenessAfterV3Bump() async throws {
-        #expect(DerivedProducerVersions.facts == 2, "V3 3c is the second facts bump (writer binding)")
+        #expect(DerivedProducerVersions.facts == 3, "W-4 is the third facts bump (patent-pack prefix law + canon validity gate; drain re-mints the register)")
         #expect(DerivedProducerVersions.entities == 2, "U0-b is the second entities bump (RFC display-name splitter; register refresh executed live 2026-09-03)")
         #expect(DerivedProducerVersions.events == 1, "V3 3c is the first events bump (milestone→anchor threading)")
 
@@ -48,13 +48,14 @@ struct ProducerVersionTests {
                 [.integer(Int64(era))])).first?.int(0) ?? -1)
         }
 
-        // Exactly the one legacy NULL fact reads stale at facts=2 (COALESCE(NULL,0)=0 != 2);
-        // every freshly-ingested fact is stamped 2 and reads current.
+        // Exactly the one legacy NULL fact reads stale at the current facts
+        // era (COALESCE(NULL,0)=0 != current); every freshly-ingested fact is
+        // stamped current.
         let staleFacts = try await staleCount("generic_facts", current: DerivedProducerVersions.facts)
         print("V3 BUMP TEST: stale facts=\(staleFacts) (want 1)")
         #expect(staleFacts == 1, "exactly the one legacy NULL row should light stale post-V3; got \(staleFacts)")
 
-        // Fresh facts are stamped at the current era (2).
+        // Fresh facts are stamped at the current era.
         #expect(try await stampedCount("generic_facts", era: DerivedProducerVersions.facts) > 0,
                 "ingest wrote no facts stamped at the current era")
 
@@ -66,10 +67,10 @@ struct ProducerVersionTests {
         #expect(try await staleCount("events", current: DerivedProducerVersions.events) == 0,
                 "fresh events must all read current at the events era")
 
-        // The predicate stays LIVE for the NEXT bump: at a hypothetical current=3
+        // The predicate stays LIVE for the NEXT bump: at a hypothetical future era
         // the whole set (legacy + every current row) is stale — a future logic
         // change still selects everything to rewrite.
-        let futureStale = try await staleCount("generic_facts", current: 3)
+        let futureStale = try await staleCount("generic_facts", current: DerivedProducerVersions.facts + 1)
         let total = Int((try await rig.db.query("SELECT COUNT(*) FROM generic_facts", [])).first?.int(0) ?? 0)
         #expect(futureStale == total, "a future era bump must select the full unrewritten set")
     }
