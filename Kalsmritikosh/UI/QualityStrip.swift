@@ -78,6 +78,8 @@ public struct QualityStrip: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+                // RC-5 — the receipt reads aloud as one sentence.
+                .accessibilityLabel("Answer receipt. " + QualityStrip.formatLine(answer))
             if !answer.contradictions.isEmpty {
                 Button {
                     conflictsExpanded.toggle()
