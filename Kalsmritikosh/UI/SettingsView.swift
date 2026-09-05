@@ -1404,6 +1404,17 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
+            // GK (owner decision) — the General-Knowledge Lane.
+            Toggle("Answer general questions too (clearly marked)", isOn: Binding(
+                get: { FeatureFlags.shared.generalKnowledgeLane },
+                set: { FeatureFlags.shared.generalKnowledgeLane = $0 }
+            ))
+            Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. Off by default.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
             Toggle("Apple AI writes the final answer", isOn: Binding(
                 get: { FeatureFlags.shared.llmAnswerSynthesis },
                 set: { FeatureFlags.shared.llmAnswerSynthesis = $0 }

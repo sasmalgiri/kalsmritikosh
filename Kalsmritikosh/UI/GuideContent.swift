@@ -125,7 +125,7 @@ enum GuideContent {
     /// Per-screen one-paragraph explainers (the Guide screen + info popovers).
     static let screenGuides: [(dest: Destination, title: String, body: String)] = [
         (.ask, "Ask — cited answers from your evidence",
-         "Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed."),
+         "Type a question in plain language. The answer is built only from your ingested sources: every claim cites its evidence, the badge shows how strongly it is established, and anything your sources don’t cover is listed as a gap instead of being guessed. With \u{201C}Answer general questions too\u{201D} on (Settings), questions outside your documents get a separate block marked \u{201C}Not from your documents\u{201D} \u{2014} general knowledge from the on-device AI, no sources, may be wrong, and never part of your evidence or exports."),
         (.findings, "Findings — every fact by status",
          "Four tabs: Timeline (events labelled by how they are known, with accept/reject review), Evidence (extracted claims with citations), Contradictions (where sources disagree — both sides kept), and Missing Proof (what the record does not establish)."),
         (.history, "History — the evidence-backed narrative",

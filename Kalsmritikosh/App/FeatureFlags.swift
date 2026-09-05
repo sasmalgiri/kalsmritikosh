@@ -265,6 +265,20 @@ public final class FeatureFlags {
         return UserDefaults.standard.bool(forKey: kFullPower)
     }
 
+    /// GK (owner decision, pre-HOLD-2) — the General-Knowledge Lane: after
+    /// the archive lane refuses, a separately BANNER-MARKED block may answer
+    /// from the on-device AI's general knowledge — never entering the ledger,
+    /// evidence, exports, or the sealed envelope. Default OFF (the
+    /// conservative default for legal/forensic use; self-ruling, the owner
+    /// confirms the default at HOLD 2).
+    public var generalKnowledgeLane: Bool {
+        get { Self.generalKnowledgeLaneValue() }
+        set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
+    }
+    public nonisolated static func generalKnowledgeLaneValue() -> Bool {
+        UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
+    }
+
     /// SURFACE STYLE (owner request 2026-08-22). When ON, analytic jobs present
     /// the previous CLASSIC launchers (the fixed Analyze-phase buttons) instead
     /// of the newer catalog-driven studio launchers. Default OFF (new studios).
@@ -458,6 +472,7 @@ public final class FeatureFlags {
     private nonisolated static let kCustomProtocolStudio   = "kalsmritikosh.feature.customProtocolStudio.enabled"
     private nonisolated static let kSystemMode             = "kalsmritikosh.feature.systemMode"
     private nonisolated static let kSystemModeChosen       = "kalsmritikosh.feature.systemModeChosen"
+    private nonisolated static let kGeneralKnowledgeLane   = "kalsmritikosh.feature.generalKnowledgeLane"
     private nonisolated static let kExpertGating           = "kalsmritikosh.feature.expertRelevanceGating"
     private nonisolated static let kLLMSynthesis           = "kalsmritikosh.feature.llmAnswerSynthesis"
     private nonisolated static let kLLMSelfCritique        = "kalsmritikosh.feature.llmSelfCritique"
