@@ -75,4 +75,38 @@ struct PatentDomainPackTests {
         #expect(PatentDomainPack.isDateShapedNumber("2023-03-22"))
         #expect(!PatentDomainPack.isDateShapedNumber("Patent No. 555489"))
     }
+
+    // MARK: - W-4 (owner witness, 2026-09-06) — permanent cases
+
+    @Test("W-4: 'Patent Application-N' is an APPLICATION — the patent label may never claim it")
+    func patentApplicationIsNotAPatentNumber() {
+        let facts = PatentDomainPack.extractFacts(
+            fromText: "Intimation regarding the Grant and Recordal of Patent Application-202331019665",
+            subjectLabel: "s", blockID: UUID())
+        print("W4-PROBE recordal:", facts.map { "\($0.field)=\($0.value)" })
+        #expect(facts.contains { $0.field == "applicationnumber" && $0.value == "202331019665" })
+        #expect(!facts.contains { $0.field == "patentnumber" && $0.value == "202331019665" },
+                "the live register held patentnumber|202331019665 — this row keeps it dead")
+    }
+
+    @Test("W-4: prose letters never pose as a country code — 'ed202331019665' can never mint")
+    func proseLettersAreNotACountryCode() {
+        // The live junk: "…application … granted 202331019665" — under the old
+        // pattern, 'ed' + space + digits matched as a prefixed identifier.
+        let facts = PatentDomainPack.extractFacts(
+            fromText: "The application for this invention was granted 202331019665 as its number",
+            subjectLabel: "s", blockID: UUID())
+        #expect(!facts.contains { $0.value.lowercased().hasPrefix("ed") },
+                "got: \(facts.map(\.value))")
+        // The validity gate itself, directly:
+        #expect(PatentDomainPack.normalizeIdentifier("ed202331019665") == "")
+        #expect(PatentDomainPack.normalizeIdentifier("202331019665(") == "202331019665",
+                "edge punctuation is stripped, never stored")
+        // Real country codes still work, attached and uppercase.
+        #expect(PatentDomainPack.normalizeIdentifier("US1234567B2") == "US1234567B2")
+        let us = PatentDomainPack.extractFacts(
+            fromText: "Patent No. US1234567B2 was cited", subjectLabel: "s", blockID: UUID())
+        print("W4-PROBE us:", us.map { "\($0.field)=\($0.value)" })
+        #expect(us.contains { $0.field == "patentnumber" && $0.value == "US1234567B2" })
+    }
 }
