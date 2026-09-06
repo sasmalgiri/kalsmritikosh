@@ -262,6 +262,7 @@ public final class AppState {
     public private(set) var files: FilesRepository?
     public private(set) var objects: KnowledgeObjectRepository?
     public private(set) var chunks: ChunksRepository?
+    public private(set) var genericFacts: GenericFactRepository?
     /// OPS-003D — screen-level scope filter; resolves KO/chunk sensitivity for view layers.
     public private(set) var sensitiveScopes: SensitiveScopeRepository?
     /// OPS-003D.1 — fail-closed screen gate for all view layers, wired once here.
@@ -2299,6 +2300,7 @@ public final class AppState {
             self.files = files
             self.objects = objects
             self.chunks = chunks
+            self.genericFacts = genericFactsRepo
             self.embedder = embedder
             self.entities = entities
             self.events = events
@@ -2477,6 +2479,10 @@ public final class AppState {
             // reconstruction engine + renderer + durable artifact persistence.
             await brain.setStoryComposer { [weak self] question in
                 await self?.composeStoryAnswer(question: question)
+            }
+            // A3 — the tool-grounded middle floor.
+            await brain.setToolGroundedFallback { [weak self] question in
+                await self?.composeToolGroundedAnswer(question: question)
             }
             await brain.setLedgerStateProvider { [weak database] in
                 // C-ii: begin the ask's read snapshot; the returned stamp is
@@ -3865,6 +3871,9 @@ public final class AppState {
         guard let stamp = try? await repo.currentLedgerStamp() else { return nil }
         if let existing = try? await repo.existingCurrent(
             anchorKey: anchorKey, requestShape: "story", ledgerStamp: stamp) {
+            // A4 — the cached-history receipt: the same subject on an
+            // unchanged ledger reuses the persisted structure.
+            KalsmritikoshLog.app.info("history: cached (artifact \(existing.uuidString.prefix(8), privacy: .public) reused — same subject, same ledger)")
             return existing
         }
         let saved = try? await repo.save(result, narrative: narrative, at: Date(),
@@ -3923,8 +3932,15 @@ public final class AppState {
                     .sorted { $0.0 < $1.0 }
                 body += "\n\nOpen questions: " + byKind.map { "\($0.0) (\($0.1))" }.joined(separator: " · ")
             }
+            var cached = false
+            if let artifactID, let stampNow = try? await historyArtifacts?.currentLedgerStamp() {
+                let hit = try? await historyArtifacts?.existingCurrent(
+                    anchorKey: anchorKey, requestShape: "story", ledgerStamp: stampNow)
+                cached = (hit == artifactID)
+            }
             body += "\n\nThis story was saved to your archive"
                 + (artifactID != nil ? " and awaits your review." : ".")
+            if cached { body += " (History: reused — built earlier on this same ledger.)" }
 
             // Citations: the items' distinct source documents, deterministic order.
             var seen = Set<KnowledgeObject.ID>()
@@ -3942,6 +3958,57 @@ public final class AppState {
     /// "missingEndDate" → "missing end date" (RC-8 plain language, no jargon).
     nonisolated static func plainGapKind(_ kind: HistoryGapKind) -> String {
         kind.rawValue.map { $0.isUppercase ? " \($0.lowercased())" : String($0) }.joined()
+    }
+
+    /// A3 — the Ask-the-Ledger fallback: derive the plan deterministically,
+    /// gather small id-bearing tool results (the loop law: history + field
+    /// lookup + one span fetch), compose via the on-device AI, SWEEP every
+    /// sentence against the result it cites. nil at any failure — the
+    /// ladder falls through, never a dead end. The receipt carries the
+    /// plan, the tools, the model + build stamps, and — when the subject's
+    /// anchor lives in a topic node — "scoped to ‹node›" (A2.2).
+    public func composeToolGroundedAnswer(question: String) async -> VerifiedAnswer? {
+        guard let entities, let events, let genericFacts = self.genericFacts,
+              let chunks, let caps = capabilities, let db = database else { return nil }
+        let anchors = (try? await entities.allAnchors()) ?? []
+        let plan = QuestionPlan.derive(question: question, anchors: anchors)
+        guard plan.shape != QuestionShape.outOfScope.rawValue else { return nil }
+
+        let tools = LedgerTools(
+            events: { [weak events] tokens in (try? await events?.findByTitleTokens(tokens)) ?? [] },
+            facts: { [weak genericFacts] field in (try? await genericFacts?.facts(field: field)) ?? [] },
+            chunksForQuestion: { [weak chunks] q in
+                let hits = (try? await chunks?.searchFTS(SlotFieldResolver.expandAliases(q), limit: 15)) ?? []
+                return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
+            })
+        // The loop law: history → field lookup → ONE span fetch.
+        var results = await tools.historyOf(question: question)
+        if let field = plan.field { results += await tools.lookupField(field) }
+        results += await tools.fetchSpans(question: question,
+                                          shape: QuestionShape(rawValue: plan.shape) ?? .unresolved)
+        guard let grounded = await ToolGroundedComposer.compose(
+            question: question, plan: plan, results: results, capabilities: caps) else { return nil }
+
+        var receipt = grounded.receiptLines
+        // A2.2 — the scoping receipt: the anchor's topic node, when one holds it.
+        if let anchorCanon = plan.subjectMention,
+           let anchor = anchors.first(where: { SubjectResolver.canon($0) == anchorCanon }),
+           let node = (try? await db.query("""
+           SELECT cs.title FROM entity_communities ec
+           JOIN community_summaries cs ON cs.community_id = ec.community_id AND cs.level = 1
+           WHERE ec.entity_id = ? AND ec.level = 1 LIMIT 1;
+           """, [.uuid(anchor.id)]).first?.string(0)) {
+            receipt.append("Scoped to: \(node)")
+        }
+        let body = grounded.sentences.map(\.text).joined(separator: " ")
+            + "\n\n(" + receipt.joined(separator: " · ") + ")"
+        let citations = grounded.citedObjectIDs.prefix(8).map {
+            VerifiedAnswer.Citation(objectID: $0, snippet: "Ledger result")
+        }
+        KalsmritikoshLog.brain.info("ledger.compose: shipped \(grounded.sentences.count) swept sentence(s)")
+        return VerifiedAnswer(body: body,
+                              answerText: grounded.sentences.map(\.text).joined(separator: " "),
+                              citations: Array(citations), confidence: Confidence(0.6))
     }
 
     /// P4-U2 (B-4) — budgeted, advisory LEADS for a story's open gaps: each
