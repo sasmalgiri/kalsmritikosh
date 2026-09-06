@@ -60,6 +60,12 @@ public enum SlotFieldResolver {
         ("amount", "amount", .monetaryAmount, "Amount", "transaction"),
         ("fee", "amount", .monetaryAmount, "Amount", "transaction"),
         ("amount paid", "amount", .monetaryAmount, "Amount", "transaction"),
+        // A1.1 — the role table's ask-side names ("who is the owner of this
+        // patent" resolves to the applicant field; proprietor/holder too).
+        ("applicant", "applicant", .counterparty, "Applicant", "patent"),
+        ("inventor", "inventor", .counterparty, "Inventor", "patent"),
+        ("proprietor", "applicant", .counterparty, "Applicant", "patent"),
+        ("patent holder", "applicant", .counterparty, "Applicant", "patent"),
     ]
 
     /// Combined-cue rules for phrasings that name the field indirectly:
@@ -72,6 +78,8 @@ public enum SlotFieldResolver {
         (["patent", "grant"], ["date", "when"], "grantdate", .date, "Grant date", "patent"),
         (["patent", "filed"], ["date", "when"], "filingdate", .date, "Filing date", "patent"),
         (["patent", "filing"], ["date", "when"], "filingdate", .date, "Filing date", "patent"),
+        // A1.1 — "who is the owner/holder of this patent" (no field bigram).
+        (["patent"], ["owner", "owns", "proprietor", "holder", "belongs"], "applicant", .counterparty, "Applicant", "patent"),
     ]
 
     /// Lowercase ledger field id → human label, for every field the packs

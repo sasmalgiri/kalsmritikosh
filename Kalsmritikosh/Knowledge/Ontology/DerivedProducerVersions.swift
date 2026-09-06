@@ -31,7 +31,9 @@ public nonisolated enum DerivedProducerVersions {
     /// v3 — W-4 (owner witness): the patent pack's prefix law + canon
     /// validity gate; the drain re-extracts every document's facts and the
     /// register re-mints its anchors. No re-ingest.
-    public static let facts = 3
+    /// v4 — A1.1: the role table (applicant/inventor extraction); the drain
+    /// re-extracts and the register carries the roles. No re-ingest.
+    public static let facts = 4
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
