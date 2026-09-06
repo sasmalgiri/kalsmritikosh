@@ -121,6 +121,28 @@ public struct TopicTreeBuilder {
         var groups: [String: [String]] = [:]
         for c in cids { groups[find(c), default: []].append(c) }
 
+        // A6 idempotence (parity caught it): a wholesale rewrite every boot
+        // moves the ledger stamp every run. Skip when NOTHING level-0 changed
+        // since the last build (signature = level-0 row count + max stamp vs
+        // the stored level-1 build stamp).
+        let sig = try await database.query("""
+        SELECT (SELECT COUNT(*) FROM entity_communities WHERE level = 0),
+               (SELECT COALESCE(MAX(computed_at), 0) FROM entity_communities WHERE level = 0),
+               (SELECT COALESCE(MAX(computed_at), 0) FROM entity_communities WHERE level = 1);
+        """, []).first
+        let l0Count = sig?.int(0) ?? 0
+        let l0Max = sig?.double(1) ?? 0
+        let l1Built = sig?.double(2) ?? -1
+        if l1Built >= l0Max, l0Count > 0, receipt.levelOneNodes == 0 {
+            // Level-1 is newer than every level-0 row → the tree is current.
+            let existing = try await database.query(
+                "SELECT COUNT(DISTINCT community_id) FROM entity_communities WHERE level = 1;", []).first?.int(0) ?? 0
+            if existing > 0 || groups.allSatisfy({ $0.value.count < 2 }) {
+                receipt.levelOneNodes = Int(existing)
+                return receipt
+            }
+        }
+
         // 4 — persist level-1 (replace wholesale; level-0 untouched) + labels.
         try await database.exec("SAVEPOINT topic_tree;", [])
         do {
