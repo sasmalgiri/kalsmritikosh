@@ -137,4 +137,34 @@ struct LedgerDrainCoordinatorTests {
         #expect(second.entitiesStampedV1 == 0)
         #expect(second.untouchedProven)
     }
+
+    @Test("W-4b: an anchor whose minting facts died is swept; a bound anchor survives")
+    func orphanAnchorSweep() async throws {
+        let rig = try await makeAgedRig()
+        defer { try? FileManager.default.removeItem(at: rig.dir) }
+
+        // A ghost: an identifier anchor NO generic_facts row binds — the live
+        // register's "ed202331019665" class after its junk fact was refreshed
+        // away. The drain must sweep it, and must keep every bound anchor.
+        let ghost = UUID()
+        let realKO = try #require((try await rig.db.query(
+            "SELECT id FROM knowledge_objects LIMIT 1;", [])).first?.uuid(0))
+        try await rig.db.exec("""
+        INSERT INTO entities (id, kind, value, normalized, source_object_id, confidence, attributes_json, quality_tier)
+        VALUES (?, ?, 'applicationnumber|ed202331019665', 'applicationnumber|ed202331019665', ?, 0.9, '{}', 'T1');
+        """, [.uuid(ghost), .text(Entity.Kind.identifierAnchor.rawValue), .uuid(realKO)])
+
+        let receipt = try await rig.drain.drain()
+        #expect(receipt.orphanAnchorsSwept >= 1, "the ghost must be swept")
+        let ghostLeft = Int((try await rig.db.query(
+            "SELECT COUNT(*) FROM entities WHERE id = ?;", [.uuid(ghost)])).first?.int(0) ?? -1)
+        #expect(ghostLeft == 0)
+        // Every surviving anchor is bound to at least one fact.
+        let unbound = Int((try await rig.db.query("""
+        SELECT COUNT(*) FROM entities
+        WHERE kind = ? AND merged_into IS NULL
+          AND id NOT IN (SELECT DISTINCT subject_id FROM generic_facts WHERE subject_id IS NOT NULL);
+        """, [.text(Entity.Kind.identifierAnchor.rawValue)])).first?.int(0) ?? -1)
+        #expect(unbound == 0, "after the drain, no anchor floats free of its facts")
+    }
 }
