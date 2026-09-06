@@ -661,7 +661,7 @@ public struct EvidenceVerifier: Verifier {
             // the milestone rows), ask the event table directly by those
             // terms. Deterministic, bounded, cited like any event answer.
             var shapeEvents = retrieval.events
-            if [.existence, .count, .timeline].contains(shape),
+            if [.existence, .count, .timeline, .list].contains(shape),
                let fetch = eventsByTitleTokens {
                 let wanted = EventAnswerComposer.vocabularyTerms(in: intent.rawQuestion)
                 let alreadyMatched = EventAnswerComposer.matchEvents(
@@ -677,6 +677,12 @@ public struct EvidenceVerifier: Verifier {
                 }
             }
             let composed: EventAnswerComposition? = {
+                // A2.5 — a comparison question outranks its single-shape
+                // reading: two labeled cited blocks + date arithmetic.
+                if let compared = EventAnswerComposer.composeComparison(
+                    question: intent.rawQuestion, events: shapeEvents) {
+                    return compared
+                }
                 switch shape {
                 case .existence:
                     return EventAnswerComposer.composeExistence(
@@ -689,6 +695,15 @@ public struct EvidenceVerifier: Verifier {
                 case .timeline:
                     return EventAnswerComposer.composeTimeline(
                         question: intent.rawQuestion, events: shapeEvents,
+                        documentsSearched: docsSearched)
+                // A2.1 — the last-mile shapes compose deterministically too.
+                case .list:
+                    return EventAnswerComposer.composeList(
+                        question: intent.rawQuestion, events: shapeEvents,
+                        documentsSearched: docsSearched)
+                case .aggregation:
+                    return EventAnswerComposer.composeAggregation(
+                        facts: retrieval.genericFacts,
                         documentsSearched: docsSearched)
                 default:
                     return nil

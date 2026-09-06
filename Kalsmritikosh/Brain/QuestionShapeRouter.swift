@@ -20,12 +20,18 @@ import Foundation
 import os
 
 public enum QuestionShape: String, Sendable, CaseIterable {
-    case unresolved   // the normal pipeline — SAFEST
-    case existence    // "is/was/has the X …?" — yes/no from the ledger
-    case timeline     // "timeline of …" — the ordered, dated, cited chain
-    case count        // "how many …?" — counts from counts
-    case story        // P4-U4 — "tell me the story of …" — the reconstruction engine
-    case outOfScope   // world knowledge — fixed refusal, zero retrieval/model
+    case unresolved    // the normal pipeline — SAFEST
+    case existence     // "is/was/has the X …?" — yes/no from the ledger
+    case timeline      // "timeline of …" — the ordered, dated, cited chain
+    case count         // "how many …?" — counts from counts
+    case story         // P4-U4 — "tell me the story of …" — the reconstruction engine
+    // A2.1 (closing spec) — the last-mile shapes:
+    case role          // "who is the ‹role› of …" — answered by the slot law
+    case list          // "list/show all …" — a deterministic, complete list
+    case aggregation   // "total/sum of …" — computed total with operands
+    case conflict      // "which is correct …" — both values, both citations
+    case relationship  // "how is X connected to Y" — cited links, ≤2 hops
+    case outOfScope    // world knowledge — fixed refusal, zero retrieval/model
 }
 
 public struct RoutedShape: Sendable, Equatable {
@@ -40,8 +46,12 @@ public enum QuestionShapeRouter {
     /// SAFEST-FIRST order, as data (GO2R): on twin disagreement the shape
     /// EARLIER in this list wins. unresolved is safest (full pipeline);
     /// outOfScope is least safe (it refuses).
+    /// The closing spec's order, safest first: on twin disagreement the
+    /// EARLIER shape wins (unresolved = the full pipeline = safest;
+    /// outOfScope = a refusal = least safe).
     public nonisolated static let safestOrder: [QuestionShape] = [
-        .unresolved, .timeline, .story, .existence, .count, .outOfScope,
+        .unresolved, .story, .relationship, .conflict, .timeline, .list,
+        .aggregation, .count, .role, .existence, .outOfScope,
     ]
 
     /// Story openers (data): the reconstruction ask.
@@ -75,6 +85,14 @@ public enum QuestionShapeRouter {
             return .outOfScope
         }
         if storyOpeners.contains(where: { q.contains($0) }) { return .story }
+        if ["conflicting", "which is correct", "discrepancy", "disagree"].contains(where: { q.contains($0) }) { return .conflict }
+        if ["connected to", "connection between", "related to", "relationship between"].contains(where: { q.contains($0) }) { return .relationship }
+        if ["total", "sum of", "in total", "altogether", "combined"].contains(where: { q.contains($0) }),
+           q.contains("amount") || q.contains("paid") || q.contains("fee") || q.contains("cost") || q.contains("much") {
+            return .aggregation
+        }
+        if ["list all", "list the", "show all", "show me all", "list every"].contains(where: { q.hasPrefix($0) || q.contains($0) }) { return .list }
+        if q.hasPrefix("who is the") && q.contains(" of ") { return .role }
         if ["timeline of", "history of", "chronology of"].contains(where: { q.contains($0) }) { return .timeline }
         if countOpeners.contains(where: { q.hasPrefix($0) }) { return .count }
         if existenceOpeners.contains(where: { q.hasPrefix($0) }) { return .existence }
@@ -94,6 +112,17 @@ public enum QuestionShapeRouter {
             return .outOfScope
         }
         if tokens.contains("story") { return .story }
+        if !tokens.isDisjoint(with: ["conflicting", "discrepancy", "disagree"]) { return .conflict }
+        if !tokens.isDisjoint(with: ["connected", "connection", "relationship"]) { return .relationship }
+        if !tokens.isDisjoint(with: ["total", "sum", "altogether", "combined"]),
+           !tokens.isDisjoint(with: ["amount", "paid", "fee", "cost", "much", "money"]) {
+            return .aggregation
+        }
+        if tokens.contains("list") || (tokens.contains("show") && tokens.contains("all")) { return .list }
+        if let first = normalized(question).components(separatedBy: " ").first, first == "who",
+           tokens.contains("the"), tokens.contains("of") {
+            return .role
+        }
         if !tokens.isDisjoint(with: ["timeline", "chronology", "history"]) { return .timeline }
         if tokens.contains("many") || tokens.contains("count") { return .count }
         let yesNoLeads: Set<String> = ["is", "was", "were", "has", "have", "did", "does", "are"]
@@ -155,9 +184,14 @@ public enum QuestionShapeRouter {
         case .unresolved: return "a general question"
         case .existence:  return "a yes-or-no question"
         case .timeline:   return "a timeline question"
-        case .count:      return "a counting question"
-        case .story:      return "a story question"
-        case .outOfScope: return "outside the archive"
+        case .count:        return "a counting question"
+        case .story:        return "a story question"
+        case .role:         return "a who-holds-this-role question"
+        case .list:         return "a list question"
+        case .aggregation:  return "a totals question"
+        case .conflict:     return "a which-is-correct question"
+        case .relationship: return "a connection question"
+        case .outOfScope:   return "outside the archive"
         }
     }
 }

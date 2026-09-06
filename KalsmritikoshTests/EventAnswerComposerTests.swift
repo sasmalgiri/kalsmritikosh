@@ -70,4 +70,58 @@ struct EventAnswerComposerTests {
         let again = EventAnswerComposer.composeExistence(question: "is the patent granted?", events: events, documentsSearched: 3)
         #expect(yes == again)
     }
+
+    // MARK: - A2.1 — list + aggregation gold
+
+    @Test("A2: 'list all hearings' returns the complete deterministic list with an honest header")
+    func listGold() {
+        let src = UUID()
+        let events = [
+            Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_722_816_000), title: "Hearing held", entityIDs: [], sourceObjectID: src, datePrecision: .day),
+            Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_723_420_800), title: "Hearing adjourned", entityIDs: [], sourceObjectID: src, datePrecision: .day),
+            Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_732_752_000), title: "Patent granted", entityIDs: [], sourceObjectID: src, datePrecision: .day),
+        ]
+        let out = EventAnswerComposer.composeList(question: "list all hearings", events: events, documentsSearched: 3)
+        #expect(out?.primaryText.hasPrefix("2 matching records:") == true, "got: \(out?.primaryText ?? "nil")")
+        #expect(out?.supportingEvents.count == 2)
+        #expect(out?.primaryText.contains("granted") == false, "the grant is not a hearing")
+        // No vocabulary → nil (the pipeline runs, never a wrong list).
+        #expect(EventAnswerComposer.composeList(question: "list all shipments", events: events, documentsSearched: 3) == nil)
+    }
+
+    @Test("A2: the total is computed with operands; currencies never mix")
+    func aggregationGold() {
+        func amount(_ v: String) -> GenericFact {
+            GenericFact(subjectLabel: "s", field: "amount", value: v, status: .sourceAsserted,
+                        confidence: 0.8, sourceBlockIDs: [UUID()],
+                        producerVersion: DerivedProducerVersions.facts, rawMatch: nil, sourceCount: 1)
+        }
+        let out = EventAnswerComposer.composeAggregation(
+            facts: [amount("₹15,000"), amount("₹7,000"), amount("$100")], documentsSearched: 5)
+        let text = out?.primaryText ?? ""
+        #expect(text.contains("Total: ₹22000") || text.contains("Total: ₹22,000".replacingOccurrences(of: ",", with: "")),
+                "rupees sum: \(text)")
+        #expect(text.contains("Total: $100"), "the dollar stays its own total: \(text)")
+        #expect(!text.contains("22100"), "currencies are never mixed")
+        // No amounts → nil.
+        #expect(EventAnswerComposer.composeAggregation(facts: [], documentsSearched: 5) == nil)
+    }
+
+    @Test("A2.5: a comparison question yields two cited blocks + pure date arithmetic")
+    func comparisonGold() {
+        let src = UUID(), src2 = UUID()
+        let filed = Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_553_126_400), title: "Patent filed", entityIDs: [], sourceObjectID: src, datePrecision: .day)
+        let granted = Event(kind: .contractSigned, date: Date(timeIntervalSince1970: 1_732_752_000), title: "Patent granted", entityIDs: [], sourceObjectID: src2, datePrecision: .day)
+        let out = EventAnswerComposer.composeComparison(
+            question: "how long between filing and the patent being granted",
+            events: [filed, granted])
+        let text = out?.primaryText ?? ""
+        #expect(text.contains("Derived comparison:"), "got: \(text)")
+        #expect(text.contains("2079 days") || text.contains("2078 days") || text.contains("2080 days"),
+                "the arithmetic is real: \(text)")
+        #expect(out?.supportingEvents.count == 2, "both records cited")
+        // One vocabulary only → nil (never a fabricated comparison).
+        #expect(EventAnswerComposer.composeComparison(
+            question: "was the patent granted before everything", events: [granted]) == nil)
+    }
 }
