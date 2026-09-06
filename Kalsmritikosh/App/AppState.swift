@@ -2482,6 +2482,39 @@ public final class AppState {
             self.phase = .ready
             KalsmritikoshLog.app.info("AppState booted successfully")
 
+            // W-4b — THE DRAIN RUNS IN THE APP: when any derived row is
+            // behind its producer era (a fix shipped since it was written),
+            // the ledger drain re-derives it in the background — facts
+            // re-extracted, anchors re-minted, orphans swept, milestones
+            // rebuilt. This is the "no re-ingest" promise made real for the
+            // LIVE app, not only the harness. Idempotent; era-stamped rows
+            // skip; suppressed during isolated eval boots.
+            if !suppressAutoReingest {
+                let drainDB = db
+                let drainObjects = objects
+                let drainEntities = entities
+                let drainEvents = events
+                let drainFacts = genericFactsRepo
+                let drainEvidence = evidenceStoreRepo
+                Task.detached(priority: .utility) {
+                    do {
+                        let stale = try await drainDB.query("""
+                        SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
+                             + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
+                             + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities));
+                        """, []).first?.int(0) ?? 0
+                        guard stale > 0 else { return }
+                        KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era — refreshing in the background")
+                        let coordinator = LedgerDrainCoordinator(
+                            database: drainDB, objects: drainObjects, entities: drainEntities,
+                            events: drainEvents, facts: drainFacts, evidence: drainEvidence)
+                        _ = try await coordinator.drain()
+                    } catch {
+                        KalsmritikoshLog.app.error("Ledger drain failed (will retry next launch): \(error)")
+                    }
+                }
+            }
+
             // One-time catch-up: apply the legal/patent milestone extractor to
             // documents ingested BEFORE it existed. New documents already get
             // milestones inline at ingest, so this runs once (flag-guarded) and

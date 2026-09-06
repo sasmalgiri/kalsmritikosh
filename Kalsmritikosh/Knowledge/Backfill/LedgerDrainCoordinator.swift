@@ -51,6 +51,8 @@ public struct DrainReceipt: Sendable {
     public var factsDeleted = 0
     public var factsWritten = 0
     public var anchorsAfter = 0
+    /// W-4b — anchors whose minting facts no longer exist, removed.
+    public var orphanAnchorsSwept = 0
     public var eventKOsRewritten = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
@@ -72,7 +74,7 @@ public struct DrainReceipt: Sendable {
         """
         DRAIN RECEIPT
           entities retired:        \(entitiesRetired) (+\(memoryObjectsRetired) memory rows)
-          facts: sources rewritten \(factsSourcesRewritten) (deleted \(factsDeleted) stale → wrote \(factsWritten) v2); anchors now \(anchorsAfter)
+          facts: sources rewritten \(factsSourcesRewritten) (deleted \(factsDeleted) stale → wrote \(factsWritten)); anchors now \(anchorsAfter) (\(orphanAnchorsSwept) orphan(s) swept)
           events: KOs rewritten    \(eventKOsRewritten) (deleted \(eventsDeleted) stale → wrote \(eventsWritten) v1)
           milestones rebuilt:      \(milestonesRebuilt)
           document_class stamped:  \(documentClassStamped)
@@ -138,6 +140,19 @@ public final class LedgerDrainCoordinator {
 
         // ── pass 4: global milestone rebuild, anchored, suspects excluded ───
         receipt.milestonesRebuilt = try await rebuildMilestones(koIDs: koIDs)
+
+        // ── pass 4b (W-4b): ORPHANED-ANCHOR SWEEP ────────────────────────────
+        // An anchor is DERIVED from facts; when a facts refresh stops minting
+        // a junk fact (ed202331019665, the mis-fielded patent number), the
+        // anchor entity it once bound must die with it — otherwise the About
+        // footer lists ghosts forever ("2 patents on file"). Derived hygiene,
+        // same class as the stale-facts delete above; source rows untouched.
+        try await database.exec("""
+        DELETE FROM entities
+        WHERE kind = '\(Entity.Kind.identifierAnchor.rawValue)' AND merged_into IS NULL
+          AND id NOT IN (SELECT DISTINCT subject_id FROM generic_facts WHERE subject_id IS NOT NULL);
+        """, [])
+        receipt.orphanAnchorsSwept = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
 
         // ── pass 6: era-stamp the surviving register ─────────────────────────
         try await database.exec("""
