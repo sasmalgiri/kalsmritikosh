@@ -27,6 +27,9 @@ setStoryComposer|MasterBrain.swift
 listBigPicture|TopicRetriever.swift
 storySourceContext|KnowledgeObjectRepository.swift
 findByTitleTokens|EventsRepository.swift
+SpanCutter|SpanCutter.swift
+LedgerTools|LedgerTools.swift
+ToolGroundedComposer|ToolGroundedComposer.swift
 "
 while IFS='|' read -r sym def; do
   [ -z "$sym" ] && continue

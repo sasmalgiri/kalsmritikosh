@@ -1330,6 +1330,12 @@ public actor MasterBrain {
     /// P4-U4 — the story door: wired by AppState to the reconstruction
     /// engine + renderer + durable artifact persistence. nil in rigs.
     public var storyComposer: (@Sendable (String) async -> VerifiedAnswer?)?
+    /// A3 — the tool-grounded middle floor: deterministic composer →
+    /// THIS → quote floor → deterministic readout. nil in rigs.
+    public var toolGroundedFallback: (@Sendable (String) async -> VerifiedAnswer?)?
+    public func setToolGroundedFallback(_ f: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+        toolGroundedFallback = f
+    }
     public func setStoryComposer(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
         storyComposer = c
     }
@@ -1680,6 +1686,12 @@ public actor MasterBrain {
         // in when the verifier explicitly refused or surfaced no
         // sources — confident answers with citations pass through.
         if verified.refused || verified.citations.isEmpty {
+            // A3 — the tool-grounded floor runs BEFORE generic chunk RAG:
+            // the model sees only id-bearing ledger results and every
+            // sentence is swept against the result it cites.
+            if let grounded = await toolGroundedFallback?(question), !grounded.refused {
+                return grounded
+            }
             if let rag = await chunkBasedFallback(
                 question: question, intent: intent, retrieval: retrievalForVerifier,
                 context: llmContext

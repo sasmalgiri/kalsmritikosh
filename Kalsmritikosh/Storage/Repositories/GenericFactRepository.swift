@@ -94,6 +94,18 @@ public actor GenericFactRepository {
     /// from those exact blocks ride along. Matches on the JSON-encoded block-id
     /// array (uppercased UUID strings, as Foundation encodes them). Returns
     /// highest-confidence first, deduped by fact id.
+    /// A3 — the lookupField tool's read: every fact carrying a field,
+    /// deterministic order, bounded.
+    public func facts(field: String, limit: Int = 50) async throws -> [GenericFact] {
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count, reassigned_from
+        FROM generic_facts WHERE field = ? ORDER BY confidence DESC, id LIMIT ?;
+        """, [.text(field), .integer(Int64(limit))])
+        return rows.compactMap(Self.decode)
+    }
+
     public func facts(forBlockIDs blockIDs: [UUID]) async throws -> [GenericFact] {
         let ids = Array(Set(blockIDs)).prefix(64)   // bound the OR-scan cost
         guard !ids.isEmpty else { return [] }

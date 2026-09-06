@@ -128,3 +128,24 @@ P4/#7 → P5 + RC-1…RC-8 → HOLD 2. PROJECT COMPLETE now includes RC-8 (Langu
 and App Review passed.
 
 _End of addenda (§A/§B original; §C added 2026-09-01; §D added 2026-09-03; §E added 2026-09-03 night). The build opened at V0; V2 opens after reseal #3._
+
+## A5 — Decisions recorded (closing spec, 2026-09-06)
+
+1. **Adapters rejected** (stands, beside the earlier PCC rejection): no
+   fine-tuned adapters ship in 1.1; the deterministic layer plus the sweep
+   carries correctness; adapter evaluation is a Go-3/MT-train question.
+2. **`unsupportedLanguage` → deterministic mode now; the bundled provider
+   answers it in T0.** The requirements card states language support
+   live-checked; non-English asks get the full deterministic contract.
+3. **Error-enum → fallback map, complete:** `contextWindowExceeded` →
+   deterministic answer · `guardrailViolation` → deterministic answer ·
+   `unsupportedLanguage` → deterministic mode · generation empty/failed →
+   next floor. Every floor is receipted; no error ever surfaces as a crash
+   or a blank.
+4. **Constrained decoding disposition (A3.4):** DynamicGenerationSchema
+   constrained decoding is the T0 provider's job. In 1.1 THE SWEEP IS THE
+   GATE — every tool-grounded sentence must cite a result id and is
+   verified against exactly that result (digits ⊆ cited text ∪ question;
+   proper nouns from the cited text; uncited sentences die). The gate is
+   deterministic and CI-proven, which is stronger than decode-time
+   constraint for the truth laws it enforces.
