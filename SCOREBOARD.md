@@ -55,6 +55,7 @@ drift between copy and registry, on any surface.
 | in-app | app.private-mode | Fully private (no AI) | app-claims-coverage.sh → Kalsmritikosh/UI/SettingsView.swift |
 | in-app | app.twin-badge | Independent AI reading agreed. | app-claims-coverage.sh → Kalsmritikosh/Brain/ComposeTwin.swift |
 | in-app | app.q0-refusal | Kalsmritikosh answers only from your ingested documents | app-claims-coverage.sh → Kalsmritikosh/Brain/QuestionShapeRouter.swift |
+| in-app | app.gk-banner | Not from your documents — general knowledge from the on-device AI | app-claims-coverage.sh → Kalsmritikosh/Brain/GeneralKnowledgeLane.swift |
 | App Store | asc.private-on-device | private, on-device workspace | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
 | App Store | asc.honest-refusal | it tells you honestly | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
 | App Store | asc.cited-answers | answers come with clickable citations | app-claims-coverage.sh → release/APP_STORE_LISTING.md |
