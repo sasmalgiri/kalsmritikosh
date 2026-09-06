@@ -786,7 +786,10 @@ public actor HybridRetriever: Retriever {
     }
 
     private func metadataLayer(_ intent: UserIntent) async throws -> [RetrievedChunk] {
-        let q = intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A2.3 — field aliases expand the keyword query ("patent no" also
+        // searches "patent number") so recall never depends on the spelling.
+        let q = SlotFieldResolver.expandAliases(
+            intent.rawQuestion.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !q.isEmpty else { return [] }
         var hits = try await chunks.searchFTS(q, limit: 25)
         if hits.isEmpty {

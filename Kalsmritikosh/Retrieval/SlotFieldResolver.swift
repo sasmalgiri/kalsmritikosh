@@ -68,6 +68,23 @@ public enum SlotFieldResolver {
         ("patent holder", "applicant", .counterparty, "Applicant", "patent"),
     ]
 
+    /// A2.3 — REGISTRY-ALIAS EXPANSION: when the question carries one alias
+    /// of a field ("patent no"), the canonical phrase joins the keyword
+    /// query ("patent number") so FTS recall never depends on which spelling
+    /// the document used. Deterministic; appends, never rewrites.
+    public nonisolated static func expandAliases(_ question: String) -> String {
+        let q = question.lowercased()
+        var additions: [String] = []
+        var seen = Set<String>()
+        for entry in vocabulary where q.contains(entry.phrase) {
+            let canonical = entry.label.lowercased()
+            if canonical != entry.phrase, !q.contains(canonical), seen.insert(canonical).inserted {
+                additions.append(canonical)
+            }
+        }
+        return additions.isEmpty ? question : question + " " + additions.joined(separator: " ")
+    }
+
     /// Combined-cue rules for phrasings that name the field indirectly:
     /// "on which date was the patent granted" carries no "grant date"
     /// bigram, but ⟨patent⟩ + ⟨granted⟩ + ⟨date/when⟩ names it exactly.
