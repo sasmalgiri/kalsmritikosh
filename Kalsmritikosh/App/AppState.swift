@@ -1395,6 +1395,13 @@ public final class AppState {
                 eventsByTitleTokens: { [weak events] tokens in
                     guard let events else { return [] }
                     return (try? await events.findByTitleTokens(tokens)) ?? []
+                },
+                // A1.2 — the abstention receipt's archive-wide scope.
+                archiveTotals: { [weak db] in
+                    guard let db else { return (0, 0) }
+                    let docs = Int((try? await db.query("SELECT COUNT(*) FROM knowledge_objects;", []).first?.int(0)) ?? 0)
+                    let passages = Int((try? await db.query("SELECT COUNT(*) FROM chunks WHERE review_status IS NULL;", []).first?.int(0)) ?? 0)
+                    return (docs, passages)
                 }
             )
             let memoryDistiller = MemoryDistiller(
@@ -2503,14 +2510,31 @@ public final class AppState {
                              + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
                              + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities));
                         """, []).first?.int(0) ?? 0
-                        guard stale > 0 else { return }
-                        KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era — refreshing in the background")
-                        let coordinator = LedgerDrainCoordinator(
-                            database: drainDB, objects: drainObjects, entities: drainEntities,
-                            events: drainEvents, facts: drainFacts, evidence: drainEvidence)
-                        _ = try await coordinator.drain()
+                        if stale > 0 {
+                            KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era — refreshing in the background")
+                            let coordinator = LedgerDrainCoordinator(
+                                database: drainDB, objects: drainObjects, entities: drainEntities,
+                                events: drainEvents, facts: drainFacts, evidence: drainEvidence)
+                            _ = try await coordinator.drain()
+                        }
                     } catch {
                         KalsmritikoshLog.app.error("Ledger drain failed (will retry next launch): \(error)")
+                    }
+                    // SPEC A1.4 (the reachability lesson, applied) — the rest
+                    // of the derived-data producers run in the SAME boot pass,
+                    // each idempotent and self-skipping when current:
+                    // chunk reindex → term salience → topic tree (the Big
+                    // Picture's input) → the advisory twins (budgeted).
+                    do {
+                        _ = try await ChunkReindexCoordinator(database: drainDB).run()
+                        _ = try await TermSalienceComputer(database: drainDB).run()
+                        _ = try await TopicTreeBuilder(database: drainDB).run()
+                        _ = try await EntityPlausibilityTwin(database: drainDB)
+                            .runOnce(gate: EntityQualityGate.bundled())
+                        _ = try await EventRecordTwin(database: drainDB).runOnce()
+                        KalsmritikoshLog.app.info("Boot maintenance pass complete (reindex, terms, tree, twins)")
+                    } catch {
+                        KalsmritikoshLog.app.error("Boot maintenance pass failed (will retry next launch): \(error)")
                     }
                 }
             }

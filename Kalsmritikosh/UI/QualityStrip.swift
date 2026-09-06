@@ -411,7 +411,7 @@ public struct QualityStrip: View {
         return parts.joined(separator: " · ")
     }
 
-    private static func confidenceWord(_ c: Confidence) -> String {
+    static func confidenceWord(_ c: Confidence) -> String {
         switch c.value {
         case 0.7...: return "strong"
         case 0.4..<0.7: return "moderate"

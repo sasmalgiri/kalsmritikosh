@@ -45,7 +45,7 @@ public nonisolated enum LegalNotice {
     public static func modelStamp(providerID: String = "Apple on-device AI") -> String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
         let build = "macOS \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
-        return "AI text by \(providerID) (FoundationModels, \(build))"
+        return "AI text by \(providerID) (FoundationModels, \(build), build \(BuildIdentity.gitSHA))"
     }
 
     /// One-liner for the Ask entry / empty state.

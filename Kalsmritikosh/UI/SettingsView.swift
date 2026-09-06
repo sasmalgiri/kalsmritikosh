@@ -1350,9 +1350,10 @@ public struct SettingsView: View {
             legalItem("Changes to these notices", LegalNotice.changesStatement, "clock.arrow.2.circlepath")
             legalItem("Acknowledgments", LegalNotice.thirdPartyStatement, "shippingbox")
 
-            Text("Notices version \(LegalNotice.termsVersion)")
+            Text("Notices version \(LegalNotice.termsVersion) · \(BuildIdentity.displayLine)")
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(.tertiary)
+                .accessibilityLabel("Notices version \(LegalNotice.termsVersion). \(BuildIdentity.displayLine)")
             // The counsel note is an owner/developer reminder, not a user
             // notice — kept in LegalNotice for the repo, not shown in the app.
         }

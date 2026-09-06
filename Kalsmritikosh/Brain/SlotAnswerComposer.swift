@@ -55,6 +55,7 @@ public enum SlotAnswerComposer {
         evaluations: [ClaimEvaluation],
         authorityObjectIDs: [UUID],
         documentsSearched: Int,
+        archivePassages: Int? = nil,
         scoreByObject: [KnowledgeObject.ID: Double] = [:],
         salienceByObject: [KnowledgeObject.ID: Double] = [:]
     ) -> SlotAnswerComposition? {
@@ -153,7 +154,9 @@ public enum SlotAnswerComposer {
                 }
                 sentence += "."
             }
-            sentence += " (Receipt: \(documentsSearched) document(s) exhausted across the keyword, entity, timeline and semantic layers; no model was consulted.)"
+            let scope = archivePassages.map { "\(documentsSearched) documents and \($0) passages" }
+                ?? "\(documentsSearched) document(s)"
+            sentence += " (Receipt: \(scope) exhausted across the keyword, entity, timeline and semantic layers; no model was consulted.)"
             return SlotAnswerComposition(
                 primaryText: sentence,
                 supportingObjectIDs: related.map { [$0.objectID] } ?? [],
