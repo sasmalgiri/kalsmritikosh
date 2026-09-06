@@ -238,7 +238,9 @@ public enum FactSchemaRegistry {
         "payee": "counterparty", "recipient": "counterparty", "paid to": "counterparty",
         "date": "date", "on": "date", "when": "date",
         "designation": "role", "position": "role", "title": "role", "job title": "role",
-        "status": "status", "email": "email", "phone": "phone", "location": "location"
+        "status": "status", "email": "email", "phone": "phone", "location": "location",
+        "applicant": "applicant", "owner": "applicant", "proprietor": "applicant",
+        "patentholder": "applicant", "inventor": "inventor"
     ]
 
     /// Expected value shape for a canonical field (best-effort; defaults to text).
@@ -247,6 +249,7 @@ public enum FactSchemaRegistry {
     nonisolated static let shapes: [String: ValueShape] = [
         "amount": .money, "date": .date, "employer": .text, "role": .text,
         "counterparty": .text, "status": .text, "email": .email, "phone": .phone,
+        "applicant": .text, "inventor": .text,
         "location": .text,
         "grantdate": .date, "filingdate": .date,
         "patentnumber": .identifier, "applicationnumber": .identifier,

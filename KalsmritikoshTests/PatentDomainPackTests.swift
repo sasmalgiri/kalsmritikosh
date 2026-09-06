@@ -109,4 +109,27 @@ struct PatentDomainPackTests {
         print("W4-PROBE us:", us.map { "\($0.field)=\($0.value)" })
         #expect(us.contains { $0.field == "patentnumber" && $0.value == "US1234567B2" })
     }
+
+    // MARK: - A1.1 (W-4c) — the role table
+
+    @Test("W-4c: the POA names its grantor — applicant extracts; 'owner' resolves to the applicant field; the slot composes one sentence")
+    func roleExtractionAndResolution() {
+        let poa = "GENERAL POWER OF ATTORNEY (PATENTS) THE PATENTS ACT, 1970. Form of Authorization of an Agent. I, shirshendu sasmal having Nationality of India, hereby authorize the agent below. Application No. 202331019665."
+        let facts = PatentDomainPack.extractFacts(fromText: poa, subjectLabel: "s", blockID: UUID())
+        #expect(facts.first { $0.field == "applicant" }?.value == "shirshendu sasmal",
+                "got: \(facts.map { "\($0.field)=\($0.value)" })")
+
+        let cert = PatentDomainPack.extractFacts(
+            fromText: "Applicant: Eco Sanskriti Innovation, Inventor: Shirshendu Sasmal",
+            subjectLabel: "s", blockID: UUID())
+        #expect(cert.contains { $0.field == "applicant" && $0.value.contains("Eco Sanskriti") })
+        #expect(cert.contains { $0.field == "inventor" && $0.value.contains("Shirshendu") })
+
+        // The ask side: "owner of this patent" resolves to the applicant field.
+        let plan = QueryPlanCompiler().compile(
+            intent: UserIntent(kind: .factualLookup, scope: .global, timeframe: nil,
+                               entityHints: [], rawQuestion: "who is the owner of this patent?"),
+            category: .fact, queryClass: .ordinary)
+        #expect(plan.slotFieldIDs.contains("applicant"), "got: \(plan.slotFieldIDs)")
+    }
 }

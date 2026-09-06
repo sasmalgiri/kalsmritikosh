@@ -58,7 +58,24 @@ public enum PatentDomainPack {
     /// the completeness invariant (SlotAnswerComposer display contracts) checks
     /// against, so a new emittable field cannot ship without a display contract.
     public nonisolated static let emittedFields: [String] =
-        ["patentNumber", "applicationNumber", "publicationNumber", "status", "grantDate", "filingDate"]
+        ["patentNumber", "applicationNumber", "publicationNumber", "status", "grantDate", "filingDate",
+         "applicant", "inventor"]
+
+    /// A1.1 — role capture patterns (field → regex with a ‹name› group). Data.
+    nonisolated static let rolePatterns: [(String, String)] = [
+        ("applicant", #"applicant[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
+        ("applicant", #"\bI,?\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)\s+(?:having|of|son of|daughter of|resid)"#),
+        ("applicant", #"granted to\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
+        ("inventor",  #"inventor[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
+    ]
+
+    nonisolated static func cleanRoleName(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        for prefix in ["mr. ", "mrs. ", "ms. ", "dr. ", "shri ", "smt. "] where t.lowercased().hasPrefix(prefix) {
+            t = String(t.dropFirst(prefix.count))
+        }
+        return t.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+    }
 
     /// Ordered by authority: granted/rejected are terminal official states.
     nonisolated static let statusKeywords: [(String, String)] = [
@@ -109,6 +126,29 @@ public enum PatentDomainPack {
                                      producerVersion: DerivedProducerVersions.facts,
                                      rawMatch: full.trimmingCharacters(in: .whitespaces), sourceCount: 1))
         }
+        // A1.1 (W-4c) — THE ROLE TABLE, as data: who stands in which role,
+        // read from certificate fields, POA parties, and labeled lines. The
+        // owner's witnessed gap: the POA plainly says "I, shirshendu sasmal…"
+        // while the answer said "Not found: identity". Names are captured
+        // conservatively (2–5 capitalized-or-lowercase word tokens before a
+        // delimiter); the validity trim strips titles and trailing clauses.
+        for (field, pattern) in Self.rolePatterns {
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            let ns = text as NSString
+            for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+                let r = m.range(withName: "name")
+                guard r.location != NSNotFound else { continue }
+                let name = Self.cleanRoleName(ns.substring(with: r))
+                guard name.split(separator: " ").count >= 2, name.count <= 60 else { continue }
+                let key = field + "|" + name.lowercased()
+                guard seen.insert(key).inserted else { continue }
+                facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: name,
+                                         status: .sourceAsserted, confidence: 0.7, sourceBlockIDs: [blockID],
+                                         producerVersion: DerivedProducerVersions.facts,
+                                         rawMatch: String(ns.substring(with: m.range).prefix(160)), sourceCount: 1))
+            }
+        }
+
         if let st = status(in: text) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "status", value: st,
                                      status: .sourceAsserted, confidence: 0.75, sourceBlockIDs: [blockID],
