@@ -2535,9 +2535,15 @@ public final class AppState {
                         _ = try await ChunkReindexCoordinator(database: drainDB).run()
                         _ = try await TermSalienceComputer(database: drainDB).run()
                         _ = try await TopicTreeBuilder(database: drainDB).run()
-                        _ = try await EntityPlausibilityTwin(database: drainDB)
-                            .runOnce(gate: EntityQualityGate.bundled())
-                        _ = try await EventRecordTwin(database: drainDB).runOnce()
+                        // A6 idempotence (parity finding #2): a per-boot twin
+                        // BUDGET means every boot writes until the frontier
+                        // drains (~50 docs/200 entities a launch). Loop each
+                        // twin to frontier-empty in THIS one pass — later
+                        // boots write nothing and the world stands still.
+                        while try await EntityPlausibilityTwin(database: drainDB)
+                            .runOnce(gate: EntityQualityGate.bundled()).scanned > 0 {}
+                        while try await EventRecordTwin(database: drainDB)
+                            .runOnce().documentsExamined > 0 {}
                         KalsmritikoshLog.app.info("Boot maintenance pass complete (reindex, terms, tree, twins)")
                     } catch {
                         KalsmritikoshLog.app.error("Boot maintenance pass failed (will retry next launch): \(error)")
