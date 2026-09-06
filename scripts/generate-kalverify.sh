@@ -17,6 +17,7 @@ cd "$(dirname "$0")/.."
 OUT="verifier/kalverify.swift"
 CORE_FILES=(
   "Kalsmritikosh/Core/LegalNotice.swift"
+  "Kalsmritikosh/App/BuildIdentity.swift"
   "Kalsmritikosh/Personas/Investigator/EvidentiaryStandard.swift"
   "Kalsmritikosh/Personas/PersonaJobKind.swift"
   "Kalsmritikosh/Sutra/JobTooling.swift"
