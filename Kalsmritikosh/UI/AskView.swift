@@ -886,9 +886,12 @@ public struct AskView: View {
         } else {
             lines.append(answer.body)
         }
-        let pct = Int(answer.confidence.value * 100)
+        // A1.3 / RC-8 — ONE confidence presentation: the word, and honest
+        // source grammar (never "citation(s)", never a percent beside a word).
+        let sources = Set(answer.citations.map(\.objectID)).count
         lines.append("")
-        lines.append("Confidence \(pct)% · \(answer.citations.count) citation(s)")
+        lines.append("Confidence: \(QualityStrip.confidenceWord(answer.confidence))"
+            + (sources > 0 ? " · \(sources) source\(sources == 1 ? "" : "s")" : ""))
         if !answer.contradictions.isEmpty {
             lines.append("⚠ Contradictions:")
             for c in answer.contradictions {

@@ -236,6 +236,11 @@ public struct EvidenceVerifier: Verifier {
     /// (factualLookup retrieval ranks chunks, not milestones, so "how many
     /// hearings" never met the hearing rows). nil → retrieval-only (legacy).
     private let eventsByTitleTokens: (@Sendable ([String]) async -> [Event])?
+    /// SPEC A1.2 — the abstention receipt's ARCHIVE-WIDE scope: total
+    /// documents and passages from the ledger, not the candidate window
+    /// (the owner's live not-found said "54 documents" on a 716-document
+    /// archive). nil → window counts (legacy rigs).
+    private let archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))?
 
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
@@ -248,7 +253,8 @@ public struct EvidenceVerifier: Verifier {
         answerabilityMinRetrievalScore: Double = 0.20,
         citationResolver: CitationResolver? = nil,
         anchorsProvider: (@Sendable () async -> [Entity])? = nil,
-        eventsByTitleTokens: (@Sendable ([String]) async -> [Event])? = nil
+        eventsByTitleTokens: (@Sendable ([String]) async -> [Event])? = nil,
+        archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))? = nil
     ) {
         self.minimumConfidence = minimumConfidence
         self.minimumCitations = minimumCitations
@@ -261,6 +267,7 @@ public struct EvidenceVerifier: Verifier {
         self.citationResolver = citationResolver
         self.anchorsProvider = anchorsProvider
         self.eventsByTitleTokens = eventsByTitleTokens
+        self.archiveTotals = archiveTotals
     }
 
     public func verify(
@@ -597,12 +604,16 @@ public struct EvidenceVerifier: Verifier {
         // registered fact field, compose the slot answer from the surfaced
         // facts (their carried evaluations decide surfaceability).
         let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // A1.2 — the receipt speaks for the WHOLE archive.
+        let totals = await archiveTotals?()
+        let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count
         let slot = SlotAnswerComposer.compose(
             slotFieldIDs: plan.slotFieldIDs,
             facts: retrieval.genericFacts,
             evaluations: retrieval.claimEvaluations,
             authorityObjectIDs: retrieval.authorityObjectIDs,
-            documentsSearched: Set(retrieval.chunks.map(\.chunk.objectID)).count,
+            documentsSearched: searchedScope,
+            archivePassages: totals?.passages,
             scoreByObject: scoreByObject,
             salienceByObject: meanSalienceByObject)
 
@@ -643,7 +654,7 @@ public struct EvidenceVerifier: Verifier {
         // no slot composed (a named fact field still outranks the shape).
         if slot == nil {
             let shape = QuestionShapeRouter.route(intent.rawQuestion).shape
-            let docsSearched = Set(retrieval.chunks.map(\.chunk.objectID)).count
+            let docsSearched = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count
             // P5 residual — the SHAPE-AWARE event fetch: when an event-shaped
             // question's vocabulary matches nothing in the retrieval set (the
             // live hearings-count gap: chunk-ranked retrieval never carried
@@ -714,7 +725,7 @@ public struct EvidenceVerifier: Verifier {
         // prefix — "Reported:", "Derived:" — is a restated fact, not an
         // answer) or an empty claim set; it never preempts real composed
         // prose (an FM sentence carries no frame prefix).
-        let framePrefixes = ["Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"]
+        let framePrefixes = ["The source says:", "Reported:", "Corroborated:", "Derived:", "User-confirmed:", "Inference:", "Conflicting accounts:"] // jargon-ok: DETECTOR list — recognizes legacy frames; the banned token is never produced
         let substantiveDocClaims = claims.filter { !$0.supportingObjectIDs.isEmpty }
         let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
             framePrefixes.contains { c.statement.hasPrefix($0) }

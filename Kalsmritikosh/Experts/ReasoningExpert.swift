@@ -168,7 +168,7 @@ public struct ReasoningExpert: Expert {
         case .fact:           return ""                    // a directly-observed fact stands unframed
         case .corroborated:   return "Corroborated: "
         case .derivation:     return "Derived: "
-        case .attributed:     return "Reported: "
+        case .attributed:     return "The source says: "   // A1.3: the fact-spam frame "Reported:" is banned (RC-8 lint)
         case .userAttributed: return "User-confirmed: "
         case .inference:      return "Inference: "
         case .conflict:       return "Conflicting accounts: "
