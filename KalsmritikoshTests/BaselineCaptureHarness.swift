@@ -122,17 +122,19 @@ struct BaselineCaptureHarness {
         // post-maintenance world (like-stamp-to-like-stamp).
         if let db = state.database {
             for poll in 0..<240 {   // cap ~20 min; the pass is minutes on 716 docs
-                let open = (try? await db.query("""
-                SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
-                     + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
-                     + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities))
-                     + (SELECT COUNT(*) FROM entities e WHERE e.kind IN ('person','organization') AND e.merged_into IS NULL
-                          AND NOT EXISTS (SELECT 1 FROM fact_reviews fr WHERE fr.subject_id = e.id AND fr.reviewer = 'twin.entity'))
-                     + (SELECT COUNT(*) FROM knowledge_objects ko
+                let row = (try? await db.query("""
+                SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts)),
+                       (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events)),
+                       (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities)),
+                       (SELECT COUNT(*) FROM entities e WHERE e.kind IN ('person','organization') AND e.merged_into IS NULL
+                          AND NOT EXISTS (SELECT 1 FROM fact_reviews fr WHERE fr.subject_id = e.id AND fr.reviewer = 'twin.entity')),
+                       (SELECT COUNT(*) FROM knowledge_objects ko
                           WHERE NOT EXISTS (SELECT 1 FROM fact_reviews fr WHERE fr.subject_id = ko.id AND fr.reviewer = 'twin.event'));
-                """, []).first?.int(0)) ?? 0
+                """, []).first)
+                let parts = (0..<5).map { Int(row?.int($0) ?? 0) }
+                let open = parts.reduce(0, +)
                 if open == 0 { print("\(label) QUIESCE: maintenance frontiers empty after \(poll) poll(s)"); break }
-                if poll % 15 == 0 { print("\(label) QUIESCE: \(open) maintenance row(s) still open…") }
+                if poll % 15 == 0 { print("\(label) QUIESCE: \(open) open (facts \(parts[0]) · events \(parts[1]) · entities \(parts[2]) · twinE \(parts[3]) · twinK \(parts[4]))") }
                 try? await Task.sleep(nanoseconds: 5_000_000_000)
             }
         }
