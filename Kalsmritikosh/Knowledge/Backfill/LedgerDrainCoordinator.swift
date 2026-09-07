@@ -53,6 +53,8 @@ public struct DrainReceipt: Sendable {
     public var anchorsAfter = 0
     /// W-4b — anchors whose minting facts no longer exist, removed.
     public var orphanAnchorsSwept = 0
+    /// A6 — era-stale facts unreachable by any current document version, removed.
+    public var factOrphansSwept = 0
     public var eventKOsRewritten = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
@@ -140,6 +142,17 @@ public final class LedgerDrainCoordinator {
 
         // ── pass 4: global milestone rebuild, anchored, suspects excluded ───
         receipt.milestonesRebuilt = try await rebuildMilestones(koIDs: koIDs)
+
+        // ── pass 2b (A6): ORPHANED-FACTS SWEEP ───────────────────────────────
+        // Any fact STILL era-stale after the per-KO pass is unreachable by
+        // the drain's own derivation — its evidence blocks are not part of
+        // any document's current version (deleted or re-versioned sources).
+        // Derived hygiene, same class as the stale-facts delete inside
+        // drainFacts: source rows untouched, the orphan derived row dies.
+        try await database.exec("""
+        DELETE FROM generic_facts WHERE COALESCE(producer_version, 0) != \(DerivedProducerVersions.facts);
+        """, [])
+        receipt.factOrphansSwept = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
 
         // ── pass 4b (W-4b): ORPHANED-ANCHOR SWEEP ────────────────────────────
         // An anchor is DERIVED from facts; when a facts refresh stops minting
