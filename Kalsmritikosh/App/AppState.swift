@@ -3993,7 +3993,19 @@ public final class AppState {
         results += await tools.fetchSpans(question: question,
                                           shape: QuestionShape(rawValue: plan.shape) ?? .unresolved)
         guard let grounded = await ToolGroundedComposer.compose(
-            question: question, plan: plan, results: results, capabilities: caps) else { return nil }
+            question: question, plan: plan, results: results, capabilities: caps,
+            allowUnverified: UnverifiedAnswerPolicy.showBadged) else { return nil }
+
+        // U-1 — the sweep confirmed nothing but the policy says show-badged:
+        // ship the reading marked Unverified, zero citations, low confidence.
+        // Never enters the sealed envelope (policy defaults off).
+        if !grounded.verified {
+            let text = grounded.sentences.map(\.text).joined(separator: " ")
+            let body = text + "\n\n(" + grounded.receiptLines.joined(separator: " · ") + ")"
+            KalsmritikoshLog.brain.info("ledger.compose: shipped UNVERIFIED reading (\(grounded.sentences.count) sentence(s))")
+            return VerifiedAnswer(body: body, answerText: text, citations: [],
+                                  confidence: Confidence(0.2), answerState: .unverified)
+        }
 
         var receipt = grounded.receiptLines
         // A2.2 — the scoping receipt: the anchor's topic node, when one holds it.

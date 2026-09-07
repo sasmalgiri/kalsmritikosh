@@ -1415,6 +1415,19 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
+            // U-1 — the Unverified policy: show-badged vs abstain when the
+            // evidence check cannot confirm an AI reading. Off by default
+            // (abstain), which preserves the sealed answer behavior.
+            Toggle("Show unconfirmed AI readings (marked)", isOn: Binding(
+                get: { UserDefaults.standard.bool(forKey: UnverifiedAnswerPolicy.defaultsKey) },
+                set: { UserDefaults.standard.set($0, forKey: UnverifiedAnswerPolicy.defaultsKey) }
+            ))
+            Text("When the evidence check cannot confirm what the AI read, show it anyway with the badge \u{201C}Unverified — AI reading; evidence check failed\u{201D} and no sources. Off = such readings are withheld and the answer falls back to checked material only. Keep this off for legal, compliance, or HR work.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 2)
+
             Toggle("Apple AI writes the final answer", isOn: Binding(
                 get: { FeatureFlags.shared.llmAnswerSynthesis },
                 set: { FeatureFlags.shared.llmAnswerSynthesis = $0 }

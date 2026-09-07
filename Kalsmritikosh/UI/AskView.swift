@@ -554,13 +554,16 @@ public struct AskView: View {
                             .help("Copy this answer")
                         }
                     }
-                    // HISTORY follow-on — assistant bodies may carry
-                    // `## Chapter heading` lines from the narrative
-                    // composer's folded VerifiedAnswer.body. Render
-                    // markdown so headings break visually. Falls back
-                    // to plain text when AttributedString parsing
-                    // fails (preserves prior behavior for non-markdown
-                    // bodies). Line splits keep paragraph spacing.
+                    // U-1 — ANSWER/EVIDENCE SEPARATION. The Answer section
+                    // (sentence · badge · one-line trust note) renders first
+                    // and cannot be touched by anything that fails below it;
+                    // the Evidence section (About/footers, quality strip)
+                    // follows with its own complete/partial/failed state.
+                    // The split is byte-preserving — same composer output,
+                    // two sections. HISTORY bodies keep their markdown
+                    // headings via assistantBody.
+                    let sections = AnswerPresentation.split(
+                        body: turn.body, answer: verifiedAnswers[turn.id])
                     Group {
                         if turn.body.isEmpty {
                             // Streaming/verifying — show the animated
@@ -576,22 +579,55 @@ public struct AskView: View {
                             .padding(.vertical, 12)
                             .cardSurface(cornerRadius: 16)
                         } else {
-                            assistantBody(turn.body)
-                                .textSelection(.enabled)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 11)
-                                .cardSurface(cornerRadius: 16)
+                            VStack(alignment: .leading, spacing: 6) {
+                                assistantBody(sections.answer.text)
+                                    .textSelection(.enabled)
+                                if let badge = sections.answer.badge {
+                                    AnswerBadgeChip(badge: badge)
+                                }
+                                if let note = sections.answer.trustNote {
+                                    Text(note)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            .cardSurface(cornerRadius: 16)
                         }
                     }
                     if let verified = verifiedAnswers[turn.id] {
-                        QualityStrip(
-                            answer: verified,
-                            onEvidenceTap: { objectID in
-                                revealSource(objectID: objectID)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Evidence", systemImage: "doc.text.magnifyingglass")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            switch sections.evidence.state {
+                            case .complete:
+                                EmptyView()
+                            case .partial(let reason):
+                                Label(reason, systemImage: "exclamationmark.circle")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            case .failed(let reason):
+                                Label(reason, systemImage: "xmark.octagon")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
                             }
-                        )
-                            .padding(.horizontal, 10)
-                            .padding(.bottom, 6)
+                            if !sections.evidence.text.isEmpty {
+                                assistantBody(sections.evidence.text)
+                                    .textSelection(.enabled)
+                            }
+                            QualityStrip(
+                                answer: verified,
+                                onEvidenceTap: { objectID in
+                                    revealSource(objectID: objectID)
+                                }
+                            )
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Evidence for this answer")
                     }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
@@ -899,6 +935,41 @@ public struct AskView: View {
             }
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - Answer badge chip (U-1)
+
+/// The badge from the semantics table, rendered as a small chip in the
+/// Answer section. Labels come from `AnswerBadge.label` verbatim — this
+/// view never re-words them.
+private struct AnswerBadgeChip: View {
+    let badge: AnswerBadge
+
+    private var style: (Color, String) {
+        switch badge {
+        case .supported:          return (.green, "checkmark.seal.fill")
+        case .partiallySupported: return (.yellow, "circle.lefthalf.filled")
+        case .unverified:         return (.purple, "eye.trianglebadge.exclamationmark")
+        case .notFound:           return (.secondary, "questionmark.circle")
+        case .twinVerified:       return (.green, "checkmark.shield")
+        case .aiReadingDiffered:  return (.orange, "arrow.triangle.branch")
+        }
+    }
+
+    var body: some View {
+        let (color, icon) = style
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .imageScale(.small)
+            Text(badge.label)
+                .font(.caption.weight(.semibold))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.12), in: Capsule())
+        .accessibilityLabel("Answer status: \(badge.label)")
     }
 }
 

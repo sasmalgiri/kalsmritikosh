@@ -47,6 +47,7 @@ public struct QualityStrip: View {
             case .contradicted:          return (.orange, "exclamationmark.triangle.fill")
             case .notFound:              return (.secondary, "questionmark.circle")
             case .insufficientlyIndexed: return (.blue, "hourglass")
+            case .unverified:            return (.purple, "eye.trianglebadge.exclamationmark")
             case .unknown:               return (.secondary, "circle")
             }
         }()

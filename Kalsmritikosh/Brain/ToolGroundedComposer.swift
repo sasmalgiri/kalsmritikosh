@@ -20,6 +20,21 @@ public struct ToolGroundedAnswer: Sendable {
     public let sentences: [(text: String, citedID: String)]
     public let citedObjectIDs: [UUID]
     public let receiptLines: [String]
+    /// U-1 — false when the sweep confirmed nothing and the Unverified
+    /// policy chose show-badged over abstention: the sentences are the
+    /// model's UNCONFIRMED reading, carry zero citations, and must wear
+    /// the "Unverified — AI reading; evidence check failed" badge.
+    public let verified: Bool
+
+    public init(sentences: [(text: String, citedID: String)],
+                citedObjectIDs: [UUID],
+                receiptLines: [String],
+                verified: Bool = true) {
+        self.sentences = sentences
+        self.citedObjectIDs = citedObjectIDs
+        self.receiptLines = receiptLines
+        self.verified = verified
+    }
 }
 
 public enum ToolGroundedComposer {
@@ -71,7 +86,8 @@ public enum ToolGroundedComposer {
         question: String,
         plan: QuestionPlan,
         results: [ToolResult],
-        capabilities: CapabilityRegistry
+        capabilities: CapabilityRegistry,
+        allowUnverified: Bool = false
     ) async -> ToolGroundedAnswer? {
         guard !results.isEmpty else { return nil }
         let spec = CapabilitySpec.reasoning(contextTokens: 3_000, purpose: "ledger.compose")
@@ -99,6 +115,10 @@ public enum ToolGroundedComposer {
         }
         let kept = sweep(candidate: text, question: question, results: results)
         guard !kept.isEmpty else {
+            if allowUnverified {
+                logger.info("ledger.compose: SWEEP kept nothing — shipping badged Unverified (policy)")
+                return unverifiedFallback(text: text, plan: plan)
+            }
             logger.info("ledger.compose: SWEEP kept nothing — falling through")
             return nil
         }
@@ -111,5 +131,35 @@ public enum ToolGroundedComposer {
             LegalNotice.modelStamp(),
         ]
         return ToolGroundedAnswer(sentences: kept, citedObjectIDs: objects, receiptLines: receipt)
+    }
+
+    /// U-1 — the show-badged branch, PURE so CI proves it: the model's
+    /// raw reading with the bracket ids stripped, zero citations, and a
+    /// receipt that says the check failed. Never chosen unless the
+    /// Unverified policy is on; the default remains abstention.
+    public nonisolated static func unverifiedFallback(
+        text: String,
+        plan: QuestionPlan
+    ) -> ToolGroundedAnswer? {
+        var sentences: [(text: String, citedID: String)] = []
+        for raw in text.components(separatedBy: CharacterSet(charactersIn: ".\n")) {
+            var body = raw.trimmingCharacters(in: .whitespaces)
+            // Strip a trailing "[id]" — the id confirmed nothing, so
+            // rendering it would dress the sentence as cited.
+            if let open = body.lastIndex(of: "["), let close = body.lastIndex(of: "]"),
+               open < close, body[body.index(after: close)...].allSatisfy(\.isWhitespace) {
+                body = String(body[..<open]).trimmingCharacters(in: .whitespaces)
+            }
+            guard body.count >= 8 else { continue }
+            sentences.append((body + ".", ""))
+        }
+        guard !sentences.isEmpty else { return nil }
+        let receipt = [
+            "Plan: \(plan.shape)\(plan.field.map { " · field \($0)" } ?? "")\(plan.subjectMention.map { " · subject \($0)" } ?? "")",
+            "Evidence check failed — nothing below is cited; the reading is shown because your Unverified setting is on.",
+            LegalNotice.modelStamp(),
+        ]
+        return ToolGroundedAnswer(sentences: sentences, citedObjectIDs: [],
+                                  receiptLines: receipt, verified: false)
     }
 }
