@@ -115,6 +115,27 @@ struct BaselineCaptureHarness {
     static func quiesceInFact(state: AppState, label: String,
                               threshold: TimeInterval = 10, maxRounds: Int = 12) async -> Bool {
         _ = await state.enrichmentDrainer?.drainAll()
+        // A6 (parity finding #3): the BOOT MAINTENANCE PASS writes on the
+        // fresh ledger copy (drain to current eras, twins to frontier-empty,
+        // tree build). The asks must not race it — poll every frontier to
+        // ZERO before the first question, so all stamps read the same
+        // post-maintenance world (like-stamp-to-like-stamp).
+        if let db = state.database {
+            for poll in 0..<240 {   // cap ~20 min; the pass is minutes on 716 docs
+                let open = (try? await db.query("""
+                SELECT (SELECT COUNT(*) FROM generic_facts WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.facts))
+                     + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
+                     + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities))
+                     + (SELECT COUNT(*) FROM entities e WHERE e.kind IN ('person','organization') AND e.merged_into IS NULL
+                          AND NOT EXISTS (SELECT 1 FROM fact_reviews fr WHERE fr.subject_id = e.id AND fr.reviewer = 'twin.entity'))
+                     + (SELECT COUNT(*) FROM knowledge_objects ko
+                          WHERE NOT EXISTS (SELECT 1 FROM fact_reviews fr WHERE fr.subject_id = ko.id AND fr.reviewer = 'twin.event'));
+                """, []).first?.int(0)) ?? 0
+                if open == 0 { print("\(label) QUIESCE: maintenance frontiers empty after \(poll) poll(s)"); break }
+                if poll % 15 == 0 { print("\(label) QUIESCE: \(open) maintenance row(s) still open…") }
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+            }
+        }
         for round in 0..<maxRounds {
             let t0 = Date()
             _ = await state.brain.answer(
