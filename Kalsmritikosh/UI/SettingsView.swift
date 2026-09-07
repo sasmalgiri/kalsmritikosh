@@ -20,7 +20,6 @@ public struct SettingsView: View {
     @State private var providerIDs: [String] = []
     @State private var manifests: [ModelManifest] = []
     @State private var pins: [ModelCapability: String] = [:]
-    @State private var allowCloud: Bool = PrivacyGate.shared.allowCloudRouting
     @State private var threadCoalescing: Bool = UserDefaults.standard.bool(forKey: "kalsmritikosh.moveA.threadCoalescing")
     @State private var showIngestGuide = false
     /// SURFACE STYLE switch — classic vs catalog-driven analytic launchers.
@@ -1528,21 +1527,13 @@ public struct SettingsView: View {
     private var privacySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Privacy").font(.title3.bold())
-            // RELEASE-READINESS (fifteenth review): the cloud-routing toggle is a
-            // DEV-ONLY control. The release product contract is zero network —
-            // PrivacyGate is compile-locked to no-cloud in Release, so showing a
-            // toggle there would contradict the shipped behavior.
-            #if DEBUG
-            Toggle("Allow cloud-routed providers (dev builds only)", isOn: $allowCloud)
-                .onChange(of: allowCloud) { _, newValue in
-                    PrivacyGate.shared.allowCloudRouting = newValue
-                }
-            Text("Dev-build control. When off, the CapabilityRegistry never returns providers whose privacy tier is `cloud`. In Release builds this gate is compile-locked off and no cloud or local-network provider is reachable.")
+            // U-0 (privacy invariant closure): the old dev-only cloud toggle
+            // was a false affordance — the product has no network entitlement
+            // in any build, so there is nothing a switch could enable.
+            Label("This app has no network access; there is nothing to toggle.", systemImage: "lock.shield")
+            Text("Every model runs on this Mac. The app is built without the network permission, so no document, question, or answer can leave your computer.")
                 .font(.caption).foregroundStyle(.secondary)
-            #else
-            Label("All processing is on-device. Cloud routing is compiled out of this build.", systemImage: "lock.shield")
-                .font(.caption).foregroundStyle(.secondary)
-            #endif
+                .fixedSize(horizontal: false, vertical: true)
 
             Divider().padding(.vertical, 4)
 
