@@ -79,7 +79,18 @@ public struct EntityPlausibilityTwin {
         """, [.integer(Int64(Self.batchBudget))])
 
         for row in rows {
-            guard let id = row.uuid(0), let value = row.string(1), let kind = row.string(2) else { continue }
+            guard let id = row.uuid(0) else { continue }
+            guard let value = row.string(1), let kind = row.string(2) else {
+                // A6 frontier law: mark the undecodable row so it never
+                // re-enters the frontier.
+                receipt.scanned += 1
+                receipt.agreed += 1
+                try await database.exec("""
+                INSERT INTO fact_reviews (id, subject_kind, subject_id, action, reviewer, reason, reviewed_at)
+                VALUES (?, 'entity', ?, 'accept', 'twin.entity', 'no readable value to re-check', ?);
+                """, [.uuid(UUID()), .uuid(id), .real(Date().timeIntervalSince1970)])
+                continue
+            }
             let sources = Int(row.int(3) ?? 1)
             receipt.scanned += 1
 

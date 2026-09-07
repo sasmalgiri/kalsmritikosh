@@ -64,7 +64,18 @@ public struct EventRecordTwin {
 
         let extractor = RuleEventExtractor()
         for row in rows {
-            guard let koID = row.uuid(0), let content = row.string(1) else { continue }
+            // A6 frontier law: an undecodable row still gets its marker —
+            // NOTHING re-enters the frontier forever.
+            guard let koID = row.uuid(0) else { continue }
+            guard let content = row.string(1), !content.isEmpty else {
+                receipt.documentsExamined += 1
+                receipt.agreed += 1
+                try await database.exec("""
+                INSERT INTO fact_reviews (id, subject_kind, subject_id, action, reviewer, reason, reviewed_at)
+                VALUES (?, 'event-record', ?, 'accept', 'twin.event', 'no readable content to re-check', ?);
+                """, [.uuid(UUID()), .uuid(koID), .real(Date().timeIntervalSince1970)])
+                continue
+            }
             receipt.documentsExamined += 1
 
             // The stored record for this document.
