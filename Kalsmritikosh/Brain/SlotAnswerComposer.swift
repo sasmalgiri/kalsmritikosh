@@ -332,6 +332,10 @@ public enum SlotAnswerComposer {
         case "patentnumber":      return "Patent No."
         case "applicationnumber": return "Application No."
         case "publicationnumber": return "Publication No."
+        // Persona-coverage starter-pack identifiers.
+        case "casenumber":        return "Case No."
+        case "accountnumber":     return "Account No."
+        case "idnumber":          return "ID No."
         default:                  return nil
         }
     }

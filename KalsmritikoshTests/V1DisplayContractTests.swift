@@ -48,6 +48,13 @@ struct V1DisplayContractTests {
         assertContractsCovered(ContractDomainPack.emittedFields, pack: "contract")
         assertContractsCovered(TransactionDomainPack.emittedFields, pack: "transaction")
         assertContractsCovered(EmploymentDomainPack.emittedFields, pack: "employment")
+        // Persona-coverage starter packs.
+        assertContractsCovered(MedicalDomainPack.emittedFields, pack: "medical")
+        assertContractsCovered(LegalCaseDomainPack.emittedFields, pack: "legalCase")
+        assertContractsCovered(VitalRecordsDomainPack.emittedFields, pack: "vitalRecords")
+        assertContractsCovered(FinancialStatementDomainPack.emittedFields, pack: "financialStatement")
+        assertContractsCovered(PropertyDomainPack.emittedFields, pack: "property")
+        assertContractsCovered(IdentityDocumentDomainPack.emittedFields, pack: "identityDocument")
     }
 
     @Test("Identifier display constants equal the witnessed answer-surface prefixes")

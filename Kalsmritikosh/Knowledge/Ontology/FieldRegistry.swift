@@ -25,6 +25,15 @@ public enum FieldRegistry {
         for f in ContractDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
         for f in TransactionDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
         for f in EmploymentDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        // Persona-coverage starter packs — the app answers precisely for
+        // health, litigation, genealogy, finance, property, and identity
+        // documents, not IP alone.
+        for f in MedicalDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        for f in LegalCaseDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        for f in VitalRecordsDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        for f in FinancialStatementDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        for f in PropertyDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
+        for f in IdentityDocumentDomainPack.emittedFields { out.insert(FactSchemaRegistry.normalizeField(f)) }
         for entry in SlotFieldResolver.vocabulary { out.insert(FactSchemaRegistry.normalizeField(entry.fieldID)) }
         return out
     }()

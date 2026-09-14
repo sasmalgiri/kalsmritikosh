@@ -256,6 +256,15 @@ public enum FactSchemaRegistry {
         "publicationnumber": .identifier, "invoicenumber": .identifier,
         "casenumber": .identifier, "pan": .identifier, "gstin": .identifier,
         "doi": .identifier,
+        // Persona-coverage starter packs (medical / legal-case / vital /
+        // financial / property / identity). Identifiers get display
+        // constants in SlotAnswerComposer; dates use the precision canon;
+        // money uses renderMoney; text renders its own atom.
+        "accountnumber": .identifier, "idnumber": .identifier,
+        "visitdate": .date, "hearingdate": .date, "birthdate": .date,
+        "deathdate": .date, "marriagedate": .date, "deeddate": .date,
+        "issuedate": .date, "expirydate": .date,
+        "balance": .money, "consideration": .money,
     ]
 
     public nonisolated static func normalizeField(_ raw: String) -> String {

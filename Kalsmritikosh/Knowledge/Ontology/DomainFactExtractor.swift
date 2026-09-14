@@ -17,14 +17,18 @@ import Foundation
 public struct DomainFactExtractor: Sendable {
     public nonisolated init() {}
 
-    /// The five packs as callable roots, in the DEFAULT order (the historical
-    /// sequence — first-seen value form wins in merge, so order is semantic).
+    /// The packs as callable roots, in the DEFAULT order (the historical
+    /// sequence first — first-seen value form wins in merge, so order is
+    /// semantic — then the persona-coverage starter packs, each marker-gated
+    /// so it stays silent outside its domain).
     private nonisolated static let defaultOrder: [PackRoot] = [
-        .employment, .transaction, .contract, .patent, .research
+        .employment, .transaction, .contract, .patent, .research,
+        .medical, .legalCase, .vitalRecords, .financialStatement, .property, .identityDocument
     ]
 
     nonisolated enum PackRoot: CaseIterable, Sendable {
         case employment, transaction, contract, patent, research
+        case medical, legalCase, vitalRecords, financialStatement, property, identityDocument
         nonisolated func extractFacts(fromText t: String, subjectLabel s: String, blockID b: UUID) -> [GenericFact] {
             switch self {
             case .employment:  return EmploymentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
@@ -32,6 +36,12 @@ public struct DomainFactExtractor: Sendable {
             case .contract:    return ContractDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
             case .patent:      return PatentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
             case .research:    return ResearchDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .medical:            return MedicalDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .legalCase:          return LegalCaseDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .vitalRecords:       return VitalRecordsDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .financialStatement: return FinancialStatementDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .property:           return PropertyDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
+            case .identityDocument:   return IdentityDocumentDomainPack.extractFacts(fromText: t, subjectLabel: s, blockID: b)
             }
         }
     }
