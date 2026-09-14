@@ -60,6 +60,9 @@ public actor CausalDiscoverer: BackgroundService {
     /// a few hundred to a few thousand events; one pass over them
     /// completes in seconds.
     private let maxEventsPerPass: Int
+    /// W-6 (unit 1.8) — max HEURISTIC outgoing links per source event. The
+    /// doc's budget is ≤3; lexically-grounded CAUSED links are exempt.
+    private let maxOutgoingPerEvent: Int
     private let intervalSeconds: TimeInterval
     private var runTask: Task<Void, Never>?
     private var lastRunStatus: LastRunStatus
@@ -74,6 +77,7 @@ public actor CausalDiscoverer: BackgroundService {
         maxGapDays: Int = 120,
         threshold: Double = 0.35,
         maxEventsPerPass: Int = 2000,
+        maxOutgoingPerEvent: Int = 3,
         intervalSeconds: TimeInterval = 6 * 3_600   // 4× per day
     ) {
         self.database = database
@@ -84,6 +88,7 @@ public actor CausalDiscoverer: BackgroundService {
         self.maxGapDays = maxGapDays
         self.threshold = threshold
         self.maxEventsPerPass = maxEventsPerPass
+        self.maxOutgoingPerEvent = maxOutgoingPerEvent
         self.intervalSeconds = intervalSeconds
         self.lastRunStatus = LastRunStatus(serviceID: "kalsmritikosh.causal.discover")
     }
@@ -210,9 +215,15 @@ public actor CausalDiscoverer: BackgroundService {
         }
 
         var emitted = 0
-        // O(N²) over a 2k cap = 4M pair checks max; each is a tier+set
-        // arithmetic op — completes in well under a second on the
-        // archive sizes we target.
+        // W-6 (unit 1.8) — the per-event outgoing BUDGET. Near-identical
+        // thread events used to explode into O(N²) pairwise CONTRIBUTED_TO
+        // noise. A source event may emit at most `maxOutgoingPerEvent`
+        // HEURISTIC links (CONTRIBUTED_TO / ENABLED); lexically-grounded
+        // CAUSED links are never capped — they are evidence, not adjacency.
+        // Highest-scoring heuristic links win the budget because `sorted`
+        // is by date and we count per source; the score gate + structural
+        // precondition below keep only the strongest.
+        var heuristicOutByEvent: [Event.ID: Int] = [:]
         for i in 0..<sorted.count {
             let a = sorted[i]
             for j in (i + 1)..<sorted.count {
@@ -238,6 +249,18 @@ public actor CausalDiscoverer: BackgroundService {
                     if Self.isEnablerPair(a: a, b: b) { return .enabled }
                     return .contributedTo
                 }()
+
+                // W-6 (unit 1.8) — heuristic links (no lexical trigger) must
+                // clear TWO extra gates before emission:
+                //   · a STRUCTURAL precondition — the pair must actually share
+                //     a participant (entity overlap), not merely fall close in
+                //     time; adjacency alone manufactures noise.
+                //   · the per-event outgoing BUDGET (≤ maxOutgoingPerEvent).
+                // CAUSED (lexical) bypasses both — it is grounded in text.
+                if score.lexicalTrigger == nil {
+                    guard score.entityOverlap > 0 else { continue }
+                    guard heuristicOutByEvent[a.id, default: 0] < maxOutgoingPerEvent else { continue }
+                }
                 let triple = "\(a.id.uuidString)|\(b.id.uuidString)|\(relation.rawValue)"
                 if existing.contains(triple) { continue }
 
@@ -260,6 +283,9 @@ public actor CausalDiscoverer: BackgroundService {
                 do {
                     try await links.insert(link)
                     emitted += 1
+                    if score.lexicalTrigger == nil {
+                        heuristicOutByEvent[a.id, default: 0] += 1
+                    }
                 } catch {
                     KalsmritikoshLog.knowledge.error("CausalDiscoverer: insert failed for \(a.id.uuidString.prefix(8), privacy: .public)→\(b.id.uuidString.prefix(8), privacy: .public) — \(String(describing: error), privacy: .public)")
                 }

@@ -242,10 +242,10 @@ struct V0AdversarialFixtureTests {
 
         // The true causal link must exist now AND after the bounding fix.
         #expect(caused >= 1, "the lexical-trigger CAUSED link was not discovered")
-        withKnownIssue("unit 1.8: O(n²) pairwise emission has no per-event cap until the bounding lands") {
-            #expect(contributed <= perEventBound * seeded.count,
-                    "\(contributed) CONTRIBUTED_TO links for \(seeded.count) events — noise manufacturing")
-        }
+        // W-6 (unit 1.8) FLIPPED — the per-event heuristic budget + structural
+        // (entity-overlap) precondition bound the CONTRIBUTED_TO explosion.
+        #expect(contributed <= perEventBound * seeded.count,
+                "\(contributed) CONTRIBUTED_TO links for \(seeded.count) events — noise manufacturing")
     }
 }
 

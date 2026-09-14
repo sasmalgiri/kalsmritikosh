@@ -126,10 +126,16 @@ public actor RuleBasedNarrativeComposer: NarrativeComposer {
             // Restrict to links whose BOTH endpoints are inside this
             // chapter — inter-chapter links surface elsewhere.
             let chapterEventSet = Set(planned.events.map(\.id))
-            causalLinks = raw.filter {
+            let intraChapter = raw.filter {
                 chapterEventSet.contains($0.sourceEventID)
                 && chapterEventSet.contains($0.targetEventID)
-            }.sorted { $0.confidence > $1.confidence }
+            }
+            // W-6 (unit 1.8) — only CAUSED (lexical) and ENABLED
+            // (precondition) links may author story connectives; heuristic
+            // CONTRIBUTED_TO adjacency is advisory and never reaches the
+            // prose. The budget keeps a dense chapter from over-claiming.
+            causalLinks = CausalLinkPolicy.boundedForAnswers(intraChapter)
+                .sorted { $0.confidence > $1.confidence }
         }
         if !causalLinks.isEmpty,
            let coda = Self.renderCausalCoda(
