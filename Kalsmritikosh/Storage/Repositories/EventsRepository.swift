@@ -289,6 +289,21 @@ public actor EventsRepository {
         return rows.compactMap(decode)
     }
 
+    /// U-3.4 (W-6) — how many events still await narrative-slot backfill.
+    /// The health panel's "backfill pending = 0" invariant reads this; the
+    /// predicate mirrors listEventsMissingNarrativeSlots exactly.
+    public func countEventsMissingNarrativeSlots() async throws -> Int {
+        let rows = try await database.query("""
+        SELECT COUNT(*) FROM events
+        WHERE narrative_slots_json IS NULL
+           OR narrative_slots_json = '{}'
+           OR narrative_slots_json LIKE '%"who":[]%'
+           OR narrative_slots_json LIKE '%"what":[]%'
+           OR narrative_slots_json LIKE '%"when":[]%';
+        """, [])
+        return Int(rows.first?.int(0) ?? 0)
+    }
+
     /// G3.20 — read the persisted fact_type for a single row. Returns
     /// nil when the row isn't classified or doesn't exist. Used by the
     /// WalkExplainer to type each end of a bond step.

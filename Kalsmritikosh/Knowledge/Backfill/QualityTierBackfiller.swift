@@ -63,6 +63,14 @@ public actor QualityTierBackfiller: BackgroundService {
     ///
     /// Returns count of rows actually re-tagged so callers can
     /// surface "N rows re-tiered" in Settings.
+    ///
+    /// U-3.4 (W-6) — entities still parked at T2 awaiting re-tier; 0 = done.
+    public func pendingCount() async -> Int {
+        let rows = try? await database.query(
+            "SELECT COUNT(*) FROM entities WHERE quality_tier = 'T2';", [])
+        return Int(rows?.first?.int(0) ?? 0)
+    }
+
     @discardableResult
     public func runOnce() async -> Int {
         let candidates: [(id: UUID, value: String, kind: String)]
