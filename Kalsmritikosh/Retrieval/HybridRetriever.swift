@@ -874,7 +874,11 @@ public actor HybridRetriever: Retriever {
     }
 
     private func summaryLayer(_ intent: UserIntent) async throws -> [Summary] {
+        // U-3.5 (W-6) — CommunitySummarizer classification: a model-generated
+        // summary may steer a search but is never itself citable evidence.
+        // Only deterministic / extractive summaries reach the retrieval set.
         try await summaries.listByLevel(.knowledgeBase, limit: 3)
+            .filter(\.isRetrievalEligible)
     }
 
     private func graphLayer(seeds: [Entity]) async throws -> [Relationship] {
