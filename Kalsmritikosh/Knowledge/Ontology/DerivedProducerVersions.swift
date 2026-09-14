@@ -33,7 +33,11 @@ public nonisolated enum DerivedProducerVersions {
     /// register re-mints its anchors. No re-ingest.
     /// v4 — A1.1: the role table (applicant/inventor extraction); the drain
     /// re-extracts and the register carries the roles. No re-ingest.
-    public static let facts = 4
+    /// v5 — W-5.1 (implement-all U-2): the ROLE-VALUE GATE — clause-shaped
+    /// role captures ("am writing to state…") are rejected at write, so a
+    /// v4 store can hold junk role facts a v5 producer cannot emit; the
+    /// drain re-extracts and the junk dies with its era. No re-ingest.
+    public static let facts = 5
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
@@ -53,5 +57,9 @@ public nonisolated enum DerivedProducerVersions {
     /// ANCHOR (backfillLegalMilestones passes anchor ids), so a v1 event's
     /// participant set can contain the anchor a v0 event never referenced. The
     /// V5 drain rebuilds milestones to apply the threading to the live archive.
-    public static let events = 1
+    ///   1→2 (W-5.3, implement-all U-2): the event-title normalizer — a v1
+    ///        email event's title is the raw subject ("Fwd: Fwd: intimation…");
+    ///        a v2 title is the stripped happening. The drain rewrites titles;
+    ///        the subject stays on the source document for citation.
+    public static let events = 2
 }

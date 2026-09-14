@@ -928,6 +928,14 @@ public struct AskView: View {
         lines.append("")
         lines.append("Confidence: \(QualityStrip.confidenceWord(answer.confidence))"
             + (sources > 0 ? " · \(sources) source\(sources == 1 ? "" : "s")" : ""))
+        // W-5.5 — the ADAPTIVE DISCLAIMER: a model-free answer says so.
+        // Signal: the reasoning trace recorded zero model calls, or the
+        // deterministic composer stamped its no-model receipt in the body.
+        let modelFree = (answer.reasoningTrace.map { $0.llmPurposes.isEmpty } ?? false)
+            || answer.body.contains("no model was consulted")
+        if modelFree, !answer.refused {
+            lines.append("Answered from your records — no AI involved. Verify against the cited sources.")
+        }
         if !answer.contradictions.isEmpty {
             lines.append("⚠ Contradictions:")
             for c in answer.contradictions {

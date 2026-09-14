@@ -364,7 +364,7 @@ public struct QualityStrip: View {
 
         let claimCount = answer.citations.count
         let fileCount = Set(answer.citations.map(\.objectID)).count
-        var evidence = "Evidence: \(claimCount) claim\(plural(claimCount)), \(fileCount) file\(plural(fileCount))"
+        var evidence = "Evidence: \(claimCount) passage\(plural(claimCount)), \(fileCount) file\(plural(fileCount))"
         if let dropped = answer.report?.droppedUnverifiable, dropped > 0 {
             evidence += ", \(dropped) dropped"
         }

@@ -60,6 +60,34 @@ public enum EventAnswerComposer {
         documentsSearched: Int
     ) -> EventAnswerComposition? {
         guard let matches = matchEvents(question: question, events: events) else { return nil }
+        // W-5.2 — STATE-CHANGE MILESTONES OUTRANK COMMUNICATION EVENTS: the
+        // grant certificate's dated milestone answers "was it granted?", the
+        // intimation email is only the messenger. Milestone = a non-email
+        // event whose title carries a state-change term; when both exist the
+        // answer leads with the milestone and cites the intimation second.
+        // (Document class is not visible here; event kind is the signal.)
+        let stateChange: Set<String> = ["granted", "grant", "issued", "filed",
+                                        "filing", "refused", "rejected", "published"]
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        let milestones = matches.filter { e in
+            guard !isCommunication(e) else { return false }
+            let tokens = Set(e.title.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
+            return !tokens.isDisjoint(with: stateChange)
+        }
+        if let best = milestones.first {
+            let date = Self.dateFormatter.string(from: best.date)
+            var text = "Yes — \(lowercasedTitle(best.title)) on \(date)."
+            if let intimation = matches.first(where: isCommunication) {
+                text += " Intimation received \(Self.dateFormatter.string(from: intimation.date))."
+            }
+            let supporting = [best] + matches.filter { $0.id != best.id }
+            return EventAnswerComposition(
+                primaryText: text,
+                supportingEvents: Array(supporting.prefix(3)),
+                isNotFound: false,
+                receiptLine: "Answered from the dated event record — the official milestone leads, correspondence is cited after it; no model was consulted.")
+        }
         if let best = matches.first {
             let date = Self.dateFormatter.string(from: best.date)
             let extras = matches.count > 1 ? " (and \(matches.count - 1) related event\(matches.count > 2 ? "s" : ""))" : ""

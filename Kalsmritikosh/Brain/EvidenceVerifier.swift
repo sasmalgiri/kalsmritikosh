@@ -959,10 +959,14 @@ public struct EvidenceVerifier: Verifier {
         // answer. Non-slot questions keep the global-agreement behavior.
         if let slot {
             if slot.isConflict {
-                footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — both values are shown above.")
+                // W-5.5 — count-aware: "both" is only honest for two.
+                let phrase = slot.conflictValueCount > 2
+                    ? "all \(slot.conflictValueCount) values are shown above"
+                    : "both values are shown above"
+                footerParts.append("Note: your sources disagree on \(slot.requestedLabel.lowercased()) — \(phrase).")
             }
         } else if report.agreementScore <= 0.6 {
-            footerParts.append("Note: experts disagreed across some of these claims.")
+            footerParts.append("Note: your sources disagree on some of these points.")
         }
         let body: String
         if footerParts.isEmpty {

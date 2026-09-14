@@ -497,6 +497,41 @@ extension KnowledgeObjectRepository {
         return out
     }
 
+    /// W-5.4 — the identity fields the source-independence key provider
+    /// needs, one batch: the email Subject (when the KO is a message) and
+    /// the source file's content hash. Object id / filename / rank are
+    /// NEVER independence keys (C2.1); this returns only reliable identity.
+    public func independenceIdentities(
+        for ids: Set<KnowledgeObject.ID>
+    ) async throws -> [KnowledgeObject.ID: (emailSubject: String?, contentHash: String?)] {
+        guard !ids.isEmpty else { return [:] }
+        var out: [KnowledgeObject.ID: (String?, String?)] = [:]
+        let all = Array(ids)
+        var start = 0
+        while start < all.count {
+            let batch = Array(all[start..<min(start + 200, all.count)])
+            start += batch.count
+            let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT k.id, k.metadata_json, f.content_hash
+            FROM knowledge_objects k
+            LEFT JOIN files f ON f.id = k.file_id
+            WHERE k.id IN (\(placeholders));
+            """, batch.map { .uuid($0) })
+            for row in rows {
+                guard let id = row.uuid(0) else { continue }
+                var subject: String?
+                if let metaJSON = row.string(1) {
+                    let meta = parseMetadataBag(metaJSON)
+                    let s = meta.first(where: { $0.key.lowercased() == "subject" })?.value
+                    if let s, !s.isEmpty { subject = s }
+                }
+                out[id] = (subject, row.string(2))
+            }
+        }
+        return out
+    }
+
     /// Best-effort parse of an email Date header across common formats.
     nonisolated static func parseEmailDate(_ raw: String?) -> Date? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }

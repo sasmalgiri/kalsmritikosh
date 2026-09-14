@@ -1309,7 +1309,10 @@ public final class AppState {
                 entityTrie: entityTrieCache,
                 entityTimeline: entityTimelineCache,
                 objects: objects,   // T18 §21 — enables the privilege post-filter
-                genericFacts: genericFactsRepo   // SEM — facts ride the surfaced evidence
+                genericFacts: genericFactsRepo,   // SEM — facts ride the surfaced evidence
+                // W-5.4 — thread copies collapse to one independent source
+                // for corroboration (Fwd/Re/quoted copies of one message).
+                independenceProvider: LedgerSourceIndependenceKeyProvider(objects: objects)
             )
 
             let expertRegistry = ExpertRegistry()

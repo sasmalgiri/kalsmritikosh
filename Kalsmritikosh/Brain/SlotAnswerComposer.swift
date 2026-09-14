@@ -32,6 +32,9 @@ public struct SlotAnswerComposition: Sendable {
     public let alsoOnFile: String?
     /// Human label of the (first) requested field.
     public let requestedLabel: String
+    /// W-5.5 — how many distinct values are in conflict (0 when none);
+    /// the disagreement note reads "both values" only when it is two.
+    public var conflictValueCount: Int = 0
 }
 
 public enum SlotAnswerComposer {
@@ -205,12 +208,14 @@ public enum SlotAnswerComposer {
         let lines = groups.prefix(4).map { "• \(renderValue($0.best.fact))" }
         let sentence = "Your archive carries conflicting values for \(label.lowercased()):\n"
             + lines.joined(separator: "\n")
-        return SlotAnswerComposition(
+        var composition = SlotAnswerComposition(
             primaryText: sentence,
             supportingObjectIDs: groups.map(\.best.objectID),
             isConflict: true, isNotFound: false,
             singleCanonicalValue: false, structuredSource: false,
             alsoOnFile: also, requestedLabel: label)
+        composition.conflictValueCount = min(groups.count, 4)
+        return composition
     }
 
     // MARK: - Ranking (D-12 step 3)

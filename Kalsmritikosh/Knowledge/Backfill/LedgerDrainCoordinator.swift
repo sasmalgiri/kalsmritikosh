@@ -55,6 +55,11 @@ public struct DrainReceipt: Sendable {
     public var orphanAnchorsSwept = 0
     /// A6 — era-stale facts unreachable by any current document version, removed.
     public var factOrphansSwept = 0
+    /// W-5.6 — mislabeled identifier rows whose field was corrected to the
+    /// archive-dominant home ("Patent No. ‹application number›" letters).
+    public var crossFieldReassigned = 0
+    /// W-5.6 — truncated same-field values folded into the dominant value.
+    public var prefixCollapsed = 0
     public var eventKOsRewritten = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
@@ -76,7 +81,7 @@ public struct DrainReceipt: Sendable {
         """
         DRAIN RECEIPT
           entities retired:        \(entitiesRetired) (+\(memoryObjectsRetired) memory rows)
-          facts: sources rewritten \(factsSourcesRewritten) (deleted \(factsDeleted) stale → wrote \(factsWritten)); anchors now \(anchorsAfter) (\(orphanAnchorsSwept) orphan(s) swept)
+          facts: sources rewritten \(factsSourcesRewritten) (deleted \(factsDeleted) stale → wrote \(factsWritten)); anchors now \(anchorsAfter) (\(orphanAnchorsSwept) orphan(s) swept, \(crossFieldReassigned) mislabel(s) re-fielded, \(prefixCollapsed) truncation(s) folded)
           events: KOs rewritten    \(eventKOsRewritten) (deleted \(eventsDeleted) stale → wrote \(eventsWritten) v1)
           milestones rebuilt:      \(milestonesRebuilt)
           document_class stamped:  \(documentClassStamped)
@@ -153,6 +158,37 @@ public final class LedgerDrainCoordinator {
         DELETE FROM generic_facts WHERE COALESCE(producer_version, 0) != \(DerivedProducerVersions.facts);
         """, [])
         receipt.factOrphansSwept = try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+
+        // ── pass 2c (W-5.6): CROSS-BLOCK COLLISION RESOLUTION ───────────────
+        // The within-block resolver (C-10, caged by owner binding gate 4)
+        // cannot see a mislabel whose true home lives in a DIFFERENT
+        // document — the live ghost: two hearing letters write "Patent No.
+        // 202331019665" while 115 sources file that value as the
+        // application number. Archive-wide, same spirit as the caged gates:
+        // (a) exact value collision across identifier fields; (b) the
+        // intruded field holds a better-attested value of its own; (d') the
+        // home's attestation dominates (≥3× and ≥10 rows). The mislabeled
+        // rows' FIELD is corrected in place and the subject unbound so the
+        // 4b sweep retires the ghost anchor — evidence rows never deleted.
+        // Idempotent: once corrected, the collision no longer exists.
+        let reassignments = try await crossBlockCollisions()
+        for r in reassignments {
+            try await database.exec("""
+            UPDATE generic_facts SET field = ?, subject_id = NULL
+            WHERE lower(field) = ? AND value = ?;
+            """, [.text(r.home), .text(r.intruded), .text(r.value)])
+            receipt.crossFieldReassigned += try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+        }
+        // Same-field truncation fold: a value that is a strict prefix (≥6
+        // chars) of a value the SAME field attests ≥5× more (and ≥20 rows)
+        // is a broken capture of it, not a second answer — fold it in.
+        for f in try await prefixCollapses() {
+            try await database.exec("""
+            UPDATE generic_facts SET value = ?
+            WHERE lower(field) = ? AND value = ?;
+            """, [.text(f.dominant), .text(f.field), .text(f.truncated)])
+            receipt.prefixCollapsed += try await Int(database.query("SELECT changes();").first?.int(0) ?? 0)
+        }
 
         // ── pass 4b (W-4b): ORPHANED-ANCHOR SWEEP ────────────────────────────
         // An anchor is DERIVED from facts; when a facts refresh stops minting
@@ -330,5 +366,81 @@ public final class LedgerDrainCoordinator {
 
     private func count(_ table: String) async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM \(table);", [])).first?.int(0) ?? 0)
+    }
+
+    // ── pass 2c helpers (W-5.6) — pure decisions over grouped counts ────────
+
+    struct CrossFieldReassignment: Sendable, Equatable {
+        let intruded: String   // lower(field) the value must leave
+        let home: String       // lower(field) that dominates it
+        let value: String
+    }
+    struct PrefixFold: Sendable, Equatable {
+        let field: String      // lower(field)
+        let truncated: String
+        let dominant: String
+    }
+
+    static let identifierFields = ["patentnumber", "applicationnumber", "publicationnumber"]
+
+    private func identifierAttestation() async throws -> [String: [String: Int]] {
+        let placeholders = Self.identifierFields.map { "'\($0)'" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT lower(field), value, COUNT(*) FROM generic_facts
+        WHERE lower(field) IN (\(placeholders))
+        GROUP BY lower(field), value;
+        """, [])
+        var out: [String: [String: Int]] = [:]   // field → value → row count
+        for row in rows {
+            guard let f = row.string(0), let v = row.string(1) else { continue }
+            out[f, default: [:]][v] = Int(row.int(2) ?? 0)
+        }
+        return out
+    }
+
+    func crossBlockCollisions() async throws -> [CrossFieldReassignment] {
+        let attn = try await identifierAttestation()
+        return Self.resolveCrossBlock(attestation: attn)
+    }
+
+    /// Pure — CI proves the gates on the live shape. A value leaves field F
+    /// for field H only when: it collides (both claim it), H attests it ≥3×
+    /// F and ≥10 rows, and F holds a DIFFERENT value attested better than
+    /// the intruder (F has its own answer).
+    nonisolated static func resolveCrossBlock(attestation: [String: [String: Int]]) -> [CrossFieldReassignment] {
+        var out: [CrossFieldReassignment] = []
+        for (f, values) in attestation.sorted(by: { $0.key < $1.key }) {
+            for (v, fCount) in values.sorted(by: { $0.key < $1.key }) {
+                for (h, hValues) in attestation.sorted(by: { $0.key < $1.key }) where h != f {
+                    guard let hCount = hValues[v] else { continue }
+                    guard hCount >= 10, hCount >= 3 * fCount else { continue }
+                    let fBest = values.filter { $0.key != v }.map(\.value).max() ?? 0
+                    guard fBest > fCount else { continue }
+                    out.append(CrossFieldReassignment(intruded: f, home: h, value: v))
+                }
+            }
+        }
+        return out
+    }
+
+    func prefixCollapses() async throws -> [PrefixFold] {
+        let attn = try await identifierAttestation()
+        return Self.resolvePrefixFolds(attestation: attn)
+    }
+
+    /// Pure — a same-field value that is a strict prefix (≥6 chars) of a
+    /// value attested ≥5× more and ≥20 rows is a broken capture, folded in.
+    nonisolated static func resolvePrefixFolds(attestation: [String: [String: Int]]) -> [PrefixFold] {
+        var out: [PrefixFold] = []
+        for (f, values) in attestation.sorted(by: { $0.key < $1.key }) {
+            for (short, sCount) in values.sorted(by: { $0.key < $1.key }) where short.count >= 6 {
+                for (long, lCount) in values.sorted(by: { $0.key < $1.key })
+                where long != short && long.hasPrefix(short) {
+                    guard lCount >= 20, lCount >= 5 * sCount else { continue }
+                    out.append(PrefixFold(field: f, truncated: short, dominant: long))
+                }
+            }
+        }
+        return out
     }
 }
