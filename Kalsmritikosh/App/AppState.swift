@@ -2480,12 +2480,12 @@ public final class AppState {
             // data_version (a mutation counter, nearly free) at ask start.
             // P4-U4 rung 3 — the story door: story-shaped questions go to the
             // reconstruction engine + renderer + durable artifact persistence.
-            await brain.setStoryComposer { [weak self] question in
-                await self?.composeStoryAnswer(question: question)
+            await brain.setStoryComposer { [weak self] question, access in
+                await self?.composeStoryAnswer(question: question, access: access)
             }
             // A3 — the tool-grounded middle floor.
-            await brain.setToolGroundedFallback { [weak self] question in
-                await self?.composeToolGroundedAnswer(question: question)
+            await brain.setToolGroundedFallback { [weak self] question, access in
+                await self?.composeToolGroundedAnswer(question: question, access: access)
             }
             await brain.setLedgerStateProvider { [weak database] in
                 // C-ii: begin the ask's read snapshot; the returned stamp is
@@ -3905,7 +3905,17 @@ public final class AppState {
     /// by kind. Ambiguity lists the candidates; no anchor refuses with the
     /// honest message; an engine failure returns nil so the normal pipeline
     /// carries (never a dead end).
-    public func composeStoryAnswer(question: String) async -> VerifiedAnswer? {
+    public func composeStoryAnswer(question: String, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        // G1 (Stage 1) — FAIL-CLOSED scope gate. This path reads the ledger
+        // through unscoped repositories, so it may run ONLY under the global
+        // owner scope. Any narrower scope (a case/workspace) refuses here
+        // rather than falling through to unscoped global reads (§5 case 5).
+        // Scoped repository variants are the tracked follow-up that lifts
+        // this restriction for the investigator edition.
+        guard access.scope.isGlobalOwnerBypass else {
+            KalsmritikoshLog.brain.info("composeStoryAnswer: refusing — story path not yet scope-enforced for a narrowed access context")
+            return nil
+        }
         guard let entities, let engine = historyEngine else { return nil }
         let anchors = (try? await entities.allAnchors()) ?? []
         guard let resolution = try? await HistorySubjectResolver(entities: entities)
@@ -3976,7 +3986,15 @@ public final class AppState {
     /// ladder falls through, never a dead end. The receipt carries the
     /// plan, the tools, the model + build stamps, and — when the subject's
     /// anchor lives in a topic node — "scoped to ‹node›" (A2.2).
-    public func composeToolGroundedAnswer(question: String) async -> VerifiedAnswer? {
+    public func composeToolGroundedAnswer(question: String, access: SensitiveAccessContext) async -> VerifiedAnswer? {
+        // G1 (Stage 1) — FAIL-CLOSED scope gate (see composeStoryAnswer). The
+        // tool path reads anchors, facts, events and FTS chunks through
+        // unscoped repositories; under any narrowed scope it refuses rather
+        // than leak unauthorized rows into the model prompt (§5 cases 1–5).
+        guard access.scope.isGlobalOwnerBypass else {
+            KalsmritikoshLog.brain.info("composeToolGroundedAnswer: refusing — tool path not yet scope-enforced for a narrowed access context")
+            return nil
+        }
         guard let entities, let events, let genericFacts = self.genericFacts,
               let chunks, let caps = capabilities, let db = database else { return nil }
         let anchors = (try? await entities.allAnchors()) ?? []

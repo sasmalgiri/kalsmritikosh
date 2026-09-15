@@ -381,7 +381,7 @@ public actor MasterBrain {
                 // returning nil (no door wired, or an engine failure) falls
                 // through to the normal pipeline — never a dead end.
                 if routed.shape == .story, let compose = await self.storyComposer,
-                   let story = await compose(question) {
+                   let story = await compose(question, access) {
                     for update in await self.finalizeProgressiveAnswer(
                         question: question, verified: story, mission: nil,
                         originScopeID: originScopeID) {
@@ -1329,14 +1329,17 @@ public actor MasterBrain {
     public var askSnapshotEnd: (@Sendable () async -> Void)?
     /// P4-U4 — the story door: wired by AppState to the reconstruction
     /// engine + renderer + durable artifact persistence. nil in rigs.
-    public var storyComposer: (@Sendable (String) async -> VerifiedAnswer?)?
+    /// G1 (Stage 1): carries the caller's SensitiveAccessContext so the
+    /// story path enforces the SAME scope as normal retrieval, fail-closed.
+    public var storyComposer: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
     /// A3 — the tool-grounded middle floor: deterministic composer →
     /// THIS → quote floor → deterministic readout. nil in rigs.
-    public var toolGroundedFallback: (@Sendable (String) async -> VerifiedAnswer?)?
-    public func setToolGroundedFallback(_ f: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+    /// G1: carries the access context (see storyComposer).
+    public var toolGroundedFallback: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    public func setToolGroundedFallback(_ f: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         toolGroundedFallback = f
     }
-    public func setStoryComposer(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+    public func setStoryComposer(_ c: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         storyComposer = c
     }
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
@@ -1689,7 +1692,7 @@ public actor MasterBrain {
             // A3 — the tool-grounded floor runs BEFORE generic chunk RAG:
             // the model sees only id-bearing ledger results and every
             // sentence is swept against the result it cites.
-            if let grounded = await toolGroundedFallback?(question), !grounded.refused {
+            if let grounded = await toolGroundedFallback?(question, access), !grounded.refused {
                 return grounded
             }
             if let rag = await chunkBasedFallback(
