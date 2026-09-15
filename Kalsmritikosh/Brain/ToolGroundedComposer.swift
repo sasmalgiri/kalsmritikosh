@@ -63,7 +63,12 @@ public enum ToolGroundedComposer {
             guard let result = byID[id] else { continue }
             let body = String(sentence[..<open]).trimmingCharacters(in: .whitespaces)
             guard !body.isEmpty else { continue }
-            let truth = result.text + " " + question
+            // G1/Stage-6.2 — the QUESTION IS NOT PROOF. Digits and proper
+            // nouns must come from the CITED RESULT itself, never the user's
+            // question: an answer that pulls "$500" or "Shirshendu" from the
+            // question text (absent in the evidence) is question-as-proof and
+            // must die. (Connectives still pass via allowedLeads below.)
+            let truth = result.text
             guard StoryProseRephraser.digitTokens(body)
                 .isSubset(of: StoryProseRephraser.digitTokens(truth)) else { continue }
             // Proper nouns: reuse the grounding gate's noun law.

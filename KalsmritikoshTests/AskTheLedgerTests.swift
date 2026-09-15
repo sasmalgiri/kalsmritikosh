@@ -55,6 +55,40 @@ struct AskTheLedgerTests {
         #expect(!kept.contains { $0.text.contains("Khurana") })
     }
 
+    // G1/Stage-6.2 — the QUESTION IS NOT PROOF. A digit or proper noun that
+    // appears only in the user's question (not in the cited evidence) must
+    // not validate a composed sentence.
+    @Test("Adversarial: question text cannot serve as proof")
+    func questionIsNotProof() {
+        let results = [ToolResult(id: "T1", text: "The patent was granted.", objectIDs: [UUID()])]
+        // The digit 500000 and the name "Meridian" live ONLY in the question.
+        let q = "was the settlement 500000 rupees and did Meridian sign it"
+        let candidate = """
+        The settlement was 500000 rupees [T1]. Meridian signed it [T1].
+        """
+        let kept = ToolGroundedComposer.sweep(candidate: candidate, question: q, results: results)
+        #expect(!kept.contains { $0.text.contains("500000") }, "digit from the question is not proof")
+        #expect(!kept.contains { $0.text.contains("Meridian") }, "noun from the question is not proof")
+        #expect(kept.isEmpty, "nothing in the cited result supports either sentence")
+    }
+
+    // G1/Stage-6.2 — wrong-date and subject-swap: a sentence asserting a date
+    // or name absent from its cited result dies even if it cites a real id.
+    @Test("Adversarial: wrong date and subject swap die")
+    func wrongDateAndSubjectSwap() {
+        let results = [ToolResult(id: "T1", text: "28 November 2024 — Patent granted to Sasmal",
+                                  objectIDs: [UUID()])]
+        let q = "when was it granted"
+        let candidate = """
+        It was granted on 3 March 2020 [T1]. It was granted to Kapoor [T1]. \
+        It was granted on 28 November 2024 [T1].
+        """
+        let kept = ToolGroundedComposer.sweep(candidate: candidate, question: q, results: results)
+        #expect(!kept.contains { $0.text.contains("2020") }, "wrong date dies")
+        #expect(!kept.contains { $0.text.contains("Kapoor") }, "swapped subject dies")
+        #expect(kept.contains { $0.text.contains("28 November 2024") }, "the grounded sentence survives")
+    }
+
     @Test("Tools are deterministic and id-bearing; an unknown field returns nothing")
     func toolLaws() async {
         let src = UUID()
