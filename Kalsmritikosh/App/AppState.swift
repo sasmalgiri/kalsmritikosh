@@ -4055,8 +4055,18 @@ public final class AppState {
         }
         let body = grounded.sentences.map(\.text).joined(separator: " ")
             + "\n\n(" + receipt.joined(separator: " · ") + ")"
+        // G1/Stage-2.1 — the citation snippet is the ACTUAL cited tool-result
+        // text (the passage/field the sweep verified), never a generic
+        // "Ledger result" label. Map each cited object id back to the result
+        // that carried it.
+        var snippetByObjectID: [UUID: String] = [:]
+        for r in results {
+            for oid in r.objectIDs where snippetByObjectID[oid] == nil {
+                snippetByObjectID[oid] = r.text
+            }
+        }
         let citations = grounded.citedObjectIDs.prefix(8).map {
-            VerifiedAnswer.Citation(objectID: $0, snippet: "Ledger result")
+            VerifiedAnswer.Citation(objectID: $0, snippet: snippetByObjectID[$0] ?? "Cited ledger passage")
         }
         KalsmritikoshLog.brain.info("ledger.compose: shipped \(grounded.sentences.count) swept sentence(s)")
         return VerifiedAnswer(body: body,

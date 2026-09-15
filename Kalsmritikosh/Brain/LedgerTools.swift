@@ -93,8 +93,12 @@ public struct LedgerTools: Sendable {
         let rows = await facts(canon)
         var seen = Set<String>()
         return rows.filter { seen.insert($0.value.lowercased()).inserted }.prefix(6).enumerated().map { n, f in
+            // G1/Stage-2.1 — PROVENANCE: a field fact's evidence is the SOURCE
+            // BLOCKS that asserted it (sourceBlockIDs → real passages), never
+            // the subject/entity id. A subjectID masquerading as a document id
+            // produced citations that pointed at an entity, not the text.
             ToolResult(id: "F\(n + 1)", text: "\(canon): \(f.value)",
-                       objectIDs: f.subjectID.map { [$0] } ?? [])
+                       objectIDs: f.sourceBlockIDs)
         }
     }
 

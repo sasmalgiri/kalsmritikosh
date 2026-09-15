@@ -80,4 +80,24 @@ struct AskTheLedgerTests {
         let count = await tools.countEvents(question: "how many grants were there")
         #expect(count.first?.text == "count: 1")
     }
+
+    // G1/Stage-2.1 — a field fact's provenance is its SOURCE BLOCKS, never
+    // the subject/entity id masquerading as a document id.
+    @Test func lookupFieldCitesSourceBlocksNotSubject() async {
+        let block1 = UUID(), block2 = UUID(), subject = UUID()
+        let tools = LedgerTools(
+            events: { _ in [] },
+            facts: { field in
+                field == "applicant"
+                    ? [GenericFact(subjectID: subject, subjectLabel: "s", field: "applicant",
+                                   value: "shirshendu sasmal", status: .sourceAsserted,
+                                   confidence: 0.8, sourceBlockIDs: [block1, block2],
+                                   producerVersion: 4, rawMatch: nil, sourceCount: 2)]
+                    : []
+            },
+            chunksForQuestion: { _ in [] })
+        let lookup = await tools.lookupField("applicant")
+        #expect(lookup.first?.objectIDs == [block1, block2], "must cite source blocks")
+        #expect(lookup.first?.objectIDs.contains(subject) == false, "must NOT cite the subject id")
+    }
 }
