@@ -57,7 +57,7 @@ public enum PatentDomainPack {
     ///     ("202331019665Applicant" ×82 on the live archive). A real
     ///     kind-code suffix (B2) is uppercase; prose is not.
     nonisolated static let numberCapturePattern =
-        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}(?-i:[A-Z0-9]*))"#
+        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}(?:(?-i:[A-Z][A-Z0-9]{0,3})(?![a-z]))?)"#
 
     /// The fields this pack can emit under producer_version=1 — the authority
     /// the completeness invariant (SlotAnswerComposer display contracts) checks

@@ -59,7 +59,8 @@ struct W5FixTests {
     // — 2. existence prefers the state-change milestone over the email —
 
     @Test func existenceLeadsWithTheMilestone() {
-        let cal = Calendar(identifier: .gregorian)
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!   // align with the composer's UTC formatter
         let grantDate = cal.date(from: DateComponents(year: 2024, month: 11, day: 28))!
         let mailDate = cal.date(from: DateComponents(year: 2024, month: 12, day: 2))!
         let milestone = Event(kind: .other, date: grantDate, title: "Patent granted",
@@ -150,7 +151,8 @@ struct W5FixTests {
         // value tail swallowing the next word.
         let text = "Application number:202331019665Applicant name: Shirshendu Sasmal"
         let facts = PatentDomainPack.extractFacts(fromText: text, subjectLabel: "s", blockID: UUID())
-        let values = facts.filter { $0.field == "applicationNumber" }.map(\.value)
+        // Facts store field names LOWERCASE (generic_facts convention).
+        let values = facts.filter { FactSchemaRegistry.normalizeField($0.field) == "applicationnumber" }.map(\.value)
         #expect(values.contains("202331019665"))
         #expect(!values.contains { $0.lowercased().contains("applicant") })
     }
