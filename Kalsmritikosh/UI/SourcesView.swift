@@ -240,6 +240,8 @@ public struct SourcesView: View {
                                     .lineLimit(2)
                             }
                             Spacer()
+                            // U-3.6 — every file shows an explicit status.
+                            fileStatusChip(for: row)
                             Text(row.sourceType.rawValue.uppercased())
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
@@ -378,6 +380,31 @@ public struct SourcesView: View {
         } catch {
             return "<unavailable>"
         }
+    }
+
+    /// U-3.6 — the honest per-file status chip. Classified from the source
+    /// type and a cheap "produced text" proxy (a non-empty preview), so
+    /// every file in the list carries an account of what happened to it
+    /// without an N-query fan-out.
+    @ViewBuilder
+    private func fileStatusChip(for row: KnowledgeObjectSummaryRow) -> some View {
+        let status = FileIndexStatus.classify(
+            sourceType: row.sourceType,
+            chunkCount: row.preview.isEmpty ? 0 : 1)
+        let color: Color = {
+            switch status {
+            case .indexed, .transcribed, .expanded: return .green
+            case .limitedScan:                      return .yellow
+            case .notTranscribed, .notExpanded:     return .orange
+            case .unsupported:                      return .secondary
+            }
+        }()
+        Text(status.label)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.12), in: Capsule())
+            .help("How this file was read into the knowledge base")
     }
 
     private func icon(for type: SourceType) -> String {

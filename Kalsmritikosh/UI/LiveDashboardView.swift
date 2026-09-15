@@ -20,6 +20,9 @@ public struct LiveDashboardView: View {
     @State private var rootCoverage: [(displayName: String, fileCount: Int)] = []
     @State private var tierCounts: [EnrichmentTier: Int] = [:]
     @State private var gapCount: Int = 0
+    // U-3.3 — the Health & Self-check panel, replacing the ad-hoc numbers.
+    @State private var healthReport: HealthReport?
+    @State private var healthRunning = false
 
     public init() {}
 
@@ -32,6 +35,14 @@ public struct LiveDashboardView: View {
                 }
                 if let live = appState.liveMetrics {
                     snapshotRow(live.current)
+                    // U-3.3 — Health & self-check first: invariants a glance,
+                    // then the detail panels below.
+                    if let report = healthReport {
+                        HealthPanelView(report: report, isRunning: healthRunning,
+                                        onRunSelfCheck: { Task { await runSelfCheck() } })
+                            .cardSurface(cornerRadius: 12)
+                        Divider().padding(.vertical, 4)
+                    }
                     llmBudgetPanel(live.current)
                     enrichmentTiersPanel()
                     pipelineStrip(live.current.pipelineCounters)
@@ -68,6 +79,9 @@ public struct LiveDashboardView: View {
         }
         .task {
             await loadEnrichmentTiers()
+        }
+        .task {
+            healthReport = await HealthReportBuilder.build(appState: appState)
         }
         .onAppear {
             // Phase J.13 — start polling only while the Live tab is
@@ -711,6 +725,13 @@ public struct LiveDashboardView: View {
     }
 
     // MARK: - I/O
+
+    /// U-3.3 — re-gather the health report on demand ("Run self-check").
+    private func runSelfCheck() async {
+        healthRunning = true
+        healthReport = await HealthReportBuilder.build(appState: appState)
+        healthRunning = false
+    }
 
     private func loadRootCoverage() async {
         var rows: [(String, Int)] = []
