@@ -50,6 +50,14 @@ public final class LiveMetrics {
             let total = llmCallsRun + llmCallsSkipped
             return total > 0 ? Double(llmCallsSkipped) / Double(total) : 0
         }
+
+        /// U-3.1 (W-6) — the embedding bar as a four-state split (embedded /
+        /// pending / excluded / failed, summing to chunkCount). Excluded and
+        /// failed are 0 until ingest stamps an embedding status; pending is
+        /// the honest remainder today.
+        public var embeddingCoverage: EmbeddingCoverage {
+            EmbeddingCoverage(total: chunkCount, embedded: vectorCount)
+        }
     }
 
     public struct ThroughputPoint: Sendable, Hashable, Identifiable {
