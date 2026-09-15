@@ -50,8 +50,14 @@ public actor VisionOCR: OCREngine {
     /// multilingual archives.
     private let recognitionLanguages: [String]
 
-    public init(recognitionLanguages: [String] = ["en-US"]) {
+    /// U-4 — domain vocabulary seeded into Vision so party names, firm
+    /// names, and domain terms from the registry survive recognition
+    /// (Vision biases toward these spellings). Empty by default.
+    private let customWords: [String]
+
+    public init(recognitionLanguages: [String] = ["en-US"], customWords: [String] = []) {
         self.recognitionLanguages = recognitionLanguages
+        self.customWords = customWords
     }
 
     public func recognizePrinted(at url: URL) async -> [String] {
@@ -128,6 +134,83 @@ public actor VisionOCR: OCREngine {
             return (strings, mean)
         } catch {
             return ([], 0)
+        }
+    }
+    #endif
+
+    /// U-4 — ACCOUNTABLE recognition: per-line text + confidence + region,
+    /// with identifier-shaped lines re-read WITHOUT language correction so a
+    /// number is never autocorrected. Two passes at the best orientation:
+    /// pass A (correction on) authors prose lines; pass B (correction off)
+    /// replaces any line the identifier policy flags, matched by bounding-box
+    /// overlap. Returns lines in reading order (top-to-bottom).
+    public func recognizeLines(at url: URL) async -> [OCRLine] {
+        #if canImport(Vision) && canImport(AppKit)
+        guard let image = NSImage(contentsOf: url),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return [] }
+
+        // Pick the best orientation by mean confidence (as recognizePrinted).
+        let orientations: [CGImagePropertyOrientation] = [.up, .right, .down, .left]
+        var best: (lines: [OCRLine], confidence: Float) = ([], -1)
+        for orientation in orientations {
+            let corrected = recognizeObservations(cgImage: cgImage, orientation: orientation, correct: true)
+            let mean = corrected.isEmpty ? 0 : corrected.map(\.confidence).reduce(0, +) / Float(corrected.count)
+            if mean > best.confidence { best = (corrected, mean) }
+        }
+        var lines = best.lines
+        guard lines.contains(where: { OCRTextPolicy.isIdentifierShaped($0.text) }) else { return lines }
+
+        // Pass B — correction OFF — only to rescue identifier-shaped lines.
+        // Match by bounding-box overlap; keep pass-B text where it differs.
+        let rawPass = recognizeObservations(cgImage: cgImage, orientation: .up, correct: false)
+        for i in lines.indices where OCRTextPolicy.isIdentifierShaped(lines[i].text) {
+            if let raw = rawPass.max(by: { overlap($0.boundingBox, lines[i].boundingBox)
+                                          < overlap($1.boundingBox, lines[i].boundingBox) }),
+               overlap(raw.boundingBox, lines[i].boundingBox) > 0.2 {
+                lines[i] = OCRLine(text: raw.text, confidence: raw.confidence, boundingBox: lines[i].boundingBox)
+            }
+        }
+        return lines
+        #else
+        return []
+        #endif
+    }
+
+    #if canImport(Vision)
+    private nonisolated func overlap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        let i = a.intersection(b)
+        guard !i.isNull else { return 0 }
+        let ia = i.width * i.height
+        let ua = a.width * a.height + b.width * b.height - ia
+        return ua > 0 ? ia / ua : 0
+    }
+
+    /// One pass returning per-line observations (text, confidence, bbox).
+    private nonisolated func recognizeObservations(
+        cgImage: CGImage,
+        orientation: CGImagePropertyOrientation,
+        correct: Bool
+    ) -> [OCRLine] {
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.recognitionLanguages = recognitionLanguages
+        request.usesLanguageCorrection = correct
+        if !customWords.isEmpty { request.customWords = customWords }
+        if #available(macOS 13.0, *) { request.automaticallyDetectsLanguage = false }
+        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
+        do {
+            try handler.perform([request])
+            let observations = request.results ?? []
+            return observations.compactMap { obs in
+                guard let top = obs.topCandidates(1).first else { return nil }
+                return OCRLine(text: top.string, confidence: top.confidence, boundingBox: obs.boundingBox)
+            }
+            // Reading order: Vision returns top-to-bottom already, but sort
+            // by descending y (origin bottom-left) to be deterministic.
+            .sorted { $0.boundingBox.maxY > $1.boundingBox.maxY }
+        } catch {
+            return []
         }
     }
     #endif
