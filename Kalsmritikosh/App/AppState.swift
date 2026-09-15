@@ -3991,10 +3991,24 @@ public final class AppState {
                 return hits.map { RetrievedChunk(chunk: $0, score: 1.0, viaLayer: .metadata) }
             })
         // The loop law: history → field lookup → ONE span fetch.
-        var results = await tools.historyOf(question: question)
+        let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
+        var results: [ToolResult]
+        // U-7 — a timeline question that names an explicit YEAR gets the
+        // date-windowed slice instead of the whole chain; otherwise the
+        // full history. Bounded so only timeline-with-year questions change.
+        if shape == .timeline, let (from, to) = Self.yearWindow(in: question) {
+            results = await tools.timelineSlice(question: question, from: from, to: to)
+        } else {
+            results = await tools.historyOf(question: question)
+        }
         if let field = plan.field { results += await tools.lookupField(field) }
-        results += await tools.fetchSpans(question: question,
-                                          shape: QuestionShape(rawValue: plan.shape) ?? .unresolved)
+        results += await tools.fetchSpans(question: question, shape: shape)
+        // U-7 — the reference-shelf lane: a no-op until a shelf reader is
+        // injected (tools.shelf == nil), so archive answers are unchanged
+        // today; the call sits in the loop for when the shelf lands.
+        if plan.needsGeneralKnowledge {
+            results += await tools.shelfLookup(question)
+        }
         guard let grounded = await ToolGroundedComposer.compose(
             question: question, plan: plan, results: results, capabilities: caps,
             allowUnverified: UnverifiedAnswerPolicy.showBadged) else { return nil }
@@ -4308,6 +4322,19 @@ public final class AppState {
     /// Wall-clock milliseconds for the durable ingest-run ledger (the repository
     /// is deterministic and takes caller-supplied timestamps).
     nonisolated static func nowMillis() -> Double { Date().timeIntervalSince1970 * 1000 }
+
+    /// U-7 — parse an explicit 4-digit year (1900–2099) from a question and
+    /// return its [Jan 1, Dec 31] UTC window for timelineSlice. nil when no
+    /// year is named, so a plain "timeline of X" keeps the full chain.
+    nonisolated static func yearWindow(in question: String) -> (from: Date, to: Date)? {
+        guard let m = question.range(of: #"\b(19|20)\d{2}\b"#, options: .regularExpression),
+              let year = Int(question[m]) else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        guard let from = cal.date(from: DateComponents(year: year, month: 1, day: 1)),
+              let to = cal.date(from: DateComponents(year: year, month: 12, day: 31)) else { return nil }
+        return (from, to)
+    }
 
     nonisolated static func withFileTimeout<T: Sendable>(
         _ seconds: Double, _ op: @Sendable @escaping () async throws -> T
