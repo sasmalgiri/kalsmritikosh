@@ -23,10 +23,13 @@ public enum MedicalDomainPack {
     /// marker. Conservative on purpose: a false medical fact on a
     /// non-medical document is worse than a missed one (the generic layer
     /// still answers). All lower-cased substring checks.
+    // Live-archive hardening: dropped the loose markers that fire on noisy
+    // email/OCR text ("mg " inside encoded tokens, bare "patient"/"drug"/
+    // "rx"). A real health record carries one of these unambiguous phrases.
     nonisolated static let markers: [String] = [
-        "diagnosis", "prescription", "prescribed", "patient", "mg ",
-        "dosage", "symptoms", "discharge summary", "lab report",
-        "blood pressure", "consultation", "physician", "medication",
+        "diagnosis", "prescription", "prescribed", "dosage",
+        "discharge summary", "lab report", "blood pressure",
+        "chief complaint", "physician", "medication",
     ]
 
     nonisolated static func isMedical(_ lower: String) -> Bool {
@@ -58,10 +61,10 @@ public enum MedicalDomainPack {
         if let v = labeledValue(after: ["diagnosis", "impression", "provisional diagnosis"], in: text) {
             facts.append(fact(subjectLabel, "diagnosis", v, blockID, 0.7))
         }
-        if let v = labeledValue(after: ["medication", "prescribed", "rx", "drug"], in: text) {
+        if let v = labeledValue(after: ["medication", "prescribed", "medicine"], in: text) {
             facts.append(fact(subjectLabel, "medication", v, blockID, 0.65))
         }
-        if let raw = DomainPackText.firstDate(in: text),
+        if let raw = DomainPackText.labeledDate(after: ["date of visit", "visit date", "date of admission", "consulted on", "seen on"], in: text),
            let iso = PatentDomainPack.normalizeDate(raw) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "visitDate", value: iso,
                                      status: .sourceAsserted, confidence: 0.65, sourceBlockIDs: [blockID],

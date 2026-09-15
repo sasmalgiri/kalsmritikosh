@@ -14,10 +14,14 @@ import Foundation
 
 public enum LegalCaseDomainPack {
 
+    // Live-archive hardening: dropped the loose markers that fire on patent
+    // and general correspondence ("hearing", "vs.", " v. ", "tribunal",
+    // "adjourned", "court of") — patents have office hearings, and "vs."/
+    // "v." appear everywhere. A real litigation document carries a numbered
+    // case, named parties, or the court-of formula.
     nonisolated static let markers: [String] = [
-        "plaintiff", "defendant", "petitioner", "respondent", "vs.", " v. ",
-        "case no", "suit no", "in the court of", "hon'ble", "honourable court",
-        "cause list", "hearing", "adjourned", "court of", "tribunal",
+        "plaintiff", "defendant", "petitioner", "respondent",
+        "case no", "suit no", "in the court of", "hon'ble",
     ]
 
     nonisolated static func isLegalCase(_ lower: String) -> Bool {
@@ -52,7 +56,7 @@ public enum LegalCaseDomainPack {
            PatentDomainPack.isPlausibleRoleValue(v) {
             facts.append(fact(subjectLabel, "defendant", v, blockID, 0.7))
         }
-        if let raw = DomainPackText.firstDate(in: text), lower.contains("hearing") || lower.contains("adjourned") || lower.contains("listed"),
+        if let raw = DomainPackText.labeledDate(after: ["hearing on", "date of hearing", "listed on", "next hearing", "adjourned to"], in: text),
            let iso = PatentDomainPack.normalizeDate(raw) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "hearingDate", value: iso,
                                      status: .sourceAsserted, confidence: 0.65, sourceBlockIDs: [blockID],

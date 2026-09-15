@@ -13,10 +13,15 @@ import Foundation
 
 public enum PropertyDomainPack {
 
+    // Live-archive hardening: dropped the loose markers that fire on general
+    // and legal correspondence ("consideration" appears in "in consideration
+    // of…", "deed of" in "deed of assignment", bare "sq ft"/"survey no"/
+    // "plot no"/"khata"). A real conveyance carries the deed/lease formula or
+    // a named lessor/lessee/vendor/vendee.
     nonisolated static let markers: [String] = [
-        "sale deed", "deed of", "conveyance", "lease agreement", "lessor",
-        "lessee", "vendor", "vendee", "property situated", "schedule of property",
-        "sq. ft", "sq ft", "khata", "survey no", "plot no", "consideration",
+        "sale deed", "deed of conveyance", "conveyance deed", "lease agreement",
+        "lessor", "lessee", "vendor", "vendee", "property situated at",
+        "schedule of property",
     ]
 
     nonisolated static func isProperty(_ lower: String) -> Bool {
@@ -52,7 +57,8 @@ public enum PropertyDomainPack {
             facts.append(fact(subjectLabel, "consideration", money.replacingOccurrences(of: " ", with: ""),
                               blockID, 0.7, unit: DomainPackText.currencyUnit(money)))
         }
-        if let raw = DomainPackText.firstDate(in: text), let iso = PatentDomainPack.normalizeDate(raw) {
+        if let raw = DomainPackText.labeledDate(after: ["executed on", "dated", "date of execution", "registered on"], in: text),
+           let iso = PatentDomainPack.normalizeDate(raw) {
             facts.append(GenericFact(subjectLabel: subjectLabel, field: "deedDate", value: iso,
                                      status: .sourceAsserted, confidence: 0.6, sourceBlockIDs: [blockID],
                                      producerVersion: DerivedProducerVersions.facts, rawMatch: raw, sourceCount: 1))
