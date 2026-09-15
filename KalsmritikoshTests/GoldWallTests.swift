@@ -29,8 +29,12 @@ struct GoldWallTests {
         let truth: [String]?
         /// Strings that must NEVER appear (hallucination tripwires).
         let never: [String]
-        /// The truth lives in PROSE no extraction pack carries — the row is
-        /// a recorded RED until P3-U4's grounded composition answers it.
+        /// G1/Stage-13 — for an UNANSWERABLE row (truth == nil), a grounded
+        /// answer is legal ONLY when a real event/fact could honestly support
+        /// it (e.g. "is the invoice paid?" — a grounded yes is fine). Default
+        /// false: an unanswerable must ABSTAIN, and a nonempty citation is NOT
+        /// an acceptable substitute for correct abstention.
+        var groundedAnswerLegal: Bool = false
     }
 
     static let wall: [Row] = [
@@ -40,7 +44,7 @@ struct GoldWallTests {
               truth: ["48,500"], never: ["41,000 due", "7,500 due"]),
         .init(archive: "PersonaTransactions",
               question: "is the invoice paid?",
-              truth: nil, never: []),   // ambiguity-safe: one invoice, but payment is an event claim — abstention or grounded yes both legal; NEVER an invented number
+              truth: nil, never: [], groundedAnswerLegal: true),   // ambiguity-safe: one invoice, but payment is an event claim — abstention or grounded yes both legal; NEVER an invented number
         .init(archive: "PersonaTransactions",
               question: "what is the purchase order number",
               truth: nil, never: ["7741 is the purchase order"]),
@@ -105,8 +109,18 @@ struct GoldWallTests {
                     || text.contains("No record") || text.contains("None of the")
                     || text.contains("not among the fields") || text.contains("can't ground")
                     || text.contains("No ") // honest zero from the count composer
-                #expect(abstained || a.citations.isEmpty == false,
-                        "\(archive): '\(row.question)' — an unanswerable must abstain or ground; got: \(String(text.prefix(200)))")
+                // G1/Stage-13 — an unanswerable MUST abstain. A nonempty
+                // citation is NOT an acceptable substitute for correct
+                // abstention (the audited escape hatch). Only rows explicitly
+                // marked groundedAnswerLegal may answer with grounded evidence;
+                // the `never` tripwires still forbid any invented value.
+                if row.groundedAnswerLegal {
+                    #expect(abstained || !a.citations.isEmpty,
+                            "\(archive): '\(row.question)' — must abstain or ground; got: \(String(text.prefix(200)))")
+                } else {
+                    #expect(abstained,
+                            "\(archive): '\(row.question)' — an unanswerable MUST abstain, not answer with a citation; got: \(String(text.prefix(200)))")
+                }
             }
             // HALLUCINATION = 0: the tripwires never appear, either direction.
             for bad in row.never {

@@ -35,30 +35,27 @@ remaining`) across all ~57 destinations is not written down as one artifact.
   `/tmp/dd-implement-all`; CI guards in `ci/guards`).
 
 ## Gate G1 — Trust: scope + provenance + verification (Stages 1, 2, 6.3)
-Status: ◐ — verification ladder strong (U-1 answer/evidence split, sweep,
-abstention), but two **confirmed** structural gaps remain.
-- T-G1.1 ✗ **Access-context threading (Stage 1).** Thread one explicit
-  fail-closed `SensitiveAccessContext` through `composeStoryAnswer(question:)`
-  and `composeToolGroundedAnswer(question:)` (AppState:3908/3979) and the
-  `MasterBrain` story/tool fallback closures. Scope BEFORE retrieval
-  limit/rank. No implicit global fallback. Cache keys include scope +
-  evidence stamp + pipeline version. Acceptance cases 1–5 (§5).
-- T-G1.2 ✗ **Field provenance (Stage 2.1).** `LedgerTools.lookupField`
-  resolves source via `sourceBlockIDs` + canonical source/version/location,
-  NOT `subjectID` (LedgerTools:97). Kill generic `"Ledger result"` /
-  `"Story evidence"` citations (AppState:4041) — map to real passages.
-  Constrain lookup by subject + scope + source version + fact status.
-- T-G1.3 ◐ **One acceptance contract for every composer (Stage 2.2).**
-  chunk-fallback, tool-grounded, story, deterministic, structured, progressive
-  all pass the same policy-aware acceptance. U-1 covers tool-grounded; audit
-  the others. Add adversarial tests: negation, subject swap, wrong date/tz,
-  amount/currency/unit, quoted allegation, causal claim, conflicting accounts,
-  question-as-proof, prompt-injection (file content ≠ instructions).
+Status: ◐ — T-G1.1/1.2/1.3 DONE (commits eeaa298, 60a2c68, e24319e); T-G1.4
+metrics + T-G1.5 GoldWall in progress.
+- T-G1.1 ✅ **Access-context threading (Stage 1)** — done (eeaa298): access
+  threaded through story/tool composers; fail-closed under narrowed scope.
+- T-G1.2 ✅ **Field provenance (Stage 2.1)** — done (60a2c68): sourceBlockIDs
+  not subjectID; real citation snippets; provenance test.
+- T-G1.3 ✅ **Question-is-not-proof + adversarial sweep (Stage 6.2)** — done
+  (e24319e): sweep grounds on cited text only; adversarial tests for
+  question-as-proof, wrong-date, subject-swap.
+- T-G1.5 ✅ **GoldWall unanswerable (Stage 13)** — done: unanswerable rows
+  MUST abstain (per-row groundedAnswerLegal flag); GoldWall green — the four
+  pure-unanswerable rows genuinely abstain, only the grounded-legal row
+  answers. Confirms the system already abstains; the test was too lenient.
+- T-G1.3b ◐ **Remaining composer-acceptance audit (Stage 2.2)** — the sweep
+  + adversarial cases are done for the tool path; still to audit that
+  chunk-fallback / story / structured / progressive all pass the SAME
+  policy-aware acceptance (negation, unit-change, quoted-allegation,
+  prompt-injection cases beyond the tool sweep).
 - T-G1.4 ✗ **Evidence metrics (Stage 6.3)** measured separately: retrieval
   recall · source-identity correctness · claim support · unanswerable
   handling · conflict detection · scope violations. No single score.
-- T-G1.5 ◐ **GoldWall unanswerable branch (Stage 13)** — must require
-  abstention, not accept a nonempty citation (overlaps U-8; finish).
 
 ## Gate G2 — Durability (Stages 3, 11)
 Status: ◐.
