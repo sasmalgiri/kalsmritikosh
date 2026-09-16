@@ -71,9 +71,12 @@ Status: ◐ — T-G2.1 DONE (bffd409); migration-safety for v128 verified.
   SourceLocationResolver resolve a citation to exact page/cell/message/char
   location with the tested .wholeDocument fallback. Remaining: wire into the
   source-viewer UI + handle moved/revoked/deleted originals in the view.
-- T-G2.3c ✅ Backup/restore CORE (d69ef0b): BackupManifest / BackupPlanner /
-  RestoreValidator — deterministic manifest + honest incomplete-restore
-  report. Remaining: the file-copy/hash service + Settings action on top.
+- T-G2.3c ✅ Backup/restore CORE (d69ef0b) + SERVICE (d8ea590, round-trip +
+  incomplete-refused tests) + SETTINGS ACTION (ed8960f): "Back up your
+  knowledge base" copies knowledge.sqlite (+wal/shm) with a SHA-256 manifest;
+  "Check a backup" verifies a folder. Safe — never touches originals, never
+  overwrites the live DB. Remaining: an in-app guided live-restore (owner must
+  verify against a real store; deliberately not auto-wired).
 - T-G3.3b ✅ ComparisonService (d69ef0b) + **ledger resolver (0b933a5)** +
   **brief surface (eee6cae)**. ComparisonLedgerResolver binds the matrix to
   live facts via injected facts-for-field + block→document reads (stated/
@@ -95,12 +98,14 @@ lifecycle (start/cancel/review/correct/save/reopen/export).
 - T-G3.2 ◐ Workflow B (chronology) — history engine exists; reconcile the
   deferred topic/folder/corpus subject (Stage 5); event-time vs doc-time,
   date precision, uncertainty; bounded causal links (U-3.2 done); export.
-- T-G3.3 ◐ Workflow C (comparison brief) — CORE + DATA PATH + SURFACE done:
+- T-G3.3 ✅ Workflow C (comparison brief) — END-TO-END REACHABLE:
   ComparisonMatrix (f61c422) + ComparisonBrief (8dea284) + ComparisonService
-  (d69ef0b) + ComparisonLedgerResolver (0b933a5, matrix now reads live ledger
-  facts per source) + ComparisonBriefView (eee6cae, sourced-section UI).
-  Remaining (UI-integration, needs RootView/navigation): the doc/field
-  PICKER, analyst-edit, export PDF/MD, reopen, recompute-to-new-revision.
+  (d69ef0b) + ComparisonLedgerResolver (0b933a5) + ComparisonBriefView
+  (eee6cae, render-verified) + AppState.compareDocuments live adapter (5f3ea63)
+  + StructuredComparisonView with a doc PICKER, discovered fields, Markdown
+  export, registered as the .compareDocs route across RootView (4db6546).
+  Remaining (optional polish): analyst-edit + PDF export + reopen/recompute-
+  to-new-revision.
 - T-G3.4 ◐ **Navigation redesign (Stage 7)** — Home / Projects / Files /
   Outputs; Simple mode completes flagships with no persona/SOP knowledge;
   Advanced + command palette for specialists; keep Fast / Long-with-evidence;
