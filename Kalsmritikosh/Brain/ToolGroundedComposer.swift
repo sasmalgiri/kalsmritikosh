@@ -52,6 +52,18 @@ public enum ToolGroundedComposer {
         "none", "neither", "nor", "unpaid", "unresolved",
     ]
 
+    /// AT-05 — the currency/unit markers present in a text (normalized). A
+    /// sentence may not assert a currency its cited evidence lacks.
+    nonisolated static func currencyMarkers(in text: String) -> Set<String> {
+        let lower = text.lowercased()
+        var out: Set<String> = []
+        if text.contains("₹") || lower.contains("inr") || lower.contains("rupee") || lower.contains("rs.") || lower.contains(" rs ") { out.insert("inr") }
+        if text.contains("$") || lower.contains("usd") || lower.contains("dollar") { out.insert("usd") }
+        if text.contains("€") || lower.contains("eur") || lower.contains("euro") { out.insert("eur") }
+        if text.contains("£") || lower.contains("gbp") || lower.contains("pound") { out.insert("gbp") }
+        return out
+    }
+
     public nonisolated static func sweep(
         candidate: String,
         question: String,
@@ -98,6 +110,13 @@ public enum ToolGroundedComposer {
             let bodyNeg = !bodyWords.isDisjoint(with: Self.negationCues)
             let truthNeg = !truthWords.isDisjoint(with: Self.negationCues)
             guard !(bodyNeg && !truthNeg) else { continue }
+            // AT-05 — CURRENCY / UNIT POLARITY: an amount whose digits match
+            // the evidence but whose CURRENCY differs ("$500" from a "₹500"
+            // result) is a changed claim, not a grounded one. Every currency
+            // marker in the sentence must appear in the cited text.
+            let bodyCur = Self.currencyMarkers(in: body)
+            let truthCur = Self.currencyMarkers(in: truth)
+            guard bodyCur.isSubset(of: truthCur) else { continue }
             kept.append((body + ".", id))
         }
         return kept

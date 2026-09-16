@@ -130,6 +130,19 @@ struct AskTheLedgerTests {
         #expect(grounded.count == 1, "a grounded negation survives")
     }
 
+    // AT-05 — a currency swap (digits match, currency differs) dies.
+    @Test func currencySwapDies() {
+        let rupees = [ToolResult(id: "T1", text: "The consideration was ₹500000.", objectIDs: [UUID()])]
+        // Same digits, wrong currency → changed claim → dies.
+        let swapped = ToolGroundedComposer.sweep(
+            candidate: "The consideration was $500000 [T1].", question: "how much", results: rupees)
+        #expect(swapped.isEmpty, "a currency swap must die even when digits match")
+        // Right currency survives.
+        let ok = ToolGroundedComposer.sweep(
+            candidate: "The consideration was ₹500000 [T1].", question: "how much", results: rupees)
+        #expect(ok.count == 1)
+    }
+
     // G1/Stage-6.2 / AT-18 — a hostile instruction embedded in a document
     // is neutralized before it reaches the model, while the legitimate value
     // in the same snippet survives so grounding still works.
