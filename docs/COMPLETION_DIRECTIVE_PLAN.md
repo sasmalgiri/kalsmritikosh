@@ -84,9 +84,13 @@ lifecycle (start/cancel/review/correct/save/reopen/export).
 - T-G3.2 ◐ Workflow B (chronology) — history engine exists; reconcile the
   deferred topic/folder/corpus subject (Stage 5); event-time vs doc-time,
   date precision, uncertainty; bounded causal links (U-3.2 done); export.
-- T-G3.3 ✗ Workflow C (comparison brief) — propositions×sources matrix →
-  sourced brief; disagreement vs different-units; absent-evidence vs
-  evidence-of-absence; export + reopen + recompute-to-new-revision.
+- T-G3.3 ◐ Workflow C (comparison brief) — DETERMINISTIC CORE done:
+  ComparisonMatrix (f61c422, verdicts agree/disagree/differentUnit/
+  singleSource/unattested + absent-evidence vs evidence-of-absence) and
+  ComparisonBrief renderer (8dea284, sourced sections + register). Remaining:
+  wire the matrix to real ledger field-values per source; the brief UI
+  (select docs/fields, edit analyst assessment, export PDF/MD, reopen,
+  recompute-to-new-revision).
 - T-G3.4 ◐ **Navigation redesign (Stage 7)** — Home / Projects / Files /
   Outputs; Simple mode completes flagships with no persona/SOP knowledge;
   Advanced + command palette for specialists; keep Fast / Long-with-evidence;
