@@ -67,8 +67,15 @@ Status: ◐ — T-G2.1 DONE (bffd409); migration-safety for v128 verified.
   schema v128 conversation_turns.answer_ledger_id; turn↔durable-answer link;
   reconstructVerifiedAnswer restores citations/status/receipt on reopen;
   legacy turns honest-empty; round-trip tested.
-- T-G2.2 ✗ Source opening shows exact passage/page/cell/message; handle
-  missing/moved/revoked/deleted/old-version originals with tested fallback.
+- T-G2.2 ◐ Source opening — CORE done (d69ef0b): CitedSourceLocation +
+  SourceLocationResolver resolve a citation to exact page/cell/message/char
+  location with the tested .wholeDocument fallback. Remaining: wire into the
+  source-viewer UI + handle moved/revoked/deleted originals in the view.
+- T-G2.3c ✅ Backup/restore CORE (d69ef0b): BackupManifest / BackupPlanner /
+  RestoreValidator — deterministic manifest + honest incomplete-restore
+  report. Remaining: the file-copy/hash service + Settings action on top.
+- T-G3.3b ✅ ComparisonService (d69ef0b) — wires the matrix/brief to injected
+  per-source reads. Remaining: the ledger resolver + brief UI/export.
 - T-G2.3 ◐ **Migrations + backup/restore (Stage 11)** — migration-safety for
   v128 VERIFIED (full MigrationMatrix green: 24 milestone versions 0→128
   migrate with row preservation, FK integrity, rollback, idempotent
