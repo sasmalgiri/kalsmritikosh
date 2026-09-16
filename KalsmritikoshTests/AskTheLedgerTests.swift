@@ -115,6 +115,21 @@ struct AskTheLedgerTests {
         #expect(count.first?.text == "count: 1")
     }
 
+    // AT-05 — a fabricated NEGATION reversal dies; a grounded negation lives.
+    @Test func negationReversalDies() {
+        let granted = [ToolResult(id: "T1", text: "The patent was granted on 28 November 2024.", objectIDs: [UUID()])]
+        // Introducing "not" against a "granted" result is a reversal → dies.
+        let reversal = ToolGroundedComposer.sweep(
+            candidate: "The patent was not granted [T1].", question: "was it granted", results: granted)
+        #expect(reversal.isEmpty, "a negation absent from the evidence must die")
+
+        // A negation the cited evidence SHARES is legitimate → survives.
+        let unpaid = [ToolResult(id: "T1", text: "The invoice was not paid as of March.", objectIDs: [UUID()])]
+        let grounded = ToolGroundedComposer.sweep(
+            candidate: "The invoice was not paid [T1].", question: "is it paid", results: unpaid)
+        #expect(grounded.count == 1, "a grounded negation survives")
+    }
+
     // G1/Stage-6.2 / AT-18 — a hostile instruction embedded in a document
     // is neutralized before it reaches the model, while the legitimate value
     // in the same snippet survives so grounding still works.

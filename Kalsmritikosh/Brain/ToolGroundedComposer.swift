@@ -44,6 +44,14 @@ public enum ToolGroundedComposer {
     /// cited id exists AND its digits ⊆ (cited text ∪ question) AND its
     /// capitalized words appear in the cited text or the question (or are
     /// plain connectives).
+    /// AT-05 — negation cues. A composed sentence carrying one of these that
+    /// its cited evidence does not share is a fabricated reversal and dies.
+    nonisolated static let negationCues: Set<String> = [
+        "not", "no", "never", "without", "denied", "refused", "rejected",
+        "cannot", "isn't", "wasn't", "weren't", "didn't", "don't", "doesn't",
+        "none", "neither", "nor", "unpaid", "unresolved",
+    ]
+
     public nonisolated static func sweep(
         candidate: String,
         question: String,
@@ -79,6 +87,17 @@ public enum ToolGroundedComposer {
                 .allSatisfy { truthWords.contains($0.lowercased())
                     || StoryProseRephraser.allowedLeads.contains($0.lowercased()) }
             guard nounsOK else { continue }
+            // AT-05 — NEGATION POLARITY: a composed sentence must not introduce
+            // a negation the cited evidence does not carry (asserting "was NOT
+            // granted" from a "granted" result is a fabricated reversal). If the
+            // sentence contains a negation cue absent from the cited text, it
+            // dies. (A negation grounded in the evidence — the cited text also
+            // negates — passes.)
+            let bodyWords = Set(body.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty })
+            let bodyNeg = !bodyWords.isDisjoint(with: Self.negationCues)
+            let truthNeg = !truthWords.isDisjoint(with: Self.negationCues)
+            guard !(bodyNeg && !truthNeg) else { continue }
             kept.append((body + ".", id))
         }
         return kept
