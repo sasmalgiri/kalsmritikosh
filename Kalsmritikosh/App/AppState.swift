@@ -2751,11 +2751,11 @@ public final class AppState {
     /// suspends until the user picks a mode, so the engine boots in the
     /// chosen mode with no relaunch. On later launches it returns at once.
     public func awaitModeSelectionIfNeeded() async {
-        if FeatureFlags.shared.systemModeChosen { return }
-        showModeChooser = true
-        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-            self.modeSelectionContinuation = cont
-        }
+        // Zero mode choices (owner 2026-09-16): the system mode is pinned to the
+        // single minimum-LLM ledger engine (FeatureFlags.systemMode is fixed),
+        // so there is nothing for the user to choose. Mark it chosen and boot
+        // straight through — the chooser is never presented.
+        if !FeatureFlags.shared.systemModeChosen { FeatureFlags.shared.systemModeChosen = true }
     }
 
     /// Persist the chosen mode and dismiss the chooser. On first run this

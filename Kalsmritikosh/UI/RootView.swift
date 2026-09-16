@@ -319,11 +319,12 @@ public struct RootView: View {
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
-    /// HYBRID MODE (owner request 2026-09-16) — the app runs ONE unified mode:
-    /// the full navigation is always shown (no Simple/Advanced toggle). Kept as
-    /// a constant so the existing layout reads resolve to the complete surface
-    /// set; nothing is hidden behind a mode switch anymore.
-    private let simpleMode = false
+    /// HYBRID MODE (owner request 2026-09-16) — the app runs ONE unified mode
+    /// with NO user toggle. The presentation is the calm primary navigation
+    /// (Stage 7: a new user completes the flagship workflows without learning a
+    /// taxonomy); every specialist surface stays reachable through the header
+    /// search + ⌘K palette, so nothing is lost — only decluttered.
+    private let simpleMode = true
     /// ENGINE POWER — hybrid: the full stack is always on (embeddings, vector
     /// search, on-device AI) with the AEE's adaptive escalation providing the
     /// fast path when full reasoning isn't needed. No user Full/Lightning
@@ -1038,47 +1039,28 @@ public struct RootView: View {
     /// Always-visible badge showing the active system mode. Tapping opens
     /// the chooser (a change applies on next launch once booted). Also
     /// surfaces the count of files discovered this launch.
+    /// New-files hint. The MODE chooser was removed (owner 2026-09-16, "zero
+    /// mode choices"): the system runs one pinned engine, so there is nothing
+    /// to choose. This is now a NON-interactive indicator shown only when new
+    /// files arrived this session; when there are none it renders nothing, so
+    /// the sidebar stays calm.
+    @ViewBuilder
     private var modeBadge: some View {
-        let mode = FeatureFlags.shared.systemMode
-        return Button {
-            appState.showModeChooser = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: mode.symbolName)
+        if appState.newFilesSinceLaunch > 0 {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
                     .imageScale(.small)
-                    .foregroundStyle(Theme.brand)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("MODE")
-                        .font(.system(size: 8, weight: .heavy))
-                        .foregroundStyle(.tertiary)
-                        .tracking(0.5)
-                    Text(mode.shortLabel)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if appState.newFilesSinceLaunch > 0 {
-                    Text("\(appState.newFilesSinceLaunch) new")
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Theme.brandAlt.opacity(0.16), in: .capsule)
-                        .foregroundStyle(Theme.brandAlt)
-                }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.brandAlt)
+                Text("\(appState.newFilesSinceLaunch) new file\(appState.newFilesSinceLaunch == 1 ? "" : "s") added")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(Theme.brand.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .stroke(Theme.brand.opacity(0.18), lineWidth: 1)
-            )
+            .padding(.vertical, 6)
+            .background(Theme.brandAlt.opacity(0.10), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .padding(.horizontal, 8)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 8)
     }
 
     /// First-run walkthrough tip (TipKit) — one ordered tip at a time,
