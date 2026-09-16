@@ -48,11 +48,15 @@ metrics + T-G1.5 GoldWall in progress.
   MUST abstain (per-row groundedAnswerLegal flag); GoldWall green — the four
   pure-unanswerable rows genuinely abstain, only the grounded-legal row
   answers. Confirms the system already abstains; the test was too lenient.
-- T-G1.3b ◐ **Remaining composer-acceptance audit (Stage 2.2)** — the sweep
-  + adversarial cases are done for the tool path; still to audit that
-  chunk-fallback / story / structured / progressive all pass the SAME
-  policy-aware acceptance (negation, unit-change, quoted-allegation,
-  prompt-injection cases beyond the tool sweep).
+- T-G1.3b ◐ **Composer-acceptance / adversarial suite (Stage 2.2 / AT-05,18)**
+  — DONE for the tool sweep: question-as-proof (e24319e), wrong-date +
+  subject-swap (e24319e), prompt-injection defang (2acfab4), negation-polarity
+  (e7fa66e), currency/unit-polarity (424f933). Remaining: audit that
+  chunk-fallback / story / structured / progressive paths pass the SAME
+  policy-aware acceptance; quoted-allegation-as-fact case.
+- T-G2.3b ✅ **Deletion cascade (Stage 11 / AT-17-adjacent)** — done (eae45ea):
+  deleting a document removes every derived row + leaves no orphaned vectors,
+  tested over real rig-produced rows.
 - T-G1.4 ✗ **Evidence metrics (Stage 6.3)** measured separately: retrieval
   recall · source-identity correctness · claim support · unanswerable
   handling · conflict detection · scope violations. No single score.
