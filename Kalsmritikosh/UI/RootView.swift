@@ -31,7 +31,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
     case registers
     case workspaces
     case dataLab
-    case timeline, history, findings, notebook, dossier, explore, matrix, connections, story
+    case timeline, history, findings, notebook, dossier, explore, matrix, compareDocs, connections, story
     case reasoning, hypotheses, hrStudio, privilegeStudio, siuStudio, faStudio, jnStudio
     case rsStudio, gnStudio, ccStudio, inStudio
     case sopBoard
@@ -66,6 +66,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "Dossier"
         case .explore:      return "Explore"
         case .matrix:       return "Cross-Doc Matrix"
+        case .compareDocs:  return "Compare Documents"
         case .connections:  return "Connections"
         case .fundFlow:     return "Fund Flow"
         case .emailThreads: return "Email Threads"
@@ -128,6 +129,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "person.text.rectangle"
         case .explore:      return "point.3.connected.trianglepath.dotted"
         case .matrix:       return "square.grid.3x3.topleft.filled"
+        case .compareDocs:  return "square.split.2x1"
         case .connections:  return "point.topleft.down.to.point.bottomright.curvepath"
         case .fundFlow:     return "arrow.triangle.branch"
         case .emailThreads: return "envelope.badge.person.crop"
@@ -206,6 +208,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .dossier:      return "Everything known about a person or entity"
         case .explore:      return "Entity graph — see who and what connects"
         case .matrix:       return "Ask one question across every document — what each source says, cited"
+        case .compareDocs:  return "Compare two or more documents field by field — agreements, disagreements, and what no source settles"
         case .connections:  return "Find the shortest chain of relationships linking two people or organizations"
         case .fundFlow:     return "See how money moved between parties — payer to payee — drawn from your evidence"
         case .emailThreads: return "A big email dump, deduplicated and grouped into conversations"
@@ -262,7 +265,7 @@ public enum Destination: String, CaseIterable, Identifiable, Hashable {
         var items: [Destination] {
             switch self {
             case .converse:    return [.home, .ask, .search, .work, .workCenter, .registers]
-            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
+            case .reconstruct: return [.workspaces, .dataLab, .timeline, .history, .findings, .review, .handoff, .matrix, .compareDocs, .connections, .fundFlow, .emailThreads, .story, .reasoning, .hypotheses, .hrStudio, .privilegeStudio, .siuStudio, .faStudio, .jnStudio, .rsStudio, .gnStudio, .ccStudio, .inStudio, .transcripts, .notebook, .dossier, .explore, .insights, .changes]
             case .knowledge:   return [.knowledge, .assertions, .answers, .audit, .verifyReceipt, .library, .saved, .authenticity, .citations, .freshness, .trends, .query]
             case .workspace:   return [.sources, .convert, .completeness, .live, .redaction, .caseload]
             case .system:      return [.guide, .sutra, .sopBoard, .settings]
@@ -453,7 +456,7 @@ public struct RootView: View {
              .transcripts, .authenticity, .citations,
              .freshness, .trends, .emailThreads, .query:              return .entities
         case .dataLab:                                                return .dataLab
-        case .connections, .explore, .matrix, .fundFlow:              return .relationships
+        case .connections, .explore, .matrix, .compareDocs, .fundFlow: return .relationships
         case .findings, .notebook, .dossier, .story, .review,
              .handoff, .verifyReceipt, .audit, .reasoning, .hypotheses,
              .hrStudio, .privilegeStudio, .siuStudio, .faStudio,
@@ -1402,6 +1405,7 @@ public struct RootView: View {
         case .dossier:      DossierView()
         case .explore:      ExplorerView()
         case .matrix:       CrossDocumentMatrixView()
+        case .compareDocs:  StructuredComparisonView()
         case .connections:  ConnectionFinderView()
         case .fundFlow:     FundFlowView()
         case .emailThreads: EmailThreadsView()

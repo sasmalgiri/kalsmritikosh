@@ -93,3 +93,16 @@ public struct ComparisonBriefView: View {
         }
     }
 }
+
+#Preview("Comparison brief") {
+    ComparisonBriefView(
+        brief: ComparisonBrief(
+            agreements: ["parties: all sources agree — Orchid Chemicals & Ltd."],
+            disagreements: ["effective date: sources disagree — Agreement.pdf: 1 April 2024; Amendment.pdf: 1 July 2024."],
+            differentUnits: ["consideration: same figure, different units — Deed.pdf: 500000 INR; Memo.pdf: 500000 USD (not a conflict)."],
+            unresolved: ["governing law: only Agreement.pdf states — Maharashtra. Others silent: Memo.pdf."],
+            sourceRegister: ["Agreement.pdf", "Amendment.pdf", "Deed.pdf", "Memo.pdf"],
+            text: "preview"),
+        onExport: {})
+    .frame(width: 640, height: 560)
+}
