@@ -58,16 +58,18 @@ metrics + T-G1.5 GoldWall in progress.
   handling · conflict detection · scope violations. No single score.
 
 ## Gate G2 — Durability (Stages 3, 11)
-Status: ◐.
-- T-G2.1 ✗ **Durable conversation reopening (Stage 3).** Bind `AskView`
-  turns to durable answer revisions (ConversationsRepository) so citations/
-  status/receipt restore on reopen; honest legacy state for old turns; atomic
-  writes. (U-1 built the two-section card; this adds the persistence link.)
+Status: ◐ — T-G2.1 DONE (bffd409); migration-safety for v128 verified.
+- T-G2.1 ✅ **Durable conversation reopening (Stage 3)** — done (bffd409):
+  schema v128 conversation_turns.answer_ledger_id; turn↔durable-answer link;
+  reconstructVerifiedAnswer restores citations/status/receipt on reopen;
+  legacy turns honest-empty; round-trip tested.
 - T-G2.2 ✗ Source opening shows exact passage/page/cell/message; handle
   missing/moved/revoked/deleted/old-version originals with tested fallback.
-- T-G2.3 🔎 **Migrations + backup/restore (Stage 11)** — upgrade populated
-  legacy schema; rollback after interrupted migration; backup/restore to a
-  clean profile; deletion cascade semantics. (Schema-version guard exists.)
+- T-G2.3 ◐ **Migrations + backup/restore (Stage 11)** — migration-safety for
+  v128 VERIFIED (full MigrationMatrix green: 24 milestone versions 0→128
+  migrate with row preservation, FK integrity, rollback, idempotent
+  re-migration). Still to do: backup/restore to a clean profile; deletion
+  cascade semantics audit.
 
 ## Gate G3 — Product flows (Stages 5, 6, 7)
 Status: ◐ — engines exist; the three flagship workflows need end-to-end UI
