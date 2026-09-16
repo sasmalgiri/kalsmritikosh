@@ -319,23 +319,20 @@ public struct RootView: View {
     /// Game-style quick-swap: the previously-viewed screen, so ⌘\ toggles
     /// straight back to it (like weapon quick-swap in shooters).
     @State private var previousSelection: Destination = .ask
-    /// Interface mode. Simple collapses each sidebar group to its ONE primary surface
-    /// (Group.simplePrimary); Advanced shows every screen. Everything hidden in Simple stays
-    /// reachable via the header search + ⌘K palette. Persisted; default Simple.
-    @AppStorage("kalsmritikosh.settings.simpleMode") private var simpleMode: Bool = true
-    /// ENGINE POWER — same defaults key FeatureFlags.fullPowerMode reads, so
-    /// the sidebar toggle and the engine's value getters stay in lockstep.
+    /// HYBRID MODE (owner request 2026-09-16) — the app runs ONE unified mode:
+    /// the full navigation is always shown (no Simple/Advanced toggle). Kept as
+    /// a constant so the existing layout reads resolve to the complete surface
+    /// set; nothing is hidden behind a mode switch anymore.
+    private let simpleMode = false
+    /// ENGINE POWER — hybrid: the full stack is always on (embeddings, vector
+    /// search, on-device AI) with the AEE's adaptive escalation providing the
+    /// fast path when full reasoning isn't needed. No user Full/Lightning
+    /// toggle. Same FeatureFlags.fullPowerMode key, forced true at launch.
     @AppStorage("kalsmritikosh.feature.fullPower") private var fullPower: Bool = true
     /// Semantic-index backlog (embedded chunks vs total), refreshed every 30s
     /// — drives the caption under the Engine picker so Lightning's deferred
     /// indexing is never silent.
     @State private var semanticBacklog: (done: Int, total: Int) = (0, 0)
-    /// Engine-switch confirmation. When the user flips Full power ↔ Lightning
-    /// while background work is running, we hold the desired value here and
-    /// raise a Stop all / Keep running / Cancel dialog instead of flipping
-    /// silently — so the switch never strands in-flight work without a choice.
-    @State private var pendingEnginePower: Bool?
-    @State private var showEngineSwitchConfirm = false
     /// Presents the native "Add files" importer (SwiftUI-managed, sizes correctly).
     @State private var showAddFiles = false
     /// Presents the add-folder importer (from the ⌘K palette).
@@ -580,6 +577,12 @@ public struct RootView: View {
             if newValue != nil { navigate(to: .workCenter) }
         }
         .task {
+            // HYBRID MODE — the engine is always full power (no Lightning toggle).
+            // Force it on at launch so a value persisted by an older build can't
+            // strand the app in the retired Lightning path.
+            if !fullPower { fullPower = true }
+        }
+        .task {
             // ENGINE POWER — refresh the semantic-index backlog caption.
             while !Task.isCancelled {
                 let p = await appState.ingestProgress()
@@ -653,20 +656,6 @@ public struct RootView: View {
     /// as `pendingEnginePower` and the confirmation dialog decides what happens;
     /// otherwise it flips immediately. The getter always returns the committed
     /// `fullPower`, so the segmented control stays put until the user confirms.
-    private var enginePowerBinding: Binding<Bool> {
-        Binding(
-            get: { fullPower },
-            set: { newValue in
-                guard newValue != fullPower else { return }
-                if appState.hasStoppableBackgroundWork {
-                    pendingEnginePower = newValue
-                    showEngineSwitchConfirm = true
-                } else {
-                    fullPower = newValue
-                }
-            })
-    }
-
     private var sidebar: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 3) {
@@ -710,48 +699,9 @@ public struct RootView: View {
                         Task { await appState.ingestFiles(urls) }
                     }
                 }
-                // Simple / Advanced interface toggle. Simple shows one primary screen per group;
-                // everything else stays reachable via the header search + ⌘K.
-                Picker("Interface", selection: $simpleMode) {
-                    Text("Simple").tag(true)
-                    Text("Advanced").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
-                // ENGINE POWER (owner request 2026-08-16) — Full power runs the
-                // complete stack (embeddings, vector search, on-device AI);
-                // Lightning answers from structure + full-text alone: fastest,
-                // lowest energy, still evidence-cited. Lossless flip: vectors
-                // resume backfilling the moment Full power returns.
-                Picker("Engine", selection: enginePowerBinding) {
-                    Label("Full power", systemImage: "brain").tag(true)
-                    Label("Lightning", systemImage: "bolt.fill").tag(false)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
-                .help("Full power: embeddings, vector search and on-device AI. Lightning: structure + full-text only — fastest and lowest energy; answers stay cited to your documents.")
-                .confirmationDialog(
-                    "Background work is running",
-                    isPresented: $showEngineSwitchConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Stop all and switch", role: .destructive) {
-                        appState.stopAllBackgroundWork()
-                        if let p = pendingEnginePower { fullPower = p }
-                        pendingEnginePower = nil
-                    }
-                    Button("Keep running and switch") {
-                        if let p = pendingEnginePower { fullPower = p }
-                        pendingEnginePower = nil
-                    }
-                    Button("Cancel", role: .cancel) { pendingEnginePower = nil }
-                } message: {
-                    Text("Ingesting, relationship extraction and semantic indexing are still in progress. Switching the engine loses nothing — the work pauses and resumes automatically. Choose Stop all to halt it now instead.")
-                }
+                // HYBRID MODE — the Simple/Advanced and Full power/Lightning
+                // toggles were removed (owner request 2026-09-16): the app runs
+                // one unified mode — full navigation + full-power adaptive engine.
                 // D-6 — the honest deterministic-mode note (CLEAN_MACHINE step 6):
                 // when no on-device generation is available, say WHY — the
                 // FoundationModels unavailability hint — right where the engine
