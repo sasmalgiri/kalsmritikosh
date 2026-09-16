@@ -34,7 +34,7 @@ app to fully exercise (walkthrough item) · 🔒 owner-gated (no agent can run i
 | AT-16 | Migration safety: every milestone version 0→128 migrates with row/FK integrity | `MigrationMatrixTests` | ✅ |
 | AT-17 | Deleting a document cascades to all derived rows; no orphaned vectors | `DeletionCascadeTests` (eae45ea) | ✅ |
 | AT-18 | Prompt-injected document text is defanged, not obeyed | `AskTheLedgerTests.documentInjectionIsDefangedNotObeyed` (2acfab4) | ✅ |
-| AT-19 | Source opening resolves a citation to an exact location, with whole-document fallback | `SourceLocationTests`; exact-passage highlighting UI | 🧪 |
+| AT-19 | Source opening resolves a citation to an exact location, with whole-document fallback | `SourceLocationTests`, `CitedSourceLocationMappingTests`; `AppState.exactLocation(forBlock:)` (4532b38) — logic wired+tested; only visual highlight pending | 🧪 |
 | AT-20 | Persona/professional workflows trace end-to-end (approval gates, redaction, receipts ≠ admissibility) | `LawyerPersonaAcceptanceTests`, `JournalistIndividualAcceptanceTests`, `ResearcherPersonaAcceptanceTests`, `PersonaAcceptanceInvestigatorTests` | ✅ |
 
 ## Remaining to fully close Stage 13

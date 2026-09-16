@@ -67,10 +67,12 @@ Status: ◐ — T-G2.1 DONE (bffd409); migration-safety for v128 verified.
   schema v128 conversation_turns.answer_ledger_id; turn↔durable-answer link;
   reconstructVerifiedAnswer restores citations/status/receipt on reopen;
   legacy turns honest-empty; round-trip tested.
-- T-G2.2 ◐ Source opening — CORE done (d69ef0b): CitedSourceLocation +
-  SourceLocationResolver resolve a citation to exact page/cell/message/char
-  location with the tested .wholeDocument fallback. Remaining: wire into the
-  source-viewer UI + handle moved/revoked/deleted originals in the view.
+- T-G2.2 ◐ Source opening — CORE (d69ef0b) + LIVE WIRING (4532b38):
+  CitedSourceLocation.from(SourceLocator) maps the real block locator to an
+  exact open target (char/page/cell/message, whole-doc fallback);
+  AppState.exactLocation(forBlock:) resolves a cited block through the evidence
+  store (8 mapper tests green). Remaining: the visual highlight in the
+  source-viewer UI + moved/revoked/deleted-original handling (walkthrough).
 - T-G2.3c ✅ Backup/restore CORE (d69ef0b) + SERVICE (d8ea590, round-trip +
   incomplete-refused tests) + SETTINGS ACTION (ed8960f): "Back up your
   knowledge base" copies knowledge.sqlite (+wal/shm) with a SHA-256 manifest;
