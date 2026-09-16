@@ -74,8 +74,12 @@ Status: ◐ — T-G2.1 DONE (bffd409); migration-safety for v128 verified.
 - T-G2.3c ✅ Backup/restore CORE (d69ef0b): BackupManifest / BackupPlanner /
   RestoreValidator — deterministic manifest + honest incomplete-restore
   report. Remaining: the file-copy/hash service + Settings action on top.
-- T-G3.3b ✅ ComparisonService (d69ef0b) — wires the matrix/brief to injected
-  per-source reads. Remaining: the ledger resolver + brief UI/export.
+- T-G3.3b ✅ ComparisonService (d69ef0b) + **ledger resolver (0b933a5)** +
+  **brief surface (eee6cae)**. ComparisonLedgerResolver binds the matrix to
+  live facts via injected facts-for-field + block→document reads (stated/
+  explicit-none/silent, unit folded so different-unit ≠ disagreement; tested).
+  ComparisonBriefView renders the sourced sections. Remaining: the doc/field
+  PICKER + analyst-edit + export + recompute-revision, wired into navigation.
 - T-G2.3 ◐ **Migrations + backup/restore (Stage 11)** — migration-safety for
   v128 VERIFIED (full MigrationMatrix green: 24 milestone versions 0→128
   migrate with row preservation, FK integrity, rollback, idempotent
@@ -91,13 +95,12 @@ lifecycle (start/cancel/review/correct/save/reopen/export).
 - T-G3.2 ◐ Workflow B (chronology) — history engine exists; reconcile the
   deferred topic/folder/corpus subject (Stage 5); event-time vs doc-time,
   date precision, uncertainty; bounded causal links (U-3.2 done); export.
-- T-G3.3 ◐ Workflow C (comparison brief) — DETERMINISTIC CORE done:
-  ComparisonMatrix (f61c422, verdicts agree/disagree/differentUnit/
-  singleSource/unattested + absent-evidence vs evidence-of-absence) and
-  ComparisonBrief renderer (8dea284, sourced sections + register). Remaining:
-  wire the matrix to real ledger field-values per source; the brief UI
-  (select docs/fields, edit analyst assessment, export PDF/MD, reopen,
-  recompute-to-new-revision).
+- T-G3.3 ◐ Workflow C (comparison brief) — CORE + DATA PATH + SURFACE done:
+  ComparisonMatrix (f61c422) + ComparisonBrief (8dea284) + ComparisonService
+  (d69ef0b) + ComparisonLedgerResolver (0b933a5, matrix now reads live ledger
+  facts per source) + ComparisonBriefView (eee6cae, sourced-section UI).
+  Remaining (UI-integration, needs RootView/navigation): the doc/field
+  PICKER, analyst-edit, export PDF/MD, reopen, recompute-to-new-revision.
 - T-G3.4 ◐ **Navigation redesign (Stage 7)** — Home / Projects / Files /
   Outputs; Simple mode completes flagships with no persona/SOP knowledge;
   Advanced + command palette for specialists; keep Fast / Long-with-evidence;
