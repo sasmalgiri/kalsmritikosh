@@ -1122,6 +1122,8 @@ public struct SettingsView: View {
     /// "Delete all my data" confirmation + status.
     @State private var confirmDeleteAll = false
     @State private var deleteAllStatus: String?
+    @State private var backupStatus: String?
+    @State private var backingUp = false
     /// Which everyday Settings categories are expanded. Empty = all collapsed,
     /// so Settings shows a minimal list of category headers by default.
     @State private var openSettingsGroups: Set<String> = []
@@ -1251,10 +1253,118 @@ public struct SettingsView: View {
         }
     }
 
+    /// Back up / restore — a SAFE, read-only copy of the extracted ledger to a
+    /// folder the user picks. It never touches originals and never overwrites the
+    /// live database; restore is verified against the manifest (an incomplete
+    /// backup is refused, not partially restored) via BackupService.
+    private var backupSubsection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "externaldrive.badge.timemachine").foregroundStyle(Theme.brand)
+                Text("Back up your knowledge base").font(.title3.bold())
+            }
+            Text("Save a copy of your extracted ledger (knowledge.sqlite) to a folder you choose — e.g. an external drive. Your original documents stay where they are. A manifest records each file's size and SHA-256, so a restore can be verified and an incomplete backup is refused.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button {
+                    backUpNow()
+                } label: {
+                    if backingUp {
+                        Label("Backing up…", systemImage: "hourglass")
+                    } else {
+                        Label("Back up now…", systemImage: "externaldrive.badge.plus")
+                    }
+                }
+                .disabled(backingUp)
+                Button {
+                    inspectBackup()
+                } label: {
+                    Label("Check a backup…", systemImage: "checkmark.seal")
+                }
+                if let s = backupStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    /// Copy the live database (+ its -wal/-shm sidecars, if present) into a
+    /// timestamped backup folder the user selects. Read-only w.r.t. the app's
+    /// own data; failures are surfaced, never swallowed.
+    private func backUpNow() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Back Up Here"
+        panel.message = "Choose a folder to save your Kalsmritikosh backup into."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        backingUp = true
+        backupStatus = nil
+        Task {
+            let dbURL = DatabaseLocations.defaultDatabaseURL
+            var sidecars: [URL] = []
+            for suffix in ["-wal", "-shm"] {
+                let u = URL(fileURLWithPath: dbURL.path + suffix)
+                if FileManager.default.fileExists(atPath: u.path) { sidecars.append(u) }
+            }
+            let stamp = Int(Date().timeIntervalSince1970)
+            let dest = dir.appendingPathComponent("Kalsmritikosh-Backup-\(stamp)")
+            do {
+                let manifest = try BackupService().createBackup(
+                    databaseURL: dbURL, originalURLs: sidecars, destination: dest,
+                    schemaVersion: SchemaMigrations.latestVersion,
+                    nowEpoch: Date().timeIntervalSince1970)
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
+                }
+            } catch {
+                await MainActor.run {
+                    backingUp = false
+                    backupStatus = "Backup failed: \(error.localizedDescription)"
+                }
+            }
+        }
+        #endif
+    }
+
+    /// Validate a chosen backup folder against its manifest WITHOUT copying — the
+    /// honest pre-restore check (present/missing files, schema version).
+    private func inspectBackup() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = "Check Backup"
+        panel.message = "Choose a backup folder to verify."
+        guard panel.runModal() == .OK, let dir = panel.url else { return }
+        Task {
+            do {
+                let (manifest, verdict) = try BackupService().inspect(backupFolder: dir)
+                await MainActor.run {
+                    backupStatus = verdict.ok
+                        ? "Backup OK — \(manifest.entries.count) file(s), schema v\(manifest.schemaVersion). Verified complete."
+                        : "Incomplete backup — missing: \(verdict.missing.joined(separator: ", "))."
+                }
+            } catch {
+                await MainActor.run {
+                    backupStatus = "That folder isn't a valid backup (no manifest.json)."
+                }
+            }
+        }
+        #endif
+    }
+
     /// Your data — the global "erase everything" control. Always visible so it's
     /// easy to find (the app previously only had a per-folder forget in Sources).
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
+            backupSubsection
+            Divider().padding(.vertical, 4)
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
                 Text("Your data").font(.title3.bold())
