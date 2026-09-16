@@ -775,12 +775,24 @@ public struct AskView: View {
     private func openConversation(_ id: UUID) async {
         guard let repo = appState.conversations else { return }
         let existing = (try? await repo.turns(for: id)) ?? []
+        // G2/Stage-3 — restore the durable evidence for each assistant turn
+        // that carries a ledger link: citations, verification status and the
+        // receipt come back from the answer ledger, not from rendered prose.
+        // Turns without a link (legacy, or persistence failed) stay in the
+        // honest "evidence not linked" state (body text only).
+        var restored: [UUID: VerifiedAnswer] = [:]
+        if let ledger = appState.answerLedger {
+            for turn in existing where turn.role == .assistant {
+                if let aid = turn.answerLedgerID,
+                   let verified = try? await ledger.reconstructVerifiedAnswer(answerID: aid) {
+                    restored[turn.id] = verified
+                }
+            }
+        }
         await MainActor.run {
             self.conversationID = id
             self.turns = existing
-            // Verified quality strips only re-hydrate for the live session;
-            // the answer text itself is persisted in each turn's body.
-            self.verifiedAnswers = [:]
+            self.verifiedAnswers = restored
             self.showHistory = false
             self.inputFocused = true
         }
@@ -889,7 +901,12 @@ public struct AskView: View {
 
             // Ledger-AI v28 — persist the answer against a fresh corpus
             // snapshot (closed-corpus contract). Best-effort.
-            await appState.recordAnswer(question: q, answer: answer)
+            // G2/Stage-3 — bind this turn to its durable answer so reopening
+            // the conversation restores citations/status/receipt from the
+            // ledger instead of losing them.
+            if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer) {
+                try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
+            }
 
             // GK — the second lane: only AFTER the archive lane finished and
             // REFUSED, only when the setting is on. One model call, zero

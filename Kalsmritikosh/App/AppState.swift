@@ -2694,12 +2694,18 @@ public final class AppState {
     /// after every user-facing answer so the ledger records what the
     /// archive looked like when each answer was produced. Best-effort:
     /// failures are logged, never surfaced to the user.
-    public func recordAnswer(question: String, answer: VerifiedAnswer) async {
-        guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return }
+    /// Persist the shipped answer to the durable ledger. G2/Stage-3: returns
+    /// the ledger answer id so the caller can bind the conversation turn to
+    /// this durable revision (for evidence restoration on reopen). nil when
+    /// no ledger is wired or persistence failed.
+    @discardableResult
+    public func recordAnswer(question: String, answer: VerifiedAnswer) async -> UUID? {
+        guard let snapshots = corpusSnapshots, let ledger = answerLedger else { return nil }
         let snapshot = await currentCorpusSnapshot()
+        var persistedID: UUID?
         do {
             if let snapshot { try await snapshots.insert(snapshot) }
-            try await ledger.persist(
+            persistedID = try await ledger.persist(
                 question: question,
                 answer: answer,
                 corpusSnapshotID: snapshot?.id
@@ -2713,6 +2719,7 @@ public final class AppState {
         // next idle scoring pass; the other engines no-op. All mode-
         // specific behaviour now lives in the engine, not here.
         await systemEngine?.onAnswer(answer)
+        return persistedID
     }
 
     /// Build a point-in-time census of the archive from the live repos.

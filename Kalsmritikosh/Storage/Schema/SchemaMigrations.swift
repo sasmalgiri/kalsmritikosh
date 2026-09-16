@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 127
+    public static let latestVersion = 128
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -658,7 +658,8 @@ public enum SchemaMigrations {
         (124, v124),
         (125, v125),
         (126, v126),
-        (127, v127)
+        (127, v127),
+        (128, v128)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6482,5 +6483,18 @@ public enum SchemaMigrations {
     ALTER TABLE history_artifacts ADD COLUMN ledger_stamp TEXT;
     CREATE INDEX IF NOT EXISTS idx_history_artifacts_dedup
         ON history_artifacts(anchor_key, request_shape, ledger_stamp);
+    """
+
+    // MARK: - v128 — G2/Stage-3: durable conversation reopening
+    //
+    // An assistant conversation turn gains a link to its durable answer in
+    // the answer ledger (answer_ledger_id). On reopen the citations,
+    // verification status and receipt controls are restored from that
+    // ledger row instead of being lost — the turn binds to the durable
+    // revision, never a second divergent copy of verification truth. NULL
+    // for legacy turns (an honest "evidence not linked" state) and for user
+    // turns.
+    private static let v128: String = """
+    ALTER TABLE conversation_turns ADD COLUMN answer_ledger_id TEXT;
     """
 }
