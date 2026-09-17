@@ -883,12 +883,24 @@ public struct RootView: View {
         return t
     }
 
-    /// The last 4 screens the user actually visited, newest first (home
-    /// excluded — it has its own permanent place). Empty until real use.
+    /// The permanent sidebar destinations always shown under GO TO — the group
+    /// primaries plus the professional-workflow surfaces and Home. Recents are
+    /// deduplicated against this set so nothing appears twice (Stage 7).
+    private var permanentSidebarDestinations: Set<Destination> {
+        var set = Set(Destination.Group.allCases.map { $0.simplePrimary })
+        set.formUnion([.home, .work, .workCenter])
+        return set
+    }
+
+    /// The last 4 screens the user actually visited, newest first, EXCLUDING
+    /// any already pinned under GO TO (Home + the group primaries + work
+    /// surfaces) — so a recent never duplicates a permanent row. Empty until
+    /// there is real, non-duplicate history.
     private var recentDestinations: [Destination] {
-        recentDestinationsBlob.split(separator: ",")
+        let permanent = permanentSidebarDestinations
+        return recentDestinationsBlob.split(separator: ",")
             .compactMap { Destination(rawValue: String($0)) }
-            .filter { $0 != .home }
+            .filter { !permanent.contains($0) }
             .prefix(4)
             .map { $0 }
     }
