@@ -1126,6 +1126,8 @@ public struct SettingsView: View {
     @State private var backingUp = false
     @State private var cleanupStatus: String?
     @State private var cleaningUp = false
+    @State private var topicsStatus: String?
+    @State private var buildingTopics = false
     /// Which everyday Settings categories are expanded. Empty = all collapsed,
     /// so Settings shows a minimal list of category headers by default.
     @State private var openSettingsGroups: Set<String> = []
@@ -1398,6 +1400,30 @@ public struct SettingsView: View {
                 }
                 .disabled(cleaningUp)
                 if let s = cleanupStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 12) {
+                Button {
+                    buildingTopics = true
+                    topicsStatus = nil
+                    Task {
+                        let n = await appState.buildTopics()
+                        await MainActor.run {
+                            buildingTopics = false
+                            topicsStatus = n.map { "Built \($0) topic\($0 == 1 ? "" : "s") from your facts." }
+                                ?? "Nothing to build yet."
+                        }
+                    }
+                } label: {
+                    if buildingTopics {
+                        Label("Building topics…", systemImage: "hourglass")
+                    } else {
+                        Label("Build topics", systemImage: "square.stack.3d.up")
+                    }
+                }
+                .disabled(buildingTopics)
+                if let s = topicsStatus {
                     Text(s).font(.caption).foregroundStyle(.secondary)
                 }
             }
