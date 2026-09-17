@@ -28,7 +28,22 @@ public enum DeterministicEvidenceFallback {
         // P7.5 — the no-LLM reconstruction must read as a CHRONOLOGICAL timeline,
         // so sort the event cards by date ascending before rendering (retrieval
         // order is relevance-ranked, not temporal).
-        let events = Array(retrieval.events.prefix(12)).sorted { $0.date < $1.date }
+        // Answer-quality W4 — everything shown here must be RELEVANT to the
+        // question. The live diagnostic showed this last-resort composer dumping
+        // every riding fact (Role: Director / Hearingdate … ×30) and unrelated
+        // documents (a patent timeline for "who signed the lease?"). Gate each
+        // section by shared content terms; when nothing relevant survives, return
+        // nil so the caller keeps its honest not-found. Empty question ⇒ keep all.
+        let relevanceSelector = PassageAnswerSelector()
+        let qTerms = relevanceSelector.contentTerms(question)
+        func relevant(_ text: String) -> Bool {
+            guard !qTerms.isEmpty else { return true }
+            return !qTerms.isDisjoint(with: relevanceSelector.contentTerms(text))
+        }
+
+        let events = Array(retrieval.events.prefix(12))
+            .filter { relevant($0.title) }
+            .sorted { $0.date < $1.date }
         let chunks = Array(retrieval.chunks.prefix(8))
         guard !events.isEmpty || !chunks.isEmpty else { return nil }
 
@@ -61,7 +76,7 @@ public enum DeterministicEvidenceFallback {
                 .replacingOccurrences(of: "\n", with: " ")
                 .trimmingCharacters(in: .whitespaces)
                 .prefix(300)
-            guard snippet.count >= 20 else { continue }
+            guard snippet.count >= 20, relevant(String(snippet)) else { continue }
             passageLines.append("- \(snippet)")
             if seen.insert(hit.chunk.objectID).inserted {
                 citations.append(VerifiedAnswer.Citation(
@@ -83,9 +98,17 @@ public enum DeterministicEvidenceFallback {
             if let b = c.chunk.evidenceBlockID, blockToChunk[b] == nil { blockToChunk[b] = c }
         }
         var factLines: [String] = []
+        var seenFacts = Set<String>()          // W4 — dedup: the same field+value
         for fact in retrieval.genericFacts {
             guard let backing = fact.sourceBlockIDs.lazy.compactMap({ blockToChunk[$0] }).first
             else { continue }   // only facts whose evidence is in THIS surfaced set
+            // W4 — relevance gate + dedup + cap: never dump every riding fact or
+            // repeat the same one. Skip facts the question did not ask about, and
+            // collapse duplicate field+value rows.
+            guard relevant(fact.field + " " + fact.value) else { continue }
+            let dedupKey = "\(fact.field.lowercased())|\(fact.value.lowercased())"
+            guard seenFacts.insert(dedupKey).inserted else { continue }
+            guard factLines.count < 12 else { break }
             let field = fact.field.prefix(1).uppercased() + fact.field.dropFirst()
             let unit = fact.unit.map { " \($0)" } ?? ""
             factLines.append("- **\(field):** \(fact.value)\(unit)")
@@ -98,6 +121,11 @@ public enum DeterministicEvidenceFallback {
                 ))
             }
         }
+
+        // W4 abstention — if nothing relevant to the question survived the gates,
+        // return nil so the caller keeps its honest not-found instead of dumping
+        // an unrelated fact/timeline pile.
+        guard !factLines.isEmpty || !passageLines.isEmpty || !events.isEmpty else { return nil }
 
         // Contradictions are found deterministically (no LLM).
         let contradictions = await MasterBrain.findCrossRetrievalContradictions(
