@@ -758,9 +758,10 @@ public struct RootView: View {
                 onboardingTip
                 personaSection
                 if simpleMode {
-                    // Simple mode: exactly one primary per group. Collapsing a single-item group would
-                    // hide it behind a chevron (the "empty sidebar" bug), so show the primaries as a
-                    // flat, always-visible list under one calm caption. Everything else is one ⌘K away.
+                    // Stage 7 — the work-oriented primary destinations: Home,
+                    // Ask (flagship A), Projects, Files, Outputs, then Settings.
+                    // Every other surface is one ⌘K palette / header-search away,
+                    // so nothing is lost — only decluttered.
                     Text("GO TO")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.tertiary)
@@ -768,17 +769,16 @@ public struct RootView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 12)
                         .padding(.bottom, 2)
-                    ForEach(Destination.Group.allCases) { group in
-                        SidebarRow(dest: group.simplePrimary, isSelected: selection == group.simplePrimary, namespace: sidebarNS) {
-                            navigate(to: group.simplePrimary)
+                    ForEach(stagePrimaries, id: \.dest) { item in
+                        SidebarRow(dest: item.dest, isSelected: selection == item.dest,
+                                   namespace: sidebarNS,
+                                   labelOverride: item.label, iconOverride: item.icon) {
+                            navigate(to: item.dest)
                         }
                     }
-                    // Even in Simple mode, keep the professional workflow surfaces one
-                    // click away — jobs run their guided workflows in the Work Center.
-                    ForEach([Destination.work, .workCenter], id: \.self) { dest in
-                        SidebarRow(dest: dest, isSelected: selection == dest, namespace: sidebarNS) {
-                            navigate(to: dest)
-                        }
+                    Divider().padding(.horizontal, 12).padding(.vertical, 4)
+                    SidebarRow(dest: .settings, isSelected: selection == .settings, namespace: sidebarNS) {
+                        navigate(to: .settings)
                     }
                 } else {
                     // Advanced mode: every screen, grouped and collapsible (groups start expanded).
@@ -883,12 +883,23 @@ public struct RootView: View {
         return t
     }
 
-    /// The permanent sidebar destinations always shown under GO TO — the group
-    /// primaries plus the professional-workflow surfaces and Home. Recents are
-    /// deduplicated against this set so nothing appears twice (Stage 7).
+    /// Stage 7 primary destinations (label/icon overrides map existing screens
+    /// to the work-oriented names). Home · Ask · Projects · Files · Outputs.
+    /// Settings is shown separately below a divider as the utility destination.
+    private var stagePrimaries: [(dest: Destination, label: String, icon: String)] {
+        [(.home, "Home", "house"),
+         (.ask, "Ask", "bubble.left.and.text.bubble.right"),
+         (.workspaces, "Projects", "folder"),
+         (.sources, "Files", "tray.and.arrow.down.fill"),
+         (.answers, "Outputs", "tray.full")]
+    }
+
+    /// The permanent sidebar destinations always shown under GO TO — the Stage 7
+    /// primaries plus Settings. Recents are deduplicated against this set so
+    /// nothing appears twice (Stage 7).
     private var permanentSidebarDestinations: Set<Destination> {
-        var set = Set(Destination.Group.allCases.map { $0.simplePrimary })
-        set.formUnion([.home, .work, .workCenter])
+        var set = Set(stagePrimaries.map { $0.dest })
+        set.insert(.settings)
         return set
     }
 
@@ -1444,19 +1455,27 @@ private struct SidebarRow: View {
     let dest: Destination
     let isSelected: Bool
     let namespace: Namespace.ID
+    /// Optional presentation overrides — used by the Stage 7 primary rows so a
+    /// destination can show a work-oriented label ("Projects", "Files",
+    /// "Outputs") without renaming the destination globally.
+    var labelOverride: String? = nil
+    var iconOverride: String? = nil
     let onTap: () -> Void
     @State private var hovering = false
+
+    private var label: String { labelOverride ?? dest.title }
+    private var icon: String { iconOverride ?? dest.icon }
 
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 10) {
-                Image(systemName: dest.icon)
+                Image(systemName: icon)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(isSelected ? .white : Theme.brand)
                     .frame(width: 26, height: 26)
                     .background(iconChip)
                     .symbolEffect(.bounce, value: isSelected)
-                Text(dest.title)
+                Text(label)
                     .font(.callout.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? .primary : .secondary)
                 Spacer(minLength: 0)
@@ -1473,7 +1492,7 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("\(dest.title) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
+        .help("\(label) — \(dest.blurb)\(dest.shortcutHint.map { "  (\($0))" } ?? "")")
         .onHover { h in
             withAnimation(.easeOut(duration: 0.12)) { hovering = h }
         }
