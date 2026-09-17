@@ -69,6 +69,10 @@ public actor GenericFactRepository {
     /// This replaces the id-keyed `upsert` on the extraction write path, so
     /// re-extracting the same fact can no longer inflate the ledger.
     public func mergeUpsert(_ fact: GenericFact) async throws {
+        // Topic-Ledger U4 — keep extraction noise out of the ledger (the live
+        // audit found `amount="rs,"`, `"$0"`, `"$1"`). Degenerate values are
+        // dropped at the write path, never stored.
+        guard FactValuePlausibility.isAcceptable(field: fact.field, value: fact.value) else { return }
         let subjectClause: String
         var binds: [SQLValue] = [.text(fact.field.lowercased()), .text(fact.value.lowercased())]
         if let sid = fact.subjectID {
@@ -118,6 +122,34 @@ public actor GenericFactRepository {
 
     public func mergeUpsert(_ facts: [GenericFact]) async throws {
         for f in facts { try await mergeUpsert(f) }
+    }
+
+    /// Topic-Ledger U3 — one-time cleanup of an ALREADY-inflated ledger: collapse
+    /// every duplicate to one canonical row per natural key (union source blocks,
+    /// distinct-document count, highest confidence) and drop degenerate junk
+    /// values (U4). Facts are derived projections, so rewriting them is safe (the
+    /// no-delete law protects sources/evidence). Returns (before, after) counts.
+    /// Idempotent: a second run is a no-op.
+    @discardableResult
+    public func dedupExisting() async throws -> (before: Int, after: Int) {
+        let before = try await count()
+        var everything: [GenericFact] = []
+        var offset = 0
+        while true {
+            let page = try await all(offset: offset, pageSize: 1_000)
+            if page.isEmpty { break }
+            everything.append(contentsOf: page)
+            offset += page.count
+            if page.count < 1_000 { break }
+        }
+        let canonical = GenericFact.canonicalize(everything)
+            .filter { FactValuePlausibility.isAcceptable(field: $0.field, value: $0.value) }
+        let keep = Set(canonical.map(\.id))
+        let drop = everything.map(\.id).filter { !keep.contains($0) }
+        try await delete(ids: drop)
+        for f in canonical { try await upsert(f) }   // rewrite canonical rows (merged blocks/count)
+        let after = try await count()
+        return (before, after)
     }
 
     /// Facts about a subject for a field (e.g. all "employer" facts for "Sasmal").

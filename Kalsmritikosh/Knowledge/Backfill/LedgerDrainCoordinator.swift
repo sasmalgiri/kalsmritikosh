@@ -262,7 +262,9 @@ public final class LedgerDrainCoordinator {
         try await database.exec("SAVEPOINT drain_facts;", [])
         do {
             if !stale.isEmpty { try await facts.delete(ids: stale.map(\.id)) }
-            if !merged.isEmpty { try await facts.upsert(merged) }
+            // Topic-Ledger U2 — merge by natural key so a re-derived fact shared
+            // across documents lands on ONE canonical row, not a duplicate.
+            if !merged.isEmpty { try await facts.mergeUpsert(merged) }
             try await database.exec("RELEASE drain_facts;", [])
         } catch {
             try? await database.exec("ROLLBACK TO drain_facts;", [])

@@ -62,4 +62,33 @@ struct GenericFactMergeTests {
         #expect(rows[0].sourceBlockIDs.count == 3, "all three source blocks are retained")
         #expect(rows[0].confidence == 0.9)
     }
+
+    @Test func dedupExistingCollapsesDuplicatesAndDropsJunk() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fm-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let repo = GenericFactRepository(database: db)
+
+        let subj = UUID()
+        // Simulate an already-inflated ledger via the OLD id-keyed upsert:
+        // three duplicate "role" rows + one junk amount row.
+        try await repo.upsert(fact(subject: subj, value: "Director", block: UUID(), conf: 0.6))
+        try await repo.upsert(fact(subject: subj, value: "Director", block: UUID(), conf: 0.9))
+        try await repo.upsert(fact(subject: subj, value: "Director", block: UUID(), conf: 0.7))
+        try await repo.upsert(GenericFact(subjectID: subj, subjectLabel: "Subject",
+            field: "amount", value: "$0", unit: nil,
+            assessment: EvidenceAssessment(basis: .sourceAsserted, origin: .sourceExtraction),
+            confidence: 0.8, sourceBlockIDs: [UUID()]))
+        #expect(try await repo.count() == 4)
+
+        let result = try await repo.dedupExisting()
+        #expect(result.before == 4)
+        #expect(result.after == 1, "3 role dups → 1 canonical; junk amount dropped")
+
+        let roles = try await repo.facts(field: "role", limit: 50)
+        #expect(roles.count == 1)
+        #expect(roles[0].sourceBlockIDs.count == 3)
+        #expect(try await repo.facts(field: "amount", limit: 50).isEmpty, "junk amount removed")
+    }
 }

@@ -849,7 +849,11 @@ public actor IngestCoordinator {
         let merged = await bindIdentifierAnchors(DomainFactExtractor.merge(derived),
                                                  owningObjectID: owningObjectID)
         do {
-            try await repo.upsert(merged)
+            // Topic-Ledger U2 — write through the natural-key merge so a fact this
+            // document shares with others collapses into ONE canonical row (union
+            // of source blocks) instead of a duplicate. This is what stops the
+            // ledger inflating (was 9,266 rows / 387 distinct) on re-ingest.
+            try await repo.mergeUpsert(merged)
             KalsmritikoshLog.ingestion.info("Domain facts: \(derived.count, privacy: .public) fact(s) for \(url.lastPathComponent, privacy: .private)")
         } catch {
             KalsmritikoshLog.ingestion.error("Domain-fact persist failed for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
