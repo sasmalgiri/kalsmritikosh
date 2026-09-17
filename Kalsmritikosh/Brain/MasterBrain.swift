@@ -1718,9 +1718,14 @@ public actor MasterBrain {
             // Budget spent / no provider and still ungrounded — render a
             // deterministic evidence readout instead of a bare refusal (§13),
             // but only when there IS something citable to show.
+            // U7 — prefer the deterministic TOPIC rollup: fetch topics that match
+            // the question and let the fallback lead with the best one instead of
+            // a raw fact/passage pile.
+            let topics: [MemoryObject] = (try? await memoryRepo?.search(question, limit: 3)) ?? []
             if let det = await DeterministicEvidenceFallback.build(
                 question: question, intent: intent,
-                retrieval: retrievalForVerifier, eventLinks: eventLinks
+                retrieval: retrievalForVerifier, eventLinks: eventLinks,
+                topics: topics
             ), !det.citations.isEmpty {
                 return det
             }

@@ -22,7 +22,8 @@ public enum DeterministicEvidenceFallback {
         question: String,
         intent: UserIntent,
         retrieval: RetrievalResult,
-        eventLinks: EventLinksRepository? = nil
+        eventLinks: EventLinksRepository? = nil,
+        topics: [MemoryObject] = []
     ) async -> VerifiedAnswer? {
         // Prefer dated events (the structured layer); fall back to top chunks.
         // P7.5 — the no-LLM reconstruction must read as a CHRONOLOGICAL timeline,
@@ -41,15 +42,39 @@ public enum DeterministicEvidenceFallback {
             return !qTerms.isDisjoint(with: relevanceSelector.contentTerms(text))
         }
 
+        // Topic-Ledger U7 — LEAD with a built topic when one is relevant, so the
+        // answer composes from the deterministic topic rollup (memory object)
+        // rather than the raw fact/passage pile. Pick the topic whose subject or
+        // narrative shares the most content terms with the question.
+        var leadTopic: MemoryObject?
+        var leadOverlap = 0
+        for t in topics {
+            let terms = relevanceSelector.contentTerms(t.subjectIdentifier + " " + t.narrative)
+            let overlap = qTerms.intersection(terms).count
+            guard overlap > 0 || qTerms.isEmpty else { continue }
+            if leadTopic == nil || overlap > leadOverlap {
+                leadTopic = t
+                leadOverlap = overlap
+            }
+        }
+
         let events = Array(retrieval.events.prefix(12))
             .filter { relevant($0.title) }
             .sorted { $0.date < $1.date }
         let chunks = Array(retrieval.chunks.prefix(8))
-        guard !events.isEmpty || !chunks.isEmpty else { return nil }
+        guard !events.isEmpty || !chunks.isEmpty || leadTopic != nil else { return nil }
 
         var citations: [VerifiedAnswer.Citation] = []
         var seen = Set<KnowledgeObject.ID>()
         var supportLines: [String] = []
+
+        // U7 — the built topic's contributing documents become citations so the
+        // leading topic section is grounded and reopenable.
+        if let leadTopic {
+            for objectID in leadTopic.sourceObjectIDs where seen.insert(objectID).inserted {
+                citations.append(VerifiedAnswer.Citation(objectID: objectID, snippet: leadTopic.subjectIdentifier))
+            }
+        }
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "d MMM yyyy"
@@ -124,8 +149,8 @@ public enum DeterministicEvidenceFallback {
 
         // W4 abstention — if nothing relevant to the question survived the gates,
         // return nil so the caller keeps its honest not-found instead of dumping
-        // an unrelated fact/timeline pile.
-        guard !factLines.isEmpty || !passageLines.isEmpty || !events.isEmpty else { return nil }
+        // an unrelated fact/timeline pile. A relevant built topic (U7) also counts.
+        guard leadTopic != nil || !factLines.isEmpty || !passageLines.isEmpty || !events.isEmpty else { return nil }
 
         // Contradictions are found deterministically (no LLM).
         let contradictions = await MasterBrain.findCrossRetrievalContradictions(
@@ -136,6 +161,10 @@ public enum DeterministicEvidenceFallback {
         // holds the answer (grant date, patent number, clause). Then the dated
         // timeline for context.
         var md = ""
+        // U7 — lead with the built topic (deterministic rollup) when relevant.
+        if let leadTopic {
+            md += "## Topic\n\n\(leadTopic.narrative)\n\n"
+        }
         if !factLines.isEmpty {
             md += "## Extracted facts (from your evidence)\n\n"
             md += factLines.joined(separator: "\n") + "\n\n"
