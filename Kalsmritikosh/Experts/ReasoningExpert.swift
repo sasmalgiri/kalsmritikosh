@@ -54,7 +54,19 @@ public struct ReasoningExpert: Expert {
         // Deterministic fallback (no model): lead with the domain facts, then
         // surface the top retrieved snippets as coarse claims so the expert
         // still contributes offline.
-        let snippetClaims = result.chunks.prefix(5).map { hit in
+        // Answer-quality W4 — a snippet must actually be RELEVANT to the question
+        // (share a content term). This stops the composer quoting boilerplate
+        // ("IN THE MATTER OF PATENT ACT …") or an unrelated document (a power of
+        // attorney for a "who signed the lease?" question); when nothing is
+        // relevant the claims are empty and the expert abstains ("No evidence to
+        // reason over") rather than dumping. Empty question ⇒ keep top hits.
+        let snippetSelector = PassageAnswerSelector()
+        let snippetQTerms = snippetSelector.contentTerms(intent.rawQuestion)
+        let relevantHits = result.chunks.filter { hit in
+            guard !snippetQTerms.isEmpty, !hit.chunk.text.isEmpty else { return true }
+            return !snippetQTerms.isDisjoint(with: snippetSelector.contentTerms(hit.chunk.text))
+        }
+        let snippetClaims = relevantHits.prefix(5).map { hit in
             ExpertFindings.Claim(
                 statement: hit.chunk.text.isEmpty
                     ? "Relevant material via \(hit.viaLayer.rawValue)"
