@@ -61,6 +61,65 @@ public actor GenericFactRepository {
         for f in facts { try await upsert(f) }
     }
 
+    /// Topic-Ledger Rebuild U1 (owner rule 1) — write ONE canonical row per fact
+    /// natural key (subject+field+value+unit). If the fact already exists, MERGE
+    /// the new occurrence into it (union source blocks, bump the distinct-document
+    /// count, keep the higher confidence) instead of minting a duplicate row; any
+    /// stray duplicate rows already present are collapsed into the canonical one.
+    /// This replaces the id-keyed `upsert` on the extraction write path, so
+    /// re-extracting the same fact can no longer inflate the ledger.
+    public func mergeUpsert(_ fact: GenericFact) async throws {
+        let subjectClause: String
+        var binds: [SQLValue] = [.text(fact.field.lowercased()), .text(fact.value.lowercased())]
+        if let sid = fact.subjectID {
+            subjectClause = "subject_id = ?"
+            binds.insert(.uuid(sid), at: 0)
+        } else {
+            subjectClause = "subject_id IS NULL AND lower(subject_label) = ?"
+            binds.insert(.text(fact.subjectLabel.lowercased()), at: 0)
+        }
+        let unitClause: String
+        if let u = fact.unit {
+            unitClause = "lower(unit) = ?"; binds.append(.text(u.lowercased()))
+        } else {
+            unitClause = "unit IS NULL"
+        }
+        let rows = try await database.query("""
+        SELECT id, source_blocks_json, confidence FROM generic_facts
+        WHERE \(subjectClause) AND lower(field) = ? AND lower(value) = ? AND \(unitClause)
+        ORDER BY created_at ASC;
+        """, binds)
+
+        guard let firstRow = rows.first, let canonicalID = firstRow.uuid(0) else {
+            try await upsert(fact)   // brand-new fact
+            return
+        }
+        // Merge into the earliest (canonical) row; carry its id AND its existing
+        // confidence so the merge keeps the highest across occurrences.
+        var existingBlocks: [UUID] = []
+        if let json = firstRow.string(1),
+           let data = json.data(using: .utf8),
+           let decoded = try? Self.decoder.decode([UUID].self, from: data) {
+            existingBlocks = decoded
+        }
+        let existingConfidence = firstRow.double(2) ?? fact.confidence
+        let canonicalSeed = GenericFact(
+            id: canonicalID, subjectID: fact.subjectID, subjectLabel: fact.subjectLabel,
+            field: fact.field, value: fact.value, unit: fact.unit,
+            assessment: fact.assessment, confidence: existingConfidence,
+            sourceBlockIDs: existingBlocks, producerVersion: fact.producerVersion,
+            rawMatch: fact.rawMatch, sourceCount: nil, reassignedFrom: fact.reassignedFrom)
+        let merged = canonicalSeed.mergedWith(fact)
+        try await upsert(merged)
+        // Collapse any stray duplicate rows (older schema/pre-merge writes).
+        let strays = rows.dropFirst().compactMap { $0.uuid(0) }
+        if !strays.isEmpty { try await delete(ids: strays) }
+    }
+
+    public func mergeUpsert(_ facts: [GenericFact]) async throws {
+        for f in facts { try await mergeUpsert(f) }
+    }
+
     /// Facts about a subject for a field (e.g. all "employer" facts for "Sasmal").
     public func facts(subjectLabel: String, field: String) async throws -> [GenericFact] {
         let rows = try await database.query("""
