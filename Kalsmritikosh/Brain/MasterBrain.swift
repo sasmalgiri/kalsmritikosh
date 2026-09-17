@@ -1035,8 +1035,22 @@ public actor MasterBrain {
         // inferences and conflicts are SEPARATE groups. MasterBrain never strengthens — an
         // attributed/user/inference/conflict claim is never placed in the verified group.
         let evalByID = Dictionary(evaluations.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        // Answer-quality W4 — do NOT present subject-field facts the question did
+        // not ask about as "prefer these exact values". The live diagnostic showed
+        // "who drafted the claims?" being answered with applicant/application-number
+        // dumps because every fact was injected here. Keep only facts whose
+        // field+value shares a content term with the question; if the question
+        // asks for a specific field it still matches (application number →
+        // "application","number"), so field lookups are unaffected. When nothing
+        // is relevant, inject no fact block and let the cited chunks answer.
+        let selector = PassageAnswerSelector()
+        let qTerms = selector.contentTerms(question)
+        let relevantFacts: [GenericFact] = qTerms.isEmpty ? facts : facts.filter { f in
+            let ft = selector.contentTerms(f.field + " " + f.value)
+            return !qTerms.isDisjoint(with: ft)
+        }
         var byPresentation: [ClaimPresentation: [String]] = [:]
-        for f in facts {
+        for f in relevantFacts {
             guard let eval = evalByID[f.id], let presentation = eval.presentation,
                   let label = f.sourceBlockIDs.lazy.compactMap({ blockToLabel[$0] }).first
             else { continue }
