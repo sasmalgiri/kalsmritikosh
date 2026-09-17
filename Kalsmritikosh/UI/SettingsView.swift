@@ -1124,6 +1124,8 @@ public struct SettingsView: View {
     @State private var deleteAllStatus: String?
     @State private var backupStatus: String?
     @State private var backingUp = false
+    @State private var cleanupStatus: String?
+    @State private var cleaningUp = false
     /// Which everyday Settings categories are expanded. Empty = all collapsed,
     /// so Settings shows a minimal list of category headers by default.
     @State private var openSettingsGroups: Set<String> = []
@@ -1359,11 +1361,56 @@ public struct SettingsView: View {
         #endif
     }
 
+    /// Clean up the ledger — collapse duplicate facts to one canonical row each
+    /// and drop extraction junk (Topic-Ledger U3). Safe: facts are derived, so
+    /// this never touches your original documents or evidence; it only tidies the
+    /// derived index. Idempotent — running it twice does nothing the second time.
+    private var ledgerCleanupSubsection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.sparkles").foregroundStyle(Theme.brand)
+                Text("Tidy up the knowledge index").font(.title3.bold())
+            }
+            Text("Merge duplicate facts into one entry each (keeping every source) and remove extraction noise. Your original documents and evidence are untouched — this only cleans the derived index. Safe to run any time.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Button {
+                    cleaningUp = true
+                    cleanupStatus = nil
+                    Task {
+                        let result = await appState.cleanUpLedger()
+                        await MainActor.run {
+                            cleaningUp = false
+                            if let r = result {
+                                cleanupStatus = "Tidied — \(r.before) → \(r.after) facts."
+                            } else {
+                                cleanupStatus = "Nothing to tidy yet."
+                            }
+                        }
+                    }
+                } label: {
+                    if cleaningUp {
+                        Label("Tidying…", systemImage: "hourglass")
+                    } else {
+                        Label("Tidy up now", systemImage: "wand.and.sparkles")
+                    }
+                }
+                .disabled(cleaningUp)
+                if let s = cleanupStatus {
+                    Text(s).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     /// Your data — the global "erase everything" control. Always visible so it's
     /// easy to find (the app previously only had a per-folder forget in Sources).
     private var dataSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             backupSubsection
+            Divider().padding(.vertical, 4)
+            ledgerCleanupSubsection
             Divider().padding(.vertical, 4)
             HStack(spacing: 6) {
                 Image(systemName: "trash").foregroundStyle(.red)
