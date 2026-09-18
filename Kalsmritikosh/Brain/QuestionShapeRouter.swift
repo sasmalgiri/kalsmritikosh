@@ -27,6 +27,7 @@ public enum QuestionShape: String, Sendable, CaseIterable {
     case story         // P4-U4 — "tell me the story of …" — the reconstruction engine
     // A2.1 (closing spec) — the last-mile shapes:
     case role          // "who is the ‹role› of …" — answered by the slot law
+    case actor         // "who ‹drafted/filed/signed› …" — the party that DID an action
     case list          // "list/show all …" — a deterministic, complete list
     case aggregation   // "total/sum of …" — computed total with operands
     case conflict      // "which is correct …" — both values, both citations
@@ -51,8 +52,23 @@ public enum QuestionShapeRouter {
     /// outOfScope = a refusal = least safe).
     public nonisolated static let safestOrder: [QuestionShape] = [
         .unresolved, .story, .relationship, .conflict, .timeline, .list,
-        .aggregation, .count, .role, .existence, .outOfScope,
+        .aggregation, .count, .actor, .role, .existence, .outOfScope,
     ]
+
+    /// Action-verb stems that mark an ACTOR question ("who DRAFTED …"). Reuses
+    /// the selector's set so routing and the answer selector agree on what an
+    /// action is.
+    nonisolated static func isActorQuestion(_ q: String) -> Bool {
+        let tokens = q.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        guard let first = tokens.first, first == "who" || first == "whom", tokens.count >= 2 else { return false }
+        // "who is/was/are the …" is a ROLE question, not an actor question.
+        if ["is", "was", "are", "were"].contains(tokens[1]) { return false }
+        // Prefix-match the raw token against the verb roots so inflections match
+        // ("filed".hasPrefix("file"), "drafted".hasPrefix("draft")).
+        return tokens.dropFirst().contains { token in
+            PassageAnswerSelector.actionVerbStems.contains { token.hasPrefix($0) }
+        }
+    }
 
     /// Story openers (data): the reconstruction ask.
     nonisolated static let storyOpeners: [String] = [
@@ -93,6 +109,7 @@ public enum QuestionShapeRouter {
         }
         if ["list all", "list the", "show all", "show me all", "list every"].contains(where: { q.hasPrefix($0) || q.contains($0) }) { return .list }
         if q.hasPrefix("who is the") && q.contains(" of ") { return .role }
+        if isActorQuestion(q) { return .actor }
         if ["timeline of", "history of", "chronology of"].contains(where: { q.contains($0) }) { return .timeline }
         if countOpeners.contains(where: { q.hasPrefix($0) }) { return .count }
         if existenceOpeners.contains(where: { q.hasPrefix($0) }) { return .existence }
@@ -119,6 +136,7 @@ public enum QuestionShapeRouter {
             return .aggregation
         }
         if tokens.contains("list") || (tokens.contains("show") && tokens.contains("all")) { return .list }
+        if isActorQuestion(normalized(question)) { return .actor }
         if let first = normalized(question).components(separatedBy: " ").first, first == "who",
            tokens.contains("the"), tokens.contains("of") {
             return .role
@@ -187,6 +205,7 @@ public enum QuestionShapeRouter {
         case .count:        return "a counting question"
         case .story:        return "a story question"
         case .role:         return "a who-holds-this-role question"
+        case .actor:        return "a who-did-this question"
         case .list:         return "a list question"
         case .aggregation:  return "a totals question"
         case .conflict:     return "a which-is-correct question"
