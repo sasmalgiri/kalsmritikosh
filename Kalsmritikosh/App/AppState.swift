@@ -4018,10 +4018,15 @@ public final class AppState {
         // The loop law: history → field lookup → ONE span fetch.
         let shape = QuestionShape(rawValue: plan.shape) ?? .unresolved
         var results: [ToolResult]
-        // U-7 — a timeline question that names an explicit YEAR gets the
-        // date-windowed slice instead of the whole chain; otherwise the
-        // full history. Bounded so only timeline-with-year questions change.
-        if shape == .timeline, let (from, to) = Self.yearWindow(in: question) {
+        // R1 — a timeline question with ANY time expression (a year, "between
+        // 2013 and 2015", "since 2020", "before 2016", "last year") gets the
+        // date-windowed slice; TemporalGrammar is the primary parser, the
+        // year-only helper the fallback; otherwise the full history. Bounded to
+        // timeline questions, so nothing else changes.
+        if shape == .timeline, let w = TemporalGrammar.parse(question, now: Date()),
+           w.from != nil || w.to != nil {
+            results = await tools.timelineSlice(question: question, from: w.from, to: w.to)
+        } else if shape == .timeline, let (from, to) = Self.yearWindow(in: question) {
             results = await tools.timelineSlice(question: question, from: from, to: to)
         } else {
             results = await tools.historyOf(question: question)
