@@ -1292,6 +1292,11 @@ public final class AppState {
             let entityTimelineCache = EntityTimeline()
             let entityTrieCache = EntityTrie()
             // A4 — retrieval does not query synthetic-question projections in release.
+            // R2 — the answer-path reranker: cheap keyword tier first, then the
+            // bundled BGE cross-encoder (CoreML). Reorder-only over the final
+            // chunk set, so recall is preserved; the cross-encoder passes through
+            // (no-op) when its model isn't loadable.
+            let answerReranker = RerankerLadder(tiers: [HeuristicKeywordTier(), CoreMLCrossEncoderTier()])
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -1312,7 +1317,8 @@ public final class AppState {
                 genericFacts: genericFactsRepo,   // SEM — facts ride the surfaced evidence
                 // W-5.4 — thread copies collapse to one independent source
                 // for corroboration (Fwd/Re/quoted copies of one message).
-                independenceProvider: LedgerSourceIndependenceKeyProvider(objects: objects)
+                independenceProvider: LedgerSourceIndependenceKeyProvider(objects: objects),
+                reranker: answerReranker
             )
 
             let expertRegistry = ExpertRegistry()

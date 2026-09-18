@@ -93,6 +93,10 @@ public actor HybridRetriever: Retriever {
     /// after the base retrieval + legacy privilege filter. nil = default
     /// extension (wraps result with zero withheld counts, no enforcement).
     private let sensitivePolicy: SensitiveRetrievalPolicy?
+    /// R2 — optional cross-encoder rerank of the final chunk set. nil ⇒ no-op
+    /// (identity order). Reorder-only: it never drops a chunk, so recall cannot
+    /// fall; it only promotes the most on-target passages for the composer.
+    private let reranker: RerankerLadder?
 
     public init(
         memory: MemoryRepository,
@@ -116,12 +120,14 @@ public actor HybridRetriever: Retriever {
         objects: KnowledgeObjectRepository? = nil,
         genericFacts: GenericFactRepository? = nil,
         independenceProvider: SourceIndependenceKeyProvider? = nil,
-        sensitivePolicy: SensitiveRetrievalPolicy? = nil
+        sensitivePolicy: SensitiveRetrievalPolicy? = nil,
+        reranker: RerankerLadder? = nil
     ) {
         self.objects = objects
         self.genericFacts = genericFacts
         self.independenceProvider = independenceProvider
         self.sensitivePolicy = sensitivePolicy
+        self.reranker = reranker
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -446,7 +452,7 @@ public actor HybridRetriever: Retriever {
             resultRelationships = collectedRelationships
         }
 
-        let result = assemble(
+        let result = await assemble(
             chunks: resultChunks,
             events: resultEvents,
             entities: resultEntities,
@@ -456,7 +462,8 @@ public actor HybridRetriever: Retriever {
             shortCircuit: nil,
             walkSteps: walkSteps,
             authorityKOs: authorityKOs,
-            authorityRanking: authorityRanking
+            authorityRanking: authorityRanking,
+            question: intent.rawQuestion
         )
         return await attachGenericFacts(to: result)
     }
@@ -1062,8 +1069,9 @@ public actor HybridRetriever: Retriever {
         shortCircuit: RetrievalLayer?,
         walkSteps: [WalkStep] = [],
         authorityKOs: Set<KnowledgeObject.ID> = [],
-        authorityRanking: [KnowledgeObject.ID] = []
-    ) -> RetrievalResult {
+        authorityRanking: [KnowledgeObject.ID] = [],
+        question: String = ""
+    ) async -> RetrievalResult {
         // HISTORY Phase A.4 — tier-aware re-ranking.
         // Entities are sorted by (-tier.defaultWeight, originalIndex)
         // so T1 leads, T2 follows, T3 trails — unless the user has
@@ -1124,7 +1132,8 @@ public actor HybridRetriever: Retriever {
             let rest = fused.filter { !authorityKOs.contains($0.chunk.objectID) }
             prioritized = authorityChunks + rest
         }
-        let diverseChunks = Self.diversify(prioritized)
+        let diverseChunks = await Self.reranked(
+            Self.diversify(prioritized), question: question, reranker: reranker)
 
         // UPDATE_07 — the same hygiene for events: the timeline/reconstruction
         // path was drowning in email noise (empty-title events, internal
@@ -1203,6 +1212,27 @@ public actor HybridRetriever: Retriever {
             out.append(rc)
         }
         return out
+    }
+
+    /// R2 — reorder the final chunks by cross-encoder relevance when a reranker
+    /// is wired. REORDER-ONLY: the returned set is exactly the input set (no
+    /// drops), so recall is preserved; only the ORDER changes to promote the
+    /// most on-target passages for the composer. nil reranker, empty question,
+    /// or ≤1 chunk → identity. Ties keep original order.
+    nonisolated static func reranked(
+        _ chunks: [RetrievedChunk], question: String, reranker: RerankerLadder?
+    ) async -> [RetrievedChunk] {
+        guard let reranker, chunks.count > 1,
+              !question.trimmingCharacters(in: .whitespaces).isEmpty else { return chunks }
+        let cap = Swift.min(chunks.count, 100)
+        let head = Array(chunks.prefix(cap))
+        let tail = Array(chunks.dropFirst(cap))
+        let scores = await reranker.score(question: question, candidates: head.map { $0.chunk.text })
+        guard scores.count == head.count else { return chunks }
+        let ordered = zip(head, scores).enumerated()
+            .sorted { a, b in a.element.1 != b.element.1 ? a.element.1 > b.element.1 : a.offset < b.offset }
+            .map { $0.element.0 }
+        return ordered + tail
     }
 
     /// System-notification / non-substantive email subjects that are never a
