@@ -49,6 +49,28 @@ extension AppState {
 
         let allEvents = (try? await events?.recent(limit: 2_000)) ?? []
         let now = Date()
+
+        // U6/C3 — when a reasoning model is available (e.g. Apple Intelligence on),
+        // smooth each deterministic spine into prose; the polisher REJECTS any
+        // rewrite that drops/adds a number or name, so facts are never changed.
+        // No model → the closure returns nil → the spine stands unchanged.
+        let caps = capabilities
+        let polisher = TopicProsePolisher(reason: { spine in
+            guard let caps else { return nil }
+            let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "topic.polish")
+            guard let provider = try? await caps.resolve(spec), await provider.isAvailable() else { return nil }
+            let prompt = """
+            Rewrite the following notes as 2–4 clear sentences of connected prose. \
+            Do NOT add, remove, or change any name, number, date, amount, or fact — only add \
+            connecting words and grammar. Keep it faithful and concise.
+
+            Notes:
+            \(spine)
+            """
+            return try? await provider.generate(
+                prompt: prompt, options: GenerationOptions(maxTokens: 300, temperature: 0.2))
+        })
+
         var built = 0
         for (subject, facts) in factsBySubject {
             // Best-effort event attachment: events whose title/summary names the subject.
@@ -56,8 +78,15 @@ extension AppState {
                 $0.title.localizedCaseInsensitiveContains(subject)
                 || ($0.summary?.localizedCaseInsensitiveContains(subject) ?? false)
             }
-            let topic = TopicSpineBuilder.build(
+            let spineTopic = TopicSpineBuilder.build(
                 subjectIdentifier: subject, facts: facts, events: subjectEvents, now: now)
+            let polished = await polisher.polish(spine: spineTopic.narrative)
+            let topic: MemoryObject = (polished == spineTopic.narrative) ? spineTopic : MemoryObject(
+                id: spineTopic.id, subjectKind: spineTopic.subjectKind,
+                subjectIdentifier: spineTopic.subjectIdentifier,
+                keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
+                sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
+                createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt)
             if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
         }
         KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics from \(factsBySubject.count, privacy: .public) subjects")
