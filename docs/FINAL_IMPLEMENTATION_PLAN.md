@@ -13,6 +13,9 @@ every claim cites a source or abstains; build green + regression green before co
 ---
 
 ## PHASE 1 — Retrieval quality (highest answer impact)
+> Progress: **R1 ✅** (783700f, TemporalGrammar wired to timeline) · **R2 ✅** (b3e00a9,
+> cross-encoder rerank on the answer path, reorder-only) · **R3 ✅ already wired**
+> (MasterBrain.applyCorrectiveRetrieval @1647, tests present). Remaining: R4, R5, R6.
 
 ### R1 · Wire TemporalGrammar into retrieval
 - files: `Brain/AEE/QueryMissionCompiler.swift` (or intent compilation), `Brain/LedgerTools.swift` (timelineSlice).
