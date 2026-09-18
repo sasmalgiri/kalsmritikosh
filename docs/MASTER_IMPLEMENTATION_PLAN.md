@@ -190,6 +190,15 @@ land and measure well.
 
 ---
 
+## Progress (this program)
+LANDED 🟢 (unit-tested, model-independent): U1–U7 topic-ledger; answer-path W4
+relevance/abstention (three composers); **C1 `.actor` shape** (11cf3b4); **B6
+TemporalGrammar** (11cf3b4). Also U6 TopicProsePolisher (fact-preserving, model-optional).
+REMAINING are 🟡 (need owner re-ingest/GUI to verify: A1/A2/A4/A5, B2/B3/B5/B7, C2, D1/D2/E1/E2/E3),
+🔴 (need a reasoning model: B4, C3, A3-LLM), 🟢-but-needs-work (A6 causal bounding — generation
+site diffuse; A7 doc-class schema migration; B1 metrics harness needs a DB rig; D4 stamps), and
+⚫ roadmap (Phase F Gate-3 graph, Phase G multilingual/investigator/formats).
+
 ## Recommended execution order (dependency-correct)
 1. **B1 metrics harness** (gates all retrieval work).
 2. **Phase A** (A1→A2→A4→A5 topic automation; A6/A7/A3 hygiene) — makes the DB self-build topics.
