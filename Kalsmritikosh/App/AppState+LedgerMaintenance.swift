@@ -12,6 +12,25 @@ import Foundation
 import os
 
 extension AppState {
+
+    /// Story-reviewer loop (module .storyReviewerLoop) — record a user's
+    /// approve/correct/reject verdict on one reconstructed history beat. The
+    /// outline builder already honours the status on the next render (rejected
+    /// beats drop, corrected beats lead). No-op when the module is off or the
+    /// history repo isn't ready. Returns true when the verdict was written.
+    @discardableResult
+    public func reviewStoryItem(_ itemID: UUID, _ status: HistoryReviewStatus) async -> Bool {
+        guard KnowledgeModuleFlags.isEnabled(.storyReviewerLoop),
+              let historyArtifacts else { return false }
+        do {
+            try await historyArtifacts.setItemReviewStatus(status, forItemID: itemID)
+            KalsmritikoshLog.app.info("Story review: item \(itemID.uuidString.prefix(8), privacy: .public) → \(status.rawValue, privacy: .public)")
+            return true
+        } catch {
+            KalsmritikoshLog.app.error("Story review write failed: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
     /// Collapse duplicate facts + drop junk in the live ledger. Returns
     /// (before, after) row counts, or nil if the repository isn't ready.
     @discardableResult

@@ -391,6 +391,29 @@ public struct SourcesView: View {
         let status = FileIndexStatus.classify(
             sourceType: row.sourceType,
             chunkCount: row.preview.isEmpty ? 0 : 1)
+        // A2 (module .importLifecycle) — when on, show the unified lifecycle state
+        // (adds needs-password / failed / partial with omission disclosure). Off ⇒
+        // the original FileIndexStatus label.
+        if KnowledgeModuleFlags.isEnabled(.importLifecycle) {
+            let life = SourceLifecycle.derive(.init(index: status))
+            let lc: Color = {
+                switch life {
+                case .searchable:                 return .green
+                case .partial:                    return .yellow
+                case .processing, .queued:        return .blue
+                case .needsPassword:              return .orange
+                case .failed, .excluded:          return .secondary
+                }
+            }()
+            Text(life.label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(lc)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(lc.opacity(0.12), in: Capsule())
+                .help(life.disclosesOmission
+                      ? "Results may omit this source until it is fully indexed."
+                      : "How this file was read into the knowledge base")
+        } else {
         let color: Color = {
             switch status {
             case .indexed, .transcribed, .expanded: return .green
@@ -405,6 +428,7 @@ public struct SourcesView: View {
             .padding(.horizontal, 6).padding(.vertical, 2)
             .background(color.opacity(0.12), in: Capsule())
             .help("How this file was read into the knowledge base")
+        }
     }
 
     private func icon(for type: SourceType) -> String {
