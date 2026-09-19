@@ -58,15 +58,21 @@ tested commit; nothing half-wired.
 
 ---
 
-## LANE C — activation-gated (banked; do NOT open until the owner activates)
+## LANE C — VERIFIED 2026-09-19: mostly ALREADY BUILT (audit was stale)
 
-- **GO 2 / GO 3 banked directives** — open only at their checkpoints.
-- **Any-Question Stack** (archive→shelf→GK lanes) — activation Go-3 first train.
-- **Gate-3 typed knowledge graph** (FactType/BondRule/walk planner/"why this answer" UI) —
-  Q4 2026–Q2 2027 roadmap.
-- **Story reviewer loop** (approve/correct/reject beats) — ROADMAP_1_2.
-- **Multilingual semantic index** (bge-m3, no translate) — v2.
-- **Investigator edition** — deferred until research gates pass.
+- **Gate-3 typed knowledge graph** — ✅ **BUILT + WIRED**: `Knowledge/Ontology/` has FactSchema,
+  FactTypeClassifier, OntologyValidator, BondConstructor, BondWalker, WalkExplainer ("why this
+  answer"), InMemoryBondGraph, BondBackfill + `FactBondsRepository`; `BondWalker`+`WalkExplainer`
+  injected into HybridRetriever (AppState:1321). FactBondsOrderingTests green.
+- **Investigator edition** — ✅ **substantially BUILT**: ~20 Investigation* services + repos +
+  case/scope authority (INV-01-A shipped); InvestigationCausalServiceTests green.
+- **Story reviewer loop** — ◐ **model + effect BUILT** (`HistoryReviewStatus` accepted/rejected/
+  corrected; `HistoryOutlineBuilder` excludes rejected + prioritizes corrected). REMAINING: the
+  review-ACTION write path (`setItemReviewStatus`) + cross-reconstruction carry-forward + the
+  approve/reject UI — a real unit needing the owner's live UI test.
+- **Multilingual semantic index (bge-m3)** — ❌ NOT built and NOT agent-completable: needs a
+  DIFFERENT embedding model bundled/downloaded (v2 by design; owner/research decision).
+- **GO 2 / GO 3 / Any-Question Stack** — banked directives; open only at their checkpoints.
 
 ---
 
