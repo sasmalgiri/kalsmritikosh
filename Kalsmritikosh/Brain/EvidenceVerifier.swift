@@ -745,6 +745,31 @@ public struct EvidenceVerifier: Verifier {
         let claimsAreDumpOnly = substantiveDocClaims.allSatisfy { c in
             framePrefixes.contains { c.statement.hasPrefix($0) }
         }
+        // A1 (module .actorComposer) — a who-did-this question is answered by the
+        // passage that NAMES THE ACTING PARTY performing the action, not a field
+        // dump. Fires only for actor-shaped questions when the quoted sentence both
+        // carries an action verb and names an actor; otherwise falls through to the
+        // generic paths unchanged. Off ⇒ skipped.
+        if KnowledgeModuleFlags.isEnabled(.actorComposer),
+           QuestionShapeRouter.detect(intent.rawQuestion) == .actor,
+           let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
+            let selector = PassageAnswerSelector()
+            if selector.mentionsActionVerb(quoted.sentence), selector.containsNamedActor(quoted.sentence) {
+                var body = SentenceQuoteComposer.render(quoted)
+                body += "\n\n(\(quoted.receiptLine))"
+                KalsmritikoshLog.brain.info("Actor composer: named-actor answer from chunk \(quoted.chunkID.uuidString.prefix(8), privacy: .public)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: SentenceQuoteComposer.render(quoted),
+                    intentKind: intentKindRaw,
+                    citations: [VerifiedAnswer.Citation(objectID: quoted.objectID, chunkID: quoted.chunkID,
+                                                        snippet: String(quoted.sentence.prefix(180)))],
+                    confidence: Confidence(0.8),
+                    contradictions: effectiveReport.contradictions,
+                    refused: false,
+                    report: effectiveReport)
+            }
+        }
         if slot == nil, claimsAreDumpOnly,
            let quoted = SentenceQuoteComposer.compose(question: intent.rawQuestion, chunks: retrieval.chunks) {
             var body = SentenceQuoteComposer.render(quoted)
