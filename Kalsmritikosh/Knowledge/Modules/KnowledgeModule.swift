@@ -28,7 +28,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case summariesAtIdle        // L2 — build heuristic summaries on the idle pass
     case historyAtIdle          // L3 — persist reconstructed history on the idle pass
     case eventSlotFill          // L4 — optional FM 5W+H slot fill
-    case documentClass          // L6 — persisted document-class labelling
+    // (L6 document-class labelling is shipped core — always on, migration v123 —
+    //  so it is not an optional module here.)
     // Retrieval
     case crossEncoderRerank     // R2 — cross-encoder rerank on the answer path
     case correctiveRetrieval    // R3 — re-retrieve on weak evidence
@@ -48,7 +49,6 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .summariesAtIdle:      return "Summaries at idle"
         case .historyAtIdle:        return "History at idle"
         case .eventSlotFill:        return "Event detail fill (5W+H)"
-        case .documentClass:        return "Document-class labelling"
         case .crossEncoderRerank:   return "Cross-encoder reranking"
         case .correctiveRetrieval:  return "Corrective re-retrieval"
         case .hydeExpansion:        return "Hypothetical query expansion"
@@ -66,7 +66,6 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .summariesAtIdle:      return "Build per-document and per-community summaries during idle maintenance."
         case .historyAtIdle:        return "Reconstruct and store per-subject history chapters during idle maintenance."
         case .eventSlotFill:        return "Fill missing who/where/when/why/how event details with the on-device model, under a fact-preserving guard."
-        case .documentClass:        return "Classify and store each document's class so extraction packs can gate by it."
         case .crossEncoderRerank:   return "Reorder retrieved passages with a cross-encoder so the most on-target passage leads. Reorder-only; never drops evidence."
         case .correctiveRetrieval:  return "When first-pass evidence is weak, re-retrieve once with expanded terms before answering or abstaining."
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
@@ -85,7 +84,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
              .topicSeededComposers, .actorComposer, .progressiveStreaming:
             return true
-        case .eventSlotFill, .documentClass, .boilerplateEmbedSkip:
+        case .eventSlotFill, .boilerplateEmbedSkip:
             return false
         }
     }
@@ -101,7 +100,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     public var group: String {
         switch self {
         case .topicMinimization, .autoTopics, .summariesAtIdle, .historyAtIdle,
-             .eventSlotFill, .documentClass:
+             .eventSlotFill:
             return "Knowledge synthesis"
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip:
             return "Retrieval"
