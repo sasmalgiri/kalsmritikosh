@@ -1815,6 +1815,10 @@ public final class AppState {
                         if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
                             _ = await self.buildSummaries()
                         }
+                        // L3 — persist per-subject history for the top entities.
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.historyAtIdle) {
+                            _ = await self.buildHistories()
+                        }
                         return gaps
                     }
                     await MainActor.run { self.idleMaintenanceScan = scan }

@@ -124,4 +124,34 @@ extension AppState {
             return nil
         }
     }
+
+    /// L3 (module `.historyAtIdle`) — reconstruct and persist per-subject history
+    /// for the top entities on the idle pass, filling history_artifacts/chapters/
+    /// items. Deterministic (the engine is LLM-free). Reuses persistStoryFromAsk,
+    /// which dedups on an unchanged ledger, so repeated passes are cheap and
+    /// idempotent. Capped + cancellation-checked so it never dominates idle time.
+    /// Returns the number of histories persisted, or nil if repositories aren't ready.
+    @discardableResult
+    public func buildHistories(limit: Int = 10) async -> Int? {
+        guard let entities, let engine = historyEngine, historyArtifacts != nil else { return nil }
+        let anchors = (try? await entities.allAnchors(limit: 500)) ?? []
+        guard !anchors.isEmpty else { return 0 }
+        var built = 0
+        for entity in anchors.prefix(limit) {
+            if Task.isCancelled { break }
+            let subject = HistorySubject.forEntity(entity)
+            var result: HistoryReconstructionResult?
+            for await update in engine.reconstruct(subject: subject, request: HistoryRequest()) {
+                if case .verified(let r) = update { result = r }
+            }
+            guard let result else { continue }
+            let narrative = HistoryNarrativeRenderer().render(outline: result.outline)
+            if await persistStoryFromAsk(
+                result, narrative: narrative, anchorKey: entity.id.uuidString) != nil {
+                built += 1
+            }
+        }
+        KalsmritikoshLog.app.info("History build: \(built, privacy: .public) subject histories persisted")
+        return built
+    }
 }
