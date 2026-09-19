@@ -45,4 +45,8 @@ public enum IngestorError: Error, Sendable {
     case unreadable(URL, underlying: Error?)
     case parseFailure(URL, reason: String)
     case empty(URL)
+    /// A4 (module .passwordProtectedFiles) — the source is encrypted and needs a
+    /// user-supplied password to open. Distinct from `unreadable` so the file is
+    /// tracked as "needs password" instead of a silent parse failure.
+    case passwordProtected(URL)
 }

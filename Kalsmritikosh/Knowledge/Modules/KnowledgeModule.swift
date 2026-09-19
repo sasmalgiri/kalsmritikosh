@@ -36,6 +36,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case correctiveRetrieval    // R3 — re-retrieve on weak evidence
     case hydeExpansion          // R4 — hypothetical-answer query expansion
     case boilerplateEmbedSkip   // I1 — skip learned boilerplate templates at embed time
+    case passwordProtectedFiles // A4 — open encrypted files (empty-password unlock; classify the rest)
     // Answer composition
     case actorComposer          // A1 — dedicated "who did X" actor answer door
     case progressiveStreaming   // A2 — stream instant→synthesis→verified to the UI
@@ -55,6 +56,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .correctiveRetrieval:  return "Corrective re-retrieval"
         case .hydeExpansion:        return "Hypothetical query expansion"
         case .boilerplateEmbedSkip: return "Boilerplate embed-skip"
+        case .passwordProtectedFiles: return "Password-protected files"
         case .actorComposer:        return "Actor answers (who did X)"
         case .progressiveStreaming: return "Progressive answer streaming"
         case .topicSeededComposers: return "Topic-first composition"
@@ -73,6 +75,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .correctiveRetrieval:  return "When first-pass evidence is weak, re-retrieve once with expanded terms before answering or abstaining."
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
+        case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
         case .actorComposer:        return "Route who-did-this questions to the passage naming the acting party and compose a grounded answer."
         case .progressiveStreaming: return "Render the answer as it forms — instant context, then synthesis, then the verified result."
         case .topicSeededComposers: return "Give the model composer the matched topic first, so answers lead with the topic rather than raw facts."
@@ -86,7 +89,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .topicMinimization, .autoTopics, .crossEncoderRerank,
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
-             .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding:
+             .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
+             .passwordProtectedFiles:
             return true
         }
     }
@@ -110,7 +114,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .topicMinimization, .autoTopics, .summariesAtIdle, .historyAtIdle,
              .eventSlotFill, .proseSubjectBinding:
             return "Knowledge synthesis"
-        case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip:
+        case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip,
+             .passwordProtectedFiles:
             return "Retrieval"
         case .actorComposer, .progressiveStreaming, .topicSeededComposers:
             return "Answer composition"
