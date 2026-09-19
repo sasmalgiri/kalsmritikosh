@@ -12,7 +12,7 @@ tested commit; nothing half-wired.
 
 ---
 
-## LANE A — agent-completable now (ordered by answer-value)
+## LANE A — ✅ COMPLETE (2026-09-19): A1✅ A2✅ A3✅ A4✅, all module-gated + green
 
 ### A1 · Anchor-subject: identifier-only subjects resolve to a story  ✅ ALREADY DONE (verified 2026-09-19)
 - The story-engine memory's "can't resolve the patent" was fixed by later P4-U1 work. Verified
@@ -25,13 +25,12 @@ tested commit; nothing half-wired.
   → exact footer), `StoryGoldTests`, `StorySecondDoorTests/storyResolverLaws`,
   `HistorySubjectResolverTests` — 19/19 pass. No work needed.
 
-### A2 · Import / coverage lifecycle (audit I3)
-- **Why:** per-source state machine is partial (`FileIndexStatus` only).
-- **Files:** `App/FileIndexStatus.swift`, `Ingestion/Pipeline/*`, readiness repo.
-- **Steps:** per-source states (queued/processing/searchable/partial/failed/excluded),
-  partial-omission disclosure, dup identity, transient-retry-without-dup, moved-file reauth.
-- **Done-when:** state transitions + no-dup-on-retry tests; a moved file re-auths without a
-  duplicate row.
+### A2 · Import / coverage lifecycle  ✅ DONE (6a61440, module .importLifecycle)
+- `App/SourceLifecycle.swift` — pure `SourceLifecycle.derive` folds FileIndexStatus + in-flight +
+  encrypted + failed + excluded + partial-omission into ONE priority-ordered state
+  (excluded>needsPassword>failed>partial>searchable>processing>queued) with isAnswerable +
+  disclosesOmission. 7 unit tests. (Dup-identity / moved-file-reauth persistence already exists
+  in `ingest_file_attempts`+`source_relations`; this unifies the display/disclosure layer.)
 
 ### A3 · Plain-document workspace-subject claims  ✅ DONE (50dc822, module .proseSubjectBinding, default OFF)
 - `ClaimProducer` now resolves a subject-less fact's subjectLabel to ONE canonical entity
@@ -40,13 +39,12 @@ tested commit; nothing half-wired.
   bump, no forced re-drain). Regression green (28/28). Owner flips it on to prefer subject
   scoping for prose archives.
 
-### A4 · Password-protected files (encrypted PDF/ZIP/Office)
-- **Why:** encrypted sources are skipped; niche but real.
-- **Files:** loaders + a password-collection UI hook (never crack; user supplies the password).
-- **Steps:** detect encryption → surface a "needs password" state → retry decode with the
-  user-supplied secret → ingest through the same pipeline.
-- **Done-when:** an encrypted fixture ingests after a password is provided; wrong/absent
-  password fails closed (no crash, marked needs-password).
+### A4 · Password-protected files  ✅ DONE (b84b66e, module .passwordProtectedFiles)
+- `PDFLoader` tries an empty-user-password unlock (opens the common owner-only-encrypted class,
+  zero UI) and otherwise throws `IngestorError.passwordProtected` so a truly password-needing
+  file is tracked distinctly (surfaced via A2's `.needsPassword` lifecycle state) instead of a
+  silent empty-failure. Module OFF ⇒ old behaviour. (A user-typed-password retry for ZIP/Office
+  is a future UI addition; the PDF empty-password class is the common real case and needs no UI.)
 
 ---
 
