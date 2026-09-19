@@ -97,6 +97,10 @@ public actor HybridRetriever: Retriever {
     /// (identity order). Reorder-only: it never drops a chunk, so recall cannot
     /// fall; it only promotes the most on-target passages for the composer.
     private let reranker: RerankerLadder?
+    /// R4 — optional HyDE expander. nil ⇒ no-op. Consulted only when the literal
+    /// query's vector pass is weak (vocabulary mismatch), so ordinary questions
+    /// spend no extra model budget.
+    private let hyde: HypotheticalQueryExpander?
 
     public init(
         memory: MemoryRepository,
@@ -121,13 +125,15 @@ public actor HybridRetriever: Retriever {
         genericFacts: GenericFactRepository? = nil,
         independenceProvider: SourceIndependenceKeyProvider? = nil,
         sensitivePolicy: SensitiveRetrievalPolicy? = nil,
-        reranker: RerankerLadder? = nil
+        reranker: RerankerLadder? = nil,
+        hyde: HypotheticalQueryExpander? = nil
     ) {
         self.objects = objects
         self.genericFacts = genericFacts
         self.independenceProvider = independenceProvider
         self.sensitivePolicy = sensitivePolicy
         self.reranker = reranker
+        self.hyde = hyde
         self.memory = memory
         self.events = events
         self.entities = entities
@@ -1031,11 +1037,34 @@ public actor HybridRetriever: Retriever {
             KalsmritikoshLog.storage.notice("Vector layer skipped: no query embedding produced; using structured layers only.")
             return []
         }
-        let hits = try await vectors.nearest(
+        var hits = try await vectors.nearest(
             to: query,
             limit: vectorLayerLimit,
             candidateChunkIDs: candidateChunkIDs
         )
+        // R4 — HyDE: only when the literal query retrieved little (a vocabulary
+        // mismatch), bridge with a hypothetical answer and RRF-fuse its neighbors.
+        // The hypothetical is never surfaced; the intent guard lives in the expander.
+        if let hyde, hits.count < max(3, vectorLayerLimit / 4),
+           let hypo = await hyde.hypothetical(for: intent.rawQuestion) {
+            let hypoVec = await embedder.embed(hypo)
+            if !hypoVec.isEmpty {
+                let hypoHits = (try? await vectors.nearest(
+                    to: hypoVec, limit: vectorLayerLimit,
+                    candidateChunkIDs: candidateChunkIDs)) ?? []
+                if !hypoHits.isEmpty {
+                    var bestScore: [Chunk.ID: Double] = [:]
+                    for h in hits + hypoHits {
+                        bestScore[h.chunkID] = max(bestScore[h.chunkID] ?? -.greatestFiniteMagnitude, h.score)
+                    }
+                    let fused = HypotheticalQueryExpander.rrfFuse(
+                        [hits.map(\.chunkID), hypoHits.map(\.chunkID)])
+                    hits = fused.prefix(vectorLayerLimit).map {
+                        VectorHit(chunkID: $0, score: bestScore[$0] ?? 0)
+                    }
+                }
+            }
+        }
         let hydrated = try await chunks.findByIDs(hits.map(\.chunkID))
         let byID = Dictionary(uniqueKeysWithValues: hydrated.map { ($0.id, $0) })
         return hits.compactMap { hit in

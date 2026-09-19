@@ -1297,6 +1297,16 @@ public final class AppState {
             // chunk set, so recall is preserved; the cross-encoder passes through
             // (no-op) when its model isn't loadable.
             let answerReranker = RerankerLadder(tiers: [HeuristicKeywordTier(), CoreMLCrossEncoderTier()])
+            // R4 — HyDE expander backed by the on-device reasoning capability.
+            // Consulted only when a query's literal vector pass is weak; returns
+            // nil (no expansion) when no reasoning model is available.
+            let hydeExpander = HypotheticalQueryExpander(reason: { [capabilities] prompt in
+                let spec = CapabilitySpec.reasoning(contextTokens: 1_000, purpose: "retrieval.hyde")
+                guard let provider = try? await capabilities.resolve(spec),
+                      await provider.isAvailable() else { return nil }
+                return try? await provider.generate(
+                    prompt: prompt, options: GenerationOptions(maxTokens: 120, temperature: 0.3))
+            })
             let retriever = HybridRetriever(
                 memory: memoryRepo,
                 events: events,
@@ -1318,7 +1328,8 @@ public final class AppState {
                 // W-5.4 — thread copies collapse to one independent source
                 // for corroboration (Fwd/Re/quoted copies of one message).
                 independenceProvider: LedgerSourceIndependenceKeyProvider(objects: objects),
-                reranker: answerReranker
+                reranker: answerReranker,
+                hyde: hydeExpander
             )
 
             let expertRegistry = ExpertRegistry()

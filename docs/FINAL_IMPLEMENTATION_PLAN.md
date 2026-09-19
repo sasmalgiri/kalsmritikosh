@@ -12,10 +12,15 @@ every claim cites a source or abstains; build green + regression green before co
 
 ---
 
-## PHASE 1 — Retrieval quality (highest answer impact)
+## PHASE 1 — Retrieval quality (highest answer impact)  ✅ COMPLETE
 > Progress: **R1 ✅** (783700f, TemporalGrammar wired to timeline) · **R2 ✅** (b3e00a9,
 > cross-encoder rerank on the answer path, reorder-only) · **R3 ✅ already wired**
-> (MasterBrain.applyCorrectiveRetrieval @1647, tests present). Remaining: R4, R5, R6.
+> (MasterBrain.applyCorrectiveRetrieval @1647, tests present) · **R4 ✅** (HyDE expander
+> + RRF fusion in vectorLayer, gated on weak first pass, HypotheticalQueryExpanderTests)
+> · **R5 ✅ already wired** (ANNIndexCoordinator warm+build+persist at boot, maintain()
+> scheduled, brute-force correctness fallback, ANNBenchmarkTests) · **R6 ✅ already
+> wired** (deterministic template prefix applied to every multi-chunk doc at ingest,
+> prepended into embed input; ContextPrefixBackfiller for re-embed).
 
 ### R1 · Wire TemporalGrammar into retrieval
 - files: `Brain/AEE/QueryMissionCompiler.swift` (or intent compilation), `Brain/LedgerTools.swift` (timelineSlice).
