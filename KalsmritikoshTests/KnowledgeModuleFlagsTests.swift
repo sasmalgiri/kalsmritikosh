@@ -26,7 +26,7 @@ import Foundation
 
     @Test("A not-yet-implemented module is never on, even if written")
     func unimplementedNeverOn() {
-        let m = KnowledgeModule.eventSlotFill
+        let m = KnowledgeModule.boilerplateEmbedSkip
         #expect(!m.implemented)
         KnowledgeModuleFlags.setEnabled(m, true)         // attempt to force-enable
         #expect(KnowledgeModuleFlags.isEnabled(m) == false)

@@ -1938,12 +1938,25 @@ public final class AppState {
             // narrative_slots_json is the default '{}'). 6-hour
             // cadence with 200-row batches; idempotent (only touches
             // events whose slot bundle is still empty).
+            // L4 (module .eventSlotFill) — the backfiller runs the rule extractor,
+            // then fills the empty why/where/how slots with the on-device model
+            // under a fact-preserving guard (module-gated inside the composite;
+            // off ⇒ rule-only). Reasoner resolves the reasoning capability; nil
+            // when no model is up. This is the BACKGROUND path — the inline ingest
+            // path at ~1615 stays rule-only (minimum-LLM).
+            let slotExtractor = CompositeNarrativeSlotExtractor(reason: { [capabilities] prompt in
+                let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "event.slotFill")
+                guard let provider = try? await capabilities.resolve(spec),
+                      await provider.isAvailable() else { return nil }
+                return try? await provider.generate(
+                    prompt: prompt, options: GenerationOptions(maxTokens: 160, temperature: 0.2))
+            })
             let narrativeSlotBackfiller = NarrativeSlotBackfiller(
                 database: db,
                 events: events,
                 objects: objects,
                 entities: entities,
-                extractor: RuleNarrativeSlotExtractor()
+                extractor: slotExtractor
             )
             await narrativeSlotBackfiller.start()
 
