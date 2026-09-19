@@ -403,18 +403,17 @@ public final class FeatureFlags {
         (UserDefaults.standard.object(forKey: kOCRDuringIngest) as? Bool) ?? true
     }
 
-    /// Idle-maintenance mode. Default `.off` — under the minimum-LLM
-    /// contract the ledger is warmed on demand, so no background sweep
-    /// runs unless the user opts in. The generative sweeps (community
-    /// summaries, memory distillation) are separately gated off in the
-    /// v1 release profile; this default also stops the deterministic
-    /// gap/contradiction recalc + nightly compression from contending
-    /// for the DB actor while idle. Users can switch to Notify / Ask /
-    /// Automatic in Settings.
+    /// Idle-maintenance mode. Default `.automatic` (owner decision 2026-09-20 —
+    /// "put the AI on as default"): while the Mac is idle the app silently runs
+    /// the derived-layer builders — dedup, minimized topics, summaries, history,
+    /// gap/contradiction recalc — and, when a reasoning model is available (Apple
+    /// Intelligence on), polishes topic/story prose. The builders themselves are
+    /// deterministic, so this runs safely even with no model; the LLM is only an
+    /// optional polish. Users can switch to Notify / Ask / Off in Settings.
     public var maintenanceMode: MaintenanceMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: Self.kMaintenanceMode),
-                  let mode = MaintenanceMode(rawValue: raw) else { return .off }
+                  let mode = MaintenanceMode(rawValue: raw) else { return .automatic }
             return mode
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kMaintenanceMode) }
