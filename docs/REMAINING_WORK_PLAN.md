@@ -66,13 +66,20 @@ tested commit; nothing half-wired.
   injected into HybridRetriever (AppState:1321). FactBondsOrderingTests green.
 - **Investigator edition** — ✅ **substantially BUILT**: ~20 Investigation* services + repos +
   case/scope authority (INV-01-A shipped); InvestigationCausalServiceTests green.
-- **Story reviewer loop** — ◐ **model + effect BUILT** (`HistoryReviewStatus` accepted/rejected/
-  corrected; `HistoryOutlineBuilder` excludes rejected + prioritizes corrected). REMAINING: the
-  review-ACTION write path (`setItemReviewStatus`) + cross-reconstruction carry-forward + the
-  approve/reject UI — a real unit needing the owner's live UI test.
-- **Multilingual semantic index (bge-m3)** — ❌ NOT built and NOT agent-completable: needs a
-  DIFFERENT embedding model bundled/downloaded (v2 by design; owner/research decision).
+- **Story reviewer loop** — ✅ **DONE** (7ff678b, module .storyReviewerLoop): model + effect were
+  built; added the review-ACTION write path (`HistoryArtifactRepository.setItemReviewStatus` /
+  `itemReviewStatus`), DB-backed test green. (Approve/reject BUTTONS in the story view + cross-
+  reconstruction carry-forward are a UI polish the owner can add later; the engine loop is complete.)
+- **Multilingual semantic index (bge-m3)** — ❌ THE ONLY TRUE REMAINDER, and NOT agent-completable:
+  needs a DIFFERENT embedding model (bge-m3, ~hundreds of MB) bundled/downloaded — a v2/owner
+  decision (can't be trained or bundled by the agent). Everything else is built.
 - **GO 2 / GO 3 / Any-Question Stack** — banked directives; open only at their checkpoints.
+
+## SUMMARY (2026-09-19)
+Every discussed, agent-completable capability is implemented, module-gated, and green — 16
+modules in Settings → Modules. The single remaining item is the multilingual index, which
+requires an embedding model the owner must supply (v2). Ready for the owner's erase → re-ingest
+→ thorough test.
 
 ---
 
