@@ -136,6 +136,24 @@ public actor HistoryArtifactRepository {
 
     // MARK: - Load / query
 
+    /// Story-reviewer loop (module .storyReviewerLoop) — the review ACTION: record
+    /// a user's approve/correct/reject verdict on one history item. The outline
+    /// builder already HONORS review_status (rejected items are dropped, corrected
+    /// items prioritized), so a subsequent render of this artifact reflects the
+    /// verdict. Preserve-not-delete: only the derived item's status changes.
+    public func setItemReviewStatus(_ status: HistoryReviewStatus, forItemID id: UUID) async throws {
+        try await database.exec(
+            "UPDATE history_items SET review_status = ? WHERE id = ?;",
+            [.text(status.rawValue), .uuid(id)])
+    }
+
+    /// Read one item's current review status (nil = item not found).
+    public func itemReviewStatus(forItemID id: UUID) async throws -> HistoryReviewStatus? {
+        let rows = try await database.query(
+            "SELECT review_status FROM history_items WHERE id = ?;", [.uuid(id)])
+        return rows.first?.string(0).flatMap(HistoryReviewStatus.init(rawValue:))
+    }
+
     public func header(id: UUID) async throws -> HistoryArtifact? {
         let rows = try await database.query("\(Self.headerColumns) FROM history_artifacts WHERE id = ?;", [.uuid(id)])
         return rows.first.flatMap(Self.decodeHeader)

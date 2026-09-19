@@ -39,6 +39,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case passwordProtectedFiles // A4 — open encrypted files (empty-password unlock; classify the rest)
     case importLifecycle        // A2 — unified per-source lifecycle state + omission disclosure
     // Answer composition
+    case storyReviewerLoop      // Lane C — record approve/correct/reject verdicts on story items
     case actorComposer          // A1 — dedicated "who did X" actor answer door
     case progressiveStreaming   // A2 — stream instant→synthesis→verified to the UI
     case topicSeededComposers   // A3 — seed the matched topic into the model composers
@@ -59,6 +60,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .boilerplateEmbedSkip: return "Boilerplate embed-skip"
         case .passwordProtectedFiles: return "Password-protected files"
         case .importLifecycle:      return "Import & coverage lifecycle"
+        case .storyReviewerLoop:    return "Story review (approve / correct / reject)"
         case .actorComposer:        return "Actor answers (who did X)"
         case .progressiveStreaming: return "Progressive answer streaming"
         case .topicSeededComposers: return "Topic-first composition"
@@ -79,6 +81,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
         case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
         case .importLifecycle:      return "Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source."
+        case .storyReviewerLoop:    return "Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt."
         case .actorComposer:        return "Route who-did-this questions to the passage naming the acting party and compose a grounded answer."
         case .progressiveStreaming: return "Render the answer as it forms — instant context, then synthesis, then the verified result."
         case .topicSeededComposers: return "Give the model composer the matched topic first, so answers lead with the topic rather than raw facts."
@@ -93,7 +96,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
-             .passwordProtectedFiles, .importLifecycle:
+             .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop:
             return true
         }
     }
@@ -120,7 +123,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip,
              .passwordProtectedFiles, .importLifecycle:
             return "Retrieval"
-        case .actorComposer, .progressiveStreaming, .topicSeededComposers:
+        case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop:
             return "Answer composition"
         }
     }
