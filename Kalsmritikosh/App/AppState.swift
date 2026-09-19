@@ -1800,6 +1800,16 @@ public final class AppState {
                     let scan = Task { () -> Int in
                         let gaps = await self.scanForGaps()
                         if !Task.isCancelled { await self.scanForContradictions() }
+                        // L1 — topics are a derived layer, re-built on the same
+                        // idle pass. Deterministic (dedup + minimize + spine):
+                        // collapse duplicate facts, then rebuild the minimized
+                        // topic set so answers lead with real, few topics without
+                        // the owner pressing a button. The optional prose polish
+                        // inside buildTopics runs only if a reasoning model is up.
+                        if !Task.isCancelled {
+                            _ = await self.cleanUpLedger()
+                            if !Task.isCancelled { _ = await self.buildTopics() }
+                        }
                         return gaps
                     }
                     await MainActor.run { self.idleMaintenanceScan = scan }
