@@ -83,10 +83,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .topicMinimization, .autoTopics, .crossEncoderRerank,
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
-             .topicSeededComposers, .actorComposer:
+             .topicSeededComposers, .actorComposer, .progressiveStreaming:
             return true
-        case .eventSlotFill, .documentClass,
-             .boilerplateEmbedSkip, .progressiveStreaming:
+        case .eventSlotFill, .documentClass, .boilerplateEmbedSkip:
             return false
         }
     }

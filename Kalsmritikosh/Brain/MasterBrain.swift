@@ -394,7 +394,8 @@ public actor MasterBrain {
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
                 // as analysisProgress; the durable grounded answer follows below.
-                if await self.phase1Instant(question: question, access: access) != nil {
+                if KnowledgeModuleFlags.isEnabled(.progressiveStreaming),
+                   await self.phase1Instant(question: question, access: access) != nil {
                     continuation.yield(.analysisProgress(
                         detail: "Cached context found; verifying against source evidence", chapter: nil))
                 }
@@ -521,7 +522,11 @@ public actor MasterBrain {
             case .chapter(let chapter):
                 // AEE-M2 §25 — chapters stream as analysisProgress artifacts (not an eighth
                 // lifecycle state); the answer itself remains one revision chain.
-                yield(.analysisProgress(detail: "Composing chapter: \(chapter.title)", chapter: chapter))
+                // Module .progressiveStreaming gates whether partials surface; off ⇒
+                // only the final answer is emitted.
+                if KnowledgeModuleFlags.isEnabled(.progressiveStreaming) {
+                    yield(.analysisProgress(detail: "Composing chapter: \(chapter.title)", chapter: chapter))
+                }
             case .completed(let result):
                 narrative = result
             case .failed(let reason):
