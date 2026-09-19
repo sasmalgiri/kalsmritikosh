@@ -138,11 +138,25 @@ public final class LedgerDrainCoordinator {
             if page.count < 500 { break }
         }
 
+        var boilerplateBodies: [(ko: KnowledgeObject.ID, content: String)] = []
         for koID in koIDs {
             guard let ko = (try? await objects.load(id: koID)) ?? nil else { continue }
             try await drainFacts(for: ko, into: &receipt)
             try await drainEvents(for: ko, into: &receipt)
             try await stampDocumentClass(for: ko, into: &receipt)
+            if !ko.content.isEmpty { boilerplateBodies.append((ko.id, ko.content)) }
+        }
+
+        // I1 (module .boilerplateEmbedSkip) — learn cross-document boilerplate
+        // templates from the whole corpus in one batch (repeats appearing in ≥3
+        // documents get promoted). Ingest's embed gate then skips chunks that are
+        // mostly a known template. Off ⇒ skipped; best-effort (never fails drain).
+        if KnowledgeModuleFlags.isEnabled(.boilerplateEmbedSkip) {
+            let promoted = (try? await BoilerplateRegistry(database: database)
+                .detectAndPromote(bodies: boilerplateBodies)) ?? []
+            if !promoted.isEmpty {
+                KalsmritikoshLog.knowledge.info("Boilerplate: promoted \(promoted.count, privacy: .public) learned template(s)")
+            }
         }
 
         // ── pass 4: global milestone rebuild, anchored, suspects excluded ───

@@ -24,12 +24,11 @@ import Foundation
         KnowledgeModuleFlags.setEnabled(m, m.defaultEnabled)
     }
 
-    @Test("A not-yet-implemented module is never on, even if written")
-    func unimplementedNeverOn() {
-        let m = KnowledgeModule.boilerplateEmbedSkip
-        #expect(!m.implemented)
-        KnowledgeModuleFlags.setEnabled(m, true)         // attempt to force-enable
-        #expect(KnowledgeModuleFlags.isEnabled(m) == false)
+    @Test("Every registered module is implemented (all discussion items wired)")
+    func allImplemented() {
+        for m in KnowledgeModule.allCases {
+            #expect(m.implemented, "module \(m.rawValue) should be implemented")
+        }
     }
 
     @Test("Every module carries a title, detail, and group")

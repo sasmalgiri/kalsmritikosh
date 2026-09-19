@@ -55,6 +55,10 @@ public actor IngestCoordinator {
     private var byteResolver: SourceVersionByteResolver? = nil
     private var reprocessing: SourceReprocessingCoordinator? = nil   // USF-010
     private var upgradeDatabase: Database? = nil
+    /// I1 (module .boilerplateEmbedSkip) — learned cross-document boilerplate.
+    /// Built once a database is wired (configureUpgrades). Consulted at the embed
+    /// gate to skip chunks that are mostly a known template; nil ⇒ feature off.
+    private var boilerplateRegistry: BoilerplateRegistry? = nil
     private let cleaner: Cleaner
     private let classifier: DocumentClassifier
     private let chunker: Chunker
@@ -406,6 +410,7 @@ public actor IngestCoordinator {
     /// not call this keep the prior behaviour (no completion snapshot, no upgrade scheduling).
     public func configureUpgrades(database: Database, jobs: SourceUpgradeJobRepository, priorityGate: QueryPriorityGate? = nil) {
         self.upgradeDatabase = database
+        self.boilerplateRegistry = BoilerplateRegistry(database: database)
         let resolver = SourceVersionByteResolver(database: database, vault: evidenceVault)
         self.byteResolver = resolver
         let r = readiness ?? SourceReadinessRepository(database: database)
@@ -1241,6 +1246,29 @@ public actor IngestCoordinator {
             return c.withAdmitEmbedding(admit)
                 .withSourceVersion(sourceVersionID)
                 .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
+        }
+        // I1 (module .boilerplateEmbedSkip) — consult the learned cross-document
+        // registry and skip embedding any chunk that is MOSTLY a known template
+        // (a repeated legal disclaimer, signature block, etc. promoted across ≥3
+        // documents). Additive: only already-admitted chunks can be downgraded,
+        // and the chunk stays FTS-/citation-searchable — only its vector is
+        // skipped. Off / empty registry ⇒ no-op.
+        if KnowledgeModuleFlags.isEnabled(.boilerplateEmbedSkip), let reg = boilerplateRegistry {
+            var reevaluated: [Chunk] = []
+            reevaluated.reserveCapacity(chunked.count)
+            for c in chunked {
+                guard c.admitEmbedding else { reevaluated.append(c); continue }
+                if let (rewritten, used) = try? await reg.substituteKnown(c.text), !used.isEmpty {
+                    let survived = rewritten.filter { !$0.isWhitespace }.count
+                    let original = c.text.filter { !$0.isWhitespace }.count
+                    if original > 0, Double(survived) / Double(original) < 0.4 {
+                        reevaluated.append(c.withAdmitEmbedding(false))
+                        continue
+                    }
+                }
+                reevaluated.append(c)
+            }
+            chunked = reevaluated
         }
         // G2-3 — populate per-chunk context_prefix BEFORE persisting +
         // embedding so the embed pass and the persisted row carry the
