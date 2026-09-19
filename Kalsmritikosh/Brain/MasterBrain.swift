@@ -1017,7 +1017,7 @@ public actor MasterBrain {
     /// among these chunks are omitted, so the model can't cite a source it can't see).
     nonisolated static func buildEvidencePrompt(
         question: String, chunks: [RetrievedChunk], facts: [GenericFact],
-        evaluations: [ClaimEvaluation]
+        evaluations: [ClaimEvaluation], topic: MemoryObject? = nil
     ) -> String {
         let blocks = chunks.enumerated().map { idx, c -> String in
             let snippet = c.chunk.text
@@ -1076,12 +1076,21 @@ public actor MasterBrain {
         }.joined(separator: "\n\n")
         let verifiedBlock = factBlock.isEmpty ? "" : factBlock + "\n\n\n"
 
+        // A3 — topic-first: when a matched topic is provided, lead the prompt with
+        // its distilled summary as BACKGROUND (orienting the model), while still
+        // requiring every specific to cite a chunk. Never a substitute for evidence.
+        let topicBlock: String = {
+            guard let topic, !topic.narrative.isEmpty else { return "" }
+            let summary = topic.narrative.replacingOccurrences(of: "\n", with: " ").prefix(800)
+            return "Most relevant topic summary (background only — still cite chunks for every specific):\n\(summary)\n\n\n"
+        }()
+
         return """
         Question: \(question)
 
         Use ONLY the chunks below to answer. After every fact, cite the chunk label like [C3]. If the chunks don't contain enough information to answer, say "I don't have enough in your archive to answer this confidently." — do not invent.
 
-        \(verifiedBlock)Chunks:
+        \(topicBlock)\(verifiedBlock)Chunks:
         \(blocks)
 
         Answer:
@@ -1121,9 +1130,14 @@ public actor MasterBrain {
         // (amounts, dates, employers, …), each tagged with the chunk that backs
         // it so the model cites the same [C#] label. Pure prompt construction is
         // in a testable static helper below.
+        // A3 — seed the matched topic (module .topicSeededComposers) so the model
+        // composes over the topic first. Off ⇒ nil ⇒ prompt unchanged.
+        let seededTopic: MemoryObject? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
+            ? (try? await memoryRepo?.search(question, limit: 1))?.first
+            : nil
         let prompt = Self.buildEvidencePrompt(
             question: question, chunks: topChunks, facts: retrieval.genericFacts,
-            evaluations: retrieval.claimEvaluations)
+            evaluations: retrieval.claimEvaluations, topic: seededTopic)
         let options = GenerationOptions(
             maxTokens: 500,
             temperature: 0.2,
