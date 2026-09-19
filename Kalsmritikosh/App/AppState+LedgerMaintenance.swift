@@ -105,4 +105,23 @@ extension AppState {
         KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics from \(factsBySubject.count, privacy: .public) subjects")
         return built
     }
+
+    /// L2 (module `.summariesAtIdle`) — build a deterministic extractive summary
+    /// of the archive on the idle pass and persist it to `summaries`. Uses the
+    /// HeuristicSummarizer (no LLM), so it respects the minimum-LLM contract.
+    /// Returns the number of summaries written, or nil if repositories aren't ready.
+    @discardableResult
+    public func buildSummaries() async -> Int? {
+        guard let objects, let summariesRepo else { return nil }
+        let summarizer = HeuristicSummarizer(objectsRepo: objects, summariesRepo: summariesRepo)
+        do {
+            _ = try await summarizer.summarize(
+                scope: .knowledgeBase, level: .knowledgeBase, length: .executive)
+            KalsmritikoshLog.app.info("Summary build: knowledge-base summary refreshed")
+            return 1
+        } catch {
+            KalsmritikoshLog.app.error("Summary build failed: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
 }

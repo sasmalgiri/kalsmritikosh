@@ -1811,6 +1811,10 @@ public final class AppState {
                             _ = await self.cleanUpLedger()
                             if !Task.isCancelled { _ = await self.buildTopics() }
                         }
+                        // L2 — deterministic archive summary on the same idle pass.
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.summariesAtIdle) {
+                            _ = await self.buildSummaries()
+                        }
                         return gaps
                     }
                     await MainActor.run { self.idleMaintenanceScan = scan }

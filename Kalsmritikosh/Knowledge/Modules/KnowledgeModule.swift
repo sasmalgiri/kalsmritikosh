@@ -82,9 +82,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     public var implemented: Bool {
         switch self {
         case .topicMinimization, .autoTopics, .crossEncoderRerank,
-             .correctiveRetrieval, .hydeExpansion:
+             .correctiveRetrieval, .hydeExpansion, .summariesAtIdle:
             return true
-        case .summariesAtIdle, .historyAtIdle, .eventSlotFill, .documentClass,
+        case .historyAtIdle, .eventSlotFill, .documentClass,
              .boilerplateEmbedSkip, .actorComposer, .progressiveStreaming,
              .topicSeededComposers:
             return false
