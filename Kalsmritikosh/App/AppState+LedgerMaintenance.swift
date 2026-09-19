@@ -47,6 +47,17 @@ extension AppState {
         }
         guard !factsBySubject.isEmpty else { return 0 }
 
+        // Topic minimization (owner rule, 2026-09-19) — a subject with too little
+        // evidence is NOT a real topic. Fold each thin subject into its closest
+        // substantive subject so we end up with a few rich, evidence-backed topics
+        // instead of hundreds of context-free ones. Deterministic; facts only move,
+        // never change.
+        let consolidated = TopicConsolidator.consolidate(
+            factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) })
+        factsBySubject = Dictionary(
+            consolidated.map { ($0.subject, $0.facts) }, uniquingKeysWith: { a, _ in a })
+        KalsmritikoshLog.app.info("Topic minimization: \(consolidated.count, privacy: .public) topics kept")
+
         let allEvents = (try? await events?.recent(limit: 2_000)) ?? []
         let now = Date()
 
