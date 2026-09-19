@@ -1806,7 +1806,8 @@ public final class AppState {
                         // topic set so answers lead with real, few topics without
                         // the owner pressing a button. The optional prose polish
                         // inside buildTopics runs only if a reasoning model is up.
-                        if !Task.isCancelled {
+                        // Gated by the .autoTopics module switch.
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.autoTopics) {
                             _ = await self.cleanUpLedger()
                             if !Task.isCancelled { _ = await self.buildTopics() }
                         }

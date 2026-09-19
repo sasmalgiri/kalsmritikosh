@@ -51,12 +51,14 @@ extension AppState {
         // evidence is NOT a real topic. Fold each thin subject into its closest
         // substantive subject so we end up with a few rich, evidence-backed topics
         // instead of hundreds of context-free ones. Deterministic; facts only move,
-        // never change.
-        let consolidated = TopicConsolidator.consolidate(
-            factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) })
-        factsBySubject = Dictionary(
-            consolidated.map { ($0.subject, $0.facts) }, uniquingKeysWith: { a, _ in a })
-        KalsmritikoshLog.app.info("Topic minimization: \(consolidated.count, privacy: .public) topics kept")
+        // never change. Gated by the .topicMinimization module switch.
+        if KnowledgeModuleFlags.isEnabled(.topicMinimization) {
+            let consolidated = TopicConsolidator.consolidate(
+                factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) })
+            factsBySubject = Dictionary(
+                consolidated.map { ($0.subject, $0.facts) }, uniquingKeysWith: { a, _ in a })
+            KalsmritikoshLog.app.info("Topic minimization: \(consolidated.count, privacy: .public) topics kept")
+        }
 
         let allEvents = (try? await events?.recent(limit: 2_000)) ?? []
         let now = Date()

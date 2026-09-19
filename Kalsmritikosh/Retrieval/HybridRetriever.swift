@@ -1045,7 +1045,8 @@ public actor HybridRetriever: Retriever {
         // R4 — HyDE: only when the literal query retrieved little (a vocabulary
         // mismatch), bridge with a hypothetical answer and RRF-fuse its neighbors.
         // The hypothetical is never surfaced; the intent guard lives in the expander.
-        if let hyde, hits.count < max(3, vectorLayerLimit / 4),
+        if let hyde, KnowledgeModuleFlags.isEnabled(.hydeExpansion),
+           hits.count < max(3, vectorLayerLimit / 4),
            let hypo = await hyde.hypothetical(for: intent.rawQuestion) {
             let hypoVec = await embedder.embed(hypo)
             if !hypoVec.isEmpty {
@@ -1251,7 +1252,8 @@ public actor HybridRetriever: Retriever {
     nonisolated static func reranked(
         _ chunks: [RetrievedChunk], question: String, reranker: RerankerLadder?
     ) async -> [RetrievedChunk] {
-        guard let reranker, chunks.count > 1,
+        guard let reranker, KnowledgeModuleFlags.isEnabled(.crossEncoderRerank),
+              chunks.count > 1,
               !question.trimmingCharacters(in: .whitespaces).isEmpty else { return chunks }
         let cap = Swift.min(chunks.count, 100)
         let head = Array(chunks.prefix(cap))

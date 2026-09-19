@@ -33,6 +33,7 @@ public enum PaletteActionID: String, CaseIterable, Sendable {
 public enum SettingsAnchor: String, CaseIterable, Sendable {
     case localModelSetup
     case answeringModes
+    case modules
     case privacy
     case backgroundMaintenance
     case ingestOptions

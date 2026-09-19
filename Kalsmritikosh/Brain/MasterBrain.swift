@@ -869,6 +869,8 @@ public actor MasterBrain {
         // AEE-M1 — use the request's REAL compiled plan when supplied (category/class-
         // accurate fields + corroboration). Falls back to the legacy neutral compile only
         // when no plan is threaded in (kept for the standalone corrective-retrieval tests).
+        // Gated by the .correctiveRetrieval module switch — off ⇒ first pass stands.
+        guard KnowledgeModuleFlags.isEnabled(.correctiveRetrieval) else { return first }
         let plan = providedPlan ?? QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
         let sufficiency = EvidenceSufficiencyAssessor().assess(
             plan: plan, evidenceTexts: first.chunks.map { $0.chunk.text })

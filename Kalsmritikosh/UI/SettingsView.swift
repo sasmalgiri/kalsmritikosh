@@ -144,6 +144,7 @@ public struct SettingsView: View {
                 }
                 #endif
                 settingsGroup("Answering & modes", "slider.horizontal.3", anchor: .answeringModes) { systemModeSection }
+                settingsGroup("Modules", "switch.2", anchor: .modules) { modulesSection }
                 settingsGroup("Privacy", "hand.raised", anchor: .privacy) { privacySection }
                 settingsGroup("Background maintenance", "moon.zzz", anchor: .backgroundMaintenance) { maintenanceSection }
                 settingsGroup("Ingest options", "tray.and.arrow.down", anchor: .ingestOptions) { optionalIngestSection }
@@ -1204,6 +1205,38 @@ public struct SettingsView: View {
     /// Settings opens as a short list of headers, expand only what you need.
     /// D-10: every group carries a SettingsAnchor (palette-coverage.sh fails
     /// CI if one is missing) so ⌘K can expand, scroll to, and flash it.
+    /// Modules — one on/off switch per knowledge-synthesis / answer-quality
+    /// capability, grouped and described. Each reads/writes its own persisted
+    /// flag via KnowledgeModuleFlags, so a capability can be tracked and toggled
+    /// in isolation. Only implemented modules are shown.
+    @ViewBuilder
+    private var modulesSection: some View {
+        let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.implemented), by: \.group)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Turn individual capabilities on or off. Changes to synthesis modules take effect on the next idle pass or ingest; retrieval modules apply to your next question.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(groups.keys.sorted(), id: \.self) { groupName in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        Toggle(isOn: Binding(
+                            get: { KnowledgeModuleFlags.isEnabled(module) },
+                            set: { KnowledgeModuleFlags.setEnabled(module, $0) }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(module.title)
+                                Text(module.detail)
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func settingsGroup<Content: View>(_ title: String, _ icon: String, anchor: SettingsAnchor, @ViewBuilder _ content: @escaping () -> Content) -> some View {
         DisclosureGroup(isExpanded: Binding(
@@ -1248,6 +1281,7 @@ public struct SettingsView: View {
         switch a {
         case .localModelSetup:       return "Local model setup"
         case .answeringModes:        return "Answering & modes"
+        case .modules:               return "Modules"
         case .privacy:               return "Privacy"
         case .backgroundMaintenance: return "Background maintenance"
         case .ingestOptions:         return "Ingest options"
