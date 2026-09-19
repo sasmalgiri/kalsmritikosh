@@ -61,6 +61,15 @@ every claim cites a source or abstains; build green + regression green before co
 ---
 
 ## PHASE 2 — Ledger synthesis (fills the remaining empty tables)
+> Verified state (2026-09-19): **L1 ✅** (auto-build minimized topics on the idle/boot
+> maintenance pass — cleanUpLedger + TopicConsolidator + buildTopics; TopicTreeBuilder
+> also runs in the boot pass). **L5 ✅** the answer-side bound exists
+> (`CausalLinkPolicy.boundedForAnswers` + discoverer emission cap). Remaining, each a
+> scoped unit: **L2** summaries-at-idle (community summarizer is deliberately cost-gated;
+> wire the heuristic summarizer into the idle pass), **L3** persist history at idle
+> (works at query time — refactor the stream-assembly into a reusable call, then save via
+> HistoryArtifactRepository), **L4** optional FM slot fill (rule-based slots already run),
+> **L6** persisted document_class (needs +1 schema migration + MigrationMatrix pin).
 
 ### L1 · Auto-build topics after ingest + entity-subject grouping
 - files: `Ingestion/Pipeline/IngestCoordinator.swift` (post-drain hook), `App/AppState+LedgerMaintenance.swift`, new `Knowledge/Topics/TopicSubjectResolver.swift`.
@@ -101,6 +110,15 @@ every claim cites a source or abstains; build green + regression green before co
 ---
 
 ## PHASE 3 — Answer composition polish
+> Verified state (2026-09-19): topics already lead the FAST path (`phase1Instant`
+> serves the subject's MemoryObject narrative) and the deterministic fallback
+> (`DeterministicEvidenceFallback` leads with the best-matching topic). Actor/passage
+> answering flows through `EvidenceVerifier` → `SentenceQuoteComposer` + a `.actor`-aware
+> `PassageAnswerSelector` (action verb required, named actor rewarded), and facts are
+> relevance-gated (`MasterBrain:1046`). Remaining: **A1** a dedicated actor-composer door
+> (refinement — the capability exists), **A2** progressive streaming to the AskView UI
+> (FM stream + state machine exist; not rendered progressively), **A3** seed the matched
+> topic into the mid-tier MODEL composers (ExpertCouncil/ToolGrounded), not just fast/fallback.
 
 ### A1 · Actor answer composer (finish C1)
 - files: `Brain/MasterBrain.swift` (route `.actor` → actor selector), reuse `PassageAnswerSelector`.
