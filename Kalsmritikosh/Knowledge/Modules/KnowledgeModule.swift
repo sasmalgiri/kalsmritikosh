@@ -28,6 +28,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case summariesAtIdle        // L2 — build heuristic summaries on the idle pass
     case historyAtIdle          // L3 — persist reconstructed history on the idle pass
     case eventSlotFill          // L4 — optional FM 5W+H slot fill
+    case proseSubjectBinding    // A3 — bind subject-less prose facts to a resolved subject
     // (L6 document-class labelling is shipped core — always on, migration v123 —
     //  so it is not an optional module here.)
     // Retrieval
@@ -49,6 +50,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .summariesAtIdle:      return "Summaries at idle"
         case .historyAtIdle:        return "History at idle"
         case .eventSlotFill:        return "Event detail fill (5W+H)"
+        case .proseSubjectBinding:  return "Plain-document subject binding"
         case .crossEncoderRerank:   return "Cross-encoder reranking"
         case .correctiveRetrieval:  return "Corrective re-retrieval"
         case .hydeExpansion:        return "Hypothetical query expansion"
@@ -66,6 +68,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .summariesAtIdle:      return "Build per-document and per-community summaries during idle maintenance."
         case .historyAtIdle:        return "Reconstruct and store per-subject history chapters during idle maintenance."
         case .eventSlotFill:        return "Fill missing who/where/when/why/how event details with the on-device model, under a fact-preserving guard."
+        case .proseSubjectBinding:  return "Attach facts from plain documents to the subject they name, so prose archives produce subject-scoped answers (not just source-scoped). Off keeps the current, more conservative behaviour."
         case .crossEncoderRerank:   return "Reorder retrieved passages with a cross-encoder so the most on-target passage leads. Reorder-only; never drops evidence."
         case .correctiveRetrieval:  return "When first-pass evidence is weak, re-retrieve once with expanded terms before answering or abstaining."
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
@@ -83,23 +86,29 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .topicMinimization, .autoTopics, .crossEncoderRerank,
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
-             .eventSlotFill, .boilerplateEmbedSkip:
+             .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding:
             return true
         }
     }
 
-    /// Default state when the user has never toggled it.
+    /// Default state when the user has never toggled it. Implemented modules are
+    /// ON by default (they ARE the current behaviour) — EXCEPT modules that change
+    /// how the ledger scopes/derives, which default OFF so the old behaviour stands
+    /// until the owner opts in.
     public var defaultEnabled: Bool {
-        // Implemented modules are on by default (they are the current behaviour);
-        // not-yet-implemented modules default off.
-        implemented
+        switch self {
+        case .proseSubjectBinding:
+            return false   // ledger-scoping change — opt-in, old behaviour is the default
+        default:
+            return implemented
+        }
     }
 
     /// Grouping for the Settings list.
     public var group: String {
         switch self {
         case .topicMinimization, .autoTopics, .summariesAtIdle, .historyAtIdle,
-             .eventSlotFill:
+             .eventSlotFill, .proseSubjectBinding:
             return "Knowledge synthesis"
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip:
             return "Retrieval"

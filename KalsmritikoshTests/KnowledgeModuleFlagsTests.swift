@@ -40,10 +40,14 @@ import Foundation
         }
     }
 
-    @Test("Implemented modules default on")
+    @Test("Implemented modules default on, except opt-in ledger-scoping ones")
     func implementedDefaultOn() {
+        // Ledger-scoping modules intentionally default OFF (old behaviour stands
+        // until the owner opts in); everything else implemented defaults ON.
+        let optIn: Set<KnowledgeModule> = [.proseSubjectBinding]
         for m in KnowledgeModule.allCases where m.implemented {
-            #expect(m.defaultEnabled)
+            if optIn.contains(m) { #expect(!m.defaultEnabled) }
+            else { #expect(m.defaultEnabled) }
         }
     }
 }

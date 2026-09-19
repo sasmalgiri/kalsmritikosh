@@ -1577,10 +1577,22 @@ public final class AppState {
             let workspacesRepo = WorkspaceRepository(database: db)
             let claimsRepo = ClaimRepository(database: db)
             let temporalClaimsRepo = TemporalClaimRepository(database: db)
+            // A3 (module .proseSubjectBinding, default OFF) — resolve a prose fact's
+            // subjectLabel to ONE canonical entity, else nil (never guess when a label
+            // matches several distinct subjects). Consulted only when the module is on.
+            let claimSubjectResolver: @Sendable (String) async -> Entity.ID? = { [entities] label in
+                let hits = (try? await entities.find(byValue: label, limit: 8)) ?? []
+                var canonicals = Set<Entity.ID>()
+                for e in hits {
+                    canonicals.insert((try? await entities.resolveCanonical(e.id)) ?? e.id)
+                }
+                return canonicals.count == 1 ? canonicals.first : nil
+            }
             let claimProducer = ClaimProducer(
                 genericFacts: genericFactsRepo, assertions: assertionsRepo,
                 temporalClaims: temporalClaimsRepo, events: events,
-                claims: claimsRepo, evidence: evidenceStoreRepo)
+                claims: claimsRepo, evidence: evidenceStoreRepo,
+                subjectResolver: claimSubjectResolver)
             let membershipDeriver = WorkspaceMembershipDeriver(database: db, workspaces: workspacesRepo)
             let claimProjectionBackfill = ClaimProjectionBackfill(
                 producer: claimProducer,
