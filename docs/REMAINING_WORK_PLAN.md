@@ -33,14 +33,12 @@ tested commit; nothing half-wired.
 - **Done-when:** state transitions + no-dup-on-retry tests; a moved file re-auths without a
   duplicate row.
 
-### A3 · Plain-document workspace-subject claims (persona-v2 extraction gap)
-- **Why:** a real `.txt`/prose doc yields ZERO workspace-subject-scoped claims (domain facts
-  carry nil subjectID; only email/event-participant content threads to a subject).
-- **Files:** `Storage/Repositories/ClaimProducer.swift`, `Knowledge/Ontology/DomainFactExtractor.swift`.
-- **Steps:** bind prose domain facts to a resolved subject (entity mention in the same block)
-  so a plain-doc archive produces a non-empty subject-scoped summary.
-- **Done-when:** a prose-only fixture yields subject-scoped claims; ClaimProducerRealIngestTests
-  extended.
+### A3 · Plain-document workspace-subject claims  ✅ DONE (50dc822, module .proseSubjectBinding, default OFF)
+- `ClaimProducer` now resolves a subject-less fact's subjectLabel to ONE canonical entity
+  (injected resolver over `EntitiesRepository.find(byValue:)`+`resolveCanonical`; ambiguous →
+  nil, never guessed) and scopes the claim `.entity`. Gated + default OFF (opt-in; no producer
+  bump, no forced re-drain). Regression green (28/28). Owner flips it on to prefer subject
+  scoping for prose archives.
 
 ### A4 · Password-protected files (encrypted PDF/ZIP/Office)
 - **Why:** encrypted sources are skipped; niche but real.
