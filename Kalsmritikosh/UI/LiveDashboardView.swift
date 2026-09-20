@@ -23,6 +23,7 @@ public struct LiveDashboardView: View {
     // U-3.3 — the Health & Self-check panel, replacing the ad-hoc numbers.
     @State private var healthReport: HealthReport?
     @State private var healthRunning = false
+    @State private var topicScore: TopicScoreboard?
 
     public init() {}
 
@@ -44,6 +45,9 @@ public struct LiveDashboardView: View {
                         Divider().padding(.vertical, 4)
                     }
                     llmBudgetPanel(live.current)
+                    if let score = topicScore, score.total > 0 {
+                        topicScoreboardPanel(score)
+                    }
                     enrichmentTiersPanel()
                     pipelineStrip(live.current.pipelineCounters)
                     throughputChart(live.throughput)
@@ -82,6 +86,9 @@ public struct LiveDashboardView: View {
         }
         .task {
             healthReport = await HealthReportBuilder.build(appState: appState)
+        }
+        .task {
+            topicScore = await appState.topicScoreboard()
         }
         .onAppear {
             // Phase J.13 — start polling only while the Live tab is
@@ -257,6 +264,35 @@ public struct LiveDashboardView: View {
         .padding(.horizontal, 8).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background((ready ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    // MARK: - Topic scoreboard (M4 — did AI improve the topic layer?)
+
+    @ViewBuilder
+    private func topicScoreboardPanel(_ s: TopicScoreboard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up.badge.a")
+                    .foregroundStyle(Theme.brand)
+                Text("Topic quality").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Text("\(Int(s.subjectShapedFraction * 100))% real-subject")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(s.subjectShapedFraction >= 0.7 ? .green : .orange)
+            }
+            HStack(spacing: 10) {
+                budgetTile("Topics", s.total, "square.stack.3d.up", .blue)
+                budgetTile("Real subject", s.subjectShaped, "person.crop.circle", .green)
+                budgetTile("Document-shaped", s.documentShaped, "doc", .orange)
+                budgetTile("AI-polished", s.aiPolished, "sparkles", .purple)
+            }
+            Text("Fewer document-shaped topics + more AI-polished = AI subject resolution and prose working. Build topics in Settings → Your data to refresh.")
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface(cornerRadius: 12)
     }
 
     // MARK: - LLM budget (ledger-first reduction)

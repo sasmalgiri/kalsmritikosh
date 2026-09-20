@@ -158,6 +158,18 @@ extension AppState {
         return built
     }
 
+    /// M4 — an objective read of topic-layer quality: total topics, how many are
+    /// still document-shaped vs real-world subjects, and how many the AI polished.
+    /// Lets the owner see whether AI subject resolution + prose actually improved
+    /// the DB. nil when the memory repo isn't ready.
+    public func topicScoreboard() async -> TopicScoreboard? {
+        guard let memoryRepo else { return nil }
+        let topics = (try? await memoryRepo.listAll()) ?? []
+        return TopicScoreboard.from(
+            identifiers: topics.map(\.subjectIdentifier),
+            aiPolished: lastTopicBuild?.polished ?? 0)
+    }
+
     /// L2 (module `.summariesAtIdle`) — build a deterministic extractive summary
     /// of the archive on the idle pass and persist it to `summaries`. Uses the
     /// HeuristicSummarizer (no LLM), so it respects the minimum-LLM contract.
