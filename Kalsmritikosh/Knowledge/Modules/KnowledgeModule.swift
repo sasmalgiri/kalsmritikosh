@@ -29,6 +29,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case historyAtIdle          // L3 — persist reconstructed history on the idle pass
     case eventSlotFill          // L4 — optional FM 5W+H slot fill
     case proseSubjectBinding    // A3 — bind subject-less prose facts to a resolved subject
+    case aiSubjectResolution    // M2 — AI clusters same-subject document copies into one topic
     // (L6 document-class labelling is shipped core — always on, migration v123 —
     //  so it is not an optional module here.)
     // Retrieval
@@ -55,6 +56,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .historyAtIdle:        return "History at idle"
         case .eventSlotFill:        return "Event detail fill (5W+H)"
         case .proseSubjectBinding:  return "Plain-document subject binding"
+        case .aiSubjectResolution:  return "AI subject resolution (merge duplicate topics)"
         case .crossEncoderRerank:   return "Cross-encoder reranking"
         case .correctiveRetrieval:  return "Corrective re-retrieval"
         case .hydeExpansion:        return "Hypothetical query expansion"
@@ -77,6 +79,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .historyAtIdle:        return "Reconstruct and store per-subject history chapters during idle maintenance."
         case .eventSlotFill:        return "Fill missing who/where/when/why/how event details with the on-device model, under a fact-preserving guard."
         case .proseSubjectBinding:  return "Attach facts from plain documents to the subject they name, so prose archives produce subject-scoped answers (not just source-scoped). Off keeps the current, more conservative behaviour."
+        case .aiSubjectResolution:  return "Before topics are built, the on-device model groups labels that name the same real-world subject (e.g. several copies of one résumé) into a single topic — but only merges when the two share enough evidence terms. Turns document-shaped topics into real-world-subject topics."
         case .crossEncoderRerank:   return "Reorder retrieved passages with a cross-encoder so the most on-target passage leads. Reorder-only; never drops evidence."
         case .correctiveRetrieval:  return "When first-pass evidence is weak, re-retrieve once with expanded terms before answering or abstaining."
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
@@ -100,7 +103,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
              .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop,
-             .aiComposeEveryAnswer:
+             .aiComposeEveryAnswer, .aiSubjectResolution:
             return true
         }
     }
@@ -111,7 +114,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     /// until the owner opts in.
     public var defaultEnabled: Bool {
         switch self {
-        case .proseSubjectBinding:
+        case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
         default:
             return implemented
@@ -122,7 +125,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     public var group: String {
         switch self {
         case .topicMinimization, .autoTopics, .summariesAtIdle, .historyAtIdle,
-             .eventSlotFill, .proseSubjectBinding:
+             .eventSlotFill, .proseSubjectBinding, .aiSubjectResolution:
             return "Knowledge synthesis"
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip,
              .passwordProtectedFiles, .importLifecycle:

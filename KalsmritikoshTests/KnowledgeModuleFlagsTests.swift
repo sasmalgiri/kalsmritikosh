@@ -44,7 +44,7 @@ import Foundation
     func implementedDefaultOn() {
         // Ledger-scoping modules intentionally default OFF (old behaviour stands
         // until the owner opts in); everything else implemented defaults ON.
-        let optIn: Set<KnowledgeModule> = [.proseSubjectBinding]
+        let optIn: Set<KnowledgeModule> = [.proseSubjectBinding, .aiSubjectResolution]
         for m in KnowledgeModule.allCases where m.implemented {
             if optIn.contains(m) { #expect(!m.defaultEnabled) }
             else { #expect(m.defaultEnabled) }

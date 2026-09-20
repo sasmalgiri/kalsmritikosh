@@ -66,6 +66,33 @@ extension AppState {
         }
         guard !factsBySubject.isEmpty else { return 0 }
 
+        // M2 (module .aiSubjectResolution) — before minimizing, let the on-device
+        // model group labels that name the SAME real-world subject (e.g. several
+        // copies of one résumé) into ONE canonical subject, so document-shaped
+        // topics become real-world-subject topics. Each merge passes a shared-
+        // evidence-term guard (no blind merges); facts only move. Off / no model ⇒
+        // skipped. Runs BEFORE minimization so the deduped facts feed the merged subject.
+        if KnowledgeModuleFlags.isEnabled(.aiSubjectResolution), let caps = capabilities {
+            let clusterer = AISubjectClusterer(reason: { prompt in
+                let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "topic.subjectResolution")
+                guard let provider = try? await caps.resolve(spec),
+                      await provider.isAvailable() else { return nil }
+                return try? await provider.generate(
+                    prompt: prompt, options: GenerationOptions(maxTokens: 400, temperature: 0.1))
+            })
+            let input = factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) }
+            let canonical = await clusterer.canonicalize(input)
+            if canonical.contains(where: { $0.key != $0.value }) {
+                var merged: [String: [GenericFact]] = [:]
+                for (label, facts) in factsBySubject {
+                    merged[canonical[label] ?? label, default: []].append(contentsOf: facts)
+                }
+                let before = factsBySubject.count
+                factsBySubject = merged
+                KalsmritikoshLog.app.info("AI subject resolution: \(before, privacy: .public) → \(merged.count, privacy: .public) subjects")
+            }
+        }
+
         // Topic minimization (owner rule, 2026-09-19) — a subject with too little
         // evidence is NOT a real topic. Fold each thin subject into its closest
         // substantive subject so we end up with a few rich, evidence-backed topics
