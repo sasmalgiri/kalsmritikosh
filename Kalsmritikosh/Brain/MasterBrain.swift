@@ -1816,13 +1816,21 @@ public actor MasterBrain {
             case .complex:         depth = .draftAndEvidenceCheck
             case .investigation:   depth = .councilDraftAndEvidenceCheck
             }
+            // Topic-first: hand the best-matching distilled topic to the
+            // synthesizer as the primary orientation, so the AI answers FROM the
+            // topic (deduped/minimized knowledge) and grounds it in the citations.
+            // Gated by .topicSeededComposers; nil when off / no match.
+            let topicContext: String? = KnowledgeModuleFlags.isEnabled(.topicSeededComposers)
+                ? (try? await memoryRepo?.search(question, limit: 1))?.first?.narrative
+                : nil
             synthesizedBody = await AnswerSynthesizer().synthesize(
                 question: question,
                 verifiedBody: verified.body,
                 citations: verified.citations,
                 capabilities: capabilities,
                 depth: depth,
-                context: llmContext
+                context: llmContext,
+                topic: topicContext
             )
         }
         let tagged = Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
