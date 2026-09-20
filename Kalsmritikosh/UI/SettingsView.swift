@@ -1133,6 +1133,10 @@ public struct SettingsView: View {
     /// Which everyday Settings categories are expanded. Empty = all collapsed,
     /// so Settings shows a minimal list of category headers by default.
     @State private var openSettingsGroups: Set<String> = []
+    // Module toggles read/write UserDefaults through KnowledgeModuleFlags, which
+    // SwiftUI does not observe. Bumping this token in each setter forces the
+    // modules section to recompute so the switch reflects its new state.
+    @State private var moduleFlagsVersion = 0
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1213,6 +1217,9 @@ public struct SettingsView: View {
     @ViewBuilder
     private var modulesSection: some View {
         let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.implemented), by: \.group)
+        // Reading the token here ties this view's identity to it, so a setter
+        // bump re-evaluates the body and every toggle re-reads its flag.
+        let _ = moduleFlagsVersion
         VStack(alignment: .leading, spacing: 16) {
             // M1 — the AI regime selector (A/B): Guided (grounded) vs Unconstrained (free).
             VStack(alignment: .leading, spacing: 6) {
@@ -1236,7 +1243,10 @@ public struct SettingsView: View {
                     ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
                         Toggle(isOn: Binding(
                             get: { KnowledgeModuleFlags.isEnabled(module) },
-                            set: { KnowledgeModuleFlags.setEnabled(module, $0) }
+                            set: {
+                                KnowledgeModuleFlags.setEnabled(module, $0)
+                                moduleFlagsVersion &+= 1
+                            }
                         )) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(module.title)
