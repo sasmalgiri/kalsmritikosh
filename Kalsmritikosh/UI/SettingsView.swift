@@ -1459,8 +1459,14 @@ public struct SettingsView: View {
                         let n = await appState.buildTopics()
                         await MainActor.run {
                             buildingTopics = false
-                            topicsStatus = n.map { "Built \($0) topic\($0 == 1 ? "" : "s") from your facts." }
-                                ?? "Nothing to build yet."
+                            if let n {
+                                // M3 — show how many topics the AI actually polished.
+                                let polished = appState.lastTopicBuild?.polished ?? 0
+                                let aiNote = polished > 0 ? " · \(polished) AI-polished" : " · none AI-polished (model off?)"
+                                topicsStatus = "Built \(n) topic\(n == 1 ? "" : "s") from your facts\(aiNote)."
+                            } else {
+                                topicsStatus = "Nothing to build yet."
+                            }
                         }
                     }
                 } label: {

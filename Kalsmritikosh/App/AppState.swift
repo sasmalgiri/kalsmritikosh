@@ -106,6 +106,10 @@ public final class AppState {
     public private(set) var maintenanceActive: Bool = false
     /// Human-readable status line for the maintenance banner.
     public private(set) var maintenanceStatus: String?
+    /// M3 — last topic build: (topics written, of those AI-prose-polished). Lets
+    /// Settings/Live show how many topics the model actually touched vs the
+    /// deterministic spine. nil until the first build.
+    public internal(set) var lastTopicBuild: (built: Int, polished: Int)?
     /// When the last maintenance transition happened (for "· 2m ago").
     public private(set) var maintenanceLastEventAt: Date?
 

@@ -113,9 +113,11 @@ extension AppState {
         // smooth each deterministic spine into prose; the polisher REJECTS any
         // rewrite that drops/adds a number or name, so facts are never changed.
         // No model → the closure returns nil → the spine stands unchanged.
+        // M3 (module .topicProsePolish, default on) — gate the AI prose polish.
+        let polishEnabled = KnowledgeModuleFlags.isEnabled(.topicProsePolish)
         let caps = capabilities
         let polisher = TopicProsePolisher(reason: { spine in
-            guard let caps else { return nil }
+            guard polishEnabled, let caps else { return nil }
             let spec = CapabilitySpec.reasoning(contextTokens: 2_000, purpose: "topic.polish")
             guard let provider = try? await caps.resolve(spec), await provider.isAvailable() else { return nil }
             let prompt = """
@@ -131,6 +133,7 @@ extension AppState {
         })
 
         var built = 0
+        var polishedCount = 0
         for (subject, facts) in factsBySubject {
             // Best-effort event attachment: events whose title/summary names the subject.
             let subjectEvents = allEvents.filter {
@@ -140,15 +143,18 @@ extension AppState {
             let spineTopic = TopicSpineBuilder.build(
                 subjectIdentifier: subject, facts: facts, events: subjectEvents, now: now)
             let polished = await polisher.polish(spine: spineTopic.narrative)
-            let topic: MemoryObject = (polished == spineTopic.narrative) ? spineTopic : MemoryObject(
+            let didPolish = (polished != spineTopic.narrative)
+            if didPolish { polishedCount += 1 }
+            let topic: MemoryObject = didPolish ? MemoryObject(
                 id: spineTopic.id, subjectKind: spineTopic.subjectKind,
                 subjectIdentifier: spineTopic.subjectIdentifier,
                 keyEventIDs: spineTopic.keyEventIDs, narrative: polished,
                 sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
-                createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt)
+                createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt) : spineTopic
             if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
         }
-        KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics from \(factsBySubject.count, privacy: .public) subjects")
+        lastTopicBuild = (built, polishedCount)
+        KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, from \(factsBySubject.count, privacy: .public) subjects")
         return built
     }
 
