@@ -1798,8 +1798,16 @@ public actor MasterBrain {
         // request. Volume signals — many docs, long answer, many entities,
         // general wording — deliberately do NOT escalate.
         let escalation = Self.escalationLevel(for: verified, intent: intent, question: question, queryClass: queryClass)
+        // Module .aiComposeEveryAnswer (owner request 2026-09-20) — when on and a
+        // model is available, EVERY grounded answer gets at least a groundedDraft
+        // AI compose pass, so plain lookups read as fluent prose instead of the
+        // terse deterministic body. Grounding is preserved (AnswerSynthesizer
+        // composes over the verified body + citations and is evidence-checked); a
+        // nil result (no model / failure) safely falls back to the deterministic
+        // body. Off ⇒ original adaptive-only behaviour (synthesis when escalated).
+        let composeEveryAnswer = KnowledgeModuleFlags.isEnabled(.aiComposeEveryAnswer)
         var synthesizedBody: String? = nil
-        if escalation != .none,
+        if (escalation != .none || composeEveryAnswer),
            FeatureFlags.llmAnswerSynthesisValue(),
            !verified.refused, !verified.citations.isEmpty {
             let depth: AnswerSynthesizer.Depth

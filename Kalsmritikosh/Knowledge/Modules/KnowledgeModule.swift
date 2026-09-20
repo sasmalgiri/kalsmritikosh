@@ -39,6 +39,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case passwordProtectedFiles // A4 — open encrypted files (empty-password unlock; classify the rest)
     case importLifecycle        // A2 — unified per-source lifecycle state + omission disclosure
     // Answer composition
+    case aiComposeEveryAnswer   // compose EVERY grounded answer with the model (not just escalated)
     case storyReviewerLoop      // Lane C — record approve/correct/reject verdicts on story items
     case actorComposer          // A1 — dedicated "who did X" actor answer door
     case progressiveStreaming   // A2 — stream instant→synthesis→verified to the UI
@@ -60,6 +61,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .boilerplateEmbedSkip: return "Boilerplate embed-skip"
         case .passwordProtectedFiles: return "Password-protected files"
         case .importLifecycle:      return "Import & coverage lifecycle"
+        case .aiComposeEveryAnswer: return "AI writes every answer"
         case .storyReviewerLoop:    return "Story review (approve / correct / reject)"
         case .actorComposer:        return "Actor answers (who did X)"
         case .progressiveStreaming: return "Progressive answer streaming"
@@ -81,6 +83,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
         case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
         case .importLifecycle:      return "Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source."
+        case .aiComposeEveryAnswer: return "When the on-device model is available, compose every grounded answer as fluent prose (not just complex ones). Grounding is preserved — the model rewrites over the verified evidence and citations; if no model is available it falls back to the exact deterministic answer."
         case .storyReviewerLoop:    return "Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt."
         case .actorComposer:        return "Route who-did-this questions to the passage naming the acting party and compose a grounded answer."
         case .progressiveStreaming: return "Render the answer as it forms — instant context, then synthesis, then the verified result."
@@ -96,7 +99,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .correctiveRetrieval, .hydeExpansion, .summariesAtIdle, .historyAtIdle,
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
-             .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop:
+             .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop,
+             .aiComposeEveryAnswer:
             return true
         }
     }
@@ -123,7 +127,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip,
              .passwordProtectedFiles, .importLifecycle:
             return "Retrieval"
-        case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop:
+        case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop,
+             .aiComposeEveryAnswer:
             return "Answer composition"
         }
     }
