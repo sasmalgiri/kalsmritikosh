@@ -96,6 +96,7 @@ public struct SettingsView: View {
     /// Everyday users never need the model/provider/diagnostics machinery —
     /// the app auto-selects the best model for the device. Those sections live
     /// under a collapsed "Advanced" disclosure, off by default.
+    @AppStorage(FeatureFlags.aiModeKey) private var aiModeRaw = AIMode.guided.rawValue
     @AppStorage("kalsmritikosh.settings.showAdvanced") private var showAdvanced = false
     /// Collapses the many individual diagnostic tools so only the single
     /// "release readiness" check is prominent. Off by default.
@@ -1213,6 +1214,19 @@ public struct SettingsView: View {
     private var modulesSection: some View {
         let groups = Dictionary(grouping: KnowledgeModule.allCases.filter(\.implemented), by: \.group)
         VStack(alignment: .leading, spacing: 16) {
+            // M1 — the AI regime selector (A/B): Guided (grounded) vs Unconstrained (free).
+            VStack(alignment: .leading, spacing: 6) {
+                Text("AI mode").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Picker("AI mode", selection: $aiModeRaw) {
+                    ForEach(AIMode.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                Text(AIMode(rawValue: aiModeRaw)?.detail ?? "")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider()
             Text("Turn individual capabilities on or off. Changes to synthesis modules take effect on the next idle pass or ingest; retrieval modules apply to your next question.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

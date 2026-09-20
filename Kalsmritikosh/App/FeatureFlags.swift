@@ -158,10 +158,53 @@ public enum MaintenanceMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// The AI regime the whole answer/topic stack runs under (owner A/B test,
+/// 2026-09-20). Two positions plus the implicit off-when-no-model floor:
+///   .guided       — AI under our guardrails: every fact cited or rejected,
+///                   fact-lock blocks invented numbers, topic-first, budgeted.
+///   .unconstrained— AI free: the grounding + fact-lock checks become ADVISORY
+///                   (kept + logged, not rejected) so we can see the fluency
+///                   ceiling. Such answers are banner-marked and never enter the
+///                   verified ledger.
+public enum AIMode: String, CaseIterable, Identifiable, Sendable {
+    case guided
+    case unconstrained
+
+    public var id: String { rawValue }
+    public var label: String {
+        switch self {
+        case .guided:        return "Guided (grounded)"
+        case .unconstrained: return "Unconstrained (free)"
+        }
+    }
+    public var detail: String {
+        switch self {
+        case .guided:        return "AI writes answers but every fact must cite a source or it is dropped — grounded and safe (recommended)."
+        case .unconstrained: return "AI writes freely; grounding + fact-lock checks only WARN. Fluent but may be wrong — answers are marked and kept out of the saved record."
+        }
+    }
+    /// Guided ENFORCES the grounding gate + fact-lock; unconstrained makes them advisory.
+    public var enforcesGrounding: Bool { self == .guided }
+}
+
 @MainActor
 @Observable
 public final class FeatureFlags {
     public static let shared = FeatureFlags()
+
+    /// M1 — the AI regime selector. Default `.guided` (grounded contract). The
+    /// setter/getter persist to UserDefaults; a nonisolated reader lets the
+    /// answer stack (off the main actor) consult it without a hop.
+    public var aiMode: AIMode {
+        get { Self.aiModeValue() }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.kAIMode) }
+    }
+    public nonisolated static func aiModeValue() -> AIMode {
+        guard let raw = UserDefaults.standard.string(forKey: kAIMode),
+              let m = AIMode(rawValue: raw) else { return .guided }
+        return m
+    }
+    public nonisolated static let aiModeKey = kAIMode
 
     /// Phase K — iMessage loader (reads ~/Library/Messages/chat.db
     /// when a user-selected folder contains a copy of it). Default
@@ -465,6 +508,7 @@ public final class FeatureFlags {
 
     // MARK: - Storage keys
 
+    private nonisolated static let kAIMode                 = "kalsmritikosh.feature.aiMode"
     private nonisolated static let kFullPower              = "kalsmritikosh.feature.fullPower"
     private nonisolated static let kPreferClassicSurfaces  = "kalsmritikosh.feature.preferClassicSurfaces"
     private nonisolated static let kClassicConformance     = "kalsmritikosh.feature.classicConformance.enabled"

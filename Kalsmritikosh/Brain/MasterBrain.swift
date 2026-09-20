@@ -1836,7 +1836,12 @@ public actor MasterBrain {
         let tagged = Self.tag(verified, as: .experts, trace: trace, bodyOverride: synthesizedBody)
         // §16 — persist the verified answer as a derived ledger object (with
         // provenance) so derived knowledge compounds across sessions.
-        persistDerived(tagged, purposes: trace.expertIDs)
+        // M1 safety: in UNCONSTRAINED mode the grounding/fact-lock checks were only
+        // advisory, so the composed body may carry unverified prose — do NOT compound
+        // it into the durable derived ledger (keep the experiment out of the record).
+        if FeatureFlags.aiModeValue().enforcesGrounding {
+            persistDerived(tagged, purposes: trace.expertIDs)
+        }
         // AEE-M2 — the answer-ledger persistence is NO LONGER fire-and-forget here: the
         // stream's finalizeProgressiveAnswer commits the durable revision chain (working
         // result → review-ready → verifiedFinal) BEFORE verifiedFinal is emitted. The old
