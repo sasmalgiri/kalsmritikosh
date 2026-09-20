@@ -232,6 +232,33 @@ public struct LiveDashboardView: View {
         .cardSurface(cornerRadius: 12, tint: tint)
     }
 
+    // MARK: - Apple Intelligence status
+
+    /// Live on-device-AI status, read straight from the FoundationModels
+    /// availability API. nil hint = ready; otherwise the exact reason (Apple
+    /// Intelligence off, device not eligible, model still preparing). Answers to
+    /// plain factual LOOKUPS may still say "no model consulted" — that is the
+    /// minimum-LLM design (the deterministic layers answered), not this being off.
+    @ViewBuilder
+    private var appleIntelligenceStatusChip: some View {
+        let hint = FoundationModelsProvider.unavailabilityHint()
+        let ready = (hint == nil)
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: ready ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ready ? .green : .orange)
+                .font(.caption2)
+            Text(ready
+                 ? "Apple Intelligence: on-device model ready"
+                 : (hint ?? "Apple Intelligence unavailable"))
+                .font(.caption2)
+                .foregroundStyle(ready ? .green : .orange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background((ready ? Color.green : Color.orange).opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
     // MARK: - LLM budget (ledger-first reduction)
 
     @ViewBuilder
@@ -248,6 +275,7 @@ public struct LiveDashboardView: View {
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(.green)
             }
+            appleIntelligenceStatusChip
             HStack(spacing: 10) {
                 budgetTile("Calls run", sample.llmCallsRun, "waveform", .blue)
                 budgetTile("Skipped", sample.llmCallsSkipped, "bolt.slash", .green)
