@@ -1803,6 +1803,17 @@ public actor IngestCoordinator {
                 }
                 .joined(separator: " ")
             guard label.count > 2 else { continue }
+            // Gate-then-fold BEFORE the write door. A domain head can be a
+            // hostname-shape hex fragment (e.g. "01ce304b" from x@01ce304b.tld),
+            // which is not a real organization. Classify and skip hard-junk here
+            // so it never reaches upsertCanonicalOrganization — the door asserts
+            // in DEBUG that every creating path gates upstream, and this is that
+            // gate (release previously relied on the door throwing + a caught log).
+            let candidateOrg = Entity(kind: .organization, value: label, sourceObjectID: sourceObjectID)
+            if let reason = EntityQualityGate().classify(candidateOrg),
+               EntitiesRepository.hardJunkClasses.contains(reason) {
+                continue
+            }
             do {
                 let orgID = try await repo.upsertCanonicalOrganization(
                     label: label,
