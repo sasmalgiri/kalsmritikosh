@@ -65,6 +65,33 @@ public actor MemoryRepository {
         ])
     }
 
+    /// Remove TOPIC-kind memory objects whose subject is NOT in `keep`. The topic
+    /// rebuild calls this so a fresh build REPLACES the topic set instead of
+    /// accumulating stale subjects from earlier builds (e.g. document-shaped
+    /// labels left by a build under a different AI regime, or superseded merges).
+    /// Only `subject_kind = 'topic'` rows are affected — distilled memories and
+    /// every other subject kind are never touched. Empty `keep` clears all topics.
+    /// Returns the number of stale topic rows deleted.
+    @discardableResult
+    public func deleteTopicsNotIn(subjectIdentifiers keep: Set<String>) async throws -> Int {
+        let topicKind = MemoryObject.SubjectKind.topic.rawValue
+        let before = try await database.query(
+            "SELECT COUNT(*) FROM memory_objects WHERE subject_kind = ?;", [.text(topicKind)]).first?.int(0) ?? 0
+        if keep.isEmpty {
+            try await database.exec("DELETE FROM memory_objects WHERE subject_kind = ?;", [.text(topicKind)])
+        } else {
+            let placeholders = Array(repeating: "?", count: keep.count).joined(separator: ",")
+            var binds: [SQLValue] = [.text(topicKind)]
+            binds.append(contentsOf: keep.map { SQLValue.text($0) })
+            try await database.exec(
+                "DELETE FROM memory_objects WHERE subject_kind = ? AND subject_identifier NOT IN (\(placeholders));",
+                binds)
+        }
+        let after = try await database.query(
+            "SELECT COUNT(*) FROM memory_objects WHERE subject_kind = ?;", [.text(topicKind)]).first?.int(0) ?? 0
+        return Int(before - after)
+    }
+
     public func recordChange(_ change: MemoryChange) async throws {
         let delta = try encoder.encode(change.delta)
         try await database.exec("""

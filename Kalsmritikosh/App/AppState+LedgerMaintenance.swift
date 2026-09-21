@@ -168,6 +168,7 @@ extension AppState {
 
         var built = 0
         var polishedCount = 0
+        var builtSubjects: Set<String> = []
         for (subject, facts) in factsBySubject {
             // Best-effort event attachment: events whose title/summary names the subject.
             let subjectEvents = allEvents.filter {
@@ -186,6 +187,15 @@ extension AppState {
                 sourceObjectIDs: spineTopic.sourceObjectIDs, confidence: spineTopic.confidence,
                 createdAt: spineTopic.createdAt, updatedAt: spineTopic.updatedAt) : spineTopic
             if (try? await memoryRepo.upsert(topic)) != nil { built += 1 }
+            builtSubjects.insert(spineTopic.subjectIdentifier)
+        }
+        // REPLACE, not append: drop topic rows from earlier builds whose subject
+        // isn't in this build (stale document-shaped labels, superseded merges).
+        // Scoped to subject_kind='topic', so distilled memories are untouched. This
+        // is what makes a rebuild under a new AI regime actually clear the old set
+        // instead of accumulating (the live 92→143 growth was this missing step).
+        if let removed = try? await memoryRepo.deleteTopicsNotIn(subjectIdentifiers: builtSubjects), removed > 0 {
+            KalsmritikoshLog.app.info("Topic build: pruned \(removed, privacy: .public) stale topic(s)")
         }
         lastTopicBuild = (built, polishedCount)
         KalsmritikoshLog.app.info("Topic build: \(built, privacy: .public) topics, \(polishedCount, privacy: .public) AI-polished, from \(factsBySubject.count, privacy: .public) subjects")
