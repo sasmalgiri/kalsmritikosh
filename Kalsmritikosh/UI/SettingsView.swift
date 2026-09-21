@@ -1854,6 +1854,23 @@ public struct SettingsView: View {
                 }
             }
 
+            // When is this actually needed? Only as a FALLBACK/dev path — the
+            // shipping engine is Apple Intelligence (on-device) + the bundled
+            // embedder, and this whole section is hidden in release. Say so plainly
+            // so a Debug user with Apple Intelligence available doesn't think they
+            // must install anything.
+            Label {
+                Text("You only need a local model if **Apple Intelligence isn't available** on this Mac (older hardware, macOS earlier than 26, or Apple Intelligence turned off), or for developer model comparisons. If the Live “Apple Intelligence” chip is green, AI already works — you can ignore this. It’s a fallback/developer option and is hidden in the shipping app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+            }
+            .padding(8)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
             switch setup.action {
             case .installOllama:
                 Text("Step 1 — install Ollama")
