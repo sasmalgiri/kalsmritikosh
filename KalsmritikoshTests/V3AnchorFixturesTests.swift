@@ -67,9 +67,17 @@ struct V3AnchorFixturesTests {
         #expect(try await rig.entities.count(of: .identifierAnchor) == 1, "twelve mentions must resolve to ONE anchor")
         let patentFacts = try await rig.facts.all(pageSize: 5_000)
             .filter { $0.field == "patentnumber" }
-        #expect(patentFacts.count >= 12, "expected a patent fact per source, got \(patentFacts.count)")
+        // Owner rule 1 (Topic-Ledger U1, 2026-09-17): the SAME fact (subject+field+
+        // value) stated by N documents dedups to ONE canonical row that UNIONS its
+        // source blocks — corroboration is a count ON the row, not N duplicate rows.
+        // So twelve circulation notes → one patent fact, twelve-sources-strong.
+        // (This fixture predates the dedup and asserted the old one-row-per-source
+        // count; the assertion below is the stronger post-dedup contract.)
+        #expect(patentFacts.count == 1, "twelve mentions dedup to ONE canonical patent fact, got \(patentFacts.count)")
+        #expect(patentFacts.first?.sourceCount == 12,
+                "the one fact must carry all twelve corroborations, got \(patentFacts.first?.sourceCount ?? -1)")
         let subjects = Set(patentFacts.compactMap(\.subjectID))
-        #expect(subjects.count == 1, "twelve sources' facts must all bind to the ONE anchor")
+        #expect(subjects.count == 1, "the fact binds to the ONE anchor")
     }
 
     @Test("Anchor coincidence live: same digits under two fields → TWO anchors, never cross-threaded")
