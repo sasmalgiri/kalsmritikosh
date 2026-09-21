@@ -45,9 +45,17 @@ public actor ClaimRepository {
     private func performSave(_ claim: Claim, injectFailure: SaveFailurePoint?) async throws {
         // A per-claim savepoint name (valid identifier: letters + hex, no dashes).
         let savepoint = "claim_save_\(claim.id.uuidString.replacingOccurrences(of: "-", with: ""))"
-        do {
-            try await database.exec("SAVEPOINT \(savepoint);", [])
-
+        // ATOMICITY FIX: the SAVEPOINT + writes + RELEASE run as ONE actor-isolated
+        // unit via withSavepoint, so concurrent claim saves can never interleave their
+        // savepoint statements. The old version issued SAVEPOINT / … / RELEASE as
+        // SEPARATE `await database.exec` calls; between two awaits the Database actor
+        // could run another task's exec, so claim A's `RELEASE SAVEPOINT claim_save_A`
+        // released B's still-open inner savepoint, and B's later RELEASE failed with
+        // "no such savepoint" → "SQL logic error" (seen flooding the console during a
+        // parallel ingest). withSavepoint also does ROLLBACK-then-RELEASE on any throw,
+        // preserving the injected-failure atomicity contract.
+        let injected = injectFailure
+        try await database.withSavepoint(savepoint) { db in
             let a = claim.assessment
             // True UPSERT: re-production UPDATES the row in place and PRESERVES created_at (the
             // original projection time), never rewriting it to the latest backfill time.
@@ -58,7 +66,7 @@ public actor ClaimRepository {
                 case nil:                     return (.null, .null)
                 }
             }()
-            try await database.exec("""
+            try db.exec("""
             INSERT INTO claims
                 (id, subject_id, subject_label, statement, confidence, contradiction_group_id, created_at,
                  evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
@@ -90,9 +98,9 @@ public actor ClaimRepository {
 
             // Evidence: rewrite with a stable ordinal identity so distinct references that
             // share object/block but differ in role or linked source ids all persist.
-            try await database.exec("DELETE FROM claim_evidence_ref WHERE claim_id = ?;", [.uuid(claim.id)])
+            try db.exec("DELETE FROM claim_evidence_ref WHERE claim_id = ?;", [.uuid(claim.id)])
             for (ordinal, ev) in claim.evidence.enumerated() {
-                try await database.exec("""
+                try db.exec("""
                 INSERT INTO claim_evidence_ref
                     (claim_id, ordinal, knowledge_object_id, evidence_block_id, assertion_id,
                      generic_fact_id, event_id, source_version_id, evidence_role)
@@ -105,21 +113,15 @@ public actor ClaimRepository {
                       ev.sourceVersionID.map { SQLValue.uuid($0) } ?? .null,
                       .text(ev.role.rawValue)])
             }
-            if injectFailure == .afterEvidence { throw InjectedSaveFailure() }
+            if injected == .afterEvidence { throw InjectedSaveFailure() }
 
-            try await database.exec("DELETE FROM claim_lineage WHERE claim_id = ?;", [.uuid(claim.id)])
+            try db.exec("DELETE FROM claim_lineage WHERE claim_id = ?;", [.uuid(claim.id)])
             for ref in claim.derivedFrom {
-                try await database.exec("""
+                try db.exec("""
                 INSERT OR IGNORE INTO claim_lineage (claim_id, source_kind, source_id) VALUES (?,?,?);
                 """, [.uuid(claim.id), .text(ref.kind.rawValue), .uuid(ref.id)])
             }
-            if injectFailure == .afterLineage { throw InjectedSaveFailure() }
-
-            try await database.exec("RELEASE SAVEPOINT \(savepoint);", [])
-        } catch {
-            try? await database.exec("ROLLBACK TO SAVEPOINT \(savepoint);", [])
-            try? await database.exec("RELEASE SAVEPOINT \(savepoint);", [])
-            throw error
+            if injected == .afterLineage { throw InjectedSaveFailure() }
         }
     }
 
