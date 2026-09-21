@@ -1221,26 +1221,34 @@ public struct SettingsView: View {
         // bump re-evaluates the body and every toggle re-reads its flag.
         let _ = moduleFlagsVersion
         VStack(alignment: .leading, spacing: 16) {
-            // M1 — the AI regime selector (A/B): Guided (grounded) vs Unconstrained (free).
+            // The SINGLE AI posture control (owner request 2026-09-21) — supersedes
+            // the old "Fully private" privacy toggle + guided/unconstrained picker.
+            // One choice, three options, with a full explanation of each. Changing it
+            // re-evaluates every module's availability below (the token bump).
+            let regime = FeatureFlags.aiRegimeValue()
             VStack(alignment: .leading, spacing: 6) {
-                Text("AI mode").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                Picker("AI mode", selection: $aiModeRaw) {
-                    ForEach(AIMode.allCases) { Text($0.label).tag($0.rawValue) }
+                Text("AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Picker("AI", selection: Binding(
+                    get: { FeatureFlags.aiRegimeValue() },
+                    set: { FeatureFlags.setAIRegime($0); moduleFlagsVersion &+= 1 }
+                )) {
+                    ForEach(AIRegime.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                Text(AIMode(rawValue: aiModeRaw)?.detail ?? "")
+                Text(regime.summary)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Divider()
-            Text("Turn individual capabilities on or off. Changes to synthesis modules take effect on the next idle pass or ingest; retrieval modules apply to your next question.")
+            Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(groups.keys.sorted(), id: \.self) { groupName in
                 VStack(alignment: .leading, spacing: 10) {
                     Text(groupName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                     ForEach((groups[groupName] ?? []).sorted { $0.title < $1.title }) { module in
+                        let reason = KnowledgeModuleFlags.disabledReason(module)
                         Toggle(isOn: Binding(
                             get: { KnowledgeModuleFlags.isEnabled(module) },
                             set: {
@@ -1253,8 +1261,15 @@ public struct SettingsView: View {
                                 Text(module.detail)
                                     .font(.caption).foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
+                                if let reason {
+                                    Label(reason, systemImage: "lock.fill")
+                                        .font(.caption2.weight(.medium))
+                                        .foregroundStyle(.orange)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
+                        .disabled(reason != nil)
                     }
                 }
             }
@@ -1640,12 +1655,10 @@ public struct SettingsView: View {
 
             Divider().padding(.vertical, 2)
 
-            // Fully private (no LLM) — PrivacyGate.
-            Toggle("Fully private (no AI)", isOn: Binding(
-                get: { PrivacyGate.shared.offlineNoLLM },
-                set: { PrivacyGate.shared.offlineNoLLM = $0 }
-            ))
-            Text("Uses NO generative model at all (on-device or cloud). Answers come purely from the rule-based ledger + experts. Maximum privacy and speed; plainer, bullet-style answers. On-device search/embeddings still work.")
+            // Consolidation (owner request 2026-09-21): the AI posture — Fully
+            // private / AI gated / AI free — now lives in ONE place, Modules → AI,
+            // so it can never drift out of sync with a second toggle here.
+            Label("Choose Fully private · AI gated · AI free under Modules → AI. That one control turns AI on or off everywhere.", systemImage: "switch.2")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

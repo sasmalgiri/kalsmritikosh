@@ -139,6 +139,34 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// Whether this module CALLS the on-device generative model. AI modules are
+    /// force-disabled under the Fully-private AI regime (the capability registry
+    /// refuses every generative spec there, so they can only no-op). Deterministic
+    /// modules — even ML ones like the CoreML cross-encoder — are NOT listed here.
+    public var requiresAI: Bool {
+        switch self {
+        case .aiSubjectResolution, .topicProsePolish, .aiComposeEveryAnswer,
+             .eventSlotFill, .hydeExpansion, .topicSeededComposers:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Prerequisite modules that must be EFFECTIVELY enabled for this one to do
+    /// anything. The topic-refinement steps all run inside the topic build, which
+    /// `.autoTopics` drives — turning off Auto-build topics leaves them nothing to
+    /// act on, so they depend on it. (Kept minimal + true: the codebase's modules
+    /// are otherwise independent by design.)
+    public var dependsOn: [KnowledgeModule] {
+        switch self {
+        case .topicMinimization, .aiSubjectResolution, .topicProsePolish, .topicSeededComposers:
+            return [.autoTopics]
+        default:
+            return []
+        }
+    }
+
     fileprivate var storageKey: String { "kalsmritikosh.module.\(rawValue)" }
 }
 
@@ -149,9 +177,29 @@ public enum KnowledgeModuleFlags {
     public nonisolated static func isEnabled(_ m: KnowledgeModule) -> Bool {
         // A module with no code path can never be "on" at runtime.
         guard m.implemented else { return false }
+        // Regime gate — an AI module is dead under Fully-private (no model to call).
+        if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI { return false }
+        // Dependency gate — each prerequisite must be EFFECTIVELY enabled (recursive).
+        for dep in m.dependsOn where !isEnabled(dep) { return false }
+        // Stored preference, else the code default.
         let d = UserDefaults.standard
         if d.object(forKey: m.storageKey) == nil { return m.defaultEnabled }
         return d.bool(forKey: m.storageKey)
+    }
+
+    /// Why a module can't run under the current regime / prerequisites, for the
+    /// Settings UI to grey it out and explain, or nil when it is freely togglable.
+    /// The stored preference is NEVER erased — flip back to a permissive regime or
+    /// re-enable the prerequisite and the module returns to the user's own choice.
+    public nonisolated static func disabledReason(_ m: KnowledgeModule) -> String? {
+        guard m.implemented else { return "Not available in this build" }
+        if m.requiresAI, !FeatureFlags.aiRegimeValue().allowsAI {
+            return "Needs AI — choose “AI · evidence-gated” or “AI · free” above"
+        }
+        for dep in m.dependsOn where !isEnabled(dep) {
+            return "Requires “\(dep.title)”"
+        }
+        return nil
     }
 
     public nonisolated static func setEnabled(_ m: KnowledgeModule, _ on: Bool) {

@@ -187,6 +187,45 @@ public enum AIMode: String, CaseIterable, Identifiable, Sendable {
     public var enforcesGrounding: Bool { self == .guided }
 }
 
+/// The single, user-facing AI posture — ONE choice that supersedes the separate
+/// "Fully private" privacy switch and the guided/unconstrained AI-mode picker.
+/// It is a projection over two stored flags (PrivacyGate.offlineNoLLM + AIMode),
+/// so there is exactly one place to choose how much the on-device model may do.
+public enum AIRegime: String, CaseIterable, Identifiable, Sendable {
+    /// No LLM at all — the capability registry refuses every generative request;
+    /// answers and topics are built purely by deterministic rules.
+    case fullyPrivate
+    /// On-device model, evidence-gated: every AI claim must cite a source or abstain.
+    case gated
+    /// On-device model, unconstrained: fluent, may go beyond strict citations.
+    case free
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .fullyPrivate: return "Fully private — no AI"
+        case .gated:        return "AI · evidence-gated (recommended)"
+        case .free:         return "AI · free"
+        }
+    }
+
+    /// Long-form explanation shown under the picker so the choice is unambiguous.
+    public var summary: String {
+        switch self {
+        case .fullyPrivate:
+            return "The on-device AI model is never consulted. Everything — answers, topics, summaries — is built from your documents by deterministic rules. Fastest and lowest energy, and the most private. AI-only features below are unavailable and shown greyed."
+        case .gated:
+            return "Apple's on-device model is used, but only over your own evidence: every AI-written fact must cite a source in your archive or it is dropped, and the answer abstains rather than guess. Nothing is invented and nothing leaves your Mac. Recommended."
+        case .free:
+            return "The on-device model may answer more fluently and reason beyond strict citations. Still 100% on-device, but unconstrained answers are clearly marked and are NOT written into your verified ledger — use it to compare phrasing/coverage against gated mode."
+        }
+    }
+
+    /// True when the model is allowed at all (gated or free).
+    public var allowsAI: Bool { self != .fullyPrivate }
+}
+
 @MainActor
 @Observable
 public final class FeatureFlags {
@@ -205,6 +244,30 @@ public final class FeatureFlags {
         return m
     }
     public nonisolated static let aiModeKey = kAIMode
+
+    /// The unified AI posture, read from the two underlying flags. Fully-private
+    /// wins (offlineNoLLM is the hard master switch); otherwise the AIMode picks
+    /// gated vs free.
+    public nonisolated static func aiRegimeValue() -> AIRegime {
+        if PrivacyGate.shared.offlineNoLLM { return .fullyPrivate }
+        return aiModeValue() == .unconstrained ? .free : .gated
+    }
+
+    /// Apply a regime by writing BOTH underlying flags atomically-enough for the
+    /// UI (they are independent UserDefaults keys). This is the ONLY writer the
+    /// Settings UI uses, so the two flags can never drift into a confusing combo.
+    public nonisolated static func setAIRegime(_ r: AIRegime) {
+        switch r {
+        case .fullyPrivate:
+            PrivacyGate.shared.offlineNoLLM = true
+        case .gated:
+            PrivacyGate.shared.offlineNoLLM = false
+            UserDefaults.standard.set(AIMode.guided.rawValue, forKey: kAIMode)
+        case .free:
+            PrivacyGate.shared.offlineNoLLM = false
+            UserDefaults.standard.set(AIMode.unconstrained.rawValue, forKey: kAIMode)
+        }
+    }
 
     /// Phase K — iMessage loader (reads ~/Library/Messages/chat.db
     /// when a user-selected folder contains a copy of it). Default
