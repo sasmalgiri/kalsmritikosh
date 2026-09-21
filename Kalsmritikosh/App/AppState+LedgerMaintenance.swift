@@ -55,6 +55,25 @@ extension AppState {
     /// when a model is available. No-op when the module is off.
     public func autoBuildTopicsAfterIngest() async {
         guard KnowledgeModuleFlags.isEnabled(.autoTopics) else { return }
+        // When AI is allowed, WARM the on-device model before the batch. This runs
+        // the instant ingest completes, when the Neural Engine may still be cold or
+        // contended by the just-finished pass; the first real polish/subject-
+        // resolution call could otherwise throw once and silently fall back to a raw
+        // spine (every topic then reads deterministic). A tiny warm generate + short
+        // retry primes the model so the batch reliably gets AI. Best-effort: if it
+        // never warms, we proceed and buildTopics falls back safely as before.
+        if FeatureFlags.aiRegimeValue().allowsAI, let caps = capabilities {
+            for _ in 0..<3 {
+                let spec = CapabilitySpec.reasoning(contextTokens: 256, purpose: "topic.warmup")
+                if let provider = try? await caps.resolve(spec), await provider.isAvailable(),
+                   (try? await provider.generate(
+                        prompt: "Reply with the word: ready",
+                        options: GenerationOptions(maxTokens: 4, temperature: 0))) != nil {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+            }
+        }
         _ = await cleanUpLedger()
         if let n = await buildTopics() {
             KalsmritikoshLog.app.info("Post-ingest topic build: \(n, privacy: .public) topics on the full ledger")
