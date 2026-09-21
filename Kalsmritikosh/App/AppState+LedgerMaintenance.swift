@@ -46,6 +46,21 @@ extension AppState {
         }
     }
 
+    /// Owner Q (2026-09-21) — topics are a WHOLE-ARCHIVE derived layer, so they
+    /// must be (re)built ONCE the corpus is fully in, not per-file or mid-ingest
+    /// (a mid-ingest pass stamps a partial, document-shaped set). The bulk
+    /// (re)ingest paths call this at CLEAN completion: collapse duplicate facts,
+    /// then rebuild the minimized + AI-resolved topic set. Gated by `.autoTopics`
+    /// (same switch the idle pass honours); deterministic core, AI polish only
+    /// when a model is available. No-op when the module is off.
+    public func autoBuildTopicsAfterIngest() async {
+        guard KnowledgeModuleFlags.isEnabled(.autoTopics) else { return }
+        _ = await cleanUpLedger()
+        if let n = await buildTopics() {
+            KalsmritikoshLog.app.info("Post-ingest topic build: \(n, privacy: .public) topics on the full ledger")
+        }
+    }
+
     /// Topic-Ledger U5 — build deterministic TOPICS from the (deduped) ledger:
     /// group facts by subject, attach that subject's dated events, and roll each
     /// up into one MemoryObject via TopicSpineBuilder (no model). Returns the

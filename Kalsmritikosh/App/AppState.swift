@@ -207,6 +207,16 @@ public final class AppState {
         ingestRunState == .running || ingestActiveCount > 0 || idleMaintenanceScan != nil
     }
 
+    /// True while a bulk (re)ingest is running (or files are still in flight, or a
+    /// pre-count has set the planned total). The idle maintenance pass reads this
+    /// to DEFER topic-building until the whole corpus is in: topics are a whole-
+    /// archive derived layer, so building them mid-ingest stamps a partial,
+    /// document-shaped set (owner Q 2026-09-21). The ingest path itself rebuilds
+    /// topics at clean completion, so nothing is lost by waiting.
+    public var isBulkIngestActive: Bool {
+        ingestRunState == .running || ingestActiveCount > 0 || ingestPlannedFileTotal > 0
+    }
+
     /// Owner decision 2026-08-15 (generalized): whenever the user RETURNS
     /// from ≥90s of inactivity while background work is running, raise the
     /// continue-or-stop card. This watcher covers the minutes-long work
@@ -1823,7 +1833,12 @@ public final class AppState {
                         // the owner pressing a button. The optional prose polish
                         // inside buildTopics runs only if a reasoning model is up.
                         // Gated by the .autoTopics module switch.
-                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.autoTopics) {
+                        // Skip while a bulk (re)ingest is still running — topics are
+                        // a whole-archive layer; building mid-ingest stamps a partial,
+                        // document-shaped set. The ingest path rebuilds topics itself
+                        // at clean completion (autoBuildTopicsAfterIngest).
+                        let bulkIngestActive = await self.isBulkIngestActive
+                        if !Task.isCancelled, KnowledgeModuleFlags.isEnabled(.autoTopics), !bulkIngestActive {
                             _ = await self.cleanUpLedger()
                             if !Task.isCancelled { _ = await self.buildTopics() }
                         }
@@ -4272,6 +4287,10 @@ public final class AppState {
         }
         setIngestPlannedTotal(0)
         KalsmritikoshLog.app.info("Auto-reingest pass complete")
+        // Whole corpus is in — build the topic layer now on the FULL ledger
+        // (dedup + AI subject resolution + minimization + prose), so the archive
+        // is answer-ready without a manual button. No-op if the run was stopped.
+        if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
     }
 
     @discardableResult
@@ -4348,6 +4367,13 @@ public final class AppState {
         if !summary.failures.isEmpty {
             KalsmritikoshLog.ingestion.notice("Bulk ingest: \(summary.headline, privacy: .public)")
         }
+        // Whole corpus is in — build the topic layer now on the FULL ledger
+        // (dedup + AI subject resolution + minimization + prose), so the archive
+        // is answer-ready without a manual button. Skipped if the user stopped the
+        // run (a later resume will rebuild). ingestRunState is still `.running`
+        // here (the function's defer resets it), so the idle pass stays deferred
+        // through the build and won't race it.
+        if !(await ingestControl.isStopped) { await autoBuildTopicsAfterIngest() }
         return succeeded
     }
 
