@@ -1137,6 +1137,8 @@ public struct SettingsView: View {
     // SwiftUI does not observe. Bumping this token in each setter forces the
     // modules section to recompute so the switch reflects its new state.
     @State private var moduleFlagsVersion = 0
+    // True while a regime change is rebuilding the topic layer in the background.
+    @State private var regimeRebuildRunning = false
 
     /// Ledger-first LLM budget. Kalsmritikosh is a ledger-based
     /// historical AI, not a RAG chatbot — it spends its LLM budget on
@@ -1230,7 +1232,22 @@ public struct SettingsView: View {
                 Text("AI").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
                 Picker("AI", selection: Binding(
                     get: { FeatureFlags.aiRegimeValue() },
-                    set: { FeatureFlags.setAIRegime($0); moduleFlagsVersion &+= 1 }
+                    set: { newRegime in
+                        FeatureFlags.setAIRegime(newRegime)
+                        moduleFlagsVersion &+= 1
+                        // The existing topic layer was built under the PREVIOUS
+                        // regime (e.g. raw spines under Fully-private). Rebuild it
+                        // now so switching to AI takes effect immediately instead
+                        // of silently waiting for the next ingest. Skipped mid-
+                        // ingest (that rebuilds at completion); a no-op with no facts.
+                        if !appState.isBulkIngestActive {
+                            regimeRebuildRunning = true
+                            Task {
+                                await appState.autoBuildTopicsAfterIngest()
+                                await MainActor.run { regimeRebuildRunning = false }
+                            }
+                        }
+                    }
                 )) {
                     ForEach(AIRegime.allCases) { Text($0.label).tag($0) }
                 }
@@ -1239,6 +1256,13 @@ public struct SettingsView: View {
                 Text(regime.summary)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if regimeRebuildRunning {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text("Rebuilding topics for the new AI setting…")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
             }
             Divider()
             Text("Turn individual capabilities on or off. Modules that need AI or another module are greyed with the reason when unavailable. Synthesis changes take effect on the next idle pass or ingest; retrieval changes apply to your next question.")
