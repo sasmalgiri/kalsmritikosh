@@ -37,6 +37,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// per-command TIMESTAMPS that look like nothing to a text reader, and a
     /// dated command is what places activity on the timeline.
     case shellHistory
+    /// HOST-6a — a Windows shortcut (`.lnk`). Its own type because a shortcut is
+    /// evidence about a file that may no longer exist: it records the target's
+    /// full path, size, volume serial number and DRIVE TYPE, so a `.lnk` in
+    /// `Recent` is often the only surviving record that a file was opened from a
+    /// particular USB device.
+    case shellLink
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -243,6 +249,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "emlx": return .appleMail
         case "nsf": return .nsf
         case "evtx": return .eventLog
+        case "lnk": return .shellLink
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -297,6 +304,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x72, 0x65, 0x67, 0x66]) { return .registryHive }         // "regf"
         // HOST-3 — "ElfFile": a Windows event log, however it was renamed.
         if has([0x45, 0x6C, 0x66, 0x46, 0x69, 0x6C, 0x65]) { return .eventLog }   // "ElfFile"
+        // HOST-6a — a Windows shortcut: header size 0x4C followed by the shell
+        // link class id. Sixteen bytes of it are already unambiguous, and a
+        // renamed `.lnk` is routine in an extraction.
+        if has([0x4C, 0x00, 0x00, 0x00] + Array(ShellLinkReader.linkCLSID.prefix(12))) {
+            return .shellLink
+        }
         return nil
     }
 
@@ -321,7 +334,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
-             .loginRecord, .shellHistory: return .hostArtifact
+             .loginRecord, .shellHistory, .shellLink: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

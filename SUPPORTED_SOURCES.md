@@ -50,6 +50,7 @@ Coverage states (from the locked product contract):
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
 | loginRecord (utmp/wtmp/btmp) | hostArtifact | FULL | linux-login-accounting-utmp | 1 |
 | shellHistory (bash/zsh/fish/REPL) | hostArtifact | FULL | shell-history | 1 |
+| shellLink (lnk) | hostArtifact | FULL | windows-shell-link | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -69,7 +70,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 31 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 32 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -202,6 +203,28 @@ derives this table from it so the matrix cannot drift from what actually runs.
   (zsh writes its own escaped encoding for non-ASCII) are read byte-for-byte as Latin-1 with
   the encoding disclosed, rather than guessing at an unescaping that could corrupt a command.
 
+- **Windows shortcuts (`.lnk`, HOST-6a)** are evidence about files that may no longer exist. A
+  shortcut in `Recent` records the target's full original path and size, the volume's serial
+  number and label, and the DRIVE TYPE — and when that type is REMOVABLE, the shortcut is
+  often the only surviving record that a particular file was on a particular USB device and
+  was opened from this machine. Also read: the relative path, working directory, description,
+  icon location, and the command-line ARGUMENTS (how a program was actually invoked), plus the
+  TrackerDataBlock's NetBIOS name of the machine that CREATED the link — which is not
+  necessarily the machine it was found on, and is labelled as such. **The misreading this
+  parser refuses to enable:** a shortcut's three FILETIMEs belong to the TARGET FILE as it
+  stood when the shortcut was last written. They are NOT when the shortcut was used. Every one
+  of them carries that disclaimer in its own evidence block — not once at the top of the
+  document — because a retrieved answer quotes a block, so a caveat elsewhere would not travel
+  with it. **The identifier this parser refuses to manufacture:** the tracker's droid UUIDs can
+  contain the creating machine's MAC address, but only when the UUID is version 1 with a
+  unicast node; a version-4 UUID's node bytes are random, and reporting those as a hardware
+  address would invent an identifier an investigation could attribute to a person. Both
+  conditions are checked and no address is reported otherwise. The shell-item id list is
+  declared, skipped by its exact size and DISCLOSED rather than decoded: it is a
+  loosely-documented per-shell-folder tagged format, and the path information worth having is
+  carried in the fixed-offset location block and relative path. A shortcut renamed away from
+  `.lnk` is still found by its 20-byte header-plus-class-id signature.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -256,7 +279,10 @@ searchable by name — they are simply not interpreted yet:
   (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
   gap is the binary file rather than the log's content.
 - **`$MFT`** (NTFS master file table): filenames, MACB timestamps, deleted entries.
-- **Program execution** — Prefetch, LNK/jumplists, Amcache, Shimcache.
+- **Program execution** — Prefetch (Win10+ is LZXPRESS-Huffman compressed), jumplists (OLE2
+  containers of shell-link streams), Amcache (a registry hive, so HOST-2's reader already
+  reads its bytes — what is missing is the schema layer), Shimcache. Plain `.lnk` shortcuts
+  ARE read; see the entry above.
 - **`lastlog`** — deliberately not claimed with the utmp family: it has a different record
   layout and identifies an account only by the record's POSITION (the numeric uid), so without
   `/etc/passwd` a login would be attributed to a number.

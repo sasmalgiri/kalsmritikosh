@@ -174,6 +174,14 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .shellLink:
+            // HOST-6a — a real shortcut. The sentinel rides in the target path,
+            // which is the fact a shortcut exists to record.
+            var writer = ShellLinkFixtureWriter()
+            writer.localBasePath = #"E:\cases\"# + "\(s)."
+            writer.targetWritten = Date(timeIntervalSince1970: 1_773_480_413)
+            writer.volume = .init(driveType: 2, serialNumber: 0xA4B2_11C7, label: "FIELDKIT")
+            return writer.build()
         case .shellHistory:
             // HOST-4b — a zsh extended history, the flavour that carries both a
             // timestamp and an elapsed time.
