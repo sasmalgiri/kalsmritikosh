@@ -21,6 +21,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
     /// structure is what makes a host artifact citable.
     case plist
+    /// HOST-2 — Windows registry hive (REGF): NTUSER.DAT, UsrClass.dat, SOFTWARE,
+    /// SYSTEM, SAM, SECURITY. Usually EXTENSIONLESS, so recognized by filename
+    /// pattern and by the "regf" signature.
+    case registryHive
 
     // PAR-009 — a generic read-only SQLite database (rows cite db/table/key).
     case sqlite
@@ -77,8 +81,22 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
             || name.contains("signal-") || name.contains("slack-export") {
             return .chatExport
         }
+        // HOST-2 — Windows registry hives are extensionless with fixed names, so
+        // the filename IS the signal. `.dat` would otherwise fall through to
+        // `.unknown` and `SOFTWARE`/`SYSTEM`/`SAM` have no extension at all.
+        // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
+        // claimed here: they are not whole hives and would decode as corrupt.
+        if Self.registryHiveNames.contains(name) { return .registryHive }
         return nil
     }
+
+    /// The canonical Windows hive filenames, lowercased. NTUSER.DAT is per-user
+    /// (desktop/Explorer activity); UsrClass.dat holds shell bags; the rest are
+    /// machine-wide under %SystemRoot%\System32\config.
+    nonisolated static let registryHiveNames: Set<String> = [
+        "ntuser.dat", "usrclass.dat", "software", "system", "sam", "security",
+        "default", "components", "bcd-template", "drivers", "elam"
+    ]
 
     public nonisolated static func detect(from url: URL) -> SourceType {
         // Phase K path/filename patterns take priority over the extension.
@@ -161,6 +179,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // HOST-1 — "bplist00": a binary property list. Host artifacts are routinely
         // extensionless or oddly named, so magic bytes are the reliable signal.
         if has([0x62, 0x70, 0x6C, 0x69, 0x73, 0x74]) { return .plist }    // "bplist"
+        // HOST-2 — "regf": a Windows registry hive, whatever the examiner named it.
+        if has([0x72, 0x65, 0x67, 0x66]) { return .registryHive }         // "regf"
         return nil
     }
 
@@ -184,6 +204,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist: return .document
+        case .registryHive: return .hostArtifact
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
@@ -200,6 +221,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     public enum Category: String, Codable, Sendable {
         case document, spreadsheet, presentation, email, image, audio, video,
              archive, chat, browserHistory, unknown
+        /// HOST-* — machine/OS evidence rather than a document a person wrote:
+        /// registry hives, event logs, filesystem metadata. Processed like a
+        /// document (immediate, text + structure), but semantically it is a record
+        /// OF the machine, which matters when attributing a fact to a person.
+        case hostArtifact
     }
 }
 

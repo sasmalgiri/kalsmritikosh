@@ -443,6 +443,7 @@ public struct SourcesView: View {
         case .archive: return "archivebox"
         case .chat: return "message"
         case .browserHistory: return "safari"
+        case .hostArtifact: return "cpu"          // HOST-* — machine evidence
         case .unknown: return "doc"
         }
     }

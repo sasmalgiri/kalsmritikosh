@@ -24,7 +24,7 @@ public enum UniversalParserRegistryBuilder {
         // Real content loaders. Audio/video join only when transcription is enabled (below).
         var loaders: [any Ingestor] = [
             TextLoader(), PDFLoader(ocr: ocr), DocxLoader(), SpreadsheetLoader(), PresentationLoader(),
-            EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader()
+            EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader(), RegistryHiveLoader()
         ]
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }

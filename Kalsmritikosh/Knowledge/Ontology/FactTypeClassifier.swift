@@ -154,7 +154,11 @@ public struct FactTypeClassifier: Sendable {
             // to meeting at medium confidence; future v2 may add
             // Interview / Conversation types.
             return Result(type: .meeting, confidence: 0.50, reason: "sourceType.category=transcript (default → Meeting)")
-        case .spreadsheet, .image, .archive, .unknown:
+        // HOST-* artifacts are deliberately unclassified here. A registry hive or
+        // event log is not an invoice, contract or meeting; forcing it into one of
+        // those would put a fabricated document type on machine evidence. Their
+        // structure is already citable via the parser's typed blocks.
+        case .spreadsheet, .image, .archive, .hostArtifact, .unknown:
             return nil
         case .chat:
             // Chat exports / iMessage threads behave like email

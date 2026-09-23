@@ -362,6 +362,9 @@ public nonisolated struct RuleNarrativeSlotExtractor: NarrativeSlotExtractor {
                 case .archive:        return "archive"
                 case .chat:           return "chat"
                 case .browserHistory: return "browser"
+                // HOST-* — the channel IS the machine: a registry key or event log
+                // records what a system did, not what a person sent.
+                case .hostArtifact:   return "system record"
                 case .unknown:        return nil
                 }
             }()

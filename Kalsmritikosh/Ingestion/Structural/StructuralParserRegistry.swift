@@ -38,7 +38,8 @@ public struct StructuralParserRegistry: Sendable {
         NSFStructuralParser(),       // Lotus/HCL Notes .nsf — typed blocks per mail note
         StructuredTextStructuralParser(),  // PAR-008 — HTML / JSON / XML / log
         SQLiteStructuralParser(),          // PAR-009 — read-only SQLite tables
-        PlistStructuralParser()            // HOST-1 — binary / XML / OpenStep plists
+        PlistStructuralParser(),           // HOST-1 — binary / XML / OpenStep plists
+        RegistryHiveStructuralParser()     // HOST-2 — Windows registry hives (REGF)
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

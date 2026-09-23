@@ -174,6 +174,11 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .registryHive:
+            // HOST-2 — a real REGF hive carrying the sentinel as a REG_SZ value.
+            return RegistryHiveFixtureWriter().build(
+                root: .init("ROOT", lastWritten: Date(timeIntervalSince1970: 1_773_480_413),
+                            values: [.sz("Note", "\(s).")]))
 
         case .pdf:
             let out = NSMutableData()
