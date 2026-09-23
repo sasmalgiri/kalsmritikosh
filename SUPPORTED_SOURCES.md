@@ -95,8 +95,8 @@ derives this table from it so the matrix cannot drift from what actually runs.
   not a parser. Mappers claim a file by its CONTENT, not its name or extension, because
   evidence is routinely renamed. Currently mapped: **YouTube** (Takeout comments, live chat,
   watch/search history), **Discord** (package messages.json and messages.csv), **Reddit**
-  (comments, posts, private messages), **X** (tweets.js, direct-messages.js) and **Meta**
-  (Messenger and Instagram threads). Meta threads are the only artifact here that names
+  (comments, posts, private messages), **X** (tweets.js, direct-messages.js), **Meta**
+  (Messenger and Instagram threads) and **Telegram** (Desktop result.json, full or single-chat). Meta threads are the only artifact here that names
   every participant per message; the other platforms' exports contain only the requesting
   account's own content, so those are attributed to a stated account-holder marker rather
   than to a name the export never contained. An export from an unmapped platform is reported by name with the

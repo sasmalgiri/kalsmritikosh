@@ -127,7 +127,8 @@ public struct DiscussionExportRegistry: Sendable {
         DiscordPackageMapper(),
         RedditExportMapper(),
         XArchiveMapper(),
-        MetaDownloadMapper()
+        MetaDownloadMapper(),
+        TelegramExportMapper()
     ])
 
     /// Every mapper, for the cross-platform disjointness test and for naming the

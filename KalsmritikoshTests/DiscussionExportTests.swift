@@ -254,6 +254,15 @@ struct DiscussionExportTests {
         }
     }
 
+    @Test("The registered platform roster is explicit — the one place it is pinned")
+    func registeredPlatforms() {
+        // Named rather than counted: a count tells you a mapper was added, a list
+        // tells you WHICH platforms the product can honestly claim. This is the
+        // only test that pins the roster, so adding a mapper updates one place.
+        #expect(DiscussionExportRegistry.standard.platforms
+                == ["YouTube", "Discord", "Reddit", "X", "Meta", "Telegram"])
+    }
+
     @Test("The universal registry gives .discussionExport a real immediate plugin")
     func registryOwnsDiscussionExports() throws {
         let registry = try UniversalParserRegistryBuilder.standard(ocr: VisionOCR())

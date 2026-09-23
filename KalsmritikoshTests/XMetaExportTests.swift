@@ -210,8 +210,8 @@ struct XMetaExportTests {
 
     // MARK: - Cross-platform
 
-    @Test("All five mappers stay disjoint — no artifact is double-claimed")
-    func fiveMappersStayDisjoint() {
+    @Test("X and Meta artifacts are each claimed by exactly one mapper")
+    func xAndMetaClaimsAreDisjoint() {
         let samples: [(String, String)] = [
             ("youtube comments", "Comment ID,Channel ID,Comment Create Timestamp,Price,Parent Comment ID,Video ID,Comment Text\nUg1,UCa,2026-03-14T09:00:00Z,,,v1,hi"),
             ("youtube activity", #"[{"header":"YouTube","title":"Watched x","time":"2026-03-14T09:00:00Z"}]"#),
@@ -221,8 +221,10 @@ struct XMetaExportTests {
             ("x dms", #"window.YTD.direct_messages.part0 = [{"dmConversation":{"conversationId":"a-b","messages":[]}}]"#),
             ("meta thread", #"{"participants":[{"name":"A"}],"title":"t","messages":[{"sender_name":"A","timestamp_ms":1773480413000,"content":"hi"}]}"#)
         ]
+        // Deliberately no roster-size assertion here: that belongs in exactly one
+        // place (DiscussionExportTests.registeredPlatforms), or every new mapper
+        // breaks unrelated suites. The invariant under test is disjointness.
         let registry = DiscussionExportRegistry.standard
-        #expect(registry.allMappers.count == 5)
         for (label, text) in samples {
             let data = Data(text.utf8)
             let claimants = registry.allMappers.filter {
