@@ -94,8 +94,12 @@ derives this table from it so the matrix cannot drift from what actually runs.
   `DiscussionRecord` (author, time, thread, reply target), so adding a platform adds a mapper,
   not a parser. Mappers claim a file by its CONTENT, not its name or extension, because
   evidence is routinely renamed. Currently mapped: **YouTube** (Takeout comments, live chat,
-  watch/search history), **Discord** (package messages.json and messages.csv) and **Reddit**
-  (comments, posts, private messages). An export from an unmapped platform is reported by name with the
+  watch/search history), **Discord** (package messages.json and messages.csv), **Reddit**
+  (comments, posts, private messages), **X** (tweets.js, direct-messages.js) and **Meta**
+  (Messenger and Instagram threads). Meta threads are the only artifact here that names
+  every participant per message; the other platforms' exports contain only the requesting
+  account's own content, so those are attributed to a stated account-holder marker rather
+  than to a name the export never contained. An export from an unmapped platform is reported by name with the
   supported list, never guessed at. Watching and searching are kept a distinct `activity` kind
   so "what did they say" cannot return a search box.
 - **Host artifacts (HOST-\*)** are machine/OS evidence rather than documents a person wrote, so

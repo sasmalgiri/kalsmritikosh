@@ -125,7 +125,9 @@ public struct DiscussionExportRegistry: Sendable {
     public static let standard = DiscussionExportRegistry(mappers: [
         YouTubeTakeoutMapper(),
         DiscordPackageMapper(),
-        RedditExportMapper()
+        RedditExportMapper(),
+        XArchiveMapper(),
+        MetaDownloadMapper()
     ])
 
     /// Every mapper, for the cross-platform disjointness test and for naming the
