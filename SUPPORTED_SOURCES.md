@@ -152,8 +152,16 @@ derives this table from it so the matrix cannot drift from what actually runs.
   recorded as failed, because that is what a truncated extraction looks like. The safety
   guards are the archive lane's own — path-escape containment, the per-member byte ceiling and
   the shared root budget — so a backup is not a route around limits that apply to archives.
-  **Still open:** there is no device entity yet, so two extractions from the same device do
-  not merge.
+  Device identity (HOST-8d) is an `identifierAnchor`, the case
+  built for "a real-world subject identified by a canonical identifier" — so a serial, IMEI,
+  MEID, UDID or MAC address merges two extractions of one device through the existing gated
+  anchor door, with no new entity kind and no schema change. Identity is (field, value), so a
+  serial and an IMEI sharing digits stay two devices. A computer name or model is recorded but
+  NEVER merges, because two machines are routinely called the same thing; manufacturer
+  placeholders ("To Be Filled By O.E.M.", "Unknown", all-zero serials) are refused, since
+  anchoring on one would fuse every device that shares it. **Still open:** the identity layer
+  is not yet called during a run, so device anchors are not created automatically — the
+  extractors and the door exist, the wiring does not.
 
 ## Advertising rule
 

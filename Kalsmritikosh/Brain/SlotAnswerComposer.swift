@@ -336,6 +336,16 @@ public enum SlotAnswerComposer {
         case "casenumber":        return "Case No."
         case "accountnumber":     return "Account No."
         case "idnumber":          return "ID No."
+        // HOST-8d — device identifiers. Registered here so an anchor's display
+        // name is built from a CONSTANT rather than fusing a source spelling,
+        // which is what makes anchor names immune to OCR and spacing noise.
+        case "deviceserialnumber": return DeviceIdentity.Field.deviceSerialNumber.label
+        case "imei":               return DeviceIdentity.Field.imei.label
+        case "meid":               return DeviceIdentity.Field.meid.label
+        case "deviceudid":         return DeviceIdentity.Field.deviceUDID.label
+        case "devicemacaddress":   return DeviceIdentity.Field.deviceMACAddress.label
+        case "computername":       return DeviceIdentity.Field.computerName.label
+        case "deviceproducttype":  return DeviceIdentity.Field.deviceProductType.label
         default:                  return nil
         }
     }
