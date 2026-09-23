@@ -48,6 +48,10 @@ public actor IngestCoordinator {
     /// USF-M2 — safe container expansion + coverage. Nil in lightweight rigs (members still ingest,
     /// but no container manifest is recorded); wired in production so coverage is durable.
     private let containerCoordinator: ContainerProcessingCoordinator?
+    /// HOST-8c — walks an iOS backup's virtual tree. Separate from the container
+    /// coordinator on purpose: a backup member needs no extraction, so nothing in
+    /// the ZIP path is touched.
+    private let backupCoordinator: BackupExpansionCoordinator?
     /// USF-M3 — progressive on-demand upgrade. Nil unless `configureUpgrades` is called with a database
     /// + upgrade-job ledger (production + progressive tests). Existing rigs leave these nil (unchanged).
     private var sourceUpgrade: SourceUpgradeCoordinator? = nil
@@ -227,6 +231,7 @@ public actor IngestCoordinator {
         self.custodyModeOverride = custodyModeOverride
         self.intakeCoordinator = intakeCoordinator
         self.containerCoordinator = ContainerProcessingCoordinator(repository: containerInspection)
+        self.backupCoordinator = BackupExpansionCoordinator(repository: containerInspection)
         self.readiness = readiness
         self.typedFields = typedFields
         self.evidenceStore = evidenceStore
@@ -1025,6 +1030,33 @@ public actor IngestCoordinator {
                 let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
                 return ContainerProcessingCoordinator.MemberIngestOutcome(
                     childSourceVersionID: r?.sourceVersionID, contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
+            }
+        }
+
+        // HOST-8c — an iOS backup's Manifest.db expands its VIRTUAL TREE: every file
+        // inside is ingested under the path it had on the device
+        // (`HomeDomain/Library/SMS/sms.db`) instead of its SHA-1 name, through this
+        // same pipeline, with the archiveMember relation and a per-member
+        // disposition recorded. Additive and type-scoped: no other source type can
+        // reach this branch, and the container branch above is untouched. The
+        // bundle root is the manifest's own directory — the folder holding the
+        // two-hex subdirectories.
+        if !isMember, type == .extractionManifest, let backupCoordinator {
+            let ctx = ContainerTraversalContext.root(sourceVersionID: handle.sourceVersionID,
+                                                     containerHash: handle.contentHash)
+            await backupCoordinator.expand(
+                manifestVersionID: handle.sourceVersionID, manifestURL: processURL,
+                bundleRoot: url.deletingLastPathComponent(), context: ctx, now: Date()
+            ) { [weak self] byteURL, origin, parentRef in
+                guard let self else {
+                    return ContainerProcessingCoordinator.MemberIngestOutcome(
+                        childSourceVersionID: nil, contentHash: nil, detectedType: nil)
+                }
+                let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef,
+                                                  memberByteURL: byteURL)
+                return ContainerProcessingCoordinator.MemberIngestOutcome(
+                    childSourceVersionID: r?.sourceVersionID,
+                    contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
             }
         }
 

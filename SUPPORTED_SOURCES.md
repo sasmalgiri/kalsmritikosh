@@ -145,10 +145,15 @@ derives this table from it so the matrix cannot drift from what actually runs.
   can mean a truncated extraction; an unknown size is stated as unknown rather than shown as
   zero. `Manifest.mbdb` (iOS 9 and earlier) is deliberately NOT claimed — it is a different,
   non-SQLite format, and treating it as one would report a readable backup as corrupt. Reading
-  the manifest never opens any content file. **Still open:** the ingest pipeline does not yet
-  WALK the virtual tree, so files inside a backup are ingested by their hash names unless the
-  examiner extracts them; and there is no device entity yet, so two extractions from the same
-  device do not merge.
+  the manifest never opens any content file. The pipeline now WALKS that tree (HOST-8c): each file inside
+  a backup is ingested under its device path, through the same pipeline, with an
+  `archiveMember` relation and a per-member disposition recorded, so every member stays
+  visible as admitted / blocked / failed. A file listed in the manifest but absent on disk is
+  recorded as failed, because that is what a truncated extraction looks like. The safety
+  guards are the archive lane's own — path-escape containment, the per-member byte ceiling and
+  the shared root budget — so a backup is not a route around limits that apply to archives.
+  **Still open:** there is no device entity yet, so two extractions from the same device do
+  not merge.
 
 ## Advertising rule
 
