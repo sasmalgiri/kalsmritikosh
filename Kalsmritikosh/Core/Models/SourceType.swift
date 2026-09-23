@@ -25,6 +25,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// binary: every record carries an exact written time and record id, which is
     /// what puts a machine's own account of itself on the timeline.
     case eventLog
+    /// HOST-4 — Linux login accounting: `utmp` (who was on at acquisition time),
+    /// `wtmp` (login/logout/boot history) and `btmp` (FAILED attempts). One type
+    /// for all three because they share a single 384-byte record layout; which
+    /// file it is — and therefore whether a record is a sign-in or a rejected
+    /// attempt — is carried by the filename and resolved in the parser.
+    case loginRecord
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -112,6 +118,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
         // claimed here: they are not whole hives and would decode as corrupt.
         if Self.registryHiveNames.contains(name) { return .registryHive }
+        // HOST-4 — Linux login accounting is extensionless with fixed names, and
+        // the name is ALSO what says whether a record is a sign-in (wtmp) or a
+        // rejected attempt (btmp), so it is never guessed from content here.
+        // Rotated logs keep their meaning: wtmp.1, btmp.2 …
+        if Self.isLoginAccountingName(name) { return .loginRecord }
         // HOST-7 — must precede the `.db` extension mapping, or the activity store
         // reads as a generic SQLite file and its Apple-epoch dates stay numbers.
         if name == "knowledgec.db" || path.contains("/coreduet/knowledge/") { return .knowledgeC }
@@ -136,6 +147,23 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// The canonical Windows hive filenames, lowercased. NTUSER.DAT is per-user
     /// (desktop/Explorer activity); UsrClass.dat holds shell bags; the rest are
     /// machine-wide under %SystemRoot%\System32\config.
+    /// `utmp` / `wtmp` / `btmp`, their BSD/Solaris `*x` spellings, and rotated
+    /// copies (`wtmp.1`, `btmp.2`). A rotated log is the same evidence, so the
+    /// numeric suffix is allowed — but nothing else is, because `wtmpdump.txt` is
+    /// a TEXT report about the file, not the file, and must stay a text document.
+    nonisolated static func isLoginAccountingName(_ lowercasedName: String) -> Bool {
+        let parts = lowercasedName.split(separator: ".", omittingEmptySubsequences: false)
+        guard let base = parts.first, loginAccountingBaseNames.contains(String(base)) else {
+            return false
+        }
+        let suffixes = parts.dropFirst()
+        return suffixes.isEmpty || suffixes.allSatisfy { $0.allSatisfy(\.isNumber) && !$0.isEmpty }
+    }
+
+    nonisolated static let loginAccountingBaseNames: Set<String> = [
+        "utmp", "wtmp", "btmp", "utmpx", "wtmpx", "btmpx"
+    ]
+
     nonisolated static let registryHiveNames: Set<String> = [
         "ntuser.dat", "usrclass.dat", "software", "system", "sam", "security",
         "default", "components", "bcd-template", "drivers", "elam"
@@ -271,7 +299,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
-        case .registryHive, .knowledgeC, .extractionManifest, .eventLog: return .hostArtifact
+        case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
+             .loginRecord: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

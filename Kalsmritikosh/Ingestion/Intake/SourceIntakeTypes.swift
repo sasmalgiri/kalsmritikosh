@@ -34,6 +34,12 @@ public nonisolated enum SourceDetectionBasis: String, Sendable, Codable, CaseIte
     case pathPattern
     case declaredExtension
     case magicBytes
+    /// HOST-4 — the type was decided by the SHAPE of the bytes, because the format
+    /// carries no signature (Linux login accounting is a bare array of fixed-size
+    /// records). Recorded as its own basis rather than reported as `magicBytes`,
+    /// which would claim a signature that does not exist. Applied ONLY where the
+    /// alternative is `unknown`, so it can never override a recognized format.
+    case structuralProbe
     case unknown
 }
 

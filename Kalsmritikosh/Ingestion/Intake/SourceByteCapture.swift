@@ -145,6 +145,16 @@ public enum SourceByteCapture {
         if byExtension != .unknown {
             return (byExtension, .declaredExtension, declaredExtension)
         }
+        // 3.5. HOST-4 — structural probe, LAST resort only. Linux login accounting
+        // has no magic signature, so a `wtmp` copied out under another name would
+        // otherwise be dropped as unknown bytes. This runs only after the
+        // extension check has failed, so it can never take a file away from a
+        // recognized format; the probe itself is strict (every record in the head
+        // must decode under one byte order, and at least one must be a dated
+        // session or boot).
+        if UtmpReader.looksLikeLoginRecords(head) {
+            return (.loginRecord, .structuralProbe, declaredExtension)
+        }
         // 4. unknown.
         return (.unknown, .unknown, declaredExtension)
     }

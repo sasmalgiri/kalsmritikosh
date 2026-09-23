@@ -72,7 +72,7 @@ public enum FileIndexStatus: String, Sendable, Equatable {
     nonisolated static func category(of t: SourceType) -> Category {
         switch t {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
-             .html, .json, .xml, .log, .sqlite, .plist, .registryHive, .knowledgeC, .custodyManifest, .extractionManifest, .eventLog,
+             .html, .json, .xml, .log, .sqlite, .plist, .registryHive, .knowledgeC, .custodyManifest, .extractionManifest, .eventLog, .loginRecord,
              .xlsx, .xls, .csv, .ods, .pptx, .ppt, .keynote,
              .mbox, .pst, .eml, .msg, .appleMail, .nsf,
              .imessage, .safariHistory, .chromeHistory, .chatExport, .discussionExport:

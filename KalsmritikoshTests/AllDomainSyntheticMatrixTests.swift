@@ -174,6 +174,13 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .loginRecord:
+            // HOST-4 — a real wtmp. The sentinel rides in the remote-host field,
+            // which is where a login's origin is recorded.
+            return UtmpFixtureWriter().build(records: [
+                .init(kind: .userProcess, pid: 4242, line: "pts/0", user: "riyaz",
+                      host: "host-\(s).lan", time: Date(timeIntervalSince1970: 1_773_480_413))
+            ])
         case .eventLog:
             // HOST-3 — a real EVTX container carrying the sentinel as a record string.
             return EVTXFixtureWriter().build(records: [

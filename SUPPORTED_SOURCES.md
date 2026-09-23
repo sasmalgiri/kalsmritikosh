@@ -48,6 +48,7 @@ Coverage states (from the locked product contract):
 | nsf | email | FULL | nsf | 1 |
 | plist | document | FULL | plist | 1 |
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
+| loginRecord (utmp/wtmp/btmp) | hostArtifact | FULL | linux-login-accounting-utmp | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -67,7 +68,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 29 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 30 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -146,6 +147,34 @@ derives this table from it so the matrix cannot drift from what actually runs.
   1994, so the conversion lives in one shared `AppleEpoch` helper. `ZSECONDSFROMGMT` is
   kept because it states the time zone the DEVICE was in, which no absolute timestamp can.
 
+- **Linux login accounting (`utmp` / `wtmp` / `btmp`, HOST-4)** answers the first question an
+  investigation asks about a machine: who was on it, from where, and when. It is read
+  COMPLETELY — every field of every record — because the format is a bare array of fixed-size
+  records with no templates and no compression; that is why it is FULL where the Windows event
+  log is PARTIAL. Boots, shutdowns, logins, logouts and failed attempts all become dated,
+  citable evidence, with the terminal, the remote hostname and the remote IP where the record
+  carries them. **The one thing that must not go wrong:** these three files share a single
+  384-byte record layout and mean three different things, and the meaning exists ONLY in the
+  filename — `utmp` is who was logged in at the moment of imaging, `wtmp` is history, and
+  `btmp` is FAILED attempts. A btmp record whose type on disk is identical to a successful
+  login is therefore never rendered with the words of one; a test pins that, because the
+  inversion would turn a rejected break-in into evidence that someone was signed in. A file
+  whose name is neither is reported as being of unknown kind rather than assumed to be history.
+  Byte order is the host's and nothing in the file declares it, so both readings are scored and
+  the winner is recorded (a big-endian machine is itself a fact worth stating). Sessions —
+  login paired with logout — are marked **derived**, since the file stores two independent
+  records and only the reused terminal name links them; a login with no logout is reported as
+  still open rather than given a duration, and a logout stamped before its login is called a
+  clock change rather than shown as negative. Detection is by filename, including rotated
+  copies (`wtmp.1`); a text report ABOUT the file (`wtmp.txt` from `utmpdump`) stays a text
+  document. The format has no magic signature, so a file exported under another name is
+  recovered by a deliberately strict structural probe that runs ONLY where the alternative is
+  "unknown bytes" — it can never take a file away from a recognized format, and it refuses an
+  all-zero file rather than claim it on the strength of its empty slots. Inherent limit: `tv_sec`
+  is a signed 32-bit count, so the format itself cannot express a time past 2038.
+  **Not yet read:** `journald` binary journals and shell history (`.bash_history`,
+  `.zsh_history`) — see the deferred list at the end of this section.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -188,6 +217,26 @@ derives this table from it so the matrix cannot drift from what actually runs.
   new call site and no new write path. Identifiers are read only from STRUCTURED key/value
   blocks (plist, registry, custody manifest); a serial appearing in prose is never anchored,
   because that would be a guess.
+
+### Host artifacts NOT yet read (stated, so absence is never mistaken for coverage)
+
+An extraction containing these keeps them with identity, hash and dates, and they stay
+searchable by name — they are simply not interpreted yet:
+
+- **Windows event log CONTENT** — records are dated and searchable, but not filterable by
+  event id. See the PARTIAL (container) note above.
+- **`journald`** binary journals (`*.journal`). The examiner's normal export path
+  (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
+  gap is the binary file rather than the log's content.
+- **Shell history** — `.bash_history`, `.zsh_history`, `.python_history`. These parse today as
+  plain text, so the commands are searchable; what is missing is per-command timestamps
+  (`HISTTIMEFORMAT` entries and zsh's `: <epoch>:<elapsed>;` prefix), which would put each
+  command on the timeline.
+- **`$MFT`** (NTFS master file table): filenames, MACB timestamps, deleted entries.
+- **Program execution** — Prefetch, LNK/jumplists, Amcache, Shimcache.
+- **`lastlog`** — deliberately not claimed with the utmp family: it has a different record
+  layout and identifies an account only by the record's POSITION (the numeric uid), so without
+  `/etc/passwd` a login would be attributed to a number.
 
 ## Advertising rule
 

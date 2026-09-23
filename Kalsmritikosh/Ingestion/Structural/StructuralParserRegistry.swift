@@ -44,7 +44,8 @@ public struct StructuralParserRegistry: Sendable {
         KnowledgeCStructuralParser(),      // HOST-7 — Apple CoreDuet activity store
         CustodyManifestStructuralParser(), // HOST-8 — examiner chain of custody
         ExtractionManifestStructuralParser(), // HOST-8b — iOS backup inventory
-        EVTXStructuralParser()             // HOST-3 — Windows event logs (EVTX)
+        EVTXStructuralParser(),            // HOST-3 — Windows event logs (EVTX)
+        UtmpStructuralParser()             // HOST-4 — Linux utmp/wtmp/btmp
     ]
 
     /// The default v1 registry — every format with a dependency-free structural
