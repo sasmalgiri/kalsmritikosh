@@ -14,10 +14,10 @@ Coverage states (from the locked product contract):
   fidelity depends on scan/image quality.
 - **PRESERVED-ONLY** — no structural parser yet; identity/metadata/hash retained, content not
   interpretable. Never silently dropped.
-- **DEFERRED** — recognized but processing intentionally postponed (audio/video; ASR is a
-  WhisperKit stub, media is skipped by design in v1).
+- **DEFERRED** — recognized but processing intentionally postponed. Applies to audio/video only
+  when the "Transcribe audio & video" module is turned OFF.
 
-## Coverage matrix (generated 2026-07-22 from `StructuralParserRegistry.standard(ocr:)`)
+## Coverage matrix (generated 2026-09-23 from `StructuralParserRegistry.standard(ocr:)`)
 
 | Format | Category | Coverage | Parser | Version |
 |---|---|---|---|---|
@@ -28,6 +28,11 @@ Coverage states (from the locked product contract):
 | doc | document | FULL | DocStructuralParser | 1.0 |
 | odt | document | FULL | odt-opendocument | 1 |
 | epub | document | FULL | epub-opf | 1 |
+| html | document | FULL | structured-text | 1 |
+| json | document | FULL | structured-text | 1 |
+| xml | document | FULL | structured-text | 1 |
+| log | document | FULL | structured-text | 1 |
+| sqlite | document | FULL | sqlite | 1 |
 | csv | spreadsheet | FULL | csv | 1 |
 | xlsx | spreadsheet | FULL | xlsx-ooxml | 1 |
 | xls | spreadsheet | FULL | XlsStructuralParser | 1.0 |
@@ -36,21 +41,29 @@ Coverage states (from the locked product contract):
 | eml | email | FULL | eml | 1 |
 | mbox | email | FULL | mbox | 1 |
 | appleMail (emlx) | email | FULL | emlx-apple-mail | 1 |
+| msg | email | FULL | msg | 1 |
+| pst | email | FULL | pst | 1 |
+| nsf | email | FULL | nsf | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | jpg | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | heic | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | tiff | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | webp | image | PARTIAL (OCR) | image-vision-ocr | 1 |
-| mp3, wav, m4a, aac, aiff, caf, flac, 3gp | audio | DEFERRED | — | — |
-| mp4, mov | video | DEFERRED | — | — |
-| msg, pst, nsf | email | PRESERVED-ONLY | — | — |
+| mp3, wav, m4a, aac, aiff, caf, flac, 3gp | audio | PARTIAL (ASR) / DEFERRED | apple-speech | 1 |
+| mp4, mov | video | PARTIAL (ASR) / DEFERRED | apple-speech | 1 |
 | ppt, keynote | presentation | PRESERVED-ONLY | — | — |
 | imessage, chatExport | chat | PRESERVED-ONLY | — | — |
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 15 FULL · 6 PARTIAL · 10 DEFERRED · 12 PRESERVED-ONLY.**
+**Totals (code-generated): 23 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+
+The media row is the one entry whose coverage depends on a user setting, so it is stated as a
+pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
+module, and DEFERRED when it is switched off. Everything else is fixed at build time. The
+routing truth is the `UniversalParserRegistry`; `ParserCapabilityManifest.generate(registry:)`
+derives this table from it so the matrix cannot drift from what actually runs.
 
 ## Caveats (honest limits)
 
@@ -61,10 +74,15 @@ Coverage states (from the locked product contract):
   as CONTAINER per this note.)
 - **PARTIAL (OCR)** fidelity depends on image/scan quality; a currency glyph or handwriting
   may be misread. Native-text PDFs extract exactly; scanned pages fall back to Vision OCR.
-- **DEFERRED media**: audio/video are recognized and preserved but not transcribed in v1
-  (WhisperKit is a stub; media is skipped so ingest never blocks on it).
-- **PRESERVED-ONLY** formats need legacy loaders (MSG/PST/NSF/PPT/Keynote) or dedicated
-  adapters (iMessage/chat/browser history) — tracked, intentionally not in v1.
+- **Media (ASR)**: with the default-ON "Transcribe audio & video" module, speech is transcribed
+  on-device by Apple Speech (`requiresOnDeviceRecognition` is forced — nothing leaves the Mac)
+  and the transcript carries inline timecodes, so an answer can cite "the call at 12:04".
+  It is PARTIAL, never FULL: ASR is approximate and a recording has no document structure.
+  A recording whose speech cannot be recognized is recorded as such, not silently dropped.
+  Transcription is the slowest step in ingest; turning the module off returns media to
+  DEFERRED (kept, hashed, searchable by name and date, not transcribed).
+- **PRESERVED-ONLY** formats need dedicated work (PPT/Keynote) or opt-in adapters
+  (iMessage/chat/browser history, which are feature-gated and off by default).
 
 ## Advertising rule
 

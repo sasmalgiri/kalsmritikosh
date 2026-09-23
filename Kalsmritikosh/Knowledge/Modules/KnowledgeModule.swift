@@ -90,7 +90,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
         case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
-        case .mediaTranscription:   return "Read speech in recordings and videos using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (\u{201C}the call at 12:04\u{201D}). Nothing leaves your Mac. Off by default because transcription is slow and the first run installs Apple's speech model; audio/video are always kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files."
+        case .mediaTranscription:   return "Read speech in recordings and videos using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (\u{201C}the call at 12:04\u{201D}). Nothing leaves your Mac. On by default. Transcription is slow and the first run asks permission and installs Apple's speech model; turn it OFF for faster ingest — audio/video are still kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files."
         case .importLifecycle:      return "Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source."
         case .aiComposeEveryAnswer: return "When the on-device model is available, compose every grounded answer as fluent prose (not just complex ones). Grounding is preserved — the model rewrites over the verified evidence and citations; if no model is available it falls back to the exact deterministic answer."
         case .storyReviewerLoop:    return "Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt."
@@ -121,7 +121,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     /// until the owner opts in.
     public var defaultEnabled: Bool {
         switch self {
-        case .proseSubjectBinding, .aiSubjectResolution, .mediaTranscription:
+        case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
         default:
             return implemented
