@@ -21,6 +21,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
     /// structure is what makes a host artifact citable.
     case plist
+    /// HOST-7 — Apple's CoreDuet activity store (`knowledgeC.db`): app focus with
+    /// durations, device lock/unlock, screen, media, battery. Its own type rather
+    /// than plain `.sqlite` because its timestamps are APPLE EPOCH and its rows
+    /// only become dated events once a schema-aware parser reads them.
+    case knowledgeC
     /// HOST-2 — Windows registry hive (REGF): NTUSER.DAT, UsrClass.dat, SOFTWARE,
     /// SYSTEM, SAM, SECURITY. Usually EXTENSIONLESS, so recognized by filename
     /// pattern and by the "regf" signature.
@@ -93,6 +98,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
         // claimed here: they are not whole hives and would decode as corrupt.
         if Self.registryHiveNames.contains(name) { return .registryHive }
+        // HOST-7 — must precede the `.db` extension mapping, or the activity store
+        // reads as a generic SQLite file and its Apple-epoch dates stay numbers.
+        if name == "knowledgec.db" || path.contains("/coreduet/knowledge/") { return .knowledgeC }
         // DISC-1 — discussion exports. Ambiguous names (comments.csv, messages.json)
         // are claimed ONLY inside a recognizable export tree, so an ordinary
         // spreadsheet named comments.csv stays a CSV. Unambiguous names stand alone.
@@ -239,7 +247,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist: return .document
-        case .registryHive: return .hostArtifact
+        case .registryHive, .knowledgeC: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

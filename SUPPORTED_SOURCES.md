@@ -46,6 +46,7 @@ Coverage states (from the locked product contract):
 | nsf | email | FULL | nsf | 1 |
 | plist | document | FULL | plist | 1 |
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
+| knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | discussionExport | chat | FULL | discussion-export | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
@@ -61,7 +62,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 26 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 27 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -113,7 +114,12 @@ derives this table from it so the matrix cannot drift from what actually runs.
   stated in a warning. Only complete hives are claimed: transaction logs (`.LOG1`/`.LOG2`) and
   backups (`.SAV`) are deliberately NOT treated as hives, because decoding a partial file would
   report corrupt evidence for a file that is simply not a hive. Freed cells are not followed, so
-  nothing here reports deleted registry data as live.
+  nothing here reports deleted registry data as live. Apple's activity store
+  (`knowledgeC.db`) gets both lanes: every row is indexed by the record loader, and a
+  schema-aware parser turns ZOBJECT rows into dated events with durations. Its timestamps
+  are APPLE EPOCH (seconds since 2001-01-01); read as Unix time a 2026 event would date to
+  1994, so the conversion lives in one shared `AppleEpoch` helper. `ZSECONDSFROMGMT` is
+  kept because it states the time zone the DEVICE was in, which no absolute timestamp can.
 
 ## Advertising rule
 

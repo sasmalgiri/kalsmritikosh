@@ -28,7 +28,11 @@
 import Foundation
 
 public struct SQLiteLoader: Ingestor {
-    public let supportedTypes: Set<SourceType> = [.sqlite]
+    /// `.knowledgeC` rides the same generic row reader: every row stays indexed
+    /// and searchable, while KnowledgeCStructuralParser adds the dated-event
+    /// layer on top. Neither type is feature-gated, so both may be claimed
+    /// unconditionally (unlike `.chatExport` — see DISC-6).
+    public let supportedTypes: Set<SourceType> = [.sqlite, .knowledgeC]
     public let primaryLane: ResourceLane = .diskIO
 
     /// Rows per KnowledgeObject. Small enough that one object stays chunkable,
