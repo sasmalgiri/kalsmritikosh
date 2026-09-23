@@ -183,9 +183,6 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         return nil
     }
 
-    /// The canonical Windows hive filenames, lowercased. NTUSER.DAT is per-user
-    /// (desktop/Explorer activity); UsrClass.dat holds shell bags; the rest are
-    /// machine-wide under %SystemRoot%\System32\config.
     /// `utmp` / `wtmp` / `btmp`, their BSD/Solaris `*x` spellings, and rotated
     /// copies (`wtmp.1`, `btmp.2`). A rotated log is the same evidence, so the
     /// numeric suffix is allowed — but nothing else is, because `wtmpdump.txt` is
@@ -199,15 +196,15 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         return suffixes.isEmpty || suffixes.allSatisfy { $0.allSatisfy(\.isNumber) && !$0.isEmpty }
     }
 
-    /// The history files whose LINES are commands. Deliberately exact and
-    /// deliberately short: `.lesshst` and `.viminfo` are editor state rather
-    /// than commands, and bare `history` belongs to the browser lane.
     /// Names an exported master file table arrives under. Exact, because "mft"
     /// is short enough to collide with ordinary filenames if matched loosely.
     nonisolated static let masterFileTableNames: Set<String> = [
         "$mft", "mft", "$mft.copy0", "$mft.raw", "c.$mft", "$mft.bin", "mft.bin"
     ]
 
+    /// The history files whose LINES are commands. Deliberately exact and
+    /// deliberately short: `.lesshst` and `.viminfo` are editor state rather
+    /// than commands, and bare `history` belongs to the browser lane.
     nonisolated static let shellHistoryNames: Set<String> = [
         ".bash_history", ".sh_history", ".zsh_history", ".zhistory", ".histfile",
         ".ksh_history", ".ash_history", ".dash_history", "fish_history",
@@ -220,6 +217,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         "utmp", "wtmp", "btmp", "utmpx", "wtmpx", "btmpx"
     ]
 
+    /// The canonical Windows hive filenames, lowercased. NTUSER.DAT is per-user
+    /// (desktop/Explorer activity); UsrClass.dat holds shell bags; the rest are
+    /// machine-wide under %SystemRoot%\System32\config.
     nonisolated static let registryHiveNames: Set<String> = [
         "ntuser.dat", "usrclass.dat", "software", "system", "sam", "security",
         "default", "components", "bcd-template", "drivers", "elam"

@@ -129,7 +129,14 @@ public struct DiscussionExportRegistry: Sendable {
         XArchiveMapper(),
         MetaDownloadMapper(),
         TelegramExportMapper(),
-        TextChatExportMapper()
+        // DISC-7. Twitch precedes the text-chat mapper because its export is
+        // JSON and unmistakable; the forum mapper is LAST because its input is
+        // HTML, which every other mapper would decline anyway, and because a
+        // page without an engine marker must fall through to the HTML document
+        // lane rather than being claimed here.
+        TwitchChatMapper(),
+        TextChatExportMapper(),
+        ForumThreadMapper()
     ])
 
     /// Every mapper, for the cross-platform disjointness test and for naming the

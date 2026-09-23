@@ -130,7 +130,8 @@ derives this table from it so the matrix cannot drift from what actually runs.
   watch/search history), **Discord** (package messages.json and messages.csv), **Reddit**
   (comments, posts, private messages), **X** (tweets.js, direct-messages.js), **Meta**
   (Messenger and Instagram threads) **Telegram** (Desktop result.json, full or single-chat) and
-  **WhatsApp / Signal / Slack** text exports. That last one is behind the "Chat exports"
+  **WhatsApp / Signal / Slack** text exports, **Twitch** (VOD chat) and saved **forum threads**
+  (phpBB, vBulletin, XenForo, Discourse). That last one is behind the "Chat exports"
   opt-in flag: with the flag off the type stays PRESERVED-ONLY, and no path — including the
   generic text fallback — may activate it. Meta threads are the only artifact here that names
   every participant per message; the other platforms' exports contain only the requesting
@@ -138,6 +139,39 @@ derives this table from it so the matrix cannot drift from what actually runs.
   than to a name the export never contained. An export from an unmapped platform is reported by name with the
   supported list, never guessed at. Watching and searching are kept a distinct `activity` kind
   so "what did they say" cannot return a search box.
+- **Twitch VOD chat (DISC-7)** has one property no other platform here shares: its timestamps
+  are OFFSETS INTO A VIDEO. `content_offset_seconds` is what matches a message to what was on
+  screen, so it rides INTO the message text as a timecode (`[1:01:54] …`) the way an audio
+  transcript carries one — and `created_at` supplies the absolute time separately. A message
+  that has only an offset is reported as having NO absolute time, because a position in a
+  recording is not a wall-clock time and treating it as one would date a 2026 message to 1970.
+  Unlike an account's own export, a channel log names every participant, so attribution is real
+  for every record with no account-holder marker.
+- **Saved forum threads (DISC-7)** — phpBB, vBulletin, XenForo, Discourse — already ingest as
+  HTML documents, so their words are searchable; what this adds is WHO said which part and
+  WHEN. **The defect it is built to avoid:** splitting HTML at a marker and then hunting for
+  the nearest author name is exactly how a body gets credited to the previous poster, which in
+  a thread means putting words in a named person's mouth. So the page is cut into slices at the
+  post CONTAINER (the element enclosing both the author block and the body — phpBB and
+  vBulletin put the author in a SIBLING of the body, so slicing at the body would leave every
+  post unattributed), and a post's author, time and body may come only from inside its own
+  slice. A slice with no author yields an UNATTRIBUTED record and never inherits the name
+  above it. Dates come from HTML5 `<time datetime="…">`, which is unambiguous ISO-8601; a
+  displayed "2 hours ago" is relative to when the page was SAVED and is deliberately not
+  converted, since that would manufacture a time. **A page with no forum-engine marker is not
+  claimed at all** — themes vary without limit, and a generic "find the repeated blocks"
+  heuristic would attribute text to people on pages that are not forums. Such a file stays an
+  HTML document, which is a working parse rather than a gap. Script and style contents are
+  dropped rather than joining post text.
+- **Routing limit worth knowing (DISC-\*)** — a discussion export reaches this lane by its path
+  (inside a recognizable export tree such as `/twitch/`, `/discord/`, `/takeout/`) or by an
+  unambiguous filename. A LOOSE export renamed and left outside any tree still routes by its
+  extension, so a stray Twitch log parses as JSON and a saved thread as HTML: the content is
+  searchable, but per-message authors and dates are not extracted. Making content-based mapper
+  claims override the extension for `.json` and `.html` would change the single authoritative
+  type detector's contract for two very common types, which is its own unit and an owner call,
+  not something to slip in here.
+
 - **Host artifacts (HOST-\*)** are machine/OS evidence rather than documents a person wrote, so
   they carry their own `hostArtifact` category. Processing is the same (immediate, text +
   structure); the distinction matters when attributing a fact to a person. A registry hive is
