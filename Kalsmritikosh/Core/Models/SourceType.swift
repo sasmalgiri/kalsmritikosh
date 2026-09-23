@@ -17,6 +17,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     // PAR-008 — structured text: web/data/config/log formats with a
     // deterministic structure we can parse into typed blocks.
     case html, json, xml, log
+    /// HOST-1 — Apple property list (binary `bplist00`, XML, or legacy OpenStep).
+    /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
+    /// structure is what makes a host artifact citable.
+    case plist
 
     // PAR-009 — a generic read-only SQLite database (rows cite db/table/key).
     case sqlite
@@ -90,7 +94,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "epub": return .epub
         case "html", "htm", "xhtml": return .html
         case "json", "jsonl", "ndjson": return .json
-        case "xml", "plist": return .xml
+        case "xml": return .xml
+        case "plist": return .plist
         case "log": return .log
         case "sqlite", "sqlite3", "db": return .sqlite
         case "xlsx": return .xlsx
@@ -153,6 +158,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x50, 0x4B, 0x03, 0x04]) { return .zip }
         // "SQLite format 3\0" — a generic SQLite database (PAR-009).
         if has([0x53, 0x51, 0x4C, 0x69, 0x74, 0x65]) { return .sqlite }   // "SQLite"
+        // HOST-1 — "bplist00": a binary property list. Host artifacts are routinely
+        // extensionless or oddly named, so magic bytes are the reliable signal.
+        if has([0x62, 0x70, 0x6C, 0x69, 0x73, 0x74]) { return .plist }    // "bplist"
         return nil
     }
 
@@ -175,7 +183,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
-             .html, .json, .xml, .log, .sqlite: return .document
+             .html, .json, .xml, .log, .sqlite, .plist: return .document
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email

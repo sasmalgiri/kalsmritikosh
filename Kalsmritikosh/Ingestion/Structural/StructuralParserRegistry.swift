@@ -37,7 +37,8 @@ public struct StructuralParserRegistry: Sendable {
         PSTStructuralParser(),       // Outlook .pst/.ost (NDB) — typed blocks per message
         NSFStructuralParser(),       // Lotus/HCL Notes .nsf — typed blocks per mail note
         StructuredTextStructuralParser(),  // PAR-008 — HTML / JSON / XML / log
-        SQLiteStructuralParser()           // PAR-009 — read-only SQLite tables
+        SQLiteStructuralParser(),          // PAR-009 — read-only SQLite tables
+        PlistStructuralParser()            // HOST-1 — binary / XML / OpenStep plists
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

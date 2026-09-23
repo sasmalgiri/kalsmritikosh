@@ -170,6 +170,11 @@ struct AllDomainSyntheticMatrixTests {
             """
             return Data(text.utf8)
 
+        case .plist:
+            // HOST-1 — binary, because that is the format that used to yield nothing.
+            return try? PropertyListSerialization.data(
+                fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+
         case .pdf:
             let out = NSMutableData()
             var box = CGRect(x: 0, y: 0, width: 612, height: 792)
