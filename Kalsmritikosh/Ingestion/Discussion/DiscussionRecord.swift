@@ -117,9 +117,20 @@ public struct DiscussionExportRegistry: Sendable {
         self.mappers = mappers
     }
 
+    /// Registration order is the tie-break when two mappers could claim a file.
+    /// In practice their content fingerprints are disjoint — YouTube's CSV needs a
+    /// "Comment ID" + "Video ID" header, Reddit's needs "id" + "permalink", Discord's
+    /// needs "ID" + "Timestamp" + "Contents" — and a test pins that no export is
+    /// claimed by more than one mapper.
     public static let standard = DiscussionExportRegistry(mappers: [
-        YouTubeTakeoutMapper()
+        YouTubeTakeoutMapper(),
+        DiscordPackageMapper(),
+        RedditExportMapper()
     ])
+
+    /// Every mapper, for the cross-platform disjointness test and for naming the
+    /// supported set in an honest "no mapper claims this" warning.
+    public nonisolated var allMappers: [any DiscussionExportMapper] { mappers }
 
     /// How many leading bytes a mapper may inspect to claim a file.
     public nonisolated static let sampleSize = 4096

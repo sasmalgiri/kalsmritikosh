@@ -123,7 +123,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     nonisolated static let discussionExportNames: Set<String> = [
         "comments.csv", "live-chats.csv", "posts.csv", "messages.csv",
         "watch-history.json", "search-history.json", "messages.json",
-        "my-comments.html", "my-live-chat-messages.html"
+        "my-comments.html", "my-live-chat-messages.html",
+        // Reddit writes these at the export root; Discord writes messages.json /
+        // messages.csv under messages/c<channel id>/.
+        "statistics.csv", "chat_history.json"
     ]
     /// Names no other artifact uses, so path context is unnecessary.
     nonisolated static let unambiguousDiscussionExportNames: Set<String> = [

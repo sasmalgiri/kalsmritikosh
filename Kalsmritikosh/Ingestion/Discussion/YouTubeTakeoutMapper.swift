@@ -208,49 +208,9 @@ public struct YouTubeTakeoutMapper: DiscussionExportMapper {
         return plain.date(from: raw)
     }
 
-    /// RFC 4180 CSV: quoted fields, embedded commas and newlines, doubled quotes.
-    /// Comment text routinely contains all three, and a naive split loses rows.
+    /// Delegates to the shared RFC 4180 reader (DISC-2). Kept as a named entry
+    /// point because this mapper's tests pin CSV fidelity through it.
     nonisolated static func parseCSV(_ text: String) -> [[String]] {
-        var rows: [[String]] = []
-        var row: [String] = []
-        var field = ""
-        var inQuotes = false
-        var iterator = text.startIndex
-
-        func endField() { row.append(field); field = "" }
-        func endRow() {
-            endField()
-            // Ignore the blank final line rather than emitting a phantom row.
-            if !(row.count == 1 && row[0].isEmpty) { rows.append(row) }
-            row = []
-        }
-
-        while iterator < text.endIndex {
-            let c = text[iterator]
-            if inQuotes {
-                if c == "\"" {
-                    let next = text.index(after: iterator)
-                    if next < text.endIndex, text[next] == "\"" {
-                        field.append("\"")          // escaped quote
-                        iterator = next
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    field.append(c)
-                }
-            } else {
-                switch c {
-                case "\"": inQuotes = true
-                case ",":  endField()
-                case "\n": endRow()
-                case "\r": break                    // CRLF
-                default:   field.append(c)
-                }
-            }
-            iterator = text.index(after: iterator)
-        }
-        if !field.isEmpty || !row.isEmpty { endRow() }
-        return rows
+        DiscussionCSV.parse(text)
     }
 }
