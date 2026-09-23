@@ -166,21 +166,28 @@ public struct NLEntityExtractor: EntityExtractor {
         let content = object.content
         var out: [Entity] = []
 
-        // Emails
-        let emailPattern = #"[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}"#
+        // Emails. The left boundary `(?<![\w.%+-])` stops a match from STARTING
+        // mid-token, so a wrapped address can't yield a headless fragment
+        // (`algiri@gmail.com` out of `sasm\nalgiri@gmail.com`). Whatever still
+        // slips through — machine IDs from quoted headers, suffix fragments from
+        // PDF line-wrap — is removed by EmailAddressHygiene below.
+        let emailPattern = #"(?<![\w.%+-])[\w._%+-]+@[\w.-]+\.[A-Za-z]{2,}"#
         if let regex = try? NSRegularExpression(pattern: emailPattern) {
             let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            var found: [String] = []
             for m in regex.matches(in: content, range: range) {
-                if let r = Range(m.range, in: content) {
-                    let v = String(content[r])
-                    out.append(Entity(
-                        kind: .emailAddress,
-                        value: v,
-                        normalizedValue: v.lowercased(),
-                        sourceObjectID: object.id,
-                        confidence: .high
-                    ))
-                }
+                if let r = Range(m.range, in: content) { found.append(String(content[r])) }
+            }
+            // Document-scoped hygiene: drop mail infrastructure, then collapse
+            // truncated variants of a longer address on the same domain.
+            for v in EmailAddressHygiene.clean(found) {
+                out.append(Entity(
+                    kind: .emailAddress,
+                    value: v,
+                    normalizedValue: v.lowercased(),
+                    sourceObjectID: object.id,
+                    confidence: .high
+                ))
             }
         }
 

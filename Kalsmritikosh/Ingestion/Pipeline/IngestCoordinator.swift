@@ -1788,6 +1788,11 @@ public actor IngestCoordinator {
     ) async {
         for entity in entities where entity.kind == .emailAddress {
             let addr = entity.normalizedValue ?? entity.value
+            // Mail infrastructure is neither an organization nor a subject: a
+            // Message-ID host gave the live ledger orgs named "MAIL"
+            // (mail.gmail.com) and "Hxcore" (hxcore.ol). Skip before deriving
+            // any label from the domain.
+            guard !EmailAddressHygiene.isMachineGenerated(addr) else { continue }
             guard let at = addr.firstIndex(of: "@") else { continue }
             let domain = String(addr[addr.index(after: at)...])
             guard let head = domain.split(separator: ".").first.map(String.init),
@@ -1918,6 +1923,11 @@ public actor IngestCoordinator {
         // the MemoryDistiller still fires for this subject.
         for entity in entities where entity.kind == .emailAddress {
             let addr = entity.normalizedValue ?? entity.value
+            // Mail infrastructure is neither an organization nor a subject: a
+            // Message-ID host gave the live ledger orgs named "MAIL"
+            // (mail.gmail.com) and "Hxcore" (hxcore.ol). Skip before deriving
+            // any label from the domain.
+            guard !EmailAddressHygiene.isMachineGenerated(addr) else { continue }
             guard let at = addr.firstIndex(of: "@") else { continue }
             let domain = String(addr[addr.index(after: at)...])
             guard let head = domain.split(separator: ".").first.map(String.init),
