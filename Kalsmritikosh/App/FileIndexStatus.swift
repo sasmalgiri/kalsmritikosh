@@ -75,7 +75,7 @@ public enum FileIndexStatus: String, Sendable, Equatable {
              .html, .json, .xml, .log, .sqlite, .plist, .registryHive,
              .xlsx, .xls, .csv, .ods, .pptx, .ppt, .keynote,
              .mbox, .pst, .eml, .msg, .appleMail, .nsf,
-             .imessage, .safariHistory, .chromeHistory, .chatExport:
+             .imessage, .safariHistory, .chromeHistory, .chatExport, .discussionExport:
             return .textLike
         case .png, .jpg, .heic, .tiff, .webp:
             return .image

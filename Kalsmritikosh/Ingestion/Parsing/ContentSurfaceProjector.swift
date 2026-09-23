@@ -15,7 +15,7 @@ public enum ContentSurfaceProjector {
     private static let textKinds: Set<EvidenceBlockKind> = [
         .documentTitle, .documentHeader, .sectionHeading, .paragraph, .listItem, .quote, .codeBlock,
         .footnote, .endnote, .emailBody, .quotedEmail, .slideTitle, .slideBody, .slideNotes,
-        .transcriptSegment, .logRecord]
+        .transcriptSegment, .discussionMessage, .logRecord]
     private static let tableKinds: Set<EvidenceBlockKind> = [
         .table, .tableRow, .tableCell, .spreadsheetSheet, .spreadsheetRow, .spreadsheetCell]
     private static let imageKinds: Set<EvidenceBlockKind> = [.image, .figureCaption]

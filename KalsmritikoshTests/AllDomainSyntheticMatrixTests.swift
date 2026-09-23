@@ -174,6 +174,12 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .discussionExport:
+            // DISC-1 — a Takeout comments.csv carrying the sentinel as a comment.
+            return Data("""
+            Comment ID,Channel ID,Comment Create Timestamp,Price,Parent Comment ID,Video ID,Comment Text
+            Ug001,UCriyaz,2026-03-14T09:26:53Z,,,vid42,"\(s)."
+            """.utf8)
         case .registryHive:
             // HOST-2 — a real REGF hive carrying the sentinel as a REG_SZ value.
             return RegistryHiveFixtureWriter().build(

@@ -91,6 +91,7 @@ public enum ContextPrefixTemplate {
         case .slideNotes:       return "speaker notes"
         case .spreadsheetSheet, .spreadsheetRow, .spreadsheetCell: return "spreadsheet"
         case .transcriptSegment: return "transcript"
+        case .discussionMessage: return "discussion message"
         case .logRecord:        return "log entry"
         case .archiveMember:    return "archive member"
         case .unknown:          return "text"

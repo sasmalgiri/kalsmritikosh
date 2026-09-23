@@ -46,6 +46,7 @@ Coverage states (from the locked product contract):
 | nsf | email | FULL | nsf | 1 |
 | plist | document | FULL | plist | 1 |
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
+| discussionExport | chat | FULL | discussion-export | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | jpg | image | PARTIAL (OCR) | image-vision-ocr | 1 |
@@ -59,7 +60,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 25 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 26 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -85,6 +86,17 @@ derives this table from it so the matrix cannot drift from what actually runs.
   DEFERRED (kept, hashed, searchable by name and date, not transcribed).
 - **PRESERVED-ONLY** formats need dedicated work (PPT/Keynote) or opt-in adapters
   (iMessage/chat/browser history, which are feature-gated and off by default).
+- **Discussion platforms (DISC-\*)** are read from the platform's own data export — the file
+  set the account holder, or a lawful order, produced. Kalsmritikosh makes **no network calls**
+  (`ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO` in both build configurations and
+  `network.client = false`), so there is no API client and no credentialed scraper anywhere in
+  the app; collection is always someone else's step. Every platform maps into one
+  `DiscussionRecord` (author, time, thread, reply target), so adding a platform adds a mapper,
+  not a parser. Mappers claim a file by its CONTENT, not its name or extension, because
+  evidence is routinely renamed. Currently mapped: **YouTube** (Takeout comments, live chat,
+  watch/search history). An export from an unmapped platform is reported by name with the
+  supported list, never guessed at. Watching and searching are kept a distinct `activity` kind
+  so "what did they say" cannot return a search box.
 - **Host artifacts (HOST-\*)** are machine/OS evidence rather than documents a person wrote, so
   they carry their own `hostArtifact` category. Processing is the same (immediate, text +
   structure); the distinction matters when attributing a fact to a person. A registry hive is

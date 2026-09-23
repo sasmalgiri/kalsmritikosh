@@ -25,6 +25,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// SYSTEM, SAM, SECURITY. Usually EXTENSIONLESS, so recognized by filename
     /// pattern and by the "regf" signature.
     case registryHive
+    /// DISC-1 — a discussion-platform data export (YouTube Takeout comments,
+    /// Discord package, Reddit CSVs, X archive, Telegram JSON, Twitch chat,
+    /// saved forum threads). One type for all of them: the platform is decided by
+    /// a mapper reading the CONTENT, because export filenames like `comments.csv`
+    /// are not unique to any platform.
+    case discussionExport
 
     // PAR-009 — a generic read-only SQLite database (rows cite db/table/key).
     case sqlite
@@ -87,6 +93,14 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
         // claimed here: they are not whole hives and would decode as corrupt.
         if Self.registryHiveNames.contains(name) { return .registryHive }
+        // DISC-1 — discussion exports. Ambiguous names (comments.csv, messages.json)
+        // are claimed ONLY inside a recognizable export tree, so an ordinary
+        // spreadsheet named comments.csv stays a CSV. Unambiguous names stand alone.
+        if Self.discussionExportPathMarkers.contains(where: { path.contains($0) }),
+           Self.discussionExportNames.contains(name) {
+            return .discussionExport
+        }
+        if Self.unambiguousDiscussionExportNames.contains(name) { return .discussionExport }
         return nil
     }
 
@@ -96,6 +110,24 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     nonisolated static let registryHiveNames: Set<String> = [
         "ntuser.dat", "usrclass.dat", "software", "system", "sam", "security",
         "default", "components", "bcd-template", "drivers", "elam"
+    ]
+
+    /// Directory markers that identify an export tree. Present in the paths the
+    /// platforms themselves produce.
+    nonisolated static let discussionExportPathMarkers: [String] = [
+        "/takeout/", "/youtube and youtube music/", "/my activity/",
+        "/messages/", "/discord/", "/reddit/", "/twitch/",
+        "/your_instagram_activity/", "/your_facebook_activity/", "/live chats/", "/comments/"
+    ]
+    /// Generic names that are only a discussion export inside such a tree.
+    nonisolated static let discussionExportNames: Set<String> = [
+        "comments.csv", "live-chats.csv", "posts.csv", "messages.csv",
+        "watch-history.json", "search-history.json", "messages.json",
+        "my-comments.html", "my-live-chat-messages.html"
+    ]
+    /// Names no other artifact uses, so path context is unnecessary.
+    nonisolated static let unambiguousDiscussionExportNames: Set<String> = [
+        "tweets.js", "direct-messages.js", "note-tweet.js"
     ]
 
     public nonisolated static func detect(from url: URL) -> SourceType {
@@ -205,6 +237,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist: return .document
         case .registryHive: return .hostArtifact
+        // People talking — the same ontological shape as a chat thread, which is
+        // what FactTypeClassifier already treats as a conversation between people.
+        case .discussionExport: return .chat
         case .xlsx, .xls, .csv, .ods: return .spreadsheet
         case .pptx, .ppt, .keynote: return .presentation
         case .mbox, .pst, .eml, .msg, .appleMail, .nsf: return .email
