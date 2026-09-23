@@ -42,7 +42,8 @@ public struct StructuralParserRegistry: Sendable {
         RegistryHiveStructuralParser(),    // HOST-2 — Windows registry hives (REGF)
         DiscussionStructuralParser(),      // DISC-1 — discussion-platform exports
         KnowledgeCStructuralParser(),      // HOST-7 — Apple CoreDuet activity store
-        CustodyManifestStructuralParser()  // HOST-8 — examiner chain of custody
+        CustodyManifestStructuralParser(), // HOST-8 — examiner chain of custody
+        ExtractionManifestStructuralParser()  // HOST-8b — iOS backup inventory
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

@@ -21,6 +21,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
     /// structure is what makes a host artifact citable.
     case plist
+    /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
+    /// without which the backup's 40 000 files are anonymous blobs. Its own type
+    /// because the INVENTORY is a distinct forensic fact from the file contents —
+    /// it answers what the extraction covered, including what it did not.
+    case extractionManifest
     /// HOST-8 — the examiner's chain-of-custody sidecar for an extraction. A
     /// document a person authored, not machine evidence, so it carries the
     /// document category; what makes it special is that it is the ONE artifact
@@ -110,6 +115,9 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // custody reads as an ordinary JSON document and never reaches the ledger
         // as custody.
         if CustodyRecord.manifestNames.contains(name) { return .custodyManifest }
+        // HOST-8b — before the `.db` mapping, or the one file that makes the
+        // backup readable is itself read as an anonymous database.
+        if name == IOSBackupManifest.manifestName { return .extractionManifest }
         // DISC-1 — discussion exports. Ambiguous names (comments.csv, messages.json)
         // are claimed ONLY inside a recognizable export tree, so an ordinary
         // spreadsheet named comments.csv stays a CSV. Unambiguous names stand alone.
@@ -256,7 +264,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
-        case .registryHive, .knowledgeC: return .hostArtifact
+        case .registryHive, .knowledgeC, .extractionManifest: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

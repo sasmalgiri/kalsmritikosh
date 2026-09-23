@@ -219,7 +219,7 @@ struct AllDomainSyntheticMatrixTests {
             return out as Data
         // Types this GENERIC generator can't faithfully synthesize — each is
         // owned by a dedicated suite with a proper fixture (see coveredElsewhere).
-        case .sqlite, .knowledgeC, .doc, .xls, .png, .jpg, .heic, .tiff, .webp, .pst:
+        case .sqlite, .knowledgeC, .extractionManifest, .doc, .xls, .png, .jpg, .heic, .tiff, .webp, .pst:
             return nil
 
         // No parser by design — preserved-only or deferred.
@@ -242,6 +242,7 @@ struct AllDomainSyntheticMatrixTests {
         .xls: "LegacyOfficeParserTests (real OLE2 .xls fixture)",
         .sqlite: "SQLiteStructuralParserTests (real DB built via the engine)",
         .knowledgeC: "KnowledgeCParserTests (real ZOBJECT store built via the engine)",
+        .extractionManifest: "ExtractionManifestTests (real Files-table manifest via the engine)",
         .png: "ImageParserTests (stub-OCR fixture)",
         .jpg: "ImageParserTests (stub-OCR fixture)",
         .heic: "ImageParserTests (stub-OCR fixture)",

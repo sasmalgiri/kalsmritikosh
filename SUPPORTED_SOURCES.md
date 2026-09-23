@@ -48,6 +48,7 @@ Coverage states (from the locked product contract):
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
+| extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
 | discussionExport | chat | FULL | discussion-export | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
@@ -63,7 +64,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 28 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 29 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -134,6 +135,20 @@ derives this table from it so the matrix cannot drift from what actually runs.
   all-or-nothing and a partial chain names exactly which fields are missing. An UNREADABLE
   manifest is reported more loudly than a missing one, because it means someone intended to
   document the chain and the documentation cannot be read.
+
+- **Extraction inventory (HOST-8b)** reads an iOS backup's `Manifest.db`, the file that makes
+  the rest of the backup meaningful: every file is stored under a SHA-1 name in a two-hex
+  subdirectory, and only this manifest maps that hash back to its device path
+  (`HomeDomain/Library/SMS/sms.db`). The inventory is a DISTINCT forensic fact from the file
+  contents — it answers what the extraction covered, **including what it did not**, which is a
+  finding rather than something to stay silent about. Zero-byte files are flagged because they
+  can mean a truncated extraction; an unknown size is stated as unknown rather than shown as
+  zero. `Manifest.mbdb` (iOS 9 and earlier) is deliberately NOT claimed — it is a different,
+  non-SQLite format, and treating it as one would report a readable backup as corrupt. Reading
+  the manifest never opens any content file. **Still open:** the ingest pipeline does not yet
+  WALK the virtual tree, so files inside a backup are ingested by their hash names unless the
+  examiner extracts them; and there is no device entity yet, so two extractions from the same
+  device do not merge.
 
 ## Advertising rule
 
