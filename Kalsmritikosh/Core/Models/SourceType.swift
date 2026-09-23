@@ -53,6 +53,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// name, size, parent and four timestamps until the slot is reused, so this
     /// is the one artifact that says what WAS on a disk.
     case masterFileTable
+    /// HOST-6b — a Windows jump list (`*.automaticDestinations-ms`,
+    /// `*.customDestinations-ms`): the files one application was used to open.
+    /// Its own type because the ASSOCIATION between an application and a file is
+    /// the fact it adds over a loose shortcut.
+    case jumpList
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -275,6 +280,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "evtx": return .eventLog
         case "lnk": return .shellLink
         case "mft": return .masterFileTable
+        case "automaticdestinations-ms", "customdestinations-ms": return .jumpList
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -360,7 +366,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
              .loginRecord, .shellHistory, .shellLink, .amcache,
-             .masterFileTable: return .hostArtifact
+             .masterFileTable, .jumpList: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

@@ -174,6 +174,13 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .jumpList:
+            // HOST-6b — an automatic jump list: an MS-CFB container whose stream
+            // is a real shell link. The sentinel rides in the target path.
+            var link = ShellLinkFixtureWriter()
+            link.localBasePath = #"C:\cases\"# + "\(s)."
+            link.targetWritten = Date(timeIntervalSince1970: 1_773_480_413)
+            return CFBFixtureWriter().build([.stream("1", link.build())])
         case .masterFileTable:
             // HOST-5 — a real MFT with fixups applied. The sentinel rides in a
             // filename, which is what the MFT preserves after deletion.

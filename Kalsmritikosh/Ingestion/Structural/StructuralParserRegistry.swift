@@ -49,7 +49,8 @@ public struct StructuralParserRegistry: Sendable {
         ShellHistoryStructuralParser(),    // HOST-4b — shell / REPL history
         ShellLinkStructuralParser(),       // HOST-6a — Windows shortcuts (.lnk)
         AmcacheStructuralParser(),         // HOST-6c — Windows Amcache inventory
-        MFTStructuralParser()              // HOST-5 — NTFS master file table
+        MFTStructuralParser(),             // HOST-5 — NTFS master file table
+        JumpListStructuralParser()         // HOST-6b — Windows jump lists
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

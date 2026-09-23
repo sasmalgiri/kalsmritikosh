@@ -53,6 +53,7 @@ Coverage states (from the locked product contract):
 | shellLink (lnk) | hostArtifact | FULL | windows-shell-link | 1 |
 | amcache (Amcache.hve) | hostArtifact | FULL | windows-amcache | 1 |
 | masterFileTable ($MFT) | hostArtifact | FULL | ntfs-master-file-table | 1 |
+| jumpList (*Destinations-ms) | hostArtifact | FULL | windows-jump-list | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -72,7 +73,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 34 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 35 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -278,6 +279,23 @@ derives this table from it so the matrix cannot drift from what actually runs.
   probe that requires the record header's own offsets to be self-consistent, since "FILE" alone
   is a weak signature.
 
+- **Windows jump lists (`*.automaticDestinations-ms`, `*.customDestinations-ms`, HOST-6b)**
+  record the files ONE application was used to open, which is the association a loose shortcut
+  cannot give. This unit adds no third format: an automatic jump list is an MS-CFB container —
+  the same one `.doc` and `.msg` use — and each stream is a complete SHELL LINK, so every
+  target comes back with everything the `.lnk` reader recovers (original path, size, volume
+  serial, drive type including REMOVABLE, the creating machine's NetBIOS name). A
+  custom-destinations file is not a container at all but links laid end to end, found by their
+  full 20-byte signature. **Two things are not claimed.** The APPLICATION is identified only by
+  the AppID in the filename; translating an AppID to a product name needs a community-maintained
+  lookup table, so the AppID is reported verbatim and no application is ever named — a wrong
+  name would attribute files to software that may never have been run, and a test asserts no
+  product name appears. The `DestList` stream, which holds the most-recently-used ORDER and
+  each entry's access COUNT and last access time, is reported as present and NOT decoded: its
+  layout is community-derived and version-dependent, so a mis-read offset would report a wrong
+  access count as though it had been read. The target-timestamp disclaimer from the shortcut
+  entry rides along in every time block.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -326,14 +344,18 @@ derives this table from it so the matrix cannot drift from what actually runs.
 An extraction containing these keeps them with identity, hash and dates, and they stay
 searchable by name — they are simply not interpreted yet:
 
-- **Windows event log CONTENT** — records are dated and searchable, but not filterable by
-  event id. See the PARTIAL (container) note above.
+- **Prefetch** — the Win7-era format is plain, but Windows 10 and later compress the whole
+  file with LZXPRESS Huffman behind a `MAM\x04` header. Implementing that decompressor is
+  possible; verifying it is the problem, because the only fixture available would come from an
+  encoder written to the same reading of the spec, so a shared misunderstanding of the bit
+  order would pass its own tests. Same ruling as EVTX BinXML: not shipped rather than shipped
+  unverified.
 - **`journald`** binary journals (`*.journal`). The examiner's normal export path
   (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
-  gap is the binary file rather than the log's content.
-- **Program execution** — Prefetch (Win10+ is LZXPRESS-Huffman compressed), jumplists (OLE2
-  containers of shell-link streams), Shimcache. Plain `.lnk` shortcuts and Amcache ARE read;
-  see the entries above.
+  gap is the binary container rather than the log's content.
+- **Shimcache** (`AppCompatCache`) — inside the SYSTEM hive, whose bytes HOST-2 already reads;
+  the cache's own binary layout is version-dependent and community-derived.
+- **EVTX record content** — see the PARTIAL (container) note above.
 - **`lastlog`** — deliberately not claimed with the utmp family: it has a different record
   layout and identifies an account only by the record's POSITION (the numeric uid), so without
   `/etc/passwd` a login would be attributed to a number.
