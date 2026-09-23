@@ -33,6 +33,7 @@ public struct StructuralParserRegistry: Sendable {
         EmailStructuralParser(),
         MBOXStructuralParser(),
         EMLXStructuralParser(),
+        MSGStructuralParser(),       // Outlook .msg (OLE2/MAPI) — typed email blocks
         StructuredTextStructuralParser(),  // PAR-008 — HTML / JSON / XML / log
         SQLiteStructuralParser()           // PAR-009 — read-only SQLite tables
     ]
