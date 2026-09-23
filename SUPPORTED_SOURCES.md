@@ -119,6 +119,25 @@ derives this table from it so the matrix cannot drift from what actually runs.
   DEFERRED (kept, hashed, searchable by name and date, not transcribed).
 - **PRESERVED-ONLY** formats need dedicated work (PPT/Keynote) or opt-in adapters
   (iMessage/chat/browser history, which are feature-gated and off by default).
+- **iMessage (`chat.db`) — silent data loss FIXED.** From macOS Ventura / iOS 16 onward
+  Messages often leaves `message.text` NULL and stores the body in `message.attributedBody`,
+  an NSAttributedString in Apple's LEGACY typedstream format (the old `NSArchiver`, which no
+  modern unarchiver reads). This reader filtered on `message.text IS NOT NULL`, so those
+  messages were not rendered badly — they were **dropped**, and a modern conversation could
+  arrive nearly empty while looking complete. Now every message row is read: text comes from
+  `message.text` when present (Apple's own plain copy stays authoritative), else from
+  `attributedBody`, and when NEITHER yields text the message is **still emitted** with its
+  timestamp, sender and direction plus a stated note. A message never vanishes. Recovery counts
+  (`text_recovered_from_attributed_body`, `text_unrecoverable`) ride in the object's metadata,
+  so a thin conversation can be told apart from a quiet one. The `attributedBody` column does
+  not exist in older schemas, where selecting it would fail the whole query and take the entire
+  iMessage lane down, so the reader tries the modern shape and falls back to the legacy one.
+  Attachment placeholders (U+FFFC) are named rather than left as invisible characters. The
+  archive layout and its four length encodings were **measured against Apple's own
+  `NSArchiver`** rather than read off a spec, and a test asserts the fixture writer is
+  byte-identical to Apple's output — so the decoder is verified against Apple's encoding, not
+  against a reading of it. A misread length is refused rather than clamped, because clamping
+  would hand back a truncated message as though it were whole.
 - **Discussion platforms (DISC-\*)** are read from the platform's own data export — the file
   set the account holder, or a lawful order, produced. Kalsmritikosh makes **no network calls**
   (`ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO` in both build configurations and
