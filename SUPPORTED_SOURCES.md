@@ -51,6 +51,7 @@ Coverage states (from the locked product contract):
 | loginRecord (utmp/wtmp/btmp) | hostArtifact | FULL | linux-login-accounting-utmp | 1 |
 | shellHistory (bash/zsh/fish/REPL) | hostArtifact | FULL | shell-history | 1 |
 | shellLink (lnk) | hostArtifact | FULL | windows-shell-link | 1 |
+| amcache (Amcache.hve) | hostArtifact | FULL | windows-amcache | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -70,7 +71,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 32 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 33 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -225,6 +226,26 @@ derives this table from it so the matrix cannot drift from what actually runs.
   carried in the fixed-offset location block and relative path. A shortcut renamed away from
   `.lnk` is still found by its 20-byte header-plus-class-id signature.
 
+- **Amcache (`Amcache.hve`, HOST-6c)** is Windows's inventory of executables that have been
+  PRESENT on the machine. It is a registry hive, so HOST-2's reader already read its bytes
+  exactly; what this adds is the schema — and the prize is the executable's **SHA-1**, which
+  identifies precisely which binary was there and can be matched against a hash set long after
+  the file is deleted, alongside its full path, publisher, product, version, size and PE link
+  date. **The misconception this refuses to enable:** an Amcache entry is NOT evidence of
+  execution. Windows populates the inventory from a scheduled task that walks the filesystem,
+  so an entry proves the file existed at that path when the task ran — nothing more. Reading
+  Amcache as a "programs that ran" list is a well-known and consequential error, so the
+  distinction is emitted as an evidence block and every record states that it is evidence of
+  presence. The key's last-written time is labelled a property of the RECORD, not of the file.
+  A `FileId` is reported as a SHA-1 only when it really is a 40-character hex digest (behind
+  the format's `0000` prefix), and an all-zero digest is treated as the placeholder it is —
+  a hash that gets reported is a hash someone will look up. The LEGACY numbered schema
+  (Windows 8: values named `0`, `15`, `101` …) is counted and disclosed but deliberately NOT
+  mapped: those field meanings are community-derived rather than documented, and labelling one
+  "SHA-1" on that basis would present a guess in the shape of a fact. `Amcache.hve` is routed
+  ahead of the generic hive detector, since reading it as an ordinary hive would dump its keys
+  without the schema that makes them mean anything.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -280,9 +301,8 @@ searchable by name — they are simply not interpreted yet:
   gap is the binary file rather than the log's content.
 - **`$MFT`** (NTFS master file table): filenames, MACB timestamps, deleted entries.
 - **Program execution** — Prefetch (Win10+ is LZXPRESS-Huffman compressed), jumplists (OLE2
-  containers of shell-link streams), Amcache (a registry hive, so HOST-2's reader already
-  reads its bytes — what is missing is the schema layer), Shimcache. Plain `.lnk` shortcuts
-  ARE read; see the entry above.
+  containers of shell-link streams), Shimcache. Plain `.lnk` shortcuts and Amcache ARE read;
+  see the entries above.
 - **`lastlog`** — deliberately not claimed with the utmp family: it has a different record
   layout and identifies an account only by the record's POSITION (the numeric uid), so without
   `/etc/passwd` a login would be attributed to a number.

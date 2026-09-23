@@ -174,6 +174,19 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .amcache:
+            // HOST-6c — a real Amcache hive. The sentinel rides in the
+            // executable's path, which is the fact the inventory records.
+            let writer = RegistryHiveFixtureWriter()
+            return writer.build(root: .init("Root", children: [
+                .init("InventoryApplicationFile", children: [
+                    .init("probe|0001", lastWritten: Date(timeIntervalSince1970: 1_773_480_413),
+                          values: [
+                            .sz("LowerCaseLongPath", #"c:\tools\"# + "\(s)."),
+                            .sz("Name", "\(s).")
+                          ])
+                ])
+            ]))
         case .shellLink:
             // HOST-6a — a real shortcut. The sentinel rides in the target path,
             // which is the fact a shortcut exists to record.

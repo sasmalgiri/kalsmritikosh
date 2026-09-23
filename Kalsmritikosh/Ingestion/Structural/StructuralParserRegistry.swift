@@ -47,7 +47,8 @@ public struct StructuralParserRegistry: Sendable {
         EVTXStructuralParser(),            // HOST-3 — Windows event logs (EVTX)
         UtmpStructuralParser(),            // HOST-4 — Linux utmp/wtmp/btmp
         ShellHistoryStructuralParser(),    // HOST-4b — shell / REPL history
-        ShellLinkStructuralParser()        // HOST-6a — Windows shortcuts (.lnk)
+        ShellLinkStructuralParser(),       // HOST-6a — Windows shortcuts (.lnk)
+        AmcacheStructuralParser()          // HOST-6c — Windows Amcache inventory
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

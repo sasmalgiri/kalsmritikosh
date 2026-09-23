@@ -43,6 +43,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// `Recent` is often the only surviving record that a file was opened from a
     /// particular USB device.
     case shellLink
+    /// HOST-6c — `Amcache.hve`: Windows's inventory of executables that have
+    /// been PRESENT on the machine, with each one's SHA-1. A registry hive by
+    /// format, but its own type because the schema is what makes it evidence —
+    /// and because presence must never be read as execution.
+    case amcache
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -129,6 +134,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // `.unknown` and `SOFTWARE`/`SYSTEM`/`SAM` have no extension at all.
         // Transaction logs (.LOG1/.LOG2) and backups (.SAV) are deliberately not
         // claimed here: they are not whole hives and would decode as corrupt.
+        // HOST-6c — before the generic hive check: Amcache IS a hive, and
+        // reading it as one would dump its keys without the schema that makes
+        // them mean anything.
+        if name == "amcache.hve" { return .amcache }
         if Self.registryHiveNames.contains(name) { return .registryHive }
         // HOST-4 — Linux login accounting is extensionless with fixed names, and
         // the name is ALSO what says whether a record is a sign-in (wtmp) or a
@@ -334,7 +343,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
-             .loginRecord, .shellHistory, .shellLink: return .hostArtifact
+             .loginRecord, .shellHistory, .shellLink, .amcache: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat
