@@ -18,6 +18,8 @@ import Testing
 struct AEEMasterBrainIntegrationTests {
 
     // A fake USF upgrade bridge that records which exact versions were asked to upgrade.
+    // `nonisolated` conformance: the test target's default MainActor isolation would
+    // otherwise infer a MainActor-isolated conformance an actor cannot satisfy.
     private actor FakeBridge: AEEEvidenceUpgrading {
         let states: [UUID: SourceCompletionState]
         let throwOnEnsure: Bool

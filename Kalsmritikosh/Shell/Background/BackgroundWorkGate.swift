@@ -18,7 +18,10 @@
 import Foundation
 
 /// The gate abstraction workers depend on (so tests can inject a controllable gate).
-public protocol BackgroundWorkGating: Sendable {
+/// Explicitly `nonisolated`: implementers are actors, and a module compiled with
+/// default MainActor isolation (Xcode 26.6 toolchain) would otherwise infer a
+/// global-actor-isolated protocol no actor can conform to.
+nonisolated public protocol BackgroundWorkGating: Sendable {
     func permits(_ priority: BackgroundWorkPriority) async -> Bool
 }
 

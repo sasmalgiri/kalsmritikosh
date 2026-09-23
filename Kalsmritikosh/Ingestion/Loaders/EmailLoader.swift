@@ -619,6 +619,13 @@ public struct EmailLoader: Ingestor {
     ) -> (textBody: String, attachmentURLs: [URL]) {
         guard let ct = headers["content-type"],
               ct.lowercased().hasPrefix("multipart/") else {
+            // Single-part: transfer-decode quoted-printable / base64 bodies so a
+            // QP soft break can never leave a split email address (or any split
+            // token) in the stored text. All email paths (eml, emlx, mbox)
+            // funnel through here, so this one branch fixes the whole lane.
+            if let decoded = MIMEParser.decodeSinglePartBody(body, headers: headers) {
+                return (decoded, [])
+            }
             return (body, [])
         }
         let baseDir = FileManager.default.temporaryDirectory
