@@ -45,9 +45,17 @@ public struct EmbeddingCoverage: Sendable, Equatable {
         self.failed = max(0, failed)
     }
 
-    /// Fraction embedded, for the bar fill. 1.0 when there are no chunks
-    /// (nothing to embed is "complete", not "empty").
-    public var embeddedFraction: Double {
-        total == 0 ? 1.0 : Double(embedded) / Double(total)
+    /// Whether there is anything to measure at all. The health panel gates its
+    /// consistency invariant on this: four zeroes summing to zero verifies
+    /// nothing, and reporting it as a pass told the owner the ledger had been
+    /// checked when it had not.
+    public var hasContent: Bool { total > 0 }
+
+    /// Fraction embedded, for the bar fill — nil when there are no chunks.
+    /// This used to return 1.0, which drew a FULL bar over an empty archive:
+    /// the most confident possible rendering of no data. Neither 1.0 nor 0.0 is
+    /// true here, so the caller is made to decide what "nothing yet" looks like.
+    public var embeddedFraction: Double? {
+        total == 0 ? nil : Double(embedded) / Double(total)
     }
 }

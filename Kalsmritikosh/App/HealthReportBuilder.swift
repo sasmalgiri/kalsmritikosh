@@ -9,6 +9,15 @@
 //  from the live sample. As more invariants get cheap live queries they
 //  join the emitted set.
 //
+//  VACUOUS PASSES REMOVED. Each of these checks used to go GREEN on an empty
+//  ledger: no causal links means `MAX(...)` is 0 which is "within budget",
+//  no chunks means the embedding states trivially sum, and no queued work
+//  means the backfill is "done". So a fresh install — or the state right
+//  after an erase — reported "All checks passing" having verified nothing,
+//  which is the one thing a self-check panel must never say. A check with
+//  nothing to measure is now reported as NOT MEASURED, and the panel's
+//  overall status is notMeasured rather than green when that is all there is.
+//
 
 import Foundation
 
@@ -32,18 +41,17 @@ public enum HealthReportBuilder {
                 states: [("causal links", s.causalLinkCount), ("memories", s.memoryCount),
                          ("summaries", s.summaryCount)]))
 
-            // Invariant: embedding states sum to the chunk total.
-            invariants.append(HealthInvariant(
-                id: "embedding-consistent", title: "Embedding states sum to total",
-                status: cov.isConsistent ? .pass : .fail,
-                detail: cov.isConsistent ? "consistent" : "counts do not sum to the chunk total"))
+            invariants.append(HealthReport.embeddingInvariant(cov))
         }
 
         // Invariant: grounded causal links per event ≤ budget (3). Measures
         // the max fan-out among answer-reaching link kinds.
         if let db = appState.database {
+            // SUM as well as MAX: without it, "no grounded links at all" and
+            // "the busiest event has zero" are indistinguishable, and the
+            // former was passing as though it had been checked.
             let sql = """
-            SELECT COALESCE(MAX(c), 0) FROM (
+            SELECT COALESCE(MAX(c), 0), COALESCE(SUM(c), 0) FROM (
               SELECT COUNT(*) AS c FROM event_links
               WHERE superseded_by IS NULL
                 AND source IN ('lexicalTrigger','user','ontology','llm')
@@ -52,10 +60,9 @@ public enum HealthReportBuilder {
             """
             if let rows = try? await db.query(sql, []) {
                 let maxPerEvent = Int(rows.first?.int(0) ?? 0)
-                invariants.append(HealthInvariant(
-                    id: "causal-budget", title: "Causal links within budget",
-                    status: maxPerEvent <= 3 ? .pass : .fail,
-                    detail: "max \(maxPerEvent) grounded links on one event (budget 3)"))
+                let totalLinks = Int(rows.first?.int(1) ?? 0)
+                invariants.append(HealthReport.causalBudgetInvariant(
+                    maxPerEvent: maxPerEvent, totalLinks: totalLinks))
             }
         }
 
@@ -63,10 +70,11 @@ public enum HealthReportBuilder {
         // AppState exposes publicly). Amber while it still has work.
         if let ctx = appState.contextPrefixBackfiller {
             let pending = await ctx.pendingCount()
-            invariants.append(HealthInvariant(
+            // "Drained" only means something once there was something to drain.
+            let hasChunks = (appState.liveMetrics?.current.chunkCount ?? 0) > 0
+            invariants.append(HealthReport.backfillInvariant(
                 id: "backfill-context-prefix", title: "Context-prefix backfill drained",
-                status: pending == 0 ? .pass : .warn,
-                detail: pending == 0 ? "done" : "\(pending) chunk(s) pending"))
+                pending: pending, hasWork: hasChunks))
         }
 
         return HealthReport(coverage: coverage, invariants: invariants)

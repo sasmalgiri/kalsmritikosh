@@ -102,9 +102,11 @@ public struct HealthPanelView: View {
     private var statusIcon: String { icon(for: report.worstStatus) }
     private var statusSummary: String {
         switch report.worstStatus {
-        case .pass: return "All checks passing."
+        case .pass: return "All \(report.measuredCount) measured check(s) passing."
         case .warn: return "Working — some checks still settling."
         case .fail: return "A check failed — see the red items below."
+        // Never "all passing": nothing has been measured yet.
+        case .notMeasured: return "Nothing to check yet — ingest an archive first."
         }
     }
 
@@ -113,6 +115,8 @@ public struct HealthPanelView: View {
         case .pass: return .green
         case .warn: return .orange
         case .fail: return .red
+        // Grey, deliberately: not green, and not an alarm either.
+        case .notMeasured: return .secondary
         }
     }
     private func icon(for s: HealthInvariant.Status) -> String {
@@ -120,6 +124,7 @@ public struct HealthPanelView: View {
         case .pass: return "checkmark.seal.fill"
         case .warn: return "clock.badge.exclamationmark"
         case .fail: return "xmark.octagon.fill"
+        case .notMeasured: return "circle.dashed"
         }
     }
 }

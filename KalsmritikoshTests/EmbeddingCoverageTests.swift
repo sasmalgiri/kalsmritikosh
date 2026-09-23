@@ -26,10 +26,14 @@ struct EmbeddingCoverageTests {
         #expect(c.excluded == 0 && c.failed == 0)
     }
 
-    @Test func emptyArchiveIsComplete() {
+    @Test func emptyArchiveHasNothingToReport() {
         let c = EmbeddingCoverage(total: 0, embedded: 0)
         #expect(c.pending == 0)
-        #expect(c.embeddedFraction == 1.0)
+        // Was 1.0 — a completely full bar drawn over an empty archive, which is
+        // the most confident possible rendering of no data. Neither 1.0 nor 0.0
+        // is true, so the caller must decide what "nothing yet" looks like.
+        #expect(c.embeddedFraction == nil)
+        #expect(!c.hasContent)
     }
 
     @Test func inconsistentCountsAreFlagged() {
