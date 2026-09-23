@@ -100,7 +100,10 @@ public struct RegistryHiveStructuralParser: StructuralParser {
                     path: components + [value.name], attributes: [
                         "valueName": AnyCodable(.string(value.name)),
                         "valueType": AnyCodable(.string(value.type.label)),
-                        "byteCount": AnyCodable(.int(Int64(value.byteCount)))
+                        "byteCount": AnyCodable(.int(Int64(value.byteCount))),
+                        // The rendered value as its own attribute (HOST-8e), so a
+                        // consumer reads it without re-splitting the prose line.
+                        "value": AnyCodable(.string(value.rendered))
                     ])
                 valueCount += 1
             }

@@ -855,6 +855,14 @@ public actor IngestCoordinator {
             derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
                                                    documentClass: documentClass)
         }
+        // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
+        // a plist / registry hive / custody manifest rather than from prose (a
+        // serial regexed out of a sentence is noise). They join `derived` here, so
+        // they take the SAME merge and the SAME bindIdentifierAnchors door as every
+        // other fact — the strong fields are `.identifier`-shaped, which is the
+        // entire wiring: no new call site, no new write path.
+        derived += DeviceFactProducer().facts(from: doc, subjectLabel: subjectLabel)
+
         guard !derived.isEmpty else { return }
         let merged = await bindIdentifierAnchors(DomainFactExtractor.merge(derived),
                                                  owningObjectID: owningObjectID)

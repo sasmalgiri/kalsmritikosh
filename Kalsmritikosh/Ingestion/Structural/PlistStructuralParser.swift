@@ -49,15 +49,18 @@ public struct PlistStructuralParser: StructuralParser {
         var leafCount = 0
         var truncated = false
 
-        func add(_ kind: EvidenceBlockKind, _ raw: String, path: [String], valueType: String) {
+        func add(_ kind: EvidenceBlockKind, _ raw: String, path: [String], valueType: String,
+                 value: String? = nil) {
+            var attributes: [String: AnyCodable] = [
+                "keyPath": AnyCodable(.string(path.joined(separator: "."))),
+                "valueType": AnyCodable(.string(valueType))
+            ]
+            if let value { attributes["value"] = AnyCodable(.string(value)) }
             blocks.append(EvidenceBlock(
                 documentID: documentID, sourceVersionID: sourceVersionID,
                 ordinal: blocks.count, kind: kind, rawText: raw,
                 locator: SourceLocator(sectionPath: [name] + path),
-                attributes: [
-                    "keyPath": AnyCodable(.string(path.joined(separator: "."))),
-                    "valueType": AnyCodable(.string(valueType))
-                ]))
+                attributes: attributes))
         }
 
         guard !data.isEmpty else {
@@ -158,7 +161,12 @@ public struct PlistStructuralParser: StructuralParser {
 
         func leaf(_ rendered: String, path: [String], valueType: String) {
             let label = path.isEmpty ? name : path.joined(separator: ".")
-            add(.tableRow, "\(label) = \(rendered)", path: path, valueType: valueType)
+            // The value rides as its OWN attribute as well as inside the prose, so
+            // a consumer (HOST-8e device identity) reads it without re-splitting
+            // a rendered string — string surgery on our own output would break
+            // the moment the rendering changed.
+            add(.tableRow, "\(label) = \(rendered)", path: path, valueType: valueType,
+                value: rendered)
             leafCount += 1
         }
 

@@ -159,9 +159,12 @@ derives this table from it so the matrix cannot drift from what actually runs.
   serial and an IMEI sharing digits stay two devices. A computer name or model is recorded but
   NEVER merges, because two machines are routinely called the same thing; manufacturer
   placeholders ("To Be Filled By O.E.M.", "Unknown", all-zero serials) are refused, since
-  anchoring on one would fuse every device that shares it. **Still open:** the identity layer
-  is not yet called during a run, so device anchors are not created automatically — the
-  extractors and the door exist, the wiring does not.
+  anchoring on one would fuse every device that shares it. HOST-8e wires this into every run: the strong device
+  fields are registered `.identifier`-shaped, and the pipeline's existing anchor binding
+  resolves an anchor for every identifier-shaped fact — so device anchors are created with no
+  new call site and no new write path. Identifiers are read only from STRUCTURED key/value
+  blocks (plist, registry, custody manifest); a serial appearing in prose is never anchored,
+  because that would be a guess.
 
 ## Advertising rule
 

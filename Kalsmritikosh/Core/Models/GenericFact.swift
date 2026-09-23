@@ -265,6 +265,13 @@ public enum FactSchemaRegistry {
         "deathdate": .date, "marriagedate": .date, "deeddate": .date,
         "issuedate": .date, "expirydate": .date,
         "balance": .money, "consideration": .money,
+        // HOST-8e — device identifiers. Declaring them `.identifier` is the whole
+        // wiring: IngestCoordinator.bindIdentifierAnchors already resolves an
+        // anchor for EVERY identifier-shaped fact, so device facts merge across
+        // extractions through the existing gated door with no new call site.
+        "deviceserialnumber": .identifier, "imei": .identifier, "meid": .identifier,
+        "deviceudid": .identifier, "devicemacaddress": .identifier,
+        "computername": .text, "deviceproducttype": .text,
     ]
 
     public nonisolated static func normalizeField(_ raw: String) -> String {
