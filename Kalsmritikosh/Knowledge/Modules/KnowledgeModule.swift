@@ -40,6 +40,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case boilerplateEmbedSkip   // I1 — skip learned boilerplate templates at embed time
     case passwordProtectedFiles // A4 — open encrypted files (empty-password unlock; classify the rest)
     case importLifecycle        // A2 — unified per-source lifecycle state + omission disclosure
+    case mediaTranscription     // M — transcribe audio/video on-device (Apple Speech)
     // Answer composition
     case aiComposeEveryAnswer   // compose EVERY grounded answer with the model (not just escalated)
     case storyReviewerLoop      // Lane C — record approve/correct/reject verdicts on story items
@@ -65,6 +66,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .boilerplateEmbedSkip: return "Boilerplate embed-skip"
         case .passwordProtectedFiles: return "Password-protected files"
         case .importLifecycle:      return "Import & coverage lifecycle"
+        case .mediaTranscription:   return "Transcribe audio & video"
         case .aiComposeEveryAnswer: return "AI writes every answer"
         case .storyReviewerLoop:    return "Story review (approve / correct / reject)"
         case .actorComposer:        return "Actor answers (who did X)"
@@ -88,6 +90,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .hydeExpansion:        return "On a weak vector pass, expand the query with a hypothetical answer and fuse the results. Never shown or cited."
         case .boilerplateEmbedSkip: return "Skip embedding of learned, cross-document boilerplate templates. Still fully searchable; just down-ranked."
         case .passwordProtectedFiles: return "Open encrypted PDFs that use owner-only protection (empty user password); files that truly need a password are tracked as such instead of failing silently."
+        case .mediaTranscription:   return "Read speech in recordings and videos using Apple's on-device speech model, so a recording becomes quotable evidence with timecodes (\u{201C}the call at 12:04\u{201D}). Nothing leaves your Mac. Off by default because transcription is slow and the first run installs Apple's speech model; audio/video are always kept and searchable by name and date either way. Takes effect on next app launch, for newly-ingested files."
         case .importLifecycle:      return "Show one honest lifecycle state per source (queued / processing / searchable / partial / needs-password / couldn't-read / excluded) and disclose when results may omit a source."
         case .aiComposeEveryAnswer: return "When the on-device model is available, compose every grounded answer as fluent prose (not just complex ones). Grounding is preserved — the model rewrites over the verified evidence and citations; if no model is available it falls back to the exact deterministic answer."
         case .storyReviewerLoop:    return "Let you approve, correct, or reject individual beats of a reconstructed story; rejected beats drop and corrected beats are prioritized when the story is rebuilt."
@@ -106,7 +109,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .topicSeededComposers, .actorComposer, .progressiveStreaming,
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
              .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop,
-             .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish:
+             .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish,
+             .mediaTranscription:
             return true
         }
     }
@@ -117,7 +121,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     /// until the owner opts in.
     public var defaultEnabled: Bool {
         switch self {
-        case .proseSubjectBinding, .aiSubjectResolution:
+        case .proseSubjectBinding, .aiSubjectResolution, .mediaTranscription:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
         default:
             return implemented
@@ -131,7 +135,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .eventSlotFill, .proseSubjectBinding, .aiSubjectResolution, .topicProsePolish:
             return "Knowledge synthesis"
         case .crossEncoderRerank, .correctiveRetrieval, .hydeExpansion, .boilerplateEmbedSkip,
-             .passwordProtectedFiles, .importLifecycle:
+             .passwordProtectedFiles, .importLifecycle, .mediaTranscription:
             return "Retrieval"
         case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop,
              .aiComposeEveryAnswer:

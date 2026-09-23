@@ -1630,7 +1630,8 @@ public final class AppState {
                 ocr: VisionOCR(),
                 iMessageEnabled: FeatureFlags.shared.iMessageLoaderEnabled,
                 browserHistoryEnabled: FeatureFlags.shared.browserHistoryLoaderEnabled,
-                chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled)
+                chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled,
+                mediaTranscriptionEnabled: KnowledgeModuleFlags.isEnabled(.mediaTranscription))
             let ingest = IngestCoordinator(
                 universalRegistry: universalParserRegistry,
                 chunker: dynamicChunker,

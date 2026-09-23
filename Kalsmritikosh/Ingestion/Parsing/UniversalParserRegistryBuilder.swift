@@ -6,7 +6,8 @@
 //  routing truth: exactly one plugin owns each SourceType. The existing loader + structural-parser
 //  instances are used here ONLY as construction inputs (their algorithms are untouched); at runtime
 //  IngestCoordinator dispatches through the UniversalParserRegistry, never the old registries.
-//  Feature-gated parsers remain feature-gated; media stays deferred (no transcription activated).
+//  Feature-gated parsers remain feature-gated; media is deferred unless the .mediaTranscription
+//  module is enabled, in which case the on-device ASR loaders own audio/video.
 //
 
 import Foundation
@@ -16,10 +17,11 @@ public enum UniversalParserRegistryBuilder {
     /// The complete production registry with injected dependencies. Immutable once built.
     @MainActor
     public static func standard(ocr: any OCREngine, iMessageEnabled: Bool = false,
-                                browserHistoryEnabled: Bool = false, chatExportEnabled: Bool = false) throws -> UniversalParserRegistry {
+                                browserHistoryEnabled: Bool = false, chatExportEnabled: Bool = false,
+                                mediaTranscriptionEnabled: Bool = false) throws -> UniversalParserRegistry {
         let structural = StructuralParserRegistry.standard(ocr: ocr)
 
-        // Real content loaders (NOT AudioLoader/VideoLoader — media stays deferred; no transcription).
+        // Real content loaders. Audio/video join only when transcription is enabled (below).
         var loaders: [any Ingestor] = [
             TextLoader(), PDFLoader(ocr: ocr), DocxLoader(), SpreadsheetLoader(), PresentationLoader(),
             EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader()
@@ -27,6 +29,19 @@ public enum UniversalParserRegistryBuilder {
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }
         if chatExportEnabled { loaders.append(ChatExportLoader()) }
+        // MEDIA (module .mediaTranscription, opt-in). The ASR lane — AudioLoader /
+        // VideoLoader over the on-device Apple Speech transcriber, which forces
+        // requiresOnDeviceRecognition, plus the transcript repository and view —
+        // has existed since the media work landed, but was deliberately NOT
+        // registered here, so recordings stayed preserved-only and no
+        // transcription ever ran. Enabling the module admits both loaders, and
+        // the timecodes ASRSegment embeds in the transcript text ride through
+        // chunking into cited answers ("in recording.m4a at 12:34").
+        if mediaTranscriptionEnabled {
+            let transcriber = SpeechTranscriber()
+            loaders.append(AudioLoader(transcriber: transcriber))
+            loaders.append(VideoLoader(transcriber: transcriber))
+        }
         func realLoader(_ t: SourceType) -> (any Ingestor)? { loaders.first { $0.supportedTypes.contains(t) } }
 
         var plugins: [any UniversalParserPlugin] = []
@@ -34,8 +49,17 @@ public enum UniversalParserRegistryBuilder {
             let struc = structural.parser(for: t)
             switch t.category {
             case .audio, .video:
-                // Recognized, custody kept, interpretation deferred — MMI will own transcription.
-                plugins.append(PreservedOnlyPlugin(pluginID: "media.\(t.rawValue)", supportedTypes: [t], executionMode: .deferred))
+                // Transcription ON → the real ASR loader transcribes on-device and
+                // the recording becomes searchable, citable text. OFF → recognized,
+                // custody kept, interpretation deferred, exactly as before.
+                if let l = realLoader(t) {
+                    plugins.append(ExistingParserPluginAdapter(
+                        pluginID: "media.\(t.rawValue)", pluginVersion: "1", supportedTypes: [t],
+                        executionMode: .immediate, loader: l, structural: nil,
+                        declaredSurfaces: [.text, .metadata]))
+                } else {
+                    plugins.append(PreservedOnlyPlugin(pluginID: "media.\(t.rawValue)", supportedTypes: [t], executionMode: .deferred))
+                }
             case .archive:
                 if let l = realLoader(t) {
                     plugins.append(ExistingParserPluginAdapter(

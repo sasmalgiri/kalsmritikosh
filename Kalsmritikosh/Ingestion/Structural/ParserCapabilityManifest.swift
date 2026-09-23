@@ -98,7 +98,14 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
                 case .deferred: coverage = .deferred
                 case .container, .preservedOnly: coverage = .preservedOnly
                 case .immediate:
-                    coverage = p.capabilities.producesStructure ? (p.capabilities.requiresOCR ? .partial : .full) : .preservedOnly
+                    if Self.isMedia(type) {
+                        // Transcription is ON for this type: speech becomes citable text, but a
+                        // recording has no document structure and ASR is approximate — PARTIAL is
+                        // the honest word. (OFF, the plugin is deferred and reported as such.)
+                        coverage = p.capabilities.declaredSurfaces.contains(.text) ? .partial : .preservedOnly
+                    } else {
+                        coverage = p.capabilities.producesStructure ? (p.capabilities.requiresOCR ? .partial : .full) : .preservedOnly
+                    }
                 }
                 return UniversalEntry(
                     sourceType: type.rawValue, category: String(describing: type.category),
