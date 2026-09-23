@@ -21,6 +21,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
     /// structure is what makes a host artifact citable.
     case plist
+    /// HOST-3 — a Windows event log (EVTX). Its own type rather than an opaque
+    /// binary: every record carries an exact written time and record id, which is
+    /// what puts a machine's own account of itself on the timeline.
+    case eventLog
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -189,6 +193,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "msg": return .msg
         case "emlx": return .appleMail
         case "nsf": return .nsf
+        case "evtx": return .eventLog
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -241,6 +246,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x62, 0x70, 0x6C, 0x69, 0x73, 0x74]) { return .plist }    // "bplist"
         // HOST-2 — "regf": a Windows registry hive, whatever the examiner named it.
         if has([0x72, 0x65, 0x67, 0x66]) { return .registryHive }         // "regf"
+        // HOST-3 — "ElfFile": a Windows event log, however it was renamed.
+        if has([0x45, 0x6C, 0x66, 0x46, 0x69, 0x6C, 0x65]) { return .eventLog }   // "ElfFile"
         return nil
     }
 
@@ -264,7 +271,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
-        case .registryHive, .knowledgeC, .extractionManifest: return .hostArtifact
+        case .registryHive, .knowledgeC, .extractionManifest, .eventLog: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

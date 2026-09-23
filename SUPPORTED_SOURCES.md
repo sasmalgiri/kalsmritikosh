@@ -10,8 +10,10 @@ Coverage states (from the locked product contract):
 
 - **FULL** — a structural parser recovers structure + exact locators. May be *advertised*
   "Supported" only after fixture + release verification (PAR-010).
-- **PARTIAL** — content recovered with disclosed limits. Here: OCR-dependent formats, whose
-  fidelity depends on scan/image quality.
+- **PARTIAL** — content recovered with disclosed limits. Two different limits live here:
+  OCR-dependent formats, whose fidelity depends on scan/image quality; and container-only
+  formats, where the file's framing is read exactly but its record content is not interpreted
+  (currently `evtx`). The limit is always named, never left as a vague "partial".
 - **PRESERVED-ONLY** — no structural parser yet; identity/metadata/hash retained, content not
   interpretable. Never silently dropped.
 - **DEFERRED** — recognized but processing intentionally postponed. Applies to audio/video only
@@ -50,6 +52,7 @@ Coverage states (from the locked product contract):
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
 | discussionExport | chat | FULL | discussion-export | 1 |
+| eventLog (evtx) | hostArtifact | PARTIAL (container) | windows-eventlog-evtx | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
 | jpg | image | PARTIAL (OCR) | image-vision-ocr | 1 |
@@ -64,7 +67,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 29 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 29 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -81,6 +84,26 @@ derives this table from it so the matrix cannot drift from what actually runs.
   as CONTAINER per this note.)
 - **PARTIAL (OCR)** fidelity depends on image/scan quality; a currency glyph or handwriting
   may be misread. Native-text PDFs extract exactly; scanned pages fall back to Vision OCR.
+- **PARTIAL (container) — Windows event logs (`.evtx`, HOST-3).** An EVTX file has two layers.
+  The CONTAINER is fixed-offset and is read exactly: every record's id and its written
+  FILETIME, so a machine's own account of itself lands on the timeline — when it was on, when
+  someone signed in, when a service was installed — each record citable at its byte offset.
+  The CONTENT layer is BinXML with a per-chunk TEMPLATE table, and templates are **not
+  resolved**, so a record's structured field names (`EventID`, `Provider`, `Channel`, the named
+  `Data` elements) are not recovered. The UTF-16 strings a record carries **are** recovered,
+  unlabelled. The practical line: this log is searchable and dated ("a record at 09:26:53
+  mentioning EVIDENCE-01"), but it cannot yet be filtered by event id, so it will not answer
+  "show me every 4624". That gap is emitted as an **evidence block**, not merely a warning, so
+  an answer built on a thin event log can quote what the log could not say; the status is
+  always PARTIAL and never COMPLETE, and a test pins that. The boundary is deliberate: BinXML
+  templates are self-referential, so a fixture writer correct enough to prove a template
+  resolver needs the same understanding as the resolver, and a shared misunderstanding would
+  pass its own tests. Verifying the template layer needs a real `.evtx` to check against, so
+  the container ships verified and the parser SAYS what it could not interpret. Other honest
+  states: a log copied from a running machine has its dirty flag reported (the last chunk may
+  be mid-write), a truncated log yields what survived and says it is short, records are read
+  only up to each chunk's free-space offset so stale bytes from a previous log are never
+  reported as current records, and confidence is capped at medium.
 - **Media (ASR)**: with the default-ON "Transcribe audio & video" module, speech is transcribed
   on-device by Apple Speech (`requiresOnDeviceRecognition` is forced — nothing leaves the Mac)
   and the transcript carries inline timecodes, so an answer can cite "the call at 12:04".

@@ -174,6 +174,12 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .eventLog:
+            // HOST-3 — a real EVTX container carrying the sentinel as a record string.
+            return EVTXFixtureWriter().build(records: [
+                .init(id: 1, written: Date(timeIntervalSince1970: 1_773_480_413),
+                      strings: ["\(s)."])
+            ])
         case .custodyManifest:
             // HOST-8 — a chain-of-custody sidecar. The sentinel rides in the
             // examiner notes, since that is a free-text custody field.
@@ -232,6 +238,15 @@ struct AllDomainSyntheticMatrixTests {
 
     /// Types whose parse legitimately reports `.partial` (OCR-dependent).
     private static let ocrDependent: Set<SourceType> = [.pdf, .png, .jpg, .heic, .tiff, .webp]
+
+    /// Types whose CONTAINER is read exactly but whose record content is not
+    /// interpreted, so `.partial` is the only honest status — and `.complete` is
+    /// a FAILURE, not an upgrade. `.eventLog` reads every record's id and written
+    /// FILETIME but does not resolve BinXML templates (HOST-3), so field names
+    /// like EventID are absent. If a future unit lands template resolution, that
+    /// unit moves this type out of here; until then, pinning it means the parser
+    /// cannot quietly start claiming a full read.
+    private static let containerOnly: Set<SourceType> = [.eventLog]
 
     /// Types that HAVE a parser but whose faithful fixture lives in a dedicated
     /// suite, because this generic generator can't produce valid bytes for them.
@@ -308,8 +323,14 @@ struct AllDomainSyntheticMatrixTests {
         if doc.extractionStatus == .complete {
             #expect(!doc.blocks.isEmpty, "\(type.rawValue): complete but produced no blocks")
         }
-        let expected: Set<ExtractionStatus> = Self.ocrDependent.contains(type)
-            ? [.complete, .partial] : [.complete]
+        let expected: Set<ExtractionStatus>
+        if Self.containerOnly.contains(type) {
+            expected = [.partial]           // exactly partial — complete would be a lie
+        } else if Self.ocrDependent.contains(type) {
+            expected = [.complete, .partial]
+        } else {
+            expected = [.complete]
+        }
         #expect(expected.contains(doc.extractionStatus),
                 "\(type.rawValue): status \(doc.extractionStatus)")
 

@@ -56,7 +56,8 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
                     return ParserCapabilityEntry(
                         sourceType: type.rawValue,
                         category: category,
-                        coverage: Self.isOCRDependent(type) ? .partial : .full,
+                        coverage: (Self.isOCRDependent(type) || Self.isContentUninterpreted(type))
+                            ? .partial : .full,
                         parserName: p.name,
                         parserVersion: p.version)
                 }
@@ -103,6 +104,10 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
                         // recording has no document structure and ASR is approximate — PARTIAL is
                         // the honest word. (OFF, the plugin is deferred and reported as such.)
                         coverage = p.capabilities.declaredSurfaces.contains(.text) ? .partial : .preservedOnly
+                    } else if Self.isContentUninterpreted(type) {
+                        // Structure IS produced (dated, citable records), but the
+                        // record content is not interpreted — see the helper.
+                        coverage = .partial
                     } else {
                         coverage = p.capabilities.producesStructure ? (p.capabilities.requiresOCR ? .partial : .full) : .preservedOnly
                     }
@@ -136,6 +141,20 @@ public nonisolated struct ParserCapabilityManifest: Sendable {
     nonisolated static func isOCRDependent(_ t: SourceType) -> Bool {
         switch t {
         case .pdf, .png, .jpg, .heic, .tiff, .webp: return true
+        default: return false
+        }
+    }
+
+    /// Formats whose CONTAINER is read exactly but whose record content is not
+    /// interpreted → PARTIAL, not FULL, regardless of the plugin producing
+    /// structure. `.eventLog` reads every record's id and written time but does
+    /// not resolve BinXML templates, so field names like EventID are absent
+    /// (HOST-3). Without this the generated matrix would report EVTX as FULL and
+    /// the advertising rule below would then permit calling it "Supported",
+    /// which the parser itself contradicts by always returning `.partial`.
+    nonisolated static func isContentUninterpreted(_ t: SourceType) -> Bool {
+        switch t {
+        case .eventLog: return true
         default: return false
         }
     }

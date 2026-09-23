@@ -25,7 +25,8 @@ public enum UniversalParserRegistryBuilder {
         var loaders: [any Ingestor] = [
             TextLoader(), PDFLoader(ocr: ocr), DocxLoader(), SpreadsheetLoader(), PresentationLoader(),
             EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader(), RegistryHiveLoader(),
-            SQLiteLoader(), DiscussionExportLoader(), CustodyManifestLoader()
+            SQLiteLoader(), DiscussionExportLoader(), CustodyManifestLoader(),
+            EVTXLoader()
         ]
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }
