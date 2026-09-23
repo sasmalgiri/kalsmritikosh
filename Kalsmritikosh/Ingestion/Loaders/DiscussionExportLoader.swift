@@ -13,12 +13,18 @@
 import Foundation
 
 public struct DiscussionExportLoader: Ingestor {
-    public let supportedTypes: Set<SourceType> = [.discussionExport]
+    /// Injected, NOT fixed. `.chatExport` is an opt-in adapter, so a loader that
+    /// claimed it unconditionally would open that gate by existing — the registry
+    /// decides ownership purely from which loaders are present. Default is the
+    /// ungated type only.
+    public let supportedTypes: Set<SourceType>
 
     private let registry: DiscussionExportRegistry
 
-    public nonisolated init(registry: DiscussionExportRegistry = .standard) {
+    public nonisolated init(registry: DiscussionExportRegistry = .standard,
+                            supportedTypes: Set<SourceType> = [.discussionExport]) {
         self.registry = registry
+        self.supportedTypes = supportedTypes
     }
 
     public func ingest(fileAt url: URL, type: SourceType) async throws -> KnowledgeObject {

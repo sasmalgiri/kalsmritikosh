@@ -56,7 +56,8 @@ Coverage states (from the locked product contract):
 | mp3, wav, m4a, aac, aiff, caf, flac, 3gp | audio | PARTIAL (ASR) / DEFERRED | apple-speech | 1 |
 | mp4, mov | video | PARTIAL (ASR) / DEFERRED | apple-speech | 1 |
 | ppt, keynote | presentation | PRESERVED-ONLY | — | — |
-| imessage, chatExport | chat | PRESERVED-ONLY | — | — |
+| chatExport (WhatsApp/Signal/Slack) | chat | FULL when opted in, else PRESERVED-ONLY | discussion-export | 1 |
+| imessage | chat | PRESERVED-ONLY | — | — |
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
@@ -96,7 +97,10 @@ derives this table from it so the matrix cannot drift from what actually runs.
   evidence is routinely renamed. Currently mapped: **YouTube** (Takeout comments, live chat,
   watch/search history), **Discord** (package messages.json and messages.csv), **Reddit**
   (comments, posts, private messages), **X** (tweets.js, direct-messages.js), **Meta**
-  (Messenger and Instagram threads) and **Telegram** (Desktop result.json, full or single-chat). Meta threads are the only artifact here that names
+  (Messenger and Instagram threads) **Telegram** (Desktop result.json, full or single-chat) and
+  **WhatsApp / Signal / Slack** text exports. That last one is behind the "Chat exports"
+  opt-in flag: with the flag off the type stays PRESERVED-ONLY, and no path — including the
+  generic text fallback — may activate it. Meta threads are the only artifact here that names
   every participant per message; the other platforms' exports contain only the requesting
   account's own content, so those are attributed to a stated account-holder marker rather
   than to a name the export never contained. An export from an unmapped platform is reported by name with the

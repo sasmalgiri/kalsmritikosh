@@ -128,7 +128,8 @@ public struct DiscussionExportRegistry: Sendable {
         RedditExportMapper(),
         XArchiveMapper(),
         MetaDownloadMapper(),
-        TelegramExportMapper()
+        TelegramExportMapper(),
+        TextChatExportMapper()
     ])
 
     /// Every mapper, for the cross-platform disjointness test and for naming the

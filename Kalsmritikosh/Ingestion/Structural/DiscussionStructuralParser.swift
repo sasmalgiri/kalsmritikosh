@@ -22,7 +22,7 @@ import Foundation
 import CryptoKit
 
 public struct DiscussionStructuralParser: StructuralParser {
-    public nonisolated var supportedTypes: Set<SourceType> { [.discussionExport] }
+    public nonisolated var supportedTypes: Set<SourceType> { [.discussionExport, .chatExport] }
     public nonisolated var parserName: String { "discussion-export" }
     public nonisolated var parserVersion: String { "1" }
 

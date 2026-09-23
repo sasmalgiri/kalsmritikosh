@@ -29,7 +29,13 @@ public enum UniversalParserRegistryBuilder {
         ]
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }
-        if chatExportEnabled { loaders.append(ChatExportLoader()) }
+        // DISC-6 — when the gate is open, the DISCUSSION loader owns chat exports:
+        // it yields per-message records (sender, date, thread) where ChatExportLoader
+        // produced a single normalized text blob. ChatExportLoader is left in place
+        // for the legacy LoaderRegistry and is no longer reached from this path.
+        if chatExportEnabled {
+            loaders.append(DiscussionExportLoader(supportedTypes: [.chatExport]))
+        }
         // MEDIA (module .mediaTranscription, opt-in). The ASR lane — AudioLoader /
         // VideoLoader over the on-device Apple Speech transcriber, which forces
         // requiresOnDeviceRecognition, plus the transcript repository and view —
@@ -76,12 +82,14 @@ public enum UniversalParserRegistryBuilder {
                         executionMode: .immediate, loader: l, structural: struc,
                         requiresOCR: ParserCapabilityManifest.isOCRDependent(t),
                         declaredSurfaces: Self.declaredSurfaces(for: t, hasStructural: struc != nil)))
-                } else if let struc {
+                } else if let struc, !Self.featureGated.contains(t) {
                     // Structural-only type (html/json/xml/log): TextLoader reads the bytes; the
                     // STRUCTURE comes from the structural parser. Intentional text-fallback reader.
                     // Only for types whose bytes really ARE text — a binary format routed here
                     // dies, because TextLoader throws on binary and a loader throw fails the whole
                     // plugin. That is why plist, registryHive and sqlite each own a real loader.
+                    // Feature-gated types are excluded: their loader being absent MEANS the gate
+                    // is off, and reaching them through this fallback would silently open it.
                     plugins.append(ExistingParserPluginAdapter(
                         pluginID: "format.\(t.rawValue)", pluginVersion: struc.parserVersion, supportedTypes: [t],
                         executionMode: .immediate, loader: TextLoader(), structural: struc, enforceLoaderTypeSupport: false,
@@ -101,6 +109,13 @@ public enum UniversalParserRegistryBuilder {
 
         return try UniversalParserRegistry(plugins: plugins, unknownFallback: unknownFallback)
     }
+
+    /// Opt-in adapters. Their loader is added only when the corresponding flag is
+    /// set, so an ABSENT loader is the gate being closed — never a gap to fill in
+    /// with the generic text reader.
+    private static let featureGated: Set<SourceType> = [
+        .imessage, .safariHistory, .chromeHistory, .chatExport
+    ]
 
     private static func declaredSurfaces(for t: SourceType, hasStructural: Bool) -> Set<ContentSurfaceKind> {
         var s: Set<ContentSurfaceKind> = [.text]

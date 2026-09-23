@@ -174,6 +174,14 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .chatExport:
+            // DISC-6 — a WhatsApp export; needs >=3 shape-matching lines to be
+            // claimed, and a day above 12 so the date order is decisive.
+            return Data("""
+            [14/03/2026, 9:12:34 AM] Riyaz Ahmed: \(s).
+            [14/03/2026, 9:13:00 AM] André Müller: Understood.
+            [14/03/2026, 9:14:00 AM] Riyaz Ahmed: Filing complete.
+            """.utf8)
         case .discussionExport:
             // DISC-1 — a Takeout comments.csv carrying the sentinel as a comment.
             return Data("""
@@ -207,7 +215,7 @@ struct AllDomainSyntheticMatrixTests {
         // No parser by design — preserved-only or deferred.
         case .ppt, .keynote, .zip, .rar, .sevenZip,
              .mp3, .wav, .m4a, .aac, .aiff, .caf, .flac, .threegp, .mp4, .mov,
-             .imessage, .chatExport, .safariHistory, .chromeHistory, .unknown:
+             .imessage, .safariHistory, .chromeHistory, .unknown:
             return nil
         }
     }
@@ -237,7 +245,10 @@ struct AllDomainSyntheticMatrixTests {
         .rar, .sevenZip,                                  // proprietary compression (3rd-party)
         .zip,                                             // container lane, not structural
         .mp3, .wav, .m4a, .aac, .aiff, .caf, .flac, .threegp, .mp4, .mov,   // media deferred
-        .imessage, .chatExport, .safariHistory, .chromeHistory,             // feature-gated
+        // Feature-gated. chatExport LEFT this bucket in DISC-6: it now has a real
+        // structural parser (per-message records), so it is probed with a fixture
+        // above. imessage / browser history remain adapter-only.
+        .imessage, .safariHistory, .chromeHistory,                          // feature-gated
         .unknown
     ]
 
