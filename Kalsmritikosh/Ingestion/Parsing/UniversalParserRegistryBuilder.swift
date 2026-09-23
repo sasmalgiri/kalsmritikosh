@@ -24,7 +24,8 @@ public enum UniversalParserRegistryBuilder {
         // Real content loaders. Audio/video join only when transcription is enabled (below).
         var loaders: [any Ingestor] = [
             TextLoader(), PDFLoader(ocr: ocr), DocxLoader(), SpreadsheetLoader(), PresentationLoader(),
-            EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader(), RegistryHiveLoader()
+            EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader(), RegistryHiveLoader(),
+            SQLiteLoader()
         ]
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }
@@ -76,8 +77,11 @@ public enum UniversalParserRegistryBuilder {
                         requiresOCR: ParserCapabilityManifest.isOCRDependent(t),
                         declaredSurfaces: Self.declaredSurfaces(for: t, hasStructural: struc != nil)))
                 } else if let struc {
-                    // Structural-only type (html/json/xml/log/sqlite): TextLoader reads the bytes; the
+                    // Structural-only type (html/json/xml/log): TextLoader reads the bytes; the
                     // STRUCTURE comes from the structural parser. Intentional text-fallback reader.
+                    // Only for types whose bytes really ARE text — a binary format routed here
+                    // dies, because TextLoader throws on binary and a loader throw fails the whole
+                    // plugin. That is why plist, registryHive and sqlite each own a real loader.
                     plugins.append(ExistingParserPluginAdapter(
                         pluginID: "format.\(t.rawValue)", pluginVersion: struc.parserVersion, supportedTypes: [t],
                         executionMode: .immediate, loader: TextLoader(), structural: struc, enforceLoaderTypeSupport: false,

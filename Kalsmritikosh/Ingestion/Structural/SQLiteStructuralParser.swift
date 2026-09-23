@@ -19,8 +19,12 @@ public struct SQLiteStructuralParser: StructuralParser {
     public nonisolated var parserName: String { "sqlite" }
     public nonisolated var parserVersion: String { "1" }
 
-    /// Max rows read per table (citation adapter, not a bulk exporter).
-    public nonisolated static let rowCapPerTable = 1000
+    /// Max rows given an individually-citable block, per table. This parser is the
+    /// CITATION layer, not the indexing layer: SQLiteLoader emits every row as
+    /// searchable records (DB-1), so a table beyond this cap is fully ingested even
+    /// though only its leading rows get a precise per-row locator. Raised from 1000
+    /// because 1000 rows of a message store is not a usable citation set either.
+    public nonisolated static let rowCapPerTable = 5000
 
     public nonisolated init() {}
 
@@ -84,8 +88,15 @@ public struct SQLiteStructuralParser: StructuralParser {
                     add(.tableRow, pairs.joined(separator: " | "), table: table, key: keyValue)
                 }
                 if rows.count >= Self.rowCapPerTable {
+                    // State the REAL total. "Exceeded the cap" alone leaves an examiner
+                    // unable to tell a 5001-row table from a 500 000-row one.
+                    let total = (try? db.query("SELECT COUNT(*) FROM \(quoted);"))?
+                        .first?.cells.first?.int64
+                    let of = total.map { " of \($0)" } ?? ""
                     warnings.append(ParserWarning(severity: .warning, code: "sqlite.row_cap",
-                        message: "Table \(table) exceeded the \(Self.rowCapPerTable)-row citation cap; later rows not indexed."))
+                        message: "Table \(table): the first \(Self.rowCapPerTable)\(of) rows have "
+                               + "individual citations. All rows remain searchable via record-level "
+                               + "ingest; later rows have table-level citations only."))
                 }
             }
         } catch {
