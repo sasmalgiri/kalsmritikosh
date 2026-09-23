@@ -174,6 +174,15 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .masterFileTable:
+            // HOST-5 — a real MFT with fixups applied. The sentinel rides in a
+            // filename, which is what the MFT preserves after deletion.
+            let writer = MFTFixtureWriter()
+            return writer.build(records: [
+                .init(recordNumber: 5, name: ".", parentRecordNumber: 5, isDirectory: true),
+                .init(recordNumber: 42, name: "\(s).txt", parentRecordNumber: 5,
+                      standardTimes: .all(Date(timeIntervalSince1970: 1_773_480_413)))
+            ])
         case .amcache:
             // HOST-6c — a real Amcache hive. The sentinel rides in the
             // executable's path, which is the fact the inventory records.

@@ -48,6 +48,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// format, but its own type because the schema is what makes it evidence —
     /// and because presence must never be read as execution.
     case amcache
+    /// HOST-5 — the NTFS master file table (`$MFT`). Its own type because the
+    /// MFT survives the files it describes: a deleted file's record keeps its
+    /// name, size, parent and four timestamps until the slot is reused, so this
+    /// is the one artifact that says what WAS on a disk.
+    case masterFileTable
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -138,6 +143,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // reading it as one would dump its keys without the schema that makes
         // them mean anything.
         if name == "amcache.hve" { return .amcache }
+        // HOST-5 — `$MFT` is extensionless, and examiners routinely export it
+        // as `$MFT`, `mft` or `C.$MFT`. Also matched: the `.mft` extension some
+        // tools add.
+        if Self.masterFileTableNames.contains(name) { return .masterFileTable }
         if Self.registryHiveNames.contains(name) { return .registryHive }
         // HOST-4 — Linux login accounting is extensionless with fixed names, and
         // the name is ALSO what says whether a record is a sign-in (wtmp) or a
@@ -188,6 +197,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// The history files whose LINES are commands. Deliberately exact and
     /// deliberately short: `.lesshst` and `.viminfo` are editor state rather
     /// than commands, and bare `history` belongs to the browser lane.
+    /// Names an exported master file table arrives under. Exact, because "mft"
+    /// is short enough to collide with ordinary filenames if matched loosely.
+    nonisolated static let masterFileTableNames: Set<String> = [
+        "$mft", "mft", "$mft.copy0", "$mft.raw", "c.$mft", "$mft.bin", "mft.bin"
+    ]
+
     nonisolated static let shellHistoryNames: Set<String> = [
         ".bash_history", ".sh_history", ".zsh_history", ".zhistory", ".histfile",
         ".ksh_history", ".ash_history", ".dash_history", "fish_history",
@@ -259,6 +274,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "nsf": return .nsf
         case "evtx": return .eventLog
         case "lnk": return .shellLink
+        case "mft": return .masterFileTable
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -343,7 +359,8 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
-             .loginRecord, .shellHistory, .shellLink, .amcache: return .hostArtifact
+             .loginRecord, .shellHistory, .shellLink, .amcache,
+             .masterFileTable: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

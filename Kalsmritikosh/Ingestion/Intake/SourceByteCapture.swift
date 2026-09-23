@@ -155,6 +155,12 @@ public enum SourceByteCapture {
         if UtmpReader.looksLikeLoginRecords(head) {
             return (.loginRecord, .structuralProbe, declaredExtension)
         }
+        // HOST-5 — same last-resort position. "FILE" alone is a weak signature,
+        // so the probe also requires the record header's own offsets to be
+        // self-consistent.
+        if MFTReader.looksLikeAnMFT(head) {
+            return (.masterFileTable, .structuralProbe, declaredExtension)
+        }
         // 4. unknown.
         return (.unknown, .unknown, declaredExtension)
     }

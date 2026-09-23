@@ -48,7 +48,8 @@ public struct StructuralParserRegistry: Sendable {
         UtmpStructuralParser(),            // HOST-4 — Linux utmp/wtmp/btmp
         ShellHistoryStructuralParser(),    // HOST-4b — shell / REPL history
         ShellLinkStructuralParser(),       // HOST-6a — Windows shortcuts (.lnk)
-        AmcacheStructuralParser()          // HOST-6c — Windows Amcache inventory
+        AmcacheStructuralParser(),         // HOST-6c — Windows Amcache inventory
+        MFTStructuralParser()              // HOST-5 — NTFS master file table
     ]
 
     /// The default v1 registry — every format with a dependency-free structural

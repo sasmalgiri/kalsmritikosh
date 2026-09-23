@@ -52,6 +52,7 @@ Coverage states (from the locked product contract):
 | shellHistory (bash/zsh/fish/REPL) | hostArtifact | FULL | shell-history | 1 |
 | shellLink (lnk) | hostArtifact | FULL | windows-shell-link | 1 |
 | amcache (Amcache.hve) | hostArtifact | FULL | windows-amcache | 1 |
+| masterFileTable ($MFT) | hostArtifact | FULL | ntfs-master-file-table | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -71,7 +72,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 33 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 34 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -246,6 +247,37 @@ derives this table from it so the matrix cannot drift from what actually runs.
   ahead of the generic hive detector, since reading it as an ordinary hive would dump its keys
   without the schema that makes them mean anything.
 
+- **NTFS master file table (`$MFT`, HOST-5)** is the artifact that outlives the files it
+  describes, which makes it the strongest thing in an extraction. Every file and folder has a
+  record holding its name, size, parent directory and four timestamps, and when a file is
+  DELETED the record is only marked not-in-use — the name and the times survive until the slot
+  is reused. For small files the entire content is stored inside the record, so a deleted note
+  or configuration file comes back in full. Full paths are rebuilt by walking parent
+  references. **Three things it states rather than assumes.** (1) Deleted records are labelled
+  DELETED, in the evidence and in the searchable text: a filename hit must never read as
+  though the file were still on the disk. (2) A path through a directory whose record has been
+  REUSED by a different folder is labelled stale — it is what the record says, not where the
+  file was — and a parent missing from the extraction makes the path explicitly incomplete.
+  (3) NTFS stores the four timestamps TWICE, in `$STANDARD_INFORMATION` and in `$FILE_NAME`.
+  Where the two disagree, both values and the field that differs are reported as a factual
+  property of the record; it is **not** called timestomping, because installers, archive
+  extraction and copying tools all produce differences and naming a cause is analysis rather
+  than extraction. **The trap this parser had to survive:** NTFS overwrites the last two bytes
+  of every 512-byte sector of a record with an update-sequence number and stores the displaced
+  originals in an array. A reader that does not put them back corrupts two bytes per sector,
+  and for any field crossing a boundary that yields a plausible-looking WRONG date — silent
+  corruption. Fixups are applied before anything is parsed, and a record whose sector
+  placeholder does not match its sequence number is refused outright rather than reported with
+  corrupt fields, because that means the copy was taken mid-write. Other honest states: the
+  record size is read from the file (so 4096-byte-record volumes work), a record NTFS itself
+  marked BAD is reported with its fields flagged untrustworthy, DOS 8.3 names are not counted
+  as separate files, extension records are not counted as extra files, unused slots are skipped
+  silently while data-bearing unsigned slots are counted, resident content that is not text is
+  NOT rendered as mojibake that a search would match, and the record ceiling is stated. `$MFT`
+  is detected by name (including `mft`, `C.$MFT`, `.mft`) and a renamed export by a structural
+  probe that requires the record header's own offsets to be self-consistent, since "FILE" alone
+  is a weak signature.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -299,7 +331,6 @@ searchable by name — they are simply not interpreted yet:
 - **`journald`** binary journals (`*.journal`). The examiner's normal export path
   (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
   gap is the binary file rather than the log's content.
-- **`$MFT`** (NTFS master file table): filenames, MACB timestamps, deleted entries.
 - **Program execution** — Prefetch (Win10+ is LZXPRESS-Huffman compressed), jumplists (OLE2
   containers of shell-link streams), Shimcache. Plain `.lnk` shortcuts and Amcache ARE read;
   see the entries above.
