@@ -49,6 +49,7 @@ Coverage states (from the locked product contract):
 | plist | document | FULL | plist | 1 |
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
 | loginRecord (utmp/wtmp/btmp) | hostArtifact | FULL | linux-login-accounting-utmp | 1 |
+| shellHistory (bash/zsh/fish/REPL) | hostArtifact | FULL | shell-history | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -68,7 +69,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 30 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 31 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -172,8 +173,34 @@ derives this table from it so the matrix cannot drift from what actually runs.
   "unknown bytes" — it can never take a file away from a recognized format, and it refuses an
   all-zero file rather than claim it on the strength of its empty slots. Inherent limit: `tv_sec`
   is a signed 32-bit count, so the format itself cannot express a time past 2038.
-  **Not yet read:** `journald` binary journals and shell history (`.bash_history`,
-  `.zsh_history`) — see the deferred list at the end of this section.
+  **Not yet read:** `journald` binary journals — see the deferred list at the end of this
+  section. Shell history is now read; see the next entry.
+
+- **Shell and REPL history (HOST-4b)** is what was actually TYPED on the machine —
+  `.bash_history`, `.zsh_history`, `fish_history`, `.python_history`, `.mysql_history` and
+  their siblings. These already parsed as plain text, so the commands were searchable; what
+  was missing was the part that matters most, WHEN. Three of the four flavours carry
+  per-command timestamps that look like nothing to a text reader, and all three are now
+  decoded: bash's `#<epoch>` marker lines (HISTTIMEFORMAT), zsh's
+  `: <epoch>:<elapsed>;command` prefix (EXTENDED_HISTORY — which also records how long the
+  command RAN, a fact nothing else states), and fish's `- cmd:` / `when:` blocks. Multi-line
+  commands are kept whole, because cutting at the first newline would report a command nobody
+  ran. A `#` line that is not a bare 9-to-12-digit number stays a typed comment, so `# deploy`
+  and `#42` are commands rather than invented dates. Unmarked lines are joined into the
+  preceding command ONLY after a timestamp has been seen: bash marks every dated command, but
+  applying that rule to the undated region at the top of a file — the normal shape, since
+  timestamping is usually switched on part-way through — would fuse a whole history into one
+  command. An **UNDATED** history states that in the evidence itself, because it otherwise
+  looks identical to a dated one whose dates failed to display, and an answer could place
+  those commands at a time the file never recorded; what such a file does establish is ORDER,
+  preserved by sequence number. A partially dated file reports which half is which. Two
+  deliberate refusals: commands are never de-duplicated (running something forty times is
+  itself a fact) and never labelled suspicious or dangerous (that is analysis, and a wrong
+  label beside real evidence reads as if the file had said it). Detection is by exact
+  filename — bare `History` belongs to the browser lane, a `.txt` export is a document about
+  the file, and `.lesshst` / `.viminfo` are editor state rather than commands. Non-UTF-8 bytes
+  (zsh writes its own escaped encoding for non-ASCII) are read byte-for-byte as Latin-1 with
+  the encoding disclosed, rather than guessing at an unescaping that could corrupt a command.
 
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
@@ -228,10 +255,6 @@ searchable by name — they are simply not interpreted yet:
 - **`journald`** binary journals (`*.journal`). The examiner's normal export path
   (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
   gap is the binary file rather than the log's content.
-- **Shell history** — `.bash_history`, `.zsh_history`, `.python_history`. These parse today as
-  plain text, so the commands are searchable; what is missing is per-command timestamps
-  (`HISTTIMEFORMAT` entries and zsh's `: <epoch>:<elapsed>;` prefix), which would put each
-  command on the timeline.
 - **`$MFT`** (NTFS master file table): filenames, MACB timestamps, deleted entries.
 - **Program execution** — Prefetch, LNK/jumplists, Amcache, Shimcache.
 - **`lastlog`** — deliberately not claimed with the utmp family: it has a different record

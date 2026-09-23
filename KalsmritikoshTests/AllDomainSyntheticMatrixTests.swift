@@ -174,6 +174,10 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .shellHistory:
+            // HOST-4b — a zsh extended history, the flavour that carries both a
+            // timestamp and an elapsed time.
+            return Data(": 1773480413:0;echo \(s).\n".utf8)
         case .loginRecord:
             // HOST-4 — a real wtmp. The sentinel rides in the remote-host field,
             // which is where a login's origin is recorded.

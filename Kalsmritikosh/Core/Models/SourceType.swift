@@ -31,6 +31,12 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// file it is — and therefore whether a record is a sign-in or a rejected
     /// attempt — is carried by the filename and resolved in the parser.
     case loginRecord
+    /// HOST-4b — shell and REPL history (`.bash_history`, `.zsh_history`,
+    /// `fish_history`, `.python_history`, …): what was actually TYPED. Its own
+    /// type rather than plain text because three of the four flavours carry
+    /// per-command TIMESTAMPS that look like nothing to a text reader, and a
+    /// dated command is what places activity on the timeline.
+    case shellHistory
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -123,6 +129,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // rejected attempt (btmp), so it is never guessed from content here.
         // Rotated logs keep their meaning: wtmp.1, btmp.2 …
         if Self.isLoginAccountingName(name) { return .loginRecord }
+        // HOST-4b — shell history. Named exactly, never by pattern: `history`
+        // alone is the browser artifact above, and a `.txt` export of a history
+        // is a text document about the file rather than the file.
+        if Self.shellHistoryNames.contains(name) { return .shellHistory }
         // HOST-7 — must precede the `.db` extension mapping, or the activity store
         // reads as a generic SQLite file and its Apple-epoch dates stay numbers.
         if name == "knowledgec.db" || path.contains("/coreduet/knowledge/") { return .knowledgeC }
@@ -159,6 +169,17 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         let suffixes = parts.dropFirst()
         return suffixes.isEmpty || suffixes.allSatisfy { $0.allSatisfy(\.isNumber) && !$0.isEmpty }
     }
+
+    /// The history files whose LINES are commands. Deliberately exact and
+    /// deliberately short: `.lesshst` and `.viminfo` are editor state rather
+    /// than commands, and bare `history` belongs to the browser lane.
+    nonisolated static let shellHistoryNames: Set<String> = [
+        ".bash_history", ".sh_history", ".zsh_history", ".zhistory", ".histfile",
+        ".ksh_history", ".ash_history", ".dash_history", "fish_history",
+        ".python_history", ".node_repl_history", ".mysql_history",
+        ".psql_history", ".sqlite_history", ".rediscli_history", ".irb_history",
+        "bash_history", "zsh_history"   // the leading dot is routinely lost in an export
+    ]
 
     nonisolated static let loginAccountingBaseNames: Set<String> = [
         "utmp", "wtmp", "btmp", "utmpx", "wtmpx", "btmpx"
@@ -300,7 +321,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
-             .loginRecord: return .hostArtifact
+             .loginRecord, .shellHistory: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

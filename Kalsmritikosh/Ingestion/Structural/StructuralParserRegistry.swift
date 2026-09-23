@@ -45,7 +45,8 @@ public struct StructuralParserRegistry: Sendable {
         CustodyManifestStructuralParser(), // HOST-8 — examiner chain of custody
         ExtractionManifestStructuralParser(), // HOST-8b — iOS backup inventory
         EVTXStructuralParser(),            // HOST-3 — Windows event logs (EVTX)
-        UtmpStructuralParser()             // HOST-4 — Linux utmp/wtmp/btmp
+        UtmpStructuralParser(),            // HOST-4 — Linux utmp/wtmp/btmp
+        ShellHistoryStructuralParser()     // HOST-4b — shell / REPL history
     ]
 
     /// The default v1 registry — every format with a dependency-free structural
