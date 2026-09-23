@@ -21,6 +21,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type, not `.xml`: a binary plist is not XML at all, and the key-path
     /// structure is what makes a host artifact citable.
     case plist
+    /// HOST-8 — the examiner's chain-of-custody sidecar for an extraction. A
+    /// document a person authored, not machine evidence, so it carries the
+    /// document category; what makes it special is that it is the ONE artifact
+    /// describing where all the others came from.
+    case custodyManifest
     /// HOST-7 — Apple's CoreDuet activity store (`knowledgeC.db`): app focus with
     /// durations, device lock/unlock, screen, media, battery. Its own type rather
     /// than plain `.sqlite` because its timestamps are APPLE EPOCH and its rows
@@ -101,6 +106,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         // HOST-7 — must precede the `.db` extension mapping, or the activity store
         // reads as a generic SQLite file and its Apple-epoch dates stay numbers.
         if name == "knowledgec.db" || path.contains("/coreduet/knowledge/") { return .knowledgeC }
+        // HOST-8 — must precede the `.json` extension mapping, or the chain of
+        // custody reads as an ordinary JSON document and never reaches the ledger
+        // as custody.
+        if CustodyRecord.manifestNames.contains(name) { return .custodyManifest }
         // DISC-1 — discussion exports. Ambiguous names (comments.csv, messages.json)
         // are claimed ONLY inside a recognizable export tree, so an ordinary
         // spreadsheet named comments.csv stays a CSV. Unambiguous names stand alone.
@@ -246,7 +255,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     public nonisolated var category: Category {
         switch self {
         case .pdf, .docx, .doc, .txt, .markdown, .rtf, .odt, .epub,
-             .html, .json, .xml, .log, .sqlite, .plist: return .document
+             .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.

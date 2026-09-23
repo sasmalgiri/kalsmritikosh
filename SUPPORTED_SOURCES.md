@@ -47,6 +47,7 @@ Coverage states (from the locked product contract):
 | plist | document | FULL | plist | 1 |
 | registryHive | hostArtifact | FULL | windows-registry-regf | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
+| custodyManifest | document | FULL | chain-of-custody | 1 |
 | discussionExport | chat | FULL | discussion-export | 1 |
 | pdf | document | PARTIAL (OCR) | pdf-pdfkit | 1 |
 | png | image | PARTIAL (OCR) | image-vision-ocr | 1 |
@@ -62,7 +63,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 27 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 28 FULL · 6 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -120,6 +121,19 @@ derives this table from it so the matrix cannot drift from what actually runs.
   are APPLE EPOCH (seconds since 2001-01-01); read as Unix time a 2026 event would date to
   1994, so the conversion lives in one shared `AppleEpoch` helper. `ZSECONDSFROMGMT` is
   kept because it states the time zone the DEVICE was in, which no absolute timestamp can.
+
+- **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
+  extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
+  case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
+  source device and its time zone, image hash with its algorithm, and whether the records are
+  live / recovered / deleted. Each fact becomes its OWN evidence block, so an answer cannot
+  quote the examiner while dropping the authority. **Nothing is inferred** — custody is a human
+  attestation, and a guessed value shown beside real ones would be worse than a gap because it
+  would look identical. Absence is a disclosed state, not a default: evidence with no recorded
+  custody never renders the same as documented evidence. "Complete chain of custody" is
+  all-or-nothing and a partial chain names exactly which fields are missing. An UNREADABLE
+  manifest is reported more loudly than a missing one, because it means someone intended to
+  document the chain and the documentation cannot be read.
 
 ## Advertising rule
 

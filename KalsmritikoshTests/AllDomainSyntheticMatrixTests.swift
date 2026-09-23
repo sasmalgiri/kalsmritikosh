@@ -174,6 +174,16 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .custodyManifest:
+            // HOST-8 — a chain-of-custody sidecar. The sentinel rides in the
+            // examiner notes, since that is a free-text custody field.
+            return Data("""
+            {"caseNumber":"2026-CR-114","evidenceNumber":"E-07","examiner":"Riyaz Ahmed",
+             "authority":"Search warrant 412/2026","acquisitionTool":"UFED",
+             "acquisitionDate":"2026-03-12T14:05:00Z","sourceDevice":"MacBook Pro",
+             "imageHash":{"algorithm":"SHA-256","value":"9f86d0"},
+             "recordStatus":"live","notes":"\(s)."}
+            """.utf8)
         case .chatExport:
             // DISC-6 — a WhatsApp export; needs >=3 shape-matching lines to be
             // claimed, and a day above 12 so the date order is decisive.
