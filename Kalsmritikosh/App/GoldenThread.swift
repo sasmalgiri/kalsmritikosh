@@ -88,28 +88,11 @@ public enum GoldenThread {
         }
 
         // ── Pick the document ────────────────────────────────────────────────
-        let koRow: (id: UUID, path: String)
-        do {
-            let rows: [SQLRow]
-            if let match, !match.trimmingCharacters(in: .whitespaces).isEmpty {
-                rows = try await database.query("""
-                SELECT id, source_file FROM knowledge_objects
-                WHERE LOWER(source_file) LIKE LOWER(?)
-                ORDER BY created_at ASC LIMIT 1;
-                """, [.text("%\(match)%")])
-            } else {
-                rows = try await database.query("""
-                SELECT id, source_file FROM knowledge_objects
-                ORDER BY created_at DESC LIMIT 1;
-                """, [])
-            }
-            guard let r = rows.first, let idStr = r.string(0), let id = UUID(uuidString: idStr) else {
-                throw NSError(domain: "GoldenThread", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: match.map {
-                        "No ingested document matches “\($0)”. Note this means no KNOWLEDGE OBJECT matches — the file may have been seen and failed to parse, which the Ingestion Report's failure section would show."
-                    } ?? "No documents are ingested yet."])
-            }
-            koRow = (id: id, path: r.string(1) ?? "(unknown path)")
+        guard let koRow = try await selectDocument(database: database, matching: match) else {
+            throw NSError(domain: "GoldenThread", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: match.map {
+                    "No ingested document matches “\($0)”. Note this means no KNOWLEDGE OBJECT matches — the file may have been seen and failed to parse, which the Ingestion Report's failure section would show."
+                } ?? "No documents are ingested yet."])
         }
 
         var stages: [Stage] = []
@@ -353,6 +336,44 @@ public enum GoldenThread {
         KalsmritikoshLog.app.info("GoldenThread: \(stages.count, privacy: .public) stage(s), \(defects, privacy: .public) defect(s), \(unknowns, privacy: .public) unchecked")
         return Result(reportURL: url, documentPath: koRow.path, stages: stages,
                       brokeAt: brokeAt, defects: defects, unknowns: unknowns)
+    }
+
+    // MARK: - Document selection
+
+    /// The document to trace, resolved to its id and its file path.
+    ///
+    /// Split out of `trace` so a test can execute THIS SQL — not a copy of it.
+    /// That distinction is the whole reason this function exists: the first
+    /// version selected `knowledge_objects.source_file`, a column that does not
+    /// exist (the path lives in `files.url`, reached through `file_id`), so
+    /// EVERY trace threw. The compiler cannot see it, because SQL is a string,
+    /// and no unit test could see it either while the query was buried in a
+    /// function that needs a booted AppState. A test asserting against a
+    /// duplicated query string would have passed just as happily.
+    ///
+    /// Returns nil when no document matches — distinct from throwing, which
+    /// means the query itself could not run.
+    static func selectDocument(
+        database: Database, matching match: String?
+    ) async throws -> (id: UUID, path: String)? {
+        let rows: [SQLRow]
+        if let match, !match.trimmingCharacters(in: .whitespaces).isEmpty {
+            rows = try await database.query("""
+            SELECT k.id, f.url FROM knowledge_objects k
+            JOIN files f ON f.id = k.file_id
+            WHERE LOWER(f.url) LIKE LOWER(?)
+            ORDER BY k.created_at ASC LIMIT 1;
+            """, [.text("%\(match)%")])
+        } else {
+            rows = try await database.query("""
+            SELECT k.id, f.url FROM knowledge_objects k
+            JOIN files f ON f.id = k.file_id
+            ORDER BY k.created_at DESC LIMIT 1;
+            """, [])
+        }
+        guard let r = rows.first, let idStr = r.string(0),
+              let id = UUID(uuidString: idStr) else { return nil }
+        return (id: id, path: r.string(1) ?? "(unknown path)")
     }
 
     // MARK: - Probe phrase

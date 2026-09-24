@@ -67,7 +67,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 |---|---|---|---|---|
 | `recordDerivationFailures` — Record why an import step failed | ON | — | Kalsmritikosh/Storage/Repositories/DerivationFailureRepository.swift:103 | 0 |
 | `strictDerivation` — Strict derivation (stop on a failed step) | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1655 | 0 |
-| `derivationCompleteMarker` — Track unfinished imports | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1852 | 0 |
+| `derivationCompleteMarker` — Track unfinished imports | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1876 | 0 |
 
 ## Extraction & search
 

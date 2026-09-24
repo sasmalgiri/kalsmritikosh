@@ -132,12 +132,18 @@ public enum ExtractionLanguageReport {
             guard total > 0 else {
                 return Report(coverage: [], undetectedCount: 0, totalDocuments: 0)
             }
+            // The column is `metadata_json`, NOT `metadata`. The first version
+            // of this query named the wrong column, so it threw, returned nil,
+            // and the Ingestion Report omitted the language section entirely —
+            // an English-only limit rendered as no limit at all. Exactly the
+            // failure this file exists to prevent, committed inside it.
+            //
             // json_extract is available in SQLite's JSON1, which this schema
             // already relies on elsewhere. A NULL result means either no
             // metadata or no language key — both are "undetected", which is
             // why they are counted together and NOT as English.
             let rows = try await database.query("""
-            SELECT json_extract(metadata, '$.language') AS lang, COUNT(*) AS n
+            SELECT json_extract(metadata_json, '$.language') AS lang, COUNT(*) AS n
             FROM knowledge_objects
             GROUP BY lang
             ORDER BY n DESC;
