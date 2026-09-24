@@ -265,59 +265,16 @@ writer. The rest need a verdict.
 
 ---
 
-## F. TODO — gaps, incompleteness, improvements
+## F. Remaining work
 
-Ordered so each item unblocks the next. Task numbers are the repo task list.
+Moved, to keep one owner per fact:
 
-### Tier 0 — integrity of the write path (do before any real re-ingest)
-| id | item | why |
-|---|---|---|
-| **T0-1** | Fix F-1: fail the KO's derivation when `entities.insertBatch` throws, instead of continuing with an empty mapping | prevents a silently inconsistent ledger |
-| **T0-2** | Fix F-4/F-5/F-6: replace `try?` on these write paths with recorded failures carrying a reason | a forensic tool may not lose a reason |
-| **T0-3** | Decide + implement transaction boundary for B2–B8 (one KO = one unit of work, or an explicitly resumable partial) | UNKNOWN today |
-| **T0-4** | Guard: no new `try?` on a persist in `Ingestion/`/`Knowledge/` without a recorded reason | stops regression |
+- **`PRODUCT_COMPLETION_TODO.md`** — the tiered todo with acceptance criteria
+  per item and AGENT/OWNER attribution. It was duplicated here; a todo list in
+  two files is a todo list that disagrees with itself within a week.
+- **`PIPELINE_DIAGRAM_MATRIX.md`** — the diagram and stage matrix at a glance.
+- **`PIPELINE_MATRIX.md`** — generated table wiring
+  (`python3 scripts/pipeline-matrix.py`).
 
-### Tier 1 — the first step you asked for
-| id | item |
-|---|---|
-| **#72** | Ingestion Report (blocked on #81) — gaps grouped by format with reasons, `extraction_status` per type, coverage with denominators, facts by field, `derivation` counts, explicit not-measured list |
-| **#73** | Prove that report on fixtures first |
-| **#74** | Pre-flight stamp (build SHA, schema 129, loaders ON) + erase proof (zero rows in every table enumerated from `sqlite_master`, + VACUUM sizes) |
-| **#81** | Generated producer/consumer/test map + coverage guard |
-| **#82** | Verdict on the 11 half-wired lanes (F-2, F-3, F-7, F-9, F-10) |
-
-### Tier 2 — prove the chain
-| id | item |
-|---|---|
-| **#76** | Golden Thread: one document traced by ID through all stages to its citation |
-| **#80** | Whole-chain fixed point: second run of everything changes nothing |
-
-### Tier 3 — the layers you named
-| id | item |
-|---|---|
-| **#77** | Topics: attribute empty-vs-absent model; rebuild replaces not appends; members resolve; coverage with denominator |
-| **#78** | History per subject: dated, cited, scoped, deterministic — plus the F-2 verdict |
-| **T3-1** | Fill the test gaps flagged GAP in section D: `assertions`, `entity_aliases`, `narrativeSlotExtractor`, boilerplate |
-
-### Tier 4 — answers
-| id | item |
-|---|---|
-| **#79** | Headless answer harness (blocked on #76): fixed question set → answer + resolved citations + quality strip + trace, with assertions |
-| **#71** | Reranker latency: BGETokenizer 3.6 s/passage at query time; needs a token-parity proof before any change |
-| **T4-1** | Reconcile F-8: either document `bondLayer` in the invariant or fold it in |
-
-### Tier 5 — release
-| id | item |
-|---|---|
-| **#46** | GO2 P5 + RC-1..7 ship gate → HOLD 2 |
-| **#52** | SPEC A6 gold additions → reseal #10 |
-| **#53** | SPEC §1+§3 UI deltas + RC checklist audit |
-| **#16** | D-17 document marking (owner-deferred) |
-| — | The lowercase-POA red (W-4c vs W-5.1) — **owner decision** |
-
-### Owner decisions needed
-1. `people` / `companies` / `projects` / `timelines` — future features or leftovers?
-2. `history_chapters` — wire a consumer, or stop writing it?
-3. `knowledge_objects_fts` — connect a retrieval lane, or drop the triggers?
-4. Lowercase POA grantor — store or continue to refuse?
-5. Archive size (rough file count) — for the re-ingest ETA.
+This file keeps the prose detail: the traced call chain and the per-finding
+failure stories in section E above.
