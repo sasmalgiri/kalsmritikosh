@@ -573,6 +573,31 @@ public enum DataHealthCheck {
             md += "carry a lower confidence than every rule-read field.\n\n"
         }
 
+        // ── B-1 — why the topic layer looks the way it does
+        let topicDiagnosis = await TopicLayerDiagnosis.run(database: database)
+        md += "## Why do you see the topics you see? (B-1)\n\n"
+        md += "**\(topicDiagnosis.headline)**\n\n"
+        md += "An empty topic layer has at least seven distinct causes and they want "
+        md += "completely different responses — from \"ingest something\" to \"nothing "
+        md += "is wrong\". The chain below is walked in DEPENDENCY order, so the first "
+        md += "unsatisfied link is the CAUSE and everything after it is consequence.\n\n"
+        md += "| | link | state |\n|---|---|---|\n"
+        for l in topicDiagnosis.links {
+            md += "| \(l.outcome.symbol) | \(l.name) | \(l.outcome.line) |\n"
+        }
+        md += "\n"
+        if let missing = topicDiagnosis.firstMissing {
+            if topicDiagnosis.emptyButCorrect {
+                md += "This is NOT a fault. The layer is empty because grouping would have "
+                md += "required inventing a connection the documents do not support.\n\n"
+            } else if missing.outcome.isDefect {
+                issues.append("Topic layer: the chain stops at “\(missing.name)” — \(missing.outcome.line)")
+            }
+            if !missing.remedy.isEmpty {
+                md += "**What to do:** \(missing.remedy)\n\n"
+            }
+        }
+
         md += "## What this report does NOT tell you\n\n"
         md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
         md += "- **Whether the extracted values are CORRECT.** Everything above counts "

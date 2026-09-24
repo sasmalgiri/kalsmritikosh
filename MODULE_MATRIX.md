@@ -31,7 +31,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 | module | default | AI? | wired at | tests |
 |---|---|---|---|---|
 | `topicMinimization` — Topic minimization | ON | — | Kalsmritikosh/App/AppState+LedgerMaintenance.swift:135 | 2 |
-| `autoTopics` — Auto-build topics | ON | — | Kalsmritikosh/App/AppState.swift:1846 (+1 more) | 1 |
+| `autoTopics` — Auto-build topics | ON | — | Kalsmritikosh/App/AppState.swift:1846 (+2 more) | 1 |
 | `summariesAtIdle` — Summaries at idle | ON | — | Kalsmritikosh/App/AppState.swift:1851 | 0 |
 | `historyAtIdle` — History at idle | ON | — | Kalsmritikosh/App/AppState.swift:1855 | 0 |
 | `eventSlotFill` — Event detail fill (5W+H) | ON | yes | Kalsmritikosh/Knowledge/Events/CompositeNarrativeSlotExtractor.swift:42 | 0 |

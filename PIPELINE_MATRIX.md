@@ -69,13 +69,13 @@ _The verification gap. Highest-value list in this file._
 
 | table | lane | producers | consumers | tests |
 |---|---|---|---|---|
-| `files` | App, EvalKit, Ingestion/Intake, Storage/Repositories | 4 | 13 | 160 |
-| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 27 | 251 |
-| `chunk_embeddings` | App, EvalKit, Storage/Schema, Storage/Vector | 4 | 10 | 250 |
+| `files` | App, EvalKit, Ingestion/Intake, Storage/Repositories | 4 | 14 | 160 |
+| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 29 | 251 |
+| `chunk_embeddings` | App, EvalKit, Storage/Schema, Storage/Vector | 4 | 11 | 250 |
 | `source_versions` | App, Ingestion/Intake, Storage/Repositories, Storage/Schema | 4 | 20 | 249 |
-| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 22 | 82 |
-| `entity_mentions` | App, Storage/Repositories, Storage/Schema | 3 | 5 | 233 |
-| `chunks` | EvalKit, Knowledge/Backfill, Storage/Repositories, Storage/Schema | 5 | 10 | 267 |
+| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 23 | 82 |
+| `entity_mentions` | App, Storage/Repositories, Storage/Schema | 3 | 6 | 233 |
+| `chunks` | EvalKit, Knowledge/Backfill, Storage/Repositories, Storage/Schema | 5 | 11 | 267 |
 | `chunks_fts` | EvalKit, Storage/Schema | 2 | 3 | 242 |
 | `audit_chain` | Forensics, Storage/Schema | 2 | 2 | 249 |
 | `container_manifests` | Ingestion/Container | 1 | 2 | 12 |
@@ -93,9 +93,9 @@ _The verification gap. Highest-value list in this file._
 | `generic_facts` | Knowledge/Backfill, Storage/Repositories | 2 | 5 | 47 |
 | `boilerplate_templates` | Knowledge/Boilerplate | 1 | 1 | 0 |
 | `boilerplate_uses` | Knowledge/Boilerplate | 1 | 1 | 0 |
-| `community_summaries` | Knowledge/Topics | 2 | 4 | 22 |
-| `document_terms` | Knowledge/Topics | 1 | 2 | 2 |
-| `entity_communities` | Knowledge/Topics | 2 | 6 | 8 |
+| `community_summaries` | Knowledge/Topics | 2 | 5 | 22 |
+| `document_terms` | Knowledge/Topics | 1 | 3 | 2 |
+| `entity_communities` | Knowledge/Topics | 2 | 7 | 8 |
 | `entity_cooccurrences` | Knowledge/Topics | 1 | 3 | 0 |
 | `fact_reviews` | Knowledge/Twins, Storage/Repositories | 4 | 3 | 5 |
 | `case_method_runs` | Method | 1 | 1 | 28 |
@@ -150,7 +150,7 @@ _The verification gap. Highest-value list in this file._
 | `deadline_candidates` | Storage/Repositories | 1 | 2 | 16 |
 | `deadline_reviews` | Storage/Repositories | 1 | 1 | 13 |
 | `deadlines` | Storage/Repositories | 1 | 4 | 16 |
-| `derivation_failures` | Storage/Repositories | 1 | 1 | 1 |
+| `derivation_failures` | Storage/Repositories | 1 | 2 | 1 |
 | `derived_objects` | Storage/Repositories | 1 | 1 | 0 |
 | `document_profiles` | Storage/Repositories | 1 | 3 | 69 |
 | `email_participant_occurrences` | Storage/Repositories | 1 | 2 | 3 |
@@ -226,7 +226,7 @@ _The verification gap. Highest-value list in this file._
 | `workspace_sources` | Storage/Repositories | 1 | 3 | 36 |
 | `workspaces` | Storage/Repositories | 1 | 4 | 100 |
 | `event_entities` | Storage/Repositories, Storage/Schema | 3 | 7 | 232 |
-| `events` | Storage/Repositories, Storage/Schema | 2 | 12 | 287 |
+| `events` | Storage/Repositories, Storage/Schema | 2 | 13 | 287 |
 | `evidence_blocks` | Storage/Repositories, Storage/Schema | 2 | 8 | 243 |
 | `history_items` | Storage/Repositories, Storage/Schema | 2 | 2 | 239 |
 | `relationships` | Storage/Repositories, Storage/Schema | 2 | 1 | 242 |

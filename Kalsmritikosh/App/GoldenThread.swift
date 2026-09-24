@@ -39,46 +39,10 @@ import os
 
 public enum GoldenThread {
 
-    /// What one stage of the thread found. The four cases are exhaustive and
-    /// mutually exclusive by design — see the header.
-    public enum StageOutcome: Sendable, Equatable {
-        case present(count: Int, detail: String)
-        /// Empty, and legitimately so. The reason is REQUIRED: "expected" with
-        /// no stated expectation is just a zero wearing a better label.
-        case absentExpected(reason: String)
-        /// Empty when it should not be. This is the finding.
-        case absentUnexpected(reason: String)
-        /// The check itself failed. NOT a pass and NOT a defect in the pipeline
-        /// — a defect in the knowing.
-        case couldNotCheck(why: String)
-
-        public var symbol: String {
-            switch self {
-            case .present:          return "✓"
-            case .absentExpected:   return "·"
-            case .absentUnexpected: return "✗"
-            case .couldNotCheck:    return "?"
-            }
-        }
-
-        public var isDefect: Bool {
-            if case .absentUnexpected = self { return true }
-            return false
-        }
-        public var isUnknown: Bool {
-            if case .couldNotCheck = self { return true }
-            return false
-        }
-
-        public var line: String {
-            switch self {
-            case .present(let n, let d):      return "\(n) — \(d)"
-            case .absentExpected(let r):      return "none, and that is expected: \(r)"
-            case .absentUnexpected(let r):    return "NONE — \(r)"
-            case .couldNotCheck(let w):       return "could not be checked: \(w)"
-            }
-        }
-    }
+    /// The four outcomes a stage may report — see PipelineStageOutcome for why
+    /// there are four and not two. Aliased rather than redeclared so this trace
+    /// and the topic-layer diagnosis cannot drift apart on what "empty" means.
+    public typealias StageOutcome = PipelineStageOutcome
 
     public struct Stage: Sendable {
         public let name: String
