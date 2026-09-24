@@ -845,16 +845,22 @@ public actor IngestCoordinator {
             }
             return url.deletingPathExtension().lastPathComponent
         }()
-        var derived: [GenericFact] = []
-        for block in doc.blocks {
-            guard !block.kind.isBoilerplate else { continue }
-            let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
-            guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
-            // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's
-            // own pack meets the block first; nil keeps the historical order.
-            derived += domainFactExtractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
-                                                   documentClass: documentClass)
-        }
+        // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's own
+        // pack meets the block first; nil keeps the historical order.
+        //
+        // C-4 — the extractor takes the whole ORDERED block list, not one block
+        // at a time, so a field label stranded at the foot of a page can still
+        // reach its value at the head of the next. The per-block minimum length
+        // is applied inside (unchanged at 8 characters); the cross-block pass
+        // deliberately sees every block, because a page whose first line is a
+        // bare "700321" is a six-character block and is the one that matters.
+        var derived: [GenericFact] = domainFactExtractor.extract(
+            fromBlocks: doc.blocks
+                .filter { !$0.kind.isBoilerplate }
+                .map { .init(id: $0.id,
+                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText) },
+            subjectLabel: subjectLabel,
+            documentClass: documentClass)
         // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
         // a plist / registry hive / custody manifest rather than from prose (a
         // serial regexed out of a sentence is noise). They join `derived` here, so

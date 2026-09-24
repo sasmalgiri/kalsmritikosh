@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 128
+    public static let latestVersion = 129
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -659,7 +659,8 @@ public enum SchemaMigrations {
         (125, v125),
         (126, v126),
         (127, v127),
-        (128, v128)
+        (128, v128),
+        (129, v129)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6496,5 +6497,28 @@ public enum SchemaMigrations {
     // turns.
     private static let v128: String = """
     ALTER TABLE conversation_turns ADD COLUMN answer_ledger_id TEXT;
+    """
+
+    // MARK: - v129 — C-4 / OCR derivation provenance on generic_facts
+    //
+    // A fact's value is normally read verbatim from ONE block. Two producers
+    // recover values the strict reader cannot see, and both must be
+    // distinguishable from a verbatim capture forever after:
+    //   CROSS_BLOCK_ASSEMBLED — the field label ended one block and its value
+    //     began the next (a page break between "Patent No." and the number).
+    //     Such a fact cites BOTH blocks, because neither alone supports it.
+    //   OCR_CORRECTED — a scanner read digits as letters ("7OO321"); the digits
+    //     were restored and `raw_match` keeps the scanned form as the receipt.
+    // Before this column both cases were invisible: the page-break value was not
+    // extracted at all, and the OCR value was dropped with nothing recording
+    // that a labeled identifier had been seen and abandoned. Confidence alone
+    // cannot carry this — it cannot answer "which values did we repair, and
+    // how?". NULL means verbatim, which is the overwhelming majority of rows
+    // and every row written before this migration. ADVISORY: never sealed (the
+    // evidence-state stamp counts rows, not this column), never gates
+    // surfacing, and QUERYABLE so a derivation-rate spike reads as the rule
+    // defect it would be.
+    private static let v129: String = """
+    ALTER TABLE generic_facts ADD COLUMN derivation TEXT;
     """
 }

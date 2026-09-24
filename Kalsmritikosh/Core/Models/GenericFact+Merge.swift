@@ -48,7 +48,23 @@ extension GenericFact {
             producerVersion: Swift.max(producerVersion ?? 0, other.producerVersion ?? 0),
             rawMatch: rawMatch ?? other.rawMatch,
             sourceCount: blocks.count,                // distinct corroborating documents/blocks
-            reassignedFrom: reassignedFrom ?? other.reassignedFrom)
+            reassignedFrom: reassignedFrom ?? other.reassignedFrom,
+            derivation: Self.mergedDerivation(derivation, other.derivation))
+    }
+
+    /// VERBATIM WINS. `derivation` is the one field here where nil carries
+    /// meaning — it asserts "this value was read exactly as written" — so it
+    /// cannot be filled in by the `??` rule the other optionals use. If ANY
+    /// occurrence of a value was read cleanly, the merged fact IS clean: the
+    /// clean block corroborates it, and flagging it as repaired would understate
+    /// evidence the ledger actually holds. Only when EVERY occurrence was
+    /// repaired does the mark survive, and then the first-seen derivation stands
+    /// (the canonical row's own, matching how assessment is kept).
+    nonisolated static func mergedDerivation(
+        _ mine: FactDerivation?, _ theirs: FactDerivation?
+    ) -> FactDerivation? {
+        guard let mine, theirs != nil else { return nil }
+        return mine
     }
 
     /// Collapse a batch of facts to one canonical row per naturalKey (first-seen

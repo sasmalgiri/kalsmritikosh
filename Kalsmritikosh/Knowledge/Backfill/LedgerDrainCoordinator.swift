@@ -260,14 +260,16 @@ public final class LedgerDrainCoordinator {
         // puts its own pack first (a certificate meets the patent root before
         // the employment one); nil class keeps the historical order.
         let docClass = try? await objects.documentClass(forID: ko.id)
-        var derived: [GenericFact] = []
-        for block in blocks {
-            guard !block.kind.isBoilerplate else { continue }
-            let text = block.normalizedText.isEmpty ? block.rawText : block.normalizedText
-            guard text.trimmingCharacters(in: .whitespacesAndNewlines).count >= 8 else { continue }
-            derived += extractor.extract(fromText: text, subjectLabel: subjectLabel, blockID: block.id,
-                                         documentClass: docClass ?? nil)
-        }
+        // C-4 — same document-level entry point as the ingest path, so a
+        // re-derivation recovers the page-break-split labels the original
+        // per-block pass could not see.
+        let derived: [GenericFact] = extractor.extract(
+            fromBlocks: blocks
+                .filter { !$0.kind.isBoilerplate }
+                .map { .init(id: $0.id,
+                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText) },
+            subjectLabel: subjectLabel,
+            documentClass: docClass ?? nil)
         var merged = DomainFactExtractor.merge(derived)
         // Anchor binding (3c semantics), sourced to this KO.
         var cache: [String: UUID] = [:]

@@ -42,6 +42,28 @@ public enum EvidenceStatus: String, Codable, Sendable, Hashable, CaseIterable {
     }
 }
 
+/// How a fact's value was recovered when it was not read verbatim from one
+/// block. Deliberately a CLOSED set: a new derivation is a new producer, and
+/// each one has to state what it reconstructed and at what confidence cost.
+public enum FactDerivation: String, Codable, Sendable, Hashable, CaseIterable {
+    /// C-4 — the label ended one block and the value began the next (a page
+    /// break between a field name and its value). Both blocks are cited.
+    case crossBlockAssembled = "CROSS_BLOCK_ASSEMBLED"
+    /// The scanner read digits as letters ("7OO321"); the digits were restored.
+    /// `rawMatch` keeps the mangled form as the receipt.
+    case ocrCorrected = "OCR_CORRECTED"
+
+    /// What the receipt says about this value, in the reader's words.
+    public nonisolated var receiptNote: String {
+        switch self {
+        case .crossBlockAssembled:
+            return "assembled across a page break (the label and the value are in different blocks)"
+        case .ocrCorrected:
+            return "digits restored from an OCR misread (see the raw match for the scanned form)"
+        }
+    }
+}
+
 /// A single subject–field–value assertion grounded in evidence blocks.
 public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     public let id: UUID
@@ -79,6 +101,20 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// surfacing; makes a reassignment auditable on the receipt. nil when the
     /// fact was never reassigned.
     public let reassignedFrom: String?
+    /// How this value was obtained when it was NOT read cleanly off one block.
+    /// `nil` is the ordinary case: captured verbatim from a single block, exactly
+    /// as written.
+    ///
+    /// WHY THIS EXISTS AS A FIELD AND NOT MERELY AS A LOWER CONFIDENCE. Both
+    /// producers that set it recover a value the strict reader could not see —
+    /// one joins a label to its value across a page break, the other reads
+    /// digits a scanner turned into letters. A confidence number cannot answer
+    /// "which values did we repair, and how?", so a reader could not separate a
+    /// verbatim capture from a reconstructed one. That is the same
+    /// absence-as-verification defect in a different place. ADVISORY: never
+    /// sealed, never gates surfacing, but QUERYABLE — a spike in either
+    /// derivation is visible as the rule defect it would be.
+    public let derivation: FactDerivation?
 
     /// Deprecated compatibility shim — derived from `assessment`. Kept so existing readers
     /// and the repository's legacy `status` column keep working during migration.
@@ -99,7 +135,8 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         producerVersion: Int? = nil,
         rawMatch: String? = nil,
         sourceCount: Int? = nil,
-        reassignedFrom: String? = nil
+        reassignedFrom: String? = nil,
+        derivation: FactDerivation? = nil
     ) {
         self.id = id
         self.subjectID = subjectID
@@ -114,6 +151,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.rawMatch = rawMatch
         self.sourceCount = sourceCount
         self.reassignedFrom = reassignedFrom
+        self.derivation = derivation
     }
 
     /// Legacy initializer — decodes a single `EvidenceStatus` into the separated
@@ -131,13 +169,14 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         producerVersion: Int? = nil,
         rawMatch: String? = nil,
         sourceCount: Int? = nil,
-        reassignedFrom: String? = nil
+        reassignedFrom: String? = nil,
+        derivation: FactDerivation? = nil
     ) {
         self.init(id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
                   value: value, unit: unit, assessment: LegacyEvidenceStatusAdapter.decode(status),
                   confidence: confidence, sourceBlockIDs: sourceBlockIDs,
                   producerVersion: producerVersion, rawMatch: rawMatch, sourceCount: sourceCount,
-                  reassignedFrom: reassignedFrom)
+                  reassignedFrom: reassignedFrom, derivation: derivation)
     }
 
     /// V3 3c — a copy with the canonical subject (identifier anchor) bound.
@@ -149,7 +188,27 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
             id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
             value: value, unit: unit, assessment: assessment, confidence: confidence,
             sourceBlockIDs: sourceBlockIDs, producerVersion: producerVersion,
-            rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom
+            rawMatch: rawMatch, sourceCount: sourceCount, reassignedFrom: reassignedFrom,
+            derivation: derivation
+        )
+    }
+
+    /// C-4 — a copy re-grounded on EVERY block the value was assembled from,
+    /// at the stated derivation and a reduced confidence. Pure.
+    ///
+    /// The evidence list is the point: a reader who opens this fact's receipt
+    /// must land on both the block holding the label and the block holding the
+    /// value, because neither alone supports the claim.
+    public nonisolated func assembled(
+        from blockIDs: [UUID], derivation: FactDerivation, confidence: Double
+    ) -> GenericFact {
+        let blocks = Array(Set(blockIDs)).sorted { $0.uuidString < $1.uuidString }
+        return GenericFact(
+            id: id, subjectID: subjectID, subjectLabel: subjectLabel, field: field,
+            value: value, unit: unit, assessment: assessment, confidence: confidence,
+            sourceBlockIDs: blocks, producerVersion: producerVersion,
+            rawMatch: rawMatch, sourceCount: blocks.count, reassignedFrom: reassignedFrom,
+            derivation: derivation
         )
     }
 
@@ -175,7 +234,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
     /// the transition. Decode precedence: valid assessment → valid legacy status → throw.
     private enum CodingKeys: String, CodingKey {
         case id, subjectID, subjectLabel, field, value, unit, assessment, status, confidence, sourceBlockIDs
-        case producerVersion, rawMatch, sourceCount, reassignedFrom
+        case producerVersion, rawMatch, sourceCount, reassignedFrom, derivation
     }
 
     public nonisolated init(from decoder: Decoder) throws {
@@ -192,6 +251,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         self.rawMatch = try c.decodeIfPresent(String.self, forKey: .rawMatch)
         self.sourceCount = try c.decodeIfPresent(Int.self, forKey: .sourceCount)
         self.reassignedFrom = try c.decodeIfPresent(String.self, forKey: .reassignedFrom)
+        self.derivation = try c.decodeIfPresent(FactDerivation.self, forKey: .derivation)
         if let a = try? c.decode(EvidenceAssessment.self, forKey: .assessment) {
             self.assessment = a
         } else if let s = try c.decodeIfPresent(EvidenceStatus.self, forKey: .status) {
@@ -218,6 +278,7 @@ public struct GenericFact: Codable, Sendable, Hashable, Identifiable {
         try c.encodeIfPresent(rawMatch, forKey: .rawMatch)
         try c.encodeIfPresent(sourceCount, forKey: .sourceCount)
         try c.encodeIfPresent(reassignedFrom, forKey: .reassignedFrom)
+        try c.encodeIfPresent(derivation, forKey: .derivation)
     }
 }
 

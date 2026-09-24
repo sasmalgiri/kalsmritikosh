@@ -59,6 +59,33 @@ public enum PatentDomainPack {
     nonisolated static let numberCapturePattern =
         #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>(?-i:[A-Z]{2})?\d[\d,]{4,}(?:(?-i:[A-Z][A-Z0-9]{0,3})(?![a-z]))?)"#
 
+    /// The OCR-tolerant twin of `numberCapturePattern`, for SCANNED pages where
+    /// the digits were read as letters ("Patent No. 7OO321"). Identical up to
+    /// the value group, which admits the confusable letters as well as digits —
+    /// and is CASE-SENSITIVE (`(?-i:)`) because only some cases are genuine
+    /// confusions: `B` collides with 8, plain `b` does not. Every match is then
+    /// put through `OCRDigitRecovery`, which refuses far more than it repairs;
+    /// this pattern only decides what is worth ASKING about.
+    ///
+    /// The character class is built from the recovery table so the two cannot
+    /// drift: a letter matched here but unknown there would never be repaired,
+    /// and a letter known there but unmatched here would never be reached.
+    nonisolated static let ocrNumberCapturePattern: String =
+        #"(?<label>patent(?!\s+application)|application|publication)\s*(?:no\.?|number|#)?\s*[:\-]?\s*(?<value>"#
+        + "(?-i:" + OCRDigitRecovery.candidateCharacterClass
+        + "{\(OCRDigitRecovery.lengthRange.lowerBound),\(OCRDigitRecovery.lengthRange.upperBound)})"
+        + ")"
+
+    /// Confidence for a value whose digits were restored from an OCR misread.
+    /// Deliberately below the verbatim tier (0.8): the reading is a candidate
+    /// supported by the glyph shapes, not a value the page states plainly.
+    nonisolated static let ocrRecoveredConfidence = 0.55
+
+    /// Confidence for a value rejoined to its label across a page break. Below
+    /// verbatim because the JOIN is an inference about layout — the page does
+    /// assert both halves, but not their adjacency.
+    nonisolated static let crossBlockAssembledConfidence = 0.7
+
     /// The fields this pack can emit under producer_version=1 — the authority
     /// the completeness invariant (SlotAnswerComposer display contracts) checks
     /// against, so a new emittable field cannot ship without a display contract.
@@ -177,6 +204,52 @@ public enum PatentDomainPack {
                                      producerVersion: DerivedProducerVersions.facts,
                                      rawMatch: full.trimmingCharacters(in: .whitespaces), sourceCount: 1))
         }
+        // OCR RECOVERY (V0 noise class 4). On a scanned page the digits arrive
+        // as letters — "Patent No. 7OO321" — and the strict pattern above,
+        // which requires digits, matches nothing. Before this pass that meant
+        // the value was not merely read wrongly: it was never recorded, and
+        // nothing said a labeled identifier had been seen and abandoned. So a
+        // scanned grant letter held no patent number at all.
+        //
+        // This runs SECOND on purpose. `seen` already holds everything the
+        // strict reader captured, so a value read cleanly anywhere in the block
+        // wins and is never re-minted as a repair. What lands here is only what
+        // the clean reader could not see.
+        var unrecoverableOCRCandidates = 0
+        for (full, label, rawValue) in captureGroups(ocrNumberCapturePattern, in: text) {
+            guard let recovered = OCRDigitRecovery.recover(rawValue) else {
+                // Refused by the recovery gates — a word, or too little of it
+                // left to restore. Counted so a page full of unreadable
+                // identifiers is visible in the log rather than being a silent
+                // nothing; never stored, because a guessed identifier can be
+                // cited and a missing one cannot.
+                if rawValue.contains(where: { !$0.isNumber }) { unrecoverableOCRCandidates += 1 }
+                continue
+            }
+            let value = normalizeIdentifier(recovered)
+            guard !value.isEmpty, !isDateShapedNumber(value) else { continue }
+            let field: String
+            switch label.lowercased() {
+            case "application": field = "applicationNumber"
+            case "publication": field = "publicationNumber"
+            default:            field = "patentNumber"
+            }
+            guard seen.insert(field + "|" + value.lowercased()).inserted else { continue }
+            facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: value,
+                                     status: .sourceAsserted, confidence: ocrRecoveredConfidence,
+                                     sourceBlockIDs: [blockID],
+                                     producerVersion: DerivedProducerVersions.facts,
+                                     // The receipt keeps the SCANNED form, so a
+                                     // reader sees "700321" against
+                                     // "Patent No. 7OO321" and judges the repair.
+                                     rawMatch: full.trimmingCharacters(in: .whitespaces),
+                                     sourceCount: 1,
+                                     derivation: .ocrCorrected))
+        }
+        if unrecoverableOCRCandidates > 0 {
+            KalsmritikoshLog.knowledge.info("PatentDomainPack: \(unrecoverableOCRCandidates) labeled identifier(s) too mangled to recover")
+        }
+
         // A1.1 (W-4c) — THE ROLE TABLE, as data: who stands in which role,
         // read from certificate fields, POA parties, and labeled lines. The
         // owner's witnessed gap: the POA plainly says "I, shirshendu sasmal…"

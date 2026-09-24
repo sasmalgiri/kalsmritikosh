@@ -80,6 +80,85 @@ public struct DomainFactExtractor: Sendable {
         return Self.merge(facts)
     }
 
+    /// C-4 — the DOCUMENT-level entry point: every pack over every block, PLUS
+    /// the label/value pairs a page break separated (see
+    /// `CrossBlockLabelAssembler`). Callers that hold the whole block list
+    /// should use this; `extract(fromText:)` remains for single-block callers
+    /// and is unchanged.
+    ///
+    /// Without this pass a field label at the foot of a page and its value at
+    /// the head of the next produced NO fact — each extractor sees one block, so
+    /// neither half was ever a fact. That is ordinary paginated-document
+    /// behaviour, not an exotic case.
+    ///
+    /// `perBlockMinimumLength` applies only to the per-block pass, matching the
+    /// existing call sites. The assembler deliberately sees blocks of EVERY
+    /// length: a page whose first line is a bare "700321" is a six-character
+    /// block, and it is exactly the block that carries the value.
+    public nonisolated func extract(
+        fromBlocks blocks: [CrossBlockLabelAssembler.Block],
+        subjectLabel: String,
+        documentClass: DocumentClass? = nil,
+        perBlockMinimumLength: Int = 8
+    ) -> [GenericFact] {
+        var facts: [GenericFact] = []
+        for block in blocks {
+            guard block.text.trimmingCharacters(in: .whitespacesAndNewlines).count >= perBlockMinimumLength
+            else { continue }
+            // PER-BLOCK merge, exactly as `extract(fromText:)` does it. This is
+            // not redundant with the merge below: `resolveIdentifierCollisions`
+            // runs inside `merge`, and its documented scope (owner binding gate
+            // 4) is collisions whose fields CO-OCCUR IN ONE BLOCK. Accumulating
+            // raw facts and merging only once at the end would silently widen
+            // that resolver from per-block to per-document, which is a
+            // different rule than the one that was agreed.
+            facts += extract(fromText: block.text, subjectLabel: subjectLabel,
+                             blockID: block.id, documentClass: documentClass)
+        }
+        facts += Self.crossBlockFacts(in: blocks, subjectLabel: subjectLabel,
+                                      documentClass: documentClass)
+        // The document-level merge the call sites already performed on the
+        // accumulated per-block output, kept here so this entry point's
+        // contract matches `extract(fromText:)`: callers receive merged facts.
+        return Self.merge(facts)
+    }
+
+    /// Facts built from rejoined label/value pairs, each marked
+    /// `.crossBlockAssembled` and citing every block it was assembled from.
+    ///
+    /// RESTRICTED TO IDENTIFIER-SHAPED FIELDS. The assembly is a two-token
+    /// synthetic string ("Patent No. 700321") built for one purpose: to let an
+    /// identifier label reach its number. Running the full pack surface over it
+    /// and keeping whatever else came out would let a synthetic string mint
+    /// statuses, dates or names that no block actually states in that form.
+    /// So only the field kind the assembly was made to recover survives it.
+    nonisolated static func crossBlockFacts(
+        in blocks: [CrossBlockLabelAssembler.Block],
+        subjectLabel: String,
+        documentClass: DocumentClass?
+    ) -> [GenericFact] {
+        let assemblies = CrossBlockLabelAssembler().assemblies(in: blocks)
+        guard !assemblies.isEmpty else { return [] }
+        var out: [GenericFact] = []
+        for assembly in assemblies {
+            // The label block's id is the nominal home; `assembled(from:)` then
+            // re-grounds the fact on the full block set.
+            guard let home = assembly.blockIDs.first else { continue }
+            for root in packOrder(for: documentClass) {
+                let produced = root.extractFacts(fromText: assembly.text,
+                                                 subjectLabel: subjectLabel, blockID: home)
+                for fact in produced
+                where FactSchemaRegistry.expectedShape(of: fact.field) == .identifier {
+                    out.append(fact.assembled(
+                        from: assembly.blockIDs,
+                        derivation: .crossBlockAssembled,
+                        confidence: PatentDomainPack.crossBlockAssembledConfidence))
+                }
+            }
+        }
+        return out
+    }
+
     /// V2 (C-10) — corroboration-aware merge. Key = (subject, field, CANONICAL
     /// value): spellings of one value collapse into a single fact; genuinely
     /// different canonical values for the same field are PRESERVED, so a true
@@ -109,7 +188,14 @@ public struct DomainFactExtractor: Sendable {
                                          sourceBlockIDs: blocks,
                                          producerVersion: existing.producerVersion ?? f.producerVersion,
                                          rawMatch: existing.rawMatch ?? f.rawMatch,
-                                         sourceCount: blocks.count)
+                                         sourceCount: blocks.count,
+                                         // VERBATIM WINS: a value read cleanly
+                                         // ANYWHERE is a clean value, so a
+                                         // repaired occurrence must not flag it.
+                                         // The nil here is an assertion, not an
+                                         // absence, so `??` would be wrong.
+                                         derivation: GenericFact.mergedDerivation(
+                                            existing.derivation, f.derivation))
             } else {
                 byKey[key] = GenericFact(id: f.id, subjectID: f.subjectID,
                                          subjectLabel: f.subjectLabel, field: f.field,
@@ -118,7 +204,8 @@ public struct DomainFactExtractor: Sendable {
                                          sourceBlockIDs: stableBlocks(f.sourceBlockIDs),
                                          producerVersion: f.producerVersion,
                                          rawMatch: f.rawMatch,
-                                         sourceCount: Set(f.sourceBlockIDs).count)
+                                         sourceCount: Set(f.sourceBlockIDs).count,
+                                         derivation: f.derivation)
                 order.append(key)
             }
         }
@@ -219,7 +306,8 @@ public struct DomainFactExtractor: Sendable {
                                        sourceBlockIDs: blocks,
                                        producerVersion: f.producerVersion, rawMatch: f.rawMatch,
                                        sourceCount: Set(blocks).count,
-                                       reassignedFrom: f.reassignedFrom ?? reassignOrigin[key]))  // gate-3 advisory
+                                       reassignedFrom: f.reassignedFrom ?? reassignOrigin[key],  // gate-3 advisory
+                                       derivation: f.derivation))
             } else {
                 out.append(f)
             }
