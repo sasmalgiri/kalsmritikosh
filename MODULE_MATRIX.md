@@ -18,8 +18,8 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | metric | count |
 |---|---|
-| modules declared | 25 |
-| implemented | 24 |
+| modules declared | 26 |
+| implemented | 26 |
 | **implemented but NOT WIRED** | **0** |
 | default OFF (opt-in) | 2 |
 | require the on-device model | 6 |
@@ -42,9 +42,9 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | module | default | AI? | wired at | tests |
 |---|---|---|---|---|
-| `crossEncoderRerank` — Cross-encoder reranking | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:1255 | 1 |
+| `crossEncoderRerank` — Cross-encoder reranking | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:1270 | 1 |
 | `correctiveRetrieval` — Corrective re-retrieval | ON | — | Kalsmritikosh/Brain/MasterBrain.swift:878 | 0 |
-| `hydeExpansion` — Hypothetical query expansion | ON | yes | Kalsmritikosh/Retrieval/HybridRetriever.swift:1048 | 1 |
+| `hydeExpansion` — Hypothetical query expansion | ON | yes | Kalsmritikosh/Retrieval/HybridRetriever.swift:1063 | 1 |
 | `boilerplateEmbedSkip` — Boilerplate embed-skip | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1392 (+1 more) | 0 |
 | `passwordProtectedFiles` — Password-protected files | ON | — | Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift:38 | 0 |
 | `importLifecycle` — Import & coverage lifecycle | ON | — | Kalsmritikosh/UI/SourcesView.swift:397 | 0 |
@@ -73,7 +73,8 @@ from a grep for `isEnabled(.case)` in non-test source.
 | module | default | AI? | wired at | tests |
 |---|---|---|---|---|
 | `poaGrantorRecovery` — Read names from authorisation forms | ON | — | Kalsmritikosh/Knowledge/Ontology/DomainPacks/PatentDomainPack.swift:324 | 0 |
-| `questionIndexSearch` — Search mined questions | unimplemented | — | **not wired** | 0 |
+| `documentLevelFTS` — Whole-document keyword search | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:833 | 0 |
+| `historyChapterReadback` — Story chapters & recorded disagreements | ON | — | Kalsmritikosh/Storage/Repositories/HistoryArtifactRepository.swift:200 (+1 more) | 0 |
 
 ## How to add one
 

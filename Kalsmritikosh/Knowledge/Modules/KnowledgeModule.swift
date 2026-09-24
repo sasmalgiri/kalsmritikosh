@@ -57,7 +57,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case derivationCompleteMarker // P1.3 — mark a KO's derivation complete/resumable
     // Extraction (v3 plan, Phase 2)
     case poaGrantorRecovery       // P2.7 — store a lowercase POA grantor via the formula
-    case questionIndexSearch      // P2.3 — search the Q-A / synthetic-question indexes
+    case documentLevelFTS         // P2.2 — whole-document FTS fallback (cross-chunk phrases)
+    case historyChapterReadback   // P2.1/P2.5 — read chapters + persist alternative accounts
 
     public var id: String { rawValue }
 
@@ -87,7 +88,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .strictDerivation:     return "Strict derivation (stop on a failed step)"
         case .derivationCompleteMarker: return "Track unfinished imports"
         case .poaGrantorRecovery:   return "Read names from authorisation forms"
-        case .questionIndexSearch:  return "Search mined questions"
+        case .documentLevelFTS:     return "Whole-document keyword search"
+        case .historyChapterReadback: return "Story chapters & recorded disagreements"
         }
     }
 
@@ -116,8 +118,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .recordDerivationFailures: return "When a step of an import fails in a way that can be tolerated — an embedding, one file inside a zip, an email attachment — record WHY, so a gap in your library can be explained instead of just being smaller than expected. Off reverts to a log line only, and the import report loses its reasons."
         case .strictDerivation:     return "If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored."
         case .derivationCompleteMarker: return "Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it."
+        case .documentLevelFTS:     return "Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead."
+        case .historyChapterReadback: return "Read back the chapter structure of a reconstructed story, and keep a record of disagreements found between sources so the same contradiction is not rediscovered on every rebuild. Off falls back to an unchaptered list and forgets disagreements between builds."
         case .poaGrantorRecovery:   return "Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (\u{201C}I, jane doe having\u{201D}). Restricted to that exact document phrasing, so ordinary sentences that begin with \u{201C}I\u{201D} are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised."
-        case .questionIndexSearch:  return "Match your question against questions mined from your own threads and generated for each document, not just against the document text. The indexes are built and kept up to date, but the search is not yet connected to the answer path — so this switch does nothing until that lands."
         }
     }
 
@@ -133,16 +136,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish,
              .mediaTranscription,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
-             .poaGrantorRecovery:
+             .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return true
-        case .questionIndexSearch:
-            // NOT implemented, and the honest reason: SyntheticQuestionsRepository
-            // and QAPairsRepository each maintain their FTS index AND expose a
-            // working `search()` — but NOTHING CALLS search(). The lane is built
-            // end to end except its final connection to HybridRetriever, so a
-            // switch here would be decorative: flipping it would change nothing.
-            // Flip to `true` in the same commit that adds the retrieval layer.
-            return false
         }
     }
 
@@ -173,7 +168,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
             return "Answer composition"
         case .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker:
             return "Import integrity"
-        case .poaGrantorRecovery, .questionIndexSearch:
+        case .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return "Extraction & search"
         }
     }

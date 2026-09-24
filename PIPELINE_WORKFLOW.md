@@ -211,7 +211,7 @@ asserts header, coverage, `itemCount`, `gapCount`, `evidenceCount` and review
 status. There is no chapter assertion and no `chapterCount` helper. A write-only
 table inside a passing suite whose name claims completeness.
 
-### F-3 · HIGH · Two FTS indexes are never populated
+### ~~F-3~~ · WITHDRAWN — the claim was false
 `qa_pairs_fts` and `synthetic_questions_fts` have **no producer**
 (`PIPELINE_MATRIX.md`). So question-side search has an index and no contents —
 any query against them silently returns nothing.

@@ -191,6 +191,63 @@ public actor ChunksRepository {
         return rows.compactMap(decode)
     }
 
+    // MARK: - P2.2 · document-level FTS, so `knowledge_objects_fts` is READ
+    //
+    // `knowledge_objects_fts` has been trigger-maintained on EVERY
+    // knowledge_objects write since v14 and queried by NOTHING. The obvious
+    // conclusion — that it is redundant against `chunks_fts` — is wrong, and
+    // the difference is structural rather than a matter of degree:
+    //
+    //   chunks_fts indexes each chunk SEPARATELY. A multi-word phrase whose
+    //   words fall either side of a chunk boundary can never match it, because
+    //   no single indexed row contains the whole phrase.
+    //   knowledge_objects_fts indexes the WHOLE document, so the same phrase
+    //   matches.
+    //
+    // That is exactly the class of query a chunked index is blind to, and it is
+    // not a rare one: a name, a clause, or an address split across a boundary
+    // is common. So the write was never waste — the READ was missing.
+    //
+    // Used as a FALLBACK, not a replacement: chunk-level hits are more precise
+    // (they carry the passage) and stay the primary lane. This runs only when
+    // the chunk lane found nothing, and hydrates the matched documents' chunks
+    // so downstream code receives the same shape either way.
+
+    /// Chunks belonging to documents whose FULL TEXT matches — the cross-chunk
+    /// phrase lane. Deterministic order; bounded per document so one long
+    /// document cannot crowd out the rest.
+    public func searchDocumentFTS(_ query: String, documentLimit: Int = 8,
+                                  chunksPerDocument: Int = 4) async throws -> [Chunk] {
+        let match = FTSQuerySanitizer.sanitize(query)
+        guard !match.isEmpty else { return [] }
+        let docs = try await database.query("""
+        SELECT k.id
+        FROM knowledge_objects k
+        JOIN knowledge_objects_fts ON knowledge_objects_fts.rowid = k.rowid
+        WHERE knowledge_objects_fts.content MATCH ?
+        ORDER BY rank
+        LIMIT ?;
+        """, [.text(match), .integer(Int64(documentLimit))])
+        let ids = docs.compactMap { $0.uuid(0) }
+        guard !ids.isEmpty else { return [] }
+
+        var out: [Chunk] = []
+        for id in ids {
+            // Leading chunks of the document: without a per-chunk score there
+            // is no honest ranking WITHIN the document, and pretending
+            // otherwise would invent precision. Ordinal order is at least
+            // truthful and stable.
+            let rows = try await database.query("""
+            SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind
+            FROM chunks
+            WHERE object_id = ? AND review_status IS NULL
+            ORDER BY ordinal ASC LIMIT ?;
+            """, [.uuid(id), .integer(Int64(chunksPerDocument))])
+            out.append(contentsOf: rows.compactMap(decode))
+        }
+        return out
+    }
+
     /// A deterministic sample of embeddable, non-rejected chunks (ordered by
     /// rowid, so the same DB yields the same sample). Used by the retrieval
     /// self-eval to measure recall@k on the user's OWN data.

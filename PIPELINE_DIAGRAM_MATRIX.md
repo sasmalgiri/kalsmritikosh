@@ -193,7 +193,7 @@ against, so one of the two should change (finding F-8).
 |---|---|---|---|
 | **F-1** | HIGH | `:1520` swallowed entity insert → empty `canonicalMapping` → `:1544` writes events with **un-canonicalised references**. The corruption is downstream of the failure and looks like valid data | #83 |
 | **F-2** | HIGH | `history_chapters` written every build, read nowhere — inside a suite whose test is named *"Save persists the full graph and reloads"* and asserts no chapter | #86 |
-| **F-3** | HIGH | `qa_pairs_fts` + `synthetic_questions_fts` have **no producer** — indexes with no contents, so queries silently return nothing | #86 |
+| ~~F-3~~ | **WITHDRAWN** | I claimed `qa_pairs_fts` + `synthetic_questions_fts` had no producer. FALSE. Both repositories maintain their index explicitly (`SyntheticQuestionsRepository:68`, `QAPairsRepository:71`) AND `HybridRetriever` calls both searches (`:837`, `:868`). The lane is fully wired. My scan produced two false negatives — see §F | — |
 | **F-4** | MED | `:1042` / `:1067` / `:1123` recursive member ingest `try?` — an examiner cannot tell *"not in the container"* from *"failed to parse"* | #84 |
 | **F-5** | MED | `:1146 linkBlocks` `try?` — the one call that wires the claim–evidence contract; a silent failure yields facts citing evidence that cannot resolve | #84 |
 | **F-6** | MED | `:372` / `:398` embedding `try?` — **failed** is indistinguishable from **pending**, so coverage can never be honest | #84 |

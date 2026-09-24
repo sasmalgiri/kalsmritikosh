@@ -2013,6 +2013,17 @@ public enum SchemaMigrations {
     CREATE INDEX IF NOT EXISTS idx_blocks_kind ON evidence_blocks(kind);
     CREATE INDEX IF NOT EXISTS idx_blocks_parent ON evidence_blocks(parent_block_id);
 
+    -- P2.6 · DEFERRED-KEPT (owner ruling 2026-09-24: "keep all").
+    -- Verified 2026-09-24: this table has NO producer and NO consumer anywhere
+    -- in non-test source. It is block-to-block graph scaffolding — reply-to,
+    -- continuation, and containment edges between evidence blocks — designed
+    -- and never populated.
+    -- KEPT rather than dropped: the schema costs nothing empty, and the owner
+    -- ruled that nothing is removed. EXEMPT from the coverage guard for the
+    -- same reason: an unbuilt feature with reserved schema is not a wiring gap,
+    -- and counting it as one would hide the real ones.
+    -- To build it, the producer belongs next to persistStructuralDoc, where
+    -- block order and parent/child relations are already known.
     CREATE TABLE evidence_block_edges (
         id            TEXT PRIMARY KEY NOT NULL,
         from_block_id TEXT NOT NULL,

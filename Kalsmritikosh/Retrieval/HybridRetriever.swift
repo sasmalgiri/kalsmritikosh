@@ -818,6 +818,21 @@ public actor HybridRetriever: Retriever {
                 hits = (try? await chunks.searchFTS(tokens.joined(separator: " OR "), limit: 25)) ?? []
             }
         }
+        // P2.2 (module .documentLevelFTS) — whole-document keyword fallback.
+        //
+        // chunks_fts indexes each chunk SEPARATELY, so a phrase whose words fall
+        // either side of a chunk boundary can never match it: no indexed row
+        // contains the whole phrase. knowledge_objects_fts indexes the full
+        // document and does match — and had been trigger-maintained since v14
+        // with NOTHING reading it. The write was never waste; the read was
+        // missing.
+        //
+        // Last resort by design. Chunk hits carry the actual passage and stay
+        // the primary lane; this fires only when that lane is empty, so it can
+        // add recall without ever displacing a precise hit.
+        if hits.isEmpty, KnowledgeModuleFlags.isEnabled(.documentLevelFTS) {
+            hits = (try? await chunks.searchDocumentFTS(q)) ?? []
+        }
         var collected: [RetrievedChunk] = hits.enumerated().map { idx, chunk in
             RetrievedChunk(
                 chunk: chunk,
