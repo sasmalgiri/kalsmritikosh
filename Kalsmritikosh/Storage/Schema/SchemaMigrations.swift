@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 130
+    public static let latestVersion = 131
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -661,7 +661,8 @@ public enum SchemaMigrations {
         (127, v127),
         (128, v128),
         (129, v129),
-        (130, v130)
+        (130, v130),
+        (131, v131)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6561,5 +6562,38 @@ public enum SchemaMigrations {
         ON derivation_failures(detected_type);
     CREATE INDEX IF NOT EXISTS idx_derivation_failures_sv
         ON derivation_failures(source_version_id);
+    """
+
+    // MARK: - v131 — P1.3: a KO's derivation is either COMPLETE or resumable
+    //
+    // processKnowledgeObject writes in sequence: knowledge_objects → chunks →
+    // synthetic_questions → entities → events → relationships. The transaction
+    // boundary across that sequence was UNKNOWN — recorded as unknown in
+    // PIPELINE_WORKFLOW.md rather than assumed either way. The hazard it leaves
+    // is specific: a process killed between chunks and entities leaves a KO
+    // that LOOKS finished, is counted as finished, and is silently missing its
+    // ledger. On a whole-archive re-ingest a mid-run kill is likely, not
+    // hypothetical, and a partial KO that looks complete is invisible to the
+    // Ingestion Report's counts while being wrong.
+    //
+    // WHY A MARKER AND NOT ONE BIG SAVEPOINT. The sequence interleaves database
+    // writes with long-running async work (NER, event extraction, embedding).
+    // Wrapping all of it in a single SQLite SAVEPOINT would hold a write
+    // transaction open across model inference, blocking the embedding drain and
+    // any concurrent read for the duration. So the choice is the second option
+    // this project's own acceptance criteria allowed: an EXPLICITLY RESUMABLE
+    // PARTIAL. `derivation_complete` is set only after the last stage returns;
+    // anything NULL is a KO whose derivation did not finish, which
+    // resumeIncompleteIngests can finish and the report can count separately
+    // from "derived and empty".
+    //
+    // NULL for every pre-v131 row, which is honest: those KOs were derived
+    // before the marker existed, so their completeness is genuinely unknown
+    // rather than assumed. The backfill rides the drain, never a standalone
+    // rewrite of the archive.
+    private static let v131: String = """
+    ALTER TABLE knowledge_objects ADD COLUMN derivation_complete INTEGER;
+    CREATE INDEX IF NOT EXISTS idx_ko_derivation_complete
+        ON knowledge_objects(derivation_complete);
     """
 }

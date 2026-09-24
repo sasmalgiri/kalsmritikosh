@@ -53,6 +53,51 @@ public actor KnowledgeObjectRepository {
         return rows.first?.string(0).flatMap(DocumentClass.init(rawValue:))
     }
 
+    // MARK: - P1.3 · derivation completeness
+
+    /// Mark this KO's derivation COMPLETE. Called once, after the last
+    /// derivation stage returns.
+    ///
+    /// Until this is set the KO is a resumable partial: it may have chunks and
+    /// no entities because the process was killed mid-sequence. That state was
+    /// previously indistinguishable from "derived, and there was nothing to
+    /// find" — so a partial KO looked finished, was counted as finished, and
+    /// was silently missing its ledger.
+    public func markDerivationComplete(id: KnowledgeObject.ID) async throws {
+        try await database.exec(
+            "UPDATE knowledge_objects SET derivation_complete = 1 WHERE id = ?;",
+            [.uuid(id)])
+    }
+
+    /// KOs whose derivation did not finish — `derivation_complete` is NULL or 0.
+    ///
+    /// NULL covers two different things and the caller must not conflate them:
+    /// a KO interrupted since v131, and every KO derived BEFORE v131 existed,
+    /// whose completeness is genuinely unknown rather than known-bad. Deciding
+    /// between them needs the producer-version era, not this flag; this returns
+    /// candidates in a deterministic order and lets the caller choose.
+    public func incompleteDerivations(limit: Int = 500) async throws -> [KnowledgeObject.ID] {
+        let rows = try await database.query("""
+        SELECT id FROM knowledge_objects
+        WHERE derivation_complete IS NULL OR derivation_complete = 0
+        ORDER BY id ASC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.uuid(0) }
+    }
+
+    /// (complete, incomplete) counts — the Ingestion Report needs BOTH so a
+    /// coverage figure always carries its denominator, and so "derived and
+    /// empty" never reads the same as "never finished deriving".
+    public func derivationCompleteness() async throws -> (complete: Int, incomplete: Int) {
+        let rows = try await database.query("""
+        SELECT COALESCE(SUM(CASE WHEN derivation_complete = 1 THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN derivation_complete IS NULL OR derivation_complete = 0 THEN 1 ELSE 0 END), 0)
+        FROM knowledge_objects;
+        """, [])
+        guard let r = rows.first else { return (0, 0) }
+        return (complete: Int(r.int(0) ?? 0), incomplete: Int(r.int(1) ?? 0))
+    }
+
     public func count() async throws -> Int {
         let rows = try await database.query("SELECT COUNT(*) FROM knowledge_objects;")
         return Int(rows.first?.int(0) ?? 0)

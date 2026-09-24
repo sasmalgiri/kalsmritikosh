@@ -1071,7 +1071,22 @@ public actor IngestCoordinator {
                 context: ctx, now: Date()
             ) { [weak self] byteURL, origin, parentRef in
                 guard let self else { return ContainerProcessingCoordinator.MemberIngestOutcome(childSourceVersionID: nil, contentHash: nil, detectedType: nil) }
-                let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
+                // P1.2 (F-4) — a container member, iOS-backup file or email
+                // attachment that fails to ingest previously yielded nil with the
+                // REASON discarded, and was recorded as childSourceVersionID: nil.
+                // For a forensic tool that is the worst place to lose a reason: the
+                // examiner cannot tell "not in the container" from "failed to
+                // parse". Tolerated (one bad member must not abort the container)
+                // but no longer silent.
+                var r: Result?
+                do {
+                    r = try await self.runIngest(fileAt: origin, parentVersion: parentRef, memberByteURL: byteURL)
+                } catch {
+                    await self.derivationFailures?.record(
+                        stage: "member.ingest", error: error,
+                        filePath: origin.path)
+                    KalsmritikoshLog.ingestion.error("Container member ingest failed for \(origin.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
                 return ContainerProcessingCoordinator.MemberIngestOutcome(
                     childSourceVersionID: r?.sourceVersionID, contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
             }
@@ -1096,8 +1111,23 @@ public actor IngestCoordinator {
                     return ContainerProcessingCoordinator.MemberIngestOutcome(
                         childSourceVersionID: nil, contentHash: nil, detectedType: nil)
                 }
-                let r = try? await self.runIngest(fileAt: origin, parentVersion: parentRef,
+                // P1.2 (F-4) — a container member, iOS-backup file or email
+                // attachment that fails to ingest previously yielded nil with the
+                // REASON discarded, and was recorded as childSourceVersionID: nil.
+                // For a forensic tool that is the worst place to lose a reason: the
+                // examiner cannot tell "not in the container" from "failed to
+                // parse". Tolerated (one bad member must not abort the container)
+                // but no longer silent.
+                var r: Result?
+                do {
+                    r = try await self.runIngest(fileAt: origin, parentVersion: parentRef,
                                                   memberByteURL: byteURL)
+                } catch {
+                    await self.derivationFailures?.record(
+                        stage: "member.ingest", error: error,
+                        filePath: origin.path)
+                    KalsmritikoshLog.ingestion.error("Container member ingest failed for \(origin.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                }
                 return ContainerProcessingCoordinator.MemberIngestOutcome(
                     childSourceVersionID: r?.sourceVersionID,
                     contentHash: r?.fileRecord.contentHash, detectedType: r?.fileRecord.sourceType)
@@ -1150,10 +1180,21 @@ public actor IngestCoordinator {
                    case .string(let json) = value.value {
                     let attachParent = SourceParentReference(parentSourceVersionID: handle.sourceVersionID, relation: .attachment)
                     for attachmentURL in EmailLoader.decodeAttachmentURLs(from: json) {
-                        if let attachmentResult = try? await runIngest(fileAt: attachmentURL, parentVersion: attachParent) {
+                        // P1.2 (F-4) — an email ATTACHMENT that fails to ingest
+                        // was silently absent, indistinguishable from an email
+                        // that had no attachment. Tolerated (one bad attachment
+                        // must not fail the email) but recorded.
+                        do {
+                            let attachmentResult = try await runIngest(fileAt: attachmentURL, parentVersion: attachParent)
                             await sourceRelations?.record(parent: fileRecord.id, child: attachmentResult.fileRecord.id, relation: .attachment)
                             totalChunks += attachmentResult.chunkCount; totalEntities += attachmentResult.entityCount; totalEvents += attachmentResult.eventCount
                             allInvalidations.append(contentsOf: attachmentResult.invalidations)
+                        } catch {
+                            await derivationFailures?.record(
+                                stage: "attachment.ingest", error: error,
+                                sourceVersionID: handle.sourceVersionID,
+                                filePath: attachmentURL.path)
+                            KalsmritikoshLog.ingestion.error("Attachment ingest failed for \(attachmentURL.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
                         }
                     }
                 }
@@ -1745,6 +1786,36 @@ public actor IngestCoordinator {
                 subjects: invalidationSubjects,
                 triggeringObjectID: object.id
             ))
+        }
+
+        // P1.3 — THE COMPLETION MARKER, and it must be the last thing that
+        // happens. Every stage above has returned, so this KO's derivation is
+        // whole; anything that dies before this line leaves a KO whose
+        // `derivation_complete` is NULL, which
+        // `KnowledgeObjectRepository.incompleteDerivations` can find and
+        // `resumeIncompleteIngests` can finish.
+        //
+        // Not wrapped in a SAVEPOINT with the stages above on purpose: that
+        // sequence interleaves database writes with NER, event extraction and
+        // embedding, so one transaction spanning it would hold a SQLite write
+        // lock across model inference and stall the embedding drain. The
+        // resumable-partial design is the alternative this project's own
+        // acceptance criteria allowed, and it is the one that does not trade a
+        // correctness win for a liveness loss.
+        //
+        // Tolerated-and-recorded rather than propagated: the derivation itself
+        // succeeded, and failing the whole KO because a one-column UPDATE failed
+        // would discard correct work. A missing marker is self-correcting — the
+        // next resume pass re-derives, and re-derivation is idempotent by the
+        // Fixed-Point Law.
+        do {
+            try await objects.markDerivationComplete(id: object.id)
+        } catch {
+            await derivationFailures?.record(
+                stage: "ko.markDerivationComplete", error: error,
+                knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                detectedType: object.sourceType.rawValue)
+            KalsmritikoshLog.ingestion.error("Failed to mark derivation complete for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
         }
 
         return ProcessedKO(
