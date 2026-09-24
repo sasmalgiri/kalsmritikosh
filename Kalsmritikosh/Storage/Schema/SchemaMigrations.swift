@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 132
+    public static let latestVersion = 131
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -662,8 +662,7 @@ public enum SchemaMigrations {
         (128, v128),
         (129, v129),
         (130, v130),
-        (131, v131),
-        (132, v132)
+        (131, v131)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6598,59 +6597,4 @@ public enum SchemaMigrations {
         ON knowledge_objects(derivation_complete);
     """
 
-    // MARK: - v132 — P2.3: two FTS indexes that were never populated
-    //
-    // THE SAME DEFECT AS v14, TWICE MORE. v14's comment records the original:
-    // chunks_fts and knowledge_objects_fts were created as external-content FTS5
-    // tables with no triggers, so `chunks_fts MATCH 'patent'` returned 0 rows
-    // against 42K+ chunks and the entire FTS retrieval tier was silently dead
-    // since launch. v14 added triggers and rebuilt.
-    //
-    // `qa_pairs_fts` (v?) and `synthetic_questions_fts` (v?) were created the
-    // same way and never got the same treatment. PIPELINE_MATRIX.md reports both
-    // with NO PRODUCER: an index with no contents. Any query against them
-    // returns nothing — not an error, just nothing — so question-shaped
-    // retrieval over mined Q-A turns and generated hypothetical questions has
-    // never matched anything either.
-    //
-    // This is the worst failure shape in the product: a lane that looks present,
-    // costs schema and code, and silently answers "nothing found".
-    //
-    // Fix is v14's: INSERT/UPDATE/DELETE triggers to keep future writes in sync,
-    // then one idempotent rebuild for rows already present. Idempotent by
-    // construction — running it twice yields the same final index — so it is
-    // safe under the migration self-heal and under a repeated migrate().
-    private static let v132: String = """
-    -- synthetic_questions_fts ← synthetic_questions(text)
-    CREATE TRIGGER IF NOT EXISTS synthq_fts_ai AFTER INSERT ON synthetic_questions BEGIN
-        INSERT INTO synthetic_questions_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS synthq_fts_ad AFTER DELETE ON synthetic_questions BEGIN
-        INSERT INTO synthetic_questions_fts(synthetic_questions_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS synthq_fts_au AFTER UPDATE ON synthetic_questions BEGIN
-        INSERT INTO synthetic_questions_fts(synthetic_questions_fts, rowid, text) VALUES('delete', old.rowid, old.text);
-        INSERT INTO synthetic_questions_fts(rowid, text) VALUES (new.rowid, new.text);
-    END;
-
-    -- qa_pairs_fts ← qa_pairs(question_text, answer_text)
-    CREATE TRIGGER IF NOT EXISTS qapairs_fts_ai AFTER INSERT ON qa_pairs BEGIN
-        INSERT INTO qa_pairs_fts(rowid, question_text, answer_text)
-        VALUES (new.rowid, new.question_text, new.answer_text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS qapairs_fts_ad AFTER DELETE ON qa_pairs BEGIN
-        INSERT INTO qa_pairs_fts(qa_pairs_fts, rowid, question_text, answer_text)
-        VALUES('delete', old.rowid, old.question_text, old.answer_text);
-    END;
-    CREATE TRIGGER IF NOT EXISTS qapairs_fts_au AFTER UPDATE ON qa_pairs BEGIN
-        INSERT INTO qa_pairs_fts(qa_pairs_fts, rowid, question_text, answer_text)
-        VALUES('delete', old.rowid, old.question_text, old.answer_text);
-        INSERT INTO qa_pairs_fts(rowid, question_text, answer_text)
-        VALUES (new.rowid, new.question_text, new.answer_text);
-    END;
-
-    -- Backfill what is already there. Idempotent.
-    INSERT INTO synthetic_questions_fts(synthetic_questions_fts) VALUES('rebuild');
-    INSERT INTO qa_pairs_fts(qa_pairs_fts) VALUES('rebuild');
-    """
 }

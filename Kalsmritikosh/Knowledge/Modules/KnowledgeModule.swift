@@ -117,7 +117,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .strictDerivation:     return "If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored."
         case .derivationCompleteMarker: return "Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it."
         case .poaGrantorRecovery:   return "Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (\u{201C}I, jane doe having\u{201D}). Restricted to that exact document phrasing, so ordinary sentences that begin with \u{201C}I\u{201D} are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised."
-        case .questionIndexSearch:  return "Match your question against questions mined from your own threads and generated for each document, not just against the document text. These indexes existed but were never filled, so this had nothing to match; turning it on makes question-shaped searches work."
+        case .questionIndexSearch:  return "Match your question against questions mined from your own threads and generated for each document, not just against the document text. The indexes are built and kept up to date, but the search is not yet connected to the answer path — so this switch does nothing until that lands."
         }
     }
 
@@ -133,8 +133,16 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish,
              .mediaTranscription,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
-             .poaGrantorRecovery, .questionIndexSearch:
+             .poaGrantorRecovery:
             return true
+        case .questionIndexSearch:
+            // NOT implemented, and the honest reason: SyntheticQuestionsRepository
+            // and QAPairsRepository each maintain their FTS index AND expose a
+            // working `search()` — but NOTHING CALLS search(). The lane is built
+            // end to end except its final connection to HybridRetriever, so a
+            // switch here would be decorative: flipping it would change nothing.
+            // Flip to `true` in the same commit that adds the retrieval layer.
+            return false
         }
     }
 

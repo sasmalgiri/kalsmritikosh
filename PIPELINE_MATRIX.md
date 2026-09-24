@@ -13,14 +13,14 @@ Regenerate with `python3 scripts/pipeline-matrix.py`.
 
 | metric | count |
 |---|---|
-| tables declared | 207 |
+| tables declared | 208 |
 | migration-scratch (legitimately write-only) | 14 |
-| real tables | 193 |
-| **no producer** (nothing writes it) | **9** |
+| real tables | 194 |
+| **no producer** (nothing writes it) | **7** |
 | **written but never read** | **4** |
 | **has a producer but NO test mentions it** | **17** |
 
-## No producer — nothing writes these (9)
+## No producer — nothing writes these (7)
 
 _Dead schema, or a feature whose persistence was never wired._
 
@@ -31,8 +31,6 @@ _Dead schema, or a feature whose persistence was never wired._
 | `history_alternative_accounts` | — | — |
 | `people` | — | — |
 | `projects` | — | — |
-| `qa_pairs_fts` | — | — |
-| `synthetic_questions_fts` | — | — |
 | `timelines` | — | — |
 | `vectors` | — | — |
 
@@ -79,7 +77,7 @@ _The verification gap. Highest-value list in this file._
 | `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 25 | 251 |
 | `chunk_embeddings` | App, EvalKit, Storage/Schema, Storage/Vector | 4 | 10 | 250 |
 | `source_versions` | App, Ingestion/Intake, Storage/Repositories, Storage/Schema | 4 | 20 | 249 |
-| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 22 | 81 |
+| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 22 | 82 |
 | `entity_mentions` | App, Storage/Repositories, Storage/Schema | 3 | 5 | 233 |
 | `chunks` | EvalKit, Knowledge/Backfill, Storage/Repositories, Storage/Schema | 5 | 10 | 267 |
 | `chunks_fts` | EvalKit, Storage/Schema | 2 | 3 | 242 |
@@ -136,7 +134,7 @@ _The verification gap. Highest-value list in this file._
 | `answer_revision_events` | Storage/Repositories | 1 | 2 | 6 |
 | `answer_revisions` | Storage/Repositories | 1 | 1 | 6 |
 | `answers` | Storage/Repositories | 2 | 3 | 40 |
-| `assertions` | Storage/Repositories | 1 | 1 | 42 |
+| `assertions` | Storage/Repositories | 1 | 1 | 43 |
 | `claim_contradictions` | Storage/Repositories | 1 | 1 | 43 |
 | `claim_evidence` | Storage/Repositories | 2 | 2 | 8 |
 | `claim_evidence_ref` | Storage/Repositories | 1 | 5 | 51 |
@@ -156,6 +154,7 @@ _The verification gap. Highest-value list in this file._
 | `deadline_candidates` | Storage/Repositories | 1 | 2 | 16 |
 | `deadline_reviews` | Storage/Repositories | 1 | 1 | 13 |
 | `deadlines` | Storage/Repositories | 1 | 4 | 16 |
+| `derivation_failures` | Storage/Repositories | 1 | 1 | 1 |
 | `derived_objects` | Storage/Repositories | 1 | 1 | 0 |
 | `document_profiles` | Storage/Repositories | 1 | 3 | 69 |
 | `email_participant_occurrences` | Storage/Repositories | 1 | 2 | 3 |
@@ -195,6 +194,7 @@ _The verification gap. Highest-value list in this file._
 | `protocol_registry` | Storage/Repositories | 1 | 1 | 4 |
 | `protocol_review_records` | Storage/Repositories | 1 | 1 | 4 |
 | `qa_pairs` | Storage/Repositories | 1 | 2 | 10 |
+| `qa_pairs_fts` | Storage/Repositories | 1 | 1 | 10 |
 | `review_decisions` | Storage/Repositories | 1 | 1 | 0 |
 | `review_tags` | Storage/Repositories | 1 | 1 | 0 |
 | `saved_queries` | Storage/Repositories | 1 | 1 | 0 |
@@ -209,6 +209,7 @@ _The verification gap. Highest-value list in this file._
 | `source_reliability_assessments` | Storage/Repositories | 1 | 1 | 7 |
 | `summaries` | Storage/Repositories | 1 | 2 | 9 |
 | `synthetic_questions` | Storage/Repositories | 1 | 3 | 10 |
+| `synthetic_questions_fts` | Storage/Repositories | 1 | 1 | 10 |
 | `temporal_claims` | Storage/Repositories | 1 | 1 | 29 |
 | `typed_fields` | Storage/Repositories | 1 | 1 | 5 |
 | `workflow_artifacts` | Storage/Repositories | 2 | 3 | 38 |
@@ -227,7 +228,7 @@ _The verification gap. Highest-value list in this file._
 | `workspace_sources` | Storage/Repositories | 1 | 3 | 36 |
 | `workspaces` | Storage/Repositories | 1 | 4 | 100 |
 | `event_entities` | Storage/Repositories, Storage/Schema | 3 | 7 | 232 |
-| `events` | Storage/Repositories, Storage/Schema | 2 | 12 | 286 |
+| `events` | Storage/Repositories, Storage/Schema | 2 | 12 | 287 |
 | `evidence_blocks` | Storage/Repositories, Storage/Schema | 2 | 8 | 243 |
 | `history_items` | Storage/Repositories, Storage/Schema | 2 | 2 | 230 |
 | `relationships` | Storage/Repositories, Storage/Schema | 2 | 1 | 242 |
@@ -278,7 +279,5 @@ _The verification gap. Highest-value list in this file._
 | `history_alternative_accounts` | — | 0 | 0 | 0 |
 | `people` | — | 0 | 0 | 13 |
 | `projects` | — | 0 | 0 | 9 |
-| `qa_pairs_fts` | — | 0 | 1 | 0 |
-| `synthetic_questions_fts` | — | 0 | 1 | 0 |
 | `timelines` | — | 0 | 0 | 1 |
 | `vectors` | — | 0 | 1 | 13 |

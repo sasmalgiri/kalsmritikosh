@@ -135,9 +135,24 @@ def classify_occurrences(table, text):
         # An identifier, not a table reference.
         if SWIFT_USAGE.search(text[max(0, m.start() - 24):m.start()]):
             continue
-        # Member access / call on a Swift value of the same name.
-        if text[m.end():m.end() + 1] in (".", "("):
-            continue
+        # Member access / call on a Swift value of the same name — UNLESS the
+        # table name is immediately preceded by a SQL keyword.
+        #
+        # FALSE NEGATIVE THIS FIXES, and it was a costly one: FTS5 insert syntax
+        # is `INSERT OR REPLACE INTO qa_pairs_fts(rowid, ...)`, where the table
+        # name IS followed by `(`. Skipping on that made the scan report
+        # qa_pairs_fts and synthetic_questions_fts as having NO PRODUCER, when
+        # both repositories maintain them explicitly. Acting on that wrong
+        # reading, I wrote a migration adding triggers ON TOP of the existing
+        # inserts — which would have double-inserted every row into both
+        # indexes. The scan's false negatives are more dangerous than its false
+        # positives: a missing producer invites someone to add one.
+        nextChar = text[m.end():m.end() + 1]
+        if nextChar in (".", "("):
+            before = text[max(0, m.start() - 24):m.start()]
+            sqlPrefixed = re.search(r"\b(INTO|FROM|JOIN|UPDATE|TABLE)\s+$", before)
+            if not sqlPrefixed:
+                continue
         kw = _last_keyword(text[max(0, m.start() - WINDOW):m.start()])
         if kw is None or kw in SCHEMA_KEYWORDS:
             continue

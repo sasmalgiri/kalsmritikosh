@@ -19,21 +19,11 @@ from a grep for `isEnabled(.case)` in non-test source.
 | metric | count |
 |---|---|
 | modules declared | 25 |
-| implemented | 25 |
-| **implemented but NOT WIRED** | **1** |
+| implemented | 24 |
+| **implemented but NOT WIRED** | **0** |
 | default OFF (opt-in) | 2 |
 | require the on-device model | 6 |
 | referenced by a test | 9 |
-
-## ⚠️ Decorative switches — implemented, but no gate found (1)
-
-| module | title |
-|---|---|
-| `questionIndexSearch` | Search mined questions |
-
-Either gate the code path with `KnowledgeModuleFlags.isEnabled(.<case>)`,
-or set `implemented = false` until it is wired.
-
 
 ## Knowledge synthesis
 
@@ -83,7 +73,7 @@ or set `implemented = false` until it is wired.
 | module | default | AI? | wired at | tests |
 |---|---|---|---|---|
 | `poaGrantorRecovery` — Read names from authorisation forms | ON | — | Kalsmritikosh/Knowledge/Ontology/DomainPacks/PatentDomainPack.swift:324 | 0 |
-| `questionIndexSearch` — Search mined questions | ON | — | **not wired** | 0 |
+| `questionIndexSearch` — Search mined questions | unimplemented | — | **not wired** | 0 |
 
 ## How to add one
 
