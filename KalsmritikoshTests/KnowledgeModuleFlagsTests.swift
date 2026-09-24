@@ -40,14 +40,29 @@ import Foundation
         }
     }
 
-    @Test("Implemented modules default on, except opt-in ledger-scoping ones")
+    @Test("Implemented modules default on, except the explicitly opt-in ones")
     func implementedDefaultOn() {
-        // Ledger-scoping modules intentionally default OFF (old behaviour stands
-        // until the owner opts in); everything else implemented defaults ON.
-        let optIn: Set<KnowledgeModule> = [.proseSubjectBinding, .aiSubjectResolution]
+        // Everything implemented defaults ON — it IS the current behaviour —
+        // except these, and each exception needs a stated reason. The set is
+        // closed on purpose: a new module quietly defaulting OFF is a feature
+        // nobody has, and this test is what forces that choice to be argued.
+        let optIn: Set<KnowledgeModule> = [
+            // Ledger-SCOPING changes: the old behaviour stands until the owner
+            // opts in, because these alter what a fact attaches to.
+            .proseSubjectBinding, .aiSubjectResolution,
+            // P3.3 — a different reason, and the only module of its kind: it is
+            // the one writer whose output a model had a hand in, so it is not
+            // reproducible. P3.1/P3.2/P3.4 are deterministic and default ON; a
+            // NON-deterministic writer into the ledger should be a deliberate
+            // choice rather than something a user discovers in their data.
+            .inducedSchema,
+        ]
         for m in KnowledgeModule.allCases where m.implemented {
-            if optIn.contains(m) { #expect(!m.defaultEnabled) }
-            else { #expect(m.defaultEnabled) }
+            if optIn.contains(m) {
+                #expect(!m.defaultEnabled, "\(m.rawValue) is listed opt-in but defaults ON")
+            } else {
+                #expect(m.defaultEnabled, "\(m.rawValue) defaults OFF without being listed as opt-in — state why, then add it here")
+            }
         }
     }
 }
