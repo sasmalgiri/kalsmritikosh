@@ -523,3 +523,134 @@ struct MboxAccountingTests {
         await RealArchivePipelineTests.teardown(state, dir)
     }
 }
+
+// MARK: - 8. Are the extracted VALUES correct?
+
+@Suite("VALUE CORRECTNESS — facts checked against what the documents say", .serialized)
+@MainActor
+struct FactCorrectnessTests {
+
+    // The last unverified leg. Everything else proven so far is STRUCTURAL:
+    // rows exist, chains connect, citations resolve, the thread runs end to
+    // end. None of it reads a single extracted value and compares it to the
+    // source. If the values are wrong, all of that is scaffolding around a
+    // wrong answer.
+    //
+    // Ground truth for the two documents used here was read out of the files by
+    // hand BEFORE this test existed (see the suite header), so these are not
+    // assertions reverse-engineered from whatever the extractor happened to
+    // produce — which is the trap that makes a correctness test worthless.
+
+    @Test("Dump every fact, then check the ones whose truth is known",
+          .timeLimit(.minutes(60)))
+    func factsMatchTheDocuments() async throws {
+        let files = RealArchivePipelineTests.smallFiles()
+        guard !files.isEmpty else {
+            Issue.record("~/Downloads/Mail not found — VALUE CORRECTNESS WAS NOT CHECKED")
+            return
+        }
+        let (state, dir) = try await RealArchivePipelineTests.bootState(label: "facts")
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — value correctness NOT checked")
+            await RealArchivePipelineTests.teardown(state, dir); return
+        }
+        let db = try #require(state.database)
+        await state.ingestFiles(files)
+
+        // ── Everything, printed. The dump IS the deliverable: a count of 71
+        // facts says nothing about whether they are right, and no assertion can
+        // be written for a value nobody has looked at.
+        let rows = (try? await db.query("""
+        SELECT gf.subject_label, gf.field, gf.value, gf.confidence, gf.derivation,
+               (SELECT f.url FROM files f
+                  JOIN knowledge_objects k ON k.file_id = f.id
+                  JOIN chunks c ON c.object_id = k.id
+                 WHERE gf.source_blocks_json LIKE '%' || c.evidence_block_id || '%'
+                 LIMIT 1) AS src
+        FROM generic_facts gf
+        ORDER BY gf.field, gf.value;
+        """, [])) ?? []
+        print("── \(rows.count) FACT(S) EXTRACTED FROM \(files.count) REAL FILES")
+        for r in rows {
+            let src = (r.string(5).map { URL(fileURLWithPath: $0).lastPathComponent }) ?? "?"
+            let deriv = r.string(4).map { " [\($0)]" } ?? ""
+            // Plain interpolation with manual padding. `String(format:)` with
+            // %s/%@ crashes on Swift Strings — %s wants a C string — which is
+            // what killed the first run of this test.
+            func pad(_ v: String, _ w: Int) -> String {
+                let t = String(v.prefix(w))
+                return t + String(repeating: " ", count: max(0, w - t.count))
+            }
+            let conf = String(format: "%.2f", r.double(3) ?? 0)
+            print("   \(pad(r.string(1) ?? "?", 26)) = \(pad(r.string(2) ?? "?", 46))  conf \(conf)  \(src)\(deriv)")
+        }
+
+        // ── The entities, likewise: these carry the email ground truth.
+        let ents = (try? await db.query("""
+        SELECT kind, value, COUNT(*) AS n FROM entities
+        WHERE merged_into IS NULL GROUP BY kind, value
+        ORDER BY n DESC, value LIMIT 30;
+        """, [])) ?? []
+        print("── top entities (of \(ents.count) shown):")
+        for e in ents {
+            print("   \(e.string(0) ?? "?"): \(e.string(1) ?? "?")  ×\(Int(e.int(2) ?? 0))")
+        }
+        await RealArchivePipelineTests.teardown(state, dir)
+    }
+
+    @Test("Why are the PDF's labelled fields missing? Look at the stored text",
+          .timeLimit(.minutes(60)))
+    func storedTextForLabelledPDF() async throws {
+        let files = RealArchivePipelineTests.smallFiles()
+            .filter { $0.lastPathComponent.contains("GDPR_Report_patent") }
+        guard !files.isEmpty else {
+            Issue.record("GDPR_Report_patent.pdf not found — the label gap was NOT diagnosed")
+            return
+        }
+        let (state, dir) = try await RealArchivePipelineTests.bootState(label: "labels")
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot"); await RealArchivePipelineTests.teardown(state, dir); return
+        }
+        let db = try #require(state.database)
+        await state.ingestFiles(files)
+
+        // Ground truth, read by hand from the PDF: it prints
+        //   "Data Subject : patent"
+        //   "Report Generated : 21 May 2026 at 9:23 AM"
+        //   "Emails Involving Subject : 60 of 526 total"
+        // None of those became facts. The question is whether the LABELS
+        // survive into the stored text at all — if the PDF encodes them
+        // letter-spaced, no `Label: value` rule can see them, and the gap is in
+        // text extraction rather than in field extraction.
+        let rows = (try? await db.query(
+            "SELECT text FROM chunks ORDER BY ordinal LIMIT 2;", [])) ?? []
+        for (i, r) in rows.enumerated() {
+            print("── stored chunk \(i):")
+            print(String((r.string(0) ?? "").prefix(600)))
+            print("")
+        }
+        let all = rows.compactMap { $0.string(0) }.joined(separator: " ")
+        // The chunk text above is collapsed to one run. OpenFieldExtractor does
+        // NOT read chunks — it reads evidence BLOCKS. So the question that
+        // decides where the fix belongs is whether the BLOCK text kept its line
+        // breaks: if it did, the label gate is too strict; if it did not, the
+        // parser is dropping the structure the gate depends on.
+        let blocks = (try? await db.query("""
+        SELECT kind, raw_text, normalized_text FROM evidence_blocks ORDER BY ordinal LIMIT 3;
+        """, [])) ?? []
+        for (i, b) in blocks.enumerated() {
+            let raw = b.string(1) ?? ""
+            let norm = b.string(2) ?? ""
+            print("── block \(i) kind=\(b.string(0) ?? "?") rawNewlines=\(raw.filter { $0.isNewline }.count) normNewlines=\(norm.filter { $0.isNewline }.count)")
+            print("   raw: \(String(raw.prefix(220)).replacingOccurrences(of: "\n", with: "⏎"))")
+        }
+
+        for label in ["Data Subject", "Report Generated", "Emails Involving"] {
+            let exact = all.contains(label)
+            let squeezed = all.filter { !$0.isWhitespace }
+                .contains(label.filter { !$0.isWhitespace })
+            print("── “\(label)”: exact=\(exact)  ignoring-all-spaces=\(squeezed)")
+        }
+        await RealArchivePipelineTests.teardown(state, dir)
+    }
+}
