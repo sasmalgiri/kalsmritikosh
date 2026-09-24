@@ -321,6 +321,34 @@ public enum DataHealthCheck {
         md += "Database: `\(database.url.path)`\n"
         md += "Audit runtime: \(String(format: "%.1f", Date().timeIntervalSince(started)))s\n\n"
 
+        // ── P4.4 — ATTRIBUTION STAMP ────────────────────────────────────────
+        //
+        // A report with no configuration is unattributable. Two runs over the
+        // same archive can legitimately produce different numbers because a
+        // module moved, and without this the owner has no way to tell that from
+        // a regression — they would be comparing two reports that look
+        // comparable and are not. Modules are listed by their EFFECTIVE state
+        // (`isEnabled`), not their stored preference, so a module force-disabled
+        // by the AI regime reads as off here, which is what it actually is.
+        md += "## What produced this report\n\n"
+        md += "| | |\n|---|---|\n"
+        md += "| build | `\(BuildIdentity.gitSHA)` |\n"
+        md += "| schema version | v\(SchemaMigrations.latestVersion) |\n"
+        md += "| AI regime | \(FeatureFlags.aiRegimeValue().rawValue) |\n"
+        let allModules = KnowledgeModule.allCases.filter(\.implemented)
+        let onModules = allModules.filter { KnowledgeModuleFlags.isEnabled($0) }
+        md += "| modules on | \(onModules.count) of \(allModules.count) |\n\n"
+        let offModules = allModules.filter { !KnowledgeModuleFlags.isEnabled($0) }
+        if !offModules.isEmpty {
+            md += "**Switched off for this run** — each of these is a capability the "
+            md += "numbers below do NOT include, which is the most common reason a "
+            md += "count is lower than expected:\n\n"
+            for m in offModules.sorted(by: { $0.rawValue < $1.rawValue }) {
+                md += "- `\(m.rawValue)` — \(m.title)\(m.requiresAI && !FeatureFlags.aiRegimeValue().allowsAI ? " _(forced off: no model under this AI regime)_" : "")\n"
+            }
+            md += "\n"
+        }
+
         md += "## Overview\n\n"
         md += "| Layer | Rows |\n|---|---:|\n"
         md += "| files | \(fileCount) |\n"

@@ -3847,9 +3847,55 @@ public final class AppState {
         //    (owner witness: 121 MB with every table at 0 rows), which reads
         //    as "my data wasn't deleted" — a promise breach for an erase.
         try? await db.exec("VACUUM;", [])
+
+        // 6. P4.3 — PROVE IT. Everything above is `try? await db.exec(DELETE)`,
+        //    so a table that failed to empty produced no error and was counted
+        //    as cleared anyway. The function then returned the number of DELETE
+        //    statements ATTEMPTED and called it "tables cleared". For the one
+        //    operation in this app a user cannot undo and cannot inspect, that
+        //    is the worst place in the codebase to infer success from the
+        //    absence of a thrown error.
+        //
+        //    So count the rows back. A residue is reported, logged as a fault,
+        //    and left VISIBLE rather than folded into the success number — a
+        //    half-erased ledger that reports a clean erase would have the user
+        //    re-ingest on top of surviving rows and then wonder why their counts
+        //    are wrong.
+        let residue = await Self.eraseResidue(db: db, tables: tables)
+        eraseResidue = residue
         newFilesSinceLaunch = 0
-        KalsmritikoshLog.app.info("Deleted all ingested data (\(tables.count, privacy: .public) tables cleared) — user-initiated full erase")
+        if residue.isEmpty {
+            KalsmritikoshLog.app.info("Deleted all ingested data — \(tables.count, privacy: .public) table(s) cleared and VERIFIED EMPTY (user-initiated full erase)")
+        } else {
+            let detail = residue.map { "\($0.table)=\($0.rows)" }.joined(separator: ", ")
+            let residueCount = residue.count
+            KalsmritikoshLog.app.fault("FULL ERASE INCOMPLETE — \(residueCount, privacy: .public) table(s) still hold rows after the wipe: \(detail, privacy: .public)")
+        }
         return tables.count
+    }
+
+    /// Tables that still held rows after the last full erase. EMPTY is the
+    /// expected state; anything here means the erase did not finish and the
+    /// slate is NOT clean. Surfaced in Settings so it cannot only live in a log.
+    public private(set) var eraseResidue: [(table: String, rows: Int)] = []
+
+    /// Count rows back after a wipe. A table whose COUNT cannot be read is
+    /// reported as residue with `rows = -1`: unreadable is not the same as
+    /// empty, and treating it as empty is how an unverified erase passes for a
+    /// verified one.
+    nonisolated static func eraseResidue(
+        db: Database, tables: [String]
+    ) async -> [(table: String, rows: Int)] {
+        var residue: [(table: String, rows: Int)] = []
+        for t in tables {
+            guard let rows = try? await db.query("SELECT COUNT(*) FROM \"\(t)\";", []) else {
+                residue.append((table: t, rows: -1))
+                continue
+            }
+            let n = Int(rows.first?.int(0) ?? 0)
+            if n != 0 { residue.append((table: t, rows: n)) }
+        }
+        return residue.sorted { $0.rows == $1.rows ? $0.table < $1.table : $0.rows > $1.rows }
     }
 
     /// One-click "start fresh": erase every ingested row IN PLACE (works even

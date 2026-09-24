@@ -1581,7 +1581,21 @@ public struct SettingsView: View {
                 Task {
                     deleteAllStatus = "Erasing…"
                     let n = await appState.deleteAllData()
-                    deleteAllStatus = "Erased. \(n) tables cleared — re-add folders in Sources to start fresh."
+                    // P4.3 — the erase is VERIFIED, and a failure to verify is
+                    // shown here rather than only logged. "Erased" is a claim
+                    // the user cannot check for themselves and cannot undo, so
+                    // it is only made when the rows were counted back to zero.
+                    let residue = appState.eraseResidue
+                    if residue.isEmpty {
+                        deleteAllStatus = "Erased and verified — \(n) tables cleared, all confirmed empty. Re-add folders in Sources to start fresh."
+                    } else {
+                        let worst = residue.prefix(4)
+                            .map { "\($0.table) (\($0.rows < 0 ? "unreadable" : "\($0.rows) rows")" + ")" }
+                            .joined(separator: ", ")
+                        deleteAllStatus = "⚠️ ERASE INCOMPLETE — \(residue.count) of \(n) tables still hold data: \(worst)"
+                            + (residue.count > 4 ? " and \(residue.count - 4) more." : ".")
+                            + " Do NOT re-ingest yet: new data would be added on top of rows that survived. Try the erase again, and if it keeps failing, quit the app first so nothing is writing during the wipe."
+                    }
                 }
             }
         } message: {
