@@ -46,12 +46,29 @@ struct ClaimGroundingTests {
         #expect(r.ungroundedTokens.contains("Reliance Industries"))
     }
 
-    @Test("A claim with no checkable specifics is trivially grounded (no false flags)")
-    func noSpecificsNoFlags() {
+    @Test("A claim with no checkable specifics is UNCHECKED, not verified")
+    func noSpecificsIsUnchecked() {
+        // No false flags — there is nothing ungrounded — but the fraction is
+        // nil rather than 1.0. "100% grounded" over zero specifics was the
+        // strongest possible endorsement of a sentence this check never
+        // examined, and a quality bar reading `> 0.9` would have accepted it.
         let r = grounding.check(claim: "The project was discussed at length.",
                                 evidenceTexts: ["We talked about the project."])
         #expect(!r.hasUngroundedMaterial)
-        #expect(r.groundedFraction == 1.0)
+        #expect(!r.hasCheckableSpecifics)
+        #expect(r.groundedFraction == nil)
+    }
+
+    @Test("A claim WITH specifics still reports a real fraction")
+    func specificsReportAFraction() {
+        // The other half: making the empty case nil must not make the
+        // populated case unusable.
+        let r = grounding.check(claim: "Paid ₹3,800 to Rajesh Kumar in 2004.",
+                                evidenceTexts: ["Rs 3800 credited to Rajesh Kumar"])
+        #expect(r.hasCheckableSpecifics)
+        let fraction = r.groundedFraction
+        #expect(fraction != nil)
+        #expect((fraction ?? 0) > 0 && (fraction ?? 0) <= 1.0)
     }
 
     @Test("Year grounding: a matching year passes, a fabricated year is flagged")
