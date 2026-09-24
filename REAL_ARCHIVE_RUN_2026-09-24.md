@@ -89,20 +89,54 @@ shape-similar case. See commit `700700a`; fixed and re-verified.
    because the issue line used the unsupported count when the finding was the
    undetected count.
 
-## Open, not resolved — task #91
+## RESOLVED — the mbox "gap" was my own measurement error
 
-**The mbox produced 408 documents from 526 messages.** 9,355 chunks, 316 s.
+**Nothing was lost.** The 408-of-526 alarm came from comparing *documents* to
+*messages*, which are not the same quantity: an email's **attachments are
+expanded into documents of their own**.
 
-The gap is not a counting artefact: 526 strict separators, 526 thread headers,
-366 **unique** thread ids, and the app's own earlier GDPR PDF independently says
-"of 526 total". 408 matches neither 526 (per message) nor 366 (per thread), so
-neither "no dedup" nor "thread dedup" explains it. Candidate causes, untested:
-content-hash dedup collapsing identical messages; the splitter dropping messages
-on some header shape; or per-message derivation failing and being skipped.
+Measured with the coalescing flag pinned, in one run:
 
-Recorded precisely rather than resolved by speculation. The next step is to
-re-ingest the mbox and read `files.alias_of`, `derivation_failures` and
-`derivation_complete` to separate legitimate dedup from silent drops.
+```
+mbox:  526        ← exactly one document per message, zero lost
+jpg 59 · pdf 31 · doc 31 · docx 17 · unknown 13 · png 12
+xlsx 3 · xls 2 · pptx 2 · zip 1 · eml 1        = 172 attachments
+tolerated failures: 0 · derivation incomplete: 0
+```
+
+The arithmetic closes exactly, and the same 172 appears under both settings —
+which is what makes it an explanation rather than a coincidence:
+
+| Thread coalescing | Loader documents | + attachments | = stored |
+|---|---:|---:|---:|
+| ON | 236 threads | +172 | **408** — the original measurement |
+| OFF | 526 messages | +172 | **698** — this run |
+
+The splitter is exact: with coalescing off it recovers all 526 separators.
+
+### The real finding underneath it
+
+`EmailLoader.threadCoalescingEnabled` is **ON** in this environment, read from
+`UserDefaults` key `kalsmritikosh.moveA.threadCoalescing`. The code defaults it
+to `false` and its own comment says to hold it there:
+
+> Held at `false` until the per-message extraction fanout lands in
+> `IngestCoordinator.processKnowledgeObject` so events, mentions, and memory
+> subjects don't degrade on thread KOs.
+
+So the archive is currently being ingested as 236 thread documents rather than
+526 message documents, with the degradation the code warns about. That is an
+owner decision, not a defect — but it is on against the code's own guidance, and
+it changes what per-message questions can be answered.
+
+### How I got it wrong
+
+I raised a defect alarm by comparing two incommensurable counts, then proposed
+three causes for a gap that did not exist. The tightening that mattered was not
+more hypotheses but one measurement that broke the counts down by type. Two
+wrong hypotheses were eliminated first — the splitter (exact) and coalescing
+(236, which cannot produce 408) — and the contradiction "408 > 236" is what
+forced the right question.
 
 ## Still not verified
 

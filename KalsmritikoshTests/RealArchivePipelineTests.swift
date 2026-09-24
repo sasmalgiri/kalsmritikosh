@@ -380,3 +380,146 @@ struct RealArchivePipelineTests {
         await Self.teardown(state, dir)
     }
 }
+
+// MARK: - 7. Diagnosing the 408-of-526 gap (task #91)
+
+@Suite("MBOX accounting — where the 118 messages went", .serialized)
+@MainActor
+struct MboxAccountingTests {
+
+    /// Counts what the LOADER emits, under each setting, so the gap is
+    /// attributed to a cause instead of guessed at.
+    ///
+    /// Restores the user's setting on every exit path. Reading a real
+    /// preference is fine; leaving it changed would be a diagnostic that
+    /// silently reconfigures the app it was measuring.
+    @Test("408 documents is thread COALESCING, not lost messages",
+          .timeLimit(.minutes(30)))
+    func perMessageVersusPerThread() async throws {
+        let url = RealArchivePipelineTests.archive.appendingPathComponent("Sent.mbox")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            Issue.record("Sent.mbox not found — THE 408/526 GAP WAS NOT DIAGNOSED")
+            return
+        }
+        let key = "kalsmritikosh.moveA.threadCoalescing"
+        let original = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        print("── user's current setting: coalescing = \(EmailLoader.threadCoalescingEnabled)")
+
+        let loader = EmailLoader()
+
+        UserDefaults.standard.set(false, forKey: key)
+        let perMessage = try await loader.ingestMany(fileAt: url, type: .mbox)
+        print("── coalescing OFF → \(perMessage.count) KO(s)  [file holds 526 separators]")
+
+        UserDefaults.standard.set(true, forKey: key)
+        let perThread = try await loader.ingestMany(fileAt: url, type: .mbox)
+        print("── coalescing ON  → \(perThread.count) KO(s)  [408 measured in the ingest run]")
+
+        // The accounting that settles it: per-message must recover every
+        // separator, and per-thread must equal what the ingest actually stored.
+        #expect(perMessage.count == 526,
+                "the splitter lost messages: \(perMessage.count) of 526 separators")
+        #expect(perThread.count < perMessage.count,
+                "coalescing produced no reduction, so it does not explain the gap")
+        // MEASURED: per-message 526, per-thread 236, stored 408. 408 matches
+        // NEITHER loader mode, so the gap is neither the splitter (which is
+        // exact) nor coalescing. The next candidate is de-duplication of
+        // identical message bodies during persistence.
+        var bodies = Set<String>()
+        var empty = 0
+        for k in perMessage {
+            let t = k.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if t.isEmpty { empty += 1 }
+            bodies.insert(t)
+        }
+        print("── of 526 per-message KOs: \(bodies.count) distinct bodies, \(empty) empty")
+        print("── stored by the ingest: 408")
+        if bodies.count == 408 {
+            print("   ⇒ the 118 are byte-identical duplicate messages, collapsed by content hash")
+        } else {
+            print("   ⇒ distinct bodies (\(bodies.count)) ≠ 408 either — the gap is still unexplained")
+        }
+
+        // The splitter itself is exact, which is the load-bearing claim here.
+        #expect(perMessage.count == 526)
+        #expect(perThread.count == 236,
+                "thread coalescing yields \(perThread.count); recorded as 236 on 2026-09-25")
+    }
+    /// The decisive run: pin the coalescing flag, ingest, and count in ONE run.
+    ///
+    /// The earlier measurement of 408 stored documents is inconsistent with BOTH
+    /// loader modes — 526 per message, 236 per thread — and you cannot store 408
+    /// documents from a loader that emitted 236. So the flag state during that
+    /// run is unknown, and the gap cannot be attributed without pinning it and
+    /// observing the store in the same run.
+    @Test("With coalescing pinned OFF, every message must reach the ledger",
+          .timeLimit(.minutes(45)))
+    func storedCountWithFlagPinned() async throws {
+        let mbox = RealArchivePipelineTests.archive.appendingPathComponent("Sent.mbox")
+        guard FileManager.default.fileExists(atPath: mbox.path) else {
+            Issue.record("Sent.mbox not found — THE GAP WAS NOT ATTRIBUTED")
+            return
+        }
+        let key = "kalsmritikosh.moveA.threadCoalescing"
+        let original = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let original { UserDefaults.standard.set(original, forKey: key) }
+            else { UserDefaults.standard.removeObject(forKey: key) }
+        }
+        UserDefaults.standard.set(false, forKey: key)
+        print("── pinned coalescing = \(EmailLoader.threadCoalescingEnabled) (expect false)")
+
+        let (state, dir) = try await RealArchivePipelineTests.bootState(label: "mboxpin")
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — gap NOT attributed")
+            await RealArchivePipelineTests.teardown(state, dir); return
+        }
+        let db = try #require(state.database)
+        await state.ingestFiles([mbox])
+
+        func n(_ sql: String) async -> Int {
+            Int((try? await db.query(sql, []).first?.int(0)) ?? 0) ?? 0
+        }
+        let stored = await n("SELECT COUNT(*) FROM knowledge_objects;")
+        let failures = await n("SELECT COUNT(*) FROM derivation_failures;")
+        let incomplete = await n("SELECT COUNT(*) FROM knowledge_objects WHERE derivation_complete IS NULL;")
+        print("── PINNED OFF → stored \(stored) document(s) of 526 messages")
+        print("   tolerated failures: \(failures) · derivation incomplete: \(incomplete)")
+        if failures > 0 {
+            let rows = (try? await db.query("""
+            SELECT stage, COUNT(*) FROM derivation_failures GROUP BY stage ORDER BY COUNT(*) DESC;
+            """, [])) ?? []
+            for r in rows { print("      \(r.string(0) ?? "?"): \(Int(r.int(1) ?? 0))") }
+        }
+        // RESOLVED, and in the opposite direction to the suspicion. The store
+        // holds MORE documents than the mbox holds messages, because an email's
+        // ATTACHMENTS are expanded into documents of their own. So "documents"
+        // was never comparable to "messages", and the whole 118-missing alarm
+        // came from comparing two different things.
+        //
+        //   coalescing ON :  236 threads  + 172 attachments = 408  (first run)
+        //   coalescing OFF:  526 messages + 172 attachments = 698  (this run)
+        //
+        // The same 172 both times, which is what makes the arithmetic an
+        // explanation rather than a coincidence.
+        let byType = (try? await db.query("""
+        SELECT source_type, COUNT(*) FROM knowledge_objects
+        GROUP BY source_type ORDER BY COUNT(*) DESC;
+        """, [])) ?? []
+        print("── documents by type (attachments arrive as their own type):")
+        for r in byType { print("      \(r.string(0) ?? "?"): \(Int(r.int(1) ?? 0))") }
+        let mailKOs = await n("SELECT COUNT(*) FROM knowledge_objects WHERE source_type = 'mbox';")
+        print("── mbox-typed documents: \(mailKOs) · non-mbox (attachments): \(stored - mailKOs)")
+
+        // The load-bearing claim: every MESSAGE is present. Attachments are
+        // additional, never a substitute.
+        #expect(mailKOs == 526,
+                "mbox-typed documents = \(mailKOs), expected one per message (526) with coalescing off")
+        #expect(stored >= mailKOs, "attachments cannot reduce the message count")
+        await RealArchivePipelineTests.teardown(state, dir)
+    }
+}
