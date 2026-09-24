@@ -244,26 +244,30 @@ public struct ShellHistoryStructuralParser: StructuralParser {
 
     private nonisolated static func zshCommands(_ lines: [String]) -> [Command] {
         var out: [Command] = []
-        var pending: (text: String, time: Date?, elapsed: Int?, line: Int)?
+        // Continuation lines are COLLECTED and joined once. See `bareCommands`
+        // for the measurement that made this necessary.
+        var parts: [String] = []
+        var meta: (time: Date?, elapsed: Int?, line: Int)?
 
         func flush() {
-            guard let p = pending, !p.text.trimmingCharacters(in: .whitespaces).isEmpty else {
-                pending = nil; return
-            }
-            out.append(Command(sequence: out.count + 1, text: p.text, time: p.time,
-                               elapsedSeconds: p.elapsed, line: p.line))
-            pending = nil
+            defer { parts.removeAll(keepingCapacity: true); meta = nil }
+            guard let meta else { return }
+            let text = parts.joined(separator: "\n")
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            out.append(Command(sequence: out.count + 1, text: text, time: meta.time,
+                               elapsedSeconds: meta.elapsed, line: meta.line))
         }
 
         for (index, line) in lines.enumerated() {
             if let (time, elapsed, command) = parseZshPrefix(line) {
                 flush()
-                pending = (command, time, elapsed, index + 1)
-            } else if pending != nil {
+                parts = [command]
+                meta = (time, elapsed, index + 1)
+            } else if meta != nil {
                 // A multi-line command: zsh writes the newlines literally, so a
                 // line without the timestamp prefix continues the command above.
                 // Dropping it would silently truncate what was actually run.
-                pending?.text += "\n" + line
+                parts.append(line)
             } else if !line.trimmingCharacters(in: .whitespaces).isEmpty {
                 // Commands from before EXTENDED_HISTORY was enabled: real, and
                 // genuinely undated.
@@ -278,7 +282,8 @@ public struct ShellHistoryStructuralParser: StructuralParser {
     private nonisolated static func bashCommands(_ lines: [String]) -> [Command] {
         var out: [Command] = []
         var pendingTime: Date?
-        var pending: (text: String, time: Date?, line: Int)?
+        var parts: [String] = []
+        var meta: (time: Date?, line: Int)?
         // Whether a `#epoch` marker has been seen yet. Before the first one, the
         // file is in its UNDATED region — timestamping was switched on part-way
         // through the file's life, which is the normal case — and there each
@@ -292,12 +297,12 @@ public struct ShellHistoryStructuralParser: StructuralParser {
         var seenAMarker = false
 
         func flush() {
-            guard let p = pending, !p.text.trimmingCharacters(in: .whitespaces).isEmpty else {
-                pending = nil; return
-            }
-            out.append(Command(sequence: out.count + 1, text: p.text, time: p.time,
-                               elapsedSeconds: nil, line: p.line))
-            pending = nil
+            defer { parts.removeAll(keepingCapacity: true); meta = nil }
+            guard let meta else { return }
+            let text = parts.joined(separator: "\n")
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            out.append(Command(sequence: out.count + 1, text: text, time: meta.time,
+                               elapsedSeconds: nil, line: meta.line))
         }
 
         for (index, line) in lines.enumerated() {
@@ -305,11 +310,13 @@ public struct ShellHistoryStructuralParser: StructuralParser {
                 flush()
                 pendingTime = time
                 seenAMarker = true
-            } else if pending != nil, seenAMarker {
-                pending?.text += "\n" + line
+            } else if meta != nil, seenAMarker {
+                // Collected, not concatenated — see `bareCommands`.
+                parts.append(line)
             } else if !line.trimmingCharacters(in: .whitespaces).isEmpty {
                 flush()
-                pending = (line, pendingTime, index + 1)
+                parts = [line]
+                meta = (pendingTime, index + 1)
                 pendingTime = nil
                 if !seenAMarker { flush() }
             }
@@ -349,29 +356,35 @@ public struct ShellHistoryStructuralParser: StructuralParser {
         return out
     }
 
+    /// Lines are accumulated in an ARRAY and joined once. Appending to a String
+    /// inside the continuation loop is O(n²) in the number of continued lines:
+    /// a 20 000-line history where every line ends in a backslash measured at
+    /// 23.8 SECONDS before this change.
     private nonisolated static func bareCommands(_ lines: [String]) -> [Command] {
         var out: [Command] = []
-        var pending: (text: String, line: Int)?
+        var parts: [String] = []
+        var startLine = 0
 
         func flush() {
-            guard let p = pending, !p.text.trimmingCharacters(in: .whitespaces).isEmpty else {
-                pending = nil; return
-            }
-            out.append(Command(sequence: out.count + 1, text: p.text, time: nil,
-                               elapsedSeconds: nil, line: p.line))
-            pending = nil
+            defer { parts.removeAll(keepingCapacity: true) }
+            let text = parts.joined(separator: "\n")
+            guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+            out.append(Command(sequence: out.count + 1, text: text, time: nil,
+                               elapsedSeconds: nil, line: startLine))
         }
 
         for (index, line) in lines.enumerated() {
-            if var p = pending {
-                // A trailing backslash continues the command on the next line.
-                p.text = String(p.text.dropLast()) + "\n" + line
-                pending = p
+            if !parts.isEmpty {
+                // The previous line ended in a backslash, which the shell reads
+                // as a continuation; drop the backslash and keep going.
+                parts[parts.count - 1] = String(parts[parts.count - 1].dropLast())
+                parts.append(line)
                 if !line.hasSuffix("\\") { flush() }
                 continue
             }
             guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-            pending = (line, index + 1)
+            parts = [line]
+            startLine = index + 1
             if !line.hasSuffix("\\") { flush() }
         }
         flush()

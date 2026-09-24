@@ -56,6 +56,13 @@ public struct AttributedBodyText: Sendable, Equatable {
     /// contains "String" but NOT "NSString", so this cannot match the wrong
     /// record.
     nonisolated static let stringClasses = ["NSString", "NSMutableString"]
+    /// How far into the blob the string CLASS RECORD may sit. The archive's
+    /// class records come immediately after the 13-byte header — "NSString"
+    /// lands within ~70 bytes of the start in every archive Apple's own encoder
+    /// produced — so the search is bounded here. Unbounded, a malformed
+    /// multi-megabyte value was walked end-to-end twice (once per class name)
+    /// before being refused: measured at 2.75s for 4 MB, per message.
+    nonisolated static let classSearchWindow = 4096
     /// How far past the class name the marker may sit. Measured at 5 bytes
     /// (`01 94 84 01 2b`); the window allows for version drift without letting
     /// the search wander into another record.
@@ -95,14 +102,24 @@ public struct AttributedBodyText: Sendable, Equatable {
         return AttributedBodyText(text: text, containsAttachmentPlaceholder: hasPlaceholder)
     }
 
-    /// Index just past the first string class name.
+    /// Index just past the first string class name, searched only within
+    /// `classSearchWindow` bytes — see that constant for why the whole blob
+    /// does not need walking.
     private nonisolated static func firstStringClassEnd(in bytes: [UInt8]) -> Int? {
+        let limit = min(bytes.count, classSearchWindow)
         var best: Int?
         for name in stringClasses {
             let needle = [UInt8](name.utf8)
-            guard needle.count <= bytes.count else { continue }
-            for start in 0...(bytes.count - needle.count) {
-                if Array(bytes[start..<(start + needle.count)]) == needle {
+            guard needle.count <= limit else { continue }
+            for start in 0...(limit - needle.count) {
+                // Compare element-wise: slicing into an Array per position
+                // allocates once per byte offset.
+                var matched = true
+                for offset in 0..<needle.count where bytes[start + offset] != needle[offset] {
+                    matched = false
+                    break
+                }
+                if matched {
                     let end = start + needle.count
                     if best == nil || end < best! { best = end }
                     break
