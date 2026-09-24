@@ -130,7 +130,27 @@ public enum DeterministicEvidenceFallback {
             // W4 — relevance gate + dedup + cap: never dump every riding fact or
             // repeat the same one. Skip facts the question did not ask about, and
             // collapse duplicate field+value rows.
-            guard relevant(fact.field + " " + fact.value) else { continue }
+            //
+            // A fact counts as relevant when the question's terms overlap EITHER
+            // the fact itself OR THE PASSAGE IT WAS EXTRACTED FROM. The second
+            // clause is not a loosening — it is what makes the gate correct.
+            // Comparing a question against `field + value` alone asks the user to
+            // have guessed the ledger's field NAME: "where did they work?" yields
+            // the term "work", while the fact reads `employer = Orchid Pharma`,
+            // so the one fact that answers the question was dropped — while the
+            // chunk "Worked at Orchid Pharma as a chemist.", which states the
+            // very same thing, was shown. A fact is a distillation of its
+            // passage; if the question surfaced the passage as relevant, the
+            // fact drawn from it is relevant too.
+            //
+            // This does NOT reopen the dump this gate was added to stop. The
+            // backing chunk must still be in the surfaced set (above) AND share
+            // terms with the question, so the witnessed junk — Role: Director /
+            // Hearingdate ×30 riding a "who signed the lease?" ask — stays out:
+            // those facts' passages are the unrelated documents the same gate
+            // already excludes.
+            guard relevant(fact.field + " " + fact.value) || relevant(backing.chunk.text)
+            else { continue }
             let dedupKey = "\(fact.field.lowercased())|\(fact.value.lowercased())"
             guard seenFacts.insert(dedupKey).inserted else { continue }
             guard factLines.count < 12 else { break }
