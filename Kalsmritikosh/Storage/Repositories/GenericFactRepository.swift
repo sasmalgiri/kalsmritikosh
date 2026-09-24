@@ -230,6 +230,25 @@ public actor GenericFactRepository {
         }
     }
 
+    // MARK: - P3.4 · the ledger's OWN field inventory
+    //
+    // With P3.1's open-field extractor the set of fields the ledger holds is no
+    // longer knowable in advance — `chassisnumber`, `policynumber`,
+    // `containerid` arrive from documents nobody wrote a pack for. The ask side
+    // resolves against THIS, so a question can reach a field that exists
+    // without anyone having enumerated it.
+    //
+    // Bounded and ordered by frequency: a field asserted by many facts is more
+    // likely to be what a question means than one asserted once, and the cap
+    // keeps the set small enough to hold in memory per ask.
+    public func distinctFields(limit: Int = 500) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT lower(field), COUNT(*) AS n FROM generic_facts
+        GROUP BY lower(field) ORDER BY n DESC, lower(field) ASC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
     public func count() async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM generic_facts;", [])).first?.int(0) ?? 0)
     }

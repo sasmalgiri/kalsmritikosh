@@ -149,10 +149,15 @@ public nonisolated struct QueryPlan: Codable, Sendable, Hashable {
 public struct QueryPlanCompiler: Sendable {
     public nonisolated init() {}
 
+    /// `knownFields` is the ledger's ACTUAL field inventory (P3.4). Optional
+    /// and defaulted, so every existing call site compiles unchanged and
+    /// behaves identically — an empty inventory means the discovered-field
+    /// lane simply never fires.
     public nonisolated func compile(
         intent: UserIntent,
         category: QueryCategory,
-        queryClass: LLMQueryClass
+        queryClass: LLMQueryClass,
+        knownFields: Set<String> = []
     ) -> QueryPlan {
         let q = intent.rawQuestion.lowercased()
 
@@ -160,7 +165,12 @@ public struct QueryPlanCompiler: Sendable {
         // D-11 — registered fact fields the question names, resolved BEFORE
         // the generic mapping so "what is the granted patent number" becomes
         // a slot request for `patentnumber`, never a `.definition`.
-        let slots = SlotFieldResolver.resolve(in: q)
+        //
+        // P3.4 — and when nothing curated matches, resolve against the fields
+        // the ledger really holds, so a question can reach a field that the
+        // open extractor discovered and nobody enumerated. A curated mapping
+        // always wins; this only reaches what no one curated.
+        let slots = SlotFieldResolver.resolve(in: q, knownFields: knownFields)
         let fields = Self.requestedFields(in: q, slots: slots)
         let roles = Self.preferredRoles(for: fields, question: q)
         let policy = EvidencePolicy(requiresCorroboration: Self.requiresCorroboration(queryClass))

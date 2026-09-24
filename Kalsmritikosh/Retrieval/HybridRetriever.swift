@@ -282,7 +282,22 @@ public actor HybridRetriever: Retriever {
         }
         let densityKOs = Set(mentionCounts.filter { $0.value >= 3 }.map(\.key))
 
-        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact, queryClass: .ordinary)
+        // P3.4 — the ledger's ACTUAL field inventory, so a question can reach a
+        // field the open extractor discovered and nobody enumerated ("what is
+        // the chassis number"). Read here, at the one place that both holds the
+        // facts repo and compiles the plan immediately before slot-aware
+        // retrieval consumes it.
+        //
+        // Cheap and bounded: one grouped COUNT over generic_facts, capped, and
+        // only when the asking module is on. Empty inventory changes nothing —
+        // the discovered-field lane simply never fires.
+        var knownFields: Set<String> = []
+        if KnowledgeModuleFlags.isEnabled(.openFieldAsking), let genericFacts {
+            knownFields = Set((try? await genericFacts.distinctFields()) ?? [])
+        }
+        let plan = QueryPlanCompiler().compile(intent: intent, category: .fact,
+                                               queryClass: .ordinary,
+                                               knownFields: knownFields)
 
         // Slot-aware retrieval — a registered fact-field question ("what is the
         // patent no") must reach the block that CARRIES that field even when
