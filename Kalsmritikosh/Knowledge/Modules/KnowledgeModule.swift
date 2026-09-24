@@ -61,6 +61,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     // Universality (v3 plan, Phase 3)
     case openFieldExtraction      // P3.1 — `Label: value` facts from ANY domain
     case openFieldAsking          // P3.4 — resolve a question against the ledger's real fields
+    case openFactTypes            // P3.2 — derive a type id for documents outside the curated enum
     case historyChapterReadback   // P2.1/P2.5 — read chapters + persist alternative accounts
 
     public var id: String { rawValue }
@@ -94,6 +95,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .documentLevelFTS:     return "Whole-document keyword search"
         case .openFieldExtraction:  return "Read labelled fields from any document"
         case .openFieldAsking:      return "Ask about any field we found"
+        case .openFactTypes:        return "Group unfamiliar document kinds"
         case .historyChapterReadback: return "Story chapters & recorded disagreements"
         }
     }
@@ -123,6 +125,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .recordDerivationFailures: return "When a step of an import fails in a way that can be tolerated — an embedding, one file inside a zip, an email attachment — record WHY, so a gap in your library can be explained instead of just being smaller than expected. Off reverts to a log line only, and the import report loses its reasons."
         case .strictDerivation:     return "If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored."
         case .derivationCompleteMarker: return "Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it."
+        case .openFactTypes:        return "Group documents of a kind the app does not have a built-in name for. A vehicle service record, a shipping manifest and a school report are none of the eleven built-in kinds, so today each is filed as \u{201C}unclassified\u{201D} and the health panel counts it as a problem. With this on, such a document is grouped by the fields it actually contains, so two service records from different garages land together — without the app inventing a name it cannot justify. Needs \u{201C}Read labelled fields from any document\u{201D}."
         case .openFieldAsking:      return "Let a question reach any field found in your documents, not just the ones built in. Ask \u{201C}what is the chassis number\u{201D} and it resolves against the fields actually present in your library — no synonym list to maintain. It can only match a field that genuinely exists, so the worst case is the same honest \u{201C}not found\u{201D} you get today. Pairs with \u{201C}Read labelled fields from any document\u{201D}: extraction without this fills a library you cannot question."
         case .openFieldExtraction:  return "Pull facts out of any document that states them as a label and a value — \u{201C}Policy Number: 4471-99812\u{201D}, \u{201C}Registration No: MH-12-AB-1234\u{201D}, \u{201C}Roll No: 21BCE1043\u{201D} — no matter what kind of document it is. Until now facts came only from eleven built-in document types (patents, invoices, contracts, medical, property and so on), so a shipping manifest, a car service record or a school report produced searchable text but no structured facts. Fields the built-in types already handle are left to them, so nothing about those changes. Off keeps the built-in types only."
         case .documentLevelFTS:     return "Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead."
@@ -144,7 +147,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .mediaTranscription,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
              .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback,
-             .openFieldExtraction, .openFieldAsking:
+             .openFieldExtraction, .openFieldAsking, .openFactTypes:
             return true
         }
     }
@@ -157,7 +160,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
-        case .openFieldExtraction, .openFieldAsking:
+        case .openFieldExtraction, .openFieldAsking, .openFactTypes:
             // Defaults ON: this is the product's central promise, and a
             // universality feature nobody switches on is a universality
             // feature nobody has. It is safe to default on because it only
@@ -186,7 +189,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
             return "Import integrity"
         case .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return "Extraction & search"
-        case .openFieldExtraction, .openFieldAsking:
+        case .openFieldExtraction, .openFieldAsking, .openFactTypes:
             return "Universality"
         }
     }
@@ -214,6 +217,11 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .topicMinimization, .aiSubjectResolution, .topicProsePolish, .topicSeededComposers:
             return [.autoTopics]
+        case .openFactTypes:
+            // A derived type id is a fingerprint of the document's DISCOVERED
+            // fields, so without the extractor there are no fields to
+            // fingerprint and this can only ever decline.
+            return [.openFieldExtraction]
         case .openFieldAsking:
             // Asking about discovered fields is meaningless without the
             // extractor that discovers them — the inventory would only ever

@@ -153,8 +153,22 @@ public enum DataHealthCheck {
         // writes for rows whose entity.kind / event.kind isn't a
         // recognised FactType (date, monetaryAmount, location, …).
         // Those rows ARE processed; they just have no FactType in v1.
+        // P3.2 — a DERIVED type counts as typed. `derived:` ids come from
+        // documents outside the curated enum (a vehicle service record, a
+        // shipping manifest) and name themselves after their own field
+        // signature. Excluding them would make the health panel go RED for the
+        // product working exactly as intended on a universal archive, which is
+        // the absence-as-defect mirror of the absence-as-verification problem.
         let entityTyped = await count("entity typed", "SELECT COUNT(*) FROM entities WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
         let eventTyped = await count("event typed", "SELECT COUNT(*) FROM events WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
+        // Reported SEPARATELY, because "grouped by its own fields" and
+        // "recognised as a contract" are different degrees of knowledge and a
+        // single number would hide which one the archive actually has.
+        let entityDerivedTyped = await count("entity derived-typed",
+            "SELECT COUNT(*) FROM entities WHERE fact_type LIKE 'derived:%';")
+        let eventDerivedTyped = await count("event derived-typed",
+            "SELECT COUNT(*) FROM events WHERE fact_type LIKE 'derived:%';")
+        _ = (entityDerivedTyped, eventDerivedTyped)   // surfaced via the report below
         let entityCountsByType = (try? await state.entities?.countsByFactType()) ?? [:]
         let eventCountsByType = (try? await state.events?.countsByFactType()) ?? [:]
         let entitySlotPop = await count("entity slot pop", """

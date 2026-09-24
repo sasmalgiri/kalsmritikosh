@@ -18,8 +18,8 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | metric | count |
 |---|---|
-| modules declared | 28 |
-| implemented | 28 |
+| modules declared | 29 |
+| implemented | 29 |
 | **implemented but NOT WIRED** | **0** |
 | default OFF (opt-in) | 2 |
 | require the on-device model | 6 |
@@ -82,6 +82,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 |---|---|---|---|---|
 | `openFieldExtraction` — Read labelled fields from any document | ON | — | Kalsmritikosh/Knowledge/Ontology/OpenFieldExtractor.swift:283 | 0 |
 | `openFieldAsking` — Ask about any field we found | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:295 (+1 more) | 0 |
+| `openFactTypes` — Group unfamiliar document kinds | ON | — | Kalsmritikosh/Knowledge/Ontology/FactTypeClassifier.swift:246 (+1 more) | 0 |
 
 ## How to add one
 
