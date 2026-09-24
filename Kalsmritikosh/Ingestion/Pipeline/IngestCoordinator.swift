@@ -884,11 +884,15 @@ public actor IngestCoordinator {
         // is applied inside (unchanged at 8 characters); the cross-block pass
         // deliberately sees every block, because a page whose first line is a
         // bare "700321" is a six-character block and is the one that matters.
+        // P3.1 — the KINDED entry point: the open-field extractor weights a
+        // table cell above a paragraph and refuses page furniture outright, so
+        // it needs each block's kind, not just its text.
         var derived: [GenericFact] = domainFactExtractor.extract(
-            fromBlocks: doc.blocks
+            fromKindedBlocks: doc.blocks
                 .filter { !$0.kind.isBoilerplate }
-                .map { .init(id: $0.id,
-                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText) },
+                .map { (id: $0.id,
+                        text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                        kind: $0.kind) },
             subjectLabel: subjectLabel,
             documentClass: documentClass)
         // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of

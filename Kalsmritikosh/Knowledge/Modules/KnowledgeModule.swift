@@ -58,6 +58,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     // Extraction (v3 plan, Phase 2)
     case poaGrantorRecovery       // P2.7 — store a lowercase POA grantor via the formula
     case documentLevelFTS         // P2.2 — whole-document FTS fallback (cross-chunk phrases)
+    // Universality (v3 plan, Phase 3)
+    case openFieldExtraction      // P3.1 — `Label: value` facts from ANY domain
     case historyChapterReadback   // P2.1/P2.5 — read chapters + persist alternative accounts
 
     public var id: String { rawValue }
@@ -89,6 +91,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .derivationCompleteMarker: return "Track unfinished imports"
         case .poaGrantorRecovery:   return "Read names from authorisation forms"
         case .documentLevelFTS:     return "Whole-document keyword search"
+        case .openFieldExtraction:  return "Read labelled fields from any document"
         case .historyChapterReadback: return "Story chapters & recorded disagreements"
         }
     }
@@ -118,6 +121,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .recordDerivationFailures: return "When a step of an import fails in a way that can be tolerated — an embedding, one file inside a zip, an email attachment — record WHY, so a gap in your library can be explained instead of just being smaller than expected. Off reverts to a log line only, and the import report loses its reasons."
         case .strictDerivation:     return "If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored."
         case .derivationCompleteMarker: return "Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it."
+        case .openFieldExtraction:  return "Pull facts out of any document that states them as a label and a value — \u{201C}Policy Number: 4471-99812\u{201D}, \u{201C}Registration No: MH-12-AB-1234\u{201D}, \u{201C}Roll No: 21BCE1043\u{201D} — no matter what kind of document it is. Until now facts came only from eleven built-in document types (patents, invoices, contracts, medical, property and so on), so a shipping manifest, a car service record or a school report produced searchable text but no structured facts. Fields the built-in types already handle are left to them, so nothing about those changes. Off keeps the built-in types only."
         case .documentLevelFTS:     return "Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead."
         case .historyChapterReadback: return "Read back the chapter structure of a reconstructed story, and keep a record of disagreements found between sources so the same contradiction is not rediscovered on every rebuild. Off falls back to an unchaptered list and forgets disagreements between builds."
         case .poaGrantorRecovery:   return "Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (\u{201C}I, jane doe having\u{201D}). Restricted to that exact document phrasing, so ordinary sentences that begin with \u{201C}I\u{201D} are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised."
@@ -136,7 +140,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish,
              .mediaTranscription,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
-             .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
+             .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback,
+             .openFieldExtraction:
             return true
         }
     }
@@ -149,6 +154,14 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
+        case .openFieldExtraction:
+            // Defaults ON: this is the product's central promise, and a
+            // universality feature nobody switches on is a universality
+            // feature nobody has. It is safe to default on because it only
+            // ADDS fields the eleven packs do not own — see
+            // OpenFieldExtractor.reservedFields — so existing extraction is
+            // byte-identical either way.
+            return true
         default:
             return implemented
         }
@@ -170,6 +183,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
             return "Import integrity"
         case .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return "Extraction & search"
+        case .openFieldExtraction:
+            return "Universality"
         }
     }
 

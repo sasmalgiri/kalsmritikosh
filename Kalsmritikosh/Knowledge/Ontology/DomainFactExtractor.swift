@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import os
 
 public struct DomainFactExtractor: Sendable {
     public nonisolated init() {}
@@ -95,6 +96,41 @@ public struct DomainFactExtractor: Sendable {
     /// existing call sites. The assembler deliberately sees blocks of EVERY
     /// length: a page whose first line is a bare "700321" is a six-character
     /// block, and it is exactly the block that carries the value.
+    /// P3.1 — an overload carrying each block's KIND, so the open-field
+    /// extractor can weight a table cell above a paragraph and refuse
+    /// furniture outright. The kind-less overload below forwards with
+    /// `.paragraph`, which is the conservative assumption.
+    public nonisolated func extract(
+        fromKindedBlocks blocks: [(id: UUID, text: String, kind: EvidenceBlockKind)],
+        subjectLabel: String,
+        documentClass: DocumentClass? = nil,
+        perBlockMinimumLength: Int = 8
+    ) -> [GenericFact] {
+        var facts = extract(
+            fromBlocks: blocks.map { .init(id: $0.id, text: $0.text) },
+            subjectLabel: subjectLabel,
+            documentClass: documentClass,
+            perBlockMinimumLength: perBlockMinimumLength)
+        // P3.1 — THE UNIVERSALITY PASS, and it runs LAST on purpose.
+        //
+        // It never emits a field the eleven packs own (see
+        // OpenFieldExtractor.reservedFields), so it cannot perturb their
+        // output; running it after them also means `merge` sees pack facts
+        // first, and merge keeps the FIRST-SEEN value form. Order therefore
+        // preserves today's behaviour exactly while adding the fields no pack
+        // was ever written for.
+        let open = OpenFieldExtractor.extractFacts(blocks: blocks, subjectLabel: subjectLabel)
+        if let cap = open.cappedAt {
+            // Hitting the cap is itself a finding: one document presented more
+            // label-like lines than any real form has, which usually means a
+            // table of contents, a pasted spreadsheet, or an OCR grid.
+            KalsmritikoshLog.knowledge.info(
+                "OpenFieldExtractor: capped at \(cap, privacy: .public) fields for subject \(subjectLabel, privacy: .private)")
+        }
+        facts += open.facts
+        return Self.merge(facts)
+    }
+
     public nonisolated func extract(
         fromBlocks blocks: [CrossBlockLabelAssembler.Block],
         subjectLabel: String,

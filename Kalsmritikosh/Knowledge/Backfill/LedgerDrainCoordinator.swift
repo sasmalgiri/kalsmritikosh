@@ -263,11 +263,16 @@ public final class LedgerDrainCoordinator {
         // C-4 — same document-level entry point as the ingest path, so a
         // re-derivation recovers the page-break-split labels the original
         // per-block pass could not see.
+        // P3.1 — kinded, same as ingest. This is also how universality reaches
+        // an ALREADY-INGESTED archive: the drain re-derives facts from the
+        // STORED evidence blocks, so turning the open extractor on and draining
+        // upgrades the whole ledger without re-reading a single file.
         let derived: [GenericFact] = extractor.extract(
-            fromBlocks: blocks
+            fromKindedBlocks: blocks
                 .filter { !$0.kind.isBoilerplate }
-                .map { .init(id: $0.id,
-                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText) },
+                .map { (id: $0.id,
+                        text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                        kind: $0.kind) },
             subjectLabel: subjectLabel,
             documentClass: docClass ?? nil)
         var merged = DomainFactExtractor.merge(derived)

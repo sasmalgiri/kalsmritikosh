@@ -18,8 +18,8 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | metric | count |
 |---|---|
-| modules declared | 26 |
-| implemented | 26 |
+| modules declared | 27 |
+| implemented | 27 |
 | **implemented but NOT WIRED** | **0** |
 | default OFF (opt-in) | 2 |
 | require the on-device model | 6 |
@@ -45,7 +45,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 | `crossEncoderRerank` — Cross-encoder reranking | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:1270 | 1 |
 | `correctiveRetrieval` — Corrective re-retrieval | ON | — | Kalsmritikosh/Brain/MasterBrain.swift:878 | 0 |
 | `hydeExpansion` — Hypothetical query expansion | ON | yes | Kalsmritikosh/Retrieval/HybridRetriever.swift:1063 | 1 |
-| `boilerplateEmbedSkip` — Boilerplate embed-skip | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1392 (+1 more) | 0 |
+| `boilerplateEmbedSkip` — Boilerplate embed-skip | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1396 (+1 more) | 0 |
 | `passwordProtectedFiles` — Password-protected files | ON | — | Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift:38 | 0 |
 | `importLifecycle` — Import & coverage lifecycle | ON | — | Kalsmritikosh/UI/SourcesView.swift:397 | 0 |
 | `mediaTranscription` — Transcribe audio & video | ON | — | Kalsmritikosh/App/AppState.swift:1638 | 0 |
@@ -65,8 +65,8 @@ from a grep for `isEnabled(.case)` in non-test source.
 | module | default | AI? | wired at | tests |
 |---|---|---|---|---|
 | `recordDerivationFailures` — Record why an import step failed | ON | — | Kalsmritikosh/Storage/Repositories/DerivationFailureRepository.swift:103 | 0 |
-| `strictDerivation` — Strict derivation (stop on a failed step) | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1651 | 0 |
-| `derivationCompleteMarker` — Track unfinished imports | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1848 | 0 |
+| `strictDerivation` — Strict derivation (stop on a failed step) | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1655 | 0 |
+| `derivationCompleteMarker` — Track unfinished imports | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1852 | 0 |
 
 ## Extraction & search
 
@@ -75,6 +75,12 @@ from a grep for `isEnabled(.case)` in non-test source.
 | `poaGrantorRecovery` — Read names from authorisation forms | ON | — | Kalsmritikosh/Knowledge/Ontology/DomainPacks/PatentDomainPack.swift:324 | 0 |
 | `documentLevelFTS` — Whole-document keyword search | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:833 | 0 |
 | `historyChapterReadback` — Story chapters & recorded disagreements | ON | — | Kalsmritikosh/Storage/Repositories/HistoryArtifactRepository.swift:200 (+1 more) | 0 |
+
+## Universality
+
+| module | default | AI? | wired at | tests |
+|---|---|---|---|---|
+| `openFieldExtraction` — Read labelled fields from any document | ON | — | Kalsmritikosh/Knowledge/Ontology/OpenFieldExtractor.swift:283 | 0 |
 
 ## How to add one
 
