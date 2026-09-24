@@ -77,13 +77,66 @@ public struct AbsentSubjectGate: Sendable {
             guard clean.count >= 4 else { continue }
             guard clean.rangeOfCharacter(from: .decimalDigits) != nil else { continue }
             // A bare 4-digit year is a date, not an identifier.
-            if clean.count == 4, Int(clean) != nil,
-               let y = Int(clean), y >= 1800, y <= 2200 { continue }
+            if clean.count == 4, let y = Int(clean), y >= 1800, y <= 2200 { continue }
             // Pure small integers are quantities, not references.
             if Int(clean) != nil, clean.count <= 4 { continue }
+            // A WRITTEN DATE is not a missing subject. Measured over-fire: the
+            // first version admitted "2024-05-21" and "21/05/2024", so
+            // "What happened on 2024-05-21?" would have been REFUSED — on an
+            // archive full of facts dated that very day, because dates are
+            // stored as epoch numbers and never as that string. Date questions
+            // are core to this product; suppressing them would have been a
+            // worse regression than the fabrication this gate fixes.
+            if isDateShaped(clean) { continue }
+            // A CALENDAR PERIOD ("Q3-2024", "FY2024", "H1/2025") is a date
+            // range, same reasoning.
+            if isPeriodShaped(clean) { continue }
+            // An identifier's digits come in a RUN. "COVID-19" and "MP3-320"
+            // are names with a couple of digits attached, not references, and
+            // admitting them meant refusing any question that mentioned one.
+            guard longestDigitRun(clean) >= 4 else { continue }
             out.append(clean)
         }
         return out
+    }
+
+    /// yyyy-mm-dd, dd/mm/yyyy, dd-mm-yy, yyyy/mm/dd — the written forms.
+    nonisolated static func isDateShaped(_ s: String) -> Bool {
+        let parts = s.split(whereSeparator: { $0 == "-" || $0 == "/" }).map(String.init)
+        guard parts.count == 3, parts.allSatisfy({ Int($0) != nil }) else { return false }
+        let nums = parts.compactMap(Int.init)
+        // One component must be a plausible year and the other two must fit a
+        // day/month. That admits both orderings without guessing the locale.
+        let hasYear = nums.contains { $0 >= 1800 && $0 <= 2200 }
+            || parts.contains { $0.count == 2 }
+        let smallOnes = nums.filter { $0 >= 1 && $0 <= 31 }.count
+        return hasYear && smallOnes >= 2
+    }
+
+    /// "Q3-2024", "FY2024", "H1/2025": a short alpha marker plus a year.
+    ///
+    /// Shape: 1–2 leading letters, then at most one extra digit, then a
+    /// plausible 4-digit year. The alpha run is capped at TWO so a real
+    /// reference prefix survives — "INV-2024-0093" has three letters and is
+    /// admitted, which is the distinction that matters.
+    nonisolated static func isPeriodShaped(_ s: String) -> Bool {
+        let stripped = s.lowercased().filter { $0.isLetter || $0.isNumber }
+        let letters = stripped.prefix { $0.isLetter }
+        guard (1...2).contains(letters.count) else { return false }
+        let rest = String(stripped.dropFirst(letters.count))
+        guard rest.count >= 4, rest.allSatisfy(\.isNumber) else { return false }
+        guard let year = Int(rest.suffix(4)), year >= 1800, year <= 2200 else { return false }
+        // At most one digit may precede the year ("Q3", "H1"); more than that
+        // is a reference, not a quarter.
+        return rest.count - 4 <= 1
+    }
+
+    nonisolated static func longestDigitRun(_ s: String) -> Int {
+        var best = 0, run = 0
+        for ch in s {
+            if ch.isNumber { run += 1; best = max(best, run) } else { run = 0 }
+        }
+        return best
     }
 
     /// Check the question's identifiers against the ledger.

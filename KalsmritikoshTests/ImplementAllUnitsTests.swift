@@ -865,6 +865,59 @@ struct AbsentSubjectGateTests {
         #expect(t.contains { $0.contains("74287301") }, "got \(t)")
     }
 
+    // MEASURED OVER-FIRES, all found by probing the gate after it shipped and
+    // all now pinned. The first version admitted every one of these, which
+    // would have REFUSED the question rather than answering it. The date case
+    // was the dangerous one: dates are stored as epoch numbers, never as the
+    // string "2024-05-21", so a date question would have been refused on an
+    // archive full of facts dated that very day — a worse regression than the
+    // fabrication this gate was written to fix.
+    @Test("Written dates, calendar periods and hyphenated names are NOT missing subjects",
+          arguments: [
+            "What happened on 2024-05-21?",
+            "What happened on 21/05/2024?",
+            "Anything dated 2024/05/21?",
+            "Any mention of COVID-19?",
+            "What were Q3-2024 results?",
+            "How about FY2024?",
+            "And H1/2025?",
+            "The report was generated at 9:23 AM",
+            "EPOC Email Version 2.10",
+            "What was the total of INR 25,00,000?",
+            "Emails involving 60 of 526 total",
+          ])
+    func measuredOverFiresStayQuiet(question: String) {
+        #expect(AbsentSubjectGate.candidateTokens(in: question).isEmpty,
+                "the gate would refuse this question instead of answering it")
+    }
+
+    @Test("Real references are still recognised — the gate must not go silent either",
+          arguments: [
+            "What was decided in Case No. 74287301-ZQX?",
+            "What is patent 555489 about?",
+            "Show me invoice INV-2024-0093",
+            "Roll No. 700321",
+            "Who called from 9876543210?",
+          ])
+    func realReferencesStillDetected(question: String) {
+        #expect(!AbsentSubjectGate.candidateTokens(in: question).isEmpty,
+                "over-correcting the over-fires would retire the protection entirely")
+    }
+
+    @Test("A three-letter reference prefix survives the period rule")
+    func referencePrefixIsNotAPeriod() {
+        // INV-2024-0093 vs Q3-2024: the alpha run is the discriminator, capped
+        // at two letters. Pinned because widening that cap silently turns real
+        // invoice references into "calendar periods" and stops checking them.
+        #expect(!AbsentSubjectGate.isPeriodShaped("INV-2024-0093"))
+        #expect(AbsentSubjectGate.isPeriodShaped("Q3-2024"))
+        #expect(AbsentSubjectGate.isPeriodShaped("FY2024"))
+        #expect(AbsentSubjectGate.isDateShaped("2024-05-21"))
+        #expect(!AbsentSubjectGate.isDateShaped("74287301-ZQX"))
+        #expect(AbsentSubjectGate.longestDigitRun("COVID-19") == 2)
+        #expect(AbsentSubjectGate.longestDigitRun("74287301-ZQX") == 8)
+    }
+
     @Test("A YEAR is a date, not a missing subject")
     func yearsExcluded() {
         // "What happened in 2024?" must reach the timeline lane. Treating 2024
