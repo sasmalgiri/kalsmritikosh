@@ -72,6 +72,10 @@ public struct SettingsView: View {
     @State private var answerHarnessRunning = false
     @State private var answerHarnessStatus: String?
     @State private var answerHarnessURL: URL?
+    @State private var fixedPointRunning = false
+    @State private var fixedPointStatus: String?
+    @State private var fixedPointURL: URL?
+    @State private var confirmFixedPoint = false
     @State private var inventoryRunning = false
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
@@ -518,6 +522,40 @@ public struct SettingsView: View {
                 }
             }
             if let status = answerHarnessStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // D-1 — the only diagnostic here that WRITES, so it is confirmed
+            // first. Every other one is read-only and needs no permission.
+            Text("Check For Drift — runs every background pass three times and checks that the second and third runs change nothing. If they do, some part of your ledger is being rewritten on every launch, which is how counts grow without new documents. UNLIKE THE OTHER CHECKS, THIS ONE WRITES: the property being tested is a property of writing, so it cannot be done read-only. Your original files and stored evidence are never touched. Takes a few minutes on a large archive. Writes fixed-point-check.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    confirmFixedPoint = true
+                } label: {
+                    if fixedPointRunning {
+                        Label("Checking…", systemImage: "hourglass")
+                    } else {
+                        Label("Check For Drift", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .disabled(fixedPointRunning)
+                if let url = fixedPointURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open result", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = fixedPointStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -978,6 +1016,23 @@ public struct SettingsView: View {
         } catch {
             inventoryURL = nil
             inventoryStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    private func runFixedPointCheck() async {
+        fixedPointRunning = true
+        fixedPointStatus = "Running every pass three times…"
+        defer { fixedPointRunning = false }
+        do {
+            let result = try await FixedPointCheck.run(appState)
+            fixedPointURL = result.reportURL
+            fixedPointStatus = """
+            \(result.summary)
+            Result: \(result.reportURL.path)
+            """
+        } catch {
+            fixedPointURL = nil
+            fixedPointStatus = "✗ Could not run: \(error.localizedDescription)"
         }
     }
 
@@ -1693,6 +1748,14 @@ public struct SettingsView: View {
                     Text(s).font(.caption).foregroundStyle(.secondary)
                 }
             }
+        }
+        .alert("Run the drift check?", isPresented: $confirmFixedPoint) {
+            Button("Cancel", role: .cancel) {}
+            Button("Run it") {
+                Task { await runFixedPointCheck() }
+            }
+        } message: {
+            Text("This runs every background pass three times over your ledger. It is the one check that WRITES — a pass that isn't repeatable will have changed your derived data, and that is inseparable from finding out. Your original files and the stored evidence behind every answer are not touched. It can take several minutes on a large archive.")
         }
         .alert("Delete all your data?", isPresented: $confirmDeleteAll) {
             Button("Cancel", role: .cancel) {}

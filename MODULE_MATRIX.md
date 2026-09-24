@@ -33,7 +33,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 | `topicMinimization` — Topic minimization | ON | — | Kalsmritikosh/App/AppState+LedgerMaintenance.swift:135 | 2 |
 | `autoTopics` — Auto-build topics | ON | — | Kalsmritikosh/App/AppState.swift:1846 (+2 more) | 1 |
 | `summariesAtIdle` — Summaries at idle | ON | — | Kalsmritikosh/App/AppState.swift:1851 | 0 |
-| `historyAtIdle` — History at idle | ON | — | Kalsmritikosh/App/AppState.swift:1855 | 0 |
+| `historyAtIdle` — History at idle | ON | — | Kalsmritikosh/App/AppState.swift:1855 (+1 more) | 0 |
 | `eventSlotFill` — Event detail fill (5W+H) | ON | yes | Kalsmritikosh/Knowledge/Events/CompositeNarrativeSlotExtractor.swift:42 | 0 |
 | `proseSubjectBinding` — Plain-document subject binding | OFF (opt-in) | — | Kalsmritikosh/Storage/Repositories/ClaimProducer.swift:282 | 1 |
 | `aiSubjectResolution` — AI subject resolution (merge duplicate topics) | OFF (opt-in) | yes | Kalsmritikosh/App/AppState+LedgerMaintenance.swift:109 | 2 |

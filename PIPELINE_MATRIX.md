@@ -70,11 +70,11 @@ _The verification gap. Highest-value list in this file._
 | table | lane | producers | consumers | tests |
 |---|---|---|---|---|
 | `files` | App, EvalKit, Ingestion/Intake, Storage/Repositories | 4 | 14 | 160 |
-| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 29 | 251 |
+| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 30 | 251 |
 | `chunk_embeddings` | App, EvalKit, Storage/Schema, Storage/Vector | 4 | 11 | 250 |
 | `source_versions` | App, Ingestion/Intake, Storage/Repositories, Storage/Schema | 4 | 20 | 249 |
-| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 23 | 82 |
-| `entity_mentions` | App, Storage/Repositories, Storage/Schema | 3 | 6 | 233 |
+| `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 25 | 82 |
+| `entity_mentions` | App, Storage/Repositories, Storage/Schema | 3 | 7 | 233 |
 | `chunks` | EvalKit, Knowledge/Backfill, Storage/Repositories, Storage/Schema | 5 | 11 | 267 |
 | `chunks_fts` | EvalKit, Storage/Schema | 2 | 3 | 242 |
 | `audit_chain` | Forensics, Storage/Schema | 2 | 2 | 249 |
@@ -90,7 +90,7 @@ _The verification gap. Highest-value list in this file._
 | `job_events` | Jobs | 1 | 1 | 5 |
 | `job_objectives` | Jobs | 1 | 1 | 5 |
 | `job_plan_references` | Jobs | 1 | 1 | 5 |
-| `generic_facts` | Knowledge/Backfill, Storage/Repositories | 2 | 5 | 47 |
+| `generic_facts` | Knowledge/Backfill, Storage/Repositories | 2 | 7 | 47 |
 | `boilerplate_templates` | Knowledge/Boilerplate | 1 | 1 | 0 |
 | `boilerplate_uses` | Knowledge/Boilerplate | 1 | 1 | 0 |
 | `community_summaries` | Knowledge/Topics | 2 | 5 | 22 |
@@ -167,11 +167,11 @@ _The verification gap. Highest-value list in this file._
 | `gap_nodes` | Storage/Repositories | 1 | 1 | 42 |
 | `governance_events` | Storage/Repositories | 2 | 1 | 4 |
 | `history_alternative_accounts` | Storage/Repositories | 1 | 1 | 16 |
-| `history_artifacts` | Storage/Repositories | 1 | 1 | 17 |
+| `history_artifacts` | Storage/Repositories | 1 | 2 | 17 |
 | `history_chapters` | Storage/Repositories | 1 | 1 | 16 |
 | `history_gaps` | Storage/Repositories | 1 | 1 | 16 |
-| `history_item_evidence` | Storage/Repositories | 1 | 1 | 16 |
-| `induced_schema_attempts` | Storage/Repositories | 1 | 2 | 1 |
+| `history_item_evidence` | Storage/Repositories | 1 | 2 | 16 |
+| `induced_schema_attempts` | Storage/Repositories | 1 | 3 | 1 |
 | `ingest_file_attempts` | Storage/Repositories | 1 | 2 | 27 |
 | `ingest_run_files` | Storage/Repositories | 1 | 1 | 1 |
 | `ingest_runs` | Storage/Repositories | 1 | 1 | 1 |
@@ -225,10 +225,10 @@ _The verification gap. Highest-value list in this file._
 | `workspace_entities` | Storage/Repositories | 1 | 2 | 34 |
 | `workspace_sources` | Storage/Repositories | 1 | 3 | 36 |
 | `workspaces` | Storage/Repositories | 1 | 4 | 100 |
-| `event_entities` | Storage/Repositories, Storage/Schema | 3 | 7 | 232 |
-| `events` | Storage/Repositories, Storage/Schema | 2 | 13 | 287 |
+| `event_entities` | Storage/Repositories, Storage/Schema | 3 | 8 | 232 |
+| `events` | Storage/Repositories, Storage/Schema | 2 | 15 | 287 |
 | `evidence_blocks` | Storage/Repositories, Storage/Schema | 2 | 8 | 243 |
-| `history_items` | Storage/Repositories, Storage/Schema | 2 | 2 | 239 |
+| `history_items` | Storage/Repositories, Storage/Schema | 2 | 3 | 239 |
 | `relationships` | Storage/Repositories, Storage/Schema | 2 | 1 | 242 |
 | `sensitive_scope_assignments` | Storage/Repositories, Storage/Schema | 2 | 1 | 241 |
 | `transcript_segments` | Storage/Repositories, Storage/Schema | 2 | 1 | 230 |
