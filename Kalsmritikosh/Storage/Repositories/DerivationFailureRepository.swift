@@ -96,6 +96,15 @@ public actor DerivationFailureRepository {
     /// exactly the cure being worse than the disease. If this cannot write, it
     /// logs and returns; the OSLog line is the last line of defence.
     public func record(_ failure: DerivationFailure) async {
+        // Module .recordDerivationFailures — gated HERE rather than at each of
+        // the twelve call sites, so the switch cannot be honoured in some paths
+        // and forgotten in others. OFF still logs: the reason must never vanish
+        // entirely, it just stops being queryable by the Ingestion Report.
+        guard KnowledgeModuleFlags.isEnabled(.recordDerivationFailures) else {
+            KalsmritikoshLog.ingestion.error(
+                "[\(failure.stage, privacy: .public)] \(failure.reason, privacy: .public) — not persisted (module off)")
+            return
+        }
         do {
             try await database.exec("""
             INSERT OR REPLACE INTO derivation_failures

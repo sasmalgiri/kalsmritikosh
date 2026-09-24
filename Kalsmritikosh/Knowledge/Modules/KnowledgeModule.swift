@@ -47,6 +47,14 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case actorComposer          // A1 — dedicated "who did X" actor answer door
     case progressiveStreaming   // A2 — stream instant→synthesis→verified to the UI
     case topicSeededComposers   // A3 — seed the matched topic into the model composers
+    // Ingest integrity (v3 plan, Phase 1). Each new unit ships behind its own
+    // switch so it can be turned off in isolation if it misbehaves, rather than
+    // requiring a revert. NOTE what is deliberately NOT switchable: the
+    // entity-insert CASCADE fix. Both states of `strictDerivation` are
+    // non-corrupting — it chooses HOW to degrade, never whether to corrupt.
+    case recordDerivationFailures // P1.2 — persist WHY a tolerated write failed
+    case strictDerivation         // P1.1 — abort the KO vs skip only dependent stages
+    case derivationCompleteMarker // P1.3 — mark a KO's derivation complete/resumable
 
     public var id: String { rawValue }
 
@@ -72,6 +80,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .actorComposer:        return "Actor answers (who did X)"
         case .progressiveStreaming: return "Progressive answer streaming"
         case .topicSeededComposers: return "Topic-first composition"
+        case .recordDerivationFailures: return "Record why an import step failed"
+        case .strictDerivation:     return "Strict derivation (stop on a failed step)"
+        case .derivationCompleteMarker: return "Track unfinished imports"
         }
     }
 
@@ -97,6 +108,9 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .actorComposer:        return "Route who-did-this questions to the passage naming the acting party and compose a grounded answer."
         case .progressiveStreaming: return "Render the answer as it forms — instant context, then synthesis, then the verified result."
         case .topicSeededComposers: return "Give the model composer the matched topic first, so answers lead with the topic rather than raw facts."
+        case .recordDerivationFailures: return "When a step of an import fails in a way that can be tolerated — an embedding, one file inside a zip, an email attachment — record WHY, so a gap in your library can be explained instead of just being smaller than expected. Off reverts to a log line only, and the import report loses its reasons."
+        case .strictDerivation:     return "If a file's people-and-organisations step fails, stop processing that file rather than continuing with the steps that depend on it. Off still never produces wrong data — it skips only the dependent step (events) and keeps the text, chunks and facts, so you get a partial file instead of none. Either way nothing incorrect is stored."
+        case .derivationCompleteMarker: return "Mark each file as fully processed only when every step finished, so an import interrupted by a crash or shutdown can be spotted and finished later. Without it, a half-processed file looks identical to a fully-processed one that simply had little in it."
         }
     }
 
@@ -110,7 +124,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .eventSlotFill, .boilerplateEmbedSkip, .proseSubjectBinding,
              .passwordProtectedFiles, .importLifecycle, .storyReviewerLoop,
              .aiComposeEveryAnswer, .aiSubjectResolution, .topicProsePolish,
-             .mediaTranscription:
+             .mediaTranscription,
+             .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker:
             return true
         }
     }
@@ -140,6 +155,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .actorComposer, .progressiveStreaming, .topicSeededComposers, .storyReviewerLoop,
              .aiComposeEveryAnswer:
             return "Answer composition"
+        case .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker:
+            return "Import integrity"
         }
     }
 

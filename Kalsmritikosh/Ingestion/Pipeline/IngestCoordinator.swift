@@ -1559,6 +1559,10 @@ public actor IngestCoordinator {
         var extractedEntities: [Entity] = []
         var extractedEvents: [Event] = []
         var canonicalMapping: [Entity.ID: Entity.ID] = [:]
+        // P1.1 / module .strictDerivation — set when the entity insert failed
+        // and the OFF-path chose to degrade rather than abort. The event stage
+        // MUST honour it: remapping through an empty mapping is the corruption.
+        var entityInsertFailed = false
 
         if let entityExtractor, let entities {
             // T13.2 — seed with loader-provided structured entities
@@ -1635,13 +1639,46 @@ public actor IngestCoordinator {
             // end the run, and an aborted KO is visible where a corrupt one is
             // not. NOT recorded in derivation_failures — that ledger is for
             // TOLERATED losses, and this unit of work does not complete.
-            canonicalMapping = try await entities.insertBatch(raw)
+            // Module .strictDerivation — BOTH states are non-corrupting. The
+            // old behaviour (swallow, continue with an empty mapping) is not
+            // one of them and is gone for good: it made the next stage write
+            // events whose entity references were never canonicalised.
+            //   ON  → propagate; this KO's derivation aborts entirely.
+            //   OFF → keep the correct work already done (text, chunks, facts)
+            //         and SKIP only the stage that depends on the mapping.
+            //         `entityInsertFailed` carries that decision to the event
+            //         stage below.
+            if KnowledgeModuleFlags.isEnabled(.strictDerivation) {
+                canonicalMapping = try await entities.insertBatch(raw)
+            } else {
+                do {
+                    canonicalMapping = try await entities.insertBatch(raw)
+                } catch {
+                    entityInsertFailed = true
+                    await derivationFailures?.record(
+                        stage: "entities.insert", error: error,
+                        knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                        detectedType: object.sourceType.rawValue)
+                    KalsmritikoshLog.ingestion.error("Entity insert failed for \(object.sourceFile.lastPathComponent, privacy: .private); SKIPPING the event stage so no event is written with un-canonicalised references: \(String(describing: error), privacy: .public)")
+                }
+            }
             extractedEntities = raw
             await pipelineMetrics?.bump(.entities, by: raw.count)
             await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
-        if let eventExtractor, let events {
+        // Module .strictDerivation OFF-path guard: the canonical mapping is
+        // empty because the entity insert failed, so remapping through it would
+        // produce exactly the corruption P1.1 exists to prevent. Skipping is the
+        // safe degradation — fewer events, never wrong ones.
+        if entityInsertFailed {
+            await derivationFailures?.record(
+                stage: "events.skippedAfterEntityFailure",
+                reason: "entity insert failed; events skipped to avoid un-canonicalised references",
+                knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                detectedType: object.sourceType.rawValue)
+        }
+        if let eventExtractor, let events, !entityInsertFailed {
             // P1.2 — lossy: recorded, tolerated.
             var rawEvents: [Event] = []
             do {
@@ -1808,6 +1845,7 @@ public actor IngestCoordinator {
         // would discard correct work. A missing marker is self-correcting — the
         // next resume pass re-derives, and re-derivation is idempotent by the
         // Fixed-Point Law.
+        if KnowledgeModuleFlags.isEnabled(.derivationCompleteMarker) {
         do {
             try await objects.markDerivationComplete(id: object.id)
         } catch {
@@ -1816,6 +1854,7 @@ public actor IngestCoordinator {
                 knowledgeObjectID: object.id, filePath: object.sourceFile.path,
                 detectedType: object.sourceType.rawValue)
             KalsmritikoshLog.ingestion.error("Failed to mark derivation complete for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+        }
         }
 
         return ProcessedKO(
