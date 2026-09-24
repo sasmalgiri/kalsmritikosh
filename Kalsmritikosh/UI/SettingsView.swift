@@ -65,6 +65,10 @@ public struct SettingsView: View {
     @State private var healthCheckRunning = false
     @State private var healthCheckStatus: String?
     @State private var healthCheckURL: URL?
+    @State private var goldenThreadRunning = false
+    @State private var goldenThreadStatus: String?
+    @State private var goldenThreadURL: URL?
+    @State private var goldenThreadMatch = ""
     @State private var inventoryRunning = false
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
@@ -437,6 +441,46 @@ public struct SettingsView: View {
                 }
             }
             if let status = healthCheckStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // A-1 — the Golden Thread. Separate control from the health check on
+            // purpose: that one answers "is the archive healthy?" in aggregate,
+            // this one answers "where did THIS document stop?". Aggregates
+            // cannot localise a break, because a single document failing early
+            // leaves every total looking healthy.
+            Text("Trace One Document — follows a single document through every stage in order (file → version → blocks → derivation → chunks → vectors → keyword → entities → events → facts → retrieval → citation) and reports where the chain breaks. Ends with a LIVE search and citation check, so it proves the document is actually findable and quotable, not merely stored. Leave the box empty to trace the most recent document. Writes golden-thread.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                TextField("part of a filename (optional)", text: $goldenThreadMatch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 240)
+                Button {
+                    Task { await runGoldenThread() }
+                } label: {
+                    if goldenThreadRunning {
+                        Label("Tracing…", systemImage: "hourglass")
+                    } else {
+                        Label("Trace One Document", systemImage: "point.topleft.down.curvedto.point.bottomright.up")
+                    }
+                }
+                .disabled(goldenThreadRunning)
+                if let url = goldenThreadURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open trace", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = goldenThreadStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -897,6 +941,27 @@ public struct SettingsView: View {
         } catch {
             inventoryURL = nil
             inventoryStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    private func runGoldenThread() async {
+        goldenThreadRunning = true
+        goldenThreadStatus = "Tracing…"
+        defer { goldenThreadRunning = false }
+        do {
+            let match = goldenThreadMatch.trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = try await GoldenThread.trace(appState, matching: match.isEmpty ? nil : match)
+            goldenThreadURL = result.reportURL
+            goldenThreadStatus = """
+            \(result.documentPath)
+            \(result.summary)
+            Trace: \(result.reportURL.path)
+            """
+        } catch {
+            goldenThreadURL = nil
+            // A failed trace is NOT a clean document — it means the trace could
+            // not be run, which says nothing about the document either way.
+            goldenThreadStatus = "✗ Could not trace: \(error.localizedDescription)"
         }
     }
 
