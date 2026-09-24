@@ -199,6 +199,22 @@ SELF_CHECK = [
 ]
 
 
+def superseded_tables():
+    """Table names from SupersededSchema.swift — the single declaration.
+
+    Parsed rather than re-listed so this script and the app cannot disagree
+    about which tables are intentionally empty. A mismatch there would be the
+    worst kind: the matrix would call an intentional state a gap, or hide a real
+    gap behind an intention that no longer exists.
+    """
+    path = os.path.join(SRC_ROOT, "Storage", "Schema", "SupersededSchema.swift")
+    try:
+        text = io.open(path, encoding="utf-8").read()
+    except OSError:
+        return set()
+    return set(re.findall(r'Entry\(table:\s*"([^"]+)"', text))
+
+
 def run_self_check(rows_by_table):
     failures = []
     for table, want_p, want_c, why in SELF_CHECK:
@@ -284,7 +300,16 @@ def main():
     print("self-check: %d/%d hand-verified cases agree\n" % (len(SELF_CHECK), len(SELF_CHECK)))
 
     real = [r for r in rows if not r["scratch"]]
-    no_producer = [r for r in real if not r["producers"]]
+
+    # Tables with no producer BY DESIGN, parsed from the Swift registry rather
+    # than duplicated here. Reported as their own category because lumping them
+    # into "no producer" invites the obvious and WRONG fix — writing a producer
+    # for each, which would fork the truth for data the universal model already
+    # holds. The list is read from code so the two cannot drift.
+    superseded = superseded_tables()
+    no_producer = [r for r in real
+                   if not r["producers"] and r["table"] not in superseded]
+    superseded_rows = [r for r in real if r["table"] in superseded]
     write_only = [r for r in real if r["producers"] and not r["consumers"]]
     untested = [r for r in real if r["producers"] and not r["tests"]]
 
@@ -303,12 +328,20 @@ def main():
     out.append("| migration-scratch (legitimately write-only) | %d |" % (len(rows) - len(real)))
     out.append("| real tables | %d |" % len(real))
     out.append("| **no producer** (nothing writes it) | **%d** |" % len(no_producer))
+    out.append("| no producer BY DESIGN (superseded, kept empty) | %d |" % len(superseded_rows))
     out.append("| **written but never read** | **%d** |" % len(write_only))
     out.append("| **has a producer but NO test mentions it** | **%d** |" % len(untested))
 
     for title, group, note in (
         ("No producer — nothing writes these", no_producer,
-         "Dead schema, or a feature whose persistence was never wired."),
+         "Dead schema, or a feature whose persistence was never wired. "
+         "Tables that are empty BY DESIGN are listed separately below and are "
+         "NOT in this count."),
+        ("No producer BY DESIGN — superseded, verified empty", superseded_rows,
+         "Kept for compatibility; the data lives in the universal model and the "
+         "live UI already reads it there. Writing these would create a second "
+         "source of truth. See Kalsmritikosh/Storage/Schema/SupersededSchema.swift "
+         "for what supersedes each and which surface reads the replacement."),
         ("Written but never read", write_only,
          "The write costs time on the hot path and influences nothing."),
         ("Produced but no test mentions the table", untested,

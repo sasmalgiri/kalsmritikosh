@@ -16,22 +16,30 @@ Regenerate with `python3 scripts/pipeline-matrix.py`.
 | tables declared | 209 |
 | migration-scratch (legitimately write-only) | 14 |
 | real tables | 195 |
-| **no producer** (nothing writes it) | **6** |
+| **no producer** (nothing writes it) | **2** |
+| no producer BY DESIGN (superseded, kept empty) | 4 |
 | **written but never read** | **1** |
 | **has a producer but NO test mentions it** | **17** |
 
-## No producer — nothing writes these (6)
+## No producer — nothing writes these (2)
 
-_Dead schema, or a feature whose persistence was never wired._
+_Dead schema, or a feature whose persistence was never wired. Tables that are empty BY DESIGN are listed separately below and are NOT in this count._
+
+| table | lane | producer |
+|---|---|---|
+| `evidence_block_edges` | — | — |
+| `vectors` | — | — |
+
+## No producer BY DESIGN — superseded, verified empty (4)
+
+_Kept for compatibility; the data lives in the universal model and the live UI already reads it there. Writing these would create a second source of truth. See Kalsmritikosh/Storage/Schema/SupersededSchema.swift for what supersedes each and which surface reads the replacement._
 
 | table | lane | producer |
 |---|---|---|
 | `companies` | — | — |
-| `evidence_block_edges` | — | — |
 | `people` | — | — |
 | `projects` | — | — |
 | `timelines` | — | — |
-| `vectors` | — | — |
 
 ## Written but never read (1)
 

@@ -622,6 +622,17 @@ public enum DataHealthCheck {
         md += "deliberately ambiguous one — and is recorded as owner-blocked rather than\n"
         md += "approximated with a subject chosen because it happens to work.\n\n"
 
+        // ── S-0b — the empty-by-design tables, and the invariant that they stay
+        // that way. Placed here so anyone reading a "nothing writes this" gap
+        // elsewhere finds the reason rather than going off to write a producer.
+        let superseded = await SupersededSchema.unexpectedlyPopulated(database: database)
+        md += "## One ledger, checked (S-0b)\n\n"
+        md += SupersededSchema.reportSection(populated: superseded.populated,
+                                             unreadable: superseded.unreadable)
+        if !superseded.populated.isEmpty {
+            issues.append("One-ledger violation: \(superseded.populated.map { "\($0.table) (\($0.rows) rows)" }.joined(separator: ", ")) — superseded table(s) are being written, creating a parallel source of truth.")
+        }
+
         md += "## What this report does NOT tell you\n\n"
         md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
         md += "- **Whether the extracted values are CORRECT.** Everything above counts "
