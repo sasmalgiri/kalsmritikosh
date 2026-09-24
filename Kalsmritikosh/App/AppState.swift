@@ -1390,12 +1390,16 @@ public final class AppState {
             // engine multiplies final confidence by max(coverage, 0.5).
             let verifier = EvidenceVerifier(
                 ingestCoverageProvider: { [weak files, weak objects] in
-                    guard let files, let objects else { return 1.0 }
-                    let fileCount = (try? await files.count()) ?? 0
-                    guard fileCount > 0 else { return 1.0 }
-                    let koCount = (try? await objects.count()) ?? 0
-                    let raw = Double(koCount) / Double(fileCount)
-                    return min(1.0, max(0.0, raw))
+                    // nil means "could not measure", which the verifier treats
+                    // as the incomplete-ingest floor. Previously a throwing
+                    // count or a deallocated repository returned 1.0 — "the
+                    // whole archive is ingested" — which RAISED confidence on
+                    // the strength of a failure.
+                    guard let files, let objects else { return nil }
+                    let fileCount = try? await files.count()
+                    let koCount = try? await objects.count()
+                    return EvidenceVerifier.ingestCoverage(
+                        fileCount: fileCount, objectCount: koCount)
                 },
                 entityQualityGate: EntityQualityGate.bundled(),
                 reranker: reranker,

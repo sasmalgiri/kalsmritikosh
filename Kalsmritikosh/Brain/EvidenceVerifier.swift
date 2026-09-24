@@ -198,9 +198,15 @@ public struct EvidenceVerifier: Verifier {
     /// (chunks + entities + events present). The Engine multiplies
     /// final confidence by max(coverage, 0.5) while < 1.0, so the
     /// Quality Strip can honestly say "Answered from X% of your
-    /// archive". `nil` → engine treats it as 1.0 (no-op multiplier).
-    /// T11 close-out.
-    private let ingestCoverageProvider: (@Sendable () async -> Double)?
+    /// archive". T11 close-out.
+    ///
+    /// The provider returns nil when it COULD NOT MEASURE — a repository that
+    /// threw, or one already deallocated. That is deliberately distinct from
+    /// 1.0: an unmeasurable coverage used to arrive as "the whole archive is
+    /// ingested", which granted the engine's full confidence boost at exactly
+    /// the moment the system knew least about its own completeness. See
+    /// `unknownIngestCoverage`.
+    private let ingestCoverageProvider: (@Sendable () async -> Double?)?
     /// Defensive — filters hostname-shape, stoplist, and weekday
     /// strings out of the rendered "Subjects in scope" line even if
     /// they somehow survived ingestion. nil = no filtering, behaviour
@@ -242,11 +248,32 @@ public struct EvidenceVerifier: Verifier {
     /// archive). nil → window counts (legacy rigs).
     private let archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))?
 
+    /// What coverage to assume when it could not be measured: the engine's own
+    /// floor for an incomplete ingest. Not a new number — `ingestFactor` already
+    /// clamps at `max(coverage, 0.5)` — and chosen because it cannot INFLATE
+    /// confidence, which 1.0 did.
+    public nonisolated static let unknownIngestCoverage: Double = 0.5
+
+    /// Tier-1 ingest coverage from two counts, with "could not measure" kept
+    /// distinct from "nothing to measure".
+    ///
+    /// - `nil` file count → nil: the denominator is unknown, so the fraction is.
+    /// - measured 0 files → 1.0: an empty archive has nothing un-ingested, so
+    ///   coverage is trivially complete. This is the ONLY case where 1.0 is
+    ///   honest without a measurement of objects.
+    /// - `nil` object count → nil: the numerator is unknown.
+    public nonisolated static func ingestCoverage(fileCount: Int?, objectCount: Int?) -> Double? {
+        guard let fileCount else { return nil }
+        guard fileCount > 0 else { return 1.0 }
+        guard let objectCount else { return nil }
+        return min(1.0, max(0.0, Double(objectCount) / Double(fileCount)))
+    }
+
     public init(
         minimumConfidence: Confidence = Confidence(0.2),
         minimumCitations: Int = 1,
         engine: any ConfidenceEngine = DefaultConfidenceEngine(),
-        ingestCoverageProvider: (@Sendable () async -> Double)? = nil,
+        ingestCoverageProvider: (@Sendable () async -> Double?)? = nil,
         entityQualityGate: EntityQualityGate? = nil,
         reranker: Reranker? = nil,
         sessionProfile: SessionProfile? = nil,
@@ -284,7 +311,23 @@ public struct EvidenceVerifier: Verifier {
                   let s = tf.start, let e = tf.end, e > s else { return nil }
             return DateInterval(start: s, end: e)
         }()
-        let ingestCoverage: Double = await ingestCoverageProvider?() ?? 1.0
+        // Unknown coverage takes the engine's OWN documented floor for
+        // "ingest incomplete" rather than 1.0. Between over- and
+        // under-confident on data we could not measure, an evidence-gated
+        // product must pick under: 1.0 here silently granted the full boost.
+        let measuredCoverage: Double? = await ingestCoverageProvider?()
+        let ingestCoverage: Double
+        if let measuredCoverage {
+            ingestCoverage = measuredCoverage
+        } else if ingestCoverageProvider == nil {
+            // No provider wired at all (tests, and callers that do not track
+            // coverage): unchanged no-op behaviour.
+            ingestCoverage = 1.0
+        } else {
+            ingestCoverage = Self.unknownIngestCoverage
+            KalsmritikoshLog.brain.warning(
+                "Ingest coverage could not be measured; using the incomplete-ingest floor rather than assuming a fully ingested archive.")
+        }
         var report = await engine.evaluate(
             claims: claims,
             droppedUnverifiable: droppedUnverifiable,
