@@ -481,7 +481,26 @@ public enum DataHealthCheck {
         md += "| UNFINISHED | \(derivIncomplete) | the run was interrupted part-way; these look complete in the counts above but are missing part of their ledger |\n"
         md += "| unknown | \(derivUnknown) | derived before this marker existed (or not yet re-derived). Genuinely unknown — NOT counted as finished |\n\n"
         if derivIncomplete > 0 {
-            issues.append("\(derivIncomplete) document(s) did not finish deriving — their entities/events/facts are partial. Re-run ingest to resume them.")
+            issues.append("\(derivIncomplete) document(s) did not finish deriving — their entities/events/facts are partial.")
+            // NAME THEM. A count tells the owner a number; the file paths tell
+            // them which documents to distrust. `incompleteDerivations` existed
+            // for exactly this and had no caller — the query was written, the
+            // consumer never was.
+            let ids = (try? await state.objects?.incompleteDerivations(limit: 25)) ?? []
+            if !ids.isEmpty {
+                md += "**Which ones** (up to 25):\n\n"
+                for id in ids {
+                    if let ko = try? await state.objects?.load(id: id) {
+                        md += "- `\(ko.sourceFile.lastPathComponent)`\n"
+                    } else {
+                        md += "- (document \(id.uuidString.prefix(8)) — could not be loaded)\n"
+                    }
+                }
+                md += "\nA document here was interrupted part-way. If the app was killed "
+                md += "mid-import, re-importing finishes it. If it was NOT interrupted, a "
+                md += "derivation step failed and was tolerated — the failure section above "
+                md += "names the step, and re-importing would hit the same failure again.\n\n"
+            }
         }
         if derivUnknown > 0 && derivComplete == 0 && koCount > 0 {
             md += "Every document predates the completeness marker, so this section "

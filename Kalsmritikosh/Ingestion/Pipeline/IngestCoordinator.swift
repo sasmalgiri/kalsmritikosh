@@ -1832,9 +1832,33 @@ public actor IngestCoordinator {
         // P1.3 — THE COMPLETION MARKER, and it must be the last thing that
         // happens. Every stage above has returned, so this KO's derivation is
         // whole; anything that dies before this line leaves a KO whose
-        // `derivation_complete` is NULL, which
-        // `KnowledgeObjectRepository.incompleteDerivations` can find and
-        // `resumeIncompleteIngests` can finish.
+        // `derivation_complete` is NULL.
+        //
+        // WHAT FINDS AND FIXES THOSE — corrected, because an earlier version of
+        // this comment said `resumeIncompleteIngests` would finish them and
+        // that was not true. That function resumes by URL from the FILE-level
+        // attempt ledger (`ingest_attempts` rows still at `.started`); it never
+        // consults this marker. The two ledgers overlap but are not the same
+        // set, and writing the claim into a comment made an unwired query look
+        // wired.
+        //
+        //   · a process KILLED mid-derivation leaves the file attempt at
+        //     `.started` too, so `resumeIncompleteIngests` does re-read and
+        //     re-derive it. That case is genuinely covered.
+        //   · a KO whose file attempt COMPLETED but whose derivation did not —
+        //     the P1.1 tolerated-failure path, where the entity insert failed
+        //     and the dependent stages were skipped — is NOT covered by the URL
+        //     resume, and must not be: re-reading the file would hit the same
+        //     deterministic failure and loop forever. Those are LISTED in the
+        //     Data Health report so they can be looked at, and the drain
+        //     re-derives from stored blocks without re-reading anything.
+        //
+        // AND THE HAZARD THAT MUST NOT BE "FIXED" BY AUTOMATION: every row
+        // predating v131 has a NULL marker, because their completeness is
+        // genuinely unknown. Feeding `incompleteDerivations` into a file
+        // re-ingest would therefore re-read THE ENTIRE ARCHIVE on the first run
+        // after the migration. That is why this marker drives reporting and the
+        // drain, not an automatic re-ingest.
         //
         // Not wrapped in a SAVEPOINT with the stages above on purpose: that
         // sequence interleaves database writes with NER, event extraction and
