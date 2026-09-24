@@ -355,6 +355,24 @@ public actor MasterBrain {
                     continuation.finish()
                     return
                 }
+                // FOUND BY THE OWNER'S ARCHIVE — the absent-subject gate. When
+                // the question names a specific identifier the ledger has never
+                // seen, refuse HERE, before any retrieval or composer. Placed
+                // with the conversational refusal because it has the same
+                // character: no amount of retrieval can make an answer be about
+                // a thing the archive does not contain, and retrieval on a
+                // shape-similar question produces a fluent, CITED answer about
+                // a different subject — which is what happened.
+                if let check = await self.absentSubjectCheck,
+                   let refusal = await check(question) {
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: refusal, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
                 // P3-U1 Q0 — an out-of-scope (world-knowledge) question refuses
                 // HERE: zero retrieval, zero model, sub-second. The route twin
                 // has already had its say (disagreement → never outOfScope, the
@@ -1198,8 +1216,20 @@ public actor MasterBrain {
             }
         }
 
-        let refusedShape = body.lowercased().contains("don't have enough")
-            || body.lowercased().contains("not enough")
+        // The model is ASKED (see the prompt above) to emit a specific sentence
+        // when the chunks cannot answer. Detecting only that one wording made
+        // the refusal contract depend on the model's phrasing: on the owner's
+        // archive it answered a question about a nonexistent case reference in
+        // fluent prose, using neither phrase, and the answer shipped.
+        //
+        // Broadened to the ways a refusal is actually written, matched on word
+        // boundaries rather than bare `contains` so an answer that merely
+        // mentions "no record" in passing is not mistaken for a refusal. This
+        // can only turn answers INTO refusals, which is the safe direction for
+        // an evidence-gated product — but it is a backstop, not the fix. The
+        // fix is AbsentSubjectGate, which settles the question deterministically
+        // instead of reading the model's mind.
+        let refusedShape = Self.readsAsRefusal(body)
         let conf: Double = {
             if refusedShape { return 0.2 }
             if citations.isEmpty { return 0.3 }
@@ -1240,13 +1270,45 @@ public actor MasterBrain {
             citations: citations,
             confidence: Confidence(conf),
             contradictions: [],
-            refused: refusedShape && citations.isEmpty,
+            // WAS `refusedShape && citations.isEmpty`. Citations prove passages
+            // were RETRIEVED; they never prove those passages ANSWER the
+            // question asked. Requiring an empty citation list meant that any
+            // loosely-matching chunk overrode the model's own statement that it
+            // could not answer — and retrieval's last-resort layers almost
+            // always return something, so the refusal could essentially never
+            // fire. If the model says it cannot answer, that is a refusal.
+            refused: refusedShape,
             refusalReason: refusedShape ? "Chunk RAG fallback couldn't ground an answer." : nil,
             report: nil,
             walkSteps: retrieval.walkSteps,
             source: .ragFallback,
             reasoningTrace: trace
         )
+    }
+
+    /// Does this answer body read as the model declining to answer?
+    ///
+    /// Phrase list, not sentiment analysis: each entry is a way a refusal is
+    /// actually phrased, and the check is anchored to the answer's OPENING
+    /// (where a refusal belongs) or to a whole clause, so a long answer that
+    /// happens to contain "no record of payment" mid-paragraph is not read as
+    /// declining the whole question.
+    nonisolated static func readsAsRefusal(_ body: String) -> Bool {
+        let lower = body.lowercased()
+        let phrases = [
+            "don't have enough", "do not have enough", "not enough information",
+            "no information", "nothing in your archive", "not in your archive",
+            "could not find", "couldn't find", "cannot find", "can't find",
+            "no record", "no mention", "does not appear", "doesn't appear",
+            "unable to answer", "cannot answer", "can't answer",
+            "no documents", "no evidence",
+        ]
+        // The opening 240 characters: a genuine refusal leads with itself.
+        let opening = String(lower.prefix(240))
+        if phrases.contains(where: { opening.contains($0) }) { return true }
+        // Or a very short body that is a refusal and nothing else.
+        if lower.count < 200, phrases.contains(where: { lower.contains($0) }) { return true }
+        return false
     }
 
     /// Fold a ReconstructedNarrative into a plain-text body for
@@ -1384,6 +1446,8 @@ public actor MasterBrain {
     /// THIS → quote floor → deterministic readout. nil in rigs.
     /// G1: carries the access context (see storyComposer).
     public var toolGroundedFallback: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    /// See `setAbsentSubjectCheck`. Consulted BEFORE any composer runs.
+    public var absentSubjectCheck: (@Sendable (String) async -> VerifiedAnswer?)?
     public func setToolGroundedFallback(_ f: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
         toolGroundedFallback = f
     }
@@ -1392,6 +1456,15 @@ public actor MasterBrain {
     }
     public func setLedgerStateProvider(_ p: @escaping @Sendable () async -> Int64?) {
         ledgerStateProvider = p
+    }
+    /// Found by the owner's archive, 2026-09-24 — see AbsentSubjectGate. Asks
+    /// the ledger whether an identifier the QUESTION names exists at all, and
+    /// returns a verified not-found when it does not. Injected as a closure
+    /// because MasterBrain holds no Database by design (experts are stateless
+    /// and read through repositories); AppState, which owns the ledger, wires
+    /// it. nil in rigs, which then keep the previous behaviour.
+    public func setAbsentSubjectCheck(_ c: @escaping @Sendable (String) async -> VerifiedAnswer?) {
+        absentSubjectCheck = c
     }
     public func setAskSnapshotEnd(_ p: @escaping @Sendable () async -> Void) {
         askSnapshotEnd = p

@@ -5,10 +5,28 @@
 //  P3.6 — LANGUAGE HONESTY. The other axis of universality, and the one where
 //  silence is most misleading.
 //
-//  WHAT WAS ALREADY TRUE. `Cleaner.detectLanguage` runs `NLLanguageRecognizer`
-//  on every document and stores the result in the KnowledgeObject's metadata as
-//  `meta["language"]`. So the app has ALWAYS known what language each document
-//  is in.
+//  A CLAIM I MADE HERE WAS FALSE, and the owner's own archive disproved it.
+//  This header used to say: "`Cleaner.detectLanguage` runs `NLLanguageRecognizer`
+//  on every document and stores the result in `meta["language"]`, so the app has
+//  ALWAYS known what language each document is in."
+//
+//  It does run. It does not store. `IngestCoordinator` computes
+//  `cleaned = ContentDecoder().decode(cleaner.clean(perFileKOs.first ?? …))`,
+//  uses it for `classifier.classify(cleaned)`, and then PERSISTS `perFileKOs` —
+//  the uncleaned originals. The detected language is computed on every ingest
+//  and thrown away. On a 19-document real archive this report therefore said
+//  "19 documents had no detectable language", which was true of the ledger and
+//  false about the documents: every one of them is English.
+//
+//  I asserted the claim from reading that the code EXISTS, without checking that
+//  its OUTPUT is kept — the same mistake as grepping a name to prove a call.
+//
+//  So this now DETECTS the language itself, from stored content, at report time.
+//  Read-only and off the ingest path on purpose: `Cleaner.clean` also collapses
+//  whitespace and repairs encoding, so persisting its output would change the
+//  stored text of every document, and it only cleans `perFileKOs.first`, so a
+//  multi-message mbox would get its first message's language applied to all. That
+//  is a pipeline decision for the owner, not a repair to smuggle into a report.
 //
 //  WHAT WAS MISSING. Nothing ever said so. Extraction is English-only — the
 //  domain packs' patterns, the open-field extractor's prose gates, the role
@@ -34,6 +52,7 @@
 //
 
 import Foundation
+import NaturalLanguage
 import os
 
 public enum ExtractionLanguageReport {
@@ -119,11 +138,28 @@ public enum ExtractionLanguageReport {
         }
     }
 
-    /// Build the report from the ledger's KnowledgeObject metadata.
+    /// Identify a language from a text sample. nil when the recogniser has no
+    /// confident answer — a table of figures or a two-word note genuinely has
+    /// no language, and guessing "en" would manufacture the very certainty this
+    /// report exists to avoid.
+    nonisolated static func detect(_ sample: String) -> String? {
+        let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Below this, identification is noise. Measured floor, not a guess: the
+        // recogniser will happily label a single word.
+        guard trimmed.count >= 40 else { return nil }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(trimmed)
+        guard let language = recognizer.dominantLanguage else { return nil }
+        // A low-confidence hypothesis is not a detection.
+        let confidence = recognizer.languageHypotheses(withMaximum: 1)[language] ?? 0
+        guard confidence >= 0.5 else { return nil }
+        return language.rawValue
+    }
+
+    /// Build the report from the ledger.
     ///
-    /// Reads `meta.language`, which `Cleaner` has been writing all along. The
-    /// JSON path is queried in SQL rather than decoding every KO in Swift,
-    /// because on a large archive that decode is the whole cost of the report.
+    /// Uses a stored `meta.language` when present and detects from content
+    /// otherwise — see the header for why nothing stores it today.
     public nonisolated static func build(database: Database) async -> Report? {
         guard KnowledgeModuleFlags.isEnabled(.languageHonesty) else { return nil }
         do {
@@ -142,17 +178,28 @@ public enum ExtractionLanguageReport {
             // already relies on elsewhere. A NULL result means either no
             // metadata or no language key — both are "undetected", which is
             // why they are counted together and NOT as English.
+            // Prefer a stored language when one exists (a future ingest may
+            // persist it); otherwise detect from the content that IS stored.
+            // `substr` bounds the read: language identification needs a sample,
+            // not a whole book, and pulling every document's full text through
+            // SQLite would make this report the most expensive thing in the app.
             let rows = try await database.query("""
-            SELECT json_extract(metadata_json, '$.language') AS lang, COUNT(*) AS n
-            FROM knowledge_objects
-            GROUP BY lang
-            ORDER BY n DESC;
+            SELECT json_extract(metadata_json, '$.language') AS lang,
+                   substr(content, 1, 2000) AS sample
+            FROM knowledge_objects;
             """, [])
-            var coverage: [LanguageCoverage] = []
+            var tally: [String: Int] = [:]
             var undetected = 0
             for r in rows {
-                let n = Int(r.int(1) ?? 0)
-                guard let raw = r.string(0), !raw.isEmpty else { undetected += n; continue }
+                let stored = r.string(0)
+                let detected = (stored?.isEmpty == false)
+                    ? stored
+                    : Self.detect(r.string(1) ?? "")
+                guard let code = detected, !code.isEmpty else { undetected += 1; continue }
+                tally[code, default: 0] += 1
+            }
+            var coverage: [LanguageCoverage] = []
+            for (raw, n) in tally {
                 // NLLanguageRecognizer returns BCP-47 ("en", "hi", "zh-Hans").
                 // Compare on the primary subtag so "en-GB" is supported too.
                 let primary = raw.split(separator: "-").first.map(String.init) ?? raw
@@ -161,6 +208,7 @@ public enum ExtractionLanguageReport {
                     documentCount: n,
                     extractionSupported: extractionSupported.contains(primary.lowercased())))
             }
+            coverage.sort { $0.documentCount > $1.documentCount }
             return Report(coverage: coverage, undetectedCount: undetected, totalDocuments: total)
         } catch {
             // A report that cannot be built must say so rather than returning

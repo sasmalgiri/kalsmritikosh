@@ -2572,6 +2572,24 @@ public final class AppState {
             await brain.setToolGroundedFallback { [weak self] question, access in
                 await self?.composeToolGroundedAnswer(question: question, access: access)
             }
+            // The absent-subject gate. Wired HERE because AppState owns the
+            // ledger and MasterBrain deliberately does not: the gate needs one
+            // existence query, and the brain stays free of a Database handle.
+            //
+            // Found by running the answer harness over the owner's real
+            // archive: a question about a randomly generated case reference was
+            // answered in 1,159 words with THREE CITATIONS, composed from
+            // documents about a DIFFERENT case that merely shared the question's
+            // shape. See AbsentSubjectGate for the full account.
+            await brain.setAbsentSubjectCheck { [weak database] question in
+                guard let database else { return nil }
+                guard let absence = await AbsentSubjectGate.absence(
+                    in: question, database: database) else { return nil }
+                return AbsentSubjectGate.notFoundAnswer(
+                    for: absence,
+                    intent: UserIntent(kind: .factualLookup, scope: .global,
+                                       rawQuestion: question))
+            }
             await brain.setLedgerStateProvider { [weak database] in
                 // C-ii: begin the ask's read snapshot; the returned stamp is
                 // data_version read ON the snapshot connection at ask start.

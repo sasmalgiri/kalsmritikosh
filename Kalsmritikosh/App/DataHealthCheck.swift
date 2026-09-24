@@ -560,7 +560,19 @@ public enum DataHealthCheck {
             md += "## What languages is your archive in? (P3.6)\n\n"
             if let limitation = language.limitationStatement() {
                 md += limitation + "\n\n"
-                issues.append("\(language.unsupportedDocuments) document(s) are not in English; structured extraction is English-only in this version, so they will yield few or no facts.")
+                // Report the finding that ACTUALLY applies. This used to append
+                // the unsupported-document count unconditionally, so on the
+                // owner's real archive — where every document was English but
+                // none had a recorded language — it printed
+                // "⚠️ 0 document(s) are not in English", a warning about zero
+                // documents. A statement naming a count of nothing is worse
+                // than silence: it spends the reader's trust to say nothing.
+                if language.unsupportedDocuments > 0 {
+                    issues.append("\(language.unsupportedDocuments) document(s) are not in English; structured extraction is English-only in this version, so they will yield few or no facts.")
+                }
+                if language.undetectedCount > 0 {
+                    issues.append("\(language.undetectedCount) document(s) have no identifiable language — usually very short text, tables of figures, or scans with little recognised text. Counted separately rather than assumed English.")
+                }
             } else {
                 md += "Every document is in a language this version can extract from, "
                 md += "and every document's language was detected.\n\n"

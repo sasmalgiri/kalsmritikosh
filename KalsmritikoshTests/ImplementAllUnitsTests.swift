@@ -848,3 +848,100 @@ struct DiagnosticEndToEndTests {
         #expect(md.contains("not a pass"), "the report must refuse to read as a pass")
     }
 }
+
+// MARK: - The absent-subject gate (found by the owner's archive)
+
+@Suite("AbsentSubjectGate — refuse only when the named thing is genuinely absent")
+struct AbsentSubjectGateTests {
+
+    // This gate can REFUSE answers, so over-firing is the risk that matters.
+    // A gate that refused too readily would be worse than the defect it fixes:
+    // the defect produced one wrong answer, an over-eager gate would suppress
+    // every right one.
+
+    @Test("Identifier-shaped tokens are recognised")
+    func identifiersDetected() {
+        let t = AbsentSubjectGate.candidateTokens(in: "What was decided in Case No. 74287301-ZQX?")
+        #expect(t.contains { $0.contains("74287301") }, "got \(t)")
+    }
+
+    @Test("A YEAR is a date, not a missing subject")
+    func yearsExcluded() {
+        // "What happened in 2024?" must reach the timeline lane. Treating 2024
+        // as an unknown case number would refuse every date question about a
+        // year the archive happens not to cover.
+        #expect(AbsentSubjectGate.candidateTokens(in: "What happened in 2024?").isEmpty)
+        #expect(AbsentSubjectGate.candidateTokens(in: "Summarise 1999 and 2008.").isEmpty)
+    }
+
+    @Test("Quantities and ordinary prose are not identifiers")
+    func prosePassesThrough() {
+        #expect(AbsentSubjectGate.candidateTokens(in: "What did we decide about the roof?").isEmpty,
+                "a question naming no identifier must leave the gate silent")
+        #expect(AbsentSubjectGate.candidateTokens(in: "Show me the 3 latest emails").isEmpty)
+        #expect(AbsentSubjectGate.candidateTokens(in: "Who is Asha Rao?").isEmpty)
+    }
+
+    @Test("A present identifier does NOT trigger a refusal; an absent one does")
+    func firesOnlyOnGenuineAbsence() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("absent-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+
+        let fileID = UUID(), koID = UUID()
+        try await db.exec("""
+        INSERT INTO files (id, url, source_type, size_bytes, modified_at, ingested_at, content_hash)
+        VALUES (?, '/tmp/c.txt', 'text', 9, 0, 0, 'h');
+        """, [.uuid(fileID)])
+        try await db.exec("""
+        INSERT INTO knowledge_objects (id, file_id, source_type, content, metadata_json,
+            confidence, created_at, updated_at)
+        VALUES (?, ?, 'text', 'Case SMOKE_TEST_001 was decided in 2023.', '{}', 0.9, 0, 0);
+        """, [.uuid(koID), .uuid(fileID)])
+        try await db.exec("""
+        INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, created_at)
+        VALUES (?, ?, 0, 'Case SMOKE_TEST_001 was decided in 2023.', 0, 40, 0);
+        """, [.uuid(UUID()), .uuid(koID)])
+
+        // Absent → refusal naming the token.
+        let absent = await AbsentSubjectGate.absence(
+            in: "What was decided in Case No. 99887766-ZQX?", database: db)
+        let a = try #require(absent, "an identifier absent from the ledger must be caught")
+        #expect(a.token.contains("99887766"))
+        let refusal = AbsentSubjectGate.notFoundAnswer(
+            for: a, intent: UserIntent(kind: .factualLookup, scope: .global, rawQuestion: "q"))
+        #expect(refusal.refused)
+        #expect(refusal.citations.isEmpty, "a not-found must not carry citations")
+        #expect(refusal.body.contains("99887766"), "the refusal must name what was missing")
+
+        // Present → silent, so the ordinary answer path runs.
+        #expect(await AbsentSubjectGate.absence(
+            in: "What was decided in SMOKE_TEST_001?", database: db) == nil,
+                "an identifier the ledger DOES hold must not be refused")
+        // No identifier → silent.
+        #expect(await AbsentSubjectGate.absence(
+            in: "What did we decide about the roof?", database: db) == nil)
+    }
+
+    @Test("A refusal-shaped answer is recognised however it is phrased")
+    func refusalDetectionIsBroad() {
+        // The shipped version matched only two exact phrases, so the model
+        // answering in any other wording bypassed the refusal contract entirely.
+        for body in ["I don't have enough in your archive to answer this confidently.",
+                     "I could not find any record of that in your documents.",
+                     "There is no mention of this in the archive.",
+                     "Nothing in your archive covers that.",
+                     "I am unable to answer from the documents provided."] {
+            #expect(MasterBrain.readsAsRefusal(body), "not recognised as a refusal: “\(body)”")
+        }
+        // And it must NOT fire on a real answer that happens to contain a
+        // refusal-ish phrase deep inside it.
+        let realAnswer = String(repeating: "The contract was signed on 4 March 2021 by both parties. ", count: 6)
+            + "There is no record of a later amendment."
+        #expect(!MasterBrain.readsAsRefusal(realAnswer),
+                "a genuine answer must not be turned into a refusal by a phrase in its tail")
+    }
+}
