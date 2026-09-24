@@ -13,14 +13,14 @@ Regenerate with `python3 scripts/pipeline-matrix.py`.
 
 | metric | count |
 |---|---|
-| tables declared | 208 |
+| tables declared | 209 |
 | migration-scratch (legitimately write-only) | 14 |
-| real tables | 194 |
-| **no producer** (nothing writes it) | **7** |
-| **written but never read** | **4** |
+| real tables | 195 |
+| **no producer** (nothing writes it) | **6** |
+| **written but never read** | **1** |
 | **has a producer but NO test mentions it** | **17** |
 
-## No producer — nothing writes these (7)
+## No producer — nothing writes these (6)
 
 _Dead schema, or a feature whose persistence was never wired._
 
@@ -28,21 +28,17 @@ _Dead schema, or a feature whose persistence was never wired._
 |---|---|---|
 | `companies` | — | — |
 | `evidence_block_edges` | — | — |
-| `history_alternative_accounts` | — | — |
 | `people` | — | — |
 | `projects` | — | — |
 | `timelines` | — | — |
 | `vectors` | — | — |
 
-## Written but never read (4)
+## Written but never read (1)
 
 _The write costs time on the hot path and influences nothing._
 
 | table | lane | producer |
 |---|---|---|
-| `boilerplate_uses` | Knowledge/Boilerplate | Kalsmritikosh/Knowledge/Boilerplate/BoilerplateRegistry.swift |
-| `history_chapters` | Storage/Repositories | Kalsmritikosh/Storage/Repositories/HistoryArtifactRepository.swift |
-| `knowledge_objects_fts` | Storage/Schema | Kalsmritikosh/Storage/Schema/SchemaMigrations.swift |
 | `knowledge_objects_history` | Storage/Repositories | Kalsmritikosh/Storage/Repositories/FilesRepository.swift |
 
 ## Produced but no test mentions the table (17)
@@ -74,7 +70,7 @@ _The verification gap. Highest-value list in this file._
 | table | lane | producers | consumers | tests |
 |---|---|---|---|---|
 | `files` | App, EvalKit, Ingestion/Intake, Storage/Repositories | 4 | 13 | 160 |
-| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 25 | 251 |
+| `knowledge_objects` | App, EvalKit, Knowledge/Boilerplate, Storage/Repositories, Storage/Schema | 6 | 27 | 251 |
 | `chunk_embeddings` | App, EvalKit, Storage/Schema, Storage/Vector | 4 | 10 | 250 |
 | `source_versions` | App, Ingestion/Intake, Storage/Repositories, Storage/Schema | 4 | 20 | 249 |
 | `entities` | App, Knowledge/Backfill, Storage/Repositories | 5 | 22 | 82 |
@@ -96,7 +92,7 @@ _The verification gap. Highest-value list in this file._
 | `job_plan_references` | Jobs | 1 | 1 | 5 |
 | `generic_facts` | Knowledge/Backfill, Storage/Repositories | 2 | 5 | 47 |
 | `boilerplate_templates` | Knowledge/Boilerplate | 1 | 1 | 0 |
-| `boilerplate_uses` | Knowledge/Boilerplate | 1 | 0 | 0 |
+| `boilerplate_uses` | Knowledge/Boilerplate | 1 | 1 | 0 |
 | `community_summaries` | Knowledge/Topics | 2 | 4 | 22 |
 | `document_terms` | Knowledge/Topics | 1 | 2 | 2 |
 | `entity_communities` | Knowledge/Topics | 2 | 6 | 8 |
@@ -170,10 +166,12 @@ _The verification gap. Highest-value list in this file._
 | `file_versions` | Storage/Repositories | 1 | 1 | 27 |
 | `gap_nodes` | Storage/Repositories | 1 | 1 | 42 |
 | `governance_events` | Storage/Repositories | 2 | 1 | 4 |
-| `history_artifacts` | Storage/Repositories | 1 | 1 | 6 |
-| `history_chapters` | Storage/Repositories | 1 | 0 | 5 |
-| `history_gaps` | Storage/Repositories | 1 | 1 | 5 |
-| `history_item_evidence` | Storage/Repositories | 1 | 1 | 5 |
+| `history_alternative_accounts` | Storage/Repositories | 1 | 1 | 16 |
+| `history_artifacts` | Storage/Repositories | 1 | 1 | 17 |
+| `history_chapters` | Storage/Repositories | 1 | 1 | 16 |
+| `history_gaps` | Storage/Repositories | 1 | 1 | 16 |
+| `history_item_evidence` | Storage/Repositories | 1 | 1 | 16 |
+| `induced_schema_attempts` | Storage/Repositories | 1 | 2 | 1 |
 | `ingest_file_attempts` | Storage/Repositories | 1 | 2 | 27 |
 | `ingest_run_files` | Storage/Repositories | 1 | 1 | 1 |
 | `ingest_runs` | Storage/Repositories | 1 | 1 | 1 |
@@ -230,7 +228,7 @@ _The verification gap. Highest-value list in this file._
 | `event_entities` | Storage/Repositories, Storage/Schema | 3 | 7 | 232 |
 | `events` | Storage/Repositories, Storage/Schema | 2 | 12 | 287 |
 | `evidence_blocks` | Storage/Repositories, Storage/Schema | 2 | 8 | 243 |
-| `history_items` | Storage/Repositories, Storage/Schema | 2 | 2 | 230 |
+| `history_items` | Storage/Repositories, Storage/Schema | 2 | 2 | 239 |
 | `relationships` | Storage/Repositories, Storage/Schema | 2 | 1 | 242 |
 | `sensitive_scope_assignments` | Storage/Repositories, Storage/Schema | 2 | 1 | 241 |
 | `transcript_segments` | Storage/Repositories, Storage/Schema | 2 | 1 | 230 |
@@ -241,7 +239,7 @@ _The verification gap. Highest-value list in this file._
 | `entities_new` | Storage/Schema | 1 | 1 | 230 |
 | `evidence_blocks_fts` | Storage/Schema | 1 | 2 | 230 |
 | `ingest_file_attempts__v83` _(scratch)_ | Storage/Schema | 1 | 0 | 230 |
-| `knowledge_objects_fts` | Storage/Schema | 1 | 0 | 230 |
+| `knowledge_objects_fts` | Storage/Schema | 1 | 1 | 230 |
 | `method_reviews__v81` _(scratch)_ | Storage/Schema | 1 | 0 | 230 |
 | `method_runs__v80` _(scratch)_ | Storage/Schema | 1 | 0 | 230 |
 | `method_runs__v81` _(scratch)_ | Storage/Schema | 1 | 0 | 230 |
@@ -276,7 +274,6 @@ _The verification gap. Highest-value list in this file._
 | `work_product_sections` | Workflow | 1 | 1 | 5 |
 | `companies` | — | 0 | 0 | 1 |
 | `evidence_block_edges` | — | 0 | 0 | 0 |
-| `history_alternative_accounts` | — | 0 | 0 | 0 |
 | `people` | — | 0 | 0 | 13 |
 | `projects` | — | 0 | 0 | 9 |
 | `timelines` | — | 0 | 0 | 1 |

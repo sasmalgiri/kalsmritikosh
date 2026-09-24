@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 131
+    public static let latestVersion = 132
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -662,7 +662,8 @@ public enum SchemaMigrations {
         (128, v128),
         (129, v129),
         (130, v130),
-        (131, v131)
+        (131, v131),
+        (132, v132)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6606,6 +6607,60 @@ public enum SchemaMigrations {
     ALTER TABLE knowledge_objects ADD COLUMN derivation_complete INTEGER;
     CREATE INDEX IF NOT EXISTS idx_ko_derivation_complete
         ON knowledge_objects(derivation_complete);
+    """
+
+    // MARK: - v132 — P3.3: the induction ATTEMPT is the resume marker
+    //
+    // Schema induction (InducedSchemaExtractor) is the first and only writer in
+    // this system whose output a model had a hand in, and therefore the first
+    // that is not reproducible. That collides head-on with the drain's central
+    // promise — "RESUME MARKER = producer_version itself: a second run is a
+    // no-op by construction" — and with the Fixed-Point Law (U-5): running
+    // everything twice must change nothing.
+    //
+    // It collides in a specific place. Induction runs only on documents with
+    // ZERO facts, so a SUCCESSFUL induction is self-limiting: the facts it
+    // writes make the document ineligible next time. The hole is the
+    // UNSUCCESSFUL one. A document where the model proposed nothing verifiable
+    // still has zero facts, so a second drain would call the model again — and
+    // being non-deterministic, it might write on run 2 what it declined to
+    // write on run 1. That is a fixed-point violation, and it would also pay
+    // the model cost again on every drain, forever, for exactly the documents
+    // where it has already failed.
+    //
+    // The fix is not to weaken the law but to give this pass the same kind of
+    // marker every other pass has. One row per SOURCE VERSION says the attempt
+    // happened; the pass skips any version already present. Keyed on the source
+    // version, not the KO, because a NEW version of a file is genuinely new
+    // content and deserves a fresh attempt — the same rule the rest of the
+    // derivation layer follows.
+    //
+    // `decline_reason` is the point of the table beyond idempotence: it
+    // separates "we tried and the model proposed nothing that could be found in
+    // the document" from "we never tried" from "there was no model available".
+    // Those are three different facts about a near-empty ledger and a bare row
+    // count cannot tell them apart — the absence-as-verification defect this
+    // whole program keeps closing. `rejected_*` keep the per-gate tallies, so a
+    // model that has started fabricating is visible as a rise in
+    // `rejected_not_found` rather than as a vague drop in yield.
+    //
+    // Derived + advisory: never sealed, never gates an answer. Dropping this
+    // table costs only the memory of what was attempted.
+    private static let v132: String = """
+    CREATE TABLE IF NOT EXISTS induced_schema_attempts (
+        source_version_id   TEXT PRIMARY KEY NOT NULL,
+        knowledge_object_id TEXT,
+        attempted_at        REAL NOT NULL,
+        fields_written      INTEGER NOT NULL DEFAULT 0,
+        decline_reason      TEXT,
+        rejected_not_found  INTEGER NOT NULL DEFAULT 0,
+        rejected_reserved   INTEGER NOT NULL DEFAULT 0,
+        rejected_other      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_induced_attempts_ko
+        ON induced_schema_attempts(knowledge_object_id);
+    CREATE INDEX IF NOT EXISTS idx_induced_attempts_written
+        ON induced_schema_attempts(fields_written);
     """
 
 }

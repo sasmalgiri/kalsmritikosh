@@ -18,11 +18,11 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | metric | count |
 |---|---|
-| modules declared | 31 |
-| implemented | 31 |
+| modules declared | 32 |
+| implemented | 32 |
 | **implemented but NOT WIRED** | **0** |
 | default OFF (opt-in) | 2 |
-| require the on-device model | 6 |
+| require the on-device model | 7 |
 | referenced by a test | 9 |
 | **gated but NO CALLER yet** | **2** |
 
@@ -108,6 +108,7 @@ naming the property that was grepped.
 | `openFieldExtraction` — Read labelled fields from any document | ON | — | Kalsmritikosh/Knowledge/Ontology/OpenFieldExtractor.swift:283 | 0 |
 | `openFieldAsking` — Ask about any field we found | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:295 (+1 more) | 0 |
 | `openFactTypes` — Group unfamiliar document kinds | ON | — | Kalsmritikosh/Knowledge/Ontology/FactTypeClassifier.swift:246 (+1 more) | 0 |
+| `inducedSchema` — Read documents no built-in rule recognises | ON | yes | Kalsmritikosh/App/AppState.swift:2617 (+2 more) | 0 |
 | `generatedSourceCoverage` — Report what each format can give you | ON | — | Kalsmritikosh/Ingestion/Parsing/UniversalParserRegistryBuilder.swift:238 | 0 |
 | `languageHonesty` — State the English-only limit | ON | — | Kalsmritikosh/Knowledge/Ontology/ExtractionLanguageReport.swift:128 | 0 |
 

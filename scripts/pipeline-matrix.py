@@ -168,13 +168,21 @@ def classify_occurrences(table, text):
 # is worse than none: it would retire exactly the questions it claims to answer.
 SELF_CHECK = [
     # (table, expect_producer, expect_consumer, why)
-    ("history_chapters", True, False,
-     "INSERTed at HistoryArtifactRepository.swift:77; that repository selects "
-     "history_items/artifacts/gaps/item_evidence and never chapters"),
+    # RE-VERIFIED 2026-09-24. These were write-only when first hand-checked and
+    # the expectations here said so. They are not any more: the
+    # `.historyChapterReadback` module (P2.1/P2.5) added the readback, and the
+    # boilerplate registry gained its query side. The classifier was RIGHT and
+    # this list had gone stale — so the numbers below were updated against the
+    # code rather than the classifier being "fixed" to agree with them.
+    ("history_chapters", True, True,
+     "INSERTed at HistoryArtifactRepository.swift:77; SELECTed at :318 and "
+     "counted at :338 (chapter readback, P2.1)"),
     ("generic_facts", True, True, "written and read by GenericFactRepository"),
     ("chunks", True, True, "written at ingest, read by retrieval"),
     ("evidence_block_edges", False, False, "declared in schema only"),
-    ("history_alternative_accounts", False, False, "declared in schema only"),
+    ("history_alternative_accounts", True, True,
+     "DELETE at HistoryArtifactRepository.swift:202, SELECT at :232, COUNT at "
+     ":254 (recorded disagreements, P2.5)"),
     # These three caught the scan over-counting. `people` and `vectors` occur
     # ONLY in comments, UI copy and Swift identifiers — verified by grepping
     # every occurrence — so crediting them a producer was a false positive.
@@ -185,8 +193,9 @@ SELF_CHECK = [
     # migration source — not dead schema.
     ("vectors", False, True,
      "no writer; read once by the migration that backfills chunk_embeddings"),
-    ("boilerplate_uses", True, False,
-     "INSERT OR IGNORE at BoilerplateRegistry.swift:92; no SELECT anywhere"),
+    ("boilerplate_uses", True, True,
+     "INSERT OR IGNORE at BoilerplateRegistry.swift:92; SELECTed at :127/:137/"
+     ":148/:159"),
 ]
 
 
@@ -261,7 +270,14 @@ def main():
     failures = run_self_check({r["table"]: r for r in rows})
     if failures:
         print("SELF-CHECK FAILED — refusing to write a matrix that disagrees with")
-        print("hand-verified ground truth. Fix the classifier, not the expectations.\n")
+        # The message deliberately names BOTH directions. Its first version said
+        # only "fix the classifier, not the expectations", which was true when
+        # written and wrong the first time it fired: three tables had genuinely
+        # gained readers and the expectations were the stale side. Naming one
+        # culprit in advance is the same prejudging this check exists to prevent.
+        print("hand-verified ground truth. EITHER the classifier is wrong, OR")
+        print("the code changed and these expectations are stale. Read the code")
+        print("at the cited lines and decide which — do not edit either to agree.\n")
         for f in failures:
             print("  ✗ %s" % f)
         return 2

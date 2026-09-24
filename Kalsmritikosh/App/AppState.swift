@@ -2597,6 +2597,7 @@ public final class AppState {
                 let drainEvents = events
                 let drainFacts = genericFactsRepo
                 let drainEvidence = evidenceStoreRepo
+                let drainCapabilities = capabilities
                 Task.detached(priority: .utility) {
                     do {
                         let stale = try await drainDB.query("""
@@ -2604,11 +2605,28 @@ public final class AppState {
                              + (SELECT COUNT(*) FROM events WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.events))
                              + (SELECT COUNT(*) FROM entities WHERE COALESCE(producer_version,0) != \(DerivedProducerVersions.entities));
                         """, []).first?.int(0) ?? 0
-                        if stale > 0 {
-                            KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era — refreshing in the background")
+                        // P3.3 — the drain is also how induction reaches an
+                        // archive, and era-staleness alone would never trigger
+                        // it: on a freshly ingested archive nothing is stale, so
+                        // a switched-on inducer would have sat there doing
+                        // nothing. An EMPTY attempt ledger means induction has
+                        // never run here, which is its own reason to drain once.
+                        // Self-limiting: the first pass writes attempt rows, so
+                        // this stops being true immediately afterwards.
+                        var inductionNeverRan = false
+                        if KnowledgeModuleFlags.isEnabled(.inducedSchema) {
+                            let attempts = (try? await drainDB.query(
+                                "SELECT COUNT(*) FROM induced_schema_attempts;", []
+                            ).first?.int(0)) ?? 0
+                            inductionNeverRan = (attempts ?? 0) == 0
+                        }
+                        if stale > 0 || inductionNeverRan {
+                            KalsmritikoshLog.app.info("Ledger drain: \(stale) derived row(s) behind their era\(inductionNeverRan ? " · schema induction has not run yet" : "") — refreshing in the background")
                             let coordinator = LedgerDrainCoordinator(
                                 database: drainDB, objects: drainObjects, entities: drainEntities,
-                                events: drainEvents, facts: drainFacts, evidence: drainEvidence)
+                                events: drainEvents, facts: drainFacts, evidence: drainEvidence,
+                                inducer: InducedSchemaExtractor(capabilities: drainCapabilities),
+                                inductionAttempts: InducedSchemaAttemptRepository(database: drainDB))
                             _ = try await coordinator.drain()
                         }
                     } catch {

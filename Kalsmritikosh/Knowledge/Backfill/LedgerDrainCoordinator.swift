@@ -60,6 +60,20 @@ public struct DrainReceipt: Sendable {
     public var crossFieldReassigned = 0
     /// W-5.6 — truncated same-field values folded into the dominant value.
     public var prefixCollapsed = 0
+    /// P3.3 — facts written by schema induction, counted SEPARATELY from
+    /// `factsWritten` so a receipt never blends model-assisted output into the
+    /// deterministic total. Zero whenever the module is off, which is the
+    /// default.
+    public var factsInduced = 0
+    /// Documents induction was attempted on this run (successful or not).
+    public var inductionAttempted = 0
+    /// Why induction did not run at all, when it did not. nil means it ran.
+    public var inductionSkipReason: String?
+    /// Candidate documents this run did NOT attempt because the per-run budget
+    /// ran out. NON-ZERO MEANS THE PASS IS INCOMPLETE — reported rather than
+    /// left implicit, because a receipt that shows "12 attempted" and says
+    /// nothing else reads as "that was all of them".
+    public var inductionSkippedForBudget = 0
     public var eventKOsRewritten = 0
     public var eventsDeleted = 0
     public var eventsWritten = 0
@@ -82,6 +96,7 @@ public struct DrainReceipt: Sendable {
         DRAIN RECEIPT
           entities retired:        \(entitiesRetired) (+\(memoryObjectsRetired) memory rows)
           facts: sources rewritten \(factsSourcesRewritten) (deleted \(factsDeleted) stale → wrote \(factsWritten)); anchors now \(anchorsAfter) (\(orphanAnchorsSwept) orphan(s) swept, \(crossFieldReassigned) mislabel(s) re-fielded, \(prefixCollapsed) truncation(s) folded)
+          induction:               \(inductionAttempted) document(s) attempted → \(factsInduced) field(s)\(inductionSkipReason.map { " [skipped: \($0)]" } ?? "")\(inductionSkippedForBudget > 0 ? " — \(inductionSkippedForBudget) more candidate(s) left for the next pass (budget)" : "")
           events: KOs rewritten    \(eventKOsRewritten) (deleted \(eventsDeleted) stale → wrote \(eventsWritten) v1)
           milestones rebuilt:      \(milestonesRebuilt)
           document_class stamped:  \(documentClassStamped)
@@ -100,19 +115,36 @@ public final class LedgerDrainCoordinator {
     private let evidence: EvidenceStore
     private let extractor = DomainFactExtractor()
     private let gate = EntityQualityGate.bundled()
+    /// P3.3 — optional schema inducer. nil (the default) leaves every existing
+    /// caller's behaviour byte-identical: no extra pass, no model call, no new
+    /// table written. Injected only where a capability registry exists.
+    private let inducer: InducedSchemaExtractor?
+    private let inductionAttempts: InducedSchemaAttemptRepository?
+    /// Per-RUN document budget for induction, decremented only when a model
+    /// call was actually made. Belongs to the drain rather than to the
+    /// extractor because only the drain knows how many documents a pass faces.
+    private var inductionBudgetRemaining = 0
+    private var alreadyAttempted: Set<UUID> = []
+    private var inductionEnabledThisRun = false
 
     public init(database: Database,
                 objects: KnowledgeObjectRepository,
                 entities: EntitiesRepository,
                 events: EventsRepository,
                 facts: GenericFactRepository,
-                evidence: EvidenceStore) {
+                evidence: EvidenceStore,
+                inducer: InducedSchemaExtractor? = nil,
+                inductionAttempts: InducedSchemaAttemptRepository? = nil,
+                inductionDocumentBudget: Int = 50) {
         self.database = database
         self.objects = objects
         self.entities = entities
         self.events = events
         self.facts = facts
         self.evidence = evidence
+        self.inducer = inducer
+        self.inductionAttempts = inductionAttempts
+        self.inductionBudgetRemaining = inductionDocumentBudget
     }
 
     /// The one pass. Safe to re-run: era-stamped rows are skipped everywhere.
@@ -121,6 +153,29 @@ public final class LedgerDrainCoordinator {
         receipt.chunksCount.before = try await count("chunks")
         receipt.chunksFTSCount.before = try await count("chunks_fts")
         receipt.embeddingsCount.before = try await count("chunk_embeddings")
+
+        // ── P3.3 induction eligibility, decided ONCE per run ────────────────
+        //
+        // Three things must hold, and each failure is RECORDED rather than
+        // silently producing a run with no induction: the module is on, an
+        // inducer and attempt ledger were injected, and the attempt ledger is
+        // READABLE. The last is the important one — without the marker there is
+        // no idempotence, and re-running a non-deterministic writer blind would
+        // break the drain's own "second run changes nothing" law. Skipping is
+        // the safe direction; guessing is not.
+        if inducer == nil || inductionAttempts == nil {
+            receipt.inductionSkipReason = "no inducer wired for this drain"
+        } else if !KnowledgeModuleFlags.isEnabled(.inducedSchema) {
+            receipt.inductionSkipReason = "module off"
+        } else if let inductionAttempts {
+            alreadyAttempted = await inductionAttempts.attemptedVersionIDs()
+            if await inductionAttempts.attemptsReadable {
+                inductionEnabledThisRun = true
+            } else {
+                receipt.inductionSkipReason =
+                    "the attempt ledger could not be read, so idempotence could not be guaranteed"
+            }
+        }
 
         // ── pass 1: entity retirement (owner-blessed purge; idempotent) ─────
         let purge = try await gate.purgeGarbage(in: database)
@@ -276,6 +331,64 @@ public final class LedgerDrainCoordinator {
             subjectLabel: subjectLabel,
             documentClass: docClass ?? nil)
         var merged = DomainFactExtractor.merge(derived)
+
+        // ── P3.3 — INDUCTION, and only where every rule found nothing ────────
+        //
+        // `existing.isEmpty && merged.isEmpty` is gate 1 of the four in
+        // InducedSchemaExtractor's header, evaluated from values already in
+        // hand: this document has no facts and the eleven packs plus the open
+        // extractor just failed to produce any. There is therefore nothing for
+        // a model-assisted pass to perturb, reorder or contradict.
+        //
+        // It rides inside the same SAVEPOINT below, so an induced write either
+        // lands with the rest of this document's facts or not at all.
+        var inducedCount = 0
+        var inducedAttemptMade = false
+        // A candidate that the budget turned away is counted, so the receipt can
+        // say the pass was incomplete instead of implying it was exhaustive.
+        if inductionEnabledThisRun, existing.isEmpty, merged.isEmpty,
+           inducer != nil, inductionAttempts != nil,
+           !alreadyAttempted.contains(versionID),
+           inductionBudgetRemaining <= 0 {
+            receipt.inductionSkippedForBudget += 1
+        }
+        if inductionEnabledThisRun, existing.isEmpty, merged.isEmpty,
+           let inducer, let inductionAttempts,
+           !alreadyAttempted.contains(versionID),
+           inductionBudgetRemaining > 0 {
+            inductionBudgetRemaining -= 1
+            alreadyAttempted.insert(versionID)
+            inducedAttemptMade = true
+            let outcome = await inducer.induce(
+                blocks: blocks
+                    .filter { !$0.kind.isBoilerplate }
+                    .map { (id: $0.id,
+                            text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                            kind: $0.kind) },
+                subjectLabel: subjectLabel,
+                existingFactCount: 0)
+            // Counted AFTER the merge, not before: the merge can fold two
+            // proposals onto one row, and reporting the pre-merge number would
+            // make `factsWritten` go negative on the line below.
+            let inducedFacts = DomainFactExtractor.merge(outcome.facts)
+            merged += inducedFacts
+            inducedCount = inducedFacts.count
+            // Recorded whether it succeeded or not — the attempt IS this pass's
+            // resume marker (see the v132 migration), so skipping the record on
+            // failure would make the pass re-run forever on exactly the
+            // documents where the model has already proven unhelpful.
+            await inductionAttempts.record(InducedSchemaAttempt(
+                sourceVersionID: versionID,
+                knowledgeObjectID: ko.id,
+                fieldsWritten: inducedCount,
+                declineReason: outcome.declined?.explanation,
+                rejectedNotFound: outcome.rejected.valueNotFoundInDocument,
+                rejectedReserved: outcome.rejected.reservedField,
+                rejectedOther: outcome.rejected.total
+                    - outcome.rejected.valueNotFoundInDocument
+                    - outcome.rejected.reservedField))
+        }
+
         // Anchor binding (3c semantics), sourced to this KO.
         var cache: [String: UUID] = [:]
         merged = try await withBoundAnchors(merged, koID: ko.id, cache: &cache)
@@ -294,7 +407,11 @@ public final class LedgerDrainCoordinator {
         }
         receipt.factsSourcesRewritten += 1
         receipt.factsDeleted += stale.count
-        receipt.factsWritten += merged.count
+        // Induced fields are reported on their own line, so `factsWritten`
+        // stays a count of deterministically derived facts.
+        receipt.factsWritten += merged.count - inducedCount
+        receipt.factsInduced += inducedCount
+        if inducedAttemptMade { receipt.inductionAttempted += 1 }
     }
 
     private func withBoundAnchors(_ input: [GenericFact], koID: KnowledgeObject.ID,

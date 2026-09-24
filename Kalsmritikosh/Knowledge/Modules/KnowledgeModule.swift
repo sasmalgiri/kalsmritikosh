@@ -62,6 +62,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case openFieldExtraction      // P3.1 — `Label: value` facts from ANY domain
     case openFieldAsking          // P3.4 — resolve a question against the ledger's real fields
     case openFactTypes            // P3.2 — derive a type id for documents outside the curated enum
+    case inducedSchema            // P3.3 — the model proposes field NAMES, values proved verbatim
     case generatedSourceCoverage  // P3.5 — derive the format-coverage claim from the registry
     case languageHonesty          // P3.6 — state the English-only extraction limit
     case historyChapterReadback   // P2.1/P2.5 — read chapters + persist alternative accounts
@@ -98,6 +99,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .openFieldExtraction:  return "Read labelled fields from any document"
         case .openFieldAsking:      return "Ask about any field we found"
         case .openFactTypes:        return "Group unfamiliar document kinds"
+        case .inducedSchema:        return "Read documents no built-in rule recognises"
         case .generatedSourceCoverage: return "Report what each format can give you"
         case .languageHonesty:      return "State the English-only limit"
         case .historyChapterReadback: return "Story chapters & recorded disagreements"
@@ -134,6 +136,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .openFieldExtraction:  return "Pull facts out of any document that states them as a label and a value — \u{201C}Policy Number: 4471-99812\u{201D}, \u{201C}Registration No: MH-12-AB-1234\u{201D}, \u{201C}Roll No: 21BCE1043\u{201D} — no matter what kind of document it is. Until now facts came only from eleven built-in document types (patents, invoices, contracts, medical, property and so on), so a shipping manifest, a car service record or a school report produced searchable text but no structured facts. Fields the built-in types already handle are left to them, so nothing about those changes. Off keeps the built-in types only."
         case .documentLevelFTS:     return "Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead."
         case .historyChapterReadback: return "Read back the chapter structure of a reconstructed story, and keep a record of disagreements found between sources so the same contradiction is not rediscovered on every rebuild. Off falls back to an unchaptered list and forgets disagreements between builds."
+        case .inducedSchema:        return "For a document that produced NO details at all — a kind the app has no built-in reader for — let the on-device model name the fields it records (“policy holder”, “cover starts”), then keep only those whose value it can find written in the document itself. The model never supplies a value: anything it cannot point to in your text is discarded, not stored. Runs in the background, only on documents that yielded nothing, and its results are marked so you can always tell them from rule-read details. Off means such documents keep only their searchable text."
         case .generatedSourceCoverage: return "Add a section to the import report saying, per file format, exactly what the app got: full structure, text only, expanded container, held for later, or stored but not interpreted — plus any format it recognises but cannot read. The list is read off the parsers actually loaded for that run, so it cannot claim support that is switched off or absent. Off omits the section rather than showing a hand-written list that may have drifted."
         case .languageHonesty:      return "Say which languages your documents are in, and state plainly that structured extraction — dates, names, identifiers, labelled fields — is English-only in this version. Non-English documents are still stored in full and searchable by their own words; only the structured layer is missing. Off stays silent, which makes a language limit look like an empty archive."
         case .poaGrantorRecovery:   return "Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (\u{201C}I, jane doe having\u{201D}). Restricted to that exact document phrasing, so ordinary sentences that begin with \u{201C}I\u{201D} are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised."
@@ -154,7 +157,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
              .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback,
              .openFieldExtraction, .openFieldAsking, .openFactTypes,
-             .generatedSourceCoverage, .languageHonesty:
+             .generatedSourceCoverage, .languageHonesty, .inducedSchema:
             return true
         }
     }
@@ -167,6 +170,15 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .proseSubjectBinding, .aiSubjectResolution:
             return false   // ledger-scoping change — opt-in, old behaviour is the default
+        case .inducedSchema:
+            // The ONLY universality module that defaults OFF, and the only one
+            // that writes ledger facts a model had a hand in. P3.1/P3.2/P3.4 are
+            // deterministic and reproducible; this one is neither, and it has not
+            // yet been run against a real archive. A non-deterministic writer into
+            // the ledger should be a deliberate choice, not something a user
+            // discovers in their data. Its facts carry `.llmInduced`, so once it is
+            // switched on, everything it wrote stays identifiable forever.
+            return false
         case .openFieldExtraction, .openFieldAsking, .openFactTypes:
             // Defaults ON: this is the product's central promise, and a
             // universality feature nobody switches on is a universality
@@ -197,7 +209,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return "Extraction & search"
         case .openFieldExtraction, .openFieldAsking, .openFactTypes,
-             .generatedSourceCoverage, .languageHonesty:
+             .generatedSourceCoverage, .languageHonesty, .inducedSchema:
             return "Universality"
         }
     }
@@ -209,7 +221,7 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     public var requiresAI: Bool {
         switch self {
         case .aiSubjectResolution, .topicProsePolish, .aiComposeEveryAnswer,
-             .eventSlotFill, .hydeExpansion, .topicSeededComposers:
+             .eventSlotFill, .hydeExpansion, .topicSeededComposers, .inducedSchema:
             return true
         default:
             return false

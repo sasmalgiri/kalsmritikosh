@@ -52,6 +52,12 @@ public enum FactDerivation: String, Codable, Sendable, Hashable, CaseIterable {
     /// The scanner read digits as letters ("7OO321"); the digits were restored.
     /// `rawMatch` keeps the mangled form as the receipt.
     case ocrCorrected = "OCR_CORRECTED"
+    /// P3.3 — no rule could see this field, so the on-device model proposed the
+    /// FIELD NAME and the value was then located verbatim in the document's own
+    /// blocks. The model never asserted the value: a value that could not be
+    /// found was rejected rather than written. Only ever set on documents that
+    /// deterministic extraction left with zero facts.
+    case llmInduced = "LLM_INDUCED"
 
     /// What the receipt says about this value, in the reader's words.
     public nonisolated var receiptNote: String {
@@ -60,6 +66,10 @@ public enum FactDerivation: String, Codable, Sendable, Hashable, CaseIterable {
             return "assembled across a page break (the label and the value are in different blocks)"
         case .ocrCorrected:
             return "digits restored from an OCR misread (see the raw match for the scanned form)"
+        case .llmInduced:
+            return "the field name was proposed by the on-device model because no built-in rule "
+                 + "recognised this kind of document; the value itself was then found written in "
+                 + "the source and is cited where it appears"
         }
     }
 }
