@@ -84,6 +84,11 @@ public actor IngestCoordinator {
     private let events: EventsRepository?
     private let relationships: RelationshipsRepository?
     private let vectors: VectorStore?
+    /// P1.2 — where a TOLERATED failure is recorded instead of vanishing. See
+    /// DerivationFailureRepository for the corrupting-vs-lossy split this
+    /// enforces. Optional so existing call sites and tests compile unchanged;
+    /// when absent, a tolerated failure still reaches OSLog.
+    private let derivationFailures: DerivationFailureRepository?
     /// G2-SYNTHETIC-QUESTIONS — optional repository; when wired, the
     /// ingest pipeline generates and writes hypothetical questions for
     /// each chunk so the retriever can match question-shaped queries
@@ -204,6 +209,7 @@ public actor IngestCoordinator {
         events: EventsRepository? = nil,
         relationships: RelationshipsRepository? = nil,
         vectors: VectorStore? = nil,
+        derivationFailures: DerivationFailureRepository? = nil,
         syntheticQuestions: SyntheticQuestionsRepository? = nil,
         syntheticQuestionGenerator: (any SyntheticQuestionGenerator)? = nil,
         synthQueue: SyntheticQuestionQueue? = nil,
@@ -261,6 +267,7 @@ public actor IngestCoordinator {
         self.events = events
         self.relationships = relationships
         self.vectors = vectors
+        self.derivationFailures = derivationFailures
         self.syntheticQuestions = syntheticQuestions
         self.syntheticQuestionGenerator = syntheticQuestionGenerator
             ?? HeuristicSyntheticQuestionGenerator()
@@ -369,8 +376,20 @@ public actor IngestCoordinator {
                     unembeddable.insert(c.id)   // don't retry this one this session
                     continue                     // never persist a zero vector
                 }
-                try? await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
-                embedded += 1
+                // P1.2 — a failed upsert leaves the chunk simply ABSENT from
+                // chunk_embeddings, which reads identically to not-yet-drained.
+                // Coverage could never be honest about failed vs pending, so the
+                // reason is recorded and `embedded` is only incremented on an
+                // actual write.
+                do {
+                    try await vectors.upsert(chunkID: c.id, embedding: vectorsList[i])
+                    embedded += 1
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "embeddings.upsert", error: error,
+                        knowledgeObjectID: c.objectID)
+                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
             await pipelineMetrics?.bump(.embedded, by: embedded)
             try? await Task.sleep(nanoseconds: embedded == 0 ? 2_000_000_000 : 200_000_000)
@@ -395,8 +414,19 @@ public actor IngestCoordinator {
             var progressed = false
             for (i, c) in batch.enumerated() where i < vecs.count {
                 if vecs[i].isEmpty { continue }
-                try? await vectors.upsert(chunkID: c.id, embedding: vecs[i])
-                progressed = true
+                // P1.2 — same failed-vs-pending distinction as the background
+                // drain. `progressed` must reflect a real write, or the loop's
+                // stop condition below misreads a persistent write failure as
+                // forward progress and spins.
+                do {
+                    try await vectors.upsert(chunkID: c.id, embedding: vecs[i])
+                    progressed = true
+                } catch {
+                    await derivationFailures?.record(
+                        stage: "embeddings.upsert", error: error,
+                        knowledgeObjectID: c.objectID)
+                    KalsmritikoshLog.ingestion.error("Embedding upsert failed for chunk \(c.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                }
             }
             if !progressed { break }   // embedder can't produce vectors → stop
         }
@@ -1143,7 +1173,26 @@ public actor IngestCoordinator {
                                                             documentClass: docClass)
             if structuralReceipt != nil {
                 for link in blockOwnership {
-                    try? await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+                    // P1.2 — THE most consequential tolerated failure on this
+                    // path. linkBlocks is the single call that binds evidence
+                    // blocks to their KnowledgeObject; if it fails silently,
+                    // facts derived from those blocks cite evidence that cannot
+                    // resolve, and the claim-evidence contract — the product's
+                    // core promise — breaks with nothing recording it.
+                    //
+                    // Recorded rather than propagated because the blocks and the
+                    // KO both already exist and are correct; what is lost is the
+                    // link, which the report must be able to name so a
+                    // re-link can be targeted.
+                    do {
+                        try await evidenceStore.linkBlocks(link.blockIDs, toObject: link.ko, at: Date())
+                    } catch {
+                        await derivationFailures?.record(
+                            stage: "evidence.linkBlocks", error: error,
+                            knowledgeObjectID: link.ko, filePath: url.path,
+                            detectedType: type.rawValue)
+                        KalsmritikoshLog.ingestion.error("linkBlocks failed (\(link.blockIDs.count, privacy: .public) blocks) for \(url.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+                    }
                 }
             }
         }
@@ -1487,7 +1536,20 @@ public actor IngestCoordinator {
                     annotate(entity, source: .structuredHeader)
                 })
             }
-            let nerExtracted = (try? await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)) ?? []
+            // P1.2 — lossy: no entities from NER is less data, not wrong
+            // data, so this is tolerated. But the REASON is recorded, because
+            // "this document produced no people" and "the extractor threw"
+            // must not look identical in the Ingestion Report.
+            var nerExtracted: [Entity] = []
+            do {
+                nerExtracted = try await entityExtractor.extractEntities(from: object, chunks: chunked, blocks: blocks)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "entities.ner", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("NER extraction failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
             raw.append(contentsOf: nerExtracted.map { entity in
                 annotate(entity, source: .ner)
             })
@@ -1517,19 +1579,44 @@ public actor IngestCoordinator {
                 raw = entityQualityGate.filter(raw)
             }
             if let entityLinker { raw = entityLinker.link(raw) }
-            canonicalMapping = (try? await entities.insertBatch(raw)) ?? [:]
+            // P1.1 — THIS ONE PROPAGATES, and that is the whole fix.
+            //
+            // It was `(try? await entities.insertBatch(raw)) ?? [:]`. On failure
+            // `canonicalMapping` became EMPTY, and ~25 lines below
+            // `events.insertBatch(remapped)` writes events remapped THROUGH that
+            // mapping — so one swallowed error did not merely lose entities, it
+            // PERSISTED events whose entity references were never canonicalised.
+            // The corruption sat downstream of the failure and looked like valid
+            // data, which is worse than a dropped write because it can be cited.
+            //
+            // Failing this KO's derivation loudly is the correct trade: the
+            // caller already isolates per-file failures, so one bad file cannot
+            // end the run, and an aborted KO is visible where a corrupt one is
+            // not. NOT recorded in derivation_failures — that ledger is for
+            // TOLERATED losses, and this unit of work does not complete.
+            canonicalMapping = try await entities.insertBatch(raw)
             extractedEntities = raw
             await pipelineMetrics?.bump(.entities, by: raw.count)
             await writeDomainAliases(forEntities: raw, in: entities, sourceObjectID: object.id)
         }
 
         if let eventExtractor, let events {
-            let rawEvents = (try? await eventExtractor.extractEvents(
-                from: object,
-                chunks: chunked,
-                entities: extractedEntities,
-                blocks: blocks
-            )) ?? []
+            // P1.2 — lossy: recorded, tolerated.
+            var rawEvents: [Event] = []
+            do {
+                rawEvents = try await eventExtractor.extractEvents(
+                    from: object,
+                    chunks: chunked,
+                    entities: extractedEntities,
+                    blocks: blocks
+                )
+            } catch {
+                await derivationFailures?.record(
+                    stage: "events.extract", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Event extraction failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
             // Legal/patent MILESTONE events — the "story spine" the generic
             // extractor misses (filed / hearing / objection / granted). Dated,
             // high-trust, from official-document boilerplate. Deterministic.
@@ -1541,7 +1628,19 @@ public actor IngestCoordinator {
             let remapped = (rawEvents + milestoneEvents).map { event in
                 remapEventToCanonical(event, mapping: canonicalMapping)
             }
-            try? await events.insertBatch(remapped)
+            // P1.2 — a failed event INSERT loses dated evidence silently, so
+            // the reason is recorded. Not propagated: the KO's entities and
+            // chunks are already correct, and losing events is lossy, not
+            // corrupting.
+            do {
+                try await events.insertBatch(remapped)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "events.insert", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Event insert failed (\(remapped.count, privacy: .public) events) for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
             await pipelineMetrics?.bump(.events, by: remapped.count)
             extractedEvents = remapped
         }
@@ -1603,7 +1702,16 @@ public actor IngestCoordinator {
                     viaEventID: edge.viaEventID
                 )
             }
-            try? await relationships.upsertEdges(upserts, sourceObjectID: object.id)
+            // P1.2 — lossy: relationship edges are additive.
+            do {
+                try await relationships.upsertEdges(upserts, sourceObjectID: object.id)
+            } catch {
+                await derivationFailures?.record(
+                    stage: "relationships.upsert", error: error,
+                    knowledgeObjectID: object.id, filePath: object.sourceFile.path,
+                    detectedType: object.sourceType.rawValue)
+                KalsmritikoshLog.ingestion.error("Relationship upsert failed for \(object.sourceFile.lastPathComponent, privacy: .private): \(String(describing: error), privacy: .public)")
+            }
         }
 
         // G3.12 — typed bonds. Runs after the entity-entity edge write

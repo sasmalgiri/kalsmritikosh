@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 129
+    public static let latestVersion = 130
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -660,7 +660,8 @@ public enum SchemaMigrations {
         (126, v126),
         (127, v127),
         (128, v128),
-        (129, v129)
+        (129, v129),
+        (130, v130)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6520,5 +6521,45 @@ public enum SchemaMigrations {
     // defect it would be.
     private static let v129: String = """
     ALTER TABLE generic_facts ADD COLUMN derivation TEXT;
+    """
+
+    // MARK: - v130 — P1.2: derivation failures get a REASON that survives
+    //
+    // The ingest path carried 11 `try? await <persist>` sites. Each turned a
+    // real database or extractor failure into silence: the row simply was not
+    // there afterwards, indistinguishable from "there was nothing to write".
+    // For a tool whose product is evidence that is the worst possible loss —
+    // an examiner cannot tell "not in the container" from "failed to parse",
+    // and a chunk missing an embedding reads identically to one not yet
+    // drained.
+    //
+    // This table is where a tolerated failure goes. Stages that CORRUPT on
+    // failure now propagate instead (see P1.1); stages that merely lose
+    // something additive record here and carry on, so the Ingestion Report can
+    // say what was lost and why rather than reporting a smaller number with no
+    // explanation.
+    //
+    // `stage` is a producer id ("entities.insert", "evidence.linkBlocks",
+    // "embeddings.upsert", "member.ingest"); `reason` is the error's
+    // description, truncated at the writer. Both source_version_id and
+    // knowledge_object_id are NULLABLE because some failures happen before
+    // either exists. Derived + advisory: never sealed, never gates an answer.
+    private static let v130: String = """
+    CREATE TABLE IF NOT EXISTS derivation_failures (
+        id                  TEXT PRIMARY KEY NOT NULL,
+        source_version_id   TEXT,
+        knowledge_object_id TEXT,
+        file_path           TEXT,
+        detected_type       TEXT,
+        stage               TEXT NOT NULL,
+        reason              TEXT NOT NULL,
+        occurred_at         REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_stage
+        ON derivation_failures(stage);
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_type
+        ON derivation_failures(detected_type);
+    CREATE INDEX IF NOT EXISTS idx_derivation_failures_sv
+        ON derivation_failures(source_version_id);
     """
 }
