@@ -14,6 +14,46 @@
 - Tiers are ordered by dependency. Tier 0 precedes the re-ingest because a
   report over a ledger that can silently corrupt itself measures the wrong thing.
 - Nothing here is "polish". Items I judged cosmetic are not listed.
+- **Completeness is claimed only as far as §0 states.** Eight feature lanes
+  were missing from the first version of this list; they are now in §0 and
+  TIER A. A list that hides its own gaps is worse than a short one.
+
+---
+
+## §0 · COVERAGE LEDGER — every lane, and whether this list actually covers it
+
+Added 2026-09-24 after the owner asked for a list with nothing left out. Checking
+my own list against the generated lane inventory in `PIPELINE_MATRIX.md` showed
+it did NOT cover everything: it covered the ingest→answer spine and silently
+omitted eight feature lanes holding roughly 50 tables. That omission is recorded
+here rather than quietly fixed, because "nothing left out" is only credible if
+the gaps in the list itself are visible.
+
+I cannot write honest acceptance criteria for code I have not read. So lanes
+split into two kinds: **AUDITED** (traced, with findings and criteria in the
+tiers below) and **NOT AUDITED** (listed, with an audit unit in TIER A — never
+assumed working, never assumed broken).
+
+| lane | tables | status | where |
+|---|---|---|---|
+| `Ingestion/*` (Intake, Container, Readiness, Upgrade) | 8 | **AUDITED** | Tier 0, Tier 2, Tier U |
+| `Knowledge/Ontology` + DomainPacks | — | **AUDITED** | Tier U (the universality gap) |
+| `Knowledge/Topics` | 4 | **AUDITED** | T4-1 (#77) |
+| `Knowledge/Boilerplate` | 2 | **AUDITED** | T1-4 (F-9) |
+| `Knowledge/Backfill` | 3 | **AUDITED** | drain sequencing, Tier U |
+| History (`history_*`) | 6 | **AUDITED** | T1-1 (F-2), T4-2 (#78) |
+| `Brain/*` + `Retrieval/*` (answer + 8 layers) | 4 | **AUDITED** | Tier 5 |
+| `Storage/Repositories` · `Storage/Schema` | 122 | **PARTLY** — the spine's tables traced; the rest counted, not read | Tier 6, TIER A-8 |
+| **`Workbench`** (DataLab) | **14** | **NOT AUDITED** | **TIER A-1** |
+| **`Personas`** | **12+1** | **NOT AUDITED** | **TIER A-2** |
+| **`Method`** (professional methods) | **10** | **NOT AUDITED** | **TIER A-3** |
+| **`Workflow`** (automation) | **4** | **NOT AUDITED** | **TIER A-4** |
+| **`Jobs`** | **3** | **NOT AUDITED** | **TIER A-5** |
+| **`WorkCenter`** | **3** | **NOT AUDITED** | **TIER A-6** |
+| **`Shell`** · **`Sutra`** · **`Forensics`** · **`Knowledge/Twins`** | **5** | **NOT AUDITED** | **TIER A-7** |
+| Investigation (`investigation_*`) | in Storage/Repositories | **NOT AUDITED** | **TIER A-8** |
+| UI (`Kalsmritikosh/UI/*`) | — | **NOT AUDITED** | **TIER A-9** |
+| Privacy / security (PrivacyGate, `sensitive_scope_*`, injection guard) | — | **PARTLY** — tests exist and pass; no adversarial pass by me | **TIER A-10** |
 
 ---
 
@@ -335,6 +375,98 @@ partial run again.
 
 ---
 
+## TIER A — AUDIT the lanes this list had omitted
+
+Each unit is the SAME method that produced Tiers 0–6: trace the call chain, read
+the producers, record findings with `file:line`, mark anything unestablished
+UNKNOWN, then write acceptance criteria. An audit unit's output is a findings
+list plus its own todo items — so these are the only items here whose scope
+cannot be stated up front. That is the honest position, not a hedge.
+
+**Every one of these lanes ships in the product today.** They are not dead code:
+they have tables, producers and (mostly) tests. What is missing is MY
+verification of them, which is exactly what the owner asked me to stop assuming.
+
+### A-1 · Workbench / DataLab — 14 tables
+`workbench_datasets`, `_rows`, `_fields`, `_cells`, `_scenarios`,
+`_scenario_operations`, `_transformations`, `_derivations`, `_source_bindings`,
+`_saved_views`, `_dataset_events`, `_scenario_reviews`, `_derivation_inputs`.
+**Audit for:** cell→evidence binding integrity (every value drillable to a
+source), scenario projection leaving the base untouched, derivation
+reproducibility, and whether a dataset can silently diverge from the ledger it
+was built from.
+
+### A-2 · Personas — 13 tables
+Persona job catalog, deliverables, work products (`work_product_*`),
+`professional_*`. Existing suites: `Persona*Tests`, `WorkProduct*Tests`.
+**Audit for:** every persona job routing to a REAL implementation or failing
+closed honestly (the catalog claims 23+ jobs); work-product exports carrying
+custody + citations; persona invariance (no persona bypasses the scope filter).
+
+### A-3 · Professional methods — 10 tables
+`method_nodes`, `_edges`, `_runs`, `_run_events`, `_findings`, `_assumptions`,
+`_reviews`, `_validation_results`, `_evidence_links`, `case_method_runs`.
+**Audit for:** a method run being reproducible from its recorded inputs;
+findings bound to evidence; assumptions surfaced rather than buried; the
+lifecycle gates actually gating.
+
+### A-4 · Workflow automation — 4 tables
+`workflow_runs`, `_step_runs`, `_run_events`, `workflow_automation_executions`,
+plus `workflow_artifacts`, `_checkpoints`, `_decisions`, `_provenance_*`.
+**Audit for:** an automation that fails mid-run leaving a resumable, honest
+state; provenance snapshots being complete; no automation writing to the ledger
+outside the gated doors.
+
+### A-5 · Jobs — 3 tables
+`job_objectives`, `job_events`, `job_plan_references`.
+**Audit for:** objective→plan→evidence traceability, and whether a job can claim
+completion without its objective being met.
+
+### A-6 · WorkCenter — 3 tables
+`work_center_counters`, `_documents`, `_record_edits`.
+**Audit for:** record edits being append-only and attributable; counters
+reconciling with the underlying rows rather than drifting.
+
+### A-7 · Shell · Sutra · Forensics · Twins — 5 tables
+`shell_sessions` + navigation, the SOP/sutra register, the forensic host-artifact
+lane's own table, `ComposeTwin`.
+**Audit for:** the SOP register being the authority it claims (owner positioning:
+features are SOP expressions); twin composition determinism.
+
+### A-8 · Investigation lane
+`investigations`, `investigation_cases`, `_case_sources`, `_case_events`,
+`_subjects`, `_steps`, `_hypotheses`, `_hypothesis_evidence`,
+`_identity_decisions`, `_desk_reviews`, `_findings_approvals`,
+`_evidence_requests`, `_scope_artifacts`, `_case_closures`,
+`_worksheet_cells`. Existing: `Investigation*Tests`, INV-01-A/B.
+**Audit for:** case scope being a HARD boundary (the recorded lesson: case-scope
+retrieval enforcement, not stub registration); one fingerprint across Ask /
+Methods / DataLab; staleness on scope change; and that
+`investigation_steps`/`investigations` — both flagged untested in
+`PIPELINE_MATRIX.md` — get coverage.
+
+### A-9 · UI surfaces
+Not audited at all by me, and I cannot click. **Audit for (statically):** every
+Destination reachable from the palette (a guard exists and just caught the
+missing `modules` anchor); no answer-surface file reading `rawMatch` (a guard
+exists); the new v129 `derivation` being SURFACED on the receipt — a repair the
+user cannot see is not an honest repair; and the registries from T1-7 having a
+view once they have producers.
+**OWNER remains required** for visual verification; A-9 only removes the
+statically checkable part from your plate.
+
+### A-10 · Privacy / security adversarial pass
+Tests exist and pass (`SensitiveScopeEndToEndTests`, `PromptInjectionGuard`,
+`ENABLE_OUTGOING_NETWORK_CONNECTIONS = NO` in both configs). I have not run an
+adversarial pass.
+**Audit for:** no network call reachable outside `Routing/Providers`; PrivacyGate
+filtering cloud providers out of capability resolution under every regime;
+injection defanged not obeyed on real document text; sensitive scope fail-CLOSED
+on a nil repository; and that erase genuinely leaves nothing (Tier 2's erase
+proof covers the data, this covers the caches).
+
+---
+
 ## TIER 7 — release
 
 | id | item | who |
@@ -378,6 +510,8 @@ T3-1 → T3-2                        the chain is proven and stable
 T4-1, T4-2                         topics + history on real data
 T5-1 → T5-2 → T5-3                 answers machine-checked, latency fixed
 T6-1 → T6-2 → T6-3                 no unverified producer left
+A-1 … A-10                         audit the 8 omitted lanes (each
+                                   yields its own findings + todos)
 T7                                 ship gate
 ```
 
