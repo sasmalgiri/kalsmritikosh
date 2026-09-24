@@ -54,6 +54,7 @@ Coverage states (from the locked product contract):
 | amcache (Amcache.hve) | hostArtifact | FULL | windows-amcache | 1 |
 | masterFileTable ($MFT) | hostArtifact | FULL | ntfs-master-file-table | 1 |
 | jumpList (*Destinations-ms) | hostArtifact | FULL | windows-jump-list | 1 |
+| prefetch (.pf, v17/23/26) | hostArtifact | FULL | windows-prefetch | 1 |
 | knowledgeC | hostArtifact | FULL | apple-knowledgec | 1 |
 | custodyManifest | document | FULL | chain-of-custody | 1 |
 | extractionManifest | hostArtifact | FULL | ios-backup-manifest | 1 |
@@ -73,7 +74,7 @@ Coverage states (from the locked product contract):
 | safariHistory, chromeHistory | browserHistory | PRESERVED-ONLY | — | — |
 | zip, rar, sevenZip | archive | CONTAINER | — | — |
 
-**Totals (code-generated): 35 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
+**Totals (code-generated): 36 FULL · 7 PARTIAL · 10 media · 9 PRESERVED-ONLY/CONTAINER.**
 
 The media row is the one entry whose coverage depends on a user setting, so it is stated as a
 pair. The 10 audio/video types are PARTIAL (ASR) with the default-ON "Transcribe audio & video"
@@ -349,6 +350,25 @@ derives this table from it so the matrix cannot drift from what actually runs.
   access count as though it had been read. The target-timestamp disclaimer from the shortcut
   entry rides along in every time block.
 
+- **Windows Prefetch (`*.pf`, HOST-6d)** is the ONE artifact in this lane that evidences
+  **execution**. Amcache proves a file was present (a scheduled scan saw it on disk); a
+  shortcut proves a file was pointed at; a prefetch file exists because Windows watched the
+  executable RUN, counted the runs, and stamped when they happened. Versions 17 (XP/2003),
+  23 (Vista/7) and 26 (Windows 8.x) are read completely — executable name, path hash, run
+  count, and on version 26 the last EIGHT run times, which makes one file a short execution
+  history rather than a single point. Unused run slots are dropped rather than dated to 1601.
+  **What it does not establish:** prefetch records a HASH of the full run path, not the path.
+  Two entries with the same name and different hashes are the same program run from DIFFERENT
+  locations — frequently the finding — but the artifact cannot say which, and no location is
+  guessed; a test asserts no drive or directory is invented. **Windows 10+ files are
+  compressed** with LZXPRESS Huffman behind a `MAM\x04` header. Such a file is reported as
+  present-and-not-decompressed with its declared uncompressed size and status PARTIAL: its
+  existence still evidences that a program ran, and the executable name is in the filename,
+  but the run times and count are NOT invented. The decompressor is not implemented because it
+  cannot be verified here — a fixture built from the same reading of the spec as the decoder
+  would let a shared misunderstanding pass its own test — which is the same ruling as EVTX
+  BinXML. An unrecognised format version is named rather than decoded at guessed offsets.
+
 - **Chain of custody (HOST-8)** is read from an examiner-authored JSON sidecar at the
   extraction root (`kalsmritikosh-custody.json`, `custody.json` or `chain-of-custody.json`):
   case and evidence numbers, examiner, agency, legal authority, acquisition tool and date,
@@ -397,12 +417,6 @@ derives this table from it so the matrix cannot drift from what actually runs.
 An extraction containing these keeps them with identity, hash and dates, and they stay
 searchable by name — they are simply not interpreted yet:
 
-- **Prefetch** — the Win7-era format is plain, but Windows 10 and later compress the whole
-  file with LZXPRESS Huffman behind a `MAM\x04` header. Implementing that decompressor is
-  possible; verifying it is the problem, because the only fixture available would come from an
-  encoder written to the same reading of the spec, so a shared misunderstanding of the bit
-  order would pass its own tests. Same ruling as EVTX BinXML: not shipped rather than shipped
-  unverified.
 - **`journald`** binary journals (`*.journal`). The examiner's normal export path
   (`journalctl -o json` / `-o export`) produces JSON or text that IS already ingested, so the
   gap is the binary container rather than the log's content.

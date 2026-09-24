@@ -58,6 +58,11 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
     /// Its own type because the ASSOCIATION between an application and a file is
     /// the fact it adds over a loose shortcut.
     case jumpList
+    /// HOST-6d — a Windows prefetch file (`*.pf`). Its own type because it is
+    /// the ONE artifact here that evidences EXECUTION: Windows creates it
+    /// because it watched the program run, and records a run count plus (on
+    /// Windows 8+) the last eight run times.
+    case prefetch
     /// HOST-8b — an iOS backup's `Manifest.db`: the SHA-1-to-device-path mapping
     /// without which the backup's 40 000 files are anonymous blobs. Its own type
     /// because the INVENTORY is a distinct forensic fact from the file contents —
@@ -281,6 +286,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         case "lnk": return .shellLink
         case "mft": return .masterFileTable
         case "automaticdestinations-ms", "customdestinations-ms": return .jumpList
+        case "pf": return .prefetch
         case "png": return .png
         case "jpg", "jpeg": return .jpg
         case "heic": return .heic
@@ -341,6 +347,10 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         if has([0x4C, 0x00, 0x00, 0x00] + Array(ShellLinkReader.linkCLSID.prefix(12))) {
             return .shellLink
         }
+        // HOST-6d — prefetch: the version tag then "SCCA" at offset 4, or the
+        // "MAM" container Windows 10 wraps it in. Renamed evidence stays found.
+        if b.count >= 8, Array(b[4..<8]) == Array("SCCA".utf8) { return .prefetch }
+        if has([0x4D, 0x41, 0x4D, 0x04]) { return .prefetch }
         return nil
     }
 
@@ -366,7 +376,7 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
              .html, .json, .xml, .log, .sqlite, .plist, .custodyManifest: return .document
         case .registryHive, .knowledgeC, .extractionManifest, .eventLog,
              .loginRecord, .shellHistory, .shellLink, .amcache,
-             .masterFileTable, .jumpList: return .hostArtifact
+             .masterFileTable, .jumpList, .prefetch: return .hostArtifact
         // People talking — the same ontological shape as a chat thread, which is
         // what FactTypeClassifier already treats as a conversation between people.
         case .discussionExport: return .chat

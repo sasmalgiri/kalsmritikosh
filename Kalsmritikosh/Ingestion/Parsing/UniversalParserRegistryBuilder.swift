@@ -26,7 +26,7 @@ public enum UniversalParserRegistryBuilder {
             TextLoader(), PDFLoader(ocr: ocr), DocxLoader(), SpreadsheetLoader(), PresentationLoader(),
             EpubLoader(), EmailLoader(), ImageLoader(ocr: ocr), ArchiveLoader(), PlistLoader(), RegistryHiveLoader(),
             SQLiteLoader(), DiscussionExportLoader(), CustodyManifestLoader(),
-            EVTXLoader(), UtmpLoader(), ShellLinkLoader(), AmcacheLoader(), MFTLoader(), JumpListLoader()
+            EVTXLoader(), UtmpLoader(), ShellLinkLoader(), AmcacheLoader(), MFTLoader(), JumpListLoader(), PrefetchLoader()
         ]
         if iMessageEnabled { loaders.append(IMessageLoader()) }
         if browserHistoryEnabled { loaders.append(BrowserHistoryLoader()) }

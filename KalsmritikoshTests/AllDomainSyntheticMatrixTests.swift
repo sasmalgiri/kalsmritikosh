@@ -174,6 +174,14 @@ struct AllDomainSyntheticMatrixTests {
             // HOST-1 — binary, because that is the format that used to yield nothing.
             return try? PropertyListSerialization.data(
                 fromPropertyList: ["Note": "\(s)."], format: .binary, options: 0)
+        case .prefetch:
+            // HOST-6d — a real Windows 8 prefetch file. The sentinel rides in
+            // the executable name, which is what the artifact evidences.
+            var writer = PrefetchFixtureWriter()
+            writer.executableName = "\(s).EXE"
+            writer.runCount = 3
+            writer.runTimes = [Date(timeIntervalSince1970: 1_773_480_413)]
+            return writer.build()
         case .jumpList:
             // HOST-6b — an automatic jump list: an MS-CFB container whose stream
             // is a real shell link. The sentinel rides in the target path.
