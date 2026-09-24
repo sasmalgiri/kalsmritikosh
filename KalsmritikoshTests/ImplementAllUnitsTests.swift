@@ -674,3 +674,177 @@ struct DiagnosticQueryExecutionTests {
         #expect(unclaimed.count >= 0)
     }
 }
+
+// MARK: - End to end, against a really booted AppState
+
+@Suite("The diagnostics run end-to-end on a booted app", .serialized)
+@MainActor
+struct DiagnosticEndToEndTests {
+
+    // The suites above prove each QUERY prepares. They still cannot prove that
+    // `DataHealthCheck.run` reaches every section, because the sections are
+    // sequenced inside one long function behind an AppState — and one throw
+    // early on would skip the rest while still writing a report that LOOKS
+    // complete. That is the failure mode this project keeps finding, so it is
+    // worth an actual boot.
+
+    private func bootedState() async throws -> (AppState, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("e2e-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let state = AppState(bookmarks: BookmarkStore(ephemeral: true))
+        await state.boot(databaseURL: dir.appendingPathComponent("db.sqlite"))
+        return (state, dir)
+    }
+
+    @Test("The Ingestion Report reaches EVERY section, including the five new ones",
+          .timeLimit(.minutes(5)))
+    func dataHealthReportIsComplete() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot (phase=\(state.phase)) — the report was NOT verified end-to-end")
+            await state.shutdown()
+            return
+        }
+        defer { Task { await state.shutdown() } }
+
+        let result = try await DataHealthCheck.run(state)
+        let md = try String(contentsOf: result.reportURL, encoding: .utf8)
+
+        // Each new section must be PRESENT. A missing heading means its block
+        // threw and the report carried on without it — complete-looking and
+        // quietly partial.
+        let required = [
+            "What produced this report",            // P4.4 attribution stamp
+            "Did every document finish deriving",   // P1.3
+            "Why is something missing",             // P1.2
+            "What can each format give you",        // P3.5
+            "Why do you see the topics you see",    // B-1
+            "Why do you see the stories you see",   // B-2
+            "One ledger, checked",                  // S-0b
+            "What this report does NOT tell you",   // the limits section
+        ]
+        for heading in required {
+            #expect(md.contains(heading), "the report is missing its “\(heading)” section")
+        }
+        // The stamp must carry real values, not placeholders.
+        #expect(md.contains("schema version | v\(SchemaMigrations.latestVersion)"),
+                "the attribution stamp does not name the live schema version")
+        // An empty ledger must NOT be reported as a clean bill of health.
+        #expect(md.contains("does NOT tell you"),
+                "the limits section is what stops an empty report reading as a pass")
+    }
+
+    @Test("Tracing with nothing ingested fails with a REASON, not a crash",
+          .timeLimit(.minutes(5)))
+    func goldenThreadOnEmptyLedger() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — the trace was NOT verified end-to-end")
+            await state.shutdown()
+            return
+        }
+        defer { Task { await state.shutdown() } }
+
+        // The correct behaviour on an empty ledger is a clear refusal. Before
+        // the column-name fix this threw the SAME WAY for the wrong reason —
+        // which is why the message, not just the throw, is asserted.
+        await #expect(throws: (any Error).self) {
+            _ = try await GoldenThread.trace(state)
+        }
+        do {
+            _ = try await GoldenThread.trace(state)
+        } catch {
+            let msg = (error as NSError).localizedDescription
+            #expect(msg.contains("No documents are ingested"),
+                    "got “\(msg)” — an empty ledger must say so, not report a SQL error")
+        }
+    }
+
+    @Test("The drift check runs the whole chain and reports a holding fixed point",
+          .timeLimit(.minutes(5)))
+    func fixedPointCheckRuns() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — the drift check was NOT verified end-to-end")
+            await state.shutdown()
+            return
+        }
+        defer { Task { await state.shutdown() } }
+
+        // This is the one diagnostic that WRITES, and it runs every maintenance
+        // pass three times. On an unchanged ledger the answer must be that the
+        // fixed point HOLDS — if it does not, one of those passes writes on
+        // every launch, which is the drift this exists to catch.
+        let result = try await FixedPointCheck.run(state)
+        #expect(result.tablesChecked > 0, "no tables were fingerprinted — the comparison was vacuous")
+        #expect(result.holds,
+                "fixed point VIOLATED on an untouched ledger: \(result.changes.map { "\($0.table) \($0.describe)" })")
+        let md = try String(contentsOf: result.reportURL, encoding: .utf8)
+        #expect(md.contains("This check WRITES"),
+                "the report must disclose that it mutates, not bury it")
+        #expect(md.contains("does NOT tell you"))
+        // The weaker count-only comparison must be disclosed when it applies.
+        if result.countOnlyTables > 0 {
+            #expect(md.contains("ROW COUNT ONLY"),
+                    "a partial check must say it is partial")
+        }
+    }
+
+    @Test("A full erase is VERIFIED empty, not merely attempted",
+          .timeLimit(.minutes(5)))
+    func eraseIsVerified() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — the erase proof was NOT verified end-to-end")
+            await state.shutdown()
+            return
+        }
+        defer { Task { await state.shutdown() } }
+
+        // Put a row in, so the erase has something to remove and the residue
+        // check has something it could fail on.
+        let db = try #require(state.database)
+        try await db.exec("""
+        INSERT INTO files (id, url, source_type, size_bytes, modified_at, ingested_at, content_hash)
+        VALUES (?, '/tmp/erase-me.txt', 'text', 5, 0, 0, 'h');
+        """, [.uuid(UUID())])
+        let before = (try? await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0)) ?? 0
+        #expect((before ?? 0) > 0, "the fixture row did not land, so this proves nothing")
+
+        let cleared = await state.deleteAllData()
+        #expect(cleared > 0, "no tables were cleared")
+        // THE POINT: the count of DELETE statements attempted is not proof.
+        // `eraseResidue` counts the rows back, and empty is the only pass.
+        #expect(state.eraseResidue.isEmpty,
+                "erase left rows behind: \(state.eraseResidue.map { "\($0.table)=\($0.rows)" })")
+        let after = (try? await db.query("SELECT COUNT(*) FROM files;", []).first?.int(0)) ?? 0
+        #expect((after ?? -1) == 0, "the row survived an erase that reported success")
+    }
+
+    @Test("The answer harness declines an empty ledger instead of passing it",
+          .timeLimit(.minutes(5)))
+    func answerHarnessSkipsEmptyLedger() async throws {
+        let (state, dir) = try await bootedState()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        guard case .ready = state.phase else {
+            Issue.record("AppState did not boot — the harness was NOT verified end-to-end")
+            await state.shutdown()
+            return
+        }
+        defer { Task { await state.shutdown() } }
+
+        let result = try await AnswerHarness.run(state, maxDerivedProbes: 1)
+        // "0 failures" over an empty archive is the emptiest possible pass, so
+        // it must skip WITH a reason and spend no model calls.
+        #expect(result.skipReason != nil, "an empty ledger must be skipped explicitly")
+        #expect(result.probes.isEmpty)
+        #expect(result.summary.contains("Not run"))
+        let md = try String(contentsOf: result.reportURL, encoding: .utf8)
+        #expect(md.contains("not a pass"), "the report must refuse to read as a pass")
+    }
+}
