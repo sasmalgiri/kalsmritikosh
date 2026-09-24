@@ -26,8 +26,26 @@ public struct ProjectDeltaSmokeResult: Sendable {
     public let answer: VerifiedAnswer
     public let assertionsPassed: [String]
     public let assertionsFailed: [String]
+    /// Checks that did NOT verify anything: either they could not run (a
+    /// fixture is not bundled) or only a weaker signal was available than the
+    /// check set out to prove.
+    ///
+    /// These used to be appended to `assertionsPassed`, and
+    /// `assertionsPassed.count` is the headline "N checks passed" quoted in
+    /// Settings, Gate1Baseline and ReleaseReadiness — so the pass count
+    /// included checks that never executed. A smoke test is the thing that is
+    /// supposed to tell you the app works; it must not count its own gaps as
+    /// evidence that it does.
+    public let assertionsNotVerified: [String]
 
+    /// Still keyed on failures only: "not verified" is an unknown, not a
+    /// failure, and must not turn a green run red. It is surfaced instead.
     public var ok: Bool { assertionsFailed.isEmpty }
+
+    /// True when the run proved everything it set out to prove. `ok` can be
+    /// true while this is false — that is exactly the state the old report
+    /// could not express.
+    public var fullyVerified: Bool { ok && assertionsNotVerified.isEmpty }
 }
 
 @MainActor
@@ -99,6 +117,7 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     let memoryCount = (try? await memory.count()) ?? 0
     var passed: [String] = []
     var failed: [String] = []
+    var notVerified: [String] = []
 
     if ingested >= 5 { passed.append("ingested \(ingested) fixture files") }
     else { failed.append("expected >=5 ingested files, got \(ingested)") }
@@ -140,7 +159,10 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
     if citedSupplierEvidence {
         passed.append("cited Supplier ABC evidence file (deterministic citation-source check)")
     } else if body.contains("supplier abc") || body.contains("supplier_abc") {
-        passed.append("body mentions Supplier ABC (soft signal — no citation resolved to a supplier_abc_* file)")
+        // The strict check — a citation resolving to a supplier_abc_* file —
+        // did NOT hold. A body mention is a weaker signal and is recorded as
+        // such rather than as the check passing.
+        notVerified.append("cited Supplier ABC evidence file: NOT verified — the body mentions Supplier ABC but no citation resolved to a supplier_abc_* file")
     } else {
         failed.append("answer neither cited a supplier_abc_* file nor mentioned Supplier ABC")
     }
@@ -185,7 +207,10 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         // the legacy expert pipeline — acceptable if the intent
         // detector classified the question as a flat lookup, but
         // we surface it so the developer knows.
-        passed.append("HISTORY: legacy expert path (no chapters) — intent=\(v.intentKind ?? "unknown")")
+        // The composer produced no chapters, so the history path was not
+        // exercised. Acceptable if the intent was a flat lookup — but nothing
+        // about chapters was verified.
+        notVerified.append("HISTORY composer: NOT verified — 0 chapters, answered via the legacy expert path (intent=\(v.intentKind ?? "unknown"))")
     } else {
         failed.append("HISTORY: composer produced 0 chapters AND brain refused or returned nil")
     }
@@ -240,7 +265,10 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
             failed.append("P6.1 ground-truth eval failed: \(error)")
         }
     } else {
-        passed.append("P6.1 ground-truth: fixture not bundled (add Resources/Eval/ground-truth-projectdelta.json to Copy Resources)")
+        // The evaluation did not run at all. Counting that as a pass was the
+        // clearest instance of the defect: a missing fixture read as evidence
+        // of quality.
+        notVerified.append("P6.1 ground-truth eval: DID NOT RUN — fixture not bundled (add Resources/Eval/ground-truth-projectdelta.json to Copy Resources)")
     }
 
     // T1 — calibrated confidence aggregation (replaces noisy-OR).
@@ -1295,10 +1323,11 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
         memoryObjectCount: memoryCount,
         answer: answer,
         assertionsPassed: passed,
-        assertionsFailed: failed
+        assertionsFailed: failed,
+        assertionsNotVerified: notVerified
     )
     if result.ok {
-        KalsmritikoshLog.app.info("ProjectDelta smoke test PASSED (\(result.assertionsPassed.count, privacy: .public) checks)")
+        KalsmritikoshLog.app.info("ProjectDelta smoke test PASSED (\(result.assertionsPassed.count, privacy: .public) verified, \(result.assertionsNotVerified.count, privacy: .public) NOT verified)")
     } else {
         KalsmritikoshLog.app.error("ProjectDelta smoke test FAILED — \(result.assertionsFailed.joined(separator: "; "), privacy: .public)")
     }
@@ -1312,12 +1341,23 @@ public func runProjectDeltaSmokeTest() async throws -> ProjectDeltaSmokeResult {
 /// can be inspected after the fact (OSLog .info isn't persisted to disk).
 @MainActor
 private func writeSmokeReport(_ result: ProjectDeltaSmokeResult) {
-    var md = "# ProjectDelta SmokeTest — \(result.ok ? "PASSED ✅" : "FAILED ❌")\n\n"
+    var md = "# ProjectDelta SmokeTest — "
+    md += result.ok
+        ? (result.fullyVerified ? "PASSED ✅" : "PASSED with gaps ⚠️")
+        : "FAILED ❌"
+    md += "\n\n"
     md += "- ingested: \(result.ingested)\n"
     md += "- entities: \(result.entityCount)  ·  events: \(result.eventCount)  ·  memory: \(result.memoryObjectCount)\n"
-    md += "- checks passed: \(result.assertionsPassed.count)  ·  failed: \(result.assertionsFailed.count)\n\n"
+    md += "- checks verified: \(result.assertionsPassed.count)  ·  failed: \(result.assertionsFailed.count)"
+    md += "  ·  NOT verified: \(result.assertionsNotVerified.count)\n\n"
     if !result.assertionsFailed.isEmpty {
         md += "## Failures\n\n" + result.assertionsFailed.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
+    }
+    if !result.assertionsNotVerified.isEmpty {
+        md += "## Not verified (\(result.assertionsNotVerified.count))\n\n"
+        md += "These checks did not prove what they set out to prove. A PASSED run with "
+        md += "entries here is green on the checks it COULD make, not on all of them.\n\n"
+        md += result.assertionsNotVerified.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
     }
     md += "## Passed\n\n" + result.assertionsPassed.map { "- \($0)" }.joined(separator: "\n") + "\n\n"
     md += "## Answer\n\n- state: \(result.answer.answerState.rawValue)\n"

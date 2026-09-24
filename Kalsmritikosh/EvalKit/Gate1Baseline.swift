@@ -925,8 +925,9 @@ public enum Gate1Baseline {
         md += "## 1. Smoke test\n\n"
         if let smoke {
             md += smoke.ok ? "**Status:** ✓ PASSED\n\n" : "**Status:** ✗ FAILED\n\n"
-            md += "- Checks passed: \(smoke.assertionsPassed.count)\n"
+            md += "- Checks verified: \(smoke.assertionsPassed.count)\n"
             md += "- Checks failed: \(smoke.assertionsFailed.count)\n"
+            md += "- Checks NOT verified: \(smoke.assertionsNotVerified.count)\n"
             md += "- Ingested files: \(smoke.ingested)\n"
             md += "- Entities: \(smoke.entityCount), Events: \(smoke.eventCount), Memory: \(smoke.memoryObjectCount)\n"
             md += "- Answer refused: \(smoke.answer.refused), citations: \(smoke.answer.citations.count), confidence: \(String(format: "%.2f", smoke.answer.confidence.value))\n\n"

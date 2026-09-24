@@ -856,7 +856,11 @@ public struct SettingsView: View {
             allDiagnosticsURL = result.summaryURL
             let smokeLine: String
             if let smoke = result.smoke {
-                smokeLine = "Smoke: \(smoke.ok ? "✓" : "✗") \(smoke.assertionsPassed.count) passed, \(smoke.assertionsFailed.count) failed"
+                // "verified" rather than "passed": the count excludes checks
+                // that could not run, which it silently included before.
+                smokeLine = "Smoke: \(smoke.ok ? (smoke.fullyVerified ? "✓" : "⚠️") : "✗") "
+                    + "\(smoke.assertionsPassed.count) verified, \(smoke.assertionsFailed.count) failed"
+                    + (smoke.assertionsNotVerified.isEmpty ? "" : ", \(smoke.assertionsNotVerified.count) not verified")
             } else {
                 smokeLine = "Smoke: ⚠️ \(result.smokeError ?? "no result")"
             }
@@ -1010,7 +1014,7 @@ public struct SettingsView: View {
             let result = try await runProjectDeltaSmokeTest()
             smokeFailures = result.assertionsFailed
             smokeStatus = """
-            \(result.ok ? "✓ PASSED" : "✗ FAILED") — \(result.assertionsPassed.count) checks, \(result.assertionsFailed.count) failures
+            \(result.ok ? (result.fullyVerified ? "✓ PASSED" : "⚠️ PASSED with gaps") : "✗ FAILED") — \(result.assertionsPassed.count) verified, \(result.assertionsFailed.count) failures, \(result.assertionsNotVerified.count) not verified
             ingested: \(result.ingested) files · entities: \(result.entityCount) · events: \(result.eventCount) · memory: \(result.memoryObjectCount)
             answer refused: \(result.answer.refused) · citations: \(result.answer.citations.count) · confidence: \(String(format: "%.2f", result.answer.confidence.value))
             """
