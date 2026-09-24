@@ -11,6 +11,20 @@
 //  Pure read-only: never writes back to any table. Safe to run any
 //  time on production data.
 //
+//  A FAILED PROBE IS NOT A CLEAN RESULT. Every detector below has the shape
+//  "if count > 0 then report an issue", and `scalarCount` used to return 0
+//  when its query THREW — so a probe broken by schema drift reported no
+//  problem. Worse, several counts gate whole sections (`if koCount > 0 { … }`),
+//  so one failed query silently switched those checks off while the report
+//  still said "Issues found (0)". In an audit whose entire purpose is finding
+//  problems, that is the worst failure mode available: quietest exactly when
+//  it is most broken.
+//
+//  Probes now record FAILURE distinctly from zero. A probe that could not run
+//  is listed as its own issue, counted in `issuesFound`, and named in the
+//  report under "Checks that could not run". The arithmetic is unchanged — a
+//  failed probe still contributes 0 — but it can no longer pass as a result.
+//
 
 import Foundation
 import OSLog
@@ -34,31 +48,59 @@ public enum DataHealthCheck {
         }
         let started = Date()
 
+        // Probes that did not run. Collected so the report says so out loud
+        // instead of showing their absence as a zero.
+        var failedProbes: [String] = []
+
+        /// A counting probe. Returns 0 on failure so the arithmetic below is
+        /// untouched, but RECORDS the failure so it cannot read as a result.
+        func count(_ label: String, _ sql: String) async -> Int {
+            guard let value = await Self.scalarCount(database, sql) else {
+                failedProbes.append(label)
+                return 0
+            }
+            return value
+        }
+        /// A repository count. A nil repository (not booted) and a throwing
+        /// `count()` are both "not measured", never "zero rows".
+        func repoCount(_ label: String, _ body: () async throws -> Int?) async -> Int {
+            do {
+                guard let value = try await body() else {
+                    failedProbes.append("\(label) — repository not booted")
+                    return 0
+                }
+                return value
+            } catch {
+                failedProbes.append("\(label) — \(error)")
+                return 0
+            }
+        }
+
         // ── Top-level counts ─────────────────────────────────────────
-        let fileCount = (try? await state.files?.count()) ?? 0
-        let koCount = (try? await state.objects?.count()) ?? 0
-        let entityCount = await scalarCount(database, "SELECT COUNT(*) FROM entities;")
-        let mentionCount = await scalarCount(database, "SELECT COUNT(*) FROM entity_mentions;")
-        let eventCount = (try? await state.events?.count()) ?? 0
-        let chunkCount = await scalarCount(database, "SELECT COUNT(*) FROM chunks;")
+        let fileCount = await repoCount("file count") { try await state.files?.count() }
+        let koCount = await repoCount("knowledge-object count") { try await state.objects?.count() }
+        let entityCount = await count("entity count", "SELECT COUNT(*) FROM entities;")
+        let mentionCount = await count("mention count", "SELECT COUNT(*) FROM entity_mentions;")
+        let eventCount = await repoCount("event count") { try await state.events?.count() }
+        let chunkCount = await count("chunk count", "SELECT COUNT(*) FROM chunks;")
         // v54 — vectors now live in chunk_embeddings (model-aware); count
         // distinct embedded chunks so the metric keeps meaning "chunks embedded".
-        let vectorCount = await scalarCount(database, "SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings;")
-        let relationshipCount = (try? await state.relationships?.count()) ?? 0
-        let bondCount = (try? await state.factBonds?.count()) ?? 0
-        let memoryCount = (try? await state.memoryRepo?.count()) ?? 0
-        let summaryCount = await scalarCount(database, "SELECT COUNT(*) FROM summaries;")
-        let synthQCount = await scalarCount(database, "SELECT COUNT(*) FROM synthetic_questions;")
-        let qaPairCount = await scalarCount(database, "SELECT COUNT(*) FROM qa_pairs;")
-        let aliasCount = await scalarCount(database, "SELECT COUNT(*) FROM entity_aliases;")
+        let vectorCount = await count("vector count", "SELECT COUNT(DISTINCT chunk_id) FROM chunk_embeddings;")
+        let relationshipCount = await repoCount("relationship count") { try await state.relationships?.count() }
+        let bondCount = await repoCount("fact-bond count") { try await state.factBonds?.count() }
+        let memoryCount = await repoCount("memory-object count") { try await state.memoryRepo?.count() }
+        let summaryCount = await count("summary count", "SELECT COUNT(*) FROM summaries;")
+        let synthQCount = await count("synth q count", "SELECT COUNT(*) FROM synthetic_questions;")
+        let qaPairCount = await count("qa pair count", "SELECT COUNT(*) FROM qa_pairs;")
+        let aliasCount = await count("alias count", "SELECT COUNT(*) FROM entity_aliases;")
 
         // ── File coverage ────────────────────────────────────────────
-        let filesNoKO = await scalarCount(database, """
+        let filesNoKO = await count("files no k o", """
         SELECT COUNT(*) FROM files f
         WHERE f.alias_of IS NULL
           AND NOT EXISTS (SELECT 1 FROM knowledge_objects k WHERE k.file_id = f.id);
         """)
-        let aliasFiles = await scalarCount(database, "SELECT COUNT(*) FROM files WHERE alias_of IS NOT NULL;")
+        let aliasFiles = await count("alias files", "SELECT COUNT(*) FROM files WHERE alias_of IS NOT NULL;")
         let availabilityRows = (try? await database.query("""
         SELECT availability, COUNT(*) FROM files GROUP BY availability;
         """)) ?? []
@@ -70,26 +112,26 @@ public enum DataHealthCheck {
         }
 
         // ── KO health (incomplete extractions) ───────────────────────
-        let koNoChunks = await scalarCount(database, """
+        let koNoChunks = await count("ko no chunks", """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.object_id = k.id);
         """)
-        let koNoVectors = await scalarCount(database, """
+        let koNoVectors = await count("ko no vectors", """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (
           SELECT 1 FROM chunks c JOIN chunk_embeddings v ON v.chunk_id = c.id
           WHERE c.object_id = k.id
         );
         """)
-        let koNoEntities = await scalarCount(database, """
+        let koNoEntities = await count("ko no entities", """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (SELECT 1 FROM entity_mentions m WHERE m.source_object_id = k.id);
         """)
-        let koNoEvents = await scalarCount(database, """
+        let koNoEvents = await count("ko no events", """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.source_object_id = k.id);
         """)
-        let koNoSynthQ = await scalarCount(database, """
+        let koNoSynthQ = await count("ko no synth q", """
         SELECT COUNT(*) FROM knowledge_objects k
         WHERE NOT EXISTS (SELECT 1 FROM synthetic_questions q WHERE q.object_id = k.id);
         """)
@@ -111,14 +153,14 @@ public enum DataHealthCheck {
         // writes for rows whose entity.kind / event.kind isn't a
         // recognised FactType (date, monetaryAmount, location, …).
         // Those rows ARE processed; they just have no FactType in v1.
-        let entityTyped = await scalarCount(database, "SELECT COUNT(*) FROM entities WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
-        let eventTyped = await scalarCount(database, "SELECT COUNT(*) FROM events WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
+        let entityTyped = await count("entity typed", "SELECT COUNT(*) FROM entities WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
+        let eventTyped = await count("event typed", "SELECT COUNT(*) FROM events WHERE fact_type IS NOT NULL AND fact_type != '_unclassified';")
         let entityCountsByType = (try? await state.entities?.countsByFactType()) ?? [:]
         let eventCountsByType = (try? await state.events?.countsByFactType()) ?? [:]
-        let entitySlotPop = await scalarCount(database, """
+        let entitySlotPop = await count("entity slot pop", """
         SELECT COUNT(*) FROM entities WHERE slot_values_json IS NOT NULL AND slot_values_json != '{}' AND slot_values_json != '';
         """)
-        let eventSlotPop = await scalarCount(database, """
+        let eventSlotPop = await count("event slot pop", """
         SELECT COUNT(*) FROM events WHERE slot_values_json IS NOT NULL AND slot_values_json != '{}' AND slot_values_json != '';
         """)
         let bondsByName = (try? await database.query("""
@@ -187,6 +229,15 @@ public enum DataHealthCheck {
 
         // ── Identify issues ──────────────────────────────────────────
         var issues: [String] = []
+        // Listed first and counted: a probe that did not run means this report
+        // is incomplete, and that outranks anything it did manage to check.
+        // Without this the audit was SILENT about its own failures and still
+        // printed "Issues found (0)".
+        for probe in failedProbes {
+            issues.append("CHECK DID NOT RUN — \(probe). Its count reads 0 in this report, "
+                        + "which is NOT a measurement: any issue it would have found is "
+                        + "invisible here.")
+        }
         issues.append(contentsOf: annParityIssues)
         if fileCount > 0, filesNoKO > 0 {
             let pct = Double(filesNoKO) / Double(fileCount) * 100
@@ -365,6 +416,14 @@ public enum DataHealthCheck {
             md += "\n"
         }
 
+        if !failedProbes.isEmpty {
+            md += "## Checks that could not run (\(failedProbes.count))\n\n"
+            md += "These probes failed, so their counts appear as 0 above WITHOUT being "
+            md += "measured. Treat every number they feed as unknown, not as zero.\n\n"
+            for probe in failedProbes { md += "- \(probe)\n" }
+            md += "\n"
+        }
+
         md += "## Issues found (\(issues.count))\n\n"
         if issues.isEmpty {
             md += "✓ No data-health issues detected.\n"
@@ -411,8 +470,14 @@ public enum DataHealthCheck {
 
     // MARK: - Helpers
 
-    private static func scalarCount(_ db: Database, _ sql: String) async -> Int {
-        guard let rows = try? await db.query(sql) else { return 0 }
+    /// nil when the query could not run. Returning 0 for a failed probe is
+    /// what let a broken audit report a clean bill of health.
+    ///
+    /// Internal rather than private so a test can prove the distinction
+    /// between "no rows" and "the probe failed" — the property the whole fix
+    /// rests on.
+    static func scalarCount(_ db: Database, _ sql: String) async -> Int? {
+        guard let rows = try? await db.query(sql) else { return nil }
         return Int(rows.first?.int(0) ?? 0)
     }
 }
