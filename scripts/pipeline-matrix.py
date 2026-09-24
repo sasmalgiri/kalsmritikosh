@@ -199,6 +199,101 @@ SELF_CHECK = [
 ]
 
 
+REPO_PROPERTY = re.compile(
+    r"^\s*public private\(set\) var ([a-zA-Z_]\w*):\s*([A-Z]\w*(?:Repository|Registry|Store))\??")
+
+
+def orphaned_repositories():
+    """Repositories nothing can reach — following ONE level of indirection.
+
+    THE METHOD, and two wrong versions of it, because the wrongness is the
+    lesson:
+
+    v1 grepped the repository's TYPE NAME inside UI/ and concluded 9 of 11
+    feature lanes had no user-facing door. False for six: views never name the
+    type, they write `appState.review`. Same shape as finding F-3.
+
+    v2 grepped the ACCESS PATH (`appState.<prop>`) outside AppState and reported
+    five orphans — historyArtifacts, corpusSnapshots, monitorSnapshots,
+    enrichmentJobs, ingestRuns. False for all five. Views do not touch those
+    properties either; they call an AppState METHOD that does. ChangesView calls
+    `appState.changeDigest()`, and `changeDigest` is what reads
+    `monitorSnapshots`. v2's claim that the data "cannot reach a user" was
+    simply untrue, and it was a claim about the product made by a script that
+    had not looked at the product.
+
+    v3 follows the indirection. For each repository property: find the AppState
+    methods that READ it, then ask whether any of those methods is called from
+    outside AppState — or is an entry point (`boot`) that the app itself drives.
+    A property fails only when nothing reads it anywhere, or everything that
+    reads it is itself unreachable.
+
+    Proof of ABSENCE only, as ever, and now one level deeper: a method called by
+    another AppState method that is itself dead would still be missed. Two
+    levels covers every case in this codebase today; it is not a general
+    reachability proof and does not claim to be.
+    """
+    app = os.path.join(SRC_ROOT, "App", "AppState.swift")
+    try:
+        text = io.open(app, encoding="utf-8").read()
+    except OSError:
+        return []
+    lines = text.split("\n")
+
+    props = []
+    for line in lines:
+        m = REPO_PROPERTY.match(line)
+        if m:
+            props.append((m.group(1), m.group(2)))
+
+    # property -> AppState methods that read it (declaration and assignment
+    # lines excluded: wiring a repository up is not reading it).
+    readers = {p: set() for p, _ in props}
+    current = None
+    for line in lines:
+        m = re.match(r"\s*(?:@\w+\s+)?(?:public |private |internal |fileprivate )?"
+                     r"(?:static )?func (\w+)", line)
+        if m:
+            current = m.group(1)
+        if current is None:
+            continue
+        for prop, _ in props:
+            if not re.search(r"\b%s\b" % re.escape(prop), line):
+                continue
+            if re.search(r"var %s\b" % re.escape(prop), line):
+                continue
+            if re.search(r"self\.%s\s*=" % re.escape(prop), line):
+                continue
+            readers[prop].add(current)
+
+    # Everything outside AppState (and its extensions), for call-site lookup.
+    bodies = []
+    for path in swift_files(SRC_ROOT):
+        if os.path.basename(path).startswith("AppState"):
+            continue
+        try:
+            bodies.append(io.open(path, encoding="utf-8", errors="ignore").read())
+        except OSError:
+            continue
+    blob = "\n".join(bodies)
+
+    # `boot` is driven by the app itself; a repository read there is reached.
+    ENTRY_POINTS = {"boot", "init"}
+
+    orphans = []
+    for prop, typ in props:
+        direct = re.search(r"(?:appState|state|self)\s*\.\s*%s\b" % re.escape(prop), blob)
+        if direct:
+            continue
+        methods = readers[prop]
+        if methods & ENTRY_POINTS:
+            continue
+        reached = any(re.search(r"\.\s*%s\s*\(" % re.escape(fn), blob) for fn in methods)
+        if not reached:
+            orphans.append((prop, typ, sorted(methods)))
+    return orphans
+
+
 def superseded_tables():
     """Table names from SupersededSchema.swift — the single declaration.
 
@@ -213,6 +308,32 @@ def superseded_tables():
     except OSError:
         return set()
     return set(re.findall(r'Entry\(table:\s*"([^"]+)"', text))
+
+
+# Repository properties HAND-VERIFIED reachable on 2026-09-24, with the path.
+# Fixtures because two successive versions of `orphaned_repositories` accused
+# these of being unreachable; the script now refuses to write if it does so
+# again.
+REACHABLE_REPOSITORIES = {
+    "historyArtifacts": "read by composeStoryAnswer / persistHistory / persistStoryFromAsk",
+    "corpusSnapshots":  "read by recordAnswer (the answer path)",
+    "monitorSnapshots": "read by changeDigest / acknowledgeChanges, called from ChangesView.swift:119",
+    "enrichmentJobs":   "read by boot",
+    "ingestRuns":       "read by ingestAllRoots / resumeInterruptedRuns",
+    "review":           "read directly by ReviewView / WorkspacesView",
+    "screening":        "read directly by ScreeningView",
+    "savedQueries":     "read directly by AskView / SavedQueriesView",
+    "investigations":   "read directly by NotebookView",
+    "eventVersions":    "read directly by EventDetailSheet / TimelineView",
+}
+
+
+def check_reachability_fixtures(orphans):
+    """Refuse to call a hand-verified-live repository unreachable."""
+    named = {prop for prop, _, _ in orphans}
+    return ["FALSE POSITIVE: `appState.%s` reported unreachable, but it IS reached — %s"
+            % (prop, why)
+            for prop, why in sorted(REACHABLE_REPOSITORIES.items()) if prop in named]
 
 
 def run_self_check(rows_by_table):
@@ -358,6 +479,34 @@ def main():
             out.append("| `%s` | %s | %s |" % (
                 r["table"], r["lane"],
                 (r["producers"][0] if r["producers"] else "—")))
+
+    orphans = orphaned_repositories()
+    reach_problems = check_reachability_fixtures(orphans)
+    if reach_problems:
+        sys.stderr.write("SELF-CHECK FAILED — matrix NOT written:\n")
+        for p in reach_problems:
+            sys.stderr.write("  %s\n" % p)
+        return 2
+    out.append("\n## Repositories nothing can reach (%d)\n" % len(orphans))
+    out.append("_AppState constructs and wires these, and neither any surface nor any "
+               "reachable AppState method reads them._\n")
+    if not orphans:
+        out.append("None. Every repository AppState holds is reached — either read "
+                   "directly by a surface, or read by an AppState method that a "
+                   "surface calls.\n")
+    else:
+        out.append("| property | type | read only by |")
+        out.append("|---|---|---|")
+        for prop, typ, methods in orphans:
+            where = ", ".join("`%s`" % m for m in methods) or "_nothing_"
+            out.append("| `appState.%s` | `%s` | %s |" % (prop, typ, where))
+    out.append("\n> Follows ONE level of indirection: a surface usually calls an "
+               "AppState METHOD, and the method reads the repository. Two earlier "
+               "versions of this check got it wrong — one grepped the type name and "
+               "accused six live lanes, the next grepped the property path and "
+               "accused five more. Both were claims about the product from a script "
+               "that had not followed how the product is actually wired. Proof of "
+               "absence only, and not a general reachability proof.\n")
 
     out.append("\n## Full matrix\n")
     out.append("| table | lane | producers | consumers | tests |")

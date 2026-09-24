@@ -73,6 +73,16 @@ _The verification gap. Highest-value list in this file._
 | `screening_protocols` | Storage/Repositories | Kalsmritikosh/Storage/Repositories/ScreeningRepository.swift |
 | `screening_records` | Storage/Repositories | Kalsmritikosh/Storage/Repositories/ScreeningRepository.swift |
 
+## Repositories nothing can reach (0)
+
+_AppState constructs and wires these, and neither any surface nor any reachable AppState method reads them._
+
+None. Every repository AppState holds is reached — either read directly by a surface, or read by an AppState method that a surface calls.
+
+
+> Follows ONE level of indirection: a surface usually calls an AppState METHOD, and the method reads the repository. Two earlier versions of this check got it wrong — one grepped the type name and accused six live lanes, the next grepped the property path and accused five more. Both were claims about the product from a script that had not followed how the product is actually wired. Proof of absence only, and not a general reachability proof.
+
+
 ## Full matrix
 
 | table | lane | producers | consumers | tests |
