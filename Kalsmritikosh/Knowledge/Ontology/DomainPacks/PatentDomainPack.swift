@@ -99,7 +99,28 @@ public enum PatentDomainPack {
     /// captures must STILL pass `isPlausibleRoleValue` at write.
     nonisolated static let rolePatterns: [(String, String)] = [
         ("applicant", #"applicant[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
-        ("applicant", #"\bI,?\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)\s*,?\s+(?:having|of|son of|daughter of|resid|nationality)"#),
+        // P2.7 — THE POA FORMULA, with the bare `of` REMOVED.
+        //
+        // Owner ruling: keep the grantor's name. But W-5.1 refused it for a real
+        // reason — the live archive produced "acknowledge receipt" x82 and
+        // "need patent agent" x82 through this very pattern, and
+        // `roleStopwords` does NOT catch either (measured). So the casing rule
+        // in isPlausibleRoleValue was load-bearing and could not simply be
+        // relaxed.
+        //
+        // The weak link was never the casing: it was the bare `of`. "I
+        // acknowledge receipt OF the letter" matches `\bI …\s+of`, and so does
+        // half of English correspondence. The remaining alternatives are a
+        // document FORMULA that prose does not imitate — a power of attorney
+        // says "I, <name> having …" / "son of" / "residing" / "nationality".
+        // Removing `of` alone refuses the witnessed junk AT THE PATTERN, which
+        // is stronger than refusing it at the gate: a value that never matches
+        // cannot be mis-scored later.
+        //
+        // "son of" and "daughter of" are kept as COMPOUNDS — they are formula
+        // terms, and losing them would drop the Indian POA phrasing this
+        // archive actually uses.
+        ("applicant", #"\bI,?\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)\s*,?\s+(?:having|son of|daughter of|wife of|resid|nationality|aged)"#),
         ("applicant", #"granted to\s+(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
         ("inventor",  #"inventor[s]?\s*(?:name)?\s*[:\-]\s*(?<name>[A-Za-z][A-Za-z .]{3,58}?)(?=[,;\n\(]|$)"#),
     ]
@@ -136,6 +157,31 @@ public enum PatentDomainPack {
             guard bare.count >= 2 || (token.count == 2 && token.hasSuffix(".")) else { return false }
             guard bare.allSatisfy({ $0.isLetter }) else { return false }
             guard bare.first?.isUppercase == true else { return false }
+            if roleStopwords.contains(bare.lowercased()) { return false }
+        }
+        let lower = name.lowercased()
+        if EntityQualityGate.isMailInfraName(name) { return false }
+        if EntityQualityGate.isTitleShaped(name) { return false }
+        if EntityQualityGate.isAutomatedSender(lower) { return false }
+        if EntityQualityGate.isNilFamily(lower) { return false }
+        if EntityQualityGate.isFilenameShaped(lower) { return false }
+        return true
+    }
+
+    /// P2.7 — a lowercase name captured by the POA FORMULA only.
+    ///
+    /// Everything `isPlausibleRoleValue` checks EXCEPT the uppercase-initial
+    /// rule: 2-5 tokens, each alphabetic and >=2 chars, none a function word,
+    /// and none of the register's junk classifiers. The casing rule is what the
+    /// formula pattern has already earned the right to skip; nothing else is
+    /// loosened, so a clause that somehow reached here is still refused.
+    nonisolated static func isPlausibleLowercaseFormulaName(_ name: String) -> Bool {
+        let tokens = name.split(separator: " ").map(String.init)
+        guard (2...5).contains(tokens.count) else { return false }
+        for token in tokens {
+            let bare = token.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+            guard bare.count >= 2 || (token.count == 2 && token.hasSuffix(".")) else { return false }
+            guard bare.allSatisfy({ $0.isLetter }) else { return false }
             if roleStopwords.contains(bare.lowercased()) { return false }
         }
         let lower = name.lowercased()
@@ -267,7 +313,17 @@ public enum PatentDomainPack {
                 guard name.split(separator: " ").count >= 2, name.count <= 60 else { continue }
                 // W-5.1 — the role-value gate at write: clause-shaped values
                 // are rejected and counted, never stored.
-                guard Self.isPlausibleRoleValue(name) else { rejectedRoleValues += 1; continue }
+                // P2.7 — the POA formula's capture may be lowercase; every
+                // other pattern still requires Title Case. `poaFormula` is true
+                // only for the `\bI, <name> having/son of/...` pattern, whose
+                // junk was removed at the pattern above, so this relaxation
+                // cannot readmit "acknowledge receipt".
+                let poaFormula = pattern.contains("\\bI,?")
+                let plausible = Self.isPlausibleRoleValue(name)
+                    || (poaFormula
+                        && KnowledgeModuleFlags.isEnabled(.poaGrantorRecovery)
+                        && Self.isPlausibleLowercaseFormulaName(name))
+                guard plausible else { rejectedRoleValues += 1; continue }
                 let key = field + "|" + name.lowercased()
                 guard seen.insert(key).inserted else { continue }
                 facts.append(GenericFact(subjectLabel: subjectLabel, field: field, value: name,

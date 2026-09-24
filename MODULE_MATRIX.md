@@ -18,12 +18,22 @@ from a grep for `isEnabled(.case)` in non-test source.
 
 | metric | count |
 |---|---|
-| modules declared | 23 |
-| implemented | 23 |
-| **implemented but NOT WIRED** | **0** |
+| modules declared | 25 |
+| implemented | 25 |
+| **implemented but NOT WIRED** | **1** |
 | default OFF (opt-in) | 2 |
 | require the on-device model | 6 |
 | referenced by a test | 9 |
+
+## ⚠️ Decorative switches — implemented, but no gate found (1)
+
+| module | title |
+|---|---|
+| `questionIndexSearch` | Search mined questions |
+
+Either gate the code path with `KnowledgeModuleFlags.isEnabled(.<case>)`,
+or set `implemented = false` until it is wired.
+
 
 ## Knowledge synthesis
 
@@ -67,6 +77,13 @@ from a grep for `isEnabled(.case)` in non-test source.
 | `recordDerivationFailures` — Record why an import step failed | ON | — | Kalsmritikosh/Storage/Repositories/DerivationFailureRepository.swift:103 | 0 |
 | `strictDerivation` — Strict derivation (stop on a failed step) | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1651 | 0 |
 | `derivationCompleteMarker` — Track unfinished imports | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1848 | 0 |
+
+## Extraction & search
+
+| module | default | AI? | wired at | tests |
+|---|---|---|---|---|
+| `poaGrantorRecovery` — Read names from authorisation forms | ON | — | Kalsmritikosh/Knowledge/Ontology/DomainPacks/PatentDomainPack.swift:324 | 0 |
+| `questionIndexSearch` — Search mined questions | ON | — | **not wired** | 0 |
 
 ## How to add one
 
