@@ -218,10 +218,14 @@ MUST_HAVE_CALLER = {
     "correctiveRetrieval": "MasterBrain.swift:1681 — `await Self.applyCorrectiveRetrieval(`",
     "openFieldAsking":     "SlotFieldResolver.swift:333 — unqualified in-type call",
 }
-MUST_BE_CALLERLESS = {
-    "generatedSourceCoverage": "P4 Ingestion Report is not built yet",
-    "languageHonesty":         "P4 Ingestion Report is not built yet",
-}
+# Emptied 2026-09-24: P4 landed, and both entries' consumer now exists —
+# DataHealthCheck.swift:501 calls `UniversalParserRegistryBuilder.coverageReport`
+# and :512 calls `ExtractionLanguageReport.build`. Verified by reading both call
+# sites, not by deleting the expectation to make the check pass. The check
+# refused to write the matrix until this was resolved, which is the behaviour
+# that was wanted: a producer waiting on its consumer stays visible until the
+# consumer is genuinely there.
+MUST_BE_CALLERLESS: dict[str, str] = {}
 
 
 def self_check(no_caller, cases):

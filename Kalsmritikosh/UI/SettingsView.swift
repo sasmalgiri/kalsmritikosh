@@ -907,8 +907,15 @@ public struct SettingsView: View {
         do {
             let result = try await DataHealthCheck.run(appState)
             healthCheckURL = result.reportURL
+            // NOT "Clean". This audit counts rows and reports gaps; it does not
+            // check a single extracted value against its document, and it
+            // cannot see files that were never added. "Clean" invited reading
+            // the absence of detected problems as proof of correct ingestion —
+            // the exact confusion the report's own "What this does NOT tell
+            // you" section exists to prevent, and it should not be undone by
+            // one reassuring word in the UI.
             let verdict = result.issuesFound == 0
-                ? "✓ Clean — no issues detected"
+                ? "✓ No problems found in what this checks — see the report's limits section for what it does not cover"
                 : "⚠️ \(result.issuesFound) issue(s) flagged — see report"
             healthCheckStatus = """
             \(verdict)

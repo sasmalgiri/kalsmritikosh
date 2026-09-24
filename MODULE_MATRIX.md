@@ -24,31 +24,7 @@ from a grep for `isEnabled(.case)` in non-test source.
 | default OFF (opt-in) | 2 |
 | require the on-device model | 7 |
 | referenced by a test | 9 |
-| **gated but NO CALLER yet** | **2** |
-
-## ⏳ Gated, but nothing calls the gated entry point (2)
-
-The switch is real and the code behind it is real, but no production
-surface reaches it yet — so flipping the switch changes nothing TODAY.
-This is not the same defect as a decorative switch, and it is not
-necessarily a defect at all: a producer can legitimately land before its
-consumer. It is listed so that "wired" is never read as "live".
-
-
-| module | callerless entry point | consumer owed |
-|---|---|---|
-| `generatedSourceCoverage` | `UniversalParserRegistryBuilder.coverageReport` | — |
-| `languageHonesty` | `ExtractionLanguageReport.build` | — |
-
-SOUNDNESS. This list proves ABSENCE only. It is computed for `static`
-members of named types, where every external call site must write
-`Type.member`, so zero matches is a proof of no external caller. The
-converse is NOT claimed: a module absent from this list has not been
-proven reachable. Grepping a name cannot establish that a thing is
-called — a lesson from finding F-3, where a lane was wrongly declared
-dead because its call site read `synthRepo.search(...)` rather than
-naming the property that was grepped.
-
+| **gated but NO CALLER yet** | **0** |
 
 ## Knowledge synthesis
 
@@ -73,7 +49,7 @@ naming the property that was grepped.
 | `boilerplateEmbedSkip` — Boilerplate embed-skip | ON | — | Kalsmritikosh/Ingestion/Pipeline/IngestCoordinator.swift:1396 (+1 more) | 0 |
 | `passwordProtectedFiles` — Password-protected files | ON | — | Kalsmritikosh/Ingestion/Loaders/PDFLoader.swift:38 | 0 |
 | `importLifecycle` — Import & coverage lifecycle | ON | — | Kalsmritikosh/UI/SourcesView.swift:397 | 0 |
-| `mediaTranscription` — Transcribe audio & video | ON | — | Kalsmritikosh/App/AppState.swift:1638 | 0 |
+| `mediaTranscription` — Transcribe audio & video | ON | — | Kalsmritikosh/App/AppState.swift:1638 (+1 more) | 0 |
 
 ## Answer composition
 
@@ -108,7 +84,7 @@ naming the property that was grepped.
 | `openFieldExtraction` — Read labelled fields from any document | ON | — | Kalsmritikosh/Knowledge/Ontology/OpenFieldExtractor.swift:283 | 0 |
 | `openFieldAsking` — Ask about any field we found | ON | — | Kalsmritikosh/Retrieval/HybridRetriever.swift:295 (+1 more) | 0 |
 | `openFactTypes` — Group unfamiliar document kinds | ON | — | Kalsmritikosh/Knowledge/Ontology/FactTypeClassifier.swift:246 (+1 more) | 0 |
-| `inducedSchema` — Read documents no built-in rule recognises | ON | yes | Kalsmritikosh/App/AppState.swift:2617 (+2 more) | 0 |
+| `inducedSchema` — Read documents no built-in rule recognises | ON | yes | Kalsmritikosh/App/AppState.swift:2617 (+4 more) | 0 |
 | `generatedSourceCoverage` — Report what each format can give you | ON | — | Kalsmritikosh/Ingestion/Parsing/UniversalParserRegistryBuilder.swift:238 | 0 |
 | `languageHonesty` — State the English-only limit | ON | — | Kalsmritikosh/Knowledge/Ontology/ExtractionLanguageReport.swift:128 | 0 |
 

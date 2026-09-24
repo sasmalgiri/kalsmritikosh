@@ -430,6 +430,135 @@ public enum DataHealthCheck {
             md += "\n"
         }
 
+        // ══ P4 — THE INGESTION REPORT ═══════════════════════════════════════
+        //
+        // These sections answer one question the counts above cannot: "is the
+        // ingestion PROPER?" A row count says how much arrived. It cannot say
+        // whether a document finished deriving, why something is missing, which
+        // formats were readable at all, or whether the archive is even in a
+        // language this version can extract from. Every one of those absences
+        // previously rendered as a smaller number with no explanation.
+        //
+        // Deliberately placed BEFORE "Issues found" so the explanations are read
+        // before the verdict.
+
+        md += "## Did every document finish deriving? (P1.3)\n\n"
+        let derivComplete = await count("derivation complete",
+            "SELECT COUNT(*) FROM knowledge_objects WHERE derivation_complete = 1;")
+        let derivUnknown = await count("derivation unknown",
+            "SELECT COUNT(*) FROM knowledge_objects WHERE derivation_complete IS NULL;")
+        let derivIncomplete = max(0, koCount - derivComplete - derivUnknown)
+        md += "| state | documents | what it means |\n|---|---:|---|\n"
+        md += "| finished | \(derivComplete) | every derivation stage returned |\n"
+        md += "| UNFINISHED | \(derivIncomplete) | the run was interrupted part-way; these look complete in the counts above but are missing part of their ledger |\n"
+        md += "| unknown | \(derivUnknown) | derived before this marker existed (or not yet re-derived). Genuinely unknown — NOT counted as finished |\n\n"
+        if derivIncomplete > 0 {
+            issues.append("\(derivIncomplete) document(s) did not finish deriving — their entities/events/facts are partial. Re-run ingest to resume them.")
+        }
+        if derivUnknown > 0 && derivComplete == 0 && koCount > 0 {
+            md += "Every document predates the completeness marker, so this section "
+            md += "cannot yet confirm anything. It will be meaningful after the next "
+            md += "full ingest. That is a limit of the report, not a clean result.\n\n"
+        }
+
+        md += "## Why is something missing? (P1.2)\n\n"
+        let failureRows = (try? await database.query("""
+        SELECT stage, COUNT(*) FROM derivation_failures GROUP BY stage ORDER BY COUNT(*) DESC;
+        """)) ?? []
+        if failureRows.isEmpty {
+            md += "No tolerated derivation failures were recorded.\n\n"
+            md += "READ THIS CAREFULLY: it means no failure was RECORDED, which is "
+            md += "only the same as \"nothing failed\" if the recorder was switched on "
+            md += "for the whole run (module `recordDerivationFailures`, default on). "
+            md += "Anything that failed while it was off went to the log, not here.\n\n"
+        } else {
+            md += "Each row is a step that failed and was tolerated — the document was "
+            md += "kept, but this part of its ledger is missing. The REASON is the point: "
+            md += "\"couldn't parse\" and \"not in the container\" produce the same empty "
+            md += "result and mean opposite things.\n\n"
+            md += "| stage | occurrences |\n|---|---:|\n"
+            for r in failureRows {
+                md += "| `\(r.string(0) ?? "—")` | \(Int(r.int(1) ?? 0)) |\n"
+            }
+            md += "\n"
+            let byType = (try? await database.query("""
+            SELECT COALESCE(detected_type, '(unknown)'), COUNT(*) FROM derivation_failures
+            GROUP BY detected_type ORDER BY COUNT(*) DESC LIMIT 12;
+            """)) ?? []
+            if !byType.isEmpty {
+                md += "**By format** — the grouping that makes a gap actionable "
+                md += "(\"31 .pdf failed to link blocks\" is a defect; \"310 .heic skipped\" is by design):\n\n"
+                md += "| format | occurrences |\n|---|---:|\n"
+                for r in byType { md += "| \(r.string(0) ?? "—") | \(Int(r.int(1) ?? 0)) |\n" }
+                md += "\n"
+            }
+            issues.append("\(failureRows.reduce(0) { $0 + Int($1.int(1) ?? 0) }) tolerated derivation failure(s) recorded — see the Ingestion Report section for the stages and formats.")
+        }
+
+        // ── Format coverage (P3.5) — derived from the registry, configured
+        // exactly as this run configures it, so a switched-off parser cannot be
+        // advertised.
+        if let coverage = UniversalParserRegistryBuilder.coverageReport(
+            ocr: VisionOCR(),
+            iMessageEnabled: FeatureFlags.shared.iMessageLoaderEnabled,
+            browserHistoryEnabled: FeatureFlags.shared.browserHistoryLoaderEnabled,
+            chatExportEnabled: FeatureFlags.shared.chatExportLoaderEnabled,
+            mediaTranscriptionEnabled: KnowledgeModuleFlags.isEnabled(.mediaTranscription)) {
+            md += "## What can each format give you? (P3.5)\n\n"
+            md += coverage + "\n\n"
+        }
+
+        // ── Language honesty (P3.6)
+        if let language = await ExtractionLanguageReport.build(database: database) {
+            md += "## What languages is your archive in? (P3.6)\n\n"
+            if let limitation = language.limitationStatement() {
+                md += limitation + "\n\n"
+                issues.append("\(language.unsupportedDocuments) document(s) are not in English; structured extraction is English-only in this version, so they will yield few or no facts.")
+            } else {
+                md += "Every document is in a language this version can extract from, "
+                md += "and every document's language was detected.\n\n"
+            }
+            if !language.coverage.isEmpty {
+                md += "| language | documents | structured extraction |\n|---|---:|---|\n"
+                for c in language.coverage.sorted(by: { $0.documentCount > $1.documentCount }).prefix(12) {
+                    md += "| \(c.displayName) | \(c.documentCount) | \(c.extractionSupported ? "yes" : "NO — searchable only") |\n"
+                }
+                md += "\n"
+            }
+        }
+
+        // ── Schema induction (P3.3)
+        let inductionSummary = await InducedSchemaAttemptRepository(database: database).summary()
+        if inductionSummary.attempted > 0 || KnowledgeModuleFlags.isEnabled(.inducedSchema) {
+            md += "## Documents no built-in reader recognised (P3.3)\n\n"
+            if !KnowledgeModuleFlags.isEnabled(.inducedSchema) {
+                md += "Schema induction is currently OFF. \(inductionSummary.attempted) "
+                md += "document(s) were attempted while it was on.\n\n"
+            }
+            md += "| outcome | documents |\n|---|---:|\n"
+            md += "| attempted | \(inductionSummary.attempted) |\n"
+            md += "| produced fields | \(inductionSummary.produced) |\n"
+            md += "| produced nothing | \(inductionSummary.declined) |\n\n"
+            md += "\"Produced nothing\" is recorded WITH its reason per document, so a "
+            md += "document that was tried and yielded nothing is distinguishable from "
+            md += "one that was never tried. Induced fields are marked `LLM_INDUCED` and "
+            md += "carry a lower confidence than every rule-read field.\n\n"
+        }
+
+        md += "## What this report does NOT tell you\n\n"
+        md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
+        md += "- **Whether the extracted values are CORRECT.** Everything above counts "
+        md += "rows and reports gaps. Nothing here checks a single value against the "
+        md += "document it came from.\n"
+        md += "- **Whether the right things were extracted.** A document can derive "
+        md += "cleanly and completely and still miss the one detail you care about, "
+        md += "because no rule was written for it.\n"
+        md += "- **Whether answers will be good.** Retrieval and composition quality are "
+        md += "not measured here at all.\n"
+        md += "- **Anything about files never offered to the app.** This audits what was "
+        md += "ingested; it cannot see what was not selected, and a folder you forgot to "
+        md += "add looks identical to a folder that was empty.\n\n"
+
         if !failedProbes.isEmpty {
             md += "## Checks that could not run (\(failedProbes.count))\n\n"
             md += "These probes failed, so their counts appear as 0 above WITHOUT being "
