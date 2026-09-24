@@ -69,6 +69,9 @@ public struct SettingsView: View {
     @State private var goldenThreadStatus: String?
     @State private var goldenThreadURL: URL?
     @State private var goldenThreadMatch = ""
+    @State private var answerHarnessRunning = false
+    @State private var answerHarnessStatus: String?
+    @State private var answerHarnessURL: URL?
     @State private var inventoryRunning = false
     @State private var inventoryStatus: String?
     @State private var inventoryURL: URL?
@@ -481,6 +484,40 @@ public struct SettingsView: View {
                 }
             }
             if let status = goldenThreadStatus {
+                Text(status)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            // C-1 — the answer side. Costs real model calls, so it is a
+            // deliberate action rather than anything automatic.
+            Text("Check Answering — builds a handful of questions FROM your own ledger (a subject it knows, a value it holds, a year it has events for), asks them, and checks each answer carries citations. Then it asks one question about a randomly generated reference that cannot exist, and checks the app REFUSES to answer it. Answering that one would mean the evidence gate is not holding, which is reported above everything else. Uses the on-device model, so it takes a minute. Writes answer-harness.md to ~/Documents/EvalBaselines/.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    Task { await runAnswerHarness() }
+                } label: {
+                    if answerHarnessRunning {
+                        Label("Asking…", systemImage: "hourglass")
+                    } else {
+                        Label("Check Answering", systemImage: "checkmark.bubble")
+                    }
+                }
+                .disabled(answerHarnessRunning)
+                if let url = answerHarnessURL {
+                    Button {
+                        #if canImport(AppKit)
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                        #endif
+                    } label: {
+                        Label("Open results", systemImage: "doc.text")
+                    }
+                }
+            }
+            if let status = answerHarnessStatus {
                 Text(status)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
@@ -941,6 +978,23 @@ public struct SettingsView: View {
         } catch {
             inventoryURL = nil
             inventoryStatus = "✗ Failed: \(error)"
+        }
+    }
+
+    private func runAnswerHarness() async {
+        answerHarnessRunning = true
+        answerHarnessStatus = "Asking…"
+        defer { answerHarnessRunning = false }
+        do {
+            let result = try await AnswerHarness.run(appState)
+            answerHarnessURL = result.reportURL
+            answerHarnessStatus = """
+            \(result.summary)
+            Results: \(result.reportURL.path)
+            """
+        } catch {
+            answerHarnessURL = nil
+            answerHarnessStatus = "✗ Could not run: \(error.localizedDescription)"
         }
     }
 
