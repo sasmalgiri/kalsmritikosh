@@ -89,14 +89,18 @@ A block-to-block graph lane, permanently empty.
 continuation edges) or it is recorded as DEFERRED-KEPT with the reason and
 exempted from the guard. Owner keeps the schema either way.
 
-### T1-7 · OWNER→AGENT · `people` / `companies` / `projects` / `timelines`
-Kept per your ruling. These are not gaps in an existing feature — they are
-**unbuilt features with reserved schema**.
-**Needs from you:** what each is for. `entities` already covers canonical
-people/orgs, so I cannot tell whether these are a richer registry, a UI grouping,
-or leftovers you want to revive.
-**Accept (interim):** recorded as DEFERRED-KEPT in `PIPELINE_MATRIX.md`,
-exempted from the coverage guard so they do not mask real gaps.
+### T1-7 · AGENT · `people` / `companies` / `projects` / `timelines` — canonical registries
+**Owner ruling 2026-09-24: these are for DATABASE BUILDING.** So they are neither
+dead schema nor a UI grouping — they are the canonical registries the ledger is
+meant to accumulate: one row per real person, organisation and project, and one
+timeline per subject, distinct from `entities` (which holds mentions unified by
+alias).
+**Depends on TIER U.** Their producers can only be as broad as extraction is; a
+registry fed by 11 domain packs is a registry of 11 domains. Build these AFTER
+U-1/U-2 so the registries are universal from their first row.
+**Accept:** each has a producer fed by the open extractor; every row cites the
+evidence that created it; a second build is idempotent (registries merge, never
+duplicate — the defect class that gave 9,266 fact rows for 387 distinct facts).
 
 ### T1-8 · AGENT · POA grantor recovered via the sharper discriminator
 Kept per your ruling — so the name must be stored, WITHOUT readmitting the
@@ -111,6 +115,87 @@ stored at reduced confidence.
 **Accept:** `I, shirshendu sasmal having Nationality of India` yields
 `applicant`; the four witnessed junk strings still yield zero applicant facts;
 the `withKnownIssue` red in `PatentDomainPackTests` is removed, not re-wrapped.
+
+---
+
+## TIER U — UNIVERSALITY · the central promise, currently unmet
+
+**Why this tier exists.** The owner asked whether the existing list makes the
+product universal. It does not. Tiers 0–8 make what exists *correct and
+verified*; none of them make it *general*. Measured today:
+
+| layer | universal? | evidence |
+|---|---|---|
+| Formats | mostly | 36 FULL + 7 PARTIAL, plugin registry, TextLoader fallback |
+| Storage model | **YES** | `GenericFact` is domain-neutral; `FactSchemaRegistry` states "Open — an unknown field is `.text`, never dropped" |
+| **Fact production** | **NO** | every fact comes from **11 fixed domain packs** in `Knowledge/Ontology/DomainPacks/` |
+| **Fact typing** | **NO** | `FactTypeClassifier` is a CLOSED enum — person / org / project / deliverable / contract / invoice / delivery / meeting / email / task, plus `other`. A commercial + project-management taxonomy |
+| LLM assist | NO | `LLMSlotExtractor` fills slots of an ALREADY-KNOWN fact type's schema (its own header says so) and is not on the ingest path — it runs via `OntologyBackfill` |
+| Ask side | partly | `SlotFieldResolver.vocabulary` is ~25 fixed phrases; the F8 `<word> number|date` fallback is the one genuinely open mechanism |
+| Language | NO | English-only; multilingual is v2 |
+
+**The consequence, plainly:** a shipping manifest, a car service record, a school
+report, a lab instrument log, an insurance claim, a building permit — each yields
+chunks and **zero facts**. The answer then falls back to quoting passages instead
+of answering from structure. The database-in-the-middle, which is the moat, is
+empty for any domain nobody hard-coded.
+
+**Sequencing relief.** `LedgerDrainCoordinator` pass 2 re-derives GenericFacts
+from the STORED `EvidenceBlocks`, not from the original files. So landing TIER U
+*after* a re-ingest costs a **drain**, not a second full re-ingest. Universality
+does not have to block the first step.
+
+### U-1 · AGENT · Open-domain labeled-field extractor — highest leverage here
+Real documents state facts as `Label: value`, `Label — value`, or a two-column
+table, whatever the domain. A domain-AGNOSTIC extractor capturing any such pair,
+normalising the label to a field id and storing a `GenericFact`, gives structure
+on documents no pack anticipated. It removes the need for 11 packs to become 50.
+**Gates required** — the same discipline as the C-4/OCR work, which is why that
+came first: label plausibility (not prose, not a sentence fragment); value
+plausibility (reuse `FactValuePlausibility`); block-kind awareness (a table cell
+outranks a paragraph); per-document dedup; and a cap so one junk page cannot
+mint 400 fields.
+**Accept:** fixtures from ≥6 domains nobody hard-coded (shipping, vehicle
+service, school report, utility bill, insurance, permit) each yield correct
+fields; the existing 11-pack fixtures produce output IDENTICAL to today — this
+must ADD, never perturb; a noisy page mints nothing.
+
+### U-2 · AGENT · Open fact-type taxonomy
+`FactTypeClassifier`'s closed enum becomes the KNOWN subset of an open space: a
+derived string type id is allowed, the enum stays the curated core, and
+`_unclassified` stops being a dead end that `DataHealthCheck` counts as a defect.
+**Accept:** an out-of-taxonomy document receives a stable derived type id rather
+than `.other`; the health probe separates "genuinely novel type" from
+"classifier failed"; known types keep today's behaviour exactly.
+
+### U-3 · AGENT · LLM schema induction — evidence-bound and budgeted
+For prose with no label/value structure, have the on-device model PROPOSE a field
+set, then validate deterministically: every proposed value must appear verbatim
+in a cited block or it is discarded. That is how open-domain extraction stays
+inside the evidence gate instead of becoming generation.
+**Accept:** no proposed value survives without a verbatim span in a cited block;
+the call budget holds (a per-document tier-2 cost, never per-question); with the
+model unavailable the lane is a no-op that SAYS so — never a silent gap.
+
+### U-4 · AGENT · Ask-side universality
+Resolve a question against the ACTUAL field inventory in the ledger — which U-1
+makes open — instead of a fixed phrase list. Generalise the F8 fallback.
+**Accept:** "what is the chassis number", "who was the attending physician",
+"what was the policy number" resolve to fields the ledger holds with no new
+vocabulary entries; the honest field-named not-found still fires when the field
+is genuinely absent.
+
+### U-5 · AGENT · Format universality closure
+**Accept:** every binary type without a loader is reported PRESERVED-ONLY with a
+reason, never silently empty; `SUPPORTED_SOURCES.md` is GENERATED from the
+registry rather than hand-maintained, so the claim and the code cannot diverge.
+
+### U-6 · AGENT · Language honesty — universality's other axis
+English-only today. Full multilingual is v2, but silent mis-extraction is not
+acceptable now.
+**Accept:** language is DETECTED per document and recorded; a non-English
+document is marked as such and its extraction limits appear in the Ingestion
+Report, instead of quietly producing nothing.
 
 ---
 
@@ -286,6 +371,9 @@ T1-1 … T1-6, T1-8                  wire the "keep all" rulings
 T2-1 → T2-2 → T2-3 → T2-4          the report exists and is proven on fixtures
         ⟶ OWNER: erase + re-ingest
 T2-5                               triage the real run
+U-1 → U-2 → U-3 → U-4 → U-5/U-6    UNIVERSALITY (a drain re-derives facts from
+                                   stored blocks, so NO second file re-ingest)
+T1-7                               canonical registries, once extraction is open
 T3-1 → T3-2                        the chain is proven and stable
 T4-1, T4-2                         topics + history on real data
 T5-1 → T5-2 → T5-3                 answers machine-checked, latency fixed
@@ -295,6 +383,6 @@ T7                                 ship gate
 
 ## Still needed from you
 
-1. **T1-7** — what `people` / `companies` / `projects` / `timelines` are for.
+1. ~~T1-7~~ — **answered 2026-09-24: database building.** Folded into TIER U.
 2. **T4-2** — 3–5 subject names, including one deliberately ambiguous.
 3. Archive size, roughly — only for an ETA; I will proceed without it.
