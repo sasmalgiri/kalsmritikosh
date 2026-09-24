@@ -62,6 +62,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
     case openFieldExtraction      // P3.1 — `Label: value` facts from ANY domain
     case openFieldAsking          // P3.4 — resolve a question against the ledger's real fields
     case openFactTypes            // P3.2 — derive a type id for documents outside the curated enum
+    case generatedSourceCoverage  // P3.5 — derive the format-coverage claim from the registry
+    case languageHonesty          // P3.6 — state the English-only extraction limit
     case historyChapterReadback   // P2.1/P2.5 — read chapters + persist alternative accounts
 
     public var id: String { rawValue }
@@ -96,6 +98,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .openFieldExtraction:  return "Read labelled fields from any document"
         case .openFieldAsking:      return "Ask about any field we found"
         case .openFactTypes:        return "Group unfamiliar document kinds"
+        case .generatedSourceCoverage: return "Report what each format can give you"
+        case .languageHonesty:      return "State the English-only limit"
         case .historyChapterReadback: return "Story chapters & recorded disagreements"
         }
     }
@@ -130,6 +134,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
         case .openFieldExtraction:  return "Pull facts out of any document that states them as a label and a value — \u{201C}Policy Number: 4471-99812\u{201D}, \u{201C}Registration No: MH-12-AB-1234\u{201D}, \u{201C}Roll No: 21BCE1043\u{201D} — no matter what kind of document it is. Until now facts came only from eleven built-in document types (patents, invoices, contracts, medical, property and so on), so a shipping manifest, a car service record or a school report produced searchable text but no structured facts. Fields the built-in types already handle are left to them, so nothing about those changes. Off keeps the built-in types only."
         case .documentLevelFTS:     return "Also search each document's full text, not only its individual passages. A phrase whose words fall either side of a passage boundary — a name, an address, a clause — can never match the passage index, because no single passage contains all of it. Runs only when the passage search finds nothing, so precise passage hits still lead."
         case .historyChapterReadback: return "Read back the chapter structure of a reconstructed story, and keep a record of disagreements found between sources so the same contradiction is not rediscovered on every rebuild. Off falls back to an unchaptered list and forgets disagreements between builds."
+        case .generatedSourceCoverage: return "Add a section to the import report saying, per file format, exactly what the app got: full structure, text only, expanded container, held for later, or stored but not interpreted — plus any format it recognises but cannot read. The list is read off the parsers actually loaded for that run, so it cannot claim support that is switched off or absent. Off omits the section rather than showing a hand-written list that may have drifted."
+        case .languageHonesty:      return "Say which languages your documents are in, and state plainly that structured extraction — dates, names, identifiers, labelled fields — is English-only in this version. Non-English documents are still stored in full and searchable by their own words; only the structured layer is missing. Off stays silent, which makes a language limit look like an empty archive."
         case .poaGrantorRecovery:   return "Read the person's name out of a power-of-attorney or authorisation form even when the form is typed in lower case (\u{201C}I, jane doe having\u{201D}). Restricted to that exact document phrasing, so ordinary sentences that begin with \u{201C}I\u{201D} are never mistaken for a name. Off keeps the stricter rule, which needs the name capitalised."
         }
     }
@@ -147,7 +153,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
              .mediaTranscription,
              .recordDerivationFailures, .strictDerivation, .derivationCompleteMarker,
              .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback,
-             .openFieldExtraction, .openFieldAsking, .openFactTypes:
+             .openFieldExtraction, .openFieldAsking, .openFactTypes,
+             .generatedSourceCoverage, .languageHonesty:
             return true
         }
     }
@@ -189,7 +196,8 @@ public enum KnowledgeModule: String, CaseIterable, Sendable, Identifiable {
             return "Import integrity"
         case .poaGrantorRecovery, .documentLevelFTS, .historyChapterReadback:
             return "Extraction & search"
-        case .openFieldExtraction, .openFieldAsking, .openFactTypes:
+        case .openFieldExtraction, .openFieldAsking, .openFactTypes,
+             .generatedSourceCoverage, .languageHonesty:
             return "Universality"
         }
     }
