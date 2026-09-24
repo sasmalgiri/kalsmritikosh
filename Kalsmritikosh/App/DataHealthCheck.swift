@@ -598,6 +598,30 @@ public enum DataHealthCheck {
             }
         }
 
+        // ── B-2 — why the story layer looks the way it does
+        let historyDiagnosis = await HistoryLayerDiagnosis.run(database: database)
+        md += "## Why do you see the stories you see? (B-2)\n\n"
+        md += "**\(historyDiagnosis.headline)**\n\n"
+        md += "| | link | state |\n|---|---|---|\n"
+        for l in historyDiagnosis.links {
+            md += "| \(l.outcome.symbol) | \(l.name) | \(l.outcome.line) |\n"
+        }
+        md += "\n"
+        if let missing = historyDiagnosis.firstMissing {
+            if historyDiagnosis.emptyButCorrect {
+                md += "This is NOT a fault — see the reason above.\n\n"
+            } else if missing.outcome.isDefect {
+                issues.append("Story layer: the chain stops at “\(missing.name)” — \(missing.outcome.line)")
+            }
+            if !missing.remedy.isEmpty {
+                md += "**What to do:** \(missing.remedy)\n\n"
+            }
+        }
+        md += "This does NOT judge whether any particular subject's story is correct,\n"
+        md += "complete or well-ordered. That requires named subjects — including a\n"
+        md += "deliberately ambiguous one — and is recorded as owner-blocked rather than\n"
+        md += "approximated with a subject chosen because it happens to work.\n\n"
+
         md += "## What this report does NOT tell you\n\n"
         md += "Stated so its silence is never mistaken for a clean bill of health:\n\n"
         md += "- **Whether the extracted values are CORRECT.** Everything above counts "
