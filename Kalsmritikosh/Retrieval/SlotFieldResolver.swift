@@ -68,6 +68,52 @@ public enum SlotFieldResolver {
         ("patent holder", "applicant", .counterparty, "Applicant", "patent"),
     ]
 
+    /// INTERROGATIVE SHAPE CUES — phrases that name a field's VALUE SHAPE
+    /// rather than its name. "how much did I pay?" asks for money without ever
+    /// saying "amount"; "when was it sent?" asks for a date without saying
+    /// "date". The relevance gates that decide which ledger facts may be shown
+    /// compare question words against a fact's field NAME and value, so
+    /// without this they drop the `amount` fact for "how much?" — the field is
+    /// named by the question's GRAMMAR, not its vocabulary, and no amount of
+    /// synonym listing reaches it.
+    ///
+    /// Deliberately limited to MONEY and DATE — the only two shapes an
+    /// interrogative names unambiguously and that are narrow enough to be safe.
+    /// "who", "what" and "where" are excluded on purpose: the fields they range
+    /// over (applicant, employer, counterparty, location, role …) are all
+    /// `.text`, so a cue for them would admit EVERY text-shaped fact riding the
+    /// retrieval — which is precisely the dump these gates exist to stop.
+    nonisolated static let shapeCues: [(phrases: [String], shapes: Set<FactSchemaRegistry.ValueShape>)] = [
+        (["how much", "how many", "what amount", "total cost", "cost of", "price",
+          "how expensive", "payable"], [.money, .number]),
+        (["when", "what date", "which date", "on what day", "how long ago"], [.date]),
+    ]
+
+    /// The value shapes this question asks for, via `shapeCues`. Empty when the
+    /// question names no shape — which is the common case and means the callers'
+    /// ordinary term-overlap rules decide alone.
+    public nonisolated static func requestedValueShapes(
+        in question: String
+    ) -> Set<FactSchemaRegistry.ValueShape> {
+        let q = question.lowercased()
+        var out: Set<FactSchemaRegistry.ValueShape> = []
+        for cue in shapeCues where cue.phrases.contains(where: { wordBoundedRange(of: $0, in: q) != nil }) {
+            out.formUnion(cue.shapes)
+        }
+        return out
+    }
+
+    /// Whether `question` asks for the shape `field` holds — the cheap check
+    /// the relevance gates call. False when the question names no shape, so it
+    /// only ever ADMITS a fact, never excludes one.
+    public nonisolated static func questionRequestsShape(
+        ofField field: String, in question: String
+    ) -> Bool {
+        let shapes = requestedValueShapes(in: question)
+        guard !shapes.isEmpty else { return false }
+        return shapes.contains(FactSchemaRegistry.expectedShape(of: field))
+    }
+
     /// A2.3 — REGISTRY-ALIAS EXPANSION: when the question carries one alias
     /// of a field ("patent no"), the canonical phrase joins the keyword
     /// query ("patent number") so FTS recall never depends on which spelling

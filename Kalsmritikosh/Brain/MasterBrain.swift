@@ -1050,9 +1050,22 @@ public actor MasterBrain {
         // asks for a specific field it still matches (application number →
         // "application","number"), so field lookups are unaffected. When nothing
         // is relevant, inject no fact block and let the cited chunks answer.
+        //
+        // SHAPE CUES (added after this gate dropped the `amount` fact for the
+        // question "how much?"). Term overlap alone requires the user to have
+        // used the ledger's own field vocabulary: "how much" names the money
+        // shape by GRAMMAR, shares no word with `amount = ₹3,800`, and shares
+        // none with the chunk "Amount ₹3,800 paid." either — so the decisive
+        // fact was withheld from the prompt for the commonest phrasing of a
+        // cost question. `SlotFieldResolver.questionRequestsShape` admits a
+        // fact whose field holds the shape the question asked for, and returns
+        // false whenever the question names no shape, so it can only ever admit
+        // — the "who drafted the claims?" dump this gate was added for stays
+        // blocked (no money/date/location cue in it).
         let selector = PassageAnswerSelector()
         let qTerms = selector.contentTerms(question)
         let relevantFacts: [GenericFact] = qTerms.isEmpty ? facts : facts.filter { f in
+            if SlotFieldResolver.questionRequestsShape(ofField: f.field, in: question) { return true }
             let ft = selector.contentTerms(f.field + " " + f.value)
             return !qTerms.isDisjoint(with: ft)
         }

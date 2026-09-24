@@ -149,7 +149,14 @@ public enum DeterministicEvidenceFallback {
             // Hearingdate ×30 riding a "who signed the lease?" ask — stays out:
             // those facts' passages are the unrelated documents the same gate
             // already excludes.
-            guard relevant(fact.field + " " + fact.value) || relevant(backing.chunk.text)
+            //
+            // The third clause is the SHAPE cue: "how much did I pay?" names
+            // the money shape by grammar while sharing no word with either the
+            // `amount` fact or the passage carrying it. See
+            // `SlotFieldResolver.shapeCues`; it admits only, never excludes.
+            guard relevant(fact.field + " " + fact.value)
+                    || relevant(backing.chunk.text)
+                    || SlotFieldResolver.questionRequestsShape(ofField: fact.field, in: question)
             else { continue }
             let dedupKey = "\(fact.field.lowercased())|\(fact.value.lowercased())"
             guard seenFacts.insert(dedupKey).inserted else { continue }
