@@ -104,6 +104,15 @@ public final class BGETokenizer: @unchecked Sendable {
         KalsmritikoshLog.brain.info("BGETokenizer loaded \(vocab.count, privacy: .public) tokens in \(buckets.count, privacy: .public) buckets (greedy mode)")
     }
 
+    /// The PROVABLY NEUTRAL input bound: characters beyond this can never
+    /// influence the output, because the scan emits at most `maxLength − 2`
+    /// tokens and each consumes at least one and at most `maxPieceLength`
+    /// characters. Exposed (rather than recomputed by callers from an assumed
+    /// piece length) so a test asserting cap neutrality asserts it at the REAL
+    /// bound — a test that hardcodes the wrong bound can pass for the wrong
+    /// reason.
+    var inputCharacterBound: Int { maxLength * maxPieceLength }
+
     /// Tokenize a (question, passage) pair into the model's expected
     /// input shape: <s> q_tokens </s> </s> p_tokens </s> padded to
     /// maxLength. attention_mask is 1 over real tokens, 0 over pad.
