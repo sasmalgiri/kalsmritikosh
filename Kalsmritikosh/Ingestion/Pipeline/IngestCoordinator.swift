@@ -894,7 +894,16 @@ public actor IngestCoordinator {
                         text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
                         kind: $0.kind) },
             subjectLabel: subjectLabel,
-            documentClass: documentClass)
+            documentClass: documentClass,
+            // The layout-preserving text for label detection: rawText keeps the
+            // line breaks that normalization drops, and without them no
+            // `Label: value` after the first is recognisable. See
+            // DomainFactExtractor.extract(fromKindedBlocks:) for the
+            // measurement that found this.
+            layoutTextByBlock: Dictionary(
+                doc.blocks.filter { !$0.kind.isBoilerplate }
+                    .map { ($0.id, $0.rawText) },
+                uniquingKeysWith: { a, _ in a }))
         // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
         // a plist / registry hive / custody manifest rather than from prose (a
         // serial regexed out of a sentence is noise). They join `derived` here, so

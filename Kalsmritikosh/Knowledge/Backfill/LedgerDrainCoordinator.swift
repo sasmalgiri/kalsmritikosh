@@ -329,7 +329,16 @@ public final class LedgerDrainCoordinator {
                         text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
                         kind: $0.kind) },
             subjectLabel: subjectLabel,
-            documentClass: docClass ?? nil)
+            documentClass: docClass ?? nil,
+            // The layout-preserving text for label detection: rawText keeps the
+            // line breaks that normalization drops, and without them no
+            // `Label: value` after the first is recognisable. See
+            // DomainFactExtractor.extract(fromKindedBlocks:) for the
+            // measurement that found this.
+            layoutTextByBlock: Dictionary(
+                blocks.filter { !$0.kind.isBoilerplate }
+                    .map { ($0.id, $0.rawText) },
+                uniquingKeysWith: { a, _ in a }))
         var merged = DomainFactExtractor.merge(derived)
 
         // ── P3.3 — INDUCTION, and only where every rule found nothing ────────

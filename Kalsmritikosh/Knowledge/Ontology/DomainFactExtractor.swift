@@ -100,11 +100,38 @@ public struct DomainFactExtractor: Sendable {
     /// extractor can weight a table cell above a paragraph and refuse
     /// furniture outright. The kind-less overload below forwards with
     /// `.paragraph`, which is the conservative assumption.
+    /// `layoutTextByBlock` — the block's text WITH ITS LINE BREAKS, keyed by
+    /// block id, used only by the open-field pass.
+    ///
+    /// FOUND ON THE OWNER'S REAL ARCHIVE, 2026-09-25. A GDPR report printed ~60
+    /// clean `Label: value` pairs — "Data Subject: patent", "Report Generated:
+    /// 21 May 2026 at 9:23 AM", "Emails Involving Subject: 60 of 526 total" —
+    /// and NOT ONE became a fact. Both call sites pass
+    /// `normalizedText.isEmpty ? rawText : normalizedText`, and measuring the
+    /// two stored columns showed why:
+    ///
+    ///     evidence_blocks.raw_text        → 11 / 16 / 34 newlines
+    ///     evidence_blocks.normalized_text → 0
+    ///
+    /// Normalization collapses the layout, so every label after the first sat
+    /// mid-run preceded by a plain space, and `OpenFieldExtractor`'s
+    /// label-position gate correctly refused all of them. The gate is right —
+    /// a colon mid-sentence is not a field — but it needs the line structure
+    /// the parser DID preserve and the normalizer threw away. P3.1, the whole
+    /// universality promise, was therefore silent on any document that lays its
+    /// fields out one per line: most forms, reports and statements.
+    ///
+    /// Passed as a SEPARATE map rather than by switching `text`, so the eleven
+    /// domain packs keep receiving exactly the normalized text they were tuned
+    /// against. Only label detection gains the layout, which is the only thing
+    /// that needs it. Defaulted to empty so existing callers and rigs behave
+    /// as before.
     public nonisolated func extract(
         fromKindedBlocks blocks: [(id: UUID, text: String, kind: EvidenceBlockKind)],
         subjectLabel: String,
         documentClass: DocumentClass? = nil,
-        perBlockMinimumLength: Int = 8
+        perBlockMinimumLength: Int = 8,
+        layoutTextByBlock: [UUID: String] = [:]
     ) -> [GenericFact] {
         var facts = extract(
             fromBlocks: blocks.map { .init(id: $0.id, text: $0.text) },
@@ -119,7 +146,12 @@ public struct DomainFactExtractor: Sendable {
         // first, and merge keeps the FIRST-SEEN value form. Order therefore
         // preserves today's behaviour exactly while adding the fields no pack
         // was ever written for.
-        let open = OpenFieldExtractor.extractFacts(blocks: blocks, subjectLabel: subjectLabel)
+        // Label detection reads the LAYOUT-PRESERVING text where the caller
+        // supplied one; otherwise the same text the packs saw.
+        let openInput = blocks.map { b in
+            (id: b.id, text: layoutTextByBlock[b.id] ?? b.text, kind: b.kind)
+        }
+        let open = OpenFieldExtractor.extractFacts(blocks: openInput, subjectLabel: subjectLabel)
         if let cap = open.cappedAt {
             // Hitting the cap is itself a finding: one document presented more
             // label-like lines than any real form has, which usually means a
