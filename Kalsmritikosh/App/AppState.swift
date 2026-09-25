@@ -1659,6 +1659,17 @@ public final class AppState {
                 qaPairs: qaPairsRepo,
                 qaPairExtractor: EmailThreadQAPairExtractor(),
                 bondConstructor: BondConstructor(repository: factBondsRepo, cache: bondCache),
+                // FOUND BY THE ENGINE-FIRING SWEEP, 2026-09-25. This was never
+                // passed, so `emailParticipantRepository` defaulted to nil and
+                // the whole participant lane was dead in the real app:
+                // `EmailParticipantRepository` was constructed NOWHERE outside
+                // its own unit test. Ten real .eml files produced 0 rows in
+                // `email_participant_occurrences`, and on a 526-message mailbox
+                // it would have produced none either — for a product whose
+                // primary input is mail, that is the sender/recipient graph
+                // silently missing. The repository worked; nobody handed it to
+                // the coordinator.
+                emailParticipantRepository: EmailParticipantRepository(database: db),
                 // G2-3 — LLM is the final path. No silent heuristic
                 // substitution; the row's context_prefix stays NULL
                 // when the LLM doesn't answer in budget. Timeout sized
