@@ -275,26 +275,78 @@ public struct EntityQualityGate: Sendable {
         return byClass
     }
 
-    // MARK: - Retroactive purge
+    // MARK: - Retroactive retirement (was: purge)
 
     public struct PurgeReport: Sendable {
-        public let entitiesDeleted: Int
-        public let memoryObjectsDeleted: Int
+        /// Junk entities marked `review_status = 'rejected'`. NOT deleted.
+        public let entitiesRetired: Int
+        /// Memory rows marked `status = 'retired'`. NOT deleted.
+        public let memoryObjectsRetired: Int
         public let totalEntitiesScanned: Int
+        /// Entities that FAIL `shouldKeep` but were left live because the user
+        /// had restored them by hand. Their judgement outranks the heuristic.
+        public let skippedUserRestored: Int
     }
 
-    /// Sweep existing canonical noun entities, drop those that fail
-    /// `shouldKeep`, and cascade-delete any memory_objects whose
-    /// subject_identifier matches a dropped entity's value or
-    /// normalized form. Idempotent — running it twice on the same DB
-    /// is a no-op the second time. Pass `dryRun: true` to count without
-    /// modifying.
+    /// Sweep existing canonical noun entities and RETIRE those that fail
+    /// `shouldKeep` — the "Nil Nil" / filename / hostname ghosts.
+    ///
+    /// OWNER RULING 2026-09-25: THIS NO LONGER DELETES ANYTHING.
+    ///
+    /// It used to `DELETE FROM entities` (cascading away entity_mentions and
+    /// entity_aliases) and `DELETE FROM memory_objects` for each one. Of the 47
+    /// delete sites in the app it was the only one that destroyed extracted
+    /// knowledge rather than replacing a derived projection or rolling back a
+    /// failed commit — so it was the one site in genuine tension with the
+    /// preserve-everything directive.
+    ///
+    /// It now uses the soft-exclude mechanism this app already shipped for the
+    /// same purpose (schema v49, whose own comment reads "Honoring the
+    /// preserve-everything directive, a rejected entity is NOT deleted"):
+    ///
+    ///   • entities  → `review_status = 'rejected'`, the SAME value the
+    ///     Knowledge browser's Reject button writes. Deliberately not a new
+    ///     'retired' value: the ~23 existing read filters are a mix of
+    ///     `IS NULL` and `!= 'rejected'`, so a novel value would slip past the
+    ///     second kind and leave ghosts in answers. Retrieval already honours
+    ///     'rejected' (HybridRetriever, LedgerQuery, the entity/chunk/event/
+    ///     relationship repositories), so answers are unchanged.
+    ///   • memory    → `MemoryRepository.retireSubjects`, because memory is
+    ///     keyed by subject NAME, not entity id; retiring the entity alone
+    ///     would not hide it.
+    ///   • every action is logged append-only to `fact_reviews` with
+    ///     `reviewer = "quality-gate"`, so it appears in the Audit trail,
+    ///     is attributable to the machine rather than the user, and is
+    ///     reversible from the existing Restore path.
+    ///
+    /// A USER'S RESTORE NOW WINS. Entities the user has accepted by hand are
+    /// skipped, so the next drain cannot silently re-retire something they
+    /// deliberately brought back. The old delete had no way to express that.
+    ///
+    /// Idempotent — already-rejected entities are not rescanned, so a second
+    /// run neither re-logs reviews nor changes a row (the Fixed-Point Law).
+    /// Pass `dryRun: true` to count without modifying.
     public func purgeGarbage(in database: Database, dryRun: Bool = false) async throws -> PurgeReport {
+        // Skip rows already retired so the pass is idempotent, and let a user's
+        // own rejection stand without a duplicate audit entry.
         let rows = try await database.query("""
         SELECT id, kind, value, normalized FROM entities
-        WHERE kind IN ('person','organization','vendor','client');
+        WHERE kind IN ('person','organization','vendor','client')
+          AND (review_status IS NULL OR review_status != 'rejected');
         """)
-        var toDelete: [(id: UUID, value: String, normalized: String)] = []
+        // Entities the user explicitly restored (an `accept` review by a human).
+        // The heuristic must not overrule a person.
+        var userRestored: Set<UUID> = []
+        let restoredRows = try await database.query("""
+        SELECT DISTINCT subject_id FROM fact_reviews
+        WHERE subject_kind = 'entity' AND action = 'accept' AND reviewer = 'user';
+        """)
+        for row in restoredRows { if let id = row.uuid(0) { userRestored.insert(id) } }
+
+        // The rejection REASON is captured here, against the entity's real kind,
+        // so the audit row records why this specific entity was retired.
+        var toRetire: [(id: UUID, value: String, normalized: String, reason: String)] = []
+        var skipped = 0
         for row in rows {
             guard let id = row.uuid(0),
                   let kindStr = row.string(1),
@@ -303,53 +355,65 @@ public struct EntityQualityGate: Sendable {
                   let kind = Entity.Kind(rawValue: kindStr)
             else { continue }
             let entity = Entity(kind: kind, value: value, sourceObjectID: UUID())
-            if !shouldKeep(entity) {
-                toDelete.append((id, value, normalized))
+            if let reason = classify(entity) {
+                if userRestored.contains(id) { skipped += 1; continue }
+                toRetire.append((id, value, normalized, reason))
             }
         }
-        guard !toDelete.isEmpty else {
-            return PurgeReport(entitiesDeleted: 0, memoryObjectsDeleted: 0, totalEntitiesScanned: rows.count)
+        guard !toRetire.isEmpty else {
+            return PurgeReport(entitiesRetired: 0, memoryObjectsRetired: 0,
+                               totalEntitiesScanned: rows.count,
+                               skippedUserRestored: skipped)
         }
         if dryRun {
             return PurgeReport(
-                entitiesDeleted: toDelete.count,
-                memoryObjectsDeleted: 0,
-                totalEntitiesScanned: rows.count
+                entitiesRetired: toRetire.count,
+                memoryObjectsRetired: 0,
+                totalEntitiesScanned: rows.count,
+                skippedUserRestored: skipped
             )
         }
+
+        let memory = MemoryRepository(database: database)
+        let reviews = FactReviewsRepository(database: database)
         try await database.beginTransaction()
-        var memoryDeleted = 0
+        var memoryRetired = 0
         do {
-            for entry in toDelete {
-                // Delete memory_objects matching value OR normalized (case-insensitive).
-                let res = try await database.query("""
-                SELECT id FROM memory_objects
-                WHERE lower(subject_identifier) IN (?, ?);
-                """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
-                memoryDeleted += res.count
-                if !res.isEmpty {
-                    try await database.exec("""
-                    DELETE FROM memory_objects
-                    WHERE lower(subject_identifier) IN (?, ?);
-                    """, [.text(entry.value.lowercased()), .text(entry.normalized.lowercased())])
-                }
-                // Delete the canonical entity (FK cascade removes
-                // entity_mentions + entity_aliases automatically).
+            for entry in toRetire {
+                // Memory first: keyed by subject NAME, so both the displayed
+                // value and its normalized form have to be offered.
+                memoryRetired += try await memory.retireSubjects(
+                    identifiers: [entry.value, entry.normalized])
+                // Soft-exclude the entity. Its mentions and aliases SURVIVE —
+                // under the old delete they were cascaded away, which is what
+                // made the operation unrecoverable.
                 try await database.exec(
-                    "DELETE FROM entities WHERE id = ?;",
+                    "UPDATE entities SET review_status = 'rejected' WHERE id = ?;",
                     [.uuid(entry.id)]
                 )
+                // Append-only audit record, attributable and reversible.
+                let why = "Retired by the entity quality gate (\(entry.reason))"
+                    + " — excluded from answers, not deleted"
+                _ = try await reviews.record(FactReview(
+                    subjectKind: .entity,
+                    subjectID: entry.id,
+                    action: .reject,
+                    priorValue: entry.value,
+                    reviewer: "quality-gate",
+                    reason: why
+                ))
             }
             try await database.commitTransaction()
         } catch {
             await database.rollbackTransaction()
             throw error
         }
-        KalsmritikoshLog.brain.info("EntityQualityGate purge: removed \(toDelete.count, privacy: .public) entities + \(memoryDeleted, privacy: .public) memory rows")
+        KalsmritikoshLog.brain.info("EntityQualityGate: RETIRED (not deleted) \(toRetire.count, privacy: .public) entities + \(memoryRetired, privacy: .public) memory rows; \(skipped, privacy: .public) left live because the user restored them")
         return PurgeReport(
-            entitiesDeleted: toDelete.count,
-            memoryObjectsDeleted: memoryDeleted,
-            totalEntitiesScanned: rows.count
+            entitiesRetired: toRetire.count,
+            memoryObjectsRetired: memoryRetired,
+            totalEntitiesScanned: rows.count,
+            skippedUserRestored: skipped
         )
     }
 

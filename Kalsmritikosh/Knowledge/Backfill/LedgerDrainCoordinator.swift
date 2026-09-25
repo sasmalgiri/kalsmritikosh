@@ -8,8 +8,12 @@
 //
 //    pass 1  ENTITY RETIREMENT   EntityQualityGate.purgeGarbage retires the
 //                                junk register (the live ~4,343 "Nil Nil"/
-//                                filename/hostname ghosts; owner-blessed
-//                                mechanism from T13, cascades memory_objects).
+//                                filename/hostname ghosts). SOFT-EXCLUDE since
+//                                the owner ruling of 2026-09-25: entities get
+//                                review_status='rejected' and their memory
+//                                status='retired', both reversible and logged
+//                                in fact_reviews. It no longer deletes rows or
+//                                cascades away mentions/aliases.
 //    pass 2  FACTS → v2          per KO: re-extract GenericFacts from the
 //                                STORED EvidenceBlocks via the same packs the
 //                                ingest path uses, C-10 merge, BIND ANCHORS
@@ -177,10 +181,14 @@ public final class LedgerDrainCoordinator {
             }
         }
 
-        // ── pass 1: entity retirement (owner-blessed purge; idempotent) ─────
+        // ── pass 1: entity retirement (idempotent) ──────────────────────────
+        // The receipt has always called this RETIREMENT; as of the owner ruling
+        // of 2026-09-25 the implementation matches the word — junk entities are
+        // soft-excluded (review_status='rejected') and their memory is marked
+        // retired, both reversible and logged in fact_reviews. Nothing deleted.
         let purge = try await gate.purgeGarbage(in: database)
-        receipt.entitiesRetired = purge.entitiesDeleted
-        receipt.memoryObjectsRetired = purge.memoryObjectsDeleted
+        receipt.entitiesRetired = purge.entitiesRetired
+        receipt.memoryObjectsRetired = purge.memoryObjectsRetired
 
         // Enumerate every KO once; passes 2/3/5 are per-KO.
         var koIDs: [KnowledgeObject.ID] = []

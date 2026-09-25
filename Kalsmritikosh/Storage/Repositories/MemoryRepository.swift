@@ -92,6 +92,40 @@ public actor MemoryRepository {
         return Int(before - after)
     }
 
+    /// Mark the memory of retired subjects `status = 'retired'` INSTEAD of
+    /// deleting it (owner ruling 2026-09-25, preserve-everything).
+    ///
+    /// `EntityQualityGate` used to `DELETE FROM memory_objects` for every junk
+    /// entity it removed. Those rows are distilled memory — derived, yes, but
+    /// not cheaply re-derivable, and destroying them is the one place the ledger
+    /// genuinely lost extracted knowledge. Retiring is reversible: flip the
+    /// status back and the memory returns.
+    ///
+    /// Matching is by `subject_identifier`, because memory is keyed by SUBJECT
+    /// NAME, not by entity id — so retiring the entity alone would NOT hide its
+    /// memory. That is why this method exists at all rather than relying on the
+    /// entity's own `review_status`.
+    ///
+    /// Idempotent: rows already retired are skipped, so a second drain neither
+    /// re-counts nor re-writes them (the Fixed-Point Law).
+    @discardableResult
+    public func retireSubjects(identifiers: [String]) async throws -> Int {
+        guard !identifiers.isEmpty else { return 0 }
+        let lowered = Set(identifiers.map { $0.lowercased() })
+        let placeholders = Array(repeating: "?", count: lowered.count).joined(separator: ",")
+        let binds = lowered.map { SQLValue.text($0) }
+        let matching = try await database.query("""
+        SELECT COUNT(*) FROM memory_objects
+        WHERE lower(subject_identifier) IN (\(placeholders)) AND status != 'retired';
+        """, binds).first?.int(0) ?? 0
+        guard matching > 0 else { return 0 }
+        try await database.exec("""
+        UPDATE memory_objects SET status = 'retired'
+        WHERE lower(subject_identifier) IN (\(placeholders)) AND status != 'retired';
+        """, binds)
+        return Int(matching)
+    }
+
     public func recordChange(_ change: MemoryChange) async throws {
         let delta = try encoder.encode(change.delta)
         try await database.exec("""
@@ -113,7 +147,15 @@ public actor MemoryRepository {
         ])
     }
 
-    public func current(forSubject kind: MemoryObject.SubjectKind, identifier: String) async throws -> MemoryObject? {
+    /// Retired memory is hidden by default — `retireSubjects` replaces the old
+    /// DELETE, so without this filter the junk memory the quality gate retires
+    /// would still reach answers. `includeRetired` is an explicit opt-in for
+    /// audit/restore surfaces; nothing is hidden silently.
+    public func current(
+        forSubject kind: MemoryObject.SubjectKind,
+        identifier: String,
+        includeRetired: Bool = false
+    ) async throws -> MemoryObject? {
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_identifier,
                key_decisions_json, key_event_ids_json,
@@ -122,6 +164,7 @@ public actor MemoryRepository {
                confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
         WHERE subject_kind = ? AND subject_identifier = ?
+          \(includeRetired ? "" : "AND status != 'retired'")
         LIMIT 1;
         """, [.text(kind.rawValue), .text(identifier)])
         return rows.first.flatMap(decode)
@@ -131,7 +174,9 @@ public actor MemoryRepository {
     /// object in the ledger. The cache calls this in a loop until the
     /// returned page is shorter than `pageSize`. Ordered by updated_at
     /// so re-warms after a session pick up the latest snapshots.
-    public func listAll(offset: Int = 0, pageSize: Int = 2_000) async throws -> [MemoryObject] {
+    public func listAll(
+        offset: Int = 0, pageSize: Int = 2_000, includeRetired: Bool = false
+    ) async throws -> [MemoryObject] {
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_identifier,
                key_decisions_json, key_event_ids_json,
@@ -139,13 +184,16 @@ public actor MemoryRepository {
                status, narrative, source_object_ids_json,
                confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
+        \(includeRetired ? "" : "WHERE status != 'retired'")
         ORDER BY updated_at DESC
         LIMIT ? OFFSET ?;
         """, [.integer(Int64(pageSize)), .integer(Int64(offset))])
         return rows.compactMap(decode)
     }
 
-    public func search(_ query: String, limit: Int = 20) async throws -> [MemoryObject] {
+    public func search(
+        _ query: String, limit: Int = 20, includeRetired: Bool = false
+    ) async throws -> [MemoryObject] {
         let pattern = "%\(query)%"
         let rows = try await database.query("""
         SELECT id, subject_kind, subject_identifier,
@@ -154,11 +202,20 @@ public actor MemoryRepository {
                status, narrative, source_object_ids_json,
                confidence, version, created_at, updated_at, quality_tier
         FROM memory_objects
-        WHERE subject_identifier LIKE ? OR narrative LIKE ?
+        WHERE (subject_identifier LIKE ? OR narrative LIKE ?)
+          \(includeRetired ? "" : "AND status != 'retired'")
         ORDER BY updated_at DESC
         LIMIT ?;
         """, [.text(pattern), .text(pattern), .integer(Int64(limit))])
         return rows.compactMap(decode)
+    }
+
+    /// Retired memory, for the audit/restore surface and for the integrity
+    /// audit to assert retirement actually took effect.
+    public func retiredCount() async throws -> Int {
+        let rows = try await database.query(
+            "SELECT COUNT(*) FROM memory_objects WHERE status = 'retired';")
+        return Int(rows.first?.int(0) ?? 0)
     }
 
     public func changesSince(
