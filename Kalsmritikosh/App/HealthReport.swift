@@ -102,10 +102,27 @@ public struct HealthInputs: Sendable, Equatable {
 public struct HealthReport: Sendable, Equatable {
     public let coverage: [HealthCoverageRow]
     public let invariants: [HealthInvariant]
+    /// WHEN this report was taken. The panel is a snapshot rendered beside
+    /// live-polling cards, and without a visible age a stale snapshot is
+    /// indistinguishable from a current measurement.
+    ///
+    /// OWNER WITNESS 2026-09-25: the dashboard showed "Chunks 9,611" in the
+    /// cards and "chunks: 0" in this panel's Coverage rows at the same moment.
+    /// The panel had been built once at view-appear, racing the metrics poller,
+    /// so it captured the first empty sample and never refreshed. Nothing on
+    /// screen said it was old.
+    public let generatedAt: Date
+    /// Nil when the live sample was unavailable at build time — the coverage
+    /// rows are then absent rather than zero, because "not sampled yet" and
+    /// "measured zero" are different facts.
+    public let sampleCapturedAt: Date?
 
-    public init(coverage: [HealthCoverageRow], invariants: [HealthInvariant]) {
+    public init(coverage: [HealthCoverageRow], invariants: [HealthInvariant],
+                generatedAt: Date = Date(), sampleCapturedAt: Date? = nil) {
         self.coverage = coverage
         self.invariants = invariants
+        self.generatedAt = generatedAt
+        self.sampleCapturedAt = sampleCapturedAt
     }
 
     /// The panel is RED when any invariant failed, AMBER when only warnings.

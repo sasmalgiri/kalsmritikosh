@@ -29,7 +29,22 @@ public enum HealthReportBuilder {
         var coverage: [HealthCoverageRow] = []
 
         // Coverage rows — straight from the live sample.
+        //
+        // STALENESS IS THE HAZARD HERE, not the arithmetic. This builder runs
+        // ONCE from a `.task` at view-appear, while the metrics poller starts
+        // in `.onAppear` — a race this builder always loses on first paint. It
+        // then captures whatever `current` holds (nothing, or a pre-ingest
+        // zero) and the panel keeps showing it while the cards above refresh
+        // every tick. Measured on the owner's machine: cards "Chunks 9,611"
+        // beside "chunks: 0" here, with no indication the panel was old.
+        //
+        // The caller now rebuilds this when the sample changes, and the report
+        // carries the sample's own capture time so the UI can say how old it
+        // is. `sampleCapturedAt == nil` means the rows below are ABSENT rather
+        // than zero.
+        var sampledAt: Date?
         if let s = appState.liveMetrics?.current {
+            sampledAt = s.capturedAt
             let cov = s.embeddingCoverage
             coverage.append(HealthCoverageRow(id: "embedding", title: "Embedding",
                 states: [("embedded", cov.embedded), ("pending", cov.pending),
@@ -77,6 +92,7 @@ public enum HealthReportBuilder {
                 pending: pending, hasWork: hasChunks))
         }
 
-        return HealthReport(coverage: coverage, invariants: invariants)
+        return HealthReport(coverage: coverage, invariants: invariants,
+                            sampleCapturedAt: sampledAt)
     }
 }

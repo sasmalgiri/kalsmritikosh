@@ -84,7 +84,14 @@ public struct LiveDashboardView: View {
         .task {
             await loadEnrichmentTiers()
         }
-        .task {
+        // REBUILD WHEN THE SAMPLE MOVES. A plain `.task` runs once at
+        // view-appear and loses the race against `liveMetrics.start()` in
+        // `.onAppear`, so the panel captured an empty sample and then showed
+        // "chunks: 0" beside a card reading 9,611 for the rest of the session.
+        // Keying the task on the sample's capture time rebuilds it each tick,
+        // which is cheap: the coverage rows are struct reads and the two
+        // invariant queries are indexed counts.
+        .task(id: appState.liveMetrics?.current.capturedAt) {
             healthReport = await HealthReportBuilder.build(appState: appState)
         }
         .task {

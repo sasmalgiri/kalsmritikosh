@@ -79,7 +79,26 @@ public struct HealthPanelView: View {
 
     private var coverageSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Coverage").font(.subheadline.weight(.semibold))
+            HStack(spacing: 6) {
+                Text("Coverage").font(.subheadline.weight(.semibold))
+                Spacer()
+                // WHEN these numbers were taken. This panel is a snapshot
+                // rendered beside live-polling cards; the owner saw "chunks: 0"
+                // here next to a card reading 9,611 because the snapshot was
+                // captured before ingestion and nothing said so.
+                if let at = report.sampleCapturedAt {
+                    Text("as of \(at.formatted(date: .omitted, time: .standard))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text("not sampled yet")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            if report.coverage.isEmpty {
+                Text("No live sample yet — these rows are absent rather than zero, "
+                     + "because “not measured” and “measured zero” are different facts.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             ForEach(report.coverage) { row in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
