@@ -1599,6 +1599,14 @@ public struct SettingsView: View {
             }
             let stamp = Int(Date().timeIntervalSince1970)
             let dest = dir.appendingPathComponent("Kalsmritikosh-Backup-\(stamp)")
+            // CHECKPOINT BEFORE COPYING. The connection runs in WAL mode, so
+            // recent commits can live in `knowledge.sqlite-wal` while the main
+            // file is copied — and copying a live database with an active log
+            // can capture a torn state even though the sidecars travel too.
+            // Folding the log back first makes the copied main file
+            // self-contained. A partial checkpoint is REPORTED, not hidden:
+            // the user needs to know their backup was taken over a busy log.
+            let checkpointed = (try? await appState.database?.checkpointWAL()) ?? nil
             do {
                 let manifest = try BackupService().createBackup(
                     databaseURL: dbURL, originalURLs: sidecars, destination: dest,
@@ -1606,7 +1614,11 @@ public struct SettingsView: View {
                     nowEpoch: Date().timeIntervalSince1970)
                 await MainActor.run {
                     backingUp = false
-                    backupStatus = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
+                    var msg = "Backed up \(manifest.entries.count) file(s) to “\(dest.lastPathComponent)”."
+                    if checkpointed == false {
+                        msg += " The write-ahead log was busy, so it was copied alongside the database rather than folded into it — the backup is complete, but restore it as a whole folder."
+                    }
+                    backupStatus = msg
                 }
             } catch {
                 await MainActor.run {

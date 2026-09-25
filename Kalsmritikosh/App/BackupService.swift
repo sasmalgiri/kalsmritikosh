@@ -54,6 +54,12 @@ public struct BackupService: Sendable {
                                        sha256: digest, kind: kind))
         }
         try copyIn(databaseURL, kind: .database)
+        // NOTE: the `-wal` / `-shm` sidecars are NOT added here. The caller
+        // passes them in `originalURLs` (see SettingsView), so adding them
+        // again would write two manifest entries with the same relativePath.
+        // The connection runs in WAL mode, so those sidecars matter — the
+        // caller also checkpoints first (`Database.checkpointWAL`) so the main
+        // file is self-contained and the copy cannot catch a torn state.
         for u in originalURLs { try copyIn(u, kind: .originalSource) }
 
         let manifest = BackupPlanner.manifest(schemaVersion: schemaVersion,
@@ -85,6 +91,19 @@ public struct BackupService: Sendable {
         guard verdict.ok else { throw BackupError.restoreIncomplete(missing: verdict.missing) }
         let fm = FileManager.default
         try fm.createDirectory(at: targetFolder, withIntermediateDirectories: true)
+        // REMOVE THE OUTGOING DATABASE'S SIDECARS FIRST. SQLite recovers a
+        // `-wal` against whatever main file it finds beside it. Restoring a
+        // `knowledge.sqlite` on top of the PREVIOUS database's leftover
+        // `-wal`/`-shm` would let SQLite replay one database's log into
+        // another's pages — corruption produced by the recovery feature.
+        // Entries from this backup (which may legitimately include a `-wal`)
+        // are copied in immediately below, so this only clears what is stale.
+        if let dbName = manifest.databaseEntry?.relativePath {
+            for suffix in ["-wal", "-shm"] {
+                let sidecar = targetFolder.appendingPathComponent(dbName + suffix)
+                if fm.fileExists(atPath: sidecar.path) { try? fm.removeItem(at: sidecar) }
+            }
+        }
         for entry in manifest.entries {
             let src = backupFolder.appendingPathComponent(entry.relativePath)
             let dst = targetFolder.appendingPathComponent(entry.relativePath)
