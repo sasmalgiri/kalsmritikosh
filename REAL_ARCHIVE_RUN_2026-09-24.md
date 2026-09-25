@@ -195,6 +195,47 @@ never displaces a reserved field.
 `applicant = shirshendu sasmal` recovered from the **scanned** POA — the
 lowercase-grantor module doing its job on real OCR output.
 
+## Is the database building properly? — structure audited (2026-09-25)
+
+A different question from "do the engines fire". That asks whether rows exist;
+this asks whether the rows that exist hold together. Counts look healthy over a
+ledger full of orphans — a fact citing a deleted block still counts as a fact,
+and an answer built on it still counts as cited.
+
+`LedgerIntegrityTests` builds the ledger from these 19 files, drives every
+derived pass, then audits six properties. **All clean:**
+
+| Property | Result |
+|---|---|
+| SQLite `foreign_key_check` (with `foreign_keys=1`) | 0 violations |
+| Orphans — chunks, embeddings, blocks, block→object links, mentions, events, event_entities, KOs | 0 each |
+| Facts citing no block at all | 0 |
+| Facts whose cited block does not **resolve** | 0 of 352 |
+| Duplicate fact density | **0%** (352 distinct of 352) |
+| `merged_into` dangling · merge **chains** · orphan aliases | 0 each |
+| Identifier anchors duplicated on one identity | 0 |
+
+Two results worth naming. The **claim–evidence contract holds on real data** —
+every one of the 352 facts cites a block that actually resolves, which is the
+promise the product is built on and had never been checked end-to-end. And
+**duplicate density is 0%**, measured rather than assumed: the ledger was once
+96% duplicate facts, so the test keeps a 40% threshold to trip a regression.
+
+### My own bug, caught before it became a reported defect
+
+The first version checked `evidence_blocks.document_id` against
+`knowledge_objects` and reported **all 217 blocks orphaned**. That column
+references `source_documents` — the parsed structural document — and blocks
+reach a KO through `evidence_block_objects` (217 rows, exactly matching). The
+Golden Thread above had already disproved the claim by resolving 8 of those
+blocks to citations, which is what made the number suspicious rather than
+alarming.
+
+Assuming a column's referent is the same error as assuming a call site. That is
+the fourth time in this program a confident "something is broken" came from a
+measurement that could not support it; the correction each time was to read the
+thing rather than pattern-match its name.
+
 ## Still not verified
 
 - **Whether the extracted values are CORRECT** beyond the ground-truth items
