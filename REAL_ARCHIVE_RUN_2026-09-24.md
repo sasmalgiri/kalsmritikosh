@@ -138,6 +138,63 @@ wrong hypotheses were eliminated first — the splitter (exact) and coalescing
 (236, which cannot produce 408) — and the contradiction "408 > 236" is what
 forced the right question.
 
+## Value audit — and the defect it found (2026-09-25)
+
+Dumped all facts and read them against the documents. **Structure sound, values
+not** — then fixed the largest cause.
+
+### The defect: line breaks were being thrown away
+
+`GDPR_Report_patent.pdf` prints ~60 clean `Label: value` pairs. **None became a
+fact.** Cause, proven by reading both stored columns:
+
+```
+evidence_blocks.raw_text        → 11 / 16 / 34 newlines   (parser preserves)
+evidence_blocks.normalized_text → 0                       (normalizer strips)
+```
+
+Both callers fed the extractor the normalized text, so every label after the
+first sat mid-run behind a plain space, and the label-position gate refused them
+all. The gate was correct; it just needed structure the normalizer had removed.
+
+Fixed by passing `layoutTextByBlock` — a separate map read only by the
+open-field pass, so the eleven domain packs keep the normalized text they were
+tuned against.
+
+**Result: 71 → 352 facts**, and all five hand-verified labels correct:
+
+| Fact | Value | Ground truth |
+|---|---|---|
+| `datasubject` | patent | ✓ |
+| `datasubject` | sasmalgiri@gmail.com | ✓ |
+| `emailsinvolvingsubject` | 60 of 526 total | ✓ exact |
+| `analysisscope` | PII detection, phishing assessment, data flow mapping | ✓ |
+| `earliestrecord` | 23 Jul 2007 | ✓ |
+
+No regressions: ValueRepairTests 21/21, V0AdversarialFixtureTests 10/10.
+
+**The honest other half** — the same change admits noise, since a line opening
+"1. Fwd: …" looks like a labelled field: `1fwd`, `categorypersonal`,
+`casesmoketest001`, `bodyofre`. Four classes measured and recorded as task #93
+with a rule each. The noise is additive, sits at 0.55 below pack facts, and
+never displaces a reserved field.
+
+### Value defects still open
+
+- `date = 1970` — the Unix epoch, a MISSING date rendered as a real one
+- `date = 2066`; six contradictory dates on one PDF, because bare years in prose
+  are stored as the document's date
+- `applicationnumber` = `2023310` vs `202331019665` — a truncated identifier
+- `signature = 28`; `table = 2 rows × 3 columns` stored as document facts
+- `patient = GIRIDHAR SASMAL` — medical pack firing on an investigation report
+- `status = filed` and `status = amendment` on one file, no conflict raised
+- entity `date: 06:00:22 +0530` — a time stored as a date
+
+### What worked
+
+`applicant = shirshendu sasmal` recovered from the **scanned** POA — the
+lowercase-grantor module doing its job on real OCR output.
+
 ## Still not verified
 
 - **Whether the extracted values are CORRECT** beyond the ground-truth items
