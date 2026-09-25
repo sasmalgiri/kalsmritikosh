@@ -210,16 +210,67 @@ derived pass, then audits six properties. **All clean:**
 | SQLite `foreign_key_check` (with `foreign_keys=1`) | 0 violations |
 | Orphans — chunks, embeddings, blocks, block→object links, mentions, events, event_entities, KOs | 0 each |
 | Facts citing no block at all | 0 |
-| Facts whose cited block does not **resolve** | 0 of 352 |
+| **Dangling citations** — walked individually with `json_each` | **0 of 397** across 352 facts |
+| Facts citing no block · citation list not valid JSON | 0 each |
 | Duplicate fact density | **0%** (352 distinct of 352) |
 | `merged_into` dangling · merge **chains** · orphan aliases | 0 each |
 | Identifier anchors duplicated on one identity | 0 |
 
 Two results worth naming. The **claim–evidence contract holds on real data** —
-every one of the 352 facts cites a block that actually resolves, which is the
-promise the product is built on and had never been checked end-to-end. And
-**duplicate density is 0%**, measured rather than assumed: the ledger was once
-96% duplicate facts, so the test keeps a 40% threshold to trip a regression.
+all 397 individual citations across the 352 facts resolve to a block that
+exists, which is the promise the product is built on and had never been checked
+end-to-end. And **duplicate density is 0%**, measured rather than assumed: the
+ledger was once 96% duplicate facts, so the test keeps a 40% threshold to trip a
+regression.
+
+### Second pass — the audit did not deserve the verdict it produced
+
+The first version returned all zeros and I reported the ledger sound. On a
+re-read that claim outran its evidence in three ways, all the same error — **a
+check that cannot fail is not evidence** — and all three are now closed:
+
+1. **Vacuous passes.** "embeddings whose chunk is gone: 0" is equally true of a
+   correct ledger and of an *empty* table, and this archive's embedding drain
+   had not finished. Every check now prints the size of the table it audits and
+   reports NOT VERIFIED, never ✓, when that table is empty.
+2. **The citation check was loose.** It asked whether a fact LIKE-matched *any*
+   surviving block id, so a fact citing five blocks of which four were gone
+   passed. I reported it as "every fact cites a block that resolves" — wording
+   the SQL could not support. It now walks every citation individually.
+3. **No negative control.** Nothing proved the queries could report a problem at
+   all; a mistyped column yields a clean zero. The audit now **breaks the ledger
+   on purpose** — inside a SAVEPOINT, FKs off, rolled back after — and requires
+   each check to fire:
+
+```
+✓ delete a knowledge object → orphan chunks detected           0 → 4
+✓ delete a CITED block      → dangling citation detected       0 → 5
+✓ delete a block            → orphan block→object link         0 → 1
+✓ delete an entity          → orphan mentions detected         0 → 1
+✓ break merged_into         → dangling merge detected          0 → 1
+✓ delete a knowledge object → foreign_key_check reports it     0 → 33
+```
+
+**The control immediately caught a hole in my own check** — the citation control
+failed at first, because it deleted an arbitrary block and only 102 of 217
+blocks are cited by any fact. The check was live; the control was testing the
+wrong row. "A block" and "a CITED block" are different populations.
+
+### The one thing NOT verified, and why it is not a gap
+
+**0 entities have ever been merged**, so the two `merged_into` checks have no
+population (their queries are proven live by the control above). That is
+expected, not missing: `merge()` has three callers and all are user-initiated or
+repair. **Unification happens at write time** — every entity insert is
+`ON CONFLICT(kind, normalized) DO UPDATE`, so one person named in nineteen
+documents becomes one row without any merge.
+
+Reading 0 merges as a broken capability would have been a fourth false alarm, so
+the audit now measures the thing itself:
+
+```
+entities unified across ≥2 documents: 175 of 277 mentioned
+```
 
 ### My own bug, caught before it became a reported defect
 
