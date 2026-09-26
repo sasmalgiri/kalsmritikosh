@@ -17,12 +17,15 @@ public enum TopicSpineBuilder {
 
     /// Build a deterministic topic for one subject. `facts` should already be the
     /// subject's canonical (deduped) facts; `events` its dated events. `now`
-    /// injected for determinism.
+    /// injected for determinism. `factSourceObjectIDs` are the documents the
+    /// facts were read from — without them a topic built only from facts cited
+    /// no source at all (54 of the owner's 65 topics).
     public nonisolated static func build(
         subjectKind: MemoryObject.SubjectKind = .topic,
         subjectIdentifier: String,
         facts: [GenericFact],
         events: [Event],
+        factSourceObjectIDs: [UUID] = [],
         now: Date
     ) -> MemoryObject {
         // Group facts by field (stable order), listing distinct values per field.
@@ -47,7 +50,7 @@ public enum TopicSpineBuilder {
         if !eventLines.isEmpty { parts.append("Timeline:\n" + eventLines.joined(separator: "\n")) }
         let narrative = parts.joined(separator: "\n\n")
 
-        let objectIDs = orderedUnique(sortedEvents.map(\.sourceObjectID))
+        let objectIDs = orderedUnique(sortedEvents.map(\.sourceObjectID) + factSourceObjectIDs)
 
         return MemoryObject(
             subjectKind: subjectKind,

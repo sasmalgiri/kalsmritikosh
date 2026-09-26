@@ -81,6 +81,22 @@ import Foundation
         #expect(out.first?.facts.count == 3)          // absorbed B's fact
     }
 
+    @Test("With several real topics, a thin subject sharing nothing with any of them is not dumped into the largest")
+    func unrelatedThinDoesNotPolluteLargest() {
+        let schedule = subjectFacts("Final shift schedule", [
+            ("shift", "A"), ("shift", "B"), ("operator", "Ravi"), ("operator", "Mina"), ("line", "3"),
+        ])
+        let patent = subjectFacts("Patent Matter", [
+            ("applicant", "Acme"), ("application_number", "US-1"),
+            ("filing_date", "2023-01-01"), ("examiner", "Roe"),
+        ])
+        let unrelated = subjectFacts("Please call me back", [("contact", "8106524242")])
+        let out = TopicConsolidator.consolidate([schedule, patent, unrelated], minDistinctFacts: 4)
+        #expect(out.count == 2)
+        #expect(out.allSatisfy { !$0.facts.map(\.value).contains("8106524242") },
+                "no closest topic exists, so it joins none")
+    }
+
     @Test("A single subject passes through untouched")
     func singlePassesThrough() {
         let a = subjectFacts("A", [("x", "1")])

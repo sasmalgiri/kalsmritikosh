@@ -667,13 +667,28 @@ public actor IngestCoordinator {
     /// message's chunks/events/entities link only to that message's blocks. If
     /// the two splitters disagree (no match), returns [] and the caller falls
     /// back to content chunking — degrade, never cross-link.
-    private nonisolated static func blocks(
+    ///
+    /// A THREAD KO (thread coalescing, the default) carries no single
+    /// `messageIndex` — its messages are listed in `t_threadMessages`. Matching
+    /// only the single key returned [] for every thread, so no mailbox block was
+    /// ever linked to its thread and every mailbox fact cited evidence owned by
+    /// the whole file (the owner's ledger: 3,677 unlinked blocks; 252 facts
+    /// filed under the mailbox's file name, "Sent").
+    nonisolated static func blocks(
         for ko: KnowledgeObject, from all: [EvidenceBlock], singleKO: Bool
     ) -> [EvidenceBlock] {
         if singleKO { return all }
-        guard case .int(let idx)? = ko.metadata["messageIndex"]?.value else { return [] }
+        let wanted: Set<Int>
+        if case .int(let idx)? = ko.metadata["messageIndex"]?.value {
+            wanted = [Int(idx)]
+        } else if case .string(let bag)? = ko.metadata[EmailLoader.threadMessagesMetaKey]?.value {
+            wanted = EmailLoader.threadMessageIndices(fromBag: bag)
+        } else {
+            return []
+        }
+        guard !wanted.isEmpty else { return [] }
         return all.filter {
-            if case .int(let bi)? = $0.attributes["messageIndex"]?.value { return bi == idx }
+            if case .int(let bi)? = $0.attributes["messageIndex"]?.value { return wanted.contains(Int(bi)) }
             return false
         }
     }
@@ -867,14 +882,7 @@ public actor IngestCoordinator {
         owningObjectID: KnowledgeObject.ID? = nil,
         documentClass: DocumentClass? = nil
     ) async {
-        let subjectLabel: String = {
-            if let title = doc.blocks.first(where: { $0.kind == .documentTitle }) {
-                let t = title.normalizedText.isEmpty ? title.rawText : title.normalizedText
-                let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return String(trimmed.prefix(120)) }
-            }
-            return url.deletingPathExtension().lastPathComponent
-        }()
+        let subjectLabel = FactSubjectPartitioner.documentLabel(blocks: doc.blocks, fileURL: url)
         // S2-U3 — class-ordered roots at ingest (D-17 Step 4): the class's own
         // pack meets the block first; nil keeps the historical order.
         //
@@ -887,23 +895,30 @@ public actor IngestCoordinator {
         // P3.1 — the KINDED entry point: the open-field extractor weights a
         // table cell above a paragraph and refuses page furniture outright, so
         // it needs each block's kind, not just its text.
-        var derived: [GenericFact] = domainFactExtractor.extract(
-            fromKindedBlocks: doc.blocks
-                .filter { !$0.kind.isBoilerplate }
-                .map { (id: $0.id,
-                        text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
-                        kind: $0.kind) },
-            subjectLabel: subjectLabel,
-            documentClass: documentClass,
-            // The layout-preserving text for label detection: rawText keeps the
-            // line breaks that normalization drops, and without them no
-            // `Label: value` after the first is recognisable. See
-            // DomainFactExtractor.extract(fromKindedBlocks:) for the
-            // measurement that found this.
-            layoutTextByBlock: Dictionary(
-                doc.blocks.filter { !$0.kind.isBoilerplate }
-                    .map { ($0.id, $0.rawText) },
-                uniquingKeysWith: { a, _ in a }))
+        //
+        // A mailbox is partitioned per message (FactSubjectPartitioner), so each
+        // message's facts take its Subject line instead of the mailbox's file
+        // name; every other file is one partition, unchanged.
+        var derived: [GenericFact] = []
+        for partition in FactSubjectPartitioner.partitions(blocks: doc.blocks, fallbackLabel: subjectLabel) {
+            let substantive = partition.blocks.filter { !$0.kind.isBoilerplate }
+            guard !substantive.isEmpty else { continue }
+            derived += domainFactExtractor.extract(
+                fromKindedBlocks: substantive
+                    .map { (id: $0.id,
+                            text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                            kind: $0.kind) },
+                subjectLabel: partition.subjectLabel,
+                documentClass: documentClass,
+                // The layout-preserving text for label detection: rawText keeps the
+                // line breaks that normalization drops, and without them no
+                // `Label: value` after the first is recognisable. See
+                // DomainFactExtractor.extract(fromKindedBlocks:) for the
+                // measurement that found this.
+                layoutTextByBlock: Dictionary(
+                    substantive.map { ($0.id, $0.rawText) },
+                    uniquingKeysWith: { a, _ in a }))
+        }
         // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
         // a plist / registry hive / custody manifest rather than from prose (a
         // serial regexed out of a sentence is noise). They join `derived` here, so

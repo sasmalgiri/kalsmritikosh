@@ -22,7 +22,7 @@ public struct TermSalienceComputer {
     private let database: Database
     private static let logger = Logger(subsystem: "ecosanskritiinnovation.Kalsmritikosh", category: "knowledge")
 
-    public static let producerVersion = 1
+    public static let producerVersion = 2
     /// Winner terms kept per document.
     static let winnersPerDocument = 12
 
@@ -71,7 +71,11 @@ public struct TermSalienceComputer {
         // Anchor canon values: identifiers, highest by construction.
         let anchorRows = try await database.query("""
         SELECT source_object_id, normalized FROM entities
-        WHERE kind = 'identifierAnchor' AND merged_into IS NULL;
+        WHERE kind = 'identifierAnchor' AND merged_into IS NULL
+        UNION
+        SELECT m.source_object_id, e.normalized FROM entity_mentions m
+        JOIN entities e ON e.id = m.entity_id
+        WHERE m.kind = 'identifierAnchor' AND e.merged_into IS NULL;
         """, [])
         var anchorTermsByKO: [UUID: [String]] = [:]
         for row in anchorRows {
@@ -138,6 +142,24 @@ public struct TermSalienceComputer {
     /// case preserved (the proper-noun corroboration law reads it).
     nonisolated static func terms(of text: String) -> [String] {
         text.components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { $0.count >= 3 && !SentenceQuoteComposer.stopwords.contains($0.lowercased()) }
+            .filter { t in
+                guard t.count >= 3 else { return false }
+                let lower = t.lowercased()
+                if stopwords.contains(lower) { return false }
+                // A year or a small count ("2023", "150") is shared by unrelated
+                // documents and linked them into one topic; identifiers are longer.
+                if t.count <= 4 && t.allSatisfy(\.isNumber) { return false }
+                return true
+            }
     }
+
+    /// Function words never carry a topic. v1 used the answer composer's short
+    /// list, so "about", "after" and "couldn" became topic LABELS on the owner's
+    /// archive ("2023 · about · after").
+    nonisolated static let stopwords: Set<String> = SentenceQuoteComposer.stopwords
+        .union(FTSQuerySanitizer.stopwords)
+        .union(["couldn", "didn", "doesn", "don", "hadn", "hasn", "haven", "isn",
+                "mustn", "needn", "shouldn", "wasn", "weren", "won", "wouldn", "aren",
+                "also", "please", "regards", "dear", "thanks", "thank", "sir", "madam",
+                "com", "www", "http", "https", "html", "mailto"])
 }

@@ -29,8 +29,13 @@ public enum TopicConsolidator {
 
     /// A subject is substantive when it carries at least `minDistinctFacts`
     /// distinct field=value facts. Thin subjects merge into the closest one.
+    /// `closed` subjects are matters whose membership was decided by EVIDENCE
+    /// (every document naming the identifier — the subject spine), so they are
+    /// kept but never receive folded facts. A shared word is not evidence: on
+    /// the owner's archive, résumés sharing "sasmal" with the patent folded in
+    /// and the patent topic listed "Bengali: Read – Write – Speak".
     public nonisolated static func consolidate(
-        _ input: [SubjectFacts], minDistinctFacts: Int = 4
+        _ input: [SubjectFacts], minDistinctFacts: Int = 4, closed: Set<String> = []
     ) -> [SubjectFacts] {
         guard input.count > 1 else { return input }
 
@@ -42,8 +47,10 @@ public enum TopicConsolidator {
             let a = distinctCount($0), b = distinctCount($1)
             return a != b ? a > b : $0.subject < $1.subject
         }
-        var substantive = ranked.filter { distinctCount($0) >= minDistinctFacts }
-        let thin = ranked.filter { distinctCount($0) < minDistinctFacts }
+        // A closed matter is always kept, however few its facts.
+        let substantive = ranked.filter { distinctCount($0) >= minDistinctFacts || closed.contains($0.subject) }
+        let thin = ranked.filter { distinctCount($0) < minDistinctFacts && !closed.contains($0.subject) }
+        let hosts = substantive.filter { !closed.contains($0.subject) }
 
         // No substantive subject at all → the largest becomes the sole topic and
         // absorbs everyone else (still one real, evidence-backed topic).
@@ -60,16 +67,31 @@ public enum TopicConsolidator {
         for s in substantive { bucket[s.subject] = s.facts; order.append(s.subject) }
 
         let subTerms: [(subject: String, terms: Set<String>)] =
-            substantive.map { ($0.subject, terms(of: $0)) }
+            hosts.map { ($0.subject, terms(of: $0)) }
 
         for t in thin {
+            // Only closed matters exist: nothing may absorb by vocabulary.
+            guard let largestHost = hosts.first else { continue }
             let tt = terms(of: t)
-            var bestSubject = substantive[0].subject     // fallback: the largest
+            var bestSubject = largestHost.subject       // fallback: the largest
             var bestScore = -1.0
             for cand in subTerms {
                 let score = jaccard(tt, cand.terms)
                 if score > bestScore { bestScore = score; bestSubject = cand.subject }
             }
+            // With several real topics to choose from, a thin subject sharing NO
+            // term with any of them has no "closest" one. Folding it into the
+            // largest anyway corrupted that topic — on the owner's archive a
+            // shift-schedule spreadsheet collected 41 unrelated sources. It stays
+            // out of the topic layer instead; its facts remain in the ledger.
+            // (With a single host the owner's rule stands: it absorbs everything.)
+            if bestScore <= 0, hosts.count > 1 { continue }
+            // One shared word is not "closest" either: that is how the shift
+            // schedule still gathered 41 sources. With a choice of hosts, a fold
+            // needs at least two shared content terms.
+            if hosts.count > 1,
+               let host = subTerms.first(where: { $0.subject == bestSubject }),
+               tt.intersection(host.terms).count < 2 { continue }
             bucket[bestSubject, default: []].append(contentsOf: t.facts)
         }
 

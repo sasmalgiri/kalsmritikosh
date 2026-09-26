@@ -92,23 +92,40 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
                 lastError: lastRunStatus.lastError
             )
         }
-        // Step 1 — clear the existing graph. The cost of a rebuild
-        // is dominated by step 2; the truncate is cheap.
+        // Step 1 — the hub ceiling. An entity named in more than a fifth of
+        // the documents that have any entity (the owner's own name, a law
+        // firm's letterhead offices) connects everything to everything; on the
+        // owner's archive such hubs fused 100 unrelated entities into one
+        // community. They stay in the ledger and in retrieval — only the topic
+        // graph leaves them out.
+        let documentsWithEntities: Int
         do {
-            try await database.exec("DELETE FROM entity_cooccurrences;", [])
+            let rows = try await database.query(
+                "SELECT COUNT(DISTINCT source_object_id) FROM entity_mentions;", [])
+            documentsWithEntities = Int(rows.first?.int(0) ?? 0)
         } catch {
-            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: truncate failed — \(String(describing: error), privacy: .public)")
+            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: document count failed — \(String(describing: error), privacy: .public)")
             return 0
         }
+        let hubCeiling = max(5, documentsWithEntities / 5)
 
         // Step 2 — compute edges via SQL self-join. We restrict to
         // canonical entities (T1 + T2; T3 stays out of the topic
         // graph since the plan's preserve-not-filter rule only
         // affects RETRIEVAL — T3 should not pollute communities).
+        // Dates, amounts and phone numbers are attributes, not topic
+        // members: "Thu, 29 Aug 2024 16:08:51" joined unrelated emails.
         //
         // Ordering by id ensures each pair appears once
         // (entity_a < entity_b lexicographically).
         let sql = """
+        WITH eligible AS (
+            SELECT e.id FROM entities e
+            WHERE e.quality_tier IN ('T1','T2')
+              AND e.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
+              AND (SELECT COUNT(DISTINCT x.source_object_id) FROM entity_mentions x
+                   WHERE x.entity_id = e.id) <= ?
+        )
         INSERT INTO entity_cooccurrences (entity_a, entity_b, weight, computed_at)
         SELECT
             m1.entity_id AS entity_a,
@@ -119,19 +136,28 @@ public actor CooccurrenceGraphBuilder: BackgroundService {
         JOIN entity_mentions m2
             ON m1.source_object_id = m2.source_object_id
             AND m1.entity_id < m2.entity_id
-        JOIN entities e1 ON e1.id = m1.entity_id AND e1.quality_tier IN ('T1','T2')
-        JOIN entities e2 ON e2.id = m2.entity_id AND e2.quality_tier IN ('T1','T2')
+        JOIN eligible e1 ON e1.id = m1.entity_id
+        JOIN eligible e2 ON e2.id = m2.entity_id
         GROUP BY m1.entity_id, m2.entity_id
         HAVING weight >= ?;
         """
 
+        // Clear + rebuild as ONE unit. The clear used to commit on its own, so
+        // a rebuild that then failed left the graph EMPTY until the next run
+        // (the owner's ledger: 0 edges while its mentions support 11,565).
         do {
+            try await database.exec("SAVEPOINT cooccurrence_rebuild;", [])
+            try await database.exec("DELETE FROM entity_cooccurrences;", [])
             try await database.exec(sql, [
+                .integer(Int64(hubCeiling)),
                 .real(started.timeIntervalSince1970),
                 .integer(Int64(minWeight))
             ])
+            try await database.exec("RELEASE cooccurrence_rebuild;", [])
         } catch {
-            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: rebuild failed — \(String(describing: error), privacy: .public)")
+            try? await database.exec("ROLLBACK TO cooccurrence_rebuild;", [])
+            try? await database.exec("RELEASE cooccurrence_rebuild;", [])
+            KalsmritikoshLog.knowledge.error("CooccurrenceGraphBuilder: rebuild failed, previous graph kept — \(String(describing: error), privacy: .public)")
             return 0
         }
 

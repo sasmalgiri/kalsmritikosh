@@ -2668,6 +2668,12 @@ public final class AppState {
                     // Picture's input) → the advisory twins (budgeted).
                     do {
                         _ = try await ChunkReindexCoordinator(database: drainDB).run()
+                        // Subject spine BEFORE salience + tree: the anchor
+                        // mentions it records are what let one patent's number
+                        // link its hearing notice, grant letter and emails.
+                        if KnowledgeModuleFlags.isEnabled(.subjectSpine) {
+                            _ = try await SubjectSpine(database: drainDB).run()
+                        }
                         _ = try await TermSalienceComputer(database: drainDB).run()
                         _ = try await TopicTreeBuilder(database: drainDB).run()
                         // A6 idempotence (parity finding #2): a per-boot twin

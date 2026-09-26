@@ -88,17 +88,51 @@ extension AppState {
     @discardableResult
     public func buildTopics() async -> Int? {
         guard let genericFacts, let memoryRepo else { return nil }
-        // Gather all canonical facts, grouped by subject label.
+
+        // Subject spine (module .subjectSpine) — the trunk of the tree: anchors
+        // reach every document that names them, anchors of one matter join one
+        // family, and each document is resolved to the family it is about. A
+        // fact then groups under that real-world subject instead of its file
+        // name. Unresolved facts keep their own label (the old behaviour).
+        var spine: SubjectSpine.Resolution?
+        var blockOwners: [UUID: [UUID]] = [:]
+        if KnowledgeModuleFlags.isEnabled(.subjectSpine), let database {
+            let builder = SubjectSpine(database: database)
+            do {
+                spine = try await builder.run().0
+                blockOwners = try await builder.blockOwners()
+            } catch {
+                KalsmritikoshLog.app.error("Subject spine failed; topics fall back to per-document subjects: \(String(describing: error), privacy: .public)")
+            }
+        }
+        func sourceObjects(of fact: GenericFact) -> [UUID] {
+            var seen = Set<UUID>()
+            return fact.sourceBlockIDs.flatMap { blockOwners[$0] ?? [] }.filter { seen.insert($0).inserted }
+        }
+
+        // Gather all canonical facts, grouped by (resolved) subject label.
         var factsBySubject: [String: [GenericFact]] = [:]
         var offset = 0
         while true {
             let page = (try? await genericFacts.all(offset: offset, pageSize: 1_000)) ?? []
             if page.isEmpty { break }
-            for f in page { factsBySubject[f.subjectLabel, default: []].append(f) }
+            for f in page {
+                let key = spine?.subjectLabel(anchorID: f.subjectID, currentLabel: f.subjectLabel,
+                                              objectIDs: sourceObjects(of: f)) ?? f.subjectLabel
+                factsBySubject[key, default: []].append(f)
+            }
             offset += page.count
             if page.count < 1_000 { break }
         }
         guard !factsBySubject.isEmpty else { return 0 }
+        // Family label → every document resolved to that family, so a matter's
+        // topic carries the events and sources of documents that hold no fact.
+        var familyObjects: [String: Set<UUID>] = [:]
+        if let spine {
+            for (root, objects) in spine.objectsOfFamily {
+                if let label = spine.label[root] { familyObjects[label, default: []].formUnion(objects) }
+            }
+        }
 
         // M2 (module .aiSubjectResolution) — before minimizing, let the on-device
         // model group labels that name the SAME real-world subject (e.g. several
@@ -114,7 +148,14 @@ extension AppState {
                 return try? await provider.generate(
                     prompt: prompt, options: GenerationOptions(maxTokens: 400, temperature: 0.1))
             })
-            let input = factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) }
+            // Evidence-resolved matters are not offered to the model: their
+            // membership is decided by documents naming the identifier, and a
+            // model grouping (non-deterministic) folded extra subjects into the
+            // patent on one run and not the next.
+            let matterLabels = Set(spine?.label.values.map { $0 } ?? [])
+            let input = factsBySubject
+                .filter { !matterLabels.contains($0.key) }
+                .map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) }
             let canonical = await clusterer.canonicalize(input)
             if canonical.contains(where: { $0.key != $0.value }) {
                 var merged: [String: [GenericFact]] = [:]
@@ -133,8 +174,11 @@ extension AppState {
         // instead of hundreds of context-free ones. Deterministic; facts only move,
         // never change. Gated by the .topicMinimization module switch.
         if KnowledgeModuleFlags.isEnabled(.topicMinimization) {
+            // Spine-resolved matters are closed: evidence decided their members.
+            let matters = Set(spine?.label.values.map { $0 } ?? []).intersection(factsBySubject.keys)
             let consolidated = TopicConsolidator.consolidate(
-                factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) })
+                factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) },
+                closed: matters)
             factsBySubject = Dictionary(
                 consolidated.map { ($0.subject, $0.facts) }, uniquingKeysWith: { a, _ in a })
             KalsmritikoshLog.app.info("Topic minimization: \(consolidated.count, privacy: .public) topics kept")
@@ -169,14 +213,40 @@ extension AppState {
         var built = 0
         var polishedCount = 0
         var builtSubjects: Set<String> = []
+        var eventsByObject: [UUID: [Event]] = [:]
         for (subject, facts) in factsBySubject {
-            // Best-effort event attachment: events whose title/summary names the subject.
-            let subjectEvents = allEvents.filter {
+            // The subject's documents: where its facts were read from, plus (for
+            // a resolved matter) every document the spine placed in its family.
+            var objects: [UUID] = []
+            var seenObjects = Set<UUID>()
+            for id in facts.flatMap(sourceObjects(of:)) + (familyObjects[subject] ?? []).sorted(by: { $0.uuidString < $1.uuidString })
+                where seenObjects.insert(id).inserted { objects.append(id) }
+            // Events: those whose title/summary names the subject, plus every
+            // event read from one of the subject's documents.
+            var subjectEvents = allEvents.filter {
                 $0.title.localizedCaseInsensitiveContains(subject)
                 || ($0.summary?.localizedCaseInsensitiveContains(subject) ?? false)
             }
+            if spine != nil, let events {
+                var seenEvents = Set(subjectEvents.map(\.id))
+                // A matter's timeline comes from the documents ABOUT it; a report
+                // that merely lists its number cites it as a fact but must not
+                // pour its own events into the matter's history.
+                let eventSources = familyObjects[subject].map { family in
+                    objects.filter { family.contains($0) }
+                } ?? objects
+                for oid in eventSources {
+                    if eventsByObject[oid] == nil {
+                        eventsByObject[oid] = (try? await events.findBySourceObject(oid)) ?? []
+                    }
+                    for e in eventsByObject[oid] ?? [] where seenEvents.insert(e.id).inserted {
+                        subjectEvents.append(e)
+                    }
+                }
+            }
             let spineTopic = TopicSpineBuilder.build(
-                subjectIdentifier: subject, facts: facts, events: subjectEvents, now: now)
+                subjectIdentifier: subject, facts: facts, events: subjectEvents,
+                factSourceObjectIDs: objects, now: now)
             let polished = await polisher.polish(spine: spineTopic.narrative)
             let didPolish = (polished != spineTopic.narrative)
             if didPolish { polishedCount += 1 }
@@ -242,8 +312,67 @@ extension AppState {
     @discardableResult
     public func buildHistories(limit: Int = 10) async -> Int? {
         guard let entities, let engine = historyEngine, historyArtifacts != nil else { return nil }
-        let anchors = (try? await entities.allAnchors(limit: 500)) ?? []
+        var anchors = (try? await entities.allAnchors(limit: 500)) ?? []
         guard !anchors.isEmpty else { return 0 }
+        // Subject spine — ONE history per real-world matter, most-documented
+        // first. Without it the first `limit` anchor rows were taken in storage
+        // order, so one patent got four histories (application number, patent
+        // number under two field names, a truncated copy) while matters beyond
+        // the tenth row got none.
+        if KnowledgeModuleFlags.isEnabled(.subjectSpine), let database,
+           let resolution = try? await SubjectSpine(database: database).run().0 {
+            let reachRows = (try? await database.query("""
+            SELECT entity_id, COUNT(DISTINCT source_object_id) FROM entity_mentions
+            WHERE kind = 'identifierAnchor' GROUP BY entity_id;
+            """, [])) ?? []
+            var reach: [UUID: Int] = [:]
+            for r in reachRows { if let id = r.uuid(0) { reach[id] = Int(r.int(1) ?? 0) } }
+            func grade(_ e: Entity) -> Bool { SubjectSpine.subjectGradeFields.contains(SubjectResolver.fieldID(of: e)) }
+            // The field a history engine reads best first: an Indian patent's
+            // application number is its lifelong identifier (the same value
+            // under "patent" produced 2 history items; under "application", 32).
+            let fieldPreference = ["applicationnumber", "casenumber", "contractnumber", "registrationnumber", "patentnumber"]
+            func pref(_ e: Entity) -> Int { fieldPreference.firstIndex(of: SubjectResolver.fieldID(of: e)) ?? fieldPreference.count }
+            var primary: [UUID: Entity] = [:]    // family root → its most-reached anchor
+            for a in anchors {
+                let root = resolution.familyOf[a.id] ?? a.id
+                if let cur = primary[root] {
+                    let (ra, rc) = (reach[a.id] ?? 0, reach[cur.id] ?? 0)
+                    let better = ra != rc ? ra > rc
+                        : (pref(a) != pref(cur) ? pref(a) < pref(cur) : a.id.uuidString < cur.id.uuidString)
+                    if better { primary[root] = a }
+                } else {
+                    primary[root] = a
+                }
+            }
+            func familyReach(_ root: UUID) -> Int { resolution.objectsOfFamily[root]?.count ?? (reach[primary[root]?.id ?? root] ?? 0) }
+            let ordered = primary.sorted { l, r in
+                let (fl, fr) = (familyReach(l.key), familyReach(r.key))
+                return fl != fr ? fl > fr : l.value.id.uuidString < r.value.id.uuidString
+            }.map(\.value)
+            // Matters first, then the people and organisations the archive is
+            // most about (named in ≥ 3 documents), then attribute identifiers
+            // (accounts, tax ids) — which used to take every slot.
+            let peopleRows = (try? await database.query("""
+            SELECT e.id FROM entities e JOIN entity_mentions m ON m.entity_id = e.id
+            WHERE e.kind IN ('person', 'organization') AND e.quality_tier IN ('T1', 'T2')
+              AND e.merged_into IS NULL AND COALESCE(e.review_status, '') <> 'retired'
+            GROUP BY e.id HAVING COUNT(DISTINCT m.source_object_id) >= 3
+            ORDER BY COUNT(DISTINCT m.source_object_id) DESC, e.id LIMIT ?;
+            """, [.integer(Int64(limit * 4))])) ?? []
+            // A full name only: single words ("Hindi", "Ltd", "Chennai", "Sasmal")
+            // are mis-typed entities, and their histories came back empty.
+            let people = ((try? await entities.findByIDs(peopleRows.compactMap { $0.uuid(0) })) ?? [])
+                .filter { e in
+                    let words = e.value.split(whereSeparator: { !$0.isLetter && $0 != "." })
+                        .filter { $0.filter(\.isLetter).count >= 2 }
+                    return words.count >= 2
+                }
+            let peopleOrder = Dictionary(uniqueKeysWithValues: peopleRows.enumerated().compactMap { i, r in r.uuid(0).map { ($0, i) } })
+            anchors = ordered.filter(grade)
+                + people.sorted { (peopleOrder[$0.id] ?? 0) < (peopleOrder[$1.id] ?? 0) }
+                + ordered.filter { !grade($0) }
+        }
         var built = 0
         for entity in anchors.prefix(limit) {
             if Task.isCancelled { break }

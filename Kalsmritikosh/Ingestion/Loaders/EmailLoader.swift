@@ -470,6 +470,19 @@ public struct EmailLoader: Ingestor {
     /// citation offsets.
     nonisolated static let threadMessagesMetaKey = "t_threadMessages"
 
+    /// The `messageIndex` of every message a thread KO carries, read back from
+    /// its `t_threadMessages` bag. Empty when the bag is absent or unreadable.
+    nonisolated static func threadMessageIndices(fromBag json: String) -> Set<Int> {
+        guard let data = json.data(using: .utf8),
+              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+        var out = Set<Int>()
+        for row in rows {
+            if let n = row["messageIndex"] as? Int { out.insert(n) }
+            else if let n = row["messageIndex"] as? NSNumber { out.insert(n.intValue) }
+        }
+        return out
+    }
+
     /// Pre-Move-A path. One KO per mbox message. Active when
     /// `threadCoalescingEnabled == false`. Preserved verbatim from
     /// commit dd93c9e so the production DB shape (526 per-message

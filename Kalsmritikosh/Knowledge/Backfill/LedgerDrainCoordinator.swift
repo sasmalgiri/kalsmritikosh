@@ -299,7 +299,13 @@ public final class LedgerDrainCoordinator {
 
     private func drainFacts(for ko: KnowledgeObject, into receipt: inout DrainReceipt) async throws {
         guard let versionID = try await evidence.currentVersionID(forObject: ko.id) else { return }
-        let blocks = try await evidence.blocks(forVersion: versionID)
+        let versionBlocks = try await evidence.blocks(forVersion: versionID)
+        // A mailbox thread shares ONE version with every other thread in the
+        // file; draining it over the whole version re-derived all 526 messages
+        // once per thread. Keep the thread's own messages; a single-document
+        // KO has no message indices and keeps every block, as before.
+        let own = IngestCoordinator.blocks(for: ko, from: versionBlocks, singleKO: false)
+        let blocks = own.isEmpty ? versionBlocks : own
         guard !blocks.isEmpty else { return }
         let blockIDs = blocks.map(\.id)
 
@@ -308,17 +314,18 @@ public final class LedgerDrainCoordinator {
         let stale = existing.filter { ($0.producerVersion ?? 0) != DerivedProducerVersions.facts }
         guard !stale.isEmpty || existing.isEmpty else { return }   // fully current → skip
 
+        // Repair the thread's evidence links. Before the thread-aware
+        // `blocks(for:)`, ingest linked no mailbox block to its thread, so the
+        // facts below would cite blocks no KnowledgeObject owns. Idempotent
+        // (INSERT OR IGNORE); only a thread KO has `own` blocks.
+        if !own.isEmpty {
+            try await evidence.linkBlocks(own.map(\.id), toObject: ko.id, at: Date())
+        }
+
         // Same derivation the ingest path performs (subject label = title block
         // or filename stem; skip boilerplate + tiny blocks), then C-10 merge +
         // anchor binding.
-        let subjectLabel: String = {
-            if let title = blocks.first(where: { $0.kind == .documentTitle }) {
-                let t = title.normalizedText.isEmpty ? title.rawText : title.normalizedText
-                let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty { return String(trimmed.prefix(120)) }
-            }
-            return ko.sourceFile.deletingPathExtension().lastPathComponent
-        }()
+        let subjectLabel = FactSubjectPartitioner.documentLabel(blocks: blocks, fileURL: ko.sourceFile)
         // S2-U1 (D-17 Step 4) — class-ordered roots: the KO's stored class
         // puts its own pack first (a certificate meets the patent root before
         // the employment one); nil class keeps the historical order.
@@ -330,23 +337,28 @@ public final class LedgerDrainCoordinator {
         // an ALREADY-INGESTED archive: the drain re-derives facts from the
         // STORED evidence blocks, so turning the open extractor on and draining
         // upgrades the whole ledger without re-reading a single file.
-        let derived: [GenericFact] = extractor.extract(
-            fromKindedBlocks: blocks
-                .filter { !$0.kind.isBoilerplate }
-                .map { (id: $0.id,
-                        text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
-                        kind: $0.kind) },
-            subjectLabel: subjectLabel,
-            documentClass: docClass ?? nil,
-            // The layout-preserving text for label detection: rawText keeps the
-            // line breaks that normalization drops, and without them no
-            // `Label: value` after the first is recognisable. See
-            // DomainFactExtractor.extract(fromKindedBlocks:) for the
-            // measurement that found this.
-            layoutTextByBlock: Dictionary(
-                blocks.filter { !$0.kind.isBoilerplate }
-                    .map { ($0.id, $0.rawText) },
-                uniquingKeysWith: { a, _ in a }))
+        // Per-message partitions for a mailbox, one partition otherwise — the
+        // SAME split the ingest path uses (FactSubjectPartitioner).
+        var derived: [GenericFact] = []
+        for partition in FactSubjectPartitioner.partitions(blocks: blocks, fallbackLabel: subjectLabel) {
+            let substantive = partition.blocks.filter { !$0.kind.isBoilerplate }
+            guard !substantive.isEmpty else { continue }
+            derived += extractor.extract(
+                fromKindedBlocks: substantive
+                    .map { (id: $0.id,
+                            text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
+                            kind: $0.kind) },
+                subjectLabel: partition.subjectLabel,
+                documentClass: docClass ?? nil,
+                // The layout-preserving text for label detection: rawText keeps the
+                // line breaks that normalization drops, and without them no
+                // `Label: value` after the first is recognisable. See
+                // DomainFactExtractor.extract(fromKindedBlocks:) for the
+                // measurement that found this.
+                layoutTextByBlock: Dictionary(
+                    substantive.map { ($0.id, $0.rawText) },
+                    uniquingKeysWith: { a, _ in a }))
+        }
         var merged = DomainFactExtractor.merge(derived)
 
         // ── P3.3 — INDUCTION, and only where every rule found nothing ────────

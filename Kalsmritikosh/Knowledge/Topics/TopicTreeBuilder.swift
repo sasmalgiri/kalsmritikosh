@@ -66,8 +66,20 @@ public struct TopicTreeBuilder {
         """, [])
         for r in anchorRows {
             guard let key = r.string(0) else { continue }
+            // Only an identifier that names a MATTER may join two communities.
+            // A bank account, tax id or personal id printed on a letterhead or
+            // receipt is shared by unrelated matters — on the owner's archive one
+            // account number pulled 332 of 340 members into a single node.
+            let field = String(key.split(separator: "|").first ?? "")
+            guard SubjectSpine.subjectGradeFields.contains(field) else { continue }
             let canon = key.split(separator: "|").dropFirst().joined(separator: "|")
             if !canon.isEmpty { anchorCanons[canon.lowercased()] = key }
+        }
+        // A truncated copy ("Application-2023310" in a report's subject list) is
+        // not its own matter: drop any canon that is a strict prefix of another.
+        let allCanons = Array(anchorCanons.keys)
+        for c in allCanons where allCanons.contains(where: { $0 != c && $0.hasPrefix(c) }) {
+            anchorCanons.removeValue(forKey: c)
         }
         var signature: [String: Set<String>] = [:]
         for (cid, ents) in members {
@@ -90,6 +102,17 @@ public struct TopicTreeBuilder {
                 }
             }
             signature[cid] = sig
+        }
+
+        // 2b — HUB CEILING. An anchor or term shared by more than a quarter of
+        //      all communities is a hub, not a link: the owner's archive glued
+        //      226 of 340 members into one node through a single identifier
+        //      carried by reports that list every email.
+        var spread: [String: Int] = [:]
+        for sig in signature.values { for s in sig { spread[s, default: 0] += 1 } }
+        let hubCeiling = max(3, members.count / 4)
+        for (cid, sig) in signature {
+            signature[cid] = sig.filter { (spread[$0] ?? 0) <= hubCeiling }
         }
 
         // 3 — level-1 nesting by CONTAINMENT-like overlap: two level-0 nodes
@@ -147,6 +170,9 @@ public struct TopicTreeBuilder {
         try await database.exec("SAVEPOINT topic_tree;", [])
         do {
             try await database.exec("DELETE FROM entity_communities WHERE level = 1;", [])
+            // Replace the labels with the nodes: a node that no longer exists
+            // kept its old label, so stale titles outlived every rebuild.
+            try await database.exec("DELETE FROM community_summaries WHERE level = 1;", [])
             let now = Date().timeIntervalSince1970
             for (root, children) in groups.sorted(by: { $0.key < $1.key }) {
                 // A parent with one child adds no structure — leaves stay leaves.

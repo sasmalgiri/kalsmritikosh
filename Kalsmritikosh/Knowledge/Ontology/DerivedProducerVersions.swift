@@ -37,7 +37,13 @@ public nonisolated enum DerivedProducerVersions {
     /// role captures ("am writing to state…") are rejected at write, so a
     /// v4 store can hold junk role facts a v5 producer cannot emit; the
     /// drain re-extracts and the junk dies with its era. No re-ingest.
-    public static let facts = 5
+    /// v6 — the MAILBOX SUBJECT: a multi-message file's facts are derived per
+    ///        message under that message's Subject (FactSubjectPartitioner),
+    ///        not once under the mailbox's file name; a thread KO drains over
+    ///        its own messages and gets its evidence links repaired. A v5 store
+    ///        files every mailbox fact under "Sent"; the drain re-extracts.
+    ///        No re-ingest.
+    public static let facts = 6
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
