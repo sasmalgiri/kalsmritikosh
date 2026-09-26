@@ -120,7 +120,7 @@ public enum DeterministicEvidenceFallback {
         // clickable. No fact is shown without a backing chunk in this set.
         var blockToChunk: [UUID: RetrievedChunk] = [:]
         for c in retrieval.chunks {
-            if let b = c.chunk.evidenceBlockID, blockToChunk[b] == nil { blockToChunk[b] = c }
+            for b in c.chunk.allBlockIDs where blockToChunk[b] == nil { blockToChunk[b] = c }
         }
         var factLines: [String] = []
         var seenFacts = Set<String>()          // W4 — dedup: the same field+value

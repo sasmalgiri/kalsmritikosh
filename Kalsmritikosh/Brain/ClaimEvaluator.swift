@@ -24,9 +24,8 @@ public enum ClaimEvaluator {
     ) -> [ClaimEvaluation] {
         guard !facts.isEmpty, !chunks.isEmpty else { return [] }
         var blockToObject: [UUID: KnowledgeObject.ID] = [:]
-        for c in chunks where c.chunk.evidenceBlockID != nil {
-            let b = c.chunk.evidenceBlockID!
-            if blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
+        for c in chunks {
+            for b in c.chunk.allBlockIDs where blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
         }
         let builder = AssertabilityContextBuilder()
         var out: [ClaimEvaluation] = []

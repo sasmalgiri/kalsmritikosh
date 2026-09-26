@@ -514,7 +514,7 @@ public actor HybridRetriever: Retriever {
     /// a block id. Never throws into the retrieval path.
     private func attachGenericFacts(to result: RetrievalResult) async -> RetrievalResult {
         guard let genericFacts else { return result }
-        let blockIDs = result.chunks.compactMap { $0.chunk.evidenceBlockID }
+        let blockIDs = result.chunks.flatMap { $0.chunk.allBlockIDs }   // L1: every block of a packed chunk
         guard !blockIDs.isEmpty else { return result }                 // zero work when no blocks
         let facts = (try? await genericFacts.facts(forBlockIDs: blockIDs)) ?? []
         guard !facts.isEmpty else { return result }                    // zero work when no facts
@@ -523,9 +523,8 @@ public actor HybridRetriever: Retriever {
         // retrieved chunks — no repo calls, no invented objects). Then resolve independence
         // keys in ONE batch for exactly that set. Skip the batch when nothing resolves.
         var blockToObject: [UUID: KnowledgeObject.ID] = [:]
-        for c in result.chunks where c.chunk.evidenceBlockID != nil {
-            let b = c.chunk.evidenceBlockID!
-            if blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
+        for c in result.chunks {
+            for b in c.chunk.allBlockIDs where blockToObject[b] == nil { blockToObject[b] = c.chunk.objectID }
         }
         let resolvedObjects = Set(facts.flatMap { $0.sourceBlockIDs.compactMap { blockToObject[$0] } })
         var keys: [KnowledgeObject.ID: String] = [:]

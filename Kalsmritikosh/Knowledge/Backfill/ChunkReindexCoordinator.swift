@@ -33,6 +33,10 @@ import Foundation
 import os
 
 public struct ChunkReindexReceipt: Sendable {
+    /// L1 pass 0 — documents whose per-line chunks were packed into coherent units.
+    public var packedObjects = 0
+    public var packedChunksBefore = 0
+    public var packedChunksAfter = 0
     public var oversizedFound = 0
     public var oversizedSplit = 0
     public var childrenWritten = 0
@@ -45,6 +49,7 @@ public struct ChunkReindexReceipt: Sendable {
     public func renderLines() -> String {
         """
         CHUNK REINDEX RECEIPT
+          packed (L1):            \(packedObjects) documents, \(packedChunksBefore) → \(packedChunksAfter) chunks
           oversized found:        \(oversizedFound) (split \(oversizedSplit) → \(childrenWritten) children)
           embeddings dropped:     \(embeddingsDropped) (re-embed via the pending queue)
           salience backfilled:    \(salienceBackfilled)
@@ -65,12 +70,19 @@ public struct ChunkReindexCoordinator {
     /// Split target: comfortably inside the 512-token embedding window.
     nonisolated static let splitTargetChars = 1_600
 
-    public init(database: Database) {
+    private let chunker: Chunker
+    /// The chunk era that means "packed by L1". Rows at an older era whose
+    /// document is fully block-linked are candidates for pass 0.
+    public nonisolated static let packedChunkVersion = 3
+
+    public init(database: Database, chunker: Chunker = Chunker()) {
         self.database = database
+        self.chunker = chunker
     }
 
     public func run() async throws -> ChunkReindexReceipt {
         var receipt = ChunkReindexReceipt()
+        try await packUndersized(&receipt)
         try await rechunkOversized(&receipt)
         try await backfillSalience(&receipt)
         try await backfillTemplatePrefixes(&receipt)
@@ -78,6 +90,102 @@ public struct ChunkReindexCoordinator {
         receipt.citationsBlocksPreserved = try await blockAnchoringIntact()
         Self.log.info("CHUNK REINDEX: \(receipt.oversizedSplit) split → \(receipt.childrenWritten), salience \(receipt.salienceBackfilled), prefixes \(receipt.prefixesStamped), gated \(receipt.markupGated)")
         return receipt
+    }
+
+    // MARK: - pass 0: PACK per-line chunks into coherent retrieval units (L1)
+
+    /// A document whose chunks are all block-derived and still at a pre-packing
+    /// era is re-chunked from its OWN evidence blocks with the packing chunker.
+    /// Replaced only when packing reduces the count; otherwise the rows are
+    /// stamped at the packed era so the pass is a no-op next time. Citations
+    /// anchor to blocks, so a chunk rewrite loses nothing; embeddings of
+    /// replaced rows are dropped (the pending queue re-embeds the new units).
+    private func packUndersized(_ receipt: inout ChunkReindexReceipt) async throws {
+        let candidates = try await database.query("""
+        SELECT c.object_id, COUNT(*), ko.document_class,
+               (SELECT source_version_id FROM chunks x WHERE x.object_id = c.object_id AND x.source_version_id IS NOT NULL LIMIT 1)
+        FROM chunks c JOIN knowledge_objects ko ON ko.id = c.object_id
+        GROUP BY c.object_id
+        HAVING COUNT(*) >= 2
+           AND (SUM(c.evidence_block_id IS NULL) = 0
+                OR EXISTS (SELECT 1 FROM evidence_block_objects e WHERE e.knowledge_object_id = c.object_id))
+           AND MAX(COALESCE(c.chunk_version, 0)) < \(Self.packedChunkVersion);
+        """, [])
+        guard !candidates.isEmpty else { return }
+        let evidence = EvidenceStore(database: database)
+        let repo = ChunksRepository(database: database)
+
+        for row in candidates {
+            guard let objectID = row.uuid(0) else { continue }
+            let before = Int(row.int(1) ?? 0)
+            let docClass = row.string(2).flatMap(DocumentClass.init(rawValue:))
+            let sourceVersionID = row.uuid(3)
+
+            // A document whose chunks were cut from flattened content (a mailbox
+            // thread before the thread fix) is re-chunked from the blocks it now
+            // OWNS; one that owns none has nothing to pack from and is stamped.
+            var blocks = try await evidence.blocks(forObject: objectID)
+            if blocks.isEmpty {
+                // No ownership links (pre-fix thread, or a legacy row): use the
+                // blocks the existing chunks already name.
+                let ids = try await database.query(
+                    "SELECT DISTINCT evidence_block_id FROM chunks WHERE object_id = ?;", [.uuid(objectID)])
+                    .compactMap { $0.uuid(0) }
+                blocks = try await evidence.blocks(ids: ids)
+            }
+            guard blocks.count >= 2 else {
+                try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
+                                        [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
+                continue
+            }
+            let packed = chunker.chunkWithLineage(objectID: objectID, blocks: blocks)
+            guard packed.chunks.count < before, !packed.chunks.isEmpty else {
+                try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
+                                        [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
+                continue
+            }
+            let title: String? = blocks.first(where: { $0.kind == .documentTitle })
+                .map { $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText }
+            let finished: [Chunk] = packed.chunks.map { c in
+                let isBoilerplate = c.blockKind.flatMap(EvidenceBlockKind.init(rawValue:))?.isBoilerplate ?? false
+                let admit = !isBoilerplate && ChunkAdmissionGate.evaluate(c.text).admitted
+                var out = c.withAdmitEmbedding(admit)
+                    .withSourceVersion(sourceVersionID)
+                    .withSalience(SalienceTable.salience(forBlockKind: c.blockKind, documentClass: docClass))
+                if packed.chunks.count >= 2,
+                   let prefix = ContextPrefixTemplate.render(title: title, documentClass: docClass, blockKind: c.blockKind) {
+                    out = out.withTemplatePrefix(prefix)
+                }
+                return out
+            }
+
+            try await database.exec("SAVEPOINT reindex_pack;", [])
+            do {
+                let dropped = Int((try await database.query("""
+                SELECT COUNT(*) FROM chunk_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE object_id = ?);
+                """, [.uuid(objectID)])).first?.int(0) ?? 0)
+                try await database.exec("""
+                DELETE FROM chunk_embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE object_id = ?);
+                """, [.uuid(objectID)])
+                try await database.exec("DELETE FROM chunks WHERE object_id = ?;", [.uuid(objectID)])
+                try await repo.insertBatch(finished, lineage: packed.blockIDs)
+                try await database.exec("UPDATE chunks SET chunk_version = ? WHERE object_id = ?;",
+                                        [.integer(Int64(Self.packedChunkVersion)), .uuid(objectID)])
+                try await database.exec("RELEASE reindex_pack;", [])
+                receipt.packedObjects += 1
+                receipt.packedChunksBefore += before
+                receipt.packedChunksAfter += finished.count
+                receipt.embeddingsDropped += dropped
+            } catch {
+                try? await database.exec("ROLLBACK TO reindex_pack;", [])
+                try? await database.exec("RELEASE reindex_pack;", [])
+                throw error
+            }
+        }
+        let (docs, before, after) = (receipt.packedObjects, receipt.packedChunksBefore, receipt.packedChunksAfter)
+        if docs > 0 {
+            Self.log.info("CHUNK PACK (L1): \(docs) documents, \(before) → \(after) chunks")
+        }
     }
 
     // MARK: - pass 1: re-chunk oversized

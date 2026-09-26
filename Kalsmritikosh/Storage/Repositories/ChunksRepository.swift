@@ -14,6 +14,13 @@ public actor ChunksRepository {
     }
 
     public func insertBatch(_ chunks: [Chunk]) async throws {
+        try await insertBatch(chunks, lineage: [:])
+    }
+
+    /// L1 — insert chunks and record every block each was assembled from
+    /// (`chunk_blocks`). A chunk with no lineage entry records its own
+    /// `evidenceBlockID`, so single-block chunks are covered too.
+    public func insertBatch(_ chunks: [Chunk], lineage: [Chunk.ID: [UUID]]) async throws {
         for chunk in chunks {
             try await database.exec("""
             INSERT INTO chunks (id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, admit_embedding, evidence_block_id, block_kind, source_version_id, salience, context_template_version)
@@ -36,7 +43,25 @@ public actor ChunksRepository {
                 .real(chunk.salience),
                 chunk.contextTemplateVersion.map { .integer(Int64($0)) } ?? .null
             ])
+            let blocks = lineage[chunk.id] ?? (chunk.evidenceBlockIDs.isEmpty ? chunk.allBlockIDs : chunk.evidenceBlockIDs)
+            for (i, blockID) in blocks.enumerated() {
+                try await database.exec("""
+                INSERT OR IGNORE INTO chunk_blocks (chunk_id, evidence_block_id, ordinal) VALUES (?, ?, ?);
+                """, [.uuid(chunk.id), .uuid(blockID), .integer(Int64(i))])
+            }
         }
+    }
+
+    /// L1 — every block a chunk was assembled from, in reading order; falls
+    /// back to the chunk's primary block for rows written before v133.
+    public func blockIDs(forChunk chunkID: Chunk.ID) async throws -> [UUID] {
+        let rows = try await database.query(
+            "SELECT evidence_block_id FROM chunk_blocks WHERE chunk_id = ? ORDER BY ordinal;", [.uuid(chunkID)])
+        let ids = rows.compactMap { $0.uuid(0) }
+        if !ids.isEmpty { return ids }
+        let primary = try await database.query(
+            "SELECT evidence_block_id FROM chunks WHERE id = ?;", [.uuid(chunkID)])
+        return primary.first?.uuid(0).map { [$0] } ?? []
     }
 
     /// G2-3 backfill — return chunks whose `context_prefix` is NULL
@@ -55,7 +80,7 @@ public actor ChunksRepository {
         ORDER BY object_id ASC, ordinal ASC
         LIMIT ?;
         """, [.integer(Int64(limit))])
-        return rows.compactMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     /// PERF.1 — chunks that have no vector yet (the embedding-pending set).
@@ -77,7 +102,7 @@ public actor ChunksRepository {
         ORDER BY c.created_at DESC
         LIMIT ?;
         """, [.text(modelID), .integer(Int64(limit))])
-        return rows.compactMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     /// PERF.1 — count of chunks awaiting embedding for the active model.
@@ -135,7 +160,7 @@ public actor ChunksRepository {
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks WHERE object_id = ? ORDER BY ordinal ASC;
         """, [.uuid(id)])
-        return rows.compactMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     /// G2-QA-PAIRS retrieval helper. Returns the ordinal-0 chunk for
@@ -146,7 +171,7 @@ public actor ChunksRepository {
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks WHERE object_id = ? AND review_status IS NULL ORDER BY ordinal ASC LIMIT 1;
         """, [.uuid(id)])
-        return rows.first.flatMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode)).first
     }
 
     public func findByIDs(_ ids: [Chunk.ID]) async throws -> [Chunk] {
@@ -188,7 +213,7 @@ public actor ChunksRepository {
         ORDER BY rank
         LIMIT ?;
         """, [.text(match), .integer(Int64(limit))])
-        return rows.compactMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     // MARK: - P2.2 · document-level FTS, so `knowledge_objects_fts` is READ
@@ -243,7 +268,7 @@ public actor ChunksRepository {
             WHERE object_id = ? AND review_status IS NULL
             ORDER BY ordinal ASC LIMIT ?;
             """, [.uuid(id), .integer(Int64(chunksPerDocument))])
-            out.append(contentsOf: rows.compactMap(decode))
+            out.append(contentsOf: try await hydrateLineage(rows.compactMap(decode)))
         }
         return out
     }
@@ -259,7 +284,7 @@ public actor ChunksRepository {
         ORDER BY rowid
         LIMIT ?;
         """, [.integer(Int64(limit))])
-        return rows.compactMap(decode)
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     /// Chunks whose `evidence_block_id` is one of `blockIDs` (non-rejected).
@@ -273,11 +298,13 @@ public actor ChunksRepository {
         let rows = try await database.query("""
         SELECT id, object_id, ordinal, text, char_start, char_end, page_number, created_at, context_prefix, context_prefix_source, evidence_block_id, block_kind, salience, context_template_version
         FROM chunks
-        WHERE evidence_block_id IN (\(placeholders)) AND review_status IS NULL
+        WHERE (evidence_block_id IN (\(placeholders))
+               OR id IN (SELECT chunk_id FROM chunk_blocks WHERE evidence_block_id IN (\(placeholders))))
+          AND review_status IS NULL
         ORDER BY rowid
         LIMIT ?;
-        """, ids.map { SQLValue.uuid($0) } + [.integer(Int64(limit))])
-        return rows.compactMap(decode)
+        """, ids.map { SQLValue.uuid($0) } + ids.map { SQLValue.uuid($0) } + [.integer(Int64(limit))])
+        return try await hydrateLineage(rows.compactMap(decode))
     }
 
     // MARK: - Human-in-loop review status (v51)
@@ -291,6 +318,27 @@ public actor ChunksRepository {
             "UPDATE chunks SET review_status = ? WHERE id = ?;",
             [status.map { .text($0) } ?? .null, .uuid(id)]
         )
+    }
+
+    /// L1 — attach each chunk's full block lineage (`chunk_blocks`) in ONE
+    /// batched query. Rows written before v133 have no lineage rows and keep
+    /// their primary block via `allBlockIDs`.
+    private func hydrateLineage(_ chunks: [Chunk]) async throws -> [Chunk] {
+        guard !chunks.isEmpty else { return chunks }
+        var lineage: [UUID: [UUID]] = [:]
+        let ids = chunks.map(\.id)
+        for slice in stride(from: 0, to: ids.count, by: 400).map({ Array(ids[$0..<min($0 + 400, ids.count)]) }) {
+            let qs = slice.map { _ in "?" }.joined(separator: ",")
+            let rows = try await database.query("""
+            SELECT chunk_id, evidence_block_id FROM chunk_blocks WHERE chunk_id IN (\(qs)) ORDER BY chunk_id, ordinal;
+            """, slice.map { .uuid($0) })
+            for r in rows {
+                guard let c = r.uuid(0), let b = r.uuid(1) else { continue }
+                lineage[c, default: []].append(b)
+            }
+        }
+        guard !lineage.isEmpty else { return chunks }
+        return chunks.map { c in lineage[c.id].map { c.withBlockIDs($0) } ?? c }
     }
 
     private func decode(_ row: SQLRow) -> Chunk? {

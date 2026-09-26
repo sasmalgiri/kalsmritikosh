@@ -1051,7 +1051,7 @@ public actor MasterBrain {
 
         var blockToLabel: [UUID: String] = [:]
         for (idx, c) in chunks.enumerated() {
-            if let b = c.chunk.evidenceBlockID, blockToLabel[b] == nil {
+            for b in c.chunk.allBlockIDs where blockToLabel[b] == nil {
                 blockToLabel[b] = "C\(idx + 1)"
             }
         }

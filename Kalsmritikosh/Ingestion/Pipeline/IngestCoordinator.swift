@@ -1389,9 +1389,17 @@ public actor IngestCoordinator {
         // chunk records its evidence_block_id + block_kind. Fall back to the
         // flattened KO.content for formats with no structural parser (and, until
         // Phase1 step 4, for multi-KO mbox messages, which arrive with blocks=[]).
-        var chunked = blocks.isEmpty
-            ? chunker.chunk(objectID: object.id, content: object.content)
-            : chunker.chunk(objectID: object.id, blocks: blocks)
+        // L1 — the block path packs adjacent small blocks into one chunk and
+        // reports the full lineage, persisted to chunk_blocks below.
+        var chunkLineage: [Chunk.ID: [UUID]] = [:]
+        var chunked: [Chunk]
+        if blocks.isEmpty {
+            chunked = chunker.chunk(objectID: object.id, content: object.content)
+        } else {
+            let packed = chunker.chunkWithLineage(objectID: object.id, blocks: blocks)
+            chunked = packed.chunks
+            chunkLineage = packed.blockIDs
+        }
         // Stage 1 ingest quality gate ("do not embed everything") — mark
         // non-substantive chunks (blank, tiny fragment, bare page number, lone
         // nav token) as NOT admitted to the vector index. They are still stored
@@ -1510,7 +1518,7 @@ public actor IngestCoordinator {
         // entities/events/relationships — stays best-effort and re-derivable, so
         // it is intentionally NOT part of the atomic core.)
         do {
-            try await chunks.insertBatch(chunked)
+            try await chunks.insertBatch(chunked, lineage: chunkLineage)
         } catch {
             KalsmritikoshLog.storage.error("chunk insert failed for \(object.id.uuidString.prefix(8), privacy: .public) — rolling back KO: \(String(describing: error), privacy: .public)")
             try? await objects.deleteByID(object.id)

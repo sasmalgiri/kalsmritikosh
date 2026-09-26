@@ -67,6 +67,24 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
     /// `contextPrefix`. NULL = legacy LLM/heuristic prefix or none; the
     /// shared reindex refreshes older eras.
     public let contextTemplateVersion: Int?
+    /// L1 — EVERY block this chunk was assembled from, in reading order
+    /// (`chunk_blocks`). `evidenceBlockID` is the first of them; a packed chunk
+    /// has several. Empty for rows not yet hydrated — use `allBlockIDs`.
+    public let evidenceBlockIDs: [UUID]
+
+    /// The blocks this chunk is made of: the recorded lineage, else its primary block.
+    public var allBlockIDs: [UUID] {
+        evidenceBlockIDs.isEmpty ? (evidenceBlockID.map { [$0] } ?? []) : evidenceBlockIDs
+    }
+
+    /// L1 — a copy with the full block lineage recorded.
+    public nonisolated func withBlockIDs(_ ids: [UUID]) -> Chunk {
+        Chunk(id: id, objectID: objectID, ordinal: ordinal, text: text, characterRange: characterRange,
+              pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
+              contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
+              evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: sourceVersionID,
+              salience: salience, contextTemplateVersion: contextTemplateVersion, evidenceBlockIDs: ids)
+    }
 
     // G2-SWIFT6 — nonisolated so repository actors can construct Chunk
     // rows in synchronous context. Value type holding only Sendable
@@ -86,7 +104,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         blockKind: String? = nil,
         sourceVersionID: UUID? = nil,
         salience: Double = SalienceTable.neutral,
-        contextTemplateVersion: Int? = nil
+        contextTemplateVersion: Int? = nil,
+        evidenceBlockIDs: [UUID] = []
     ) {
         self.id = id
         self.objectID = objectID
@@ -103,6 +122,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.sourceVersionID = sourceVersionID
         self.salience = salience
         self.contextTemplateVersion = contextTemplateVersion
+        self.evidenceBlockIDs = evidenceBlockIDs
     }
 
     /// Returns a copy with the structural salience set (S2-U1). Used by
@@ -112,7 +132,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
               pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
               contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
               evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: sourceVersionID,
-              salience: s, contextTemplateVersion: contextTemplateVersion)
+              salience: s, contextTemplateVersion: contextTemplateVersion, evidenceBlockIDs: evidenceBlockIDs)
     }
 
     /// Returns a copy with the exact source-version id set (USF-002.1). Used by IngestCoordinator
@@ -122,7 +142,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
               pageNumber: pageNumber, createdAt: createdAt, contextPrefix: contextPrefix,
               contextPrefixSource: contextPrefixSource, admitEmbedding: admitEmbedding,
               evidenceBlockID: evidenceBlockID, blockKind: blockKind, sourceVersionID: versionID,
-              salience: salience, contextTemplateVersion: contextTemplateVersion)
+              salience: salience, contextTemplateVersion: contextTemplateVersion, evidenceBlockIDs: evidenceBlockIDs)
     }
 
     /// Returns a new Chunk identical to `self` except `contextPrefix`
@@ -144,7 +164,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             blockKind: blockKind,
             sourceVersionID: sourceVersionID,
             salience: salience,
-            contextTemplateVersion: contextTemplateVersion
+            contextTemplateVersion: contextTemplateVersion,
+            evidenceBlockIDs: evidenceBlockIDs
         )
     }
 
@@ -156,7 +177,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
               contextPrefix: prefix, contextPrefixSource: prefix == nil ? nil : "template",
               admitEmbedding: admitEmbedding, evidenceBlockID: evidenceBlockID, blockKind: blockKind,
               sourceVersionID: sourceVersionID, salience: salience,
-              contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion)
+              contextTemplateVersion: prefix == nil ? nil : ContextPrefixTemplate.currentVersion,
+              evidenceBlockIDs: evidenceBlockIDs)
     }
 
     /// Returns a copy with the embedding-admission flag set (Stage 1 gate).
@@ -176,7 +198,8 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
             blockKind: blockKind,
             sourceVersionID: sourceVersionID,
             salience: salience,
-            contextTemplateVersion: contextTemplateVersion
+            contextTemplateVersion: contextTemplateVersion,
+            evidenceBlockIDs: evidenceBlockIDs
         )
     }
 
@@ -185,6 +208,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         case characterRangeLower, characterRangeUpper
         case pageNumber, createdAt, contextPrefix, contextPrefixSource, admitEmbedding
         case evidenceBlockID, blockKind, sourceVersionID, salience, contextTemplateVersion
+        case evidenceBlockIDs   // L1 — optional on read: pre-L1 encodings carry no lineage
     }
 
     public init(from decoder: Decoder) throws {
@@ -206,6 +230,7 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         self.sourceVersionID = try c.decodeIfPresent(UUID.self, forKey: .sourceVersionID)
         self.salience = try c.decodeIfPresent(Double.self, forKey: .salience) ?? SalienceTable.neutral
         self.contextTemplateVersion = try c.decodeIfPresent(Int.self, forKey: .contextTemplateVersion)
+        self.evidenceBlockIDs = try c.decodeIfPresent([UUID].self, forKey: .evidenceBlockIDs) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -226,5 +251,6 @@ public struct Chunk: Codable, Identifiable, Hashable, Sendable {
         try c.encodeIfPresent(sourceVersionID, forKey: .sourceVersionID)
         try c.encode(salience, forKey: .salience)
         try c.encodeIfPresent(contextTemplateVersion, forKey: .contextTemplateVersion)
+        if !evidenceBlockIDs.isEmpty { try c.encode(evidenceBlockIDs, forKey: .evidenceBlockIDs) }
     }
 }

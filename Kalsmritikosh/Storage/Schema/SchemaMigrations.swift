@@ -28,7 +28,7 @@ typealias MigrationFaultHook = @Sendable (MigrationFaultPoint) async throws -> V
 
 public enum SchemaMigrations {
 
-    public static let latestVersion = 132
+    public static let latestVersion = 133
 
     /// True when the registered migration list is internally consistent: a
     /// gap-free `1...latestVersion` sequence whose head equals `latestVersion`.
@@ -663,7 +663,8 @@ public enum SchemaMigrations {
         (129, v129),
         (130, v130),
         (131, v131),
-        (132, v132)
+        (132, v132),
+        (133, v133)
     ]
 
     // MARK: - v1 — initial 11-table schema + FTS5
@@ -6661,6 +6662,28 @@ public enum SchemaMigrations {
         ON induced_schema_attempts(knowledge_object_id);
     CREATE INDEX IF NOT EXISTS idx_induced_attempts_written
         ON induced_schema_attempts(fields_written);
+    """
+
+    // MARK: - v133 — L1 chunk packing: a retrieval chunk's FULL block lineage
+    //
+    // The block-derived chunker emitted one chunk per EvidenceBlock; many
+    // parsers make a block per LINE, so 36% of the owner's chunks were under
+    // 40 characters ("Cell : 9960270472") and the composer quoted fragments.
+    // Adjacent small blocks now pack into one chunk up to the size budget.
+    // `chunks.evidence_block_id` keeps the chunk's FIRST block (every existing
+    // consumer keeps working and the projection invariant still holds); this
+    // table records EVERY block a chunk was assembled from, so a citation can
+    // resolve to the exact block rather than the group's first line.
+    // Derived rows: they follow their chunk (ON DELETE CASCADE).
+    private static let v133: String = """
+    CREATE TABLE IF NOT EXISTS chunk_blocks (
+        chunk_id          TEXT NOT NULL,
+        evidence_block_id TEXT NOT NULL,
+        ordinal           INTEGER NOT NULL,
+        PRIMARY KEY (chunk_id, evidence_block_id),
+        FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_chunk_blocks_block ON chunk_blocks(evidence_block_id);
     """
 
 }
