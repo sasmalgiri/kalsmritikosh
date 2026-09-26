@@ -40,3 +40,21 @@ struct SampleArchiveModeTests {
         #expect(store.roots.isEmpty)
     }
 }
+
+@Suite("§1.1 — persona choice at onboarding")
+@MainActor
+struct OnboardingPersonaStepTests {
+
+    @Test("Onboarding asks for the focus right after the welcome, before any folder is chosen")
+    func personaStepOrder() {
+        #expect(OnboardingView.Step.persona.rawValue == OnboardingView.Step.welcome.rawValue + 1)
+        #expect(OnboardingView.Step.persona.rawValue < OnboardingView.Step.folder.rawValue)
+    }
+
+    @Test("Every offered persona has a unique id the sidebar can resolve")
+    func personasResolvable() {
+        let ids = GuideContent.personas.map(\.id)
+        #expect(!ids.isEmpty)
+        #expect(Set(ids).count == ids.count)
+    }
+}
