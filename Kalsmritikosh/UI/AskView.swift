@@ -56,6 +56,9 @@ public struct AskView: View {
     /// so the very next question can already retrieve and cite it. Chips clear
     /// on send; the ingested knowledge is durable either way.
     @State private var attachments: [AskAttachment] = []
+    /// §1.3 — the source sheet a citation chip (or a walk-step row) opens,
+    /// positioned at the quoted passage.
+    @State private var openSource: CitationOpenTarget?
 
     public init() {}
 
@@ -124,6 +127,23 @@ public struct AskView: View {
                 onDelete: { id in Task { await deleteConversation(id) } },
                 onClose: { showHistory = false }
             )
+        }
+        .sheet(item: $openSource) { target in
+            VStack(spacing: 0) {
+                HStack {
+                    Text(target.url.lastPathComponent)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer()
+                    Button("Done") { openSource = nil }
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding(10)
+                Divider()
+                SourceViewer(url: target.url, koID: target.objectID, quote: target.quote)
+            }
+            .frame(minWidth: 640, minHeight: 480)
         }
         .sheet(item: $activeInvestigation) { inv in
             InvestigationSheet(
@@ -617,10 +637,14 @@ public struct AskView: View {
                                 assistantBody(sections.evidence.text)
                                     .textSelection(.enabled)
                             }
+                            CitationChips(citations: verified.citations) { citation in
+                                revealSource(objectID: citation.objectID, quote: citation.snippet)
+                            }
                             QualityStrip(
                                 answer: verified,
                                 onEvidenceTap: { objectID in
-                                    revealSource(objectID: objectID)
+                                    let quote = verified.citations.first(where: { $0.objectID == objectID })?.snippet
+                                    revealSource(objectID: objectID, quote: quote)
                                 }
                             )
                         }
@@ -730,18 +754,20 @@ public struct AskView: View {
 
     // MARK: - Walk-step clickthrough
 
-    /// G3 Phase 5 UI — resolve a walk-step evidence KO id to its source
-    /// file URL and reveal it in Finder. Non-fatal when the KO has no
+    /// §1.3 — open a cited source IN THE APP at the quoted passage (the
+    /// SourceViewer finds and highlights `quote`; Reveal in Finder stays one
+    /// click away in its corner menu). Non-fatal when the KO has no
     /// underlying file row (rare; should only happen mid-ingest).
-    private func revealSource(objectID: UUID) {
+    private func revealSource(objectID: UUID, quote: String?) {
         Task { @MainActor in
             guard let repo = appState.objects,
                   let url = try? await repo.fetchSourceURL(id: objectID) else {
+                KalsmritikoshLog.ui.info("Citation open: no source file for \(objectID.uuidString, privacy: .public)")
                 return
             }
-            #if canImport(AppKit)
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-            #endif
+            let trimmed = quote?.trimmingCharacters(in: .whitespacesAndNewlines)
+            openSource = CitationOpenTarget(url: url, objectID: objectID,
+                                            quote: (trimmed?.isEmpty ?? true) ? nil : trimmed)
         }
     }
 

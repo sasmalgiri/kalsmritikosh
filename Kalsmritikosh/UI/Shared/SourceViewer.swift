@@ -39,14 +39,20 @@ public struct SourceViewer: View {
     /// before any content is rendered. OPS-003D.1.1: removed the optional bypass path.
     let koID: UUID
     let range: SourceRange?
+    /// §1.3 — the cited words. When present the viewer FINDS them in the
+    /// rendered text (whitespace/case tolerant) and highlights that; the
+    /// character range is only the fallback, because chunk offsets index the
+    /// normalised text, not the raw file.
+    let quote: String?
 
     @Environment(AppState.self) private var appState
     @State private var authorized: Bool? = nil
 
-    public init(url: URL, koID: UUID, range: SourceRange? = nil) {
+    public init(url: URL, koID: UUID, range: SourceRange? = nil, quote: String? = nil) {
         self.url = url
         self.koID = koID
         self.range = range
+        self.quote = quote
     }
 
     public var body: some View {
@@ -110,7 +116,7 @@ public struct SourceViewer: View {
     @ViewBuilder
     private var pdfBody: some View {
         #if canImport(PDFKit)
-        PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange)
+        PDFInlineView(url: url, page: range?.pageNumber, characterRange: range?.characterRange, quote: quote)
             .overlay(alignment: .topTrailing) { revealButton.padding(8) }
         #else
         fallbackBody
@@ -121,7 +127,7 @@ public struct SourceViewer: View {
 
     @ViewBuilder
     private var textBody: some View {
-        TextInlineView(url: url, characterRange: range?.characterRange)
+        TextInlineView(url: url, characterRange: range?.characterRange, quote: quote)
             .overlay(alignment: .topTrailing) { revealButton.padding(8) }
     }
 
@@ -138,6 +144,16 @@ public struct SourceViewer: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .truncationMode(.middle)
+            if let quote, !quote.isEmpty {
+                // No inline renderer for this format — show the cited words
+                // themselves so the user knows exactly what to look for.
+                Text("\u{201C}\(String(quote.prefix(400)))\u{201D}")
+                    .font(.callout)
+                    .padding(10)
+                    .frame(maxWidth: 480, alignment: .leading)
+                    .background(Color.yellow.opacity(0.18), in: .rect(cornerRadius: 8))
+                    .textSelection(.enabled)
+            }
             if let range, let chars = range.characterRange {
                 // Best we can do without inline rendering — show the
                 // offset so the user can find it manually.
@@ -183,6 +199,7 @@ private struct PDFInlineView: NSViewRepresentable {
     let url: URL
     let page: Int?
     let characterRange: Range<Int>?
+    let quote: String?
 
     func makeNSView(context: Context) -> PDFView {
         let view = PDFView()
@@ -211,6 +228,21 @@ private struct PDFInlineView: NSViewRepresentable {
     /// repeated phrases, but close enough for evidence verification.
     private func scrollAndHighlight(_ view: PDFView) {
         guard let document = view.document else { return }
+        // §1.3 — quote first: find the cited words on whichever page holds
+        // them (starting at the cited page) and select exactly that text.
+        if let quote, !quote.isEmpty {
+            let start = max(0, min((page ?? 1) - 1, document.pageCount - 1))
+            let order = Array(start..<document.pageCount) + Array(0..<start)
+            for i in order {
+                guard let pdfPage = document.page(at: i), let text = pdfPage.string,
+                      let hit = CitedPassageLocator.locate(quote, in: text),
+                      let selection = pdfPage.selection(for: hit) else { continue }
+                view.go(to: pdfPage)
+                view.setCurrentSelection(selection, animate: true)
+                view.scrollSelectionToVisible(nil)
+                return
+            }
+        }
         // PageNumber in our SourceRange is 1-indexed for human use.
         let pageIndex = max(0, (page ?? 1) - 1)
         guard pageIndex < document.pageCount,
@@ -249,6 +281,7 @@ private struct PDFInlineView: NSViewRepresentable {
 private struct TextInlineView: NSViewRepresentable {
     let url: URL
     let characterRange: Range<Int>?
+    let quote: String?
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -298,6 +331,22 @@ private struct TextInlineView: NSViewRepresentable {
                 .foregroundColor: NSColor.labelColor
             ]
         )
+        // §1.3 — the quoted words win over raw offsets (see SourceViewer.quote).
+        if let quote, !quote.isEmpty,
+           let hit = CitedPassageLocator.locate(quote, in: truncated),
+           NSMaxRange(hit) <= attributed.length {
+            attributed.addAttributes(
+                [
+                    .backgroundColor: NSColor.systemYellow.withAlphaComponent(0.35),
+                    .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
+                ],
+                range: hit
+            )
+            tv.textStorage?.setAttributedString(attributed)
+            tv.scrollRangeToVisible(hit)
+            tv.setSelectedRange(hit)
+            return
+        }
         if let range = characterRange,
            range.lowerBound >= 0,
            range.upperBound <= truncated.count,
