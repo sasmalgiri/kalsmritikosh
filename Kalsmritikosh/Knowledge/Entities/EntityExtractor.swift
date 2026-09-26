@@ -157,7 +157,8 @@ public struct NLEntityExtractor: EntityExtractor {
         if raw.range(of: #"^\s*\d{3,5}\s*[-–—]\s*\d{3,5}\s*$"#, options: .regularExpression) != nil {
             return false
         }
-        return true
+        // L2 — the same shape law the quality gate applies to stored rows.
+        return EntityQualityGate.isPhoneShaped(raw)
     }
 
     // MARK: - Regex

@@ -354,6 +354,32 @@ public enum SourceType: String, Codable, CaseIterable, Sendable {
         return nil
     }
 
+    /// L2 — a TEXT format recognised from its leading bytes, for a file with no
+    /// usable extension (an e-mail part saved as "attachment-7B4395C2"). Only
+    /// unambiguous openers are claimed; readable text with no opener is `.txt`;
+    /// bytes that are not text return nil. Runs only after the extension check
+    /// has failed, so it can never take a file away from a recognised format.
+    public nonisolated static func sniffTextSignature(_ head: Data) -> SourceType? {
+        guard !head.isEmpty else { return nil }
+        var bytes = Array(head.prefix(4_096))
+        if bytes.starts(with: [0xEF, 0xBB, 0xBF]) { bytes.removeFirst(3) }
+        guard let text = String(bytes: bytes, encoding: .utf8) ?? String(bytes: bytes, encoding: .isoLatin1) else { return nil }
+        let trimmed = text.drop { $0.isWhitespace }
+        let lower = String(trimmed.prefix(64)).lowercased()
+        if lower.hasPrefix("<!doctype html") || lower.hasPrefix("<html") { return .html }
+        if lower.hasPrefix("<?xml") || lower.hasPrefix("<svg") { return .xml }
+        if lower.hasPrefix("{\\rtf") { return .rtf }
+        if lower.hasPrefix("from ") && lower.contains("@") { return .mbox }
+        if lower.hasPrefix("return-path:") || lower.hasPrefix("received:") || lower.hasPrefix("delivered-to:")
+            || lower.hasPrefix("from:") || lower.hasPrefix("mime-version:") { return .eml }
+        if lower.hasPrefix("{") || lower.hasPrefix("[") { return .json }
+        // Plain text: no NUL bytes, almost no control characters.
+        let nulls = bytes.filter { $0 == 0 }.count
+        let controls = bytes.filter { $0 < 0x09 || ($0 > 0x0D && $0 < 0x20) }.count
+        guard nulls == 0, Double(controls) / Double(max(bytes.count, 1)) < 0.02 else { return nil }
+        return .txt
+    }
+
     /// USF-M2 §1 — compound-container disambiguation. A DOCX/XLSX/PPTX/ODT/ODS/EPUB is itself a ZIP,
     /// so `sniffMagicBytes` reports `.zip` for all of them. The declared extension selects the logical
     /// container SUBTYPE (it is NOT proof the package will parse — the parser still validates it).

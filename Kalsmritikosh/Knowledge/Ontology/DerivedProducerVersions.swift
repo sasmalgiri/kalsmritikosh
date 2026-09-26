@@ -43,7 +43,13 @@ public nonisolated enum DerivedProducerVersions {
     ///        its own messages and gets its evidence links repaired. A v5 store
     ///        files every mailbox fact under "Sent"; the drain re-extracts.
     ///        No re-ingest.
-    public static let facts = 6
+    /// v7 — L2 UNIVERSAL HYGIENE: FactValuePlausibility rejects transport headers,
+    ///        style declarations, MIME parameter lists and form placeholders;
+    ///        OpenFieldExtractor no longer mints list enumerators ("1. …",
+    ///        "16th year") as labels and keeps the Latin word of a bilingual
+    ///        label. A v6 store holds "contenttype: multipart/mixed; boundary=…"
+    ///        and "1useofpermanentmagnets"; the drain re-extracts. No re-ingest.
+    public static let facts = 7
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor

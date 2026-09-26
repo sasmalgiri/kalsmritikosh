@@ -229,6 +229,16 @@ public enum OpenFieldExtractor {
                                 ch == "'" || ch == "&" || ch == "#") {
             return false
         }
+        // L2 — a LIST ITEM is not a field. "1. Use of permanent magnets: Unlike
+        // D3…" and "(a) Hybrid design: …" are numbered arguments whose colon
+        // introduces prose; "16th year: 20th year" is a fee-table row. On the
+        // owner's ledger these minted fields like "1useofpermanentmagnets".
+        if label.range(of: #"^\(?([0-9]{1,3}|[ivxIVX]{1,4}|[a-zA-Z])[.)]\s"#, options: .regularExpression) != nil {
+            return false
+        }
+        if label.range(of: #"^[0-9]{1,3}(st|nd|rd|th)\b"#, options: .regularExpression) != nil {
+            return false
+        }
         // Clause markers — the two gates that kill most prose.
         if let first = words.first?.lowercased().trimmingCharacters(in: .punctuationCharacters),
            proseLabelHeads.contains(first) { return false }
@@ -262,11 +272,25 @@ public enum OpenFieldExtractor {
     /// it must be stable and lossless enough to stay readable in the UI, where
     /// `SlotFieldResolver.humanLabel` re-splits it.
     nonisolated static func normalizeLabel(_ label: String) -> String {
-        label.lowercased()
+        // L2 — a BILINGUAL label ("संलग्न / Enclosed", "पेषण िदनांक / Date of
+        // Dispatch") keeps only its Latin part when that part is a word on its
+        // own; concatenating both scripts made unreadable, unmergeable ids
+        // ("संलनenclosed"). A label with no Latin word keeps its own script.
+        let latinOnly = String(String.UnicodeScalarView(label.unicodeScalars.map { s -> Unicode.Scalar in
+            (Self.isLatinLetter(s) || CharacterSet.decimalDigits.contains(s) || s == " " || s == "&") ? s : " "
+        }))
+        let latin = latinOnly.trimmingCharacters(in: .whitespaces)
+        let source = latin.filter(\.isLetter).count >= 3 ? latin : label
+        return source.lowercased()
             .replacingOccurrences(of: "&", with: " and ")
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
             .joined()
+    }
+
+    nonisolated static func isLatinLetter(_ s: Unicode.Scalar) -> Bool {
+        guard s.properties.isAlphabetic else { return false }
+        return (0x41...0x24F).contains(Int(s.value))   // Basic Latin + Latin-1 + Latin Extended-A/B
     }
 
     // MARK: - Facts

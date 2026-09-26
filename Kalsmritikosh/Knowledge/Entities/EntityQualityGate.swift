@@ -125,6 +125,12 @@ public struct EntityQualityGate: Sendable {
         if stoplist.contains(lower) { return "stoplist" }
         if Self.internalIdentifiers.contains(lower) { return "internal-id" }
 
+        // L2 (universal shape typing) — a PHONE must be phone-shaped. NSDataDetector
+        // types bare digit runs as phones; on the owner's ledger 1,765 of 1,817
+        // "phone numbers" were IDs like "0000254722" and "434981693797". Kept in
+        // the ledger (retired, reversible), never surfaced as a phone.
+        if entity.kind == .phoneNumber, !Self.isPhoneShaped(surface) { return "not-phone-shaped" }
+
         let isNameKind = isNounKind(entity.kind)
         guard isNameKind else { return nil }   // non-name kinds are untouched
 
@@ -166,7 +172,43 @@ public struct EntityQualityGate: Sendable {
         // trailing navigation token gives it away; witnessed on the owner's
         // live archive. REJECTED (it is a page title, not a party).
         if Self.isTitleShaped(surface) { return "title-shaped" }
+        // L2 — LAST, after every older class keeps its name: an ORGANISATION
+        // name that is only a legal suffix ("Ltd", "Pvt") or has fewer than
+        // three letters ("Ag", "X") is a fragment, not a party. Two-letter
+        // all-caps acronyms ("EU", "MS") pass — they may be real. NO shape rule
+        // beyond that: a first cut retired "DuPont" and "EtOAc" as gibberish,
+        // which is the false-rejection the gate must never commit; a doubtful
+        // mixed-case token stays live and low-tiered instead.
+        if entity.kind == .organization || entity.kind == .vendor || entity.kind == .client {
+            if Self.legalSuffixes.contains(lower.trimmingCharacters(in: .punctuationCharacters)) { return "bare-legal-suffix" }
+            let letters = surface.filter(\.isLetter)
+            let isShortAcronym = letters.count == 2 && surface == surface.uppercased()
+            if letters.count < 3, !isShortAcronym { return "too-short-name" }
+        }
         return nil
+    }
+
+    // MARK: - L2 shape rules (universal)
+
+    public nonisolated static let legalSuffixes: Set<String> = [
+        "ltd", "limited", "inc", "llc", "llp", "plc", "pvt", "private", "co", "corp",
+        "corporation", "gmbh", "ag", "sa", "bv", "pty", "company",
+    ]
+
+    /// Phone-shaped: 7–15 digits, and either phone punctuation (a leading +,
+    /// parentheses, dashes or grouping spaces) or a plain run a phone could be —
+    /// never a zero-padded record number, never a bare run of 12+ digits with no
+    /// grouping (an account or a tracking id), never one repeated digit.
+    public nonisolated static func isPhoneShaped(_ raw: String) -> Bool {
+        let digits = raw.filter(\.isNumber)
+        guard (7...15).contains(digits.count) else { return false }
+        let hasPunct = raw.contains("+") || raw.contains("(") || raw.contains("-") || raw.contains(" ")
+        if !hasPunct {
+            if digits.hasPrefix("00") { return false }            // "0000254722" — a padded id
+            if digits.count >= 12 { return false }                // "434981693797" — no phone is written so
+        }
+        if Set(digits).count == 1 { return false }               // "0000000000"
+        return true
     }
 
     /// P3-U0 — trailing navigation/page tokens that mark a TITLE, not a name.
@@ -331,7 +373,7 @@ public struct EntityQualityGate: Sendable {
         // own rejection stand without a duplicate audit entry.
         let rows = try await database.query("""
         SELECT id, kind, value, normalized FROM entities
-        WHERE kind IN ('person','organization','vendor','client')
+        WHERE kind IN ('person','organization','vendor','client','phoneNumber')
           AND (review_status IS NULL OR review_status != 'rejected');
         """)
         // Entities the user explicitly restored (an `accept` review by a human).

@@ -145,6 +145,13 @@ public enum SourceByteCapture {
         if byExtension != .unknown {
             return (byExtension, .declaredExtension, declaredExtension)
         }
+        // 3.2. L2 — text-format sniff for a file with no usable extension (an e-mail
+        // part saved as "attachment-7B4395C2"): HTML/XML/RTF/mbox/eml/JSON by their
+        // openers, readable text as .txt. After the extension check, so it never
+        // takes a file away from a recognised format.
+        if let text = SourceType.sniffTextSignature(head) {
+            return (text, .structuralProbe, declaredExtension)
+        }
         // 3.5. HOST-4 — structural probe, LAST resort only. Linux login accounting
         // has no magic signature, so a `wtmp` copied out under another name would
         // otherwise be dropped as unknown bytes. This runs only after the
