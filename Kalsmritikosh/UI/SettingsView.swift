@@ -1912,7 +1912,7 @@ public struct SettingsView: View {
                 get: { FeatureFlags.shared.generalKnowledgeLane },
                 set: { FeatureFlags.shared.generalKnowledgeLane = $0 }
             ))
-            Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. Off by default.")
+            Text("When your documents don't hold the answer, the on-device AI may add a separate block marked \u{201C}Not from your documents\u{201D}. It may be wrong, carries no sources, and never enters your evidence, exports, or receipts. On by default; turn it off for legal, compliance, or HR work.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

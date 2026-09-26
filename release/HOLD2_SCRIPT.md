@@ -59,8 +59,10 @@ background refresh.
 ## 8. Read the ledgers
 SCOREBOARD.md (claims → proofs, three surfaces) · release/
 PERSONA_STATUS.generated.md (the measured wall) · seal blessings #4→#10 ·
-the Self-Rulings Ledger. Decide the open dispositions: GK default per
-persona · I-3 rotating panels · any rescopes.
+the Self-Rulings Ledger. Decided 2026-09-27 by the owner: GK default ON
+(Settings toggle to turn it off) · I-3 rotating panels = the SCOREBOARD's
+per-surface tables + the live dashboard panels (no separate build). Still
+open: any rescopes.
 
 ## 9. Lawyer pass
 Privacy policy · terms/EULA · acknowledgments — before submission.

@@ -374,15 +374,16 @@ public final class FeatureFlags {
     /// GK (owner decision, pre-HOLD-2) — the General-Knowledge Lane: after
     /// the archive lane refuses, a separately BANNER-MARKED block may answer
     /// from the on-device AI's general knowledge — never entering the ledger,
-    /// evidence, exports, or the sealed envelope. Default OFF (the
-    /// conservative default for legal/forensic use; self-ruling, the owner
-    /// confirms the default at HOLD 2).
+    /// evidence, exports, or the sealed envelope. Default ON (owner decision
+    /// 2026-09-27, replacing the earlier default-OFF self-ruling); the banner
+    /// law keeps the block unmistakably separate from archive answers.
     public var generalKnowledgeLane: Bool {
         get { Self.generalKnowledgeLaneValue() }
         set { UserDefaults.standard.set(newValue, forKey: Self.kGeneralKnowledgeLane) }
     }
     public nonisolated static func generalKnowledgeLaneValue() -> Bool {
-        UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
+        if UserDefaults.standard.object(forKey: kGeneralKnowledgeLane) == nil { return true }
+        return UserDefaults.standard.bool(forKey: kGeneralKnowledgeLane)
     }
 
     /// SURFACE STYLE (owner request 2026-08-22). When ON, analytic jobs present
