@@ -34,6 +34,10 @@ public struct AskView: View {
     /// UI STATE ONLY, deliberately: never a persisted turn (the brain may read
     /// prior turns as context), never in the ledger, never exportable.
     @State private var generalKnowledgeBlocks: [UUID: String] = [:]
+    /// §1.3 — the closest passage shown under a "not found" answer, keyed by
+    /// the answer's turn. UI state only, like the GK block: never persisted,
+    /// never evidence, never exported.
+    @State private var nearestPassages: [UUID: NearestPassage] = [:]
     /// Phase H — currently-open investigation sheet. Holds the
     /// in-flight Investigation as the runner streams updates. nil
     /// when no sheet is showing.
@@ -653,6 +657,36 @@ public struct AskView: View {
                         .accessibilityElement(children: .contain)
                         .accessibilityLabel("Evidence for this answer")
                     }
+                    // §1.3 — closest match on a not-found answer: explicitly
+                    // NOT an answer, openable at the passage.
+                    if let near = nearestPassages[turn.id] {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Not an answer \u{2014} the closest passage in your documents", systemImage: "scope")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                            Text("\u{201C}\(near.quote)\u{201D}")
+                                .font(.callout)
+                                .textSelection(.enabled)
+                            HStack(spacing: 8) {
+                                Button {
+                                    revealSource(objectID: near.objectID, quote: near.quote)
+                                } label: {
+                                    Label("Open at this passage", systemImage: "doc.text.magnifyingglass")
+                                        .font(.caption)
+                                }
+                                .buttonStyle(.borderless)
+                                Text("Shares: \(near.sharedTerms.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(12)
+                        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3])))
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Not an answer. The closest passage in your documents: \(near.quote)")
+                    }
                     // GK — the SECOND LANE: banner-marked, visually separate,
                     // below the archive lane's receipt. Never shares a block
                     // with grounded text; never persisted; never exported.
@@ -932,6 +966,20 @@ public struct AskView: View {
             // ledger instead of losing them.
             if let ledgerAnswerID = await appState.recordAnswer(question: q, answer: answer) {
                 try? await repo.linkAnswer(turnID: placeholderID, answerLedgerID: ledgerAnswerID)
+            }
+
+            // §1.3 — closest match: after a genuine not-found (never a
+            // conversational brush-off, never an out-of-scope question), show
+            // the single passage sharing the most question terms, if any.
+            let notFound = answer.answerState == .notFound
+                || GeneralKnowledgeLane.eligible(refused: answer.refused, refusalReason: answer.refusalReason)
+            if notFound, QuestionShapeRouter.route(q).shape != .outOfScope,
+               let chunksRepo = appState.chunks {
+                let hits = (try? await chunksRepo.searchFTS(q, limit: 12)) ?? []
+                if let near = NearestPassageFinder.pick(
+                    question: q, candidates: hits.map { ($0.objectID, $0.text) }) {
+                    await MainActor.run { self.nearestPassages[placeholderID] = near }
+                }
             }
 
             // GK — the second lane: only AFTER the archive lane finished and
