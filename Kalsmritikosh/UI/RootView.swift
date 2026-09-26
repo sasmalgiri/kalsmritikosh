@@ -489,7 +489,11 @@ public struct RootView: View {
         case .failed(let message):
             failedView(message)
         case .ready:
-            main
+            VStack(spacing: 0) {
+                // §1.1 — the sample ledger announces itself on every screen.
+                if SampleArchiveMode.isActive { SampleArchiveBanner() }
+                main
+            }
         }
     }
 
@@ -602,7 +606,7 @@ public struct RootView: View {
             }
         }
         .task {
-            if !onboardingShown && appState.bookmarks.roots.isEmpty {
+            if !onboardingShown && appState.bookmarks.roots.isEmpty && !SampleArchiveMode.isActive {
                 presentingOnboarding = true
                 onboardingShown = true
             }
@@ -1722,5 +1726,27 @@ private struct PersonaPickerView: View {
         }
         .padding(24)
         .frame(width: 520, height: 560)
+    }
+}
+
+/// §1.1 — the persistent strip shown while the app runs on the sample ledger.
+struct SampleArchiveBanner: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+            Text("Sample archive \u{2014} you\u{2019}re exploring bundled example documents in a separate ledger. Your own documents and answers are untouched.")
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Back to my archive") { SampleArchiveMode.exit() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(Color.purple.opacity(0.14))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sample archive mode. Your own documents are untouched.")
     }
 }

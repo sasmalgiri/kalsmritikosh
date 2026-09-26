@@ -109,10 +109,11 @@ Resources/Fixtures/AppReviewDemo/
       └── meeting-whiteboard.png
 ```
 
-Plus an Onboarding action: **"Try the demo archive"** that bookmarks
-`Resources/Fixtures/AppReviewDemo` and kicks off an ingest. Lets
-reviewers see ingest → answer → causal chain → narrative chapter
-within ~30 seconds of first launch.
+Plus an Onboarding action: **"Try the sample archive"** that relaunches
+the app into a SEPARATE sample ledger (its own database file, in-memory
+folder list) and ingests the bundled ProjectDelta fixtures. A banner stays
+on screen with "Back to my archive". Lets reviewers see ingest → answer →
+narrative within a minute of first launch without touching any user data.
 
 ## Network calls — auditable list
 

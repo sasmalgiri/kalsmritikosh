@@ -249,12 +249,12 @@ public struct OnboardingView: View {
                 Button {
                     tryDemoArchive(at: demoURL)
                 } label: {
-                    Label("Try the demo archive", systemImage: "sparkles")
+                    Label("Try the sample archive", systemImage: "sparkles")
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                 }
                 .controlSize(.small)
-                Text("Loads the bundled ProjectDelta fixture (~8 sample emails + contracts) so you can see Kalsmritikosh reconstruct a project narrative without ingesting your own data first.")
+                Text("Opens the bundled ProjectDelta sample (8 emails and contracts) in its own separate ledger, so you can see Kalsmritikosh reconstruct a project without adding your data \u{2014} nothing is ever mixed with your own documents. The app relaunches; \u{201C}Back to my archive\u{201D} returns you.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: 520, alignment: .leading)
@@ -276,8 +276,12 @@ public struct OnboardingView: View {
         DemoArchive.url()
     }
 
+    /// §1.1 — the sample opens in its OWN ledger (relaunch), never in the
+    /// user's. `url` stays in the signature: the button only appears when the
+    /// fixtures resolve, and the sample boot re-resolves them itself.
     private func tryDemoArchive(at url: URL) {
-        try? appState.bookmarks.register(url: url)
+        UserDefaults.standard.set(true, forKey: "kalsmritikosh.onboarding.shown")
+        SampleArchiveMode.enter()
     }
 
     private var doneStep: some View {

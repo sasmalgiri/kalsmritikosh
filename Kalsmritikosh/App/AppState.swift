@@ -2697,7 +2697,9 @@ public final class AppState {
             // milestones inline at ingest, so this runs once (flag-guarded) and
             // never blocks boot. Idempotent (backfill clears+regenerates), and
             // suppressed during isolated eval boots to keep them deterministic.
-            if !suppressAutoReingest,
+            // §1.1 — never in the sample ledger: this flag is global, and
+            // consuming it there would skip the backfill on the user's archive.
+            if !suppressAutoReingest, !SampleArchiveMode.isActive,
                !UserDefaults.standard.bool(forKey: "kalsmritikosh.milestones.backfilled.v1") {
                 Task { [weak self] in
                     _ = await self?.backfillLegalMilestones()
