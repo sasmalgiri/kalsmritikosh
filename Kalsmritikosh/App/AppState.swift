@@ -4079,6 +4079,12 @@ public final class AppState {
         let saved = try? await repo.save(result, narrative: narrative, at: Date(),
                                          reviewState: "unreviewed", anchorKey: anchorKey,
                                          requestShape: "story", ledgerStamp: stamp)
+        // L3 — a rebuild on a changed ledger REPLACES the subject's previous
+        // history (superseded, not deleted); the older rows stay reopenable.
+        if let saved {
+            _ = try? await repo.supersedePrevious(anchorKey: anchorKey, requestShape: "story",
+                                                  keeping: saved, at: Date())
+        }
         // P4-U2 — the placement twin re-checks the outline against the H-laws
         // AFTER persistence. Checker, never writer: its only output is
         // advisory review rows; the artifact is untouched either way.

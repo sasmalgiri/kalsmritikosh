@@ -49,7 +49,10 @@ public nonisolated enum DerivedProducerVersions {
     ///        "16th year") as labels and keeps the Latin word of a bilingual
     ///        label. A v6 store holds "contenttype: multipart/mixed; boundary=…"
     ///        and "1useofpermanentmagnets"; the drain re-extracts. No re-ingest.
-    public static let facts = 7
+    /// v8 — L3 DOCUMENT SUBJECT: a document headed by a person's name (a résumé,
+    ///        a bio-data sheet) files its facts under that person, not the file
+    ///        name; the drain re-extracts. No re-ingest.
+    public static let facts = 8
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor

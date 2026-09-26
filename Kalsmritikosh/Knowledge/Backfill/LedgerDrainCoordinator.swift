@@ -528,8 +528,13 @@ public final class LedgerDrainCoordinator {
     // ── pass 5: document_class (v123 backfill) ──────────────────────────────
 
     private func stampDocumentClass(for ko: KnowledgeObject, into receipt: inout DrainReceipt) async throws {
-        guard try await objects.documentClass(forID: ko.id) == nil else { return }
-        try await objects.setDocumentClass(DocumentClassifier().classify(ko), forID: ko.id)
+        // L3 — RE-classify, not just fill blanks: a classifier fix (the "vat" in
+        // "private" bug filed 16 résumés as invoices) must reach existing rows.
+        // The class is derived from stored content, so recomputing is safe.
+        let current = try await objects.documentClass(forID: ko.id) ?? nil
+        let fresh = DocumentClassifier().classify(ko)
+        guard current != fresh else { return }
+        try await objects.setDocumentClass(fresh, forID: ko.id)
         receipt.documentClassStamped += 1
     }
 

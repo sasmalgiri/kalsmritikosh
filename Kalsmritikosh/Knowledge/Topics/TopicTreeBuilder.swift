@@ -81,6 +81,12 @@ public struct TopicTreeBuilder {
         for c in allCanons where allCanons.contains(where: { $0 != c && $0.hasPrefix(c) }) {
             anchorCanons.removeValue(forKey: c)
         }
+        // L3 — a term that most documents carry ("patent", "khurana", a city on
+        // every letterhead) links everything to everything; on the owner's
+        // archive such terms fused 226 of 340 members into one node. Only terms
+        // corroborated by ≥2 documents AND by at most a fifth of them are links.
+        let totalKOs = Int((try await database.query("SELECT COUNT(*) FROM knowledge_objects;", [])).first?.int(0) ?? 0)
+        let dfCeiling = max(2, totalKOs / 5)
         var signature: [String: Set<String>] = [:]
         for (cid, ents) in members {
             var sig = Set<String>()
@@ -90,8 +96,8 @@ public struct TopicTreeBuilder {
                 let termRows = try await database.query("""
                 SELECT DISTINCT dt.term FROM entities e1
                 JOIN document_terms dt ON dt.object_id = e1.source_object_id
-                WHERE e1.id IN (\(qs)) AND dt.corroboration >= 2;
-                """, slice.map { .uuid($0) })
+                WHERE e1.id IN (\(qs)) AND dt.corroboration >= 2 AND dt.corroboration <= ?;
+                """, slice.map { .uuid($0) } + [.integer(Int64(dfCeiling))])
                 for r in termRows {
                     guard let t = r.string(0) else { continue }
                     if let identity = anchorCanons[t.lowercased()] {

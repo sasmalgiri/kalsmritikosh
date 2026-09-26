@@ -31,14 +31,71 @@ public nonisolated enum FactSubjectPartitioner {
         public let blocks: [EvidenceBlock]
     }
 
-    /// The single-document subject: the title block, else the file-name stem.
+    /// The single-document subject: the title block, else — L3 — the PERSON the
+    /// document is about when its head is a name ("RESUME" / "Curriculum Vitae"
+    /// followed by "Shirshendu Sasmal."), else the file-name stem. Structural,
+    /// not statistical: on the owner's archive every résumé's person was the
+    /// first name-shaped block after a generic heading, while "most-mentioned
+    /// organisation" returned "API" and "APTECH".
     public static func documentLabel(blocks: [EvidenceBlock], fileURL: URL) -> String {
         if let title = blocks.first(where: { $0.kind == .documentTitle }) {
             let t = title.normalizedText.isEmpty ? title.rawText : title.normalizedText
             let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return String(trimmed.prefix(120)) }
+            if !trimmed.isEmpty, !isGenericHeading(trimmed) { return String(trimmed.prefix(120)) }
         }
+        if let name = headlineName(blocks: blocks) { return name }
         return fileURL.deletingPathExtension().lastPathComponent
+    }
+
+    /// Headings that name the KIND of document, not its subject.
+    static let genericHeadings: Set<String> = [
+        "resume", "résumé", "cv", "curriculum vitae", "curriculam vitae", "curriculam-vitae",
+        "curriculum-vitae", "bio-data", "biodata", "bio data", "profile", "personal details",
+        "personal information", "personal profile", "professional profile", "objective",
+        "career objective", "career summary", "summary", "cover letter", "application",
+        // Section headings a document's head may carry before or instead of a name —
+        // each is two Title-case words and would otherwise pass as a name.
+        "work experience", "professional experience", "employment history", "experience",
+        "education", "educational qualifications", "academic qualifications", "qualifications",
+        "skills", "technical skills", "key skills", "core competencies", "strengths",
+        "achievements", "certifications", "projects", "training", "languages", "hobbies",
+        "interests", "declaration", "references", "contact", "contact details", "address",
+        "table of contents", "contents", "introduction", "abstract", "annexure", "appendix",
+    ]
+
+    static func isGenericHeading(_ text: String) -> Bool {
+        let t = text.lowercased().trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
+        return genericHeadings.contains(t)
+    }
+
+    /// The first name-shaped block among the document's opening blocks: 2–4
+    /// words, each capitalised or all-caps, letters (plus . ' -) only, no digits,
+    /// ≤ 40 characters, not a label ("Name: …") and not a generic heading.
+    static func headlineName(blocks: [EvidenceBlock]) -> String? {
+        let head = blocks.sorted { $0.ordinal < $1.ordinal }
+            .filter { $0.kind == .paragraph || $0.kind == .documentTitle || $0.kind == .documentHeader
+                   || $0.kind == .sectionHeading || $0.kind == .pageHeader }
+            .prefix(4)
+        for b in head {
+            let raw = (b.normalizedText.isEmpty ? b.rawText : b.normalizedText)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if isGenericHeading(raw) { continue }
+            if let name = nameShaped(raw) { return name }
+        }
+        return nil
+    }
+
+    static func nameShaped(_ raw: String) -> String? {
+        let text = raw.trimmingCharacters(in: CharacterSet(charactersIn: ".,;: \t"))
+        guard text.count <= 40, !text.contains(":"), !text.contains(where: \.isNumber) else { return nil }
+        let words = text.split(whereSeparator: { $0 == " " }).map(String.init)
+        guard (2...4).contains(words.count) else { return nil }
+        for w in words {
+            guard let first = w.first, first.isLetter, first.isUppercase else { return nil }
+            guard w.allSatisfy({ $0.isLetter || $0 == "." || $0 == "'" || $0 == "-" }) else { return nil }
+            if w.count == 1 { return nil }
+        }
+        return words.joined(separator: " ")
     }
 
     /// Split blocks into subject partitions. Blocks without a `messageIndex`

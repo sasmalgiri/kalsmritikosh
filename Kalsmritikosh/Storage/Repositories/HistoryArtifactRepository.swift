@@ -410,6 +410,24 @@ public actor HistoryArtifactRepository {
         try await database.exec("UPDATE history_artifacts SET superseded_by = ? WHERE id = ?;", [.uuid(newID), .uuid(oldID)])
     }
 
+    /// L3 — every OTHER current artifact for the same subject and request shape
+    /// is superseded by `newID`. Before this, a rebuild on a changed ledger added
+    /// a new artifact and left the old one current, so the owner's patent had
+    /// two live histories side by side. Returns how many were superseded.
+    @discardableResult
+    public func supersedePrevious(anchorKey: String, requestShape: String,
+                                  keeping newID: UUID, at now: Date) async throws -> Int {
+        let rows = try await database.query("""
+        SELECT id FROM history_artifacts
+        WHERE anchor_key = ? AND request_shape = ? AND superseded_by IS NULL AND id <> ?;
+        """, [.text(anchorKey), .text(requestShape), .uuid(newID)])
+        for r in rows {
+            guard let old = r.uuid(0) else { continue }
+            try await supersede(old, by: newID, at: now)
+        }
+        return rows.count
+    }
+
     public func itemCount(artifactID: UUID) async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM history_items WHERE artifact_id = ?;", [.uuid(artifactID)])).first?.int(0) ?? 0)
     }

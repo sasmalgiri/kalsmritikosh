@@ -23,7 +23,7 @@ struct ProducerVersionTests {
 
     @Test("Post-V3 bump: fresh rows carry the current era; the legacy NULL fact is stale; the predicate stays live for the next era")
     func stalenessAfterV3Bump() async throws {
-        #expect(DerivedProducerVersions.facts == 7, "the seventh facts bump: L2 universal hygiene — transport/style/enumerator/placeholder shapes are never facts")
+        #expect(DerivedProducerVersions.facts == 8, "the eighth facts bump: L3 document subject — a person-headed document files its facts under that person")
         #expect(DerivedProducerVersions.entities == 2, "U0-b is the second entities bump (RFC display-name splitter; register refresh executed live 2026-09-03)")
         #expect(DerivedProducerVersions.events == 2, "W-5.3 is the second events bump (event-title normalizer: fwd:/re: chains stripped from titles)")
 
