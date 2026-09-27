@@ -140,4 +140,21 @@ import Foundation
         #expect(out.first?.subject == "Hybrid  Reluctance Induction Motor", "the most-evidenced spelling leads")
         #expect(out.first?.facts.count == 5)
     }
+
+    @Test("P1.19 — automated senders are recognised by the address; their subjects never stand as topics")
+    func automatedMail() {
+        for a in ["noreply@google.com", "no-reply@accounts.google.com", "alerts@bank.example", "calendar-notification@google.com",
+                  "mailer-daemon@googlemail.com", "updates.jobs@portal.example"] {
+            #expect(EmailParticipantRepository.isAutomatedAddress(a), "\(a)")
+        }
+        for a in ["gopinath@iiprd.com", "info@khuranaandkhurana.com", "accounts@khuranaandkhurana.com", "alertfield@x.com"] {
+            #expect(!EmailParticipantRepository.isAutomatedAddress(a), "\(a)")
+        }
+        let chat = subjectFacts("shirshendu sasmal wants to chat", (1...6).map { ("f\($0)", "v\($0)") })
+        let patent = subjectFacts("Patent No. 555489", [("patentnumber", "555489"), ("status", "granted"), ("grantdate", "28 Nov 2024"), ("applicant", "S. Sasmal")])
+        let person = subjectFacts("Shirshendu Sasmal", [("email", "a@b.c"), ("phone", "1"), ("city", "Kolkata"), ("degree", "B.Tech")])
+        let out = TopicConsolidator.consolidate([chat, patent, person], nonSubjects: ["Shirshendu Sasmal wants to chat"]).map(\.subject)
+        #expect(!out.contains("shirshendu sasmal wants to chat"))
+        #expect(out.contains("Patent No. 555489"))
+    }
 }

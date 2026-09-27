@@ -35,7 +35,8 @@ public enum TopicConsolidator {
     /// the owner's archive, résumés sharing "sasmal" with the patent folded in
     /// and the patent topic listed "Bengali: Read – Write – Speak".
     public nonisolated static func consolidate(
-        _ input: [SubjectFacts], minDistinctFacts: Int = 4, closed: Set<String> = []
+        _ input: [SubjectFacts], minDistinctFacts: Int = 4, closed: Set<String> = [],
+        nonSubjects: Set<String> = []
     ) -> [SubjectFacts] {
         guard input.count > 1 else { return input }
         // P1.13 — one subject, one topic: labels that differ only in case or
@@ -72,6 +73,10 @@ public enum TopicConsolidator {
         // "image-bc523fd4" were standing topics.
         func isSubstantive(_ s: SubjectFacts) -> Bool {
             if closed.contains(s.subject) { return true }
+            // P1.19 — `nonSubjects`: labels the CALLER knows are not matters
+            // (subjects of automated mail — "… wants to chat", portal alerts).
+            let lowered = s.subject.lowercased()
+            if nonSubjects.contains(where: { $0.lowercased() == lowered }) { return false }
             return distinctCount(s) >= minDistinctFacts && !isNonSubjectLabel(s.subject)
         }
         let substantive = ranked.filter(isSubstantive)

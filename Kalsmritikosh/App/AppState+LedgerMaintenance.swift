@@ -176,9 +176,14 @@ extension AppState {
         if KnowledgeModuleFlags.isEnabled(.topicMinimization) {
             // Spine-resolved matters are closed: evidence decided their members.
             let matters = Set(spine?.label.values.map { $0 } ?? []).intersection(factsBySubject.keys)
+            // P1.19 — the subjects of automated mail name services, not matters.
+            let automated: Set<String> = await {
+                guard let database else { return [] }
+                return (try? await EmailParticipantRepository(database: database).subjectsOfAutomatedMail()) ?? []
+            }()
             let consolidated = TopicConsolidator.consolidate(
                 factsBySubject.map { TopicConsolidator.SubjectFacts(subject: $0.key, facts: $0.value) },
-                closed: matters)
+                closed: matters, nonSubjects: automated)
             factsBySubject = Dictionary(
                 consolidated.map { ($0.subject, $0.facts) }, uniquingKeysWith: { a, _ in a })
             KalsmritikoshLog.app.info("Topic minimization: \(consolidated.count, privacy: .public) topics kept")
