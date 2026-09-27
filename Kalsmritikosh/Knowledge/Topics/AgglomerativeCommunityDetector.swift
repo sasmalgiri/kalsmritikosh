@@ -121,11 +121,20 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         // Step 1 — load edges sorted DESC by weight.
         let edges: [(a: UUID, b: UUID, w: Int)]
         do {
+            // P1.14 — attributes are never community members, even when an
+            // older graph still carries their edges: on the owner's copy 88
+            // of ~350 community members were email date headers, left over
+            // from a graph built before CooccurrenceGraphBuilder excluded
+            // them. Same kind list as the builder.
             let rows = try await database.query("""
-            SELECT entity_a, entity_b, weight
-            FROM entity_cooccurrences
-            WHERE weight >= ?
-            ORDER BY weight DESC;
+            SELECT c.entity_a, c.entity_b, c.weight
+            FROM entity_cooccurrences c
+            JOIN entities ea ON ea.id = c.entity_a
+            JOIN entities eb ON eb.id = c.entity_b
+            WHERE c.weight >= ?
+              AND ea.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
+              AND eb.kind NOT IN ('date', 'deadline', 'milestone', 'money', 'currency', 'phoneNumber')
+            ORDER BY c.weight DESC, c.entity_a, c.entity_b;
             """, [.integer(Int64(minMergeWeight))])
             edges = rows.compactMap { row -> (UUID, UUID, Int)? in
                 guard let a = row.uuid(0),
@@ -246,6 +255,15 @@ public actor AgglomerativeCommunityDetector: BackgroundService {
         }
         if insertFailures > 0 {
             KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: \(insertFailures, privacy: .public) of \(insertedRows + insertFailures, privacy: .public) inserts failed (likely FK violations from cooccurrence edges pointing at deleted entity ids)")
+        }
+
+        // P1.14 — the level-1 topic tree is built over these communities; the
+        // boot pass may have built it from the previous set, so refresh it
+        // now rather than leaving the Big Picture one detector cycle stale.
+        do {
+            _ = try await TopicTreeBuilder(database: database).run()
+        } catch {
+            KalsmritikoshLog.knowledge.error("AgglomerativeCommunityDetector: topic tree refresh failed — \(String(describing: error), privacy: .public)")
         }
 
         let elapsed = Int(Date().timeIntervalSince(started))
