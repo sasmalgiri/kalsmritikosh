@@ -428,6 +428,34 @@ public actor HistoryArtifactRepository {
         return rows.count
     }
 
+    /// P1.12 — heal histories built BEFORE supersede-on-rebuild existed: for
+    /// every subject with more than one current artifact of a shape, the
+    /// newest stays current and the others point at it (superseded, never
+    /// deleted — they stay reopenable). Idempotent. Returns rows superseded.
+    @discardableResult
+    public func collapseDuplicateCurrent(requestShape: String, at now: Date) async throws -> Int {
+        let rows = try await database.query("""
+        SELECT anchor_key, id FROM history_artifacts
+        WHERE request_shape = ? AND superseded_by IS NULL AND anchor_key IN (
+            SELECT anchor_key FROM history_artifacts
+            WHERE request_shape = ? AND superseded_by IS NULL
+            GROUP BY anchor_key HAVING COUNT(*) > 1)
+        ORDER BY anchor_key, created_at DESC, id DESC;
+        """, [.text(requestShape), .text(requestShape)])
+        var newest: [String: UUID] = [:]
+        var superseded = 0
+        for r in rows {
+            guard let key = r.string(0), let id = r.uuid(1) else { continue }
+            if let keep = newest[key] {
+                try await supersede(id, by: keep, at: now)
+                superseded += 1
+            } else {
+                newest[key] = id
+            }
+        }
+        return superseded
+    }
+
     public func itemCount(artifactID: UUID) async throws -> Int {
         Int((try await database.query("SELECT COUNT(*) FROM history_items WHERE artifact_id = ?;", [.uuid(artifactID)])).first?.int(0) ?? 0)
     }

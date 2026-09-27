@@ -110,4 +110,28 @@ struct HistorySupersedeTests {
         #expect((byID[new] ?? nil) == nil, "the new build is current")
         #expect((byID[other] ?? nil) == nil, "another subject is untouched")
     }
+
+    @Test("P1.12 — legacy duplicates collapse to the newest current history per subject; idempotent")
+    func collapseLegacyDuplicates() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("hist-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let db = try Database(url: dir.appendingPathComponent("db.sqlite"))
+        try await SchemaMigrations.migrate(db)
+        let a1 = UUID(), a2 = UUID(), a3 = UUID(), b1 = UUID()
+        for (id, key, t) in [(a1, "anchor-A", 1.0), (a2, "anchor-A", 3.0), (a3, "anchor-A", 2.0), (b1, "anchor-B", 1.0)] {
+            try await db.exec("""
+            INSERT INTO history_artifacts (id, subject_kind, subject_label, engine_version, request_json, title, summary, coverage_json, quality_json, created_at, review_state, anchor_key, request_shape, ledger_stamp)
+            VALUES (?, 'entity', 'Application No. 1', 1, '{}', 'History', '', '{}', '{}', ?, 'unreviewed', ?, 'story', 's');
+            """, [.uuid(id), .real(t), .text(key)])
+        }
+        let repo = HistoryArtifactRepository(database: db)
+        #expect(try await repo.collapseDuplicateCurrent(requestShape: "story", at: Date()) == 2)
+        let rows = try await db.query("SELECT id, superseded_by FROM history_artifacts;", [])
+        let byID = Dictionary(uniqueKeysWithValues: rows.map { ($0.uuid(0)!, $0.uuid(1)) })
+        #expect((byID[a2] ?? nil) == nil, "the newest stays current")
+        #expect((byID[a1] ?? nil) == a2 && (byID[a3] ?? nil) == a2, "older builds point at the newest")
+        #expect((byID[b1] ?? nil) == nil, "a subject with one history is untouched")
+        #expect(try await repo.collapseDuplicateCurrent(requestShape: "story", at: Date()) == 0, "idempotent")
+    }
 }

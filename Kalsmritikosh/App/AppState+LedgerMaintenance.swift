@@ -311,7 +311,12 @@ extension AppState {
     /// Returns the number of histories persisted, or nil if repositories aren't ready.
     @discardableResult
     public func buildHistories(limit: Int = 10) async -> Int? {
-        guard let entities, let engine = historyEngine, historyArtifacts != nil else { return nil }
+        guard let entities, let engine = historyEngine, let artifacts = historyArtifacts else { return nil }
+        // P1.12 — one current history per subject, including ones built
+        // before rebuilds superseded their predecessors.
+        if let n = try? await artifacts.collapseDuplicateCurrent(requestShape: "story", at: Date()), n > 0 {
+            KalsmritikoshLog.app.info("History build: superseded \(n, privacy: .public) duplicate current history row(s)")
+        }
         var anchors = (try? await entities.allAnchors(limit: 500)) ?? []
         guard !anchors.isEmpty else { return 0 }
         // Subject spine — ONE history per real-world matter, most-documented
