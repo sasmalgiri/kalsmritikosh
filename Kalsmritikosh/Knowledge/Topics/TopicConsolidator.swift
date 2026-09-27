@@ -99,13 +99,23 @@ public enum TopicConsolidator {
         var order: [String] = []
         for s in substantive { bucket[s.subject] = s.facts; order.append(s.subject) }
 
+        // P1.4 — a term most subjects share (the owner's own name and address
+        // on every mail) links nothing: measured on the owner's archive, 28
+        // subject-less photo mails folded into the chat "h r u" through
+        // "shirshendu" + "sasmal" alone. Terms in ≥ 20% of subjects (and at
+        // least `ubiquityFloor` of them) are ignored when choosing a host.
+        var termDF: [String: Int] = [:]
+        let termsBySubject = Dictionary(ranked.map { ($0.subject, terms(of: $0)) }, uniquingKeysWith: { a, _ in a })
+        for set in termsBySubject.values { for term in set { termDF[term, default: 0] += 1 } }
+        let ubiquityCut = max(ubiquityFloor, Int((Double(ranked.count) * 0.2).rounded(.up)))
+        let ubiquitous = Set(termDF.filter { $0.value >= ubiquityCut }.keys)
         let subTerms: [(subject: String, terms: Set<String>)] =
-            hosts.map { ($0.subject, terms(of: $0)) }
+            hosts.map { ($0.subject, (termsBySubject[$0.subject] ?? []).subtracting(ubiquitous)) }
 
         for t in thin {
             // Only closed matters exist: nothing may absorb by vocabulary.
             guard let largestHost = hosts.first else { continue }
-            let tt = terms(of: t)
+            let tt = (termsBySubject[t.subject] ?? terms(of: t)).subtracting(ubiquitous)
             var bestSubject = largestHost.subject       // fallback: the largest
             var bestScore = -1.0
             for cand in subTerms {
@@ -130,6 +140,10 @@ public enum TopicConsolidator {
 
         return order.map { SubjectFacts(subject: $0, facts: bucket[$0] ?? []) }
     }
+
+    /// Fewest subjects a term must reach before it counts as ubiquitous — small
+    /// inputs never lose their vocabulary.
+    nonisolated static let ubiquityFloor = 5
 
     // MARK: - P1.19 template series
 
@@ -220,6 +234,7 @@ public enum TopicConsolidator {
         "file", "untitled", "attachment", "new", "copy", "final", "page", "sheet", "book",
         "pdf", "jpg", "jpeg", "png", "heic", "video", "vid", "audio", "rec", "recording",
         "wa", "vid", "mov", "mp4", "aud", "ptt",   // WhatsApp media stems ("IMG-20231129-WA0004")
+        "message",   // P1.4 — FactSubjectPartitioner.untitledMessage
     ]
 
     /// True when `label` names transport or a file kind rather than a subject.

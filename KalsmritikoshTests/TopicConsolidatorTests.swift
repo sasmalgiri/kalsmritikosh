@@ -176,3 +176,25 @@ import Foundation
         #expect(TopicConsolidator.openingText(of: "CV : For Pharmaceutical JOB", words: 3) == "CV : For Pharmaceutical")
     }
 }
+
+@Suite("P1.4 — the owner's own name links nothing")
+struct TopicUbiquitousTermTests {
+    private func facts(_ subject: String, _ pairs: [(String, String)]) -> TopicConsolidator.SubjectFacts {
+        TopicConsolidator.SubjectFacts(subject: subject, facts: pairs.map {
+            GenericFact(subjectLabel: subject, field: $0.0, value: $0.1, status: .sourceAsserted,
+                        confidence: 0.8, sourceBlockIDs: [UUID()])
+        })
+    }
+
+    @Test("A thin mail sharing only the owner's name with a chat is not folded into it")
+    func ubiquitousTermsDoNotFold() {
+        let owner = ("from", "Shirshendu Sasmal")
+        var input = (1...6).map { i in
+            facts("Matter \(i)", [owner, ("topic\(i)a", "alpha\(i)"), ("topic\(i)b", "beta\(i)"), ("topic\(i)c", "gamma\(i)")])
+        }
+        input.append(facts("Hot", [owner]))
+        let out = TopicConsolidator.consolidate(input)
+        let total = out.reduce(0) { $0 + $1.facts.count }
+        #expect(total == 24, "the photo mail's lone fact joined no matter (it stays in the ledger)")
+    }
+}

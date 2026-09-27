@@ -431,7 +431,8 @@ public final class LedgerDrainCoordinator {
         for partition in FactSubjectPartitioner.partitions(blocks: blocks, fallbackLabel: subjectLabel) {
             let substantive = partition.blocks.filter { !$0.kind.isBoilerplate }
             guard !substantive.isEmpty else { continue }
-            derived += extractor.extract(
+            // P1.4 — a commercial partition files under its counterparty.
+            derived += FactSubjectPartitioner.filedUnderCounterparty(extractor.extract(
                 fromKindedBlocks: substantive
                     .map { (id: $0.id,
                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
@@ -445,7 +446,8 @@ public final class LedgerDrainCoordinator {
                 // measurement that found this.
                 layoutTextByBlock: Dictionary(
                     substantive.map { ($0.id, $0.rawText) },
-                    uniquingKeysWith: { a, _ in a }))
+                    uniquingKeysWith: { a, _ in a })),
+                label: partition.subjectLabel, documentClass: docClass ?? nil)
         }
         // P1.1 — device identifiers, exactly as ingest derives them
         // (IngestCoordinator.deriveGenericFacts): without this, a facts-era bump

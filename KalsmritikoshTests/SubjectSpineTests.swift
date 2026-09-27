@@ -153,11 +153,22 @@ struct FactSubjectPartitionerTests {
         #expect(parts.first?.blocks.count == 2)
     }
 
-    @Test("A message with no Subject line falls back to the file label")
+    @Test("P1.4 — a message with no Subject is filed under what it carries, never the mailbox name")
     func missingSubject() {
-        let parts = FactSubjectPartitioner.partitions(
-            blocks: [block(.emailBody, "Amount: Rs.1500", message: 4)], fallbackLabel: "Sent")
-        #expect(parts.first?.subjectLabel == "Sent")
+        let parts = FactSubjectPartitioner.partitions(blocks: [
+            block(.emailHeader, "a@b.c", message: 4, header: "from"),
+            block(.emailBody, "Please find my resume\nRegards", message: 4),
+            block(.attachment, "Shirshendu CV-1a2b3c4d.pdf", message: 5),
+            block(.emailBody, "Amount: Rs.1500", message: 5),
+            block(.emailHeader, "a@b.c", message: 6, header: "from"),
+        ], fallbackLabel: "Sent")
+        #expect(parts.map(\.subjectLabel) == ["Untitled message", "Shirshendu CV", "Untitled message"],
+                "attachment name without the store hash; otherwise untitled — never the opening line or the file label")
+        #expect(TopicConsolidator.isNonSubjectLabel(FactSubjectPartitioner.untitledMessage))
+        #expect(FactSubjectPartitioner.isMaskedTail("XX1671") && FactSubjectPartitioner.isMaskedTail("XXX>")
+                && FactSubjectPartitioner.isMaskedTail("<"))
+        #expect(!FactSubjectPartitioner.isMaskedTail("Attorneys") && !FactSubjectPartitioner.isMaskedTail("Xerox")
+                && !FactSubjectPartitioner.isMaskedTail("2024"))
         #expect(FactSubjectPartitioner.normalizedSubject("Subject: Re:  ") == nil)
     }
 
@@ -237,5 +248,48 @@ struct SubjectSpineLedgerTests {
 
         let (_, rerun) = try await spine.run()
         #expect(rerun.mentionsWritten == 0, "idempotent — same world, no new rows")
+    }
+}
+
+@Suite("P1.4 — commercial documents file under their counterparty")
+struct CounterpartyFilingTests {
+    private func fact(_ label: String, _ field: String, _ value: String) -> GenericFact {
+        GenericFact(subjectLabel: label, field: field, value: value, status: .sourceAsserted,
+                    confidence: 0.8, sourceBlockIDs: [UUID()])
+    }
+
+    @Test("Receipts from three vendors → three subjects; a titled letter and a two-party stem stay put")
+    func receiptsFileUnderVendor() {
+        let receipts: [(String, DocumentClass?, String)] = [
+            ("Screenshot_20240112-101500", .image, "Khurana & Khurana"),
+            ("IMG_4471", nil, "Acme Stores"),
+            ("Invoice 2024-07", .invoice, "Bharat Telecom"),
+        ]
+        var subjects = Set<String>()
+        for (label, cls, party) in receipts {
+            let out = FactSubjectPartitioner.filedUnderCounterparty(
+                [fact(label, "amount", "₹1,200"), fact(label, "counterparty", party), fact(label, "date", "2024-01-12")],
+                label: label, documentClass: cls)
+            #expect(out.allSatisfy { $0.subjectLabel == party }, "\(label)")
+            #expect(out.map(\.value) == ["₹1,200", party, "2024-01-12"], "values and order untouched")
+            subjects.formUnion(out.map(\.subjectLabel))
+        }
+        #expect(subjects.count == 3)
+
+        let masked = [fact("Transaction Successful", "amount", "₹3,800"),
+                      fact("Transaction Successful", "counterparty", "Khurana and Khurana Advocates XXX>"),
+                      fact("Transaction Successful", "counterparty", "Khurana and Khurana Advocates")]
+        #expect(FactSubjectPartitioner.filedUnderCounterparty(masked, label: "Transaction Successful", documentClass: .image)
+            .allSatisfy { $0.subjectLabel == "Khurana and Khurana Advocates" }, "a masked tail is the same party")
+
+        let letter = [fact("Patent requirement", "amount", "₹20,000"), fact("Patent requirement", "counterparty", "Khurana & Khurana")]
+        #expect(FactSubjectPartitioner.filedUnderCounterparty(letter, label: "Patent requirement", documentClass: .email)
+            .allSatisfy { $0.subjectLabel == "Patent requirement" }, "a titled, non-commercial document keeps its title")
+        let twoParties = [fact("IMG_1", "amount", "₹5"), fact("IMG_1", "counterparty", "A Ltd"), fact("IMG_1", "counterparty", "B Ltd")]
+        #expect(FactSubjectPartitioner.filedUnderCounterparty(twoParties, label: "IMG_1", documentClass: .receipt)
+            .allSatisfy { $0.subjectLabel == "IMG_1" }, "two parties: no single counterparty to file under")
+        let noAmount = [fact("IMG_2", "counterparty", "A Ltd")]
+        #expect(FactSubjectPartitioner.filedUnderCounterparty(noAmount, label: "IMG_2", documentClass: .receipt)
+            .first?.subjectLabel == "IMG_2")
     }
 }

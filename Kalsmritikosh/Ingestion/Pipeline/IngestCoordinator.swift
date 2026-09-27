@@ -903,7 +903,8 @@ public actor IngestCoordinator {
         for partition in FactSubjectPartitioner.partitions(blocks: doc.blocks, fallbackLabel: subjectLabel) {
             let substantive = partition.blocks.filter { !$0.kind.isBoilerplate }
             guard !substantive.isEmpty else { continue }
-            derived += domainFactExtractor.extract(
+            // P1.4 — a commercial partition files under its counterparty.
+            derived += FactSubjectPartitioner.filedUnderCounterparty(domainFactExtractor.extract(
                 fromKindedBlocks: substantive
                     .map { (id: $0.id,
                             text: $0.normalizedText.isEmpty ? $0.rawText : $0.normalizedText,
@@ -917,7 +918,8 @@ public actor IngestCoordinator {
                 // measurement that found this.
                 layoutTextByBlock: Dictionary(
                     substantive.map { ($0.id, $0.rawText) },
-                    uniquingKeysWith: { a, _ in a }))
+                    uniquingKeysWith: { a, _ in a })),
+                label: partition.subjectLabel, documentClass: documentClass)
         }
         // HOST-8e — device identifiers, read from the STRUCTURED key/value blocks of
         // a plist / registry hive / custody manifest rather than from prose (a

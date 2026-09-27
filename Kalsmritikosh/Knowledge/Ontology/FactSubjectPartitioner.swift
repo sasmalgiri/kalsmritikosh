@@ -118,10 +118,34 @@ public nonisolated enum FactSubjectPartitioner {
             let subject = msgBlocks
                 .first { $0.kind == .emailHeader && $0.locator.emailHeaderField?.lowercased() == "subject" }
                 .flatMap { normalizedSubject($0.rawText) }
-            out.append(Partition(subjectLabel: subject ?? fallbackLabel, blocks: msgBlocks))
+            out.append(Partition(subjectLabel: subject ?? untitledMessageLabel(msgBlocks),
+                                 blocks: msgBlocks))
         }
         return out
     }
+
+    /// P1.4 — a message with NO Subject line is still about something, never
+    /// about the mailbox file: on the owner's archive 46 of 526 sent messages
+    /// had no Subject (photos, songs, a résumé sent bare) and their facts all
+    /// stood under "Sent". The same rule as a single document: what it carries
+    /// — the first attachment's name, without the store's hash suffix. With no
+    /// attachment it is `untitledMessage`, a label that never stands as a topic.
+    /// (Its opening line is NOT a subject: measured, "Hi" became a 108-source
+    /// topic.)
+    static func untitledMessageLabel(_ blocks: [EvidenceBlock]) -> String {
+        let ordered = blocks.sorted { $0.ordinal < $1.ordinal }
+        if let attachment = ordered.first(where: { $0.kind == .attachment }) {
+            let name = attachment.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stem = (name as NSString).deletingPathExtension
+                .replacingOccurrences(of: #"-[0-9a-f]{8}$"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if !stem.isEmpty { return String(stem.prefix(120)) }
+        }
+        return untitledMessage
+    }
+
+    /// The label of a message with neither Subject nor attachment.
+    public static let untitledMessage = "Untitled message"
 
     /// Headers a person wrote or reads. The rest (ARC-Seal, Authentication-
     /// Results, Received, X-…) are transport plumbing: read as `Label: value`
@@ -157,5 +181,49 @@ public nonisolated enum FactSubjectPartitioner {
         }
         s = s.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return s.isEmpty ? nil : String(s.prefix(120))
+    }
+
+    // MARK: - P1.4 commercial documents file under their counterparty
+
+    /// "XX1671", "XXX>", "****1872", "<": a masked number or stray mark.
+    static func isMaskedTail(_ word: String) -> Bool {
+        let core = word.filter { $0.isLetter || $0.isNumber }
+        if core.isEmpty { return true }
+        return core.allSatisfy { $0 == "X" || $0 == "x" || $0.isNumber } && core.contains { $0 == "X" || $0 == "x" }
+    }
+
+    /// P1.4 — a receipt or invoice is ABOUT the party it was paid to or issued
+    /// by, not about its file name: on the owner's archive four UPI screenshots
+    /// to one firm stood as four "Screenshot_2024…" subjects. When the document
+    /// is commercial — classed receipt/invoice, or labelled only by a machine
+    /// file stem — and its facts state an amount and exactly ONE counterparty,
+    /// every fact of the partition is filed under that counterparty. Two
+    /// counterparties, no amount, or a real title: the label stands (the
+    /// universal fallback is the title/stem, unchanged).
+    public static func filedUnderCounterparty(
+        _ facts: [GenericFact], label: String, documentClass: DocumentClass?
+    ) -> [GenericFact] {
+        // A picture stating an amount paid to one party is a receipt screenshot.
+        let commercialClass = documentClass == .receipt || documentClass == .invoice || documentClass == .image
+        guard commercialClass || TopicConsolidator.isNonSubjectLabel(label),
+              facts.contains(where: { $0.field == "amount" }) else { return facts }
+        var parties: [String: String] = [:]   // folded → first spelling seen
+        for f in facts where f.field == "counterparty" {
+            // Masked account tails ("XX1671", "XXX>") are not part of the name.
+            var words = f.value.split(whereSeparator: \.isWhitespace).map(String.init)
+            while let last = words.last, Self.isMaskedTail(last) { words.removeLast() }
+            let v = words.joined(separator: " ")
+            guard !v.isEmpty, !v.contains("@") else { continue }
+            let key = v.lowercased().trimmingCharacters(in: .punctuationCharacters)
+            if parties[key] == nil { parties[key] = v }
+        }
+        guard parties.count == 1, let party = parties.values.first, party != label else { return facts }
+        return facts.map { f in
+            GenericFact(id: f.id, subjectID: f.subjectID, subjectLabel: party, field: f.field, value: f.value,
+                        unit: f.unit, assessment: f.assessment, confidence: f.confidence,
+                        sourceBlockIDs: f.sourceBlockIDs, producerVersion: f.producerVersion,
+                        rawMatch: f.rawMatch, sourceCount: f.sourceCount,
+                        reassignedFrom: f.reassignedFrom, derivation: f.derivation)
+        }
     }
 }

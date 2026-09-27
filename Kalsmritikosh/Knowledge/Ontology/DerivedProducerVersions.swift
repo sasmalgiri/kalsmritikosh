@@ -55,7 +55,12 @@ public nonisolated enum DerivedProducerVersions {
     /// v9 — P2 payments: a payee stops at masked/numeric runs and payment
     ///        furniture on one-line OCR receipts; an OCR-lost rupee sign ("·10,000")
     ///        is recovered in payment confirmations. The drain re-extracts.
-    public static let facts = 9
+    /// v10 — P1.4 UNTITLED MESSAGE: a mailbox message with no Subject files its
+    ///        facts under its first attachment's name, else its opening line —
+    ///        never the mailbox file name ("Sent"); a receipt/invoice (or a
+    ///        stem-labelled payment screenshot) naming one counterparty files
+    ///        under that counterparty. The drain re-extracts.
+    public static let facts = 10
 
     /// Entity extraction + EntityQualityGate (entities.producer_version).
     /// First bump 0→1 (V3 3c): the gate hardening (3b) plus the new anchor
