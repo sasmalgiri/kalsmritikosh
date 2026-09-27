@@ -93,3 +93,20 @@ struct OrphanClaimSweepTests {
         #expect(status[live] == "present", "a claim whose source exists is untouched")
     }
 }
+
+@Suite("P4.2 — milestone ids are stable across rebuilds")
+struct StableEventIDTests {
+    @Test("The same happening gets the same id every rebuild; a different one does not")
+    func stable() {
+        let src = UUID()
+        let d = Date(timeIntervalSince1970: 1_732_752_000)   // 28 Nov 2024
+        func e(_ title: String, _ date: Date = d) -> Event {
+            Event(kind: .other, date: date, title: title, summary: "granted", sourceObjectID: src)
+        }
+        let a = EventDeduper.withStableID(e("Patent granted")), b = EventDeduper.withStableID(e("Patent granted"))
+        #expect(a.id == b.id, "two rebuilds, one row identity")
+        #expect(EventDeduper.withStableID(e("Hearing held")).id != a.id)
+        #expect(EventDeduper.withStableID(e("Patent granted", d.addingTimeInterval(86_400 * 3))).id != a.id)
+        #expect(a.title == "Patent granted" && a.sourceObjectID == src, "content untouched")
+    }
+}

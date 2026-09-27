@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 public enum EventDeduper {
 
@@ -69,5 +70,31 @@ public enum EventDeduper {
                          attributes: attributes, qualityTier: lead.qualityTier,
                          datePrecision: lead.datePrecision, status: lead.status)
         }
+    }
+
+    // MARK: - P4.2 stable identity
+
+    /// The same event, with an id DERIVED from what it is (source · kind ·
+    /// title · day · summary) instead of a fresh random one. The drain's
+    /// milestone pass deletes and rebuilds every milestone on every boot; with
+    /// random ids each boot replaced all of them (the owner copy's fixed-point
+    /// check: 479 events, identities changed) and every claim projected from a
+    /// milestone was orphaned and swept. Stable ids make the rebuild a no-op.
+    /// Apply AFTER `collapse` — it leaves one event per such key per source.
+    public nonisolated static func withStableID(_ e: Event) -> Event {
+        let day = Int((e.date.timeIntervalSince1970 / 86_400).rounded(.down))
+        let key = [e.sourceObjectID.uuidString, e.kind.rawValue, e.title, String(day), e.summary ?? ""]
+            .joined(separator: "\u{1F}")
+        var bytes = Array(SHA256.hash(data: Data(key.utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50   // name-based (v5-style) UUID
+        bytes[8] = (bytes[8] & 0x3F) | 0x80   // RFC 4122 variant
+        let id = UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                             bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+        return Event(id: id, kind: e.kind, date: e.date, endDate: e.endDate,
+                     title: e.title, summary: e.summary, entityIDs: e.entityIDs,
+                     sourceObjectID: e.sourceObjectID, sourceRange: e.sourceRange,
+                     confidence: e.confidence, dateConfidence: e.dateConfidence,
+                     attributes: e.attributes, qualityTier: e.qualityTier,
+                     datePrecision: e.datePrecision, status: e.status)
     }
 }

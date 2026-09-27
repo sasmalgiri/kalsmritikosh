@@ -3510,8 +3510,9 @@ public final class AppState {
                 // subject id, not just the NER participants.
                 let anchorIDs = await identifierAnchorIDs(inContent: content, sourceObjectID: id)
                     .filter { !suspectAnchors.contains($0) }   // I-5: split-suspects never thread
-                let milestones = PatentLegalEventExtractor.extract(
-                    text: content, sourceObjectID: id, entityIDs: anchorIDs)
+                // P4.2 — same collapse + stable ids as the drain's rebuild.
+                let milestones = EventDeduper.collapse(PatentLegalEventExtractor.extract(
+                    text: content, sourceObjectID: id, entityIDs: anchorIDs)).map(EventDeduper.withStableID)
                 if !milestones.isEmpty {
                     try? await events.insertBatch(milestones)
                     created += milestones.count

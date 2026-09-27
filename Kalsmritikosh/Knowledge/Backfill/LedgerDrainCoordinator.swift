@@ -610,8 +610,9 @@ public final class LedgerDrainCoordinator {
                     anchorIDs.append(id)
                 }
             }
+            // P4.2 — stable ids: a rebuild of unchanged milestones writes the same rows.
             let milestones = EventDeduper.collapse(await PatentLegalEventExtractor.extract(
-                text: content, sourceObjectID: koID, entityIDs: anchorIDs))
+                text: content, sourceObjectID: koID, entityIDs: anchorIDs)).map(EventDeduper.withStableID)
             if !milestones.isEmpty {
                 do {
                     try await events.insertBatch(milestones)
