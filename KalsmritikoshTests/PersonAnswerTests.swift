@@ -69,3 +69,27 @@ struct PersonAnswerTests {
         #expect(PersonAnswerComposer.composeOwnJobs(ownerLabel: "x", facts: [fact("employer", "Ltd")]) == nil)
     }
 }
+
+@Suite("L5 — who did it (first-person reports, not instructions)")
+struct ActorAnswerTests {
+    @Test("The question's action and object are read; non-who questions are not")
+    func reading() throws {
+        let q = try #require(ActorAnswerComposer.read("Who drafted the claims?"))
+        #expect(q.stem == "draft" && q.objectTerms == ["claims"])
+        #expect(ActorAnswerComposer.read("What are the claims?") == nil)
+        #expect(ActorAnswerComposer.read("Who drafted?") == nil, "no object, no answerable action")
+    }
+
+    @Test("The owner's archive: a completed first-person report wins; the examiner's instruction and a plan do not")
+    func reports() throws {
+        let q = try #require(ActorAnswerComposer.read("Who drafted the claims?"))
+        let instruction = "In case the applicant intends to amend the claims in response to this report, the same shall be drafted afresh to include the technical advancement."
+        #expect(ActorAnswerComposer.reports(in: instruction, for: q).isEmpty)
+        let plan = "After receiving your technical inputs, we shall prepare and share with you the draft written submission and proposed amendments to claims for your review."
+        #expect(ActorAnswerComposer.reports(in: plan, for: q).first?.completed == false)
+        let done = "Dear Sir,\r\n> Pursuant to your instruction, we have prepared a draft response along with=\r\n the proposed amendment in claims, abstract, and specification.\r\nThe same is attached."
+        let r = try #require(ActorAnswerComposer.reports(in: done, for: q).first)
+        #expect(r.completed)
+        #expect(r.sentence.hasPrefix("Dear Sir, Pursuant to your instruction, we have prepared a draft response along with the proposed amendment in claims"))
+    }
+}

@@ -257,3 +257,86 @@ public enum PaymentAnswerComposer {
         return (text, lines.map(\.amount))
     }
 }
+
+// MARK: - L5 — who ‹did› ‹thing›
+
+/// "Who drafted the claims?" — the party that REPORTED doing it. An action
+/// stated in the first person in a message ("we have prepared a draft … in
+/// claims") was done by that message's sender; an instruction ("shall be
+/// drafted afresh") or a plan ("we shall prepare") is not a report of it.
+public enum ActorAnswerComposer {
+
+    /// Action stems a question may name, with the words a report of that
+    /// action uses (drafting is reported as "prepared a draft").
+    nonisolated static let actionForms: [String: [String]] = [
+        "draft":   ["draft", "drafted", "drafting", "prepared"],
+        "file":    ["filed", "file", "filing", "submitted", "lodged"],
+        "sign":    ["signed", "sign", "executed"],
+        "prepar":  ["prepared", "prepare", "draft"],
+        "submit":  ["submitted", "submit", "filed"],
+        "send":    ["sent", "send", "forwarded", "shared"],
+        "pay":     ["paid", "pay", "transferred", "remitted"],
+        "review":  ["reviewed", "review", "checked"],
+        "approv":  ["approved", "approve", "accepted"],
+        "amend":   ["amended", "amend", "amendment", "amendments"],
+        "respond": ["responded", "replied", "response", "filed"],
+        "attend":  ["attended", "appeared", "represented"],
+    ]
+    nonisolated static let firstPerson = [
+        "we have ", "we've ", "i have ", "i've ", "we had ", "i had ", "we prepared", "i prepared",
+        "we filed", "i filed", "we drafted", "i drafted", "we submitted", "i submitted",
+        "we signed", "i signed", "we sent", "i sent", "we paid", "i paid", "we attended", "i attended",
+        "we are pleased to", "we hereby", "we shall ", "we will ", "i shall ", "i will ",
+    ]
+    nonisolated static let planMarkers = ["we shall ", "we will ", "i shall ", "i will ", "we would ", "will be "]
+    nonisolated static let instructionMarkers = ["shall be ", "should be ", "must be ", "is to be ", "are to be ",
+                                                 "needs to be ", "is required", "are required", "may be "]
+
+    public struct Question: Sendable, Equatable {
+        public let stem: String
+        public let forms: [String]
+        public let objectTerms: [String]
+    }
+
+    /// The action and its object a who-did question names.
+    public nonisolated static func read(_ question: String) -> Question? {
+        let tokens = question.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        guard tokens.first == "who" || tokens.first == "whom" else { return nil }
+        for t in tokens.dropFirst() {
+            guard let (stem, forms) = actionForms.first(where: { t.hasPrefix($0.key) }) else { continue }
+            let objects = tokens.drop(while: { $0 != t }).dropFirst()
+                .filter { $0.count >= 4 && !FTSQuerySanitizer.stopwords.contains($0) }
+            guard !objects.isEmpty else { return nil }
+            return Question(stem: stem, forms: forms, objectTerms: Array(objects))
+        }
+        return nil
+    }
+
+    public struct Report: Sendable, Equatable {
+        public let sentence: String
+        public let completed: Bool
+    }
+
+    /// First-person reports of the action on the object in `text`, completed
+    /// ones first. Instructions and passives never qualify.
+    public nonisolated static func reports(in text: String, for q: Question) -> [Report] {
+        let flat = text.replacingOccurrences(of: "=\r\n", with: "").replacingOccurrences(of: "=\n", with: "")
+            .replacingOccurrences(of: "\r", with: " ").replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: ">", with: " ")
+            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        var out: [Report] = []
+        for raw in flat.components(separatedBy: CharacterSet(charactersIn: ".!?")) {
+            let sentence = raw.trimmingCharacters(in: .whitespaces)
+            let lower = " " + sentence.lowercased() + " "
+            guard sentence.count >= 20, sentence.count <= 400 else { continue }
+            let words = Set(lower.components(separatedBy: CharacterSet.alphanumerics.inverted))
+            guard q.forms.contains(where: { words.contains($0) }),
+                  q.objectTerms.contains(where: { obj in words.contains(obj) || words.contains(where: { $0.hasPrefix(String(obj.prefix(5))) }) }),
+                  firstPerson.contains(where: { lower.contains(" " + $0) }),
+                  !instructionMarkers.contains(where: { lower.contains($0) }) else { continue }
+            let plan = planMarkers.contains(where: { lower.contains(" " + $0) })
+            out.append(Report(sentence: sentence, completed: !plan))
+        }
+        return out.sorted { $0.completed && !$1.completed }
+    }
+}

@@ -24,6 +24,7 @@ extension AppState {
         guard access.scope.isGlobalOwnerBypass else { return nil }
         guard let entities, let events else { return nil }
         if let person = await composePersonAnswer(question: question) { return person }
+        if let actor = await composeActorAnswer(question: question) { return actor }
         // A year question: the year's own dated records, month by month.
         if let year = EventAnswerComposer.askedYear(question),
            !EventAnswerComposer.hasSubjectReference(question) {
@@ -187,5 +188,60 @@ extension AppState {
             confidence: Confidence(0.85),
             refused: false,
             answerState: .supported)
+    }
+
+    /// L5 — "who ‹did› ‹thing›?": the sender of the message that REPORTS the
+    /// action in the first person. nil → the pipeline runs.
+    func composeActorAnswer(question: String) async -> VerifiedAnswer? {
+        guard QuestionShapeRouter.route(question).shape == .actor,
+              let q = ActorAnswerComposer.read(question),
+              let chunks, let database, let events else { return nil }
+        let search = (q.forms + q.objectTerms).joined(separator: " ")
+        let hits = (try? await chunks.searchFTS(search, limit: 80)) ?? []
+        let participants = EmailParticipantRepository(database: database)
+        struct Found { let who: String; let address: String; let date: Date?; let report: ActorAnswerComposer.Report; let chunk: Chunk }
+        var found: [Found] = []
+        var seenActors = Set<String>()
+        for c in hits {
+            guard let report = ActorAnswerComposer.reports(in: c.text, for: q).first else { continue }
+            let senders = ((try? await participants.occurrences(forSourceObject: c.objectID)) ?? [])
+                .filter { $0.role == .from || $0.role == .sender }
+            // A thread has several senders: the one the passage itself names
+            // ("Gopinath D <gopinath@iiprd.com> wrote:"), else the only one.
+            let lowerText = c.text.lowercased()
+            let named = senders.first { s in
+                lowerText.contains(s.rawAddress.lowercased())
+                    || (s.displayName.map { !$0.isEmpty && lowerText.contains($0.lowercased()) } ?? false)
+            }
+            let unique = Set(senders.map { $0.rawAddress.lowercased() }).count == 1 ? senders.first : nil
+            guard let sender = named ?? unique,
+                  seenActors.insert(sender.rawAddress.lowercased() + "|" + String(report.completed)).inserted else { continue }
+            let date = ((try? await events.findBySourceObject(c.objectID)) ?? [])
+                .filter { ($0.kind == .emailReceived || $0.kind == .emailSent) && $0.hasTrustworthyDate }
+                .map(\.date).min()
+            found.append(Found(who: [sender.displayName, "<\(sender.rawAddress)>"].compactMap { $0 }.joined(separator: " "),
+                               address: sender.rawAddress, date: date, report: report, chunk: c))
+            if found.count == 6 { break }
+        }
+        // Reports of the action DONE lead; plans only when nothing was done.
+        let done = found.filter(\.report.completed)
+        let shown = (done.isEmpty ? found : done).sorted { ($0.date ?? .distantFuture) < ($1.date ?? .distantFuture) }
+        guard !shown.isEmpty else { return nil }
+        var lines: [String] = []
+        for f in shown.prefix(4) {
+            var head = f.who
+            if let domain = f.address.split(separator: "@").last { head += " (\(domain))" }
+            if let d = f.date { head += ", \(EventAnswerComposer.dateFormatter.string(from: d))" }
+            head += f.report.completed ? " — reported doing it:" : " — said they would do it:"
+            lines.append(head + "\n\u{201C}\(f.report.sentence).\u{201D}")
+        }
+        var text = lines.joined(separator: "\n\n")
+        if done.isEmpty { text += "\n\nThese are stated plans; no report of it being done was found." }
+        KalsmritikoshLog.brain.info("subject-first: actor answered from \(shown.count, privacy: .public) report(s)")
+        return Self.deterministicAnswer(text,
+            receipt: "The actor is the sender of the message that reports the action in the first person; instructions (\u{201C}shall be …\u{201D}) are never counted; no model was consulted.",
+            citations: shown.prefix(4).map {
+                VerifiedAnswer.Citation(objectID: $0.chunk.objectID, chunkID: $0.chunk.id, snippet: String($0.report.sentence.prefix(200)))
+            })
     }
 }
