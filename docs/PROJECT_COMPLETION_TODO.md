@@ -41,7 +41,7 @@ passing is never acceptance on its own._
 | ◐ P2.7 | **First-query cold start** — DONE: optional HyDE bounded to 6 s (withDeadline); on-device model pre-warmed after boot and on first keystroke. NOT MEASURED in the real app (the test host's on-device model runs ~70 s/call); owner to confirm first-question latency live. | agent + 🔒 owner | First pipeline question < 30 s after boot. |
 | ☐ P2.3 | Tune rerank / corrective re-retrieve / HyDE against P2.1 metrics (built + on, never measured). | agent | Each module's on/off delta recorded; any negative module defaulted off. |
 | ☐ P2.4 | **W5 `.actor` shape** polish ("who drafted the claims?"). | agent | Drafter question cites the Khurana & Khurana passage. |
-| ☐ P2.5 | **Known red test** `W5FixTests.poaLineProducesExactlyOneApplicant` vs `.poaGrantorRecovery` default ON — fix code or update the test with a recorded ruling. | agent | Test green; ruling in Self-Rulings Ledger. |
+| ☑ P2.5 | **Known red test** `W5FixTests.poaLineProducesExactlyOneApplicant` — RULED: module `.poaGrantorRecovery` (default ON, formula-only) is the current decision; the test now pins BOTH module states and an "I, for one…" innocence case. Green. | agent | Test green; ruling recorded. |
 | ☐ P2.6 | Gold wall + AskTheLedger + GoldWall regression after every P2 change. | agent | Refusal 1.0 · hallucination 0 · false-not-found 0. |
 
 ## PHASE 3 — Remaining UI

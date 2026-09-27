@@ -37,11 +37,28 @@ struct W5FixTests {
         #expect(applicants.count == 1)
         #expect(applicants.first?.value == "Shirshendu Sasmal")
 
-        // The Title-Case law (doc W-5.1): a lowercase POA capture is
-        // counted, not stored — the cased certificate lines carry the name.
+        // A lowercase POA capture. The Title-Case law (W-5.1) refused it; the
+        // later module .poaGrantorRecovery (default ON) reads it — but ONLY in
+        // the exact "I, <name> having…" formula. RULING 2026-09-27 (P2.5): the
+        // module is the current decision; this test pins BOTH of its states
+        // instead of depending on the default.
         let lower = "I, shirshendu sasmal having nationality Indian, declare…"
-        let lowerFacts = PatentDomainPack.extractFacts(fromText: lower, subjectLabel: "s", blockID: UUID())
-        #expect(lowerFacts.filter { $0.field == "applicant" }.isEmpty)
+        let saved = KnowledgeModuleFlags.isEnabled(.poaGrantorRecovery)
+        defer { KnowledgeModuleFlags.setEnabled(.poaGrantorRecovery, saved) }
+        KnowledgeModuleFlags.setEnabled(.poaGrantorRecovery, false)
+        #expect(PatentDomainPack.extractFacts(fromText: lower, subjectLabel: "s", blockID: UUID())
+            .filter { $0.field == "applicant" }.isEmpty, "module off: the Title-Case law holds")
+        do {
+            KnowledgeModuleFlags.setEnabled(.poaGrantorRecovery, true)
+            let recovered = PatentDomainPack.extractFacts(fromText: lower, subjectLabel: "s", blockID: UUID())
+                .filter { $0.field == "applicant" }
+            #expect(recovered.count == 1, "module on: exactly one applicant from the formula")
+            #expect(recovered.first?.value.lowercased() == "shirshendu sasmal")
+        }
+        // Never an ordinary sentence starting with "I,", whatever the module.
+        #expect(PatentDomainPack.extractFacts(fromText: "I, for one, acknowledge receipt of the notice.",
+                                              subjectLabel: "s", blockID: UUID())
+            .filter { $0.field == "applicant" }.isEmpty)
     }
 
     @Test func roleGateRejectsInfraAndClauseShapes() {
