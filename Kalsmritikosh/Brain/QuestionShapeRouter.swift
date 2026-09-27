@@ -23,6 +23,7 @@ public enum QuestionShape: String, Sendable, CaseIterable {
     case unresolved    // the normal pipeline — SAFEST
     case existence     // "is/was/has the X …?" — yes/no from the ledger
     case timeline      // "timeline of …" — the ordered, dated, cited chain
+    case status        // L5 — "what is the status of …" — the latest dated milestone leads
     case count         // "how many …?" — counts from counts
     case story         // P4-U4 — "tell me the story of …" — the reconstruction engine
     // A2.1 (closing spec) — the last-mile shapes:
@@ -51,7 +52,7 @@ public enum QuestionShapeRouter {
     /// EARLIER shape wins (unresolved = the full pipeline = safest;
     /// outOfScope = a refusal = least safe).
     public nonisolated static let safestOrder: [QuestionShape] = [
-        .unresolved, .story, .relationship, .conflict, .timeline, .list,
+        .unresolved, .story, .relationship, .conflict, .timeline, .status, .list,
         .aggregation, .count, .actor, .role, .existence, .outOfScope,
     ]
 
@@ -89,6 +90,12 @@ public enum QuestionShapeRouter {
         "did the", "does the", "are there", "is it true",
     ]
 
+    /// L5 — status asks (data): where a matter stands NOW.
+    nonisolated static let statusPatterns: [String] = [
+        "status of", "current status", "what is the status", "what's the status", "latest status",
+        "where do things stand", "where does it stand", "progress of", "what stage",
+    ]
+
     nonisolated static let countOpeners: [String] = [
         "how many", "how much", "count of", "number of",
     ]
@@ -111,6 +118,7 @@ public enum QuestionShapeRouter {
         if q.hasPrefix("who is the") && q.contains(" of ") { return .role }
         if isActorQuestion(q) { return .actor }
         if ["timeline of", "history of", "chronology of"].contains(where: { q.contains($0) }) { return .timeline }
+        if statusPatterns.contains(where: { q.contains($0) }) { return .status }
         if countOpeners.contains(where: { q.hasPrefix($0) }) { return .count }
         if existenceOpeners.contains(where: { q.hasPrefix($0) }) { return .existence }
         return .unresolved
@@ -142,6 +150,8 @@ public enum QuestionShapeRouter {
             return .role
         }
         if !tokens.isDisjoint(with: ["timeline", "chronology", "history"]) { return .timeline }
+        if tokens.contains("status") || tokens.contains("progress")
+            || (tokens.contains("stand") && tokens.contains("where")) { return .status }
         if tokens.contains("many") || tokens.contains("count") { return .count }
         let yesNoLeads: Set<String> = ["is", "was", "were", "has", "have", "did", "does", "are"]
         if let first = normalized(question).components(separatedBy: " ").first,
@@ -202,6 +212,7 @@ public enum QuestionShapeRouter {
         case .unresolved: return "a general question"
         case .existence:  return "a yes-or-no question"
         case .timeline:   return "a timeline question"
+        case .status:     return "a where-does-it-stand question"
         case .count:        return "a counting question"
         case .story:        return "a story question"
         case .role:         return "a who-holds-this-role question"

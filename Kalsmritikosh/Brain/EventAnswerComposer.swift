@@ -104,6 +104,121 @@ public enum EventAnswerComposer {
             receiptLine: "No matching event on file.")
     }
 
+    // MARK: - L5 — status (where a matter stands NOW)
+
+    /// State-change words (data) — the lifecycle of a matter, any domain:
+    /// filings, examinations, hearings, grants, refusals, signatures, lapses.
+    nonisolated static let lifecycleTerms: Set<String> = [
+        "filed", "filing", "published", "publication", "examination", "examined", "objection",
+        "objections", "hearing", "granted", "grant", "refused", "rejected", "abandoned",
+        "withdrawn", "renewed", "renewal", "lapsed", "recorded", "registered", "issued",
+        "signed", "executed", "terminated", "expired", "settled", "closed", "decided",
+        "approved", "allowed", "opposed", "opposition", "appealed", "appeal", "judgment",
+    ]
+    /// Terminal-ish states rank above procedural ones on the same day.
+    nonisolated static let decisiveTerms: Set<String> = [
+        "granted", "grant", "refused", "rejected", "abandoned", "withdrawn", "lapsed",
+        "terminated", "expired", "settled", "closed", "decided", "approved", "judgment",
+    ]
+
+    nonisolated static func lifecycleWords(_ title: String) -> Set<String> {
+        Set(title.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }).intersection(lifecycleTerms)
+    }
+
+    /// "What is the status of …?" → the LATEST lifecycle milestone of the
+    /// subject's own events leads; earlier milestones follow, oldest first;
+    /// everything is cited. `events` must already be scoped to the subject
+    /// (the subject fetch does that). nil = no lifecycle milestone on file →
+    /// the pipeline runs (never an invented status).
+    public nonisolated static func composeStatus(
+        question: String,
+        events: [Event],
+        documentsSearched: Int
+    ) -> EventAnswerComposition? {
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        // One milestone per (words, day): repeats across documents are one happening.
+        var seen = Set<String>()
+        var milestones: [Event] = []
+        for e in events.sorted(by: {
+            if $0.date != $1.date { return $0.date < $1.date }
+            return $0.id.uuidString < $1.id.uuidString
+        }) where !isCommunication(e) && e.hasTrustworthyDate {
+            let words = lifecycleWords(e.title)
+            guard !words.isEmpty else { continue }
+            let key = words.sorted().joined(separator: "+") + "|" + Self.dayFormatter.string(from: e.date)
+            if seen.insert(key).inserted { milestones.append(e) }
+        }
+        guard let latest = milestones.max(by: { a, b in
+            if a.date != b.date { return a.date < b.date }
+            let ad = !lifecycleWords(a.title).isDisjoint(with: decisiveTerms)
+            let bd = !lifecycleWords(b.title).isDisjoint(with: decisiveTerms)
+            if ad != bd { return !ad }
+            return a.id.uuidString > b.id.uuidString
+        }) else { return nil }
+        let state = lifecycleWords(latest.title).intersection(decisiveTerms).sorted().first
+            ?? lifecycleWords(latest.title).sorted().first ?? "recorded"
+        var text = "Current status: \(state) — \(lowercasedTitle(latest.title)) on \(Self.dateFormatter.string(from: latest.date))."
+        let earlier = milestones.filter { $0.id != latest.id && $0.date <= latest.date }
+        if !earlier.isEmpty {
+            let lines = earlier.suffix(6).map { "\(Self.dateFormatter.string(from: $0.date)) — \($0.title)" }
+            text += "\n\nEarlier milestones:\n" + lines.joined(separator: "\n")
+        }
+        if let later = events.filter(isCommunication).filter({ $0.hasTrustworthyDate && $0.date >= latest.date })
+            .min(by: { $0.date < $1.date }) {
+            text += "\n\nLatest correspondence after it: \(later.title) (\(Self.dateFormatter.string(from: later.date)))."
+        }
+        return EventAnswerComposition(
+            primaryText: text,
+            supportingEvents: [latest] + Array(earlier.suffix(6).reversed()),
+            isNotFound: false,
+            receiptLine: "Status is the latest dated lifecycle milestone of this subject's own records (\(milestones.count) on file); every line is cited; no model was consulted.")
+    }
+
+    // MARK: - L5 — events of a named subject
+
+    /// "What happened at the hearing for ‹X›?" / "When was ‹X› granted?" →
+    /// the subject's own events matching the question's event words, dated
+    /// (trustworthy dates only), oldest first, each cited. nil = the question
+    /// names no event word, or the subject has no such event (pipeline runs).
+    public nonisolated static func composeSubjectEvents(
+        question: String,
+        events: [Event],
+        subjectLabel: String?
+    ) -> EventAnswerComposition? {
+        guard let matches = matchEvents(question: question, events: events.filter(\.hasTrustworthyDate)),
+              !matches.isEmpty else { return nil }
+        let isCommunication: (Event) -> Bool = { $0.kind == .emailReceived || $0.kind == .emailSent }
+        var seen = Set<String>()
+        var distinct: [Event] = []
+        // Milestones before correspondence on the same day; one line per happening.
+        for e in matches.sorted(by: {
+            if $0.date != $1.date { return $0.date < $1.date }
+            if isCommunication($0) != isCommunication($1) { return !isCommunication($0) }
+            return $0.id.uuidString < $1.id.uuidString
+        }) {
+            let key = lowercasedTitle(e.title) + "|" + Self.dayFormatter.string(from: e.date)
+            if seen.insert(key).inserted { distinct.append(e) }
+        }
+        let noun = subjectNoun(question) ?? "event"
+        let about = subjectLabel.map { " for \($0)" } ?? ""
+        var lines = ["\(distinct.count) \(noun)-related record\(distinct.count == 1 ? "" : "s")\(about):"]
+        for e in distinct.prefix(10) {
+            var line = "\(Self.dateFormatter.string(from: e.date)) — \(e.title)"
+            if let s = e.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty,
+               s.lowercased() != e.title.lowercased() {
+                line += ": " + String(s.prefix(220))
+            }
+            lines.append(line)
+        }
+        if distinct.count > 10 { lines.append("…and \(distinct.count - 10) more.") }
+        return EventAnswerComposition(
+            primaryText: lines.joined(separator: "\n"),
+            supportingEvents: Array(distinct.prefix(10)),
+            isNotFound: false,
+            receiptLine: "Answered from this subject's own dated records (\(distinct.count) matching); every line cited; no model was consulted.")
+    }
+
     // MARK: - count
 
     public nonisolated static func composeCount(
@@ -148,7 +263,8 @@ public enum EventAnswerComposer {
     ) -> EventAnswerComposition? {
         var seen = Set<String>()
         var distinct: [Event] = []
-        for e in events.sorted(by: {
+        // L5 — an extraction-time date would sit at the end of every chain.
+        for e in events.filter(\.hasTrustworthyDate).sorted(by: {
             if $0.date != $1.date { return $0.date < $1.date }
             if $0.title != $1.title { return $0.title < $1.title }
             return $0.id.uuidString < $1.id.uuidString

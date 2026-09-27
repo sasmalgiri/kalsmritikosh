@@ -32,6 +32,7 @@ LedgerTools|LedgerTools.swift
 ToolGroundedComposer|ToolGroundedComposer.swift
 EmailParticipantBackfill|EmailParticipantBackfill.swift
 LedgerContractCheck|LedgerContractCheck.swift
+composeSubjectEventAnswer|AppState+SubjectFirst.swift
 "
 while IFS='|' read -r sym def; do
   [ -z "$sym" ] && continue

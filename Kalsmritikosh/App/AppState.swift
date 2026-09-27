@@ -1435,6 +1435,11 @@ public final class AppState {
                     guard let events else { return [] }
                     return (try? await events.findByTitleTokens(tokens)) ?? []
                 },
+                // L5 — the resolved subject's own events (status shape).
+                eventsForAnchors: { [weak events] ids in
+                    guard let events else { return [] }
+                    return (try? await events.eventsForAnchors(ids)) ?? []
+                },
                 // A1.2 — the abstention receipt's archive-wide scope.
                 archiveTotals: { [weak db] in
                     guard let db else { return (0, 0) }
@@ -2578,6 +2583,10 @@ public final class AppState {
             // reconstruction engine + renderer + durable artifact persistence.
             await brain.setStoryComposer { [weak self] question, access in
                 await self?.composeStoryAnswer(question: question, access: access)
+            }
+            // L5 — the subject-first door (status / subject-event questions).
+            await brain.setSubjectEventAnswer { [weak self] question, access in
+                await self?.composeSubjectEventAnswer(question: question, access: access)
             }
             // A3 — the tool-grounded middle floor.
             await brain.setToolGroundedFallback { [weak self] question, access in

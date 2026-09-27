@@ -112,6 +112,13 @@ public enum SubjectResolver {
     // MARK: - the pieces
 
     /// The anchor's identity key is "field|canon" in `normalized` (V3 law).
+    /// "Application 202331019665" — the anchor as a reader names it.
+    public nonisolated static func displayLabel(for anchor: Entity) -> String {
+        let value = canon(anchor)
+        guard let label = anchorLabels[fieldID(of: anchor)] else { return anchor.value }
+        return value.isEmpty ? anchor.value : "\(label) \(value)"
+    }
+
     nonisolated static func fieldID(of anchor: Entity) -> String {
         String(anchor.normalizedValue?.split(separator: "|").first ?? "")
     }

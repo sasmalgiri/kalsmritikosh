@@ -409,6 +409,22 @@ public actor MasterBrain {
                     return
                 }
 
+                // L5 — SUBJECT FIRST: a question that names a subject (an
+                // identifier or a definite reference) and asks where it stands
+                // or what happened in it is answered from that subject's OWN
+                // dated records, before retrieval — deterministic, cited, no
+                // model. nil (no subject / nothing on file) → the pipeline runs.
+                if let subjectFirst = await self.subjectEventAnswer,
+                   let answered = await subjectFirst(question, access) {
+                    for update in await self.finalizeProgressiveAnswer(
+                        question: question, verified: answered, mission: nil,
+                        originScopeID: originScopeID) {
+                        continuation.yield(update)
+                    }
+                    continuation.finish()
+                    return
+                }
+
                 // AEE-M2 §16 — a cached memory read is a PROGRESS signal, never a finding on
                 // its own (unsupported cached prose must not appear as an answer). It surfaces
                 // as analysisProgress; the durable grounded answer follows below.
@@ -1442,6 +1458,12 @@ public actor MasterBrain {
     /// G1 (Stage 1): carries the caller's SensitiveAccessContext so the
     /// story path enforces the SAME scope as normal retrieval, fail-closed.
     public var storyComposer: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    /// L5 — the subject-first door (status / subject-event questions),
+    /// wired by AppState over the anchor register + the event ledger.
+    public var subjectEventAnswer: (@Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?)?
+    public func setSubjectEventAnswer(_ c: @escaping @Sendable (String, SensitiveAccessContext) async -> VerifiedAnswer?) {
+        subjectEventAnswer = c
+    }
     /// A3 — the tool-grounded middle floor: deterministic composer →
     /// THIS → quote floor → deterministic readout. nil in rigs.
     /// G1: carries the access context (see storyComposer).

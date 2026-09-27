@@ -242,6 +242,9 @@ public struct EvidenceVerifier: Verifier {
     /// (factualLookup retrieval ranks chunks, not milestones, so "how many
     /// hearings" never met the hearing rows). nil → retrieval-only (legacy).
     private let eventsByTitleTokens: (@Sendable ([String]) async -> [Event])?
+    /// L5 — the resolved subject's OWN events (its anchors + the documents
+    /// that name them). nil → the status shape is not answered here.
+    private let eventsForAnchors: (@Sendable ([Entity.ID]) async -> [Event])?
     /// SPEC A1.2 — the abstention receipt's ARCHIVE-WIDE scope: total
     /// documents and passages from the ledger, not the candidate window
     /// (the owner's live not-found said "54 documents" on a 716-document
@@ -281,6 +284,7 @@ public struct EvidenceVerifier: Verifier {
         citationResolver: CitationResolver? = nil,
         anchorsProvider: (@Sendable () async -> [Entity])? = nil,
         eventsByTitleTokens: (@Sendable ([String]) async -> [Event])? = nil,
+        eventsForAnchors: (@Sendable ([Entity.ID]) async -> [Event])? = nil,
         archiveTotals: (@Sendable () async -> (documents: Int, passages: Int))? = nil
     ) {
         self.minimumConfidence = minimumConfidence
@@ -294,6 +298,7 @@ public struct EvidenceVerifier: Verifier {
         self.citationResolver = citationResolver
         self.anchorsProvider = anchorsProvider
         self.eventsByTitleTokens = eventsByTitleTokens
+        self.eventsForAnchors = eventsForAnchors
         self.archiveTotals = archiveTotals
     }
 
@@ -650,6 +655,35 @@ public struct EvidenceVerifier: Verifier {
         // A1.2 — the receipt speaks for the WHOLE archive.
         let totals = await archiveTotals?()
         let searchedScope = totals?.documents ?? Set(retrieval.chunks.map(\.chunk.objectID)).count
+
+        // L5 — WHERE A MATTER STANDS is answered from the subject's own dated
+        // lifecycle, BEFORE any slot: a stored `status` field holds every
+        // value the archive ever stated at once (filed · amendment · draft),
+        // while the latest dated milestone is the status now. Only when the
+        // subject resolved to anchors; no milestone on file → fall through.
+        if QuestionShapeRouter.route(intent.rawQuestion).shape == .status,
+           let fetch = eventsForAnchors, let charter = resolvedCharter, !charter.anchors.isEmpty {
+            let subjectEvents = await fetch(charter.anchors.map(\.id))
+            if let composed = EventAnswerComposer.composeStatus(
+                question: intent.rawQuestion, events: subjectEvents, documentsSearched: searchedScope) {
+                var body = composed.primaryText
+                if let about = charter.footerText { body += "\n\n" + about }
+                body += "\n\n(\(composed.receiptLine))"
+                KalsmritikoshLog.brain.info("EventAnswerComposer: status answered from \(subjectEvents.count, privacy: .public) subject event(s)")
+                return VerifiedAnswer(
+                    body: body,
+                    answerText: composed.primaryText,
+                    intentKind: intent.kind.rawValue,
+                    citations: composed.supportingEvents.map {
+                        VerifiedAnswer.Citation(objectID: $0.sourceObjectID, eventID: $0.id, snippet: $0.title)
+                    },
+                    confidence: composed.supportingEvents.first?.confidence ?? report.combined,
+                    contradictions: report.contradictions,
+                    refused: false,
+                    report: report)
+            }
+        }
+
         let slot = SlotAnswerComposer.compose(
             slotFieldIDs: plan.slotFieldIDs,
             facts: retrieval.genericFacts,
