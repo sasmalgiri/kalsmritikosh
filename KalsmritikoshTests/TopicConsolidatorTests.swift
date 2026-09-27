@@ -104,4 +104,40 @@ import Foundation
         #expect(out.count == 1)
         #expect(out.first?.subject == "A")
     }
+
+    @Test("P1.13 — transport notices and file-kind stems are not subjects; real names with hashes still are")
+    func nonSubjectLabels() {
+        for label in ["Delivery Status Notification (Failure)", "Undeliverable: Fwd: resume (prasenjit maity)",
+                      "Mail Delivery Subsystem", "image-bc523fd4", "img20200115_19590228-54927701",
+                      "Picture-8776713c", "IMG_4471", "Scanned Document 12", "IMG-20231129-WA0004-55b8cdda", ""] {
+            #expect(TopicConsolidator.isNonSubjectLabel(label), "\(label) is not a subject")
+        }
+        for label in ["Patent No. 555489 (Application 202331019665)", "Shirshendu Sasmal", "Resume QA - m-720c7304",
+                      "GDPR_Report_sasmal", "HYBRID RELUCTANCE INDUCTION MOTOR", "Final shift schedule 1-44a2cf0d",
+                      "Transaction Successful"] {
+            #expect(!TopicConsolidator.isNonSubjectLabel(label), "\(label) is a real subject")
+        }
+    }
+
+    @Test("P1.13 — a bounce notice with many facts is still folded or left out, never a standing topic")
+    func bounceNeverStandsAlone() {
+        let patent = subjectFacts("Patent No. 555489", [("patentnumber", "555489"), ("applicationnumber", "202331019665"),
+                                                         ("status", "granted"), ("grantdate", "28 Nov 2024")])
+        let person = subjectFacts("Shirshendu Sasmal", [("email", "a@b.c"), ("phone", "91234"), ("city", "Kolkata"), ("degree", "B.Tech")])
+        let bounce = subjectFacts("Delivery Status Notification (Failure)",
+                                  (1...8).map { ("recipient", "user\($0)@example.com") })
+        let out = TopicConsolidator.consolidate([patent, person, bounce]).map(\.subject)
+        #expect(!out.contains("Delivery Status Notification (Failure)"))
+        #expect(out.contains("Patent No. 555489") && out.contains("Shirshendu Sasmal"))
+    }
+
+    @Test("P1.13 — labels differing only in case/spacing are one subject")
+    func caseDuplicatesMerge() {
+        let a = subjectFacts("HYBRID RELUCTANCE INDUCTION MOTOR", [("title", "motor"), ("inventor", "S. Sasmal")])
+        let b = subjectFacts("Hybrid  Reluctance Induction Motor", [("field", "electrical"), ("status", "filed"), ("year", "2023")])
+        let out = TopicConsolidator.consolidate([a, b])
+        #expect(out.count == 1)
+        #expect(out.first?.subject == "Hybrid  Reluctance Induction Motor", "the most-evidenced spelling leads")
+        #expect(out.first?.facts.count == 5)
+    }
 }

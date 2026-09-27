@@ -38,6 +38,24 @@ public enum TopicConsolidator {
         _ input: [SubjectFacts], minDistinctFacts: Int = 4, closed: Set<String> = []
     ) -> [SubjectFacts] {
         guard input.count > 1 else { return input }
+        // P1.13 — one subject, one topic: labels that differ only in case or
+        // spacing ("HYBRID RELUCTANCE INDUCTION MOTOR" / "Hybrid Reluctance
+        // Induction Motor") merge first. The most-evidenced spelling is kept.
+        var byKey: [String: [SubjectFacts]] = [:]
+        var keyOrder: [String] = []
+        for s in input {
+            let key = s.subject.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+            if byKey[key] == nil { keyOrder.append(key) }
+            byKey[key, default: []].append(s)
+        }
+        let input: [SubjectFacts] = keyOrder.compactMap { key in
+            guard let group = byKey[key], let lead = group.max(by: {
+                $0.facts.count != $1.facts.count ? $0.facts.count < $1.facts.count : $0.subject > $1.subject
+            }) else { return nil }
+            if group.count == 1 { return lead }
+            return SubjectFacts(subject: lead.subject, facts: group.flatMap(\.facts))
+        }
+        guard input.count > 1 else { return input }
 
         func distinctCount(_ s: SubjectFacts) -> Int {
             Set(s.facts.map { "\($0.field.lowercased())|\($0.value.lowercased())" }).count
@@ -48,18 +66,27 @@ public enum TopicConsolidator {
             return a != b ? a > b : $0.subject < $1.subject
         }
         // A closed matter is always kept, however few its facts.
-        let substantive = ranked.filter { distinctCount($0) >= minDistinctFacts || closed.contains($0.subject) }
-        let thin = ranked.filter { distinctCount($0) < minDistinctFacts && !closed.contains($0.subject) }
+        // P1.13 — a label that is not a SUBJECT (a bounce notice, a camera or
+        // attachment stem) is thin however many facts it carries: on the
+        // owner's archive "Delivery Status Notification (Failure)" and
+        // "image-bc523fd4" were standing topics.
+        func isSubstantive(_ s: SubjectFacts) -> Bool {
+            if closed.contains(s.subject) { return true }
+            return distinctCount(s) >= minDistinctFacts && !isNonSubjectLabel(s.subject)
+        }
+        let substantive = ranked.filter(isSubstantive)
+        let thin = ranked.filter { !isSubstantive($0) }
         let hosts = substantive.filter { !closed.contains($0.subject) }
 
         // No substantive subject at all → the largest becomes the sole topic and
         // absorbs everyone else (still one real, evidence-backed topic).
         if substantive.isEmpty {
-            let host = ranked[0]
-            let merged = ranked.dropFirst().flatMap { $0.facts }
+            // Prefer a real subject as the sole host; a transport/stem label
+            // hosts only when nothing else exists.
+            let host = ranked.first(where: { !isNonSubjectLabel($0.subject) }) ?? ranked[0]
+            let merged = ranked.filter { $0.subject != host.subject }.flatMap { $0.facts }
             return [SubjectFacts(subject: host.subject, facts: host.facts + merged)]
         }
-
         // Accumulate each substantive subject's facts; thin subjects fold into the
         // closest substantive by content-term overlap (ties → the largest).
         var bucket: [String: [GenericFact]] = [:]
@@ -96,6 +123,43 @@ public enum TopicConsolidator {
         }
 
         return order.map { SubjectFacts(subject: $0, facts: bucket[$0] ?? []) }
+    }
+
+    // MARK: - P1.13 non-subject labels (universal, shape + small vocabularies)
+
+    /// Mail-transport notices: the message is ABOUT delivery, not a matter.
+    nonisolated static let transportPhrases: [String] = [
+        "delivery status notification", "undeliverable", "undelivered mail",
+        "mail delivery failed", "mail delivery failure", "mail delivery subsystem",
+        "returned mail", "delivery failure", "failure notice", "delivery has failed",
+        "message not delivered", "could not be delivered",
+    ]
+    /// Words that name a FILE KIND, not a subject ("IMG", "Picture", "scan").
+    nonisolated static let genericStemWords: Set<String> = [
+        "img", "image", "images", "picture", "pic", "photo", "photos", "scan", "scanned",
+        "screenshot", "screen", "shot", "dsc", "dscn", "pxl", "whatsapp", "document", "doc",
+        "file", "untitled", "attachment", "new", "copy", "final", "page", "sheet", "book",
+        "pdf", "jpg", "jpeg", "png", "heic", "video", "vid", "audio", "rec", "recording",
+        "wa", "vid", "mov", "mp4", "aud", "ptt",   // WhatsApp media stems ("IMG-20231129-WA0004")
+    ]
+
+    /// True when `label` names transport or a file kind rather than a subject.
+    public nonisolated static func isNonSubjectLabel(_ label: String) -> Bool {
+        let lower = label.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !lower.isEmpty else { return true }
+        if transportPhrases.contains(where: { lower.hasPrefix($0) || lower == $0 }) { return true }
+        // Machine stem: after dropping digits and hash-like runs, only file-kind
+        // words (or nothing) remain — "image-bc523fd4", "img20200115_19590228",
+        // "Picture-8776713c", "IMG_4471". A stem with any real word stays a subject.
+        let words = lower.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+        let meaningful = words.filter { w in
+            if w.allSatisfy(\.isNumber) { return false }
+            if w.count >= 6, w.allSatisfy({ $0.isHexDigit }), w.contains(where: \.isNumber) { return false }
+            let letters = w.filter(\.isLetter)
+            if genericStemWords.contains(letters) { return false }
+            return !letters.isEmpty
+        }
+        return meaningful.isEmpty
     }
 
     nonisolated static func terms(of s: SubjectFacts) -> Set<String> {
