@@ -185,6 +185,15 @@ public struct DomainFactExtractor: Sendable {
         }
         facts += Self.crossBlockFacts(in: blocks, subjectLabel: subjectLabel,
                                       documentClass: documentClass)
+        // P2 payments — a payment screenshot's amount sits alone in its own OCR
+        // line with a mangled currency sign; only the DOCUMENT can say it is a
+        // payment. Voted across the glyph variants; only when nothing else
+        // already supplied an amount.
+        if !facts.contains(where: { $0.field == "amount" }),
+           let voted = TransactionDomainPack.documentLevelAmount(
+               blocks: blocks.map { (id: $0.id, text: $0.text) }, subjectLabel: subjectLabel) {
+            facts.append(voted)
+        }
         // The document-level merge the call sites already performed on the
         // accumulated per-block output, kept here so this entry point's
         // contract matches `extract(fromText:)`: callers receive merged facts.

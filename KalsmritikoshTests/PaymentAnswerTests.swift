@@ -31,6 +31,18 @@ struct PaymentAnswerTests {
         #expect(facts.first(where: { $0.field == "amount" })?.value == "₹10,000")
     }
 
+    @Test("The owner's real screenshot: four OCR spellings of ₹3,800 across line blocks vote down the '23,800' misread")
+    func documentVote() {
+        let lines = ["Transaction Successful 03:34 pm on 05 Dec 2024", "Paid to", "Khurana and Khurana",
+                     "UTR: 089305755533", "Powered by", "UPI /YES BANK", "23,800", "<", "R3,800", "\t·3,800\t<\t\t₺3,800\t"]
+        let blocks = lines.map { (id: UUID(), text: $0) }
+        let fact = TransactionDomainPack.documentLevelAmount(blocks: blocks, subjectLabel: "Transaction Successful")
+        #expect(fact?.value == "₹3,800")
+        #expect(TransactionDomainPack.documentLevelAmount(
+            blocks: [(id: UUID(), text: "Agenda"), (id: UUID(), text: "·1,200 attendees")], subjectLabel: "x") == nil,
+            "no payment confirmation, no amount")
+    }
+
     @Test("A '·' figure outside a payment confirmation is not money")
     func noOcrAmountWithoutPayment() {
         let facts = TransactionDomainPack.extractFacts(fromText: "Agenda · 1,200 attendees expected", subjectLabel: "x", blockID: UUID())

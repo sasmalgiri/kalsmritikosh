@@ -130,6 +130,36 @@ public enum TransactionDomainPack {
         return nil
     }
 
+    /// A payment document's amount when OCR lost the currency sign: every
+    /// thousands-grouped figure prefixed by a currency-like glyph (·, •, R, ₺,
+    /// ₹) anywhere in the document, the value the most variants agree on (a
+    /// "₹" misread as a leading "2" loses the vote). Only for a document with
+    /// a payment-confirmation block. nil when no figure qualifies.
+    public nonisolated static func documentLevelAmount(
+        blocks: [(id: UUID, text: String)], subjectLabel: String
+    ) -> GenericFact? {
+        guard blocks.contains(where: { isPaymentConfirmation($0.text) }),
+              let re = try? NSRegularExpression(pattern: #"(?:^|[\s\t<>])[·•R₺₹]\s?(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?)(?![\d,])"#)
+        else { return nil }
+        var votes: [String: (count: Int, block: UUID, raw: String)] = [:]
+        for b in blocks {
+            let ns = b.text as NSString
+            for m in re.matches(in: b.text, range: NSRange(location: 0, length: ns.length)) {
+                let value = ns.substring(with: m.range(at: 1))
+                let raw = ns.substring(with: m.range).trimmingCharacters(in: .whitespaces)
+                let prior = votes[value]
+                votes[value] = ((prior?.count ?? 0) + 1, prior?.block ?? b.id, prior?.raw ?? raw)
+            }
+        }
+        guard let (value, win) = votes.max(by: { a, b in
+            a.value.count != b.value.count ? a.value.count < b.value.count : a.key > b.key
+        }) else { return nil }
+        return GenericFact(subjectLabel: subjectLabel, field: "amount", value: "₹" + value, unit: "INR",
+                           status: .sourceAsserted, confidence: win.count >= 2 ? 0.7 : 0.55,
+                           sourceBlockIDs: [win.block], producerVersion: DerivedProducerVersions.facts,
+                           rawMatch: win.raw, sourceCount: 1)
+    }
+
     /// The furniture of a bank/UPI receipt — OCR splits a screenshot into
     /// blocks, so the amount's own block ("Powered by YES BANK ·10,000") may not
     /// carry "paid to". Only ever used for the OCR-lost-sign amount.
