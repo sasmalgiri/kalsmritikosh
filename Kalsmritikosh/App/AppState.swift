@@ -2682,6 +2682,17 @@ public final class AppState {
                         }
                         _ = try await TermSalienceComputer(database: drainDB).run()
                         _ = try await TopicTreeBuilder(database: drainDB).run()
+                        // P1.9 — EmailParticipantBackfill existed with ZERO app
+                        // callers: mail ingested before OPS-005 never got its
+                        // participant occurrences (owner copy: 0 rows). It skips
+                        // any email that already has them, so a later boot
+                        // writes nothing.
+                        let participants = await EmailParticipantBackfill(
+                            occurrences: EmailParticipantRepository(database: drainDB),
+                            entities: drainEntities, database: drainDB).run(pageSize: 10_000)
+                        if participants > 0 {
+                            KalsmritikoshLog.app.info("Boot maintenance: \(participants, privacy: .public) email participant occurrence(s) backfilled")
+                        }
                         // A6 idempotence (parity finding #2): a per-boot twin
                         // BUDGET means every boot writes until the frontier
                         // drains (~50 docs/200 entities a launch). Loop each
