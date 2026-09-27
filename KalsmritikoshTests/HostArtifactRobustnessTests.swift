@@ -213,7 +213,7 @@ struct HostArtifactRobustnessTests {
     }
 
     @Test("A history file that is one giant continuation does not go quadratic",
-          .timeLimit(.minutes(1)))
+          .timeLimit(.minutes(3)))   // 25k lines in two runs; the RATIO is the check (~2 s alone, 36 s+ under full-suite load)
     func shellHistoryContinuationIsLinear() async throws {
         // Every line ending in a backslash means one command built from 20 000
         // appends. String concatenation in that loop is O(n²).
