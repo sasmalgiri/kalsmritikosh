@@ -93,4 +93,17 @@ struct StatusAnswerTests {
         #expect(!out.primaryText.contains("granted"), "only the asked-about events")
         #expect(EventAnswerComposer.composeSubjectEvents(question: "What happened?", events: events, subjectLabel: nil) == nil)
     }
+
+    @Test("Same day: the state leads its own notice; the state reads as a word; summaries start and end on whole words")
+    func polish() throws {
+        let events = [
+            Event(kind: .other, date: day(2024, 11, 28), title: "Intimation of grant issued", sourceObjectID: doc, dateConfidence: 0.85),
+            Event(kind: .other, date: day(2024, 11, 28), title: "Patent granted", sourceObjectID: doc, dateConfidence: 0.85),
+        ]
+        let out = try #require(EventAnswerComposer.composeStatus(question: "status?", events: events, documentsSearched: 1))
+        #expect(out.primaryText.hasPrefix("Current status: granted — patent granted on 28 November 2024."))
+        #expect(EventAnswerComposer.cleanSummary("nder [and hearing held on 06/08/2024 ] a patent is hereby granted")
+                == "[and hearing held on 06/08/2024 ] a patent is hereby granted")
+        #expect(EventAnswerComposer.cleanSummary("short") == nil)
+    }
 }

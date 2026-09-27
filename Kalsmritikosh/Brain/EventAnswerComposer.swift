@@ -121,6 +121,39 @@ public enum EventAnswerComposer {
         "terminated", "expired", "settled", "closed", "decided", "approved", "judgment",
     ]
 
+    /// Words that mark a message ABOUT a state, not the state ("intimation of
+    /// grant", "hearing notice"): on the same day the state itself leads.
+    nonisolated static let noticeWords: Set<String> = [
+        "intimation", "notice", "notification", "reminder", "letter", "communication", "copy",
+    ]
+    /// A lifecycle word as a reader says the state ("grant" → "granted").
+    nonisolated static let stateLabel: [String: String] = [
+        "grant": "granted", "filing": "filed", "renewal": "renewed", "appeal": "appealed",
+        "opposition": "opposed", "publication": "published", "examination": "under examination",
+        "examined": "under examination", "hearing": "hearing held", "objection": "objection raised",
+        "objections": "objection raised", "judgment": "decided",
+    ]
+
+    nonisolated static func isNotice(_ title: String) -> Bool {
+        !Set(title.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted))
+            .isDisjoint(with: noticeWords)
+    }
+
+    /// A stored summary is often a raw passage cut mid-word ("nder [and hearing…");
+    /// start it at the first whole word and never end mid-word.
+    nonisolated static func cleanSummary(_ raw: String, limit: Int = 200) -> String? {
+        var t = raw.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        if let first = t.first, first.isLowercase, let space = t.firstIndex(of: " ") {
+            t = String(t[t.index(after: space)...])
+        }
+        guard t.count >= 12 else { return nil }
+        if t.count > limit {
+            let cut = t.prefix(limit)
+            t = (cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)) + "…"
+        }
+        return t
+    }
+
     nonisolated static func lifecycleWords(_ title: String) -> Set<String> {
         Set(title.lowercased().components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }).intersection(lifecycleTerms)
@@ -154,10 +187,13 @@ public enum EventAnswerComposer {
             let ad = !lifecycleWords(a.title).isDisjoint(with: decisiveTerms)
             let bd = !lifecycleWords(b.title).isDisjoint(with: decisiveTerms)
             if ad != bd { return !ad }
+            let an = isNotice(a.title), bn = isNotice(b.title)
+            if an != bn { return an }            // the state outranks its notice
             return a.id.uuidString > b.id.uuidString
         }) else { return nil }
-        let state = lifecycleWords(latest.title).intersection(decisiveTerms).sorted().first
+        let word = lifecycleWords(latest.title).intersection(decisiveTerms).sorted().first
             ?? lifecycleWords(latest.title).sorted().first ?? "recorded"
+        let state = stateLabel[word] ?? word
         var text = "Current status: \(state) — \(lowercasedTitle(latest.title)) on \(Self.dateFormatter.string(from: latest.date))."
         let earlier = milestones.filter { $0.id != latest.id && $0.date <= latest.date }
         if !earlier.isEmpty {
@@ -205,9 +241,9 @@ public enum EventAnswerComposer {
         var lines = ["\(distinct.count) \(noun)-related record\(distinct.count == 1 ? "" : "s")\(about):"]
         for e in distinct.prefix(10) {
             var line = "\(Self.dateFormatter.string(from: e.date)) — \(e.title)"
-            if let s = e.summary?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty,
+            if let s = e.summary.flatMap({ cleanSummary($0) }),
                s.lowercased() != e.title.lowercased() {
-                line += ": " + String(s.prefix(220))
+                line += ": " + s
             }
             lines.append(line)
         }
