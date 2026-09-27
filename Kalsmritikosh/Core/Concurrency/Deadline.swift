@@ -17,36 +17,30 @@ public nonisolated func withDeadline<T: Sendable>(
     // NOT a task group: a group waits for every child before it returns, so an
     // operation that ignores cancellation (a model call mid-generation) held
     // the caller for its full duration and the "deadline" bounded nothing.
-    // The work runs unstructured; whichever of it and the timer finishes first
-    // resumes the caller exactly once, and the loser is cancelled.
-    let gate = DeadlineGate<T>()
-    let work = Task { await operation() }
-    return await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
-        Task {
-            await gate.arm(continuation)
-            Task {
-                let value = await work.value
-                await gate.resume(with: value)
-            }
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
-                work.cancel()
-                await gate.resume(with: nil)
-            }
+    // The work runs unstructured; the timer runs on a dispatch queue (no
+    // cooperative-pool hop); whichever finishes first resumes the caller once.
+    await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+        let gate = DeadlineGate(continuation)
+        let work = Task { gate.resume(with: await operation()) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + max(0, seconds)) {
+            work.cancel()
+            gate.resume(with: nil)
         }
     }
 }
 
-/// Resumes the waiting caller once; later results are dropped. `arm` always
-/// runs before either racer starts (they are launched after it).
-private actor DeadlineGate<T: Sendable> {
+/// Resumes the waiting caller exactly once; the later result is dropped.
+private final class DeadlineGate<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
     private var continuation: CheckedContinuation<T?, Never>?
 
-    func arm(_ c: CheckedContinuation<T?, Never>) { continuation = c }
+    init(_ c: CheckedContinuation<T?, Never>) { continuation = c }
 
     func resume(with value: T?) {
-        guard let c = continuation else { return }
+        lock.lock()
+        let c = continuation
         continuation = nil
-        c.resume(returning: value)
+        lock.unlock()
+        c?.resume(returning: value)
     }
 }

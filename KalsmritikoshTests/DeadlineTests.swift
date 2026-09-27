@@ -27,17 +27,29 @@ struct DeadlineTests {
 
     @Test("An operation that IGNORES cancellation still cannot hold the caller past the deadline")
     func nonCooperative() async {
-        let started = Date()
+        // Work that never checks Task.isCancelled and finishes on another
+        // queue after 20 s — like a model mid-generation behind an XPC call.
+        // The discriminator is ORDER, not a tight clock: under a saturated
+        // full-suite thread pool the caller may resume late, but it must
+        // resume before the work finishes (the old task-group version waited
+        // for it, every time).
+        let finished = FinishedFlag()
         let value = await withDeadline(seconds: 0.2) { () async -> String? in
-            // Work that never checks Task.isCancelled and finishes on another
-            // queue — like a model mid-generation behind an XPC call. (Not a
-            // busy wait: that hogs a cooperative thread and, under a full-suite
-            // load, measures the scheduler instead of the deadline.)
             await withCheckedContinuation { (c: CheckedContinuation<String?, Never>) in
-                DispatchQueue.global().asyncAfter(deadline: .now() + 3) { c.resume(returning: "too late") }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 20) {
+                    finished.set()
+                    c.resume(returning: "too late")
+                }
             }
         }
         #expect(value == nil)
-        #expect(Date().timeIntervalSince(started) < 2.0, "returned at the deadline, not when the work finished (3 s)")
+        #expect(!finished.value, "withDeadline returned before the non-cooperative work finished")
     }
+}
+
+private final class FinishedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func set() { lock.lock(); done = true; lock.unlock() }
+    var value: Bool { lock.lock(); defer { lock.unlock() }; return done }
 }

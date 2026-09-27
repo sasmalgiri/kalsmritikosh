@@ -217,15 +217,23 @@ struct HostArtifactRobustnessTests {
     func shellHistoryContinuationIsLinear() async throws {
         // Every line ending in a backslash means one command built from 20 000
         // appends. String concatenation in that loop is O(n²).
+        // Measured as a RATIO (P4.1): an absolute limit failed only under the
+        // full suite's parallel load (27–36 s vs 10 s; ~2 s alone). Linear
+        // work grows ~4× from 5k to 20k lines, quadratic ~16×; a shared
+        // slowdown scales both runs alike.
         let line = String(repeating: "x", count: 40) + " \\"
-        let text = Array(repeating: line, count: 20_000).joined(separator: "\n") + "\ndone\n"
-        let started = Date()
-        let doc = try await ShellHistoryStructuralParser().parse(
-            data: Data(text.utf8), filename: ".bash_history", type: .shellHistory,
-            logicalSourceID: UUID(), sourceVersionID: UUID())
-        let elapsed = Date().timeIntervalSince(started)
-        #expect(!doc.blocks.isEmpty)
-        #expect(elapsed < 10.0, "20k-line continuation took \(elapsed)s")
+        func timed(_ count: Int) async throws -> (Double, Int) {
+            let text = Array(repeating: line, count: count).joined(separator: "\n") + "\ndone\n"
+            let started = Date()
+            let doc = try await ShellHistoryStructuralParser().parse(
+                data: Data(text.utf8), filename: ".bash_history", type: .shellHistory,
+                logicalSourceID: UUID(), sourceVersionID: UUID())
+            return (Date().timeIntervalSince(started), doc.blocks.count)
+        }
+        let (small, _) = try await timed(5_000)
+        let (large, blocks) = try await timed(20_000)
+        #expect(blocks > 0)
+        #expect(large < max(0.5, small * 8), "5k lines \(small)s → 20k lines \(large)s: worse than linear")
     }
 
     // MARK: - The readers' own caps hold
