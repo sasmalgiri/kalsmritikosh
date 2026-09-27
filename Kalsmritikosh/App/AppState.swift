@@ -2703,6 +2703,15 @@ public final class AppState {
                         while try await EventRecordTwin(database: drainDB)
                             .runOnce().documentsExamined > 0 {}
                         KalsmritikoshLog.app.info("Boot maintenance pass complete (reindex, terms, tree, twins)")
+                        // L4 — the ledger contract over the user's own ledger,
+                        // read-only: a violation is logged loudly, never "fixed" here.
+                        let violations = try await LedgerContractCheck(database: drainDB).violations()
+                        let report = LedgerContractCheck.render(violations)
+                        if violations.isEmpty {
+                            KalsmritikoshLog.app.info("\(report, privacy: .public)")
+                        } else {
+                            KalsmritikoshLog.app.error("\(report, privacy: .public)")
+                        }
                     } catch {
                         KalsmritikoshLog.app.error("Boot maintenance pass failed (will retry next launch): \(error)")
                     }

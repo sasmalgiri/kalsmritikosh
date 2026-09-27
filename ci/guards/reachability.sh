@@ -31,6 +31,7 @@ SpanCutter|SpanCutter.swift
 LedgerTools|LedgerTools.swift
 ToolGroundedComposer|ToolGroundedComposer.swift
 EmailParticipantBackfill|EmailParticipantBackfill.swift
+LedgerContractCheck|LedgerContractCheck.swift
 "
 while IFS='|' read -r sym def; do
   [ -z "$sym" ] && continue

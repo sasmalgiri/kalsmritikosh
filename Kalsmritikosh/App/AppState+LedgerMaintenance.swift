@@ -393,6 +393,10 @@ extension AppState {
                 built += 1
             }
         }
+        // P1.12 / L4 — two builds can overlap (the idle scan and an explicit
+        // rebuild); each supersedes only what it saw, so a race can leave two
+        // current rows. Heal in the same pass (idempotent).
+        _ = try? await artifacts.collapseDuplicateCurrent(requestShape: "story", at: Date())
         KalsmritikoshLog.app.info("History build: \(built, privacy: .public) subject histories persisted")
         return built
     }
