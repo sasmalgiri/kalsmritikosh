@@ -327,6 +327,13 @@ public actor EvidenceStore: EvidenceBlockResolving {
     /// IS the KnowledgeObject id. This is what lets a GenericFact-derived HistoryItem
     /// carry a reopenable objectID+blockID citation instead of an empty evidence array.
     /// Order is not guaranteed; the caller keys by blockID.
+    /// L5 — the document a block belongs to (first owner), for citing a fact.
+    public func owningObject(forBlock blockID: EvidenceBlock.ID) async throws -> KnowledgeObject.ID? {
+        try await database.query(
+            "SELECT knowledge_object_id FROM evidence_block_objects WHERE evidence_block_id = ? ORDER BY knowledge_object_id LIMIT 1;",
+            [.uuid(blockID)]).first?.uuid(0)
+    }
+
     public func resolveEvidenceBlocks(_ blockIDs: [EvidenceBlock.ID]) async throws -> [ResolvedEvidenceReference] {
         guard !blockIDs.isEmpty else { return [] }
         let placeholders = blockIDs.map { _ in "?" }.joined(separator: ", ")

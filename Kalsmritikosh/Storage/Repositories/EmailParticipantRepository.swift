@@ -112,6 +112,33 @@ public actor EmailParticipantRepository {
     }
 
     /// Count of occurrences for a source KO (used by backfill to skip already-processed KOs).
+    /// L5 — the archive owner's addresses: the recipients mail is most often
+    /// addressed TO (a mailbox is delivered to its owner). Most frequent first.
+    public func likelyOwnerAddresses(limit: Int = 2) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT lower(raw_address), COUNT(DISTINCT source_ko_id) FROM email_participant_occurrences
+        WHERE role = 'to' GROUP BY 1 ORDER BY 2 DESC LIMIT ?;
+        """, [.integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// L5 — every correspondence row of a person named `nameToken` (display
+    /// name or address local part contains it, whole-word-ish, case-insensitive).
+    public func correspondence(nameToken: String, limit: Int = 2_000)
+        async throws -> [(address: String, displayName: String?, sourceObjectID: UUID, role: String)] {
+        let token = nameToken.lowercased()
+        let rows = try await database.query("""
+        SELECT lower(raw_address), display_name, source_ko_id, role FROM email_participant_occurrences
+        WHERE (' ' || lower(COALESCE(display_name, '')) || ' ') LIKE ?
+           OR lower(raw_address) LIKE ?
+        LIMIT ?;
+        """, [.text("% \(token) %"), .text("\(token)%@%"), .integer(Int64(limit))])
+        return rows.compactMap { r in
+            guard let a = r.string(0), let ko = r.uuid(2), let role = r.string(3) else { return nil }
+            return (a, r.string(1), ko, role)
+        }
+    }
+
     public func occurrenceCount(forSourceObject objectID: KnowledgeObject.ID) async throws -> Int {
         let rows = try await database.query(
             "SELECT COUNT(*) FROM email_participant_occurrences WHERE source_ko_id = ?;",

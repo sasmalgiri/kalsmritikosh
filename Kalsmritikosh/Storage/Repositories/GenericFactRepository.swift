@@ -161,6 +161,32 @@ public actor GenericFactRepository {
         return (before, after)
     }
 
+    /// L5 — subjects whose facts STATE a value (e.g. a résumé stating the
+    /// owner's own email address). Case-insensitive exact value match.
+    public func subjectLabels(statingValue value: String, limit: Int = 20) async throws -> [String] {
+        let rows = try await database.query("""
+        SELECT subject_label, COUNT(*) FROM generic_facts
+        WHERE lower(trim(value)) = lower(trim(?)) GROUP BY subject_label ORDER BY 2 DESC LIMIT ?;
+        """, [.text(value), .integer(Int64(limit))])
+        return rows.compactMap { $0.string(0) }
+    }
+
+    /// L5 — every fact of the given subject labels, restricted to fields.
+    public func facts(subjectLabels: [String], fields: Set<String>) async throws -> [GenericFact] {
+        guard !subjectLabels.isEmpty, !fields.isEmpty else { return [] }
+        let wanted = fields.map { FactSchemaRegistry.normalizeField($0) }
+        let ls = subjectLabels.map { _ in "?" }.joined(separator: ",")
+        let fs = wanted.map { _ in "?" }.joined(separator: ",")
+        let rows = try await database.query("""
+        SELECT id, subject_id, subject_label, field, value, unit, status, confidence, source_blocks_json,
+               evidence_basis, review_disposition, proposal_origin, availability_status, conflict_status, legacy_status,
+               producer_version, raw_match, source_count, reassigned_from, derivation
+        FROM generic_facts WHERE subject_label IN (\(ls)) AND field IN (\(fs))
+        ORDER BY confidence DESC, id ASC;
+        """, subjectLabels.map { .text($0) } + wanted.map { .text($0) })
+        return rows.compactMap(Self.decode)
+    }
+
     /// Facts about a subject for a field (e.g. all "employer" facts for "Sasmal").
     public func facts(subjectLabel: String, field: String) async throws -> [GenericFact] {
         let rows = try await database.query("""
