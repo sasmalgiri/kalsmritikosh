@@ -155,7 +155,7 @@ struct PatentDomainPackTests {
     /// relax. But the junk it guards against was counted on the owner's live
     /// archive, which cannot be re-measured here, so the change would ship
     /// unverified against the only data that justifies the gate. Owner call.
-    @Test("RED (owner call): a lowercase POA grantor is counted, not stored — W-4c vs W-5.1")
+    @Test("W-4c vs W-5.1 — RULED: the POA formula recovers a lowercase grantor; the casing gate stays for clauses")
     func lowercasePOAGrantorIsNotStored() {
         let poa = "GENERAL POWER OF ATTORNEY (PATENTS) THE PATENTS ACT, 1970. Form of Authorization of an Agent. I, shirshendu sasmal having Nationality of India, hereby authorize the agent below. Application No. 202331019665."
         let facts = PatentDomainPack.extractFacts(fromText: poa, subjectLabel: "s", blockID: UUID())
@@ -169,9 +169,11 @@ struct PatentDomainPackTests {
         #expect(!PatentDomainPack.isPlausibleRoleValue("shirshendu sasmal"))
         #expect(PatentDomainPack.isPlausibleRoleValue("Shirshendu Sasmal"))
 
-        withKnownIssue("W-4c vs W-5.1: the uppercase-token rule rejects a lowercase POA grantor. Owner decision — see the doc comment for the measured trade and the sharper discriminator available.") {
-            #expect(facts.first { $0.field == "applicant" }?.value == "shirshendu sasmal",
-                    "got: \(facts.map { "\($0.field)=\($0.value)" })")
-        }
+        // RULED 2026-09-27 (P2.5): the formula-only `.poaGrantorRecovery` module
+        // (default ON) recovers the grantor from the POA formula itself, so the
+        // casing gate stays for everything else and this POA yields its applicant.
+        // (W5FixTests pins both module states.) Was a known issue until then.
+        #expect(facts.first { $0.field == "applicant" }?.value == "shirshendu sasmal",
+                "got: \(facts.map { "\($0.field)=\($0.value)" })")
     }
 }
